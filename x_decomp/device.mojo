@@ -38,6 +38,9 @@ from x_decomp.cells import (
     ew_cell,
     gemm_cell,
     als_row,
+    als_row_solve,
+    add,
+    mul,
     als_cg_row,
     geqrf_dot,
     geqrf_head,
@@ -71,6 +74,28 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.jacobi2 import J2_TPB, jacobi_eigh2_kernel, one_sided_svd2_kernel
+from std.os import getenv
+from core.device_zero import enqueue_fill
+from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
+from decomposition.host.linalg_public import eigh_ascending
+from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+
+
+def lu_serial_max() -> Int:
+    """Largest n whose LU runs as ONE `lu_kernel` launch (MOJOLEARN_XD_LU_SERIAL,
+    default 16; timing only, the cells and their order are the same)."""
+    var v = String(getenv("MOJOLEARN_XD_LU_SERIAL", "16"))
+    try:
+        return Int(v)
+    except:
+        return 16
+
+
+def jacobi2_on() -> Bool:
+    """MOJOLEARN_XD_JACOBI=1 selects the shipped-before Jacobi kernels
+    (timing A/B only: `x_decomp/jacobi2.mojo` stores the same bits)."""
+    return String(getenv("MOJOLEARN_XD_JACOBI", "2")) != "1"
 
 
 struct _XdContext(Defaultable, Movable):
@@ -267,6 +292,11 @@ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32P
         viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
 
 
+def orth_guard_kernel(r: F32Ptr, l: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        orth_rank_guard(r, Int(l))
+
+
 def trsm_kernel(a: F32Ptr, r: F32Ptr, q: F32Ptr, m: Int32, l: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(m):
@@ -329,6 +359,63 @@ def als_kernel(
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
+
+
+comptime ALS_TEAM_TPB = 256
+#: Largest f*f + f the team kernel keeps in threadgroup memory (f <= 63).
+comptime ALS_TEAM_CELLS = 4096
+
+
+def als_team_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32
+):
+    """`als_row` for user `block_idx.x`, by a block (lane/decomp-apple2):
+    thread t owns cells t, t + 256, ... of the user's f*f + f accumulators
+    (A row-major, then b) and runs, for each of them, exactly `als_row`'s
+    sequence (the YtY value, + reg on the diagonal, then one fused
+    multiply-add per item with c_ui != 0, items ascending), in threadgroup
+    memory. Thread 0 then writes them to the row's scratch and runs
+    `als_row_solve`, `als_row`'s own tail. No device word crosses threads."""
+    var u = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var ff = Int(f)
+    var mm = Int(m)
+    var cells = ff * ff + ff
+    var sh = stack_allocation[ALS_TEAM_CELLS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var cc = tid
+    while cc < cells:
+        if cc < ff * ff:
+            var v = yty.unsafe_load(cc)
+            if cc // ff == cc % ff:
+                v = add(v, reg)
+            sh[cc] = v
+        else:
+            sh[cc] = Float32(0)
+        cc += ALS_TEAM_TPB
+    for i in range(mm):
+        var conf = ftz(c.unsafe_load(u * mm + i))
+        if conf == Float32(0):
+            continue
+        var pos = conf > Float32(0)
+        var ca = conf if pos else -conf
+        var cm1 = sub(ca, Float32(1))
+        cc = tid
+        while cc < cells:
+            if cc < ff * ff:
+                var j = cc // ff
+                var l = cc - j * ff
+                var t = mul(cm1, y.unsafe_load(i * ff + j))
+                sh[cc] = ftz(identical_mul_add(t, ftz(y.unsafe_load(i * ff + l)), ftz(sh[cc])))
+            elif pos:
+                var j = cc - ff * ff
+                sh[cc] = ftz(identical_mul_add(conf, ftz(y.unsafe_load(i * ff + j)), ftz(sh[cc])))
+            cc += ALS_TEAM_TPB
+    barrier()
+    if tid == 0:
+        var ab = u * cells
+        for q in range(cells):
+            s.unsafe_store(ab + q, sh[q])
+        flags.unsafe_store(u, als_row_solve(x, s, u, ff))
 
 
 def als_cg_kernel(
@@ -579,6 +666,46 @@ def _p(buf: DeviceBuffer[DType.float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(buf.unsafe_ptr()))
 
 
+def _svd2_of_r(
+    ctx: DeviceContext,
+    mut r: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """`svd_of_r` (x_decomp's sweeps and tolerance) with
+    `one_sided_svd2_kernel`: same outputs, same refusal."""
+    var info = ctx.enqueue_create_buffer[DType.float32](3)
+    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    ctx.enqueue_function[one_sided_svd2_kernel](
+        r.unsafe_ptr(), v.unsafe_ptr(), s.unsafe_ptr(), info.unsafe_ptr(), rt.unsafe_ptr(), vt.unsafe_ptr(), Int32(n),
+        Int32(X_DECOMP_SVD_SWEEPS), X_DECOMP_SVD_TOL,
+        grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+    )
+    var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
+    ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info)
+    ctx.synchronize()
+    if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
+        raise Error(
+            "the one-sided Jacobi SVD did not converge in "
+            + String(X_DECOMP_SVD_SWEEPS)
+            + " sweeps at n_cols = "
+            + String(n)
+            + ": the last sweep still performed "
+            + String(h_info.unsafe_ptr().unsafe_load(2))
+            + " rotations against a tolerance of "
+            + String(X_DECOMP_SVD_TOL)
+            + ". The remedy is more sweeps, the same one cuSOLVER's syevj"
+            " has. An unconverged decomposition is not returned as if it"
+            " were one; see DEVIATION 590."
+        )
+    _ = info^
+    _ = h_info^
+    _ = rt^
+    _ = vt^
+
+
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -691,16 +818,25 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
     var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
     var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
+    var dev_guard = String(getenv("MOJOLEARN_XD_ORTH_DEV", "1")) != "0"
     for p in range(2):
         var src = da if p == 0 else dq
         var dst = dq if p == 0 else da
         ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-        ctx.synchronize()
-        _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-        _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-        ctx.synchronize()
-        orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-        ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
+        if dev_guard:
+            # lane/decomp-apple2: the guard cell on one device thread, in
+            # stream order after the R it reads (the same cell the host ran;
+            # IDENTICAL cells are bit-equal on both), so R never leaves the
+            # device and the pass waits once, not three times.
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            ctx.enqueue_function[orth_guard_kernel](r_buf.unsafe_ptr(), Int32(l), grid_dim=1, block_dim=1)
+        else:
+            ctx.synchronize()
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+            ctx.synchronize()
+            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
+            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )
@@ -823,8 +959,14 @@ struct DevExec(Exec):
         var ds = ctx.enqueue_create_buffer[DType.float32](2)
         # lu_serial's cells, step by step: the pivot search one thread, the
         # swap, the multipliers and the trailing update one thread per cell
-        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-        for k in range(n):
+        if n <= lu_serial_max():
+            # A small matrix: lu_serial itself on one device thread, the
+            # same cells in the same order as the step-by-step launches
+            # below (which exist for large n), in ONE launch instead of 5n.
+            ctx.enqueue_function[lu_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        else:
+            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for k in range(n if n > lu_serial_max() else 0):
             ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
             ctx.enqueue_function[lu_swap_kernel](
                 da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
@@ -884,6 +1026,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        if jacobi2_on():
+            DevExec._eigh2(a, w, v, n)
+            return
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
@@ -892,6 +1037,71 @@ struct DevExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def _eigh2(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        """`device_eigh` with `jacobi_eigh2_kernel` in place of
+        `jacobi_eigh_kernel`: same launch pair (the sweep, then
+        `sign_flip_kernel`), same refusals, same ascending permutation."""
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
+        enqueue_fill(ctx, dinfo, JACOBI_INFO_UNWRITTEN)
+        var dvt = ctx.enqueue_create_buffer[DType.float32](n * n)
+        ctx.enqueue_function[jacobi_eigh2_kernel](
+            da.unsafe_ptr(), dv.unsafe_ptr(), dinfo.unsafe_ptr(), dvt.unsafe_ptr(), Int32(n), Int32(JACOBI_SWEEPS), Float32(JACOBI_TOL),
+            grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
+        )
+        ctx.enqueue_function[sign_flip_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1))
+        var hinfo = ctx.enqueue_create_host_buffer[DType.float32](3)
+        var hwork = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+        ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
+        ctx.enqueue_copy(dst_ptr=hwork.unsafe_ptr(), src_buf=da.create_sub_buffer[DType.float32](0, n * n))
+        _down(ctx, dv, v, n * n)
+        ctx.synchronize()
+        var i0 = hinfo.unsafe_ptr().unsafe_load(0)
+        var i1 = hinfo.unsafe_ptr().unsafe_load(1)
+        var i2 = hinfo.unsafe_ptr().unsafe_load(2)
+        if i0 == JACOBI_INFO_UNWRITTEN:
+            raise Error(
+                "eigh: the device Jacobi eigensolver DID NOT WRITE its info"
+                " buffer, so it never ran or its launch failed. This is NOT a"
+                " convergence failure and must not be reported as one: -1.0 is a"
+                " value the kernel never stores. Check that the binding is built"
+                " for this device."
+            )
+        if i0 == Float32(0.0):
+            raise Error(
+                "eigh: the Jacobi eigensolver did not converge in "
+                + String(JACOBI_SWEEPS)
+                + " sweeps at n = "
+                + String(n)
+                + ": ||offdiag(A)||_F / ||A||_F is still "
+                + String(i1)
+                + ". An unconverged decomposition is not returned as if it were"
+                " one; see DEVIATION 590. The remedy is more sweeps, the same one"
+                " cuSOLVER's syevj has"
+            )
+        var diag = List[Float32](capacity=n)
+        for i in range(n):
+            diag.append(hwork.unsafe_ptr().unsafe_load(i * n + i))
+        var vecs = List[Float32](capacity=n * n)
+        for i in range(n * n):
+            vecs.append(v.unsafe_load(i))
+        var got = eigh_ascending(diag, vecs, n, True, Int(i2))
+        for i in range(n):
+            w.unsafe_store(i, got.w[i])
+        for i in range(n * n):
+            v.unsafe_store(i, got.v[i])
+        _ = da^
+        _ = dv^
+        _ = dinfo^
+        _ = dvt^
+        _ = hinfo^
+        _ = hwork^
+        ctx.synchronize()
+        _ = ctx^
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
@@ -941,7 +1151,10 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.synchronize()
         _ = qr_factor(ctx, da, scratch, r_buf, m, n)
-        svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
+        if jacobi2_on():
+            _svd2_of_r(ctx, r_buf, v_buf, s_buf, n)
+        else:
+            svd_of_r(ctx, r_buf, v_buf, s_buf, n, X_DECOMP_SVD_SWEEPS, X_DECOMP_SVD_TOL)
         _down(ctx, s_buf, s, n)
         _down(ctx, v_buf, v, n * n)
         ctx.synchronize()
@@ -1132,10 +1345,16 @@ struct DevExec(Exec):
         var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * (f * f + f) if n > 0 else 1)
         var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[als_kernel](
-            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
-            Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
-        )
+        if n > 0 and f * f + f <= ALS_TEAM_CELLS and String(getenv("MOJOLEARN_XD_ALS_TEAM", "1")) != "0":
+            ctx.enqueue_function[als_team_kernel](
+                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+                Int32(n), Int32(m), Int32(f), reg, grid_dim=n, block_dim=ALS_TEAM_TPB,
+            )
+        else:
+            ctx.enqueue_function[als_kernel](
+                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+                Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dx, x, n * f)
         _down(ctx, df, flags, n)
         ctx.synchronize()

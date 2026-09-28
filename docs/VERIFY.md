@@ -3,6 +3,16 @@
 This page describes the current verifier API. Each published wheel has its own
 release evidence; source coverage alone does not qualify a distributed wheel.
 
+Install verification support with `python -m pip install "mojolearn[verify]"`.
+This is the same library wheel with NumPy added for fixture generation and
+array inspection; ordinary `pip install mojolearn` remains NumPy-free. If NumPy
+is already installed and satisfies the requirement, pip reuses it. Releases
+through 0.8.24 do not declare this extra: use `python -m pip install numpy`
+with those releases. The extra and the expanded `--all` scope below take effect
+in the next published release.
+Some optional sequence estimators also use NumPy; their implementations load
+when accessed, without making it a prerequisite for importing the core library.
+
 Under the IDENTICAL tier, verification compares fixed fixtures with recorded
 hashes and checks applicable local contracts, including batch invariance:
 the same row must retain its output bits when its batch neighbors change.
@@ -43,9 +53,11 @@ lanes, including applicable batch and saved-model checks:
 python -m mojolearn verify --lanes spectral,metrics-fowlkes-mallows,arima-exog,arima-exog-seasonal --repeats 2
 ```
 
-`--all` runs standard whole/individual/split/prefix batch checks where declared,
-and the applicable step-versus-full sequence checks. For the additional gradient,
-batch-size, ragged-batch and sampler/replay properties, opt in explicitly (these cost more work):
+`--all` and `--full` run standard whole/individual/split/prefix batch checks,
+step-versus-full sequence checks, and applicable gradient, batch-size,
+ragged-batch and sampler/replay properties. `--quick` stays at one configuration
+per family on the base fixture without the four extended probes. Add
+`--batch-checks` to include them in a quick or selected-lane run:
 
 ```sh
 python -m mojolearn verify --batch-checks --lanes ols --fixtures base --json-out batches.json
@@ -53,15 +65,15 @@ python -m mojolearn verify --batch-checks --lanes ols --fixtures base --json-out
 
 The additional probes reuse each fitted model. A cell's `local_check: passed`
 means its local equality assertions passed, not that it matched a trusted hash.
-Without a usable reference it remains `OWED`, and the overall result is nonzero.
-The newly exposed optional probes do not yet have bundled reference hashes;
-their local checks can pass while reference comparison remains OWED.
+Without a usable reference it remains `OWED`, never `IDENTICAL`. Reference
+availability varies by property and configuration; a scoped `VERIFIED` verdict
+does not turn missing reference comparisons into checked parts.
 Per-property results, including batch results, appear in both the human report
 and JSON. A global statistic, corpus-wide vocabulary trainer, or fixed fitted
 membership table has a stated reason where per-row batch invariance is inapplicable.
 
-Missing reference parts, failed/refused parts, and withheld lanes in a full
-request prevent an overall `VERIFIED` result. Explicit `--lanes` requests can
+Failed/refused parts prevent a successful verdict. Missing references and
+withheld lanes remain visible in the scope and accounting. Explicit `--lanes` requests can
 exercise pending declared CPU routes; they are not silently promoted into the
 default qualified set. A successful explicit subset is only that subset.
 BPE training and fold construction also run on CPU; they currently owe reference
@@ -180,7 +192,9 @@ RESULT: VERIFIED (verified 16 of 20 cell parts (0 divergent, 0 owed, 0 refused,
 4 n/a); 2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes). exit 0
 ```
 
-Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:
+Every cell (a lane on a fixture) has five standard parts. `--all`/`--full`
+also include the four extended probes below; `--batch-checks` adds them to
+quick or selected-lane runs:
 
 | part | question |
 |---|---|
@@ -189,6 +203,10 @@ Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds 
 | model | are the saved file's bytes the recorded bytes, and does the reloaded file answer like the model in memory? |
 | batch | are the held-out answers the same whole, one row at a time, in an uneven split and by prefix, and equal to the recorded bits? |
 | stepfull | for a model that decodes, is a sequence decoded ONE TOKEN AT A TIME with a carried state, at every position, the bits the same model answers when the whole sequence runs as one fresh-state forward pass? |
+| batchgrad | do applicable gradient-accumulation checks preserve the bits? |
+| batchscale | do applicable changes in batch size preserve the bits? |
+| ragged | do applicable ragged-sequence checks preserve the bits? |
+| rlpair | does the applicable sampler/replay pair preserve the bits? |
 
 `stepfull` is the decode property, exposed on 2026-09-16. It is the claim an
 inference server actually depends on, and the place bitwise determinism
@@ -225,7 +243,7 @@ python -m mojolearn verify --coverage                    # inspect scope; no fit
 python -m mojolearn verify --inference                   # bundled saved models; no fits
 python -m mojolearn verify --training --lanes ols --fixtures base --repeats 2
 python -m mojolearn verify --training                    # all available fit-based routes
-python -m mojolearn verify --all --batch-checks --repeats 2 # comprehensive suite
+python -m mojolearn verify --all --repeats 2              # all applicable properties
 ```
 
 `--inference` is an alias for `--models-only`. It covers the bundled models,
@@ -1040,8 +1058,9 @@ self-test; run `verify --self-test` separately.
 
 Normal lane verification checks repeated training outputs, held-out inference,
 save/reload, row-batch invariance and step-versus-full decoding where declared.
-`--batch-checks` adds gradient accumulation, batch-size, ragged sequence and
-sampler/replay properties. Non-applicable properties retain their named reason;
+`--all`/`--full` include gradient accumulation, batch-size, ragged sequence and
+sampler/replay properties; quick and selected-lane runs add them with
+`--batch-checks`. Non-applicable properties retain their named reason;
 a missing reference is OWED, never a successful check. `--cross-check` compares
 GPU inference with CPU saved-model inference on the same machine. `--compare`
 compares independently produced evidence documents. Native fault controls and
@@ -1051,7 +1070,7 @@ release artifacts; the ordinary verifier self-test is not a substitute.
 ### Two-GPU distributed checks in the installed package
 
 The expanded 0.8.7 candidate includes a separate, opt-in command. Its fixture
-generator requires NumPy, available through the optional `mojolearn[test]` extra:
+generator requires NumPy, available through the optional `mojolearn[verify]` extra:
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-distributed --devices 0,1 --out distributed.json --require-installed

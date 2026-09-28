@@ -29,6 +29,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoIvfContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoIvfContextFast"
+
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -86,7 +93,7 @@ def _ivf_run(
     ip: MutPointer[Int32, MutUntrackedOrigin],
     cp: MutPointer[Int32, MutUntrackedOrigin],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var r = ivf_flat_build_and_search_host(
         ctx,
         x,
@@ -210,7 +217,7 @@ def _ivf_build_run(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, iters: Int, metric: Int,
     seed: UInt64,
 ) raises -> IvfFlatIndex:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var index = ivf_flat_build_host(ctx, x, n, dim, n_lists, iters, metric, seed)
     ctx.synchronize()
     # DEVIATION 1946: the context dies LAST.
@@ -262,7 +269,7 @@ def _ivf_search_arrays(
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
         arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage, keep=keep)
     ctx.synchronize()
     ivf_write_search_result(addrs, r.distances, r.indices, r.n_candidates, m, k)
@@ -318,7 +325,7 @@ def ivf_flat_extend_binding(
         arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
         arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = ivf_flat_extend_host(ctx, index, new_x, n_new)
     ctx.synchronize()
     var new_labels = List[UInt32](capacity=n_new)

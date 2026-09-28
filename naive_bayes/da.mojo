@@ -15,7 +15,7 @@ built.
 """
 from checks.numerics import ftz
 from x_prep.common import FP, IP, p, ld, st, RUN, run_block
-from x_prep.prims import add, sub, mul, div, logf, sqrtf
+from x_prep.prims import add, acc_add, sub, mul, div, logf, sqrtf
 
 
 def lda_prep_unit(t: Int, f: FP, q: IP):
@@ -174,13 +174,13 @@ def qda_cov_unit(t: Int, f: FP, q: IP):
         var bb = run_block[RUN](f, X + i0 * d + b, d)
         comptime for u in range(RUN):
             if Int(ftz(by[u])) == k:
-                s = add(s, mul(sub(ftz(ba[u]), mka), sub(ftz(bb[u]), mkb)))
+                s = acc_add(s, mul(sub(ftz(ba[u]), mka), sub(ftz(bb[u]), mkb)))
     for i in range(full, n):
         if Int(ld(f, Y + i)) != k:
             continue
         var ea = sub(ld(f, X + i * d + a), mka)
         var eb = sub(ld(f, X + i * d + b), mkb)
-        s = add(s, mul(ea, eb))
+        s = acc_add(s, mul(ea, eb))
     st(f, p(q, 6) + t, div(s, ld(f, p(q, 5) + k)))
 
 

@@ -26,6 +26,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoHdbscanContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoHdbscanContextFast"
+
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -90,7 +97,7 @@ def _hdbscan_fit_run(
     cluster_selection_epsilon: Float32,
     metric: Int,
 ) raises -> Int:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var out = hdbscan_fit_host_output(
         ctx,
         xp,
@@ -348,7 +355,7 @@ def _hdbscan_predict_run(
     lo: MutPointer[Int32, MutUntrackedOrigin],
     po: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     hdbscan_approximate_predict_host(
         ctx, x, m, d, core, labels, lambdas, n_edges, n_clusters, deaths,
         selected, iic, q, nq, min_samples, lo, po,
@@ -440,7 +447,7 @@ def _hdbscan_membership_run(
     q: List[Float32], nq: Int, min_samples: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     hdbscan_membership_vector_host(
         ctx, x, m, d, core, labels, parents, lambdas, n_edges, n_clusters,
         deaths, selected, iic, ex_idx, offsets, q, nq, min_samples, out_ptr,
@@ -517,7 +524,7 @@ def _hdbscan_all_points_run(
     ex_idx: List[Int32], offsets: List[Int32], row0: Int, count: Int,
     out_ptr: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     hdbscan_all_points_membership_vectors_host(
         ctx, x, m, d, parents, lambdas, n_edges, n_clusters, deaths, selected,
         iic, ex_idx, offsets, row0, count, out_ptr,

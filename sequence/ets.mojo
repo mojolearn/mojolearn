@@ -503,7 +503,9 @@ def op_ets(t: Int, a: Args):
             st(hi, k, Float32(3.0e38))
             k += 1
     var obj = EtsObj(y, n, a.i2, trend, season, m, ring, oa, ob, og, op, alpha, beta, gamma, phi)
-    var it = nelder_mead[EtsObj, NM_CAP](obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4))
+    # i9 / f4: the FAST stall stop (sequence/nm.mojo; compiled out of IDENTICAL)
+    var it = nelder_mead[EtsObj, NM_CAP](obj, x, lo, hi, k, nm_scr, Float32(0.05), Float32(1e-4), 1000, Float32(1e-4),
+                                         stall_iters=a.i9, stall_rel=a.f4)
     var u = obj.unpack(x)
     if season != SEAS_N:
         _ = fill_ring(ring, obj.seasons(x), m, season)

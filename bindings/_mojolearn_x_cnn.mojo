@@ -19,7 +19,7 @@ from x_cnn.device import (
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
     pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
-    res_alloc, res_free, res_upload, res_download, res_gather,
+    res_alloc, res_free, res_upload, res_download, res_gather, res_gather_pair, opt_many_resident,
 )
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
@@ -348,17 +348,50 @@ def softmax_xent_binding[resident: Bool = False](
     return PythonObject(Float64(loss))
 
 
+def _is_list(o: PythonObject) raises -> Bool:
+    var bi = Python.import_module("builtins")
+    return Bool(py=bi.isinstance(o, bi.list))
+
+
+def _many(ws_: PythonObject, gs: PythonObject, bs: PythonObject, params: PythonObject) raises -> Tuple[List[Int], List[Int], List[Int], List[Int]]:
+    """lane/cnn-apple2: the resident optimizer entries' list form, one
+    handle per parameter in each list and params = their element counts."""
+    var k = Int(py=len(params))
+    if Int(py=len(ws_)) != k or Int(py=len(gs)) != k or Int(py=len(bs)) != k:
+        raise Error("x_cnn optimizer: one handle per parameter in each list and one count each")
+    var a = List[Int]()
+    var b = List[Int]()
+    var c = List[Int]()
+    var n = List[Int]()
+    for j in range(k):
+        a.append(Int(py=ws_[j]))
+        b.append(Int(py=gs[j]))
+        c.append(Int(py=bs[j]))
+        var nj = Int(py=params[j])
+        if nj <= 0:
+            raise Error("x_cnn: a positive element count is required")
+        n.append(nj)
+    return (a^, b^, c^, n^)
+
+
 def sgd_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObject, v_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
     """In place: w and the momentum buffer v. hyper = [lr, momentum,
     weight_decay, dampening, nesterov (0/1), first step (0/1)]; the last
-    three default to 0."""
-    var n = _count(params)
+    three default to 0. Resident, w/g/v may be LISTS of handles (one per
+    parameter, params = their counts): every parameter in one entry."""
     var h = List[Float32]()
     var nh = Int(py=len(hyper))
     if nh < 3 or nh > 6:
         raise Error("x_cnn sgd: hyper is [lr, momentum, weight_decay(, dampening, nesterov, first)]")
     for k in range(6):
         h.append(Float32(Float64(py=hyper[k])) if k < nh else Float32(0))
+    comptime if resident:
+        if _is_list(w_addr):
+            var t = _many(w_addr, g_addr, v_addr, params)
+            with GILReleased(Python()):
+                opt_many_resident[False](t[0], t[1], t[2], t[3], h)
+            return PythonObject(len(t[3]))
+    var n = _count(params)
     var pw = _fp(w_addr)
     var g = _fp(g_addr)
     var pv = _fp(v_addr)
@@ -602,13 +635,20 @@ def graph_op_binding(
 def adam_binding[resident: Bool = False](w_addr: PythonObject, g_addr: PythonObject, mv_addr: PythonObject, params: PythonObject, hyper: PythonObject) raises -> PythonObject:
     """In place: w and mv = [m (n) | v (n)]. hyper = [step_size, 1 - beta1,
     beta2, 1 - beta2, eps, sqrt(bias_correction2), weight_decay, adamw (0/1),
-    1 - lr * weight_decay] (x_cnn/ops.mojo adam_at)."""
-    var n = _count(params)
+    1 - lr * weight_decay] (x_cnn/ops.mojo adam_at). Resident, w/g/mv may
+    be LISTS of handles (one per parameter, params = their counts)."""
     if Int(py=len(hyper)) != 9:
         raise Error("x_cnn adam: hyper has 9 entries")
     var h = List[Float32]()
     for k in range(9):
         h.append(Float32(Float64(py=hyper[k])))
+    comptime if resident:
+        if _is_list(w_addr):
+            var t = _many(w_addr, g_addr, mv_addr, params)
+            with GILReleased(Python()):
+                opt_many_resident[True](t[0], t[1], t[2], t[3], h)
+            return PythonObject(len(t[3]))
+    var n = _count(params)
     var pw = _fp(w_addr)
     var g = _fp(g_addr)
     var pm = _fp(mv_addr)
@@ -642,8 +682,20 @@ def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject)
 
 
 def res_gather_binding(dst: PythonObject, src: PythonObject, rows_addr: PythonObject, params: PythonObject) raises -> PythonObject:
-    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words]."""
+    """Resident dst rows = resident src rows[r] (int32 host indices); params = [n, row words].
+    lane/cnn-apple2: dst and src may be two-handle LISTS with params = [n,
+    row words, row2 words] (the batch and its labels in one entry)."""
     var n = Int(py=params[0])
+    if _is_list(dst):
+        if Int(py=len(dst)) != 2 or Int(py=len(src)) != 2 or Int(py=len(params)) != 3:
+            raise Error("x_cnn res_gather: the pair form is [dst, dst2], [src, src2], [n, row, row2]")
+        var d0 = Int(py=dst[0]); var d1 = Int(py=dst[1])
+        var s0 = Int(py=src[0]); var s1 = Int(py=src[1])
+        var r0 = Int(py=params[1]); var r1 = Int(py=params[2])
+        var rq = _ip(rows_addr)
+        with GILReleased(Python()):
+            res_gather_pair(d0, s0, r0, d1, s1, r1, rq, n)
+        return PythonObject(n)
     var row = Int(py=params[1])
     var d = Int(py=dst)
     var sr = Int(py=src)

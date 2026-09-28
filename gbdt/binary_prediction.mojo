@@ -16,6 +16,13 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.math import isfinite
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoGbdtContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoGbdtContextFast"
+
 from checks.numerics import ftz, identical_sigmoid
 from metrics.checks.device_io import upload_f32
 
@@ -46,7 +53,7 @@ def binary_prediction_host[probabilities: Bool, dtype: DType](
     for i in range(n):
         if not isfinite(raw[i]):
             raise Error("binary prediction: finite Float32 margins required")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var device_raw = upload_f32(ctx,raw)
     var count = 2*n if probabilities else n
     var output = ctx.enqueue_create_buffer[dtype](count)

@@ -57,6 +57,13 @@ from checks.vendor import COMPILED_VENDOR
 from gbdt.binary_prediction import binary_prediction_host
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoGbdtContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoGbdtContextFast"
+
 
 from gbdt.estimator import (
     GbdtFitParams,
@@ -515,7 +522,7 @@ def gbdt_fit_binding(
 
     var result: GbdtFitResult
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         result = gbdt_fit(
             ctx, xp, n_rows, n_features, yp, wp, n_weights,
             cp, n_flags, ep, eyp, n_eval_rows, fp,
@@ -525,6 +532,7 @@ def gbdt_fit_binding(
             pair_weights=pair_weights,
             target_dim=target_dim,
         )
+        ctx.synchronize()
 
     var learn = Python.list()
     for i in range(len(result.learn_losses)):
@@ -569,8 +577,9 @@ def gbdt_predict_binding(
 
     var wrote: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         wrote = gbdt_predict(ctx, text, xp, n_rows, op)
+        ctx.synchronize()
     return PythonObject(wrote)
 
 
@@ -615,8 +624,9 @@ def gbdt_predict_multi_binding(
 
     var width: Int
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         width = gbdt_predict_multi(ctx, text, xp, n_rows, op, mode)
+        ctx.synchronize()
     return PythonObject(width)
 
 
@@ -759,11 +769,12 @@ def gbdt_fit_two_level_feature_freq_binding(
     var random_seed = UInt64(Int(py=params[6]))
     var text: String
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         text = gbdt_fit_two_level_feature_freq(
             ctx, xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
             learning_rate, l2_leaf_reg, random_seed,
         )
+        ctx.synchronize()
     return PythonObject(text)
 
 
@@ -815,7 +826,7 @@ def gbdt_fit_ordered_rmse_binding(
             permutation.append(pp.unsafe_load(i))
         for i in range(n_weights):
             ws.append(wp.unsafe_load(i))
-        with DeviceContext() as ctx:
+        with process_ctx[_DEVCTX_SLOT]() as ctx:
             var trained = train_ordered_rmse(
                 ctx, xs, ys, n_rows, n_features, permutation,
                 n_estimators, max_depth, border_count, learning_rate,

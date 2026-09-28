@@ -90,10 +90,13 @@ class ETS:
         mask = int(self.alpha is not None) | 2 * int(self.beta is not None) | 4 * int(self.phi is not None) \
             | 8 * int(self.gamma is not None)
         fp = [0.0 if v is None else float(v) for v in (self.alpha, self.beta, self.phi, self.gamma)]
+        ip = [B, n, int(h), "AM".index(self.model[0]), "NA".index(self.model[1]), int(self.damped), mask,
+              "NAM".index(s), m]
+        stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
+        if stall is not None:                          # quality sweep (tools/sequence_quality.py)
+            ip, fp = ip + [int(stall[0])], fp + [float(stall[1])]
         _backend.binding("_mojolearn_x_sequence", self.numeric_mode).ets(
-            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data],
-            [B, n, int(h), "AM".index(self.model[0]), "NA".index(self.model[1]), int(self.damped), mask,
-             "NAM".index(s), m], fp)
+            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data], ip, fp)
         self.info_ = info
         if s != "N":
             self.seasonal_states_ = ss[0] if self._one else ss

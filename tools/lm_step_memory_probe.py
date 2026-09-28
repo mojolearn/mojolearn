@@ -486,7 +486,7 @@ def worker(args):
     # binding reads it back.
     try:
         gate = list(trainer._binding().byte_lm_attention_estash_gate())
-        mode['attention_estash_gate'] = dict(zip(('gated', 'granted', 'denied', 'need_bytes', 'free_bytes'),
+        mode['attention_estash_gate'] = dict(zip(('gated', 'granted', 'denied', 'need_bytes', 'free_bytes', 'recompute'),
                                                  [int(v) for v in gate]))
         emit(dict(event='attention_estash_gate', **mode['attention_estash_gate']))
     except Exception:  # noqa: BLE001 (a binding without the read-back)

@@ -60,6 +60,13 @@ Nothing else in this file computes.
 """
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoMetricsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoMetricsContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from spectral.host.spectral_predict_host import (
@@ -202,7 +209,7 @@ def spectral_fit_predict_dataset_host_keep(
     var config = _config(
         n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "spectral clustering (dataset): n_samples=" + String(n_samples)
@@ -291,7 +298,7 @@ def spectral_fit_predict_graph_host_keep(
     var config = _config(
         n_clusters, n_components, n_init, n_neighbors, eigen_tol, seed
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "spectral clustering (precomputed graph): n_samples="
@@ -326,7 +333,7 @@ def spectral_predict_host(
     DEVIATION 2860): the Nystrom extension and the fit's k-means assignment,
     `spectral/impl/spectral_predict.mojo` on the device. The rule is stated
     in `spectral/host/spectral_predict_host.mojo`."""
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     return spectral_predict_device(
         ctx, input, train_x, n_train, n_queries, n_features, n_components,
         n_clusters, n_neighbors, affinity, state,
@@ -383,7 +390,7 @@ def spectral_embedding_dataset_host(
     var config = _embedding_config(
         n_components, n_neighbors, norm_laplacian, drop_first, seed
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "spectral embedding (dataset): n_samples=" + String(n_samples)
@@ -430,7 +437,7 @@ def spectral_embedding_graph_host(
     var config = _embedding_config(
         n_components, 0, norm_laplacian, drop_first, seed
     )
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "spectral embedding (precomputed graph): n_samples="

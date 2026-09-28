@@ -12,7 +12,7 @@ thread's ascending loop. torch's norms are sqrt(sum of squares), squared
 back where the reference squares them, and its lerp is torch's two-branch
 formula."""
 from sequence.ops import FP, Args, add, fma3, ld, lerp, mul, st, sub, sumsq_fold
-from checks.numerics import ftz, identical_div, identical_rsqrt, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_rsqrt, identical_sqrt
 
 
 @always_inline
@@ -25,11 +25,55 @@ def _sumsq(p: FP, start: Int, n: Int, stride: Int) -> Float32:
     return sumsq_fold(p, start, n, stride)
 
 
+# ------------------------------------------------------------------ FAST norms
+#: FAST only (lane/sequence-apple2, 2026-09-28): a long sum of squares in
+#: two passes, SUMSQ_THREADS strided partials (thread t folds elements t,
+#: t + T, t + 2T, ..., so a simdgroup's loads are contiguous) and then one
+#: thread adds the partials in order. A different order from IDENTICAL's one
+#: ascending chain, so FAST only; its error against a float64 sum is lower
+#: (T short chains instead of one of length n). IDENTICAL never launches it.
+comptime SUMSQ_THREADS = 4096
+
+
+def op_chunk_sumsq(t: Int, a: Args):
+    """Partial t of a segment: p1[i2 + t] = sum of p0[i3 + t + k T]^2 over
+    k, T = i1 threads, i0 the segment length."""
+    var n = a.i0
+    var T = a.i1
+    var cnt = (n - t + T - 1) // T if t < n else 0
+    st(a.p1, a.i2 + t, sumsq_fold(a.p0, a.i3 + t, cnt, T))
+
+
+@always_inline
+def _psum(p: FP, n: Int) -> Float32:
+    """The partials p[0:n] added in order."""
+    var s = Float32(0.0)
+    for k in range(n):
+        s = add(s, ld(p, k))
+    return s
+
+
+@always_inline
+def _sumsq_or_parts(p: FP, start: Int, n: Int, parts: FP, n_parts: Int) -> Float32:
+    """IDENTICAL (n_parts == 0): the one-thread fold. FAST with partials:
+    their ordered sum. An IDENTICAL build compiles only the fold."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if n_parts > 0:
+            return _psum(parts, n_parts)
+    return _sumsq(p, start, n, 1)
+
+
 def op_af_alpha(t: Int, a: Args):
     """One thread: p1[1] = max(eps2, ||p0|| / sqrt(numel)) rho.
-    i0 numel; f0 eps2, f1 rho."""
+    i0 numel; f0 eps2, f1 rho; FAST: p2 the i2 partials of op_chunk_sumsq."""
+    af_alpha_tail(a, _sumsq_or_parts(a.p0, 0, a.i0, a.p2, a.i2))
+
+
+@always_inline
+def af_alpha_tail(a: Args, ss: Float32):
+    """op_af_alpha from ||p0||^2 = ss (sequence/coop.mojo folds it too)."""
     var n = a.i0
-    var rms = div(ftz(identical_sqrt(_sumsq(a.p0, 0, n, 1))), ftz(identical_sqrt(Float32(n))))
+    var rms = div(ftz(identical_sqrt(ss)), ftz(identical_sqrt(Float32(n))))
     # torch's max(eps2, rms): eps2 unless rms > eps2 (a NaN rms gives eps2).
     # Spelled `max`, not `rms if rms > eps2 else eps2`: Apple's Metal
     # compiler drops this WHOLE kernel (no store lands, not even one before
@@ -93,9 +137,15 @@ def op_af_vec(t: Int, a: Args):
 
 def op_af_denom(t: Int, a: Args):
     """One thread: p1[3] = -p1[1] / max(1, ||p0|| / (sqrt(numel) d));
-    i0 numel, f0 d."""
+    i0 numel, f0 d; FAST: p2 the i2 partials of op_chunk_sumsq."""
+    af_denom_tail(a, _sumsq_or_parts(a.p0, 0, a.i0, a.p2, a.i2))
+
+
+@always_inline
+def af_denom_tail(a: Args, ss: Float32):
+    """op_af_denom from ||p0||^2 = ss."""
     var n = a.i0
-    var r = div(ftz(identical_sqrt(_sumsq(a.p0, 0, n, 1))), mul(ftz(identical_sqrt(Float32(n))), a.f0))
+    var r = div(ftz(identical_sqrt(ss)), mul(ftz(identical_sqrt(Float32(n))), a.f0))
     # max(1, rms / d) spelled `max` (the Metal fault of op_af_alpha: this
     # kernel is the same shape, a compare-and-select on sqrt over _sumsq);
     # exact, a NaN ratio still gives 1.
@@ -111,10 +161,12 @@ def op_af_apply(t: Int, a: Args):
 # ------------------------------------------------------------------ LAMB
 def op_seg_sumsq(t: Int, a: Args):
     """Segment t of p0 (offsets p1[t] .. p1[t + 1], as floats):
-    p2[t] = its sum of squares, ascending."""
+    p2[t] = its sum of squares, ascending. FAST (i0 != 0): the ordered sum
+    of its partials, p3[t SUMSQ_THREADS ...], min(SUMSQ_THREADS, e - s) of them."""
     var s = Int(a.p1.unsafe_load(t))
     var e = Int(a.p1.unsafe_load(t + 1))
-    st(a.p2, t, _sumsq(a.p0, s, e - s, 1))
+    var np = min(SUMSQ_THREADS, e - s) if a.i0 != 0 else 0
+    st(a.p2, t, _sumsq_or_parts(a.p0, s, e - s, a.p3 + t * SUMSQ_THREADS, np))
 
 
 def op_lamb_upd(t: Int, a: Args):
@@ -135,11 +187,20 @@ def op_lamb_upd(t: Int, a: Args):
 
 def op_lamb_ratio(t: Int, a: Args):
     """Segment t: p3[t] = ||p|| / ||u|| (1 where either is 0; at most 1
-    when i0 & 1, timm's trust_clip). p0 param, p1 u, p2 offsets."""
+    when i0 & 1, timm's trust_clip). p0 param, p1 u, p2 offsets. FAST
+    (i1 != 0): p4 / p5 the partials of p / u, as op_seg_sumsq's."""
     var s = Int(a.p2.unsafe_load(t))
     var e = Int(a.p2.unsafe_load(t + 1))
-    var wn = ftz(identical_sqrt(_sumsq(a.p0, s, e - s, 1)))
-    var gn = ftz(identical_sqrt(_sumsq(a.p1, s, e - s, 1)))
+    var np = min(SUMSQ_THREADS, e - s) if a.i1 != 0 else 0
+    lamb_ratio_tail(a, t, _sumsq_or_parts(a.p0, s, e - s, a.p4 + t * SUMSQ_THREADS, np),
+                    _sumsq_or_parts(a.p1, s, e - s, a.p5 + t * SUMSQ_THREADS, np))
+
+
+@always_inline
+def lamb_ratio_tail(a: Args, t: Int, pss: Float32, uss: Float32):
+    """op_lamb_ratio from ||p||^2 = pss and ||u||^2 = uss of segment t."""
+    var wn = ftz(identical_sqrt(pss))
+    var gn = ftz(identical_sqrt(uss))
     var r = Float32(1.0)
     if wn > Float32(0.0) and gn > Float32(0.0):
         r = div(wn, gn)

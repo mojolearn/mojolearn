@@ -104,7 +104,23 @@ def op_mlp_rowloss(t: Int, a: Args):
 
 
 def op_sumsq(t: Int, a: Args):
-    """One thread: p1[i0] = sum_{k < i1} p0[k]^2, k ascending."""
+    """One thread: p1[i0] = sum_{k < i1} p0[k]^2, k ascending. With i2 = L > 0
+    (apple2: every layer in one launch, L <= 4) thread t folds layer t:
+    p1[t] = sum of p0[i(4+2t) .. + i(5+2t)]^2."""
+    if a.i2 > 0:
+        var off = a.i4
+        var cnt = a.i5
+        if t == 1:
+            off = a.i6
+            cnt = a.i7
+        elif t == 2:
+            off = a.i8
+            cnt = a.i9
+        elif t == 3:
+            off = a.i10
+            cnt = a.i11
+        st(a.p1, t, sumsq_fold(a.p0, off, cnt, 1))
+        return
     st(a.p1, a.i0, sumsq_fold(a.p0, 0, a.i1, 1))
 
 

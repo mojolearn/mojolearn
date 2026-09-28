@@ -46,7 +46,10 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
     assert report['lanes']['holtwinters']['status'] == 'available'
     assert report['lanes']['select-d']['properties']['batch']['kind'] == 'check'
     assert report['lanes']['bpe-trainer']['properties']['batch']['kind'] == 'not_applicable'
-    assert report['lanes']['transformer']['properties']['batchgrad']['command'] == 'verify --batch-checks'
+    for part in vr.OPTIONAL_PARTS:
+        prop = report['lanes']['transformer']['properties'][part]
+        assert prop['command'] == 'verify --all'
+        assert prop['run_by_default']
 
 
 def test_inspection_and_batch_flags_route_to_suite():
@@ -98,7 +101,8 @@ def test_local_batch_pass_without_hash_is_still_owed():
     assert va.verdict(counts)[0] != 0
 
 
-def test_opt_in_probes_reuse_fit_and_detect_drift():
+@pytest.mark.parametrize('flags', [['--all'], ['--full'], ['--batch-checks']])
+def test_extended_probes_reuse_fit_and_detect_drift(flags):
     fits, probes = [], []
     def fit(*args):
         fits.append(1)
@@ -111,12 +115,19 @@ def test_opt_in_probes_reuse_fit_and_detect_drift():
         _train_hash=lambda f: '0123456789abcdef',
         _probe_fit=lambda *args: ('n/a:function', 'n/a:no-save', None, None),
         _probe_batch=lambda *args: ('n/a:test', None), _probe_part=probe)
+    h.RLPAIR = {'x': object()}
+    h._probe_rlpair = lambda *args: (probes.append('rlpair') or 'n/a:test', None, [])
+    args = cli.build_parser().parse_args(['verify', *flags])
     result = va.run_cell(h, None, 'x', 'base', (None, None, None), np.zeros((2, 2)), 2,
-                         extra_parts=('batchgrad', 'batchscale', 'ragged'))
+                         extra_parts=va._extra_parts(args))
     assert len(fits) == 2
-    assert probes == ['stepfull', 'batchgrad', 'batchscale', 'ragged'] * 2
+    assert probes == ['stepfull', 'batchgrad', 'batchscale', 'ragged', 'rlpair'] * 2
     value, error = result['batchgrad']
     assert vr.judge(value, None, error)[0] == vr.DIVERGENT
+    rows = va.judge_rows([dict(lane='x', fixture='base', part='batchgrad',
+                               value=value, error=error)], dict(cells={}))
+    counts = {state: sum(row['state'] == state for row in rows) for state in vr.STATES}
+    assert va.verdict(counts)[0] == va.EXIT_MISMATCH
 
 
 def test_select_d_cpu_chooses_first_stationary_order_and_preserves_input(monkeypatch):
@@ -411,3 +422,14 @@ def test_a_whole_column_reports_no_absence_at_all(tmp_path, monkeypatch):
     assert f'{len(parts)} of {len(parts)} cell parts' in use, use
     assert 'absent' not in use, use
     assert table['absent_parts'] == {}
+
+
+def test_gpu_parallel_coverage_does_not_claim_default_execution():
+    h = va.load_harness()
+    report = coverage.inventory(h, vr.load_table(), 'apple')
+    for name, lane in report['lanes'].items():
+        if name.startswith('par-'):
+            assert lane['status'] == 'not_applicable'
+            assert not lane['execution']['run_by_default']
+            assert all(not prop['run_by_default'] for prop in lane['properties'].values())
+    assert set(report['lanes']) == set(h.LANES)

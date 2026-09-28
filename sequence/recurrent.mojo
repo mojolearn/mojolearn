@@ -31,6 +31,7 @@ from sequence.ops import (
     OP_GATHER_ROWS,
     OP_GATHER_SEQ,
     OP_GEMM,
+    OP_GEMM_SPLITK,
     OP_MSE,
     OP_OPT,
     OP_SEQ_OUT,
@@ -43,7 +44,7 @@ from sequence.ops import (
     OPT_NADAM,
     gates_of,
 )
-from checks.numerics import identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 comptime TASK_MSE = 0
 comptime TASK_CE = 1
@@ -107,6 +108,25 @@ def gemm[E: Exec](
     a.i6 = sbn
     a.i7 = 1 if accumulate else 0
     a.i8 = ldc
+    # FAST (apple2): a product of few cells over a long K (VAR's Z^T Z) ran
+    # on M N threads, each one K-long chain; split K so about 8192 threads
+    # fold blocks of >= 4096, then one ordered sum per cell. IDENTICAL keeps
+    # the one chain (its bits); so does every product outside that shape.
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        var MN = M * N
+        if MN <= 1024 and K >= 32768:
+            var S = min(8192 // MN, K // 4096)
+            if S > 1:
+                var KS = (K + S - 1) // S
+                S = (K + KS - 1) // KS
+                a.p3 = ex.alloc(S * MN)
+                a.i9 = S
+                a.i10 = KS
+                a.i11 = 0
+                ex.launch[OP_GEMM_SPLITK](a, S * MN)
+                a.i11 = 1
+                ex.launch[OP_GEMM_SPLITK](a, MN)
+                return
     ex.launch[OP_GEMM](a, M * N)
 
 

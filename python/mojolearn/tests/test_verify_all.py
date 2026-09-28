@@ -9,7 +9,7 @@ cell differently from tools/identity_break.py.
 The table, judge, verdict and flag tests need no GPU and no fit. The run
 tests (a corrupted reference reading DIVERGENT with exit 1, and the drift
 test) need an importable identical build and skip without one; the drift
-test runs the public CPU reference lanes on the base fixture by default and
+test runs OLS and ridge on the base fixture by default and
 takes MOJOLEARN_VERIFY_ALL_DRIFT_LANES=a,b (or `all`) for more.
 
 THE THIRD PREREQUISITE IS NUMPY. tools/identity_break.py imports it at
@@ -966,8 +966,8 @@ def test_smoke_never_reads_as_verified_and_says_the_claim_is_still_owed():
 def test_a_lane_the_run_already_executed_is_not_smoked_again():
     """A lane the run RAN is not left with nothing -- its result is kept in
     `ran_state` -- so fitting it twice more would buy a weaker version of what
-    the run already has. On a GPU install every par-* lane runs, so the smoke
-    set there is empty and the flag costs nothing."""
+    the run already has. Explicitly selected diagnostics should not incur
+    another two fits when --smoke is also selected."""
     surface = va.host_surface()
     harness = va.load_harness()
     exposure = surface.lane_exposure(list(harness.LANES), "cpu")
@@ -1200,7 +1200,8 @@ def test_quick_is_one_lane_per_family_on_base():
 
 def test_full_and_cpu_lane_sets():
     lanes, fixtures = va.select_lanes(_FakeHarness, _fake_table(), "nvidia", "full", [])
-    assert lanes == list(_FakeHarness.LANES) and fixtures == _FakeHarness.FIXTURES
+    assert lanes == [lane for lane in _FakeHarness.LANES if not lane.startswith("par-")]
+    assert fixtures == _FakeHarness.FIXTURES
     cpu, _ = va.select_lanes(_FakeHarness, _fake_table(), "cpu", "full", [])
     assert set(cpu) <= set(va.host_surface().public_reference_lanes())
     with pytest.raises(ValueError):
@@ -1214,6 +1215,28 @@ def test_full_and_cpu_lane_sets():
     # public, at which point the assertion had nothing left to catch.
     with pytest.raises(ValueError):
         va.select_lanes(_FakeHarness, _fake_table(), "cpu", "full", ["par-forest"])
+
+
+@pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
+@pytest.mark.parametrize("depth", ["quick", "full"])
+@pytest.mark.parametrize("include_pending", [False, True])
+def test_gpu_sweep_skips_structurally_inapplicable_execution(vendor, depth, include_pending):
+    lanes, _ = va.select_lanes(_FakeHarness, _fake_table(), vendor, depth, [], include_pending)
+    assert "par-forest" not in lanes
+    exposure = va.host_surface().lane_exposure(list(_FakeHarness.LANES), vendor)
+    accounting = va.lane_accounting(list(_FakeHarness.LANES), exposure, lanes, [])
+    assert accounting["lanes"]["par-forest"]["state"] == va.LANE_NOT_APPLICABLE
+    assert set(accounting["lanes"]) == set(_FakeHarness.LANES)
+    if depth == "full":
+        assert "no-ref" in lanes, "lack of reference must not hide an applicable lane"
+
+
+def test_gpu_parallel_diagnostics_remain_explicitly_selectable():
+    lanes, _ = va.select_lanes(_FakeHarness, _fake_table(), "apple", "full", ["par-forest"])
+    assert lanes == ["par-forest"]
+    exposure = va.host_surface().lane_exposure(lanes, "apple")
+    assert exposure["par-forest"]["status"] == va.LANE_NOT_APPLICABLE
+    assert "physical multi-device identity" in exposure["par-forest"]["reason"]
 
 
 def test_flags_route_to_the_suite_or_the_card():
@@ -1289,8 +1312,26 @@ def test_missing_numpy_has_an_actionable_verification_refusal(monkeypatch):
         raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
 
     monkeypatch.setattr(va, "_load_by_path", missing)
-    with pytest.raises(va.CannotRun, match="python -m pip install numpy"):
+    with pytest.raises(va.CannotRun) as error:
         va.load_harness("identity_break.py")
+    from mojolearn._version import __version__
+    assert f'python -m pip install "mojolearn[verify]=={__version__}"' in str(error.value)
+    assert 'python -m pip install numpy' in str(error.value)
+
+
+@pytest.mark.parametrize('flags, extended', [
+    (['--all'], True), (['--full'], True),
+    (['--all', '--lanes', 'ols', '--fixtures', 'base'], True),
+    (['--quick'], False), (['--all', '--quick'], False),
+    (['--lanes', 'ols'], False),
+    (['--quick', '--batch-checks'], True),
+    (['--lanes', 'ols', '--batch-checks'], True),
+    (['--all', '--models-only'], False),
+    (['--all', '--emit-reference', 'candidate.json'], True),
+])
+def test_full_suite_includes_extended_properties_but_quick_stays_bounded(flags, extended):
+    args = cli.build_parser().parse_args(['verify', *flags])
+    assert va._extra_parts(args) == (vref.OPTIONAL_PARTS if extended else ())
 
 
 def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypatch):
@@ -1301,6 +1342,49 @@ def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypat
     with pytest.raises(ModuleNotFoundError) as error:
         va.load_harness("identity_break.py")
     assert error.value.name == "internal_missing"
+
+
+def test_core_import_and_verify_guidance_without_numpy():
+    # Block NumPy in a fresh process even when the test environment has it.
+    # New optional estimators must not prevent the CLI reaching its guidance.
+    code = '''
+import sys
+class NoNumpy:
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == "numpy" or fullname.startswith("numpy."):
+            raise ModuleNotFoundError("NumPy blocked for test", name="numpy")
+sys.meta_path.insert(0, NoNumpy())
+import mojolearn
+assert "numpy" not in sys.modules
+assert "AutoARIMA" in dir(mojolearn)
+assert mojolearn.Array.from_list([1, 2], "<i4").tolist() == [1, 2]
+from mojolearn import _verify_all as va
+try:
+    va.load_harness()
+except va.CannotRun as exc:
+    assert "mojolearn[verify]" in str(exc), str(exc)
+else:
+    raise AssertionError("verification silently ran without NumPy")
+try:
+    mojolearn.AutoARIMA
+except ModuleNotFoundError as exc:
+    assert exc.name == "numpy" and "pip install numpy" in str(exc)
+else:
+    raise AssertionError("NumPy-dependent estimator unexpectedly loaded")
+'''
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_lazy_sequence_exports_resolve_to_original_implementations():
+    import importlib
+    import mojolearn
+    from mojolearn import _expansion_sequence as sequence
+    assert set(sequence.__all__) == set(sequence._LAZY_EXPORTS)
+    for name, (module, attribute) in sequence._LAZY_EXPORTS.items():
+        expected = getattr(importlib.import_module('mojolearn.' + module), attribute)
+        assert getattr(mojolearn, name) is expected
+        assert getattr(sequence, name) is expected
 
 
 # ---------------------------------------------------------------- portable models
@@ -1325,17 +1409,17 @@ def test_models_manifest_points_at_small_files():
 def _identical_build():
     code = "import mojolearn, mojolearn._backend as b; print(b.numeric_mode(), b.vendor())"
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(PKG.parent))
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd=str(PKG.parent), timeout=30)
     return r.stdout.split() if r.returncode == 0 else None
 
 
-def _run_cli(argv, env_extra=None):
+def _run_cli(argv, env_extra=None, timeout=180):
     # env_extra OVERRIDES rather than collides: a caller pinning the tier
     # itself (`--compare` must work under `fast`) is exactly what it is for
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
     env.update(env_extra or {})
     return subprocess.run([sys.executable, "-m", "mojolearn"] + argv, capture_output=True, text=True,
-                          env=env, cwd=str(PKG.parent))
+                          env=env, cwd=str(PKG.parent), timeout=timeout)
 
 
 def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
@@ -1407,6 +1491,37 @@ def test_cli_corrupted_table_exits_1():
     assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
 
 
+def test_all_checks_batch_reference_without_opt_in(tmp_path):
+    if not _identical_build():
+        pytest.skip("no importable identical build")
+    _need_numpy()
+    flags = ["verify", "--all", "--lanes", "ols", "--fixtures", "base", "--no-models", "--json"]
+    result = _run_cli(flags)
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    assert set(vref.OPTIONAL_PARTS) <= set(report['properties'])
+    assert report['properties']['batchscale'][vref.IDENTICAL] == 1
+
+    table = vref.load_table()
+    entry = table['cells']['ols/base']['batchscale']
+    ref = entry['ref']
+    entry['ref'] = ('0' if ref[0] != '0' else '1') + ref[1:]
+    path = str(tmp_path / 'bad-batch.json')
+    vref.write_table(table, path)
+    result = _run_cli(flags + ['--reference-table', path])
+    assert result.returncode == va.EXIT_MISMATCH, result.stdout[-2000:] + result.stderr[-2000:]
+    report = json.loads(result.stdout)
+    assert report['properties']['batchscale'][vref.DIVERGENT] == 1
+
+    del table['cells']['ols/base']['batchscale']
+    vref.write_table(table, path)
+    result = _run_cli(flags + ['--reference-table', path])
+    report = json.loads(result.stdout)
+    row = next(r for r in report['cells'] if r['part'] == 'batchscale')
+    assert row['state'] == vref.OWED and row['local_check'] == 'passed'
+    assert report['properties']['batchscale'][vref.IDENTICAL] == 0
+
+
 def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     """THE SKIPPED COUNT RIDES WITH THE VERDICT, seen on the real RESULT line.
 
@@ -1422,6 +1537,8 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     build = _identical_build()
     if not build:
         pytest.skip("no importable identical build")
+    if build[-1] == "cpu":
+        pytest.skip("GPU diagnostic selection; CPU excludes par-* unless --include-pending (unit-tested)")
     ok = _run_cli(["verify", "--lanes", "ols,ridge,par-forest", "--fixtures", "base", "--no-models"])
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
@@ -1447,13 +1564,10 @@ def test_shipped_verifier_hashes_like_the_harness():
     _, vendor = build
     lanes = os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_LANES", "").strip()
     if not lanes:
-        selected = list(va.host_surface().public_reference_lanes())
-        # A routine Metal diagnostic is one lane. The installed-wheel
-        # release gates cover broader device surfaces separately; the CPU
-        # parity check still exercises every public reference lane.
-        if sys.platform == "darwin" and vendor != "cpu":
-            selected = selected[:1]  # current routine Metal diagnostic policy
-        lanes = ",".join(selected)
+        # This checks harness/verifier parity, not the entire release matrix.
+        # Full CPU coverage used to silently launch hundreds of fits here.
+        lanes = "ols" if sys.platform == "darwin" and vendor != "cpu" else "ols,ridge"
+    timeout = float(os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_TIMEOUT", "180"))
     with tempfile.TemporaryDirectory() as tmp:
         column = os.path.join(tmp, "column.json")
         # --step-full because `verify --all` runs the stepfull part on every
@@ -1466,7 +1580,7 @@ def test_shipped_verifier_hashes_like_the_harness():
         if lanes != "all":
             argv += ["--lanes", lanes]
         env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical", PYTHONPATH=str(PKG.parent))
-        h = subprocess.run([sys.executable] + argv, capture_output=True, text=True, env=env, cwd=str(ROOT))
+        h = subprocess.run([sys.executable] + argv, capture_output=True, text=True, env=env, cwd=str(ROOT), timeout=timeout)
         assert os.path.isfile(column), h.stdout[-2000:] + h.stderr[-2000:]
         harness_cells = json.loads(Path(column).read_text())["cells"]
         verify_argv = ["verify", "--fixtures", "base", "--no-models", "--json"]
@@ -1474,7 +1588,8 @@ def test_shipped_verifier_hashes_like_the_harness():
             verify_argv += ["--lanes", lanes]
         else:
             verify_argv += ["--full"]
-        r = _run_cli(verify_argv, dict(MOJOLEARN_IDENTITY_BREAK=str(ROOT / "tools" / "identity_break.py")))
+        r = _run_cli(verify_argv, dict(MOJOLEARN_IDENTITY_BREAK=str(ROOT / "tools" / "identity_break.py")),
+                     timeout=timeout)
         report = json.loads(r.stdout)
     compared = 0
     parts_seen = set()

@@ -52,12 +52,20 @@ def test_rejects_native_math_import(payload):
     ('numpy/__init__.py', b''),
     ('numpy.libs/libopenblas.so', b''),
     ('mojolearn.dist-info/METADATA', b'Requires-Dist: numpy>=1.24; extra == "test"\n'),
+    ('mojolearn.dist-info/METADATA', b'Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4\n'),
+    ('mojolearn.dist-info/METADATA', b'Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify" or python_version >= "3"\n'),
 ])
 def test_numpy_policy_rejects_runtime_and_payload_dependencies(tmp_path, name, content):
     path = tmp_path / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     assert audit.numpy_errors(path, name)
+
+
+def test_numpy_verification_extra_is_optional_metadata(tmp_path):
+    path = tmp_path / 'METADATA'
+    path.write_text('Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify"\n')
+    assert not audit.numpy_errors(path, 'mojolearn.dist-info/METADATA')
 
 
 @pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
@@ -121,3 +129,30 @@ def test_fast_tier_gpu_sets_are_the_only_math_exemption():
     assert "__sincosf_stret" in wheel.MATH_SYMBOLS
     assert all(wheel.FAST_SET.match(p) for p in ok)
     assert not any(wheel.FAST_SET.match(p) for p in enforced)
+
+
+def test_optional_sparse_return_adapter_remains_narrow(tmp_path):
+    path = tmp_path / '_expansion_neighbors.py'
+    relative = 'mojolearn/_expansion_neighbors.py'
+    body = 'class AdditiveChi2Sampler:\n    def transform(self, X):\n        if sparse is not None:\n            import scipy.sparse as sp\n'
+    path.write_text(body)
+    assert audit.dependency_errors(path, relative) == []
+    assert audit.dependency_errors(path, 'mojolearn/other.py')
+    for changed in (body.replace('scipy.sparse', 'scipy.linalg'),
+                    body.replace('if sparse is not None', 'if True'),
+                    body.replace('AdditiveChi2Sampler', 'OtherEstimator'),
+                    body.replace('transform', 'fit')):
+        path.write_text(changed)
+        assert audit.dependency_errors(path, relative)
+    path.write_text('import scipy.sparse\n')
+    assert audit.dependency_errors(path, relative)
+
+
+def test_sparse_adapter_does_not_add_a_numpy_runtime_dependency(tmp_path):
+    import ast
+    source = HERE.parents[1] / 'python' / 'mojolearn' / '_expansion_neighbors.py'
+    tree = ast.parse(source.read_text())
+    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'AdditiveChi2Sampler')
+    path = tmp_path / 'adapter.py'
+    path.write_text(ast.unparse(cls))
+    assert audit.numpy_errors(path, 'mojolearn/_expansion_neighbors.py') == []

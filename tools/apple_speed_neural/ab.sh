@@ -37,9 +37,60 @@ for rep in $(seq 1 "${AB_REPS:-3}"); do
                 --out "$OUT/race-$label-$rep" --work "$OUT/work" > "$OUT/race-$label-$rep-$l.log" 2>&1
             m=$(grep -E '^NEURAL lane=' "$OUT/race-$label-$rep-$l.log" | sed 's/.*median_ms=\([0-9.]*\).*/\1/')
             dg=$(grep -E '^NEURAL-ROUND ' "$OUT/race-$label-$rep-$l.log" | tail -1 | sed 's/.*digest=//')
-            echo "AB rep=$rep variant=$label lane=$l median_ms=$m digest=$dg"
+            q=$(grep -E '^NEURAL lane=' "$OUT/race-$label-$rep-$l.log" | sed 's/.*quality=//')
+            echo "AB rep=$rep variant=$label lane=$l median_ms=$m digest=$dg quality=$q"
         done
     done
 done
+# AB_STEP_SHAPE (lane/neural-apple2): the byte LM step at this shape
+# (B L DM H KV HD FF LAYERS VOCAB) in every variant, alternating AB_STEP_REPS
+# times, each its own binding built in the variant's tree; steady median and
+# the final witness / loss digests.
+if [ -n "${AB_STEP_SHAPE:-}" ]; then
+    for label in $labels; do
+        rm -f "$OUT/wt-$label/python/mojolearn/identical/_mojolearn_byte_lm.so"
+        (cd "$OUT/wt-$label" && MOJOLEARN_NUMERIC_MODE=identical pixi run -e default sh bindings/build_byte_lm.sh) > "$OUT/bytelm-$label.log" 2>&1 || echo "AB $label BYTE-LM BUILD FAILED"
+    done
+    # AB_STEP_SHAPE may name several shapes separated by ';'.
+    echo "$AB_STEP_SHAPE" | tr ';' '\n' > "$OUT/step_shapes.txt"
+    si=0
+    while read -r shp; do
+    [ -n "$shp" ] || continue
+    si=$((si + 1))
+    echo "AB-STEP shape $si = $shp"
+    for rep in $(seq 1 "${AB_STEP_REPS:-2}"); do
+        for label in $labels; do
+            d="$OUT/step$si-$label-$rep"
+            # shellcheck disable=SC2086
+            (cd "$OUT/wt-$label" && PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/lm_step_memory_probe.py --out "$d" \
+                --shape $shp --steps "${AB_STEP_STEPS:-4}" --resident-lean --budget-seconds 3000) > "$d.log" 2>&1 < /dev/null
+            pixi run -e default python - "$d/result.json" "$label" "$rep.s$si" <<'PY'
+import json, sys
+try:
+    r = json.load(open(sys.argv[1]))
+except Exception as e:
+    print("AB-STEP", sys.argv[2], sys.argv[3], "NO RESULT", e); sys.exit(0)
+fw = (r.get("final_witness") or {}).get("sha256") or {}
+lw = [(s.get("sha256") or {}).get("loss", "")[:8] for s in r.get("step_witnesses") or []]
+print("AB-STEP rep=%s variant=%s median=%s steady=%s gate=%s grad=%s param=%s m=%s v=%s losses=%s" % (
+    sys.argv[3], sys.argv[2], r.get("steady_median_seconds"),
+    [round(x, 4) for x in r.get("steady_step_seconds") or []], r.get("attention_estash_gate"),
+    fw.get("gradients", "")[:16], fw.get("parameters", "")[:16], fw.get("m", "")[:16], fw.get("v", "")[:16], lw))
+PY
+        done
+    done
+    done < "$OUT/step_shapes.txt"
+fi
+# AB_PYPROF=1 (lane/neural-apple2): this tree's pyprof.py (the Samba train
+# step: walls, losses, the loss and parameter digests) against each variant.
+if [ "${AB_PYPROF:-0}" = 1 ]; then
+    for rep in $(seq 1 "${AB_REPS:-3}"); do
+        for label in $labels; do
+            PYPROF_STEPS=${AB_PYPROF_STEPS:-3} PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/apple_speed_neural/pyprof.py > "$OUT/pyprof-$label-$rep.log" 2>&1 < /dev/null
+            grep -E "^PYPROF samba (step|params)" "$OUT/pyprof-$label-$rep.log" | sed "s/^/AB-PYPROF rep=$rep variant=$label /"
+            grep -qE "^PYPROF samba params" "$OUT/pyprof-$label-$rep.log" || { echo "AB-PYPROF rep=$rep variant=$label FAILED:"; tail -5 "$OUT/pyprof-$label-$rep.log"; }
+        done
+    done
+fi
 for v in $AB_VARIANTS; do git worktree remove --force "$OUT/wt-${v%%=*}" > /dev/null 2>&1; done
 exit 0

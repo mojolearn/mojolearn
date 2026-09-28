@@ -6,13 +6,19 @@ from std.ffi import _Global
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import memcpy
+from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
-from sequence.ops import FP, Args
+from sequence.ops import FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.coop import COOP_W, apply_coop
+from std.sys.info import has_apple_gpu_accelerator
+
+#: the simdgroup-cooperative long folds (sequence/coop.mojo): Apple only
+comptime SEQ_COOP = has_apple_gpu_accelerator()
 
 comptime TPB = 128
 
@@ -94,6 +100,49 @@ def seq_kernel[OP: Int](
         apply[OP](t, a)
 
 
+#: host copies of at least two grains are split over threads (apple2: the
+#: optimizer steps moved ~150 MB a step through one memcpy); data movement
+#: only, the bytes are the same
+comptime PCOPY_GRAIN = 1 << 20
+
+
+def _pcopy(dst: FP, src: FP, n: Int):
+    if n < 2 * PCOPY_GRAIN:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    var tasks = min(8, n // PCOPY_GRAIN)
+    var chunk = (n + tasks - 1) // tasks
+
+    def _c(i: Int) {imm dst, imm src, imm chunk, imm n}:
+        var lo = i * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_c, tasks)
+
+
+def coop_kernel[OP: Int](
+    p0: FP, p1: FP, p2: FP, p3: FP, p4: FP, p5: FP,
+    p6: FP, p7: FP, p8: FP, p9: FP, p10: FP, p11: FP,
+    i01: Int64, i23: Int64, i45: Int64, i67: Int64, i89: Int64, i1011: Int64,
+    f01: Int64, f23: Int64, f45: Int64, f67: Int64,
+    n: Int64,
+):
+    """One simdgroup (COOP_W threads) per cell of OP (sequence/coop.mojo);
+    TPB is a multiple of COOP_W, so a cell's lanes share one simdgroup and
+    leave together."""
+    var g = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cell = g // COOP_W
+    if cell < Int(n):
+        var a = Args(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11,
+                     _lo(i01), _hi(i01), _lo(i23), _hi(i23), _lo(i45), _hi(i45),
+                     _lo(i67), _hi(i67), _lo(i89), _hi(i89), _lo(i1011), _hi(i1011),
+                     _flo(f01), _fhi(f01), _flo(f23), _fhi(f23),
+                     _flo(f45), _fhi(f45), _flo(f67), _fhi(f67))
+        apply_coop[OP](cell, g - cell * COOP_W, a)
+
+
 struct DeviceExec(Exec):
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
@@ -102,6 +151,10 @@ struct DeviceExec(Exec):
     #: upload staging buffers still read by queued copies; released at the
     #: next sync (an upload no longer waits for its own copy)
     var staged: List[HostBuffer[DType.float32]]
+    #: download_async copies waiting for the next sync: (host buffer, dst, n)
+    var pend_host: List[HostBuffer[DType.float32]]
+    var pend_dst: List[Int]
+    var pend_n: List[Int]
 
     def __init__(out self) raises:
         self.ctx = sequence_ctx()
@@ -109,11 +162,18 @@ struct DeviceExec(Exec):
         self.base = List[Int]()
         self.size = List[Int]()
         self.staged = List[HostBuffer[DType.float32]]()
+        self.pend_host = List[HostBuffer[DType.float32]]()
+        self.pend_dst = List[Int]()
+        self.pend_n = List[Int]()
 
     def alloc(mut self, n: Int) raises -> FP:
+        return self._alloc(n, True)
+
+    def _alloc(mut self, n: Int, zero: Bool) raises -> FP:
         var count = n if n > 0 else 1
         var buf = self.ctx.enqueue_create_buffer[DType.float32](count)
-        buf.enqueue_fill(Float32(0.0))
+        if zero:
+            buf.enqueue_fill(Float32(0.0))
         var p = FP(unsafe_from_address=Int(buf.unsafe_ptr()))
         self.base.append(Int(p))
         self.size.append(count)
@@ -148,14 +208,15 @@ struct DeviceExec(Exec):
         var found = self._find(dst, n)
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
         # written at once, as the element loop it replaces did
-        memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+        _pcopy(host.unsafe_ptr(), src, n)
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
         _ = view^
         self.staged.append(host^)
 
     def bind(mut self, src: FP, n: Int) raises -> FP:
-        var p = self.alloc(n)
+        # every word is uploaded over at once: no zero fill first (apple2)
+        var p = self._alloc(n, n <= 0)
         self.upload(p, src, n)
         return p
 
@@ -167,9 +228,23 @@ struct DeviceExec(Exec):
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         self.sync()
-        memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+        _pcopy(dst, host.unsafe_ptr(), n)
         _ = view^
         _ = host^
+
+    def download_async(mut self, dst: FP, src: FP, n: Int) raises:
+        """The copy is queued now; `dst` is written at the next sync, so
+        several downloads share one wait (apple2)."""
+        if n <= 0:
+            return
+        var found = self._find(src, n)
+        var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
+        var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
+        self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        _ = view^
+        self.pend_host.append(host^)
+        self.pend_dst.append(Int(dst))
+        self.pend_n.append(n)
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
@@ -178,6 +253,24 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
+                                  or OP == OP_LAMB_RATIO or OP == OP_GEMM):
+            var coop = True
+            comptime if OP == OP_GEMM:
+                coop = a.i0 * a.i1 <= 1024 and a.i2 >= 32768
+            elif OP == OP_AF_ALPHA or OP == OP_AF_DENOM:
+                coop = a.i0 >= 4096
+            if coop:
+                self.ctx.enqueue_function[coop_kernel[OP]](
+                    a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
+                    _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
+                    _pack_ii(a.i6, a.i7), _pack_ii(a.i8, a.i9), _pack_ii(a.i10, a.i11),
+                    _pack_ff(a.f0, a.f1), _pack_ff(a.f2, a.f3), _pack_ff(a.f4, a.f5), _pack_ff(a.f6, a.f7),
+                    Int64(n),
+                    grid_dim=((n * COOP_W + TPB - 1) // TPB, 1, 1),
+                    block_dim=(TPB, 1, 1),
+                )
+                return
         self.ctx.enqueue_function[seq_kernel[OP]](
             a.p0, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7, a.p8, a.p9, a.p10, a.p11,
             _pack_ii(a.i0, a.i1), _pack_ii(a.i2, a.i3), _pack_ii(a.i4, a.i5),
@@ -191,3 +284,8 @@ struct DeviceExec(Exec):
     def sync(mut self) raises:
         self.ctx.synchronize()
         self.staged.clear()
+        for i in range(len(self.pend_dst)):
+            _pcopy(FP(unsafe_from_address=self.pend_dst[i]), self.pend_host[i].unsafe_ptr(), self.pend_n[i])
+        self.pend_host.clear()
+        self.pend_dst.clear()
+        self.pend_n.clear()

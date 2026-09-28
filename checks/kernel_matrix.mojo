@@ -930,7 +930,16 @@ def reorder_single_pass_for[column: Int, identical: Bool]() -> Bool:
 def ridx_only_splits_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 1902): whether the NON-SYMMETRIC driver's split moves only the row index, leaving the stat planes stationary for the life of the fit, with every stat reader gathering `stats[row_index[pos]]` instead of reading a permuted plane."""
     comptime if identical:
-        return False
+        # Apple IDENTICAL (trees-apple2, 2026-09-28): the same bits by
+        # DEVIATION 1902's argument (a permutation moves bytes and never
+        # re-rounds; every reader enumerates the same values in the same
+        # order through the index). The IDENTICAL-only readers of the stat
+        # plane (the per-iteration partstats sweep, the `stats` trace
+        # record) gather through the index too. Opt-out:
+        # `-D MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF`.
+        return column == COLUMN_APPLE and not is_defined[
+            "MOJOLEARN_GBDT_IDENTICAL_RIDX_OFF"
+        ]()
     comptime if is_defined["MOJOLEARN_2044_FAST_NO_RIDX_ONLY"]():
         return False
     return (

@@ -33,6 +33,7 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
@@ -45,7 +46,18 @@ comptime APPLE_IDENTICAL_STEP_UNROLL = (
     and not is_defined["MOJOLEARN_APPLE_STEP_UNROLL_OFF"]()
 )
 
-comptime STRIDED_UNROLL = 8
+#: FAST on Apple (lane/linear-apple2): the same unrolled walks. A walk's
+#: adds are the plain loop's, in its order (only the loads move ahead), so
+#: FAST's words do not move either. Only the call sites that name it opt in
+#: (glm/impl/qn's loss sums and bias means). -D MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF=1
+#: reverts.
+comptime APPLE_FAST_STEP_UNROLL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_APPLE_FAST_STEP_UNROLL_OFF"]()
+)
+
+comptime STRIDED_UNROLL = 32
 
 
 @always_inline

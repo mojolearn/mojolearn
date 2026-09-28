@@ -25,6 +25,13 @@ keeps the `DeviceBuffer`s can call the implemented entries directly).
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTsaContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from holtwinters.impl.holtwinters import buffer_size, fit, forecast
@@ -222,7 +229,7 @@ def holtwinters_fit_host(
 ) raises -> HWFit:
     """The bindings entry: the environment's trace (`MOJOLEARN_IDENTITY_TRACE`),
     their block widths, no padding."""
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     return holtwinters_fit_host_traced(
         ctx, data, n, batch_size, frequency, start_periods, seasonal, eps, trace,
@@ -255,7 +262,7 @@ def holtwinters_forecast_host_traced(
 
 
 def holtwinters_forecast_host(fitted: HWFit, h: Int) raises -> List[Float32]:
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     return holtwinters_forecast_host_traced(ctx, fitted, h, trace)
 

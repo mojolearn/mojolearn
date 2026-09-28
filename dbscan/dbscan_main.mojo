@@ -5,6 +5,7 @@
 from dbscan.checks.dbscan_check import (
     check_dbscan,
     check_dbscan_batching_agrees,
+    check_dbscan_batching_shared_border,
     check_dbscan_duplicate_equals_weight_two,
     check_dbscan_eps_sensitivity,
     check_dbscan_manhattan_changes_the_labels,
@@ -28,6 +29,7 @@ def main() raises:
     check_dbscan_eps_sensitivity()
     check_exclusive_scan_beyond_the_old_cap()
     check_dbscan_batching_agrees()
+    check_dbscan_batching_shared_border()
     check_dbscan_rbc_matches_brute()
     check_dbscan_rbc_two_loop_arms()
     check_dbscan_max_mbytes_moves_the_batch()

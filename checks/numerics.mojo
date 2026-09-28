@@ -92,6 +92,31 @@ def ftz(x: Float32) -> Float32:
         ](x, Int32(0x90))
         var zero = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
         return zero if subnormal else x
+    # Consolidation: the floating comparison is the default Apple arm;
+    # FCMP_OFF selects the one-test integer arm, TWO_TEST restores the
+    # original two-test integer spelling. All three preserve the FTZ contract.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_FCMP_OFF"]() and not is_defined["MOJOLEARN_FTZ_TWO_TEST"]() and is_apple_gpu():
+        # lane cluster-apple2 (2026-09-28), in code compiled FOR an Apple GPU:
+        # `|x| < FLT_MIN` holds exactly for the subnormals and the two zeros
+        # (a zero maps to itself), never for a normal, an infinity or a NaN,
+        # so the select returns the same word for every input as the integer
+        # spelling below. Measured on m4pro-b (1790608687723), digests equal:
+        # KMeans 1M x 28 k 1024 1.732 -> 1.500 s, GaussianMixture 1M taxi
+        # 2.959 -> 2.871 s (E-step 1115 -> 1044 ms). SHARED: every family's
+        # Apple IDENTICAL kernels take it. `-D MOJOLEARN_FTZ_FCMP_OFF=1` is
+        # the revert arm.
+        var sz = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
+        return sz if abs(x) < Float32(1.17549435082228750797e-38) else x
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_apple_gpu() and not is_defined["MOJOLEARN_FTZ_TWO_TEST"]():
+        # lane ann-apple2 (2026-09-28), Apple GPU only: ONE test. A word whose
+        # exponent field is zero becomes its sign word; for a subnormal that
+        # is the signed zero (as below) and for +-0 it IS the word, so every
+        # input maps to the same word as the two-test spelling, with the
+        # mantissa test and its AND gone. `-D MOJOLEARN_FTZ_TWO_TEST` reverts.
+        var b1 = bitcast[DType.uint32](x)
+        if (b1 & UInt32(0x7F800000)) == UInt32(0):
+            return bitcast[DType.float32](b1 & UInt32(0x80000000))
+        return x
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (

@@ -23,6 +23,7 @@ pinned GEMM's (TN over the N*OH*OW rows, DEVIATION 5701).
 """
 from std.math import fma  # only a sabotage arm (seam 5709) spells the fused form
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from core.philox import philox4x32_10
 from checks.numerics import ftz, identical_div, identical_mul, identical_exp, identical_log, identical_rsqrt, identical_sqrt
 
@@ -138,6 +139,36 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
+def im2col_taps_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
+    """lane/cnn-apple2: `im2col_at` for the KH*KW taps of one (row r,
+    channel c), i = r*C + c: the same words at the same addresses (each
+    `im2col_at` element's copy), one index decode per KH*KW words instead
+    of one per word."""
+    var C = _g(p, CP_C); var H = _g(p, CP_H); var W = _g(p, CP_W)
+    var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
+    var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
+    var r = _ud(i, C)
+    var c = i - r * C
+    var n = _ud(r, (OH * OW))
+    var rem = r - n * OH * OW
+    var oh = _ud(rem, OW)
+    var ow = rem - oh * OW
+    var h0 = oh * _g(p, CP_SH) - _g(p, CP_PH)
+    var w0 = ow * _g(p, CP_SW) - _g(p, CP_PW)
+    var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
+    var xb = (n * C + c) * H
+    var ob = r * (C * KH * KW) + c * KH * KW
+    for kh in range(KH):
+        var h = h0 + kh * DH
+        for kw in range(KW):
+            var w = w0 + kw * DW
+            var v = Float32(0)
+            if h >= 0 and h < H and w >= 0 and w < W:
+                v = ftz(x.unsafe_load((xb + h) * W + w))
+            cols.unsafe_store(ob + kh * KW + kw, v)
+
+
+@always_inline
 def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     """out[n, oc, oh, ow] (NCHW) = y2[r, oc] (+ bias[oc]); one add."""
     var OC = _g(p, CP_OC); var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
@@ -148,10 +179,17 @@ def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     var oc = _um(t, OC)
     var n = _ud(t, OC)
     var r = (n * OH + oh) * OW + ow
-    var v = ftz(y2.unsafe_load(r * OC + oc))
+    dst.unsafe_store(i, conv_out_val(y2.unsafe_load(r * OC + oc), bias, oc, p))
+
+
+@always_inline
+def conv_out_val(y: Float32, bias: FP, oc: Int, p: IP) -> Float32:
+    """`conv_out_at`'s stored word for the GEMM value `y` of channel `oc`
+    (lane/cnn-apple2: shared with the tiled layout kernel)."""
+    var v = ftz(y)
     if _g(p, CP_BIAS) != 0:
         v = ftz(v + ftz(bias.unsafe_load(oc)))
-    dst.unsafe_store(i, canon(v))
+    return canon(v)
 
 
 @always_inline
@@ -354,6 +392,19 @@ def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
     var nc = _ud(t, H)
     var me = Int32(h * W + w)
     var acc = Float32(0)
+    comptime if not is_defined["MOJOLEARN_XCNN_NO_POOL_BWD_TILE"]():
+        # lane/cnn-apple2: windows that tile the input (kernel == stride, no
+        # padding, no dilation, no reversed order asked) hold each pixel
+        # exactly once, window (h // KH, w // KW): the loop below visits that
+        # one window and no other, so this is its one step on the same words.
+        if KH == SH and KW == SW and PH == 0 and PW == 0 and DH == 1 and DW == 1 and _g(p, PP_REV) == 0:
+            var oh1 = _ud(h, KH)
+            var ow1 = _ud(w, KW)
+            if oh1 < OH and ow1 < OW:
+                var o1 = (nc * OH + oh1) * OW + ow1
+                if idx.unsafe_load(o1) == me:
+                    acc = ftz(acc + ftz(dout.unsafe_load(o1)))
+            return acc
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh * DH
@@ -494,8 +545,15 @@ def pool_relu_rows_bwd_at(i: Int, dpool: FP, yconv: FP, grow: FP, f3: FP, idx: I
     var n = _ud(r, (OH * OW))
     var rem = r - n * OH * OW
     var j = ((n * OC + oc) * OH * OW) + rem
+    grow.unsafe_store(i, pool_relu_row_val(j, dpool, yconv, idx, p))
+
+
+@always_inline
+def pool_relu_row_val(j: Int, dpool: FP, yconv: FP, idx: IP, p: IP) -> Float32:
+    """`pool_relu_rows_bwd_at`'s stored word for the conv output at NCHW
+    index `j` (lane/cnn-apple2: shared with the tiled layout kernel)."""
     var gr = maxpool_bwd_val(j, dpool, idx, p + CP_LEN)
-    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), gr)))
+    return ftz(relu_bwd_val(yconv.unsafe_load(j), gr))
 
 
 @always_inline
@@ -663,13 +721,22 @@ def _bn(aux: FP, slot: Int, c: Int, C: Int) -> Int:
 
 
 @always_inline
+def bn_mean_row(a: Int, N: Int) -> Int:
+    """The image the mean's fold visits a-th: ascending (seam 5702; the
+    device's threadgroup form, x_cnn/device.mojo `bn_stats_block_kernel`,
+    reads the same order through this)."""
+    return a
+
+
+@always_inline
 def bn_stats_at(c: Int, x: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     """Training statistics of channel c: mean, then the biased variance as a
     second fold of (x - mean)^2, invstd = rsqrt(var + eps)."""
     var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
     var count = Float32(N * HW)
     var acc = Float32(0)
-    for n in range(N):
+    for a in range(N):
+        var n = bn_mean_row(a, N)
         var base = (n * C + c) * HW
         for k in range(HW):
             acc = ftz(acc + ftz(x.unsafe_load(base + k)))

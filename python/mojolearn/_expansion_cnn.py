@@ -532,6 +532,16 @@ class _Res:
         return out
 
 
+#: lane/cnn-apple2 (2026-09-28): predict_proba runs at most this many rows
+#: per forward pass on one set of resident arrays (every op is per row, so
+#: the chunk never changes a word), and the trainer's per-step optimizer and
+#: batch gather each take one binding call (the list forms). `_LEGACY_STEP`
+#: True is the measurement arm's before side (per-parameter optimizer calls,
+#: two gathers, one pass over all rows); never set in production.
+_PREDICT_ROWS = 2048
+_LEGACY_STEP = False
+
+
 class CNNClassifier(_Layer):
     """A small CNN image classifier, sklearn-shaped: for each entry of
     `conv_channels` a Conv2d (kernel_size, 'same' zero padding for odd
@@ -627,17 +637,17 @@ class CNNClassifier(_Layer):
             shape = oshape
         return plans, shape
 
-    def _resident(self, R, n, save=False):
+    def _resident(self, R, n, save=False, train=True):
         """The step's resident arrays at batch capacity n (DEVIATION 5718);
         `save` keeps each block's im2col matrix and conv output for its
-        backward."""
+        backward; `train` False (predict) skips the gradient arrays."""
         plans, shape = self._plan(n)
         k = len(self.classes_)
         a = dict(x=R.new(plans[0][2] if plans else n * self._flat), y=R.new(n),
                  logits=R.new(n * k), glog=R.new(n * k), proba=R.new(n * k))
         a["out"] = [R.new(p[3]) for p in plans]
         a["idx"] = [R.new(p[3]) for p in plans]
-        a["gout"] = [R.new(p[3]) for p in plans]
+        a["gout"] = [R.new(p[3]) for p in plans] if (train or _LEGACY_STEP) else []
         a["saved"] = [[R.new(p[4]), R.new(p[5])] if save else [] for p in plans]
         if not plans:  # the head's input gradient, never read, kept apart from glog
             a["ghead"] = R.new(n * self._flat)
@@ -687,6 +697,7 @@ class CNNClassifier(_Layer):
                 if attr == "weight_":
                     self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
             a = self._resident(R, cap, save=True)
+            sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]
             # the whole X and its labels resident once when they fit a GiB:
             # each step then gathers its rows on the binding's side (a word
             # copy) instead of uploading them
@@ -705,8 +716,11 @@ class CNNClassifier(_Layer):
                     m = len(idx)
                     if whole:
                         rows = np.ascontiguousarray(idx, dtype=np.int32)
-                        b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
-                        b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
+                        if _LEGACY_STEP:
+                            b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
+                            b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
+                        else:
+                            b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
                     else:
                         R.put(a["x"], np.ascontiguousarray(x[idx]))
                         R.put(a["y"], np.ascontiguousarray(yi[idx]))
@@ -725,7 +739,17 @@ class CNNClassifier(_Layer):
                         b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
                                                       [dx, gw_, gb_] + a["saved"][j], prm, pprm)
                     step += 1
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf):
+                    if not _LEGACY_STEP:
+                        # every parameter in one binding call, the same launches in the same order
+                        if self.optimizer == "sgd":
+                            b.x_cnn_sgd_r(hp, hg, hbuf, sizes,
+                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
+                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
+                        else:
+                            b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
+                                                                            self.eps, self.weight_decay,
+                                                                            self.optimizer == "adamw"))
+                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if _LEGACY_STEP else ():
                         size = getattr(layer, attr).size
                         if self.optimizer == "sgd":
                             b.x_cnn_sgd_r(p_, g_, buf, [size],
@@ -751,7 +775,12 @@ class CNNClassifier(_Layer):
         np = _np()
         x = self._images(X)
         n = x.shape[0]
+        k = len(self.classes_)
         b = self._binding()
+        # lane/cnn-apple2: at most _PREDICT_ROWS rows per pass on one set of
+        # resident arrays (every op is per row: the same words)
+        cap = n if _LEGACY_STEP else max(1, min(n, _PREDICT_ROWS))
+        proba = np.empty((n, k), np.float32)
         with _Res(b) as R:
             self._rw = {}
             for layer in [c for c, _ in self._blocks] + [self.head_]:
@@ -759,12 +788,14 @@ class CNNClassifier(_Layer):
                 R.put(hw, layer.weight_)
                 R.put(hb, layer.bias_)
                 self._rw[id(layer)] = (hw, hb)
-            a = self._resident(R, n)
-            R.put(a["x"], np.ascontiguousarray(x))
-            R.put(a["y"], np.full(n, -1, np.int32))
-            self._forward_r(b, a, n)
-            b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [n, len(self.classes_)])
-            proba = R.get(a["proba"], (n, len(self.classes_)))
+            a = self._resident(R, cap, train=False)
+            R.put(a["y"], np.full(cap, -1, np.int32))
+            for s in range(0, n, cap):
+                m = min(cap, n - s)
+                R.put(a["x"], np.ascontiguousarray(x[s:s + m]))
+                self._forward_r(b, a, m)
+                b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k])
+                b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
             self._rw = {}
         return proba
 
@@ -1124,8 +1155,16 @@ class _Graph:
         np = _np()
         self.n = int(n)
         self.src, self.dst = np.asarray(src, np.int64), np.asarray(dst, np.int64)
-        self.order_f = np.lexsort((self.src, self.dst))
-        self.order_t = np.lexsort((self.dst, self.src))
+        # lane/cnn-apple2: a stable argsort of the one int64 key (row * n +
+        # col, both in [0, n)) is lexsort's order exactly, at about a third
+        # of its time on 1M edges (host work that dominated the forward)
+        nn = max(self.n, 1)
+        if _LEGACY_STEP:
+            self.order_f = np.lexsort((self.src, self.dst))
+            self.order_t = np.lexsort((self.dst, self.src))
+        else:
+            self.order_f = np.argsort(self.dst * nn + self.src, kind="stable")
+            self.order_t = np.argsort(self.src * nn + self.dst, kind="stable")
         self.csr_f = self._csr(self.dst[self.order_f], self.src[self.order_f])
         self.csr_t = self._csr(self.src[self.order_t], self.dst[self.order_t])
         self.nnz = len(self.src)
@@ -1133,7 +1172,7 @@ class _Graph:
     def _csr(self, rows, cols):
         np = _np()
         ptr = np.zeros(self.n + 1, np.int64)
-        np.add.at(ptr, rows + 1, 1)
+        ptr[1:] = np.bincount(rows, minlength=self.n)[:self.n]
         return np.ascontiguousarray(np.concatenate([np.cumsum(ptr), cols, rows]).astype(np.int32))
 
     def vals_t(self, vals_f):
@@ -1151,6 +1190,26 @@ class _Graph:
         binding.x_cnn_spmm(vals.ctypes.data, h.ctypes.data, out.ctypes.data, csr.ctypes.data,
                            [self.n, h.shape[1], self.nnz, mode])
         return out
+
+
+def _graph_key(n, *arrays):
+    """lane/cnn-apple2: a content key for a layer's graph (the node count
+    and the bytes of each array): a forward on the same edges reuses the
+    CSR views and normalized values it built, which are functions of these
+    alone (the same words; PyG's cached=False recomputes them on the GPU,
+    here the build is host NumPy and dominated the forward)."""
+    import hashlib
+    np = _np()
+    h = hashlib.blake2b(digest_size=16)
+    h.update(str(int(n)).encode())
+    for a in arrays:
+        if a is None:
+            h.update(b"none")
+            continue
+        a = np.ascontiguousarray(np.asarray(a))
+        h.update(str((a.dtype.str, a.shape)).encode())
+        h.update(a.tobytes())
+    return h.digest()
 
 
 def _edges(edge_index, n):
@@ -1216,7 +1275,16 @@ class GCNConv(_Layer):
         x = _f32(x, "x")
         n = x.shape[0]
         b = self._binding()
-        g, vals = self._graph(n, edge_index, edge_weight)
+        if _LEGACY_STEP:
+            g, vals = self._graph(n, edge_index, edge_weight)
+        else:
+            key = (_graph_key(n, edge_index, edge_weight), self.improved, self.add_self_loops, self.normalize)
+            hit = getattr(self, "_gcache", None)
+            if hit is not None and hit[0] == key:
+                g, vals = hit[1]
+            else:
+                g, vals = self._graph(n, edge_index, edge_weight)
+                self._gcache = (key, (g, vals))
         h = _gemm(b, x, self.weight_, n, self.out_channels, self.in_channels, 1)
         out = g.spmm(b, vals, h, 0)
         if self.bias:
@@ -1275,8 +1343,15 @@ class SAGEConv(_Layer):
         x = _f32(x, "x")
         n = x.shape[0]
         b = self._binding()
-        src, dst = _edges(edge_index, n)
-        g = _Graph(src, dst, n)
+        key = None if _LEGACY_STEP else _graph_key(n, edge_index)
+        hit = getattr(self, "_gcache", None)
+        if key is not None and hit is not None and hit[0] == key:
+            g = hit[1]
+        else:
+            src, dst = _edges(edge_index, n)
+            g = _Graph(src, dst, n)
+            if key is not None:
+                self._gcache = (key, g)
         xs = x
         if self.project:
             xs = self._relu_p.forward(self.lin.forward(x))

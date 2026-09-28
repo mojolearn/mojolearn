@@ -1,12 +1,11 @@
---- a/x_cnn/ops.mojo	2026-09-27 12:16:05
-+++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
-@@ -522,7 +522,8 @@
-     var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
-     var count = Float32(N * HW)
-     var acc = Float32(0)
--    for n in range(N):
-+    for a in range(N):
-+        var n = N - 1 - a
-         var base = (n * C + c) * HW
-         for k in range(HW):
-             acc = ftz(acc + ftz(x.unsafe_load(base + k)))
+--- a/x_cnn/ops.mojo	2026-09-28 12:51:28
++++ b/x_cnn/ops.mojo	2026-09-28 12:51:28
+@@ -725,7 +725,7 @@
+     """The image the mean's fold visits a-th: ascending (seam 5702; the
+     device's threadgroup form, x_cnn/device.mojo `bn_stats_block_kernel`,
+     reads the same order through this)."""
+-    return a
++    return N - 1 - a  # SABOTAGE (seam 5702): the mean's fold in DESCENDING image order
+ 
+ 
+ @always_inline

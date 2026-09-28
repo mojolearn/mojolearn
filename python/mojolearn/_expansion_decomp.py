@@ -2888,13 +2888,95 @@ def _center_kernel(k, K):
     return Kc, col, allm
 
 
-def _top_eig(k, A, nc):
-    """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
-    columns, each column signed by sklearn's svd_flip(u_based_decision=True)."""
-    w, V = k.eigh(A)
+#: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
+#: under sklearn's own ARPACK policy for eigen_solver='auto' (KernelPCA /
+#: Isomap: n > 200 and fewer than 10 components), FAST mode only.
+_LANCZOS_MIN_N = 200
+_LANCZOS_MAX_NC = 10
+#: Ritz residual bound, relative to the largest |Ritz value|, and the basis cap
+#: past which the route gives up and runs the exact dense solve instead.
+_LANCZOS_TOL = 1e-7
+_LANCZOS_MAX_M = 600
+
+
+def _kdot(k, a, b):
+    return float(k.mm(a, b, ta=True).s[0])
+
+
+def _lanczos_top(k, A, nc):
+    """The nc largest eigenpairs of symmetric A by Lanczos with full
+    reorthogonalization (classical Gram-Schmidt, twice), every product on
+    the kit: A q, the basis projections and the updates. The basis starts at
+    max(2 nc + 1, 20) vectors (ARPACK's ncv) and doubles until every wanted
+    Ritz pair's residual estimate beta_m |y_m| is at most _LANCZOS_TOL times
+    the largest |Ritz value|. Returns None when that has not happened by
+    _LANCZOS_MAX_M vectors (the caller then runs the exact solve), so the
+    route never returns a less converged answer than it promises. The start
+    vector is a seeded uniform draw centred at 0 (a constant vector is
+    orthogonal to a centred kernel's spectrum)."""
     n = A.r
-    order = list(range(n - 1, n - 1 - nc, -1))
-    w, V = w.take_cols(order), V.take_cols(order)
+    q = k.ew("adds", k.rand(n, 1, 0x1A2C05, 91, 0), s=-0.5)
+    q = k.ew("scale", q, s=1.0 / math.sqrt(_kdot(k, q, q)))
+    QT = array.array("f")
+    alphas, betas = [], []
+    m = min(n, max(2 * nc + 1, 20))
+    j = 0
+    stop = False
+    while True:
+        while j < m and not stop:
+            QT.extend(q.s)
+            w = k.mm(A, q)
+            Qj = _M(QT[:], j + 1, n)
+            c = k.mm(Qj, w)
+            a = float(c.s[j])
+            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
+            c = k.mm(Qj, w)
+            a += float(c.s[j])
+            w = k.ew("sub", w, k.mm(Qj, c, ta=True))
+            alphas.append(a)
+            b = math.sqrt(max(_kdot(k, w, w), 0.0))
+            betas.append(b)
+            j += 1
+            if b <= 1e-30 * max(1.0, abs(a)) or j == n:
+                stop = True
+                break
+            q = k.ew("scale", w, s=1.0 / b)
+        T = [0.0] * (j * j)
+        for i in range(j):
+            T[i * j + i] = alphas[i]
+            if i + 1 < j:
+                T[i * j + i + 1] = T[(i + 1) * j + i] = betas[i]
+        th, Y = k.eigh(_M.of(T, j, j))
+        top = list(range(j - 1, max(j - 1 - nc, -1), -1))
+        if len(top) < nc:
+            return None
+        big = max(abs(th.s[i]) for i in top) or 1.0
+        res = [abs(betas[j - 1] * Y.s[(j - 1) * j + i]) for i in top]
+        if stop or max(res) <= _LANCZOS_TOL * big:
+            break
+        if m >= min(n, _LANCZOS_MAX_M):
+            return None
+        m = min(n, 2 * m, _LANCZOS_MAX_M)
+    Yt = Y.take_cols(top)
+    V = k.mm(_M(QT[:j * n], j, n), Yt, ta=True)
+    return th.take_cols(top), V
+
+
+def _top_eig(k, A, nc, fast=False):
+    """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
+    columns, each column signed by sklearn's svd_flip(u_based_decision=True).
+    fast (FAST mode, eigen_solver 'auto'): the Lanczos route under sklearn's
+    ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
+    n = A.r
+    got = None
+    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get("MOJOLEARN_XD_LANCZOS", "1") != "0":
+        got = _lanczos_top(k, A, nc)
+    if got is not None:
+        w, V = got
+    else:
+        w, V = k.eigh(A)
+        order = list(range(n - 1, n - 1 - nc, -1))
+        w, V = w.take_cols(order), V.take_cols(order)
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
@@ -3013,7 +3095,7 @@ class Isomap(_Base):
         self.dist_matrix_ = D.out()
         G = k.ew("scale", k.ew("sq", D), s=-0.5)
         Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components))
+        w, V = _top_eig(k, Kc, int(self.n_components), fast=self.numeric_mode_ == "fast")
         self.eigenvalues_m_ = w
         self.eigenvectors_m_ = V
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
@@ -3107,7 +3189,7 @@ class ClassicalMDS(_Base):
             D2 = k.ew("sq", Dm)
             self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
-        w, V = _top_eig(k, B, int(self.n_components))
+        w, V = _top_eig(k, B, int(self.n_components), fast=self.numeric_mode_ == "fast")
         self.eigenvalues_ = w.out((w.c,))
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
         self.embedding_ = self.embedding_m_.out()

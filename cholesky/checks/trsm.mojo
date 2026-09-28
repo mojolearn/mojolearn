@@ -295,7 +295,12 @@ comptime CHOL_MULTI_RHS = (
     has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_CHOL_MULTI_RHS_OFF"]()
 )
-comptime CHOL_MR_NT = 1024
+#: 256, not the sweep's 1024 (lane/apple-merged, 2026-09-28): with RB-wide
+#: vectors per thread the M2 Pro (no Dynamic Caching) dropped the 1024-thread
+#: dispatch with no error (GP predict(return_std=True) returned 0 for a whole
+#: batch, the right value for one row). Row i belongs to thread i % NT at any
+#: NT, so every chain is unchanged.
+comptime CHOL_MR_NT = 256
 comptime CHOL_MR_RB = 8
 
 
@@ -370,6 +375,108 @@ def trsm_lower_multi_rhs_kernel(
                     if j0 + c < nrhs:
                         b.unsafe_store(i * nrhs + j0 + c, tv[c])
             i += NT
+        barrier()
+
+
+#: lane neighbors-apple2 (2026-09-28): `trsm_lower_multi_rhs_kernel` at 256
+#: threads with each thread's later rows taken FOUR AT A TIME. DEVIATION
+#: 6150 moved the running values into b cells, and the later-row phase then
+#: walked a thread's rows one after another: 8 dependent chains per 32 steps
+#: instead of 32, GaussianProcessClassifier.predict_proba 0.26 -> 1.05 s on
+#: the M4 Pro. Here a group of four rows (i, i + NT, i + 2 NT, i + 3 NT) is
+#: loaded from its b cells, stepped together (32 independent chains), and
+#: stored back; the row owner is still `i % NT` (the diagonal simdgroup of
+#: block k0 is `(k0 % NT) / 32`, lane r owning row k0 + r), so program order
+#: suffices as before. 256 threads keeps the 32-float register tile far
+#: below every Apple pipeline limit (the M2 Pro's 1024-thread drop was the
+#: 1024-wide launch). Every element's chain is the same terms in the same
+#: order.
+#:
+#: OPT-IN SINCE 2026-09-28 18:10Z (`-D MOJOLEARN_CHOL_MR4`): after
+#: lane/apple-merged moved the row-by-row kernel itself to 256 threads, the
+#: row-by-row kernel is the faster one on both Macs measured, with equal
+#: digests: GPC.predict_proba 3k x 3k 0.215 vs 0.245 s IDENTICAL, 0.188 vs
+#: 0.213 FAST on the M4 Pro (request 1790618304592), 0.195 vs 0.209 /
+#: 0.160 vs 0.174 on the M3 Ultra (1790614983391). The regression this was
+#: written for (1.05 s) was the 1024-thread launch, which the merge removed.
+comptime CHOL_MR4 = is_defined["MOJOLEARN_CHOL_MR4"]()
+comptime CHOL_MR4_NT = 256
+comptime CHOL_MR4_G = 4
+
+
+def trsm_lower_multi_rhs4_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_lower_multi_rhs_kernel` with NT = 256 and the later rows in
+    groups of CHOL_MR4_G; columns [RB * block, +RB), any n."""
+    comptime NT = CHOL_MR4_NT
+    comptime RB = CHOL_MR_RB
+    comptime G = CHOL_MR4_G
+    var n = Int(n_in)
+    var nrhs = Int(nrhs_in)
+    var ld = Int(ld_in)
+    var j0 = Int(block_idx.x) * RB
+    var tid = Int(thread_idx.x)
+    var lane = tid % 32
+    var sg = tid // 32
+    var xs = stack_allocation[32 * RB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var nb = (n + 31) // 32
+    for kb in range(nb):
+        var k0 = kb * 32
+        var sgd = (k0 % NT) // 32
+        if sg == sgd:
+            var ri = k0 + lane
+            var tv = SIMD[DType.float32, RB](0.0)
+            if ri < n:
+                comptime for c in range(RB):
+                    if j0 + c < nrhs:
+                        tv[c] = ftz(b.unsafe_load(ri * nrhs + j0 + c))
+            for r in range(32):
+                if k0 + r < n:
+                    var x = SIMD[DType.float32, RB](0.0)
+                    if lane == r:
+                        var dg = ftz(l.unsafe_load((k0 + r) * ld + k0 + r))
+                        comptime for c in range(RB):
+                            x[c] = ftz(identical_div(tv[c], dg))
+                            xs[r * RB + c] = x[c]
+                            if j0 + c < nrhs:
+                                b.unsafe_store((k0 + r) * nrhs + j0 + c, x[c])
+                    comptime for c in range(RB):
+                        x[c] = shuffle_idx(x[c], UInt32(r))
+                    if lane > r and ri < n:
+                        var lv = ftz(l.unsafe_load(ri * ld + k0 + r))
+                        comptime for c in range(RB):
+                            tv[c] = ftz(identical_mul_add(-lv, x[c], tv[c]))
+        barrier()
+        var kc = min(32, n - k0)
+        var base = tid
+        while base < n:
+            var tv = InlineArray[SIMD[DType.float32, RB], G](fill=SIMD[DType.float32, RB](0.0))
+            var live = InlineArray[Bool, G](fill=False)
+            comptime for g in range(G):
+                var i = base + g * NT
+                if i < n and i >= k0 + 32:
+                    live[g] = True
+                    comptime for c in range(RB):
+                        if j0 + c < nrhs:
+                            tv[g][c] = ftz(b.unsafe_load(i * nrhs + j0 + c))
+            for r in range(kc):
+                comptime for g in range(G):
+                    if live[g]:
+                        var lv = ftz(l.unsafe_load((base + g * NT) * ld + k0 + r))
+                        comptime for c in range(RB):
+                            tv[g][c] = ftz(identical_mul_add(-lv, xs[r * RB + c], tv[g][c]))
+            comptime for g in range(G):
+                if live[g]:
+                    var i = base + g * NT
+                    comptime for c in range(RB):
+                        if j0 + c < nrhs:
+                            b.unsafe_store(i * nrhs + j0 + c, tv[g][c])
+            base += G * NT
         barrier()
 
 
@@ -665,11 +772,18 @@ def trsm_lower(
         comptime if CHOL_MULTI_RHS:
             if nrhs >= CHOL_MR_RB:
                 swept = True
-                ctx.enqueue_function[trsm_lower_multi_rhs_kernel](
-                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
-                    grid_dim=((nrhs + CHOL_MR_RB - 1) // CHOL_MR_RB, 1, 1),
-                    block_dim=(CHOL_MR_NT, 1, 1),
-                )
+                comptime if CHOL_MR4:
+                    ctx.enqueue_function[trsm_lower_multi_rhs4_kernel](
+                        l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                        grid_dim=((nrhs + CHOL_MR_RB - 1) // CHOL_MR_RB, 1, 1),
+                        block_dim=(CHOL_MR4_NT, 1, 1),
+                    )
+                else:
+                    ctx.enqueue_function[trsm_lower_multi_rhs_kernel](
+                        l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                        grid_dim=((nrhs + CHOL_MR_RB - 1) // CHOL_MR_RB, 1, 1),
+                        block_dim=(CHOL_MR_NT, 1, 1),
+                    )
         comptime if CHOL_SWEEP_SOLVES:
             if not swept:
                 swept = True

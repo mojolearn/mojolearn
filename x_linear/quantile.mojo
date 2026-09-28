@@ -25,6 +25,7 @@ from x_linear.ops import (
 )
 from std.sys.info import is_gpu
 from x_linear.team import Team
+from std.gpu import WARP_SIZE
 from x_linear.tops import t_sum, fold_sq, chain_fmad, fold_one_fmad
 
 
@@ -109,20 +110,42 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
     ynorm = t.bcast(ynorm, 2)
     var iters = 0
     var converged = False
+    # lane/linear-apple2: warp roles in the A' dr pass. Chains A' dr on
+    # threads [0, m); the NEXT iteration's A'(y - r - u) chains on threads
+    # [base1, base1 + m) (its y - r - u written by the r-update pass: the
+    # words the next iteration would write, unless the residual balancing
+    # rescales u, and then that iteration recomputes them); the lead's four
+    # row folds on the first thread of the warps from base2. Every chain and
+    # fold is still one thread's ascending loop. With too few threads the
+    # lead folds and every iteration computes its own A'(y - r - u).
+    var wm = ((m + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var base1 = wm
+    var base2 = 2 * wm
+    var roles = t.nt >= base2 + 4 * WARP_SIZE
+    var have_next = False
+    var nx = t.row(2)
     for it in range(max_iter):
         iters = it + 1
         # beta-update: each row's y - r - u across the team (team row 1),
         # then one thread per cell of A'(y - r - u)
         var vb = t.row(1)
-        for i in range(t.tid, n, t.nt):
-            st(vb, i, fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i)))
-        t.sync()
-        for j in range(t.tid, m, t.nt):
-            var acc = chain_fmad(x, j, d, vb, 0, 1, n) if j < d else fold_one_fmad(vb, 0, n)
-            if j < d:
-                acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
-            st(fw, rhs + j, acc)
-        t.sync()
+        if have_next:
+            for j in range(t.tid, m, t.nt):
+                var acc = ld(nx, j)
+                if j < d:
+                    acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
+                st(fw, rhs + j, acc)
+            t.sync()
+        else:
+            for i in range(t.tid, n, t.nt):
+                st(vb, i, fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i)))
+            t.sync()
+            for j in range(t.tid, m, t.nt):
+                var acc = chain_fmad(x, j, d, vb, 0, 1, n) if j < d else fold_one_fmad(vb, 0, n)
+                if j < d:
+                    acc = fa(acc, fs(ld(fw, z + j), ld(fw, v + j)))
+                st(fw, rhs + j, acc)
+            t.sync()
         if t.lead():
             chol_solve(fw, mm, m, fw, rhs)
             copy(fw, beta, fw, rhs, m)
@@ -152,18 +175,40 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             # dual update and the primal residual of this row
             var pr = fs(fa(abi, nr), ld(y, i))
             st(prb, i, pr)
-            st(fw, u + i, fa(ld(fw, u + i), pr))
+            var un_i = fa(ld(fw, u + i), pr)
+            st(fw, u + i, un_i)
+            if roles:
+                st(vb, i, fs(fs(ld(y, i), nr), un_i))
         t.sync()
-        # the dual residual's A' dr, one thread per cell (into rhs, free now)
+        # the dual residual's A' dr, one thread per cell (into rhs, free now);
+        # lane/linear-apple2: four more threads fold ||ab||^2, ||r||^2, the
+        # primal residuals' and ||u||^2 over the rows (each one thread's
+        # ascending fold, the lead's former sequence) into team slots 8..11,
+        # so the lead no longer runs four n-row folds one after another
+        var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+        # each fold thread leads a warp of its own (see huber.mojo)
         for j in range(t.tid, m, t.nt):
             var acc = chain_fmad(x, j, d, fw, tmp, 1, n) if j < d else fold_one_fmad(fw, tmp, n)
             st(fw, rhs + j, acc)
+        if roles and t.tid >= base1 and t.tid < base1 + m:
+            var j = t.tid - base1
+            st(nx, j, chain_fmad(x, j, d, vb, 0, 1, n) if j < d else fold_one_fmad(vb, 0, n))
+        if roles and t.tid >= base2 and (t.tid - base2) % WARP_SIZE == 0:
+            var role = (t.tid - base2) // WARP_SIZE
+            if role == 0:
+                st(sl, 8, fold_sq(fw, ab, n))
+            elif role == 1:
+                st(sl, 9, fold_sq(fw, r, n))
+            elif role == 2:
+                st(sl, 10, fold_sq(prb, 0, n))
+            elif role == 3:
+                st(sl, 11, fold_sq(fw, u, n))
         t.sync()
         var flag = 0  # bit 0: converged, bit 1: rescaled
         var inv = Float32(1)
         if t.lead():
-            var abn = fold_sq(fw, ab, n)
-            var rn = fold_sq(fw, r, n)
+            var abn = ld(sl, 8) if roles else fold_sq(fw, ab, n)
+            var rn = ld(sl, 9) if roles else fold_sq(fw, r, n)
             # z-update
             var zdiff = Float32(0)
             var wn = Float32(0)
@@ -177,7 +222,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
                 zdiff = fmad(dz, dz, zdiff)
                 st(fw, z + j, nz)
                 zn = fmad(nz, nz, zn)
-            var prim = fold_sq(prb, 0, n)
+            var prim = ld(sl, 10) if roles else fold_sq(prb, 0, n)
             for j in range(d):
                 var pr = fs(ld(fw, beta + j), ld(fw, z + j))
                 prim = fmad(pr, pr, prim)
@@ -191,7 +236,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
             var dual_n = fm(rho, fsqrt(dual))
             var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
             var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
-            var un = fold_sq(fw, u, n)
+            var un = ld(sl, 11) if roles else fold_sq(fw, u, n)
             for j in range(d):
                 un = fmad(ld(fw, v + j), ld(fw, v + j), un)
             var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
@@ -210,6 +255,7 @@ def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, re
                         st(fw, v + j, fm(ld(fw, v + j), inv))
                     flag = 2
         flag = t.bcast_int(flag, 3)
+        have_next = roles and flag == 0
         if flag == 1:
             converged = True
             break

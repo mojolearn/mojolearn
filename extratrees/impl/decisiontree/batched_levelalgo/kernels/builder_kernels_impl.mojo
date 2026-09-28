@@ -643,6 +643,28 @@ def _warp_fold_max_f32(v: Float32) -> Float32:
 
 
 @always_inline
+def _warp_fold_min_u32(v: UInt32) -> UInt32:
+    var x = v
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            var y = shuffle_xor(x, UInt32(off))
+            x = y if y < x else x
+    return x
+
+
+@always_inline
+def _warp_fold_max_u32(v: UInt32) -> UInt32:
+    var x = v
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            var y = shuffle_xor(x, UInt32(off))
+            x = y if y > x else x
+    return x
+
+
+@always_inline
 def _warp_fold_sum_i32(v: Int32) -> Int32:
     var x = v
     comptime for step in range(8):
@@ -690,7 +712,8 @@ def node_feature_range_tiled_kernel[
     n_sampled_cols_in: Int32,
     quant: MutPointer[Float32, MutAnyOrigin],
 ):
-    """FAST (`-D MOJOLEARN_ET_RANGE_TILED`): `node_feature_range_kernel` for
+    """FAST, and Apple IDENTICAL (key-space fold, trees-apple2):
+    `node_feature_range_kernel` for
     up to `FT` sampled features per block over a ROW-MAJOR copy of X. Each
     row's `row_ids` entry is read once and its features come from one row's
     bytes instead of `FT` separate column gathers. Grid `(row blocks,
@@ -737,6 +760,62 @@ def node_feature_range_tiled_kernel[
     # feature j across the warps. Same min, max and count as the block
     # reductions this replaces.
     comptime N_WARPS = TPB // WARP_SIZE
+    comptime if BUILD_MODE == NUMERIC_IDENTICAL:
+        # IDENTICAL folds in KEY space, as `node_feature_range_kernel`'s
+        # IDENTICAL arm does (`block_min(range_key(...))`): a float compare
+        # treats -0.0 and +0.0 as equal and could keep either, the key
+        # order keeps -0.0 as the min and +0.0 as the max on every vendor.
+        var k_min = stack_allocation[
+            N_WARPS * FT, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+        ]()
+        var k_max = stack_allocation[
+            N_WARPS * FT, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+        ]()
+        var k_miss = stack_allocation[
+            N_WARPS * FT, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        ]()
+        var kwarp = Int(thread_idx.x) // WARP_SIZE
+        var klane = Int(thread_idx.x) % WARP_SIZE
+        comptime for j in range(FT):
+            var wmin = _warp_fold_min_u32(range_key(lmin[j]))
+            var wmax = _warp_fold_max_u32(range_key(lmax[j]))
+            var wmiss = _warp_fold_sum_i32(lmiss[j])
+            if klane == 0:
+                k_min[kwarp * FT + j] = wmin
+                k_max[kwarp * FT + j] = wmax
+                k_miss[kwarp * FT + j] = wmiss
+        barrier()
+        var kt = Int(thread_idx.x)
+        if kt < nf:
+            var kmin = k_min[kt]
+            var kmax = k_max[kt]
+            var bmiss = k_miss[kt]
+            for w in range(1, N_WARPS):
+                var a = k_min[w * FT + kt]
+                var b = k_max[w * FT + kt]
+                kmin = a if a < kmin else kmin
+                kmax = b if b > kmax else kmax
+                bmiss += k_miss[w * FT + kt]
+            comptime if DT != DType.float32:
+                var qc = quant + Int(cols[kt]) * ET_QSTRIDE
+                if kmin <= kmax:
+                    kmin = range_key(qc[Int(range_unkey(kmin))])
+                    kmax = range_key(qc[Int(range_unkey(kmax))])
+            var slot = nid * k + f0 + kt
+            var single = num_blocks == 1
+            comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+                if single:
+                    if kmin < out_minkey[unsafe_offset=slot]:
+                        out_minkey[unsafe_offset=slot] = kmin
+                    if kmax > out_maxkey[unsafe_offset=slot]:
+                        out_maxkey[unsafe_offset=slot] = kmax
+                else:
+                    _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+            else:
+                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+            _publish_add(out_n_missing, slot, bmiss, single)
+            _publish_add(out_n_merges, slot, Int32(1), single)
+        return
     var s_min = stack_allocation[
         N_WARPS * FT, Scalar[DType.float32], address_space = AddressSpace.SHARED
     ]()
@@ -1788,7 +1867,8 @@ def node_feature_score_reg_tiled_kernel[
     quant: MutPointer[Float32, MutAnyOrigin],
     nbins: MutPointer[Int32, MutAnyOrigin],
 ):
-    """FAST (`-D MOJOLEARN_ET_SCORE_TILED`): the REGRESSION arm of
+    """FAST, and Apple IDENTICAL (integer counts and sums, so the same
+    integers in any order; trees-apple2): the REGRESSION arm of
     `node_feature_score_kernel` (`CLASSIFICATION=False`, one accumulator,
     no sabotage) for up to `FT` sampled features per block over a row-major
     X. Each row's id and quantized label are read once. A feature the
