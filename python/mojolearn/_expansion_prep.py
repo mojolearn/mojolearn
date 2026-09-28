@@ -72,6 +72,20 @@ _PT_EVALS = 50
 _PT_STATE = 10
 
 
+def _binding_has(binding, name):
+    """Whether `binding` exports `name`. On a CPU install the binding is the
+    host stub, whose missing attributes raise ImportError (the no-CPU-
+    implementation message), not AttributeError, so `hasattr` would raise
+    instead of answering. lane/apple2-merged (2026-09-28): prep-apple2's
+    device-only entries (x_prep_run_out, x_prep_run_scratch and the native
+    fold entries) broke every x_prep lane's CPU column (m4pro-b)."""
+    try:
+        getattr(binding, name)
+    except (AttributeError, ImportError):
+        return False
+    return True
+
+
 def _prep_binding(mode):
     return _backend.binding("_mojolearn_x_prep", mode)
 
@@ -180,9 +194,9 @@ class _Prog:
     def run(self, mode):
         binding = _prep_binding(mode)
         H, sc, on = self.size, self.scratch_size, self.out_size or 0
-        has_out = hasattr(binding, "x_prep_run_out")
+        has_out = _binding_has(binding, "x_prep_run_out")
         dev_out = has_out and on > 0 and os.environ.get("MOJOLEARN_XPREP_OUT", "1") != "0"
-        dev_scratch = sc > 0 and (has_out or hasattr(binding, "x_prep_run_scratch"))
+        dev_scratch = sc > 0 and (has_out or _binding_has(binding, "x_prep_run_scratch"))
         if H + sc + on > 2 ** 31 - 1:
             raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
         # layout: the host arena, then (host) the output unless the device keeps it,
@@ -971,11 +985,11 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0):
     halves = (s & 0xFFFFFFFF, s >> 32)
     out = array.array("i", bytes(4 * max(n, 1)))
     if codes is None:
-        if not hasattr(b, "x_prep_kfold_folds"):
+        if not _binding_has(b, "x_prep_kfold_folds"):
             return None
         b.x_prep_kfold_folds(out.buffer_info()[0], (n, n_folds, 1 if shuffle else 0), halves)
     else:
-        if not hasattr(b, "x_prep_strat_folds"):
+        if not _binding_has(b, "x_prep_strat_folds"):
             return None
         cod = array.array("i", codes)
         if b.x_prep_strat_folds(cod.buffer_info()[0], out.buffer_info()[0],
