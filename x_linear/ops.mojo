@@ -283,6 +283,30 @@ def scale_acc(g: FP, goff: Int, s: Float32, count: Int):
             j += 1
 
 
+def row_dots(x: FP, lo: Int, hi: Int, d: Int, w: FP, woff: Int, dst: FP):
+    """dst[i] = row_dot(x, i, d, w, woff) for rows [lo, hi). The host folds
+    eight rows at once, lane r holding row lo + 8b + r: each lane is that
+    row's own fold (j ascending, one fmad per term), so every value is
+    row_dot's bit for bit (lane linear-cpu)."""
+    comptime if is_gpu():
+        for i in range(lo, hi):
+            st(dst, i, row_dot(x, i, d, w, woff))
+    else:
+        var i = lo
+        while i + 8 <= hi:
+            var acc = SIMD[DType.float32, 8](0)
+            var base = x + i * d
+            for jj in range(d):
+                var j = d - 1 - jj if X_LINEAR_HOST_SABOTAGE else jj
+                var xv = (base + j).unsafe_strided_load[width=8](d)
+                acc = fmadv[8](xv, SIMD[DType.float32, 8](ld(w, woff + j)), acc)
+            dst.unsafe_store[width=8](i, acc)
+            i += 8
+        while i < hi:
+            st(dst, i, row_dot(x, i, d, w, woff))
+            i += 1
+
+
 comptime ROW_CHUNK = 2048
 
 

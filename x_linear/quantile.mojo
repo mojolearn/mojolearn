@@ -21,7 +21,7 @@ vertex, so coefficients agree with theirs to a tolerance, not exactly.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
-    cholesky, chol_solve, row_dot, mean_of, axpy_acc, par_rows,
+    cholesky, chol_solve, row_dot, mean_of, axpy_acc, par_rows, row_dots,
 )
 
 
@@ -119,8 +119,9 @@ def quantile_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, 
 
         def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm fwp, imm beta, imm b, imm ab,
                                          imm u, imm r, imm tmp, imm sw, imm q, imm kq, imm up, imm lo_}:
+            row_dots(x, lo, hi, d, fwp, beta, fwp + ab)
             for i in range(lo, hi):
-                var abi = fa(row_dot(x, i, d, fwp, beta), b)
+                var abi = fa(ld(fwp, ab + i), b)
                 st(fwp, ab + i, abi)
                 var vv = fs(fs(ld(y, i), abi), ld(fwp, u + i))
                 var upi = up

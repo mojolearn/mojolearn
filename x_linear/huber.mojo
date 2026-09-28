@@ -10,7 +10,7 @@ n*sigma + sum_inliers r^2/sigma + sum_outliers (2 eps |r| - sigma eps^2)
 sigma >= 10 * float64 eps; here sigma = exp(s) and s is free, minimized by
 x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
 from x_linear.lbfgs import lbfgs, lbfgs_work
 
 
@@ -35,8 +35,9 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
     var two_eps = fm(Float32(2), eps)
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm d, imm th, imm toff, imm b, imm sc}:
+        row_dots(x, lo, hi, d, th, toff, sc)
         for i in range(lo, hi):
-            st(sc, i, fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b))
+            st(sc, i, fs(fs(ld(y, i), ld(sc, i)), b))
 
     par_rows(rows_map, n)
     for i in range(n):

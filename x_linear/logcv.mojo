@@ -20,7 +20,7 @@ fp block [C]; y = labels (0..K-1 as float32) | fold ids | weights (optional).
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
-    axpy_acc, par_rows,
+    axpy_acc, par_rows, row_dots,
 )
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
@@ -43,13 +43,21 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm th, imm toff, imm kp, imm fi,
                                      imm fold, imm sw, imm stride, imm sl, imm sr}:
+        # the linear predictors first (eight rows at a time on the host)
+        if kp == 1:
+            row_dots(x, lo, hi, d, th, toff, sl)
+        else:
+            for k in range(kp):
+                row_dots(x, lo, hi, d, th, toff + k * stride, sl)
+                for i in range(lo, hi):
+                    st(sr, i * kp + k, fa(ld(sl, i), ld(th, toff + k * stride + d) if fi else Float32(0)))
         for i in range(lo, hi):
             if fold >= 0 and Int(ld(y, n + i)) == fold:
                 continue
             var wi = ld(y, 2 * n + i) if sw else Float32(1)
             var label = Int(ld(y, i))
             if kp == 1:
-                var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))
+                var z = fa(ld(sl, i), ld(th, toff + d) if fi else Float32(0))
                 var yi = Float32(1) if label == 1 else Float32(0)
                 var li = fs(ftz(identical_softplus(z)), fm(yi, z))
                 var r = fs(ftz(identical_sigmoid(z)), yi)
@@ -61,9 +69,7 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
             else:
                 var zmax = Float32(-3.0e38)
                 for k in range(kp):
-                    var z = fa(row_dot(x, i, d, th, toff + k * stride), ld(th, toff + k * stride + d) if fi else Float32(0))
-                    st(sr, i * kp + k, z)
-                    zmax = fmax(zmax, z)
+                    zmax = fmax(zmax, ld(sr, i * kp + k))
                 var se = Float32(0)
                 var zy = Float32(0)
                 for k in range(kp):

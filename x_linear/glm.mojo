@@ -17,7 +17,7 @@ minimizer is the same). float32 throughout.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fabs, fmax, ld, st, ldi, i2f,
-    fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows,
+    fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
 )
 
 comptime GLM_LINK_IDENTITY = 0
@@ -69,8 +69,9 @@ def _objective(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm power, imm link, imm theta,
                                      imm toff, imm eta, imm sw, imm ls, imm b}:
+        row_dots(x, lo, hi, d, theta, toff, eta)
         for i in range(lo, hi):
-            var e = fa(row_dot(x, i, d, theta, toff), b)
+            var e = fa(ld(eta, i), b)
             st(eta, i, e)
             var l = _unit(power, link, ld(y, i), e, 0)
             if sw:
