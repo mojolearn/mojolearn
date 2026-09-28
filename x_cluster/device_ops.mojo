@@ -13,7 +13,7 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 
 from x_cluster.bodies import (
     FPtr,
@@ -40,6 +40,7 @@ from x_cluster.bodies import (
     sqdist_cell,
     sqrt_cell,
     tree_descend,
+    ward_cell,
 )
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
@@ -469,6 +470,40 @@ def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, lab
     var t = _tid()
     if t < Int(n):
         tree_descend(x, Int(d), centers, nodes, labels, t)
+
+
+comptime WNN_TPB = 256
+
+
+# FAST ONLY (lane cluster-apple3): one round of the ward tree's reciprocal
+# nearest neighbours. Not an IDENTICAL path.
+def _ward_nn_kernel(c: FPtr, sz: FPtr, l: Int32, d: Int32, nn: IPtr, md: FPtr):
+    """Block `p`: the cluster q != p at the lowest `bodies.ward_cell`, the
+    lowest q on a tie, by an integer min of `(float bits, q)` keys (the
+    values are >= +0, so their bits order as they do). Every thread reads
+    its own stride of the centroids; the keys fold in threadgroup memory."""
+    var p = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var L = Int(l)
+    var D = Int(d)
+    var red = stack_allocation[WNN_TPB, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var mine = UInt64(0xFFFFFFFFFFFFFFFF)
+    for q in range(tid, L, WNN_TPB):
+        if q != p:
+            var v = ward_cell(c, sz, D, p, q)
+            mine = min(mine, (UInt64(bitcast[DType.uint32](v)) << 32) | UInt64(UInt32(q)))
+    red[tid] = mine
+    barrier()
+    var off = WNN_TPB // 2
+    while off > 0:
+        if tid < off:
+            red[tid] = min(red[tid], red[tid + off])
+        barrier()
+        off //= 2
+    if tid == 0:
+        var key = red[0]
+        nn[p] = Int32(Int(UInt32(key & UInt64(0xFFFFFFFF))))
+        md[p] = bitcast[DType.float32](UInt32(key >> 32))
 
 
 @always_inline
@@ -918,3 +953,17 @@ struct DeviceOps(ClusterOps):
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
         self._ph1("pdist")
+
+    def fast_device(self) -> Bool:
+        return GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        self._ph0()
+        if l < 2:
+            self._ph1("ward_nn")
+            return
+        self.ctx.enqueue_function[_ward_nn_kernel](
+            self._fp(c), self._fp(sz), Int32(l), Int32(d), self._ip(nn), self._fp(md),
+            grid_dim=l, block_dim=WNN_TPB,
+        )
+        self._ph1("ward_nn")

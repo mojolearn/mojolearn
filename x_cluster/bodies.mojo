@@ -513,6 +513,39 @@ def tree_descend[REV: Bool = False](
 
 
 # ------------------------------------------------ agglomerative (Lance-Williams)
+# FAST ONLY (lane cluster-apple3): the ward dissimilarity of two clusters from
+# their centroids and sizes, `2 s_p s_q / (s_p + s_q) * |c_p - c_q|^2`, the
+# closed form of the Lance-Williams recurrence over squared euclidean
+# distances (1 * |x_p - x_q|^2 for two points). Plain float arithmetic: no
+# IDENTICAL path calls it (`x_cluster/agglo.mojo::_ward_rounds`).
+@always_inline
+def ward_cell(c: FPtr, sz: FPtr, d: Int, p: Int, q: Int) -> Float32:
+    var acc = Float32(0)
+    for f in range(d):
+        var df = c[p * d + f] - c[q * d + f]
+        acc = acc + df * df
+    var sp = sz[p]
+    var sq = sz[q]
+    return acc * ((Float32(2) * sp * sq) / (sp + sq))
+
+
+@always_inline
+def ward_nn_row(c: FPtr, sz: FPtr, l: Int, d: Int, nn: IPtr, md: FPtr, p: Int):
+    """nn[p], md[p] = the cluster q != p of the first `l` at the lowest
+    `ward_cell`, the lowest q on a tie; -1 and +inf when there is none."""
+    var best = -1
+    var bv = Float32.MAX * Float32(2)
+    for q in range(l):
+        if q == p:
+            continue
+        var v = ward_cell(c, sz, d, p, q)
+        if best < 0 or v < bv:
+            best = q
+            bv = v
+    nn[p] = Int32(best)
+    md[p] = bv
+
+
 comptime LINK_WARD = 0
 comptime LINK_COMPLETE = 1
 comptime LINK_AVERAGE = 2

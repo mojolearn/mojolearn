@@ -121,3 +121,15 @@ trait ClusterOps(Movable):
     ) raises:
         """dst (na x nb) = the metric's distances (`bodies.pdist_cell`)."""
         ...
+
+    def fast_device(self) -> Bool:
+        """True on the one column that takes the FAST device-round paths
+        (lane cluster-apple3): the GPU binding built FAST. The host column
+        and every IDENTICAL build answer False."""
+        ...
+
+    def ward_nn(mut self, c: Int, sz: Int, l: Int, d: Int, nn: Int, md: Int) raises:
+        """FAST ward: nn[p], md[p] = the cluster q != p among the first `l`
+        (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
+        lowest q on a tie."""
+        ...

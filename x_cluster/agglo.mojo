@@ -27,10 +27,12 @@ CODE, one source compiled into both bindings, as OPTICS's ordering loop:
   (i, j < i, in the order components are found from vertex 0) the closest
   pair of points, the lowest (row of i, row of j) on a tie, becomes an edge.
 """
+from std.memory import bitcast
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 
-from checks.numerics import identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_sqrt
 from x_cluster.bodies import LINK_SINGLE, LINK_WARD, lance_williams
 from x_cluster.ops import ClusterOps
 
@@ -147,6 +149,149 @@ def _row_min_open(
             return
 
 
+# FAST ONLY (lane cluster-apple3). OPT-IN while unproven:
+# `-D MOJOLEARN_WARD_ROUNDS=1` takes the rounds; the default is the matrix
+# loop below.
+comptime WARD_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_WARD_ROUNDS"]()
+comptime WARD_MAX_ROUNDS = 256
+
+
+def _ward_rounds[O: ClusterOps](
+    mut ops: O, x: List[Float32], n: Int, d: Int, n_merges: Int,
+    mut children: List[Int32], mut dist: List[Float32],
+) raises -> Bool:
+    """The ward tree by ROUNDS OF RECIPROCAL NEAREST NEIGHBOURS on the device.
+
+    Ward's linkage is reducible: merging two clusters that are each other's
+    nearest never brings the merged cluster closer to a third than the nearer
+    of the two was. So every reciprocal pair of a round is a merge of the
+    greedy tree, all of them can merge in the same round, and the merges
+    sorted by their value are the greedy loop's sequence (exact ties aside).
+    A round is one device kernel over the live clusters' centroids and sizes
+    (`bodies.ward_cell`, the closed form of the Lance-Williams recurrence),
+    one read of n nearest indices and values, and the centroid updates here
+    in Float64; the n x n matrix, its 4 n^2 bytes read to the host and the
+    loop's strided column walks are gone.
+
+    The lowest-index cluster of the lowest pairs and its lowest partner are
+    always reciprocal, so a round merges at least one pair. A round budget
+    bounds the chain-shaped worst case (one merge a round): False returns the
+    fit to the matrix loop, nothing written.
+
+    A merge's value is kept at or above its children's (rounding could put
+    it a last place below), so the sort by (value, merge sequence) lists
+    every child before its parent; node ids are the sorted ranks, as the
+    greedy loop's `n + step`."""
+    var cen = List[Float64](capacity=n * d)
+    for t in range(n * d):
+        cen.append(Float64(x[t]))
+    var sz = List[Float64](length=n, fill=Float64(1))
+    var node = List[Int](capacity=n)
+    for i in range(n):
+        node.append(i)
+    var hgt = List[Float32](length=n, fill=Float32(0))
+    var ma = List[Int](capacity=n)
+    var mb = List[Int](capacity=n)
+    var mh = List[Float32](capacity=n)
+    var cs = ops.zeros(n * d)
+    var ss = ops.zeros(n)
+    var nns = ops.zeros_i(n)
+    var mds = ops.zeros(n)
+    var nn = List[Int32]()
+    var md = List[Float32]()
+    var live = n
+    var rounds = 0
+    while live > 1:
+        if rounds >= WARD_MAX_ROUNDS:
+            return False
+        rounds += 1
+        var c32 = List[Float32](capacity=live * d)
+        for t in range(live * d):
+            c32.append(Float32(cen[t]))
+        var s32 = List[Float32](capacity=live)
+        for p in range(live):
+            s32.append(Float32(sz[p]))
+        ops.set(cs, c32)
+        ops.set(ss, s32)
+        ops.ward_nn(cs, ss, live, d, nns, mds)
+        ops.get_if(nns, live, mds, live, nn, md)
+        var dead = List[Bool](length=live, fill=False)
+        var pairs = 0
+        for p in range(live):
+            var q = Int(nn[p])
+            if q > p and q < live and Int(nn[q]) == p:
+                var h = md[p]
+                if h < hgt[p]:
+                    h = hgt[p]
+                if h < hgt[q]:
+                    h = hgt[q]
+                ma.append(node[p])
+                mb.append(node[q])
+                node[p] = n + len(mh)
+                mh.append(h)
+                var sp = sz[p]
+                var sq = sz[q]
+                var tot = sp + sq
+                for f in range(d):
+                    cen[p * d + f] = (sp * cen[p * d + f] + sq * cen[q * d + f]) / tot
+                sz[p] = tot
+                hgt[p] = h
+                dead[q] = True
+                pairs += 1
+        if pairs == 0:
+            return False
+        var w = 0
+        for p in range(live):
+            if dead[p]:
+                continue
+            if w != p:
+                for f in range(d):
+                    cen[w * d + f] = cen[p * d + f]
+                sz[w] = sz[p]
+                node[w] = node[p]
+                hgt[w] = hgt[p]
+            w += 1
+        live = w
+    # the merges by (value, sequence): a stable radix sort on the value's bits
+    var m = len(mh)
+    if n_merges > m:
+        return False
+    var order = List[Int](capacity=m)
+    for s in range(m):
+        order.append(s)
+    var tmp = List[Int](length=m, fill=0)
+    for step in range(4):
+        var shift = UInt32(8 * step)
+        var count = List[Int](length=257, fill=0)
+        for s in range(m):
+            var b = Int((bitcast[DType.uint32](mh[order[s]]) >> shift) & UInt32(0xFF))
+            count[b + 1] += 1
+        for b in range(256):
+            count[b + 1] += count[b]
+        for s in range(m):
+            var o = order[s]
+            var b = Int((bitcast[DType.uint32](mh[o]) >> shift) & UInt32(0xFF))
+            tmp[count[b]] = o
+            count[b] += 1
+        for s in range(m):
+            order[s] = tmp[s]
+    var rank = List[Int](length=m, fill=0)
+    for r in range(m):
+        rank[order[r]] = r
+    children = List[Int32](capacity=2 * n_merges)
+    dist = List[Float32](capacity=n_merges)
+    for r in range(n_merges):
+        var s = order[r]
+        var a = ma[s] if ma[s] < n else n + rank[ma[s] - n]
+        var b = mb[s] if mb[s] < n else n + rank[mb[s] - n]
+        children.append(Int32(a if a < b else b))
+        children.append(Int32(b if a < b else a))
+        dist.append(identical_sqrt(mh[s]))
+    if getenv("MOJOLEARN_XC_PHASES") == "1":
+        print("XCPHASE agglo.ward_rounds rounds=" + String(rounds) + " merges=" + String(m))
+    return True
+
+
 def agglo_tree[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, linkage: Int, metric: Int, p: Float32,
     edges: List[Float32], n_edges: Int, n_merges: Int,
@@ -163,6 +308,11 @@ def agglo_tree[O: ClusterOps](
         raise Error("AgglomerativeClustering: at least two samples are needed")
     if n_merges < 0 or n_merges > n - 1:
         raise Error("AgglomerativeClustering: n_merges must be in [0, n - 1]")
+    comptime if WARD_ROUNDS:
+        if linkage == LINK_WARD and metric == -1 and n_edges < 0 and ops.fast_device():
+            if _ward_rounds(ops, x, n, d, n_merges, children, dist):
+                n_components = 1
+                return
     var inf = Float32.MAX * Float32(2)
     var dm = List[Float32]()
     if metric == 5:
