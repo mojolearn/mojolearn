@@ -295,6 +295,24 @@ against 11.5 / 21.8 s in jobs 5 and 6: its spread is wide, the ratio is not.
 prophet (32768) IDENTICAL 39.12 -> 40.31 s (0.97x), FAST 0.166 -> 0.164 s; stl,
 croston unchanged; digests equal. Reverted.
 
-## Unproven
+## Unproven (no identity, sabotage or lane-check run on any of these; the combined run owes them)
 
-(pending)
+Measured on Apple only (m4-a M4, m4pro-b M4 Pro): speed, IDENTICAL digests before ==
+after, FAST paired quality, and (job 8) the CPU column's IDENTICAL digests before ==
+after for rmsprop, lamb, adafactor, layernorm, var, garch, ets, moe. NOT run: M2 Pro,
+M3 Ultra (queued, see FINAL), NVIDIA, AMD, the identity lanes, the sabotage arms.
+
+| commit | what | risk for the combined run |
+|---|---|---|
+| 2edf591fe | FAST two-pass LAMB / Adafactor norms (`op_chunk_sumsq`) | FAST only; new op on every vendor |
+| 0e5326880 | LayerNorm staged folds (IDENTICAL); FAST row split; FAST split-K GEMM; NM stall stop | split-K sits in the SHARED `gemm` driver (FAST, <= 1024 cells, K >= 32768) |
+| 3b5b92c5a | `download_async`, fill-free `bind` | SHARED DeviceExec / HostExec; every sequence entry |
+| a786859a5 | MLP fused gathers and L2 sums (the long-K staging in it was reverted in 61b479c9f) | MLP on every vendor |
+| e18cef3b7, a45841e49, 2bc81c39b | sabotage arms 5500, 5539, e2e host arms regenerated | all 47 `git apply --check` clean at HEAD; 5500 now also sets SEQ_COOP = False |
+| bdb1e4bd8, 61b479c9f, c592aba84 | GARCH FAST stall stop, default 50 / 1e-5 | FAST only |
+| 3ebe0d0c7 | host copies split over threads (`_pcopy`) | SHARED DeviceExec |
+| 29a290cf6, c592aba84 | Prophet FAST chunked fit (N >= 16384); `prophet_fg` split into helpers | helpers are IDENTICAL-exact on Apple; FAST host L-BFGS on every vendor |
+| af1ee590c | `sequence/coop.mojo`, simdgroup folds | Apple only by `has_apple_gpu_accelerator`; assumes a 32-wide simdgroup and TPB % 32 == 0; never compiled for NVIDIA / AMD targets here (the import of `std.gpu.primitives.warp` is in every device build) |
+| 4387772c3 | AutoARIMA batched `select_d` | the 2-D route goes through the base binding's transpose (a host without `_mojolearn` built refuses) |
+| 068959af0 .. 584d32ae8 | tools: A/B conductor, quality script, harness cases | tools only |
+
