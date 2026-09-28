@@ -1,13 +1,13 @@
-diff --git a/x_metrics/regression.mojo b/x_metrics/regression.mojo
-index 2da19fdba..4749a7ecc 100644
---- a/x_metrics/regression.mojo
-+++ b/x_metrics/regression.mojo
-@@ -95,7 +95,7 @@ def _before(f: FP, V: Int, D: Int, c: Int, i: Int, j: Int) -> Bool:
-     """Row i sorts before row j in column c: by `key`, ties by row index."""
-     var ki = key(ld(f, V + i * D + c))
-     var kj = key(ld(f, V + j * D + c))
--    return ki < kj or (ki == kj and i < j)
-+    return ki < kj or (ki == kj and i > j)  # SABOTAGE 6101
+diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
+index 4e441ae51..7cc2772da 100644
+--- a/x_metrics/par.mojo
++++ b/x_metrics/par.mojo
+@@ -235,7 +235,7 @@ def key_lt(h1: UInt32, l1: UInt32, x1: Int, h2: UInt32, l2: UInt32, x2: Int) ->
+         return h1 < h2
+     if l1 != l2:
+         return l1 < l2
+-    return x1 < x2
++    return x1 > x2  # SABOTAGE 6101
  
  
- def col_sort_unit(t: Int, f: FP, q: IP):
+ def sort_key_unit(t: Int, f: FP, q: IP):

@@ -166,6 +166,22 @@ def wpercentile_unit(t: Int, f: FP, q: IP):
         var w = Float32(1) if W < 0 else ld(f, W + r)
         acc = fadd(acc, w)
         st(f, C + i, acc)
+    wpct_select(t, f, q)
+
+
+def wpct_select(t: Int, f: FP, q: IP):
+    """`wpercentile_unit` after its CDF: the search and the average. The
+    parallel plan (x_metrics/plan.mojo) writes the CDF with
+    x_metrics/par.mojo's gather and prefix units, then runs this."""
+    var V = p(q, 0)
+    var n = p(q, 1)
+    var D = p(q, 2)
+    var O = p(q, 3) + t * n
+    var W = p(q, 4)
+    var rank = ld(f, p(q, 5))
+    var avg = p(q, 6)
+    var OUT = p(q, 7)
+    var C = p(q, 8) + t * n
     var total = ld(f, C + n - 1)
     if total == Float32(0):
         st(f, OUT + t, Float32(0))
