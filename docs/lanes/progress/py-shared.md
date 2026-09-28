@@ -9,8 +9,9 @@ lane/apple2-merged 0a11b50c7.
 
 Merge `origin/lane/py-shared` to use these. Status per item: Python-only items
 are proven here on one core (pure Python, no binding); the Mojo items are
-written and pushed, and their NVIDIA + x86 CPU proof is the job below (not yet
-run: no shared pod was up at 2026-09-28 ~20:00Z). Until that job passes, treat
+written, pushed and COMPILE on Linux (x_metrics and x_prep GPU bindings built
+on nvc1, 2026-09-28); their NVIDIA + x86 CPU bit proof is queue job
+nvc1-0015 (below), queued behind the other lanes' jobs. Until that job passes, treat
 the Mojo entries as UNPROVEN and keep your fallbacks (every caller below
 already falls back when an entry is missing).
 
@@ -103,9 +104,15 @@ every hash base == head per column; then the tests; then timing
 `MOJOLEARN_ARENA_RANGES` 0 / 1 / 1 / 0).
 
 ## Results
-None yet (no shared NVIDIA pod up).
+- Pure Python, one core (Mac, M-series): fsum fast path 21 ns vs 307 ns per
+  term (14x), isfinite 42 vs 186 ns; 0 differences over 3013 sums and every
+  predicate case. The x86 numbers come from the job's `PYSHARED` lines.
+- Linux compile (nvc1, A40 pod, no GPU): `_mojolearn_x_metrics.so` and
+  `_mojolearn_x_prep.so` identical tier built.
+- Queue job nvc1-0015 (submitted 2026-09-28 ~20:10Z, `tools/py_shared/ab_job.sh`,
+  output /root/ev-py-shared/ab-<stamp>): pending.
 
 ## Unproven
-- Every Mojo change (items 3 and 4): not yet compiled.
+- Every Mojo change (items 3 and 4): compiled, not yet run on a GPU.
 - x_prep's new input-read refusal: the head test run will show any program
   that reads an input slot.
