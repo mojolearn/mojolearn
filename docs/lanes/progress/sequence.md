@@ -100,9 +100,49 @@ e2e patches in one).
 Batched steward request (all 30 family lanes, e2e_family_host_bits.patch) at
 3607aa10e: 1790537359124-sequence-3607aa10ee on m2pro, m3ultra, m4pro-a, do-amd.
 
+### Steward verdict on 3607aa10e (read 2026-09-27 evening)
+
+1790537359124-sequence-3607aa10ee: do-amd PASS; m2pro, m3ultra, m4pro-a FAIL
+on ONE lane, `clean: sequence-adafactor DISAGREE` (every other family lane
+AGREE on Metal, every arm bites). The Metal cells: `plain_state` and
+`moved_state` (row_var / col_var / variance) EQUAL the CPU column; `plain`
+and `moved` (the params) differ in all nine fixtures, and Metal's params are
+the SAME for `base` and `dupes`, which share rows 0..40 (the initial params)
+and differ only in g1 (columns 14, 15). So on Metal the matrix update does
+not reach the params (U = 0, or the one-thread scalars sc[1..3] are lost);
+the vector arm's grad is column 1, equal in both fixtures, so it says nothing.
+Logs pulled to ~/mojolearn-evidence/sequence/adafactor_metal/{cpu,gpu}.json.
+
+Probe: `sequence/checks/af_probe.mojo` (99a1467ec) runs one step, matrix
+32x8 and vector 8, DeviceExec vs HostExec, the scalars / row_var / U / params
+after every launch (synced) and once more with a single sync at the end
+(an ordering bug would hide behind the syncs). Host vs host is clean on the
+laptop CPU (mac_slot, 1 core). NOTE for probes: `FP(unsafe_from_address=...)`
+carries no origin, so a List whose last use is `_fp(l)` is freed BEFORE the
+copy that reads it (ASAP destruction); the probe keeps `g` alive with `_ = g^`.
+Queued on m2pro as speed request 1790553926253-speed-sequence-99a1467ec8
+(`python3 tools/apple_steward.py status | grep speed-sequence`; stdout in the
+verdict's speed.stdout on the Mac).
+
+POD GONE: RunPod balance went negative, every pod was deleted and `dev_pod.sh up`
+is refused. Do not retry renting until Andrew tops up.
+
+OWED ON A POD (NVIDIA A40, `tools/dev_pod.sh up sequence`, then sync):
+1. Adafactor fix (once the probe names the stage): `tools/algos_lane_check.sh
+   sequence-adafactor` AGREE + the 5507 arm still biting; existing bits of the
+   other 21 lanes unchanged; merge; ONE batched steward resubmission of the
+   family (e2e_family_host_bits.patch).
+2. Seasonal ETS (WIP at c9c21279e + 99a1467ec: statsforecast initstate / Calc /
+   Forecast, Householder factor 2 fixed in fourier_fit, OP_ETS_LIK / OP_ETS_INIT
+   seam probe ops): build bindings/build_x_sequence*.sh, run
+   ~/mojolearn-evidence/sequence/ets_seasonal_sanity.py (statsforecast 2.1.1 on
+   the pod) to the tolerance of the non-seasonal rows, then sequence-ets AGREE,
+   a sabotage arm for the season seam (5517-5519 reserved), merge.
+
 NEXT (a fresh session starts here), per the LANE CHARTER (one phase per session):
-1. Read `python3 tools/apple_steward.py status | grep sequence-3607aa10ee`.
-   PASS on every Mac and do-amd closes PHASE 1. A FAIL is a fix commit at
+1. Read the probe's verdict (speed request 1790553926253-speed-sequence-99a1467ec8,
+   above); fix the Adafactor Metal stage at the root. Everything else in
+   sequence-3607aa10ee PASSED. A FAIL is a fix commit at
    the root (fetch the log with `tools/cloudmac.sh ssh <mac> ...` from
    ~/mojolearn-evidence/apple-steward/done/<id>/check/lane_check.log; the
    M2 Pro has a compile-only scratch tree ~/seqdbg with bisect.sh/probe.sh),
