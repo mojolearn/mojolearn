@@ -260,7 +260,8 @@ OWED (step 3):
   with `--fit-on-gpu` (IVF family at 1M). Result: see below when recorded.
   STATE at 05:31Z: both GPU slots busy (decomp, sequence); a Mac-side
   `amd_central.sh run ann-cpu ...` waiter (120 min cap) was queued to
-  launch it. NEXT SESSION: `tools/amd_central.sh sh ann-cpu 'cat
+  launch it; it exited rc=255 (ssh) without launching, so the job has NOT
+  run. NEXT SESSION: `tools/amd_central.sh sh ann-cpu 'cat
   /root/ev-ann-cpu/job.log'`; if it is absent, relaunch with
   `tools/amd_central.sh run ann-cpu 'setsid nohup bash /root/ev-ann-cpu/amd_job.sh > /root/ev-ann-cpu/job.out 2>&1 < /dev/null &'`
   (box tree already synced at 3cfc52318; do not sync while it runs). The
