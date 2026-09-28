@@ -24,7 +24,6 @@ on ONE Mac and alternates the arms, then prints a stage split
 | b7f433a89 | t-SNE FAST: repulsion over candidate spans, partials joined in span order | FAST | OPT-IN since 19e0aabac (`-D MOJOLEARN_TSNE_FAST_SPLIT`): no gain measured |
 | 95101d105 | t-SNE symmetrize (host): counting-pass CSR + per-row merge (host-checked SAME on 4 random graphs) | both | on |
 | 782ad9a09 | CAGRA detour prune on the device (integer counts, rank placement) | both | on; `-D MOJOLEARN_CAGRA_HOST_PRUNE` reverts |
-
 | 513a3006e | IVF-PQ codebooks: subspace k-means side by side on pooled contexts | both | opt-in trial, `MOJOLEARN_ANN_PQ_CB_STREAMS=k` |
 
 ## Measurements
