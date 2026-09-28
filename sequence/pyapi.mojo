@@ -8,9 +8,9 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -405,6 +405,31 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     return PythonObject(N * O)
 
 
+#: FAST's two-pass norms (sequence/adafactor.mojo, op_chunk_sumsq) start at
+#: this many elements; below it the one-thread fold is as quick.
+comptime FAST_NORM_MIN = 65536
+comptime _PARTS = 4096      # = sequence.adafactor.SUMSQ_THREADS
+
+
+def _fast_norms() -> Bool:
+    return GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+
+
+def _chunk_sumsq[E: Exec](mut ex: E, src: FP, start: Int, n: Int, parts: FP, slot: Int) raises -> Int:
+    """FAST: min(_PARTS, n) strided partial sums of squares of src[start:start+n]
+    into parts[slot:]; returns how many."""
+    var T = min(_PARTS, n)
+    var c = Args()
+    c.p0 = src
+    c.p1 = parts
+    c.i0 = n
+    c.i1 = T
+    c.i2 = slot
+    c.i3 = start
+    ex.launch[OP_CHUNK_SUMSQ](c, T)
+    return T
+
+
 def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """One Adafactor step of ONE tensor, in place (`sequence/adafactor.mojo`).
     addrs = [param, grad, row_var (R) or variance (n), col_var (C; ignored for
@@ -437,12 +462,17 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     ex.upload(S1, h1, n if C == 0 else R)
     if C > 0:
         ex.upload(S2, fptr(addrs[3], "col_var"), C)
+    var fast = _fast_norms() and n >= FAST_NORM_MIN
+    var parts = ex.alloc(_PARTS if fast else 1)
     var a = Args()
     a.p0 = P
     a.p1 = sc
     a.i0 = n
     a.f0 = fval(fp, 3)
     a.f1 = rho
+    if fast:
+        a.p2 = parts
+        a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
     ex.launch[OP_AF_ALPHA](a, 1)
     if wd != Float32(0.0):
         var s = Args()
@@ -491,6 +521,9 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     d.p1 = sc
     d.i0 = n
     d.f0 = fval(fp, 4)
+    if fast:
+        d.p2 = parts
+        d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
     ex.launch[OP_AF_DENOM](d, 1)
     var ap = Args()
     ap.p0 = P
@@ -545,11 +578,19 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     ex.upload(M, hm, n)
     ex.upload(V, hv, n)
     ex.upload(O, FP(unsafe_from_address=Int(offs.unsafe_ptr())), nt + 1)
+    var fast = _fast_norms() and n >= FAST_NORM_MIN
+    var partsA = ex.alloc(nt * _PARTS if fast else 1)
+    var partsB = ex.alloc(nt * _PARTS if fast else 1)
     if (flags & 16) != 0:
         var q = Args()
         q.p0 = G
         q.p1 = O
         q.p2 = nrm
+        if fast:
+            for k in range(nt):
+                _ = _chunk_sumsq(ex, G, Int(offs[k]), Int(offs[k + 1]) - Int(offs[k]), partsA, k * _PARTS)
+            q.p3 = partsA
+            q.i0 = 1
         ex.launch[OP_SEG_SUMSQ](q, nt)
         ex.sync()
         var h = List[Float32](length=nt, fill=Float32(0.0))
@@ -596,6 +637,15 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     r.p3 = ratio
     r.i0 = flags & 1
     if wd != Float32(0.0) or (flags & 2) != 0:
+        if fast:
+            for k in range(nt):
+                var s = Int(offs[k])
+                var e = Int(offs[k + 1])
+                _ = _chunk_sumsq(ex, P, s, e - s, partsA, k * _PARTS)
+                _ = _chunk_sumsq(ex, U, s, e - s, partsB, k * _PARTS)
+            r.p4 = partsA
+            r.p5 = partsB
+            r.i1 = 1
         ex.launch[OP_LAMB_RATIO](r, nt)
     else:
         var f = Args()

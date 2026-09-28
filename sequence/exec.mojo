@@ -50,6 +50,7 @@ from sequence.ops import (
     OP_LN_BWD_X,
     OP_LN_BWD_W,
     OP_SEG_SUMSQ,
+    OP_CHUNK_SUMSQ,
     OP_LAMB_RATIO,
     OP_STL,
     OP_THETA,
@@ -96,7 +97,7 @@ def _element_weight[OP: Int](a: Args) -> Int:
         return _HEAVY
     elif (
         OP == OP_CE or OP == OP_SOFTMAX or OP == OP_MLP_ROWLOSS
-        or OP == OP_AF_ROW or OP == OP_AF_COL or OP == OP_LN_FWD
+        or OP == OP_AF_ROW or OP == OP_AF_COL or OP == OP_LN_FWD or OP == OP_CHUNK_SUMSQ
         or OP == OP_LN_BWD_X or OP == OP_PROPHET_FEATURES
         or OP == OP_PROPHET_PREDICT or OP == OP_MOE_ROUTE
         or OP == OP_MOE_HIDDEN or OP == OP_MOE_OUT

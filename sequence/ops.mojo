@@ -101,6 +101,7 @@ comptime OP_CELL_BWD_H = 59
 comptime OP_GEMM_EPI = 60
 comptime OP_COLSUM_DIV = 61
 comptime OP_GEMM_EPI_TAIL = 62
+comptime OP_CHUNK_SUMSQ = 63
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

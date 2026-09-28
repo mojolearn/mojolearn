@@ -48,6 +48,7 @@ from sequence.ops import (
     OP_AF_DENOM,
     OP_AF_APPLY,
     OP_SEG_SUMSQ,
+    OP_CHUNK_SUMSQ,
     OP_LAMB_UPD,
     OP_LAMB_RATIO,
     OP_LAMB_APPLY,
@@ -84,7 +85,7 @@ from sequence.ops import (
     op_seq_out,
     op_softmax,
 )
-from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
+from sequence.adafactor import op_af_alpha, op_af_row, op_af_col, op_af_rmean, op_af_update_mat, op_af_vec, op_af_denom, op_af_apply, op_seg_sumsq, op_chunk_sumsq, op_lamb_upd, op_lamb_ratio, op_lamb_apply
 from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_colsum_div, op_divs, op_gemm_epi, op_gemm_epi_tail, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
@@ -187,6 +188,8 @@ def apply[OP: Int](t: Int, a: Args):
         op_af_apply(t, a)
     elif OP == OP_SEG_SUMSQ:
         op_seg_sumsq(t, a)
+    elif OP == OP_CHUNK_SUMSQ:
+        op_chunk_sumsq(t, a)
     elif OP == OP_LAMB_UPD:
         op_lamb_upd(t, a)
     elif OP == OP_LAMB_RATIO:
