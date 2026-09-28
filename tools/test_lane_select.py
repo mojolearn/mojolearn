@@ -1562,13 +1562,19 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     REMEASURED 2026-09-27 (lane/algos-trees, found red after merging main):
       gbdt_host_predict    50 -> 51  x-metrics-search (the metrics lane's
       forest_host_predict  85 -> 86  model_selection search fits GBDT and
-                                     forest estimators); no old lane moved"""
+                                     forest estimators); no old lane moved
+
+    REMEASURED 2026-09-28 (lane/neural):
+      neural_inference.py  41 -> 42  optim-maximize (SGD/Adam/AdamW
+                                     maximize=, DEVIATION 6200), through the
+                                     same optimizer route as optim-adam-clip
+                                     and optim-sgd; no old lane moved"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
                       ("core/gbdt_host_predict.mojo", 51),
                       ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
-                      ("python/mojolearn/neural_inference.py", 41)):
+                      ("python/mojolearn/neural_inference.py", 42)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
