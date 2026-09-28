@@ -28,6 +28,8 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | b7bec306c | label propagation stopping sum folded on the host (same item); PCS convolution one row per block in threadgroup memory | both | same statements | default; `-D MOJOLEARN_XN_LP_DEVICE_FOLD`, `-D MOJOLEARN_XN_PCS_CELL` arms |
 | a1bb804fb | label propagation / spreading: the graph product over G's nonzero entries (CSR built once on the host), exact by the fma-with-zero argument; dense kernel when an x is non-finite | both | host check (signed values, -0.0): 0 words differ | default; `-D MOJOLEARN_XN_LP_DENSE` arm |
 | d7934f99f | x_neighbors k-NN with y rows staged per block in threadgroup memory (`knn_sq_tiled`; LOF, label propagation) | both | the item's statements, same candidate order | default; `MOJOLEARN_XN_OLD_ITEMS=1` arm |
+| ff625ac0c | NearestCentroid group means / std, variance, SVGP solve, absdiff_sum: item loops on the host in the GPU binding (HOST_RUN) | both | the CPU column's statements | default; `-D MOJOLEARN_XN_SERIAL_GPU` arm |
+| c905e9e47 | KNNImputer: fit rows staged per block (`knn_impute_tiled`); item tail factored into `knn_impute_finish` | both | host check of the refactor: 0 differ | default; `MOJOLEARN_XN_OLD_ITEMS=1` arm |
 | da21bc669 | REVERTED the identical radix device barrier: `air.wg.barrier` failed to legalize in the IDENTICAL build.sh / build_metrics.sh (request 1790604321269) | - | - | - |
 | b89ad2efa | KNNImputer.transform: one GPU thread per MISSING cell (`knn_impute_cells`, the same item per cell) | both | same statements per cell | default; `MOJOLEARN_XN_UNCOMPACT_IMPUTE=1` arm |
 
