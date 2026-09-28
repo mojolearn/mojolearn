@@ -182,6 +182,7 @@ def ivf_pq_search_device(
 ) raises:
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
+    var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
@@ -190,6 +191,7 @@ def ivf_pq_search_device(
     var dcodes = upload_i32(ctx, codes)
     var dcb = upload_f32(ctx, codebooks)
     var dmask = upload_i32(ctx, mask)
+    sst.mark(ctx, "upload")
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -202,6 +204,7 @@ def ivf_pq_search_device(
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
+    sst.host("scan_download")
     _ = dn^
     _ = di^
     _ = dd^
@@ -362,6 +365,7 @@ def ivf_sq_search_device(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
 ) raises:
+    var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
@@ -371,6 +375,7 @@ def ivf_sq_search_device(
     var dvmin = upload_f32(ctx, vmin)
     var ddelta = upload_f32(ctx, delta)
     var dmask = upload_i32(ctx, mask)
+    sst.mark(ctx, "upload")
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -381,6 +386,7 @@ def ivf_sq_search_device(
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
+    sst.host("scan_download")
     _ = dn^
     _ = di^
     _ = dd^
@@ -485,6 +491,7 @@ def ivf_rabitq_search_device(
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
+    var sst = AnnStages("ivf_search")
     var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
@@ -494,6 +501,7 @@ def ivf_rabitq_search_device(
     var dnorm = upload_f32(ctx, norms)
     var dip = upload_f32(ctx, ips)
     var dmask = upload_i32(ctx, mask)
+    sst.mark(ctx, "upload")
     var dd = ctx.enqueue_create_buffer[DType.float32](m * k)
     var di = ctx.enqueue_create_buffer[DType.int32](m * k)
     var dn = ctx.enqueue_create_buffer[DType.int32](m)
@@ -504,6 +512,7 @@ def ivf_rabitq_search_device(
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
     out_n = download_i32(ctx, dn, m)
+    sst.host("scan_download")
     _ = dn^
     _ = di^
     _ = dd^

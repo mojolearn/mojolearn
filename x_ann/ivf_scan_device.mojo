@@ -35,6 +35,7 @@ from x_ann.ivf_pq_core import (
 )
 from x_ann.ivf_sq_core import sq_candidate_dist
 from x_ann.ivf_rabitq_core import rq_candidate_est, rq_rotate
+from x_ann.stage_timer import AnnStages
 
 comptime TPB = 128
 #: threads per (query, probe) threadgroup
@@ -281,6 +282,8 @@ def ivf_scan_search[KIND: Int](
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
     var dqn = ctx.enqueue_create_buffer[DType.float32]((mc * np) if KIND == 2 else 1)
     var use_lut = 1 if pq_dim * n_codes <= LUT_MAX else 0
+    var st = AnnStages("ivf_scan")
+    st.mark(ctx, "alloc")
     var q0 = 0
     while q0 < m:
         var c = mc if m - q0 > mc else m - q0
@@ -288,10 +291,12 @@ def ivf_scan_search[KIND: Int](
             Int32(c * n_lists), Int32(q0), dq, Int32(dim), dc, Int32(n_lists),
             dcd.unsafe_ptr(), grid_dim=_grid(c * n_lists), block_dim=TPB,
         )
+        st.mark(ctx, "coarse")
         ctx.enqueue_function[probe_kernel](
             Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
             dpstart.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
         )
+        st.mark(ctx, "probe")
         comptime if KIND == 0:
             ctx.enqueue_function[pq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
@@ -318,11 +323,13 @@ def ivf_scan_search[KIND: Int](
                 Int32(stride), dmask, dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
+        st.mark(ctx, "score")
         ctx.enqueue_function[select_kernel](
             Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
             dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
             dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
         )
+        st.mark(ctx, "select")
         q0 += c
     ctx.synchronize()
     _ = dqn^
