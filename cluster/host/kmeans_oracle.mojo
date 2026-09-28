@@ -1573,4 +1573,11 @@ def host_kmeans_transform(
             op.unsafe_store(row * k + col, dist)
 
     host_cells(_row, n, 3 * k * d)
+    # Every owner the row tasks read through an untracked pointer lives past
+    # the join. The row norms' last tracked use is `host_list_ptr` above, so
+    # without the last two lines Mojo destroys them there and every cell
+    # reads freed memory (`transform(X)` at `labels_` was not the row
+    # minimum on x86: allocator bookkeeping overwrote the freed norms).
     _ = ct^
+    _ = x_norm^
+    _ = c_norm^

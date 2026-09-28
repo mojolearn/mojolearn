@@ -26,6 +26,7 @@ been converted still runs on thread 0 alone, with a team of one
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 from std.gpu import thread_idx, block_dim
 from max.gpu.sync import barrier
+from std.ffi import external_call
 from std.memory import bitcast
 from x_linear.ops import FP
 
@@ -43,6 +44,27 @@ def team_work(n: Int, bufs: Int, per_thread: Int) -> Int:
     """Float32 words of a team's scratch: the slots, `bufs` row buffers of n
     words, then `per_thread` words for each of LINEAR_TPB threads."""
     return TEAM_SLOTS + max(bufs, TEAM_ROW_BUFS) * n + LINEAR_TPB * per_thread
+
+
+@always_inline
+def team_barrier():
+    """A block barrier that also orders DEVICE memory. A team shares its
+    values through DEVICE memory (the fit's fw/res/iw buffers and the team
+    scratch, broadcast slots included), never threadgroup memory. On NVIDIA `barrier()` is
+    `bar.sync`, which orders global memory within the block, and on AMD it is
+    `s_barrier` between workgroup-scope release/acquire fences, which cover
+    global memory too. On Apple `barrier()` lowers to
+    `air.wg.barrier(2, 1)`, Metal's `threadgroup_barrier(mem_threadgroup)`:
+    it orders THREADGROUP memory only, so a thread could read a device word
+    another thread stored before the barrier as its old value. The Metal
+    column of every x_linear team fit disagreed with the CPU, CUDA and pass-1
+    columns at 89aec9ed1 (x-lasso-lars, x-lasso-lars-pos, x-logistic-cv,
+    x-bayes-ridge, ...). Here Apple gets `air.wg.barrier(3, 1)`,
+    `threadgroup_barrier(mem_device | mem_threadgroup)`."""
+    comptime if is_apple_gpu():
+        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
 
 
 @fieldwise_init
@@ -63,7 +85,7 @@ struct Team(ImplicitlyCopyable, Movable):
     def sync(self):
         comptime if is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu():
             if self.nt > 1:
-                barrier()
+                team_barrier()
 
     @always_inline
     def bcast(self, v: Float32, k: Int = 0) -> Float32:

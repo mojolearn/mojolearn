@@ -2,7 +2,7 @@
 +++ b/xtrees/ops.mojo
 @@ -36,6 +36,7 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
  from std.sys.compile import is_defined
- from max.algorithm import sync_parallelize
+ from core.host_parallel import host_parallelize
  from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 +from std.math import fma
  from ensemble.host_layout import (
