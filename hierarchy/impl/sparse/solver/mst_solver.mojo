@@ -180,7 +180,8 @@ struct MST_solver[DENSE: Bool = False](Movable):
         self.new_mst_edge = ctx.enqueue_create_buffer[DType.int32](vv)
         self.mst_edge_count = ctx.enqueue_create_buffer[DType.int32](1)
         self.prev_mst_edge_count = 0
-        self.mst_edge = ctx.enqueue_create_buffer[DType.uint8](ee)
+        # DENSE: no per-edge flag array (see `kernel_min_edge_per_vertex`)
+        self.mst_edge = ctx.enqueue_create_buffer[DType.uint8](1 if Self.DENSE else ee)
         self.next_color = ctx.enqueue_create_buffer[DType.int32](vv)
         self.color = ctx.enqueue_create_buffer[DType.int32](vv)
         self.temp_src = ctx.enqueue_create_buffer[DType.int32](2 * vv)
@@ -193,11 +194,12 @@ struct MST_solver[DENSE: Bool = False](Movable):
 
         # `:93-95` mst_edge_count = 0, prev = 0, mst_edge memset 0
         ctx.enqueue_memset(self.mst_edge_count, Int32(0))
+        var ne = 1 if Self.DENSE else e
         ctx.enqueue_function[fill_u8_kernel](
             self.mst_edge.unsafe_ptr(),
             UInt8(0),
-            Int32(e),
-            grid_dim=(_blocks(e, MST_FILL_TPB), 1, 1),
+            Int32(ne),
+            grid_dim=(_blocks(ne, MST_FILL_TPB), 1, 1),
             block_dim=(MST_FILL_TPB, 1, 1),
         )
         # `:97-105` Initially, color holds the vertex id as color

@@ -139,8 +139,14 @@ def kernel_min_edge_per_vertex[DENSE: Bool = False](
             var successor_color_idx = color_index.unsafe_load(Int(successor))
             var successor_color = color.unsafe_load(Int(successor_color_idx))
             # the color test first: the same predicate, and an edge inside
-            # one color never loads its `mst_edge` byte
-            if self_color != successor_color and mst_edge.unsafe_load(e) == 0:
+            # one color never loads its `mst_edge` byte. DENSE reads no byte
+            # at all: an edge is flagged only when a round adds it, and that
+            # round's label_prop (run to its fixed point) gives both ends one
+            # color, so every flagged edge already fails the color test.
+            var fresh = True
+            comptime if not DENSE:
+                fresh = mst_edge.unsafe_load(e) == 0
+            if self_color != successor_color and fresh:
                 var wk = weight_order_key(weights.unsafe_load(e))
                 var lh = sabotaged_lo_hi(
                     sabotage,
@@ -338,7 +344,8 @@ def min_edge_per_supervertex[DENSE: Bool = False](
                     temp_src.unsafe_store(tid, Int32(tid))
                     temp_dst.unsafe_store(tid, dst)
                     temp_weights.unsafe_store(tid, weights.unsafe_load(Int(edge_idx)))
-                    mst_edge.unsafe_store(Int(edge_idx), UInt8(1))
+                    comptime if not DENSE:
+                        mst_edge.unsafe_store(Int(edge_idx), UInt8(1))
 
             if not add_edge:
                 new_mst_edge.unsafe_store(tid, EDGE_SENTINEL)
