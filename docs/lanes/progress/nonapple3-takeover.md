@@ -112,3 +112,33 @@ of T=64/A=2, which the contract correctly refused. The old refusal remains in
 the raw snapshot and is not recategorized as successful accumulation evidence.
 Focused facade tests cover missing mandatory exports, missing optional exports,
 and selecting an available native optimization; native confirmation remains owed.
+
+## Residual worktree disposition
+
+`nonapple3-worktree-inventory.json` accounts for all 58 worktrees captured by
+the takeover inventory, preserving each exact source SHA and dirty status.
+Ancestry and patch-ID checks distinguish integrated work from cherry-picked
+work. Integration-created worktrees are evidence/control copies, not omitted
+algorithm work. No original worktree was cleaned or changed.
+
+- Original cwd `lane/lm-attention-fallback` at `5e33d2db3` is already ancestral.
+- `algos-decomp`'s `08ba64ec6` owed Isomap/MI300X 10k-row hang note is already
+  present in the current progress document under the same OWED heading. Its
+  historical append context is stale; duplicating the text is unnecessary.
+- The old detached ANN review contains unresolved `e2593e497` t-SNE option
+  parity WIP, explicitly marked UNVERIFIED. Index save/load is already present,
+  but current TSNE still admits only two components and lacks that old
+  x-ann-tsne-options lane. This is a genuine remaining selective integration
+  review, not claimed equivalent or qualified. Its separate `aa23efe08`
+  selector count72 is obsolete (current pin83).
+- `review-linear`, `review-neural`, `review-trees`, other algorithm tips and
+  older verifier repair worktrees are integrated by ancestry or patch identity.
+- `apple3-check`'s `d144aafa6` is explicitly a verification-only alternative
+  driver, marked never merged by its author; preserved in its worktree. The
+  current shared consolidated runner remains the qualification path.
+- `par-harness` through `270de4cd9` is integrated in `6b1a2432f`, with explicit
+  physical witness validation. The live job0022 and its remote uncommitted
+  patch are separate unqualified evidence; no remote patch was imported.
+  This harness compares one versus two devices and does not admit references
+  or replace the exact candidate-table par-gmm workflow. That workflow's tests
+  remain passing. No GPU jobs were submitted or started in this review.
