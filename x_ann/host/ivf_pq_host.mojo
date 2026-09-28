@@ -443,14 +443,20 @@ def ivf_rabitq_build_host(
     _ = labels^
 
 
+#: Candidate rows whose RaBitQ bit folds run side by side.
+comptime RQ_W = 8
+
+
 def ivf_rabitq_search_host(
     centers: F32P, offsets: I32P, list_indices: I32P, codes: I32P, norms: F32P, ips: F32P, mask: I32P,
     n_lists: Int, dim: Int, seed: Int, queries: F32P, m: Int, k: Int, n_probes: Int,
     out_d: F32P, out_i: I32P, out_n: I32P,
 ):
     """`rq_search_cell` per query, on the caller's arrays; the coarse
-    distances once per query (`_probe_walk`), the rotation and the scan the
-    cell's statements."""
+    distances once per query (`_probe_walk`), the rotation the cell's, and
+    the scan's sign-flip fold for RQ_W unmasked rows at a time (lane r is
+    row r's `dot = ftz(dot + (v if bit else -v))` over j ascending; the
+    estimate and the insertion then per row in slot order, as the cell)."""
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
@@ -461,9 +467,11 @@ def ivf_rabitq_search_host(
         var coarse = List[Float32](length=n_lists, fill=Float32(0.0))
         var probes = List[Int32](length=n_probes, fill=Int32(0))
         var ws = List[Float32](length=D, fill=Float32(0.0))
+        var rows_buf = List[Int32](length=RQ_W, fill=Int32(0))
         var cp = fp(coarse)
         var pp = ip(probes)
         var wp = fp(ws)
+        var rb = ip(rows_buf)
         for qi in range(span[0], span[1]):
             var base = qi * k
             var q_off = qi * dim
@@ -477,29 +485,55 @@ def ivf_rabitq_search_host(
                 for j in range(D):
                     var v = wp.unsafe_load(j)
                     qn2 = ftz(identical_mul_add(v, v, qn2))
-                for slot in range(Int(offsets.unsafe_load(l)), Int(offsets.unsafe_load(l + 1))):
-                    var row = Int(list_indices.unsafe_load(slot))
-                    if mask.unsafe_load(row) == 0:
-                        continue
-                    var est: Float32
-                    var ipv = ips.unsafe_load(row)
-                    var norm = norms.unsafe_load(row)
-                    if ipv > Float32(0.0):
-                        var dot = Float32(0.0)
-                        for j in range(D):
-                            var v = wp.unsafe_load(j)
-                            var bit = (codes.unsafe_load(row * words + j // 32) >> Int32(j % 32)) & Int32(1)
-                            dot = ftz(dot + (v if bit != 0 else -v))
-                        var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ipv))
-                        var nn = ftz(identical_mul(norm, norm))
-                        est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-                    else:
-                        est = qn2
-                    pq_insert(k, base, est, Int32(row), out_d, out_i)
-                    n_cand += 1
+                # rows in slot order, RQ_W at a time: lane r's sign-flip fold
+                # over j ascending is the cell's `dot` for row rows[r]
+                var start = Int(offsets.unsafe_load(l))
+                var stop = Int(offsets.unsafe_load(l + 1))
+                var slot = start
+                while slot < stop:
+                    var nb = 0
+                    while slot < stop and nb < RQ_W:
+                        var row = Int(list_indices.unsafe_load(slot))
+                        slot += 1
+                        if mask.unsafe_load(row) == 0:
+                            continue
+                        rb.unsafe_store(nb, Int32(row))
+                        nb += 1
+                    if nb == 0:
+                        break
+                    var ridx = SIMD[DType.int32, RQ_W](0)
+                    for r in range(nb):
+                        ridx[r] = rb.unsafe_load(r)
+                    var dot = SIMD[DType.float32, RQ_W](0.0)
+                    for w in range(words):
+                        var wv = SIMD[DType.int32, RQ_W](0)
+                        for r in range(nb):
+                            wv[r] = codes.unsafe_load(Int(ridx[r]) * words + w)
+                        var top = min(32, D - w * 32)
+                        for jj in range(top):
+                            var v = wp.unsafe_load(w * 32 + jj)
+                            var bit = (wv >> SIMD[DType.int32, RQ_W](Int32(jj))) & SIMD[DType.int32, RQ_W](1)
+                            var sv = bit.ne(SIMD[DType.int32, RQ_W](0)).select(
+                                SIMD[DType.float32, RQ_W](v), SIMD[DType.float32, RQ_W](-v)
+                            )
+                            dot = ftz_v[RQ_W](dot + sv)
+                    for r in range(nb):
+                        var row = Int(ridx[r])
+                        var est: Float32
+                        var ipv = ips.unsafe_load(row)
+                        var norm = norms.unsafe_load(row)
+                        if ipv > Float32(0.0):
+                            var xq = ftz(identical_div(ftz(identical_mul(dot[r], scale)), ipv))
+                            var nn = ftz(identical_mul(norm, norm))
+                            est = ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
+                        else:
+                            est = qn2
+                        pq_insert(k, base, est, Int32(row), out_d, out_i)
+                        n_cand += 1
             out_n.unsafe_store(qi, Int32(n_cand))
         _ = coarse^
         _ = probes^
         _ = ws^
+        _ = rows_buf^
 
     ann_tasks(task, tasks)
