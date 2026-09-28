@@ -1,0 +1,1103 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+ "vendor": "x86_64",
+ "commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "trees-dart-options/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b6abc9de99c43ce0"
+   ],
+   "parts": [
+    {
+     "reg": "c1017567ff6aa75c",
+     "predict": "66d847f2df6b9122",
+     "proba": "47e9917e291e1a9f",
+     "raw": "b7f82ea2673ac7d0",
+     "shap": "19eb973cc97a93c2",
+     "ev": "d54ddf272aac3415"
+    }
+   ],
+   "infer": [
+    "249b76e4608ed5c5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "45d91a2c671b41e8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.47291699999186676,
+    "stages": {
+     "repeat=1/train": 0.3921360550011741,
+     "repeat=1/infer-save-reload": 0.004050971998367459,
+     "repeat=1/batch": 0.0763452629907988,
+     "repeat=1/batchgrad": 0.00013200899411458522,
+     "repeat=1/batchscale": 2.784999378491193e-05,
+     "repeat=1/ragged": 2.265999501105398e-05,
+     "repeat=1/stepfull": 2.2450010874308646e-05
+    }
+   }
+  },
+  "trees-dart-options/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7d2d9770ee576146"
+   ],
+   "parts": [
+    {
+     "reg": "4e91385fd8f1c008",
+     "predict": "f7315d17c1565042",
+     "proba": "8c2204d8b83289ee",
+     "raw": "45479416f974238d",
+     "shap": "b65540ccc9e51f04",
+     "ev": "0d8ce295baae2e0e"
+    }
+   ],
+   "infer": [
+    "bb0503c542ba84a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f7a28608ce915464"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18246467999415472,
+    "stages": {
+     "repeat=1/train": 0.06635561199800577,
+     "repeat=1/infer-save-reload": 0.004011291995993815,
+     "repeat=1/batch": 0.11172877499484457,
+     "repeat=1/batchgrad": 0.00012993000564165413,
+     "repeat=1/batchscale": 3.393000224605203e-05,
+     "repeat=1/ragged": 2.771000436041504e-05,
+     "repeat=1/stepfull": 2.523000875953585e-05
+    }
+   }
+  },
+  "trees-dart-options/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "25bd8f7e883825f7"
+   ],
+   "parts": [
+    {
+     "reg": "41509748d97bac9b",
+     "predict": "6e7e399649fa54b1",
+     "proba": "4012b20380775afd",
+     "raw": "a5c95636ba561f16",
+     "shap": "d84755e5260fbe9c",
+     "ev": "b4d90aedb159f0f9"
+    }
+   ],
+   "infer": [
+    "1fd0427c021936c6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6b31c92f41a7c499"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18132177100051194,
+    "stages": {
+     "repeat=1/train": 0.0671081110049272,
+     "repeat=1/infer-save-reload": 0.0041541509999660775,
+     "repeat=1/batch": 0.10973972000647336,
+     "repeat=1/batchgrad": 0.00012058000720571727,
+     "repeat=1/batchscale": 2.317100006621331e-05,
+     "repeat=1/ragged": 2.0669001969508827e-05,
+     "repeat=1/stepfull": 2.020000829361379e-05
+    }
+   }
+  },
+  "trees-dart-options/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c31c34210b0e693d"
+   ],
+   "parts": [
+    {
+     "reg": "ca8042592d83bc49",
+     "predict": "cb48c7cd994ec91e",
+     "proba": "dbf3a745c37a9520",
+     "raw": "87f2c3c888933156",
+     "shap": "4edbc844a06ce599",
+     "ev": "78c0b4bdad25b0a4"
+    }
+   ],
+   "infer": [
+    "9763df181d04aad9"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "fec20f343c0f0801"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18093260200112127,
+    "stages": {
+     "repeat=1/train": 0.06751931000326294,
+     "repeat=1/infer-save-reload": 0.004081823004526086,
+     "repeat=1/batch": 0.10899452999001369,
+     "repeat=1/batchgrad": 0.00012964899360667914,
+     "repeat=1/batchscale": 2.5789995561353862e-05,
+     "repeat=1/ragged": 2.2849999368190765e-05,
+     "repeat=1/stepfull": 2.235999272670597e-05
+    }
+   }
+  },
+  "trees-dart-options/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "425a9e3aa86f9883"
+   ],
+   "parts": [
+    {
+     "reg": "6a62fae0db0457e3",
+     "predict": "66d847f2df6b9122",
+     "proba": "47e9917e291e1a9f",
+     "raw": "b7f82ea2673ac7d0",
+     "shap": "19eb973cc97a93c2",
+     "ev": "d54ddf272aac3415"
+    }
+   ],
+   "infer": [
+    "249b76e4608ed5c5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "45d91a2c671b41e8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18188937900413293,
+    "stages": {
+     "repeat=1/train": 0.06634562299586833,
+     "repeat=1/infer-save-reload": 0.00404515300760977,
+     "repeat=1/batch": 0.11115949599479791,
+     "repeat=1/batchgrad": 0.00011530000483617187,
+     "repeat=1/batchscale": 2.6708992663770914e-05,
+     "repeat=1/ragged": 2.3519998649135232e-05,
+     "repeat=1/stepfull": 2.2369000362232327e-05
+    }
+   }
+  },
+  "trees-dart-options/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "425a9e3aa86f9883"
+   ],
+   "parts": [
+    {
+     "reg": "6a62fae0db0457e3",
+     "predict": "66d847f2df6b9122",
+     "proba": "47e9917e291e1a9f",
+     "raw": "b7f82ea2673ac7d0",
+     "shap": "19eb973cc97a93c2",
+     "ev": "d54ddf272aac3415"
+    }
+   ],
+   "infer": [
+    "249b76e4608ed5c5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "45d91a2c671b41e8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18549315400014166,
+    "stages": {
+     "repeat=1/train": 0.06733953100047074,
+     "repeat=1/infer-save-reload": 0.004093741998076439,
+     "repeat=1/batch": 0.1137227930012159,
+     "repeat=1/batchgrad": 0.0001149099989561364,
+     "repeat=1/batchscale": 2.6160007109865546e-05,
+     "repeat=1/ragged": 2.3019994841888547e-05,
+     "repeat=1/stepfull": 2.2680003894492984e-05
+    }
+   }
+  },
+  "trees-dart-options/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "19dcc264a04a938f"
+   ],
+   "parts": [
+    {
+     "reg": "de126918a0ecfd87",
+     "predict": "280b91967835e0d1",
+     "proba": "62741bff6a94e5de",
+     "raw": "782a15e5000fd372",
+     "shap": "ceaeec551a19c98e",
+     "ev": "24966bf95c8c7673"
+    }
+   ],
+   "infer": [
+    "ed30eca925b63073"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f62871ffc56d3033"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.14003919099923223,
+    "stages": {
+     "repeat=1/train": 0.07030620500154328,
+     "repeat=1/infer-save-reload": 0.0044343009940348566,
+     "repeat=1/batch": 0.06499746500048786,
+     "repeat=1/batchgrad": 0.00010607000149320811,
+     "repeat=1/batchscale": 2.7550006052479148e-05,
+     "repeat=1/ragged": 2.336000034119934e-05,
+     "repeat=1/stepfull": 2.2420004825107753e-05
+    }
+   }
+  },
+  "trees-dart-options/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0115b3698436d867"
+   ],
+   "parts": [
+    {
+     "reg": "a8f22c8447561083",
+     "predict": "a877b31cef7fd588",
+     "proba": "2a9a6895d3f89457",
+     "raw": "a82b7c6959df13bb",
+     "shap": "182d2174a5ec7847",
+     "ev": "1649a1770b9f8675"
+    }
+   ],
+   "infer": [
+    "84a059d9c2cdf773"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "42c46ceaadb51827"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15429419299471192,
+    "stages": {
+     "repeat=1/train": 0.06360275800398085,
+     "repeat=1/infer-save-reload": 0.0033826029975898564,
+     "repeat=1/batch": 0.08710830300697125,
+     "repeat=1/batchgrad": 3.693999315146357e-05,
+     "repeat=1/batchscale": 1.7380007193423808e-05,
+     "repeat=1/ragged": 1.5789992175996304e-05,
+     "repeat=1/stepfull": 1.5030003851279616e-05
+    }
+   }
+  },
+  "trees-dart-options/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2fc250219800bfdf"
+   ],
+   "parts": [
+    {
+     "reg": "968fbb7f70ec3f88",
+     "predict": "c6c897d46fc286fc",
+     "proba": "4e70620cffe83e83",
+     "raw": "3da72f9dd770db47",
+     "shap": "a790d7295e3ceeba",
+     "ev": "2baaa70a5b84ff6f"
+    }
+   ],
+   "infer": [
+    "46670ee5a31ad782"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "467bce694d88c58d"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1831799790088553,
+    "stages": {
+     "repeat=1/train": 0.067693449993385,
+     "repeat=1/infer-save-reload": 0.004139971992117353,
+     "repeat=1/batch": 0.11101118600345217,
+     "repeat=1/batchgrad": 0.00011257099686190486,
+     "repeat=1/batchscale": 2.6040012016892433e-05,
+     "repeat=1/ragged": 2.3159998818300664e-05,
+     "repeat=1/stepfull": 2.2310996428132057e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "expansion-batch-2026-09-28-v1",
+  "resample-unpaired": "expansion-batch-2026-09-28-v1",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "expansion-batch-2026-09-28-v1",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.24",
+  "package_dir": "/root/mojolearn-wt/steward-do-amd/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "ed352abf8b395cfea7b3af9bde375f927a3347241c514703999490fed25c51cc",
+    "size": 3101136
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "7152d319c70284d8801fa1f9d9e0a15fc2ceb4f5f34ee8c548f74c9a0e9d8c07",
+    "size": 742384
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "0b5ecb7355842ca339a06819e997c4afb4ca36893aa68f1415b7d6f126eb9727",
+    "size": 4892088
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "77752a7ca7c4f04660ddfb41781ad596e5fd80148ce1e2bcaa99c47f66f0a7ae",
+    "size": 339680
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "f1c519fa1062dbf53297c1fc0e8e23d9ebbe596cb6866243b662c0baee577101",
+    "size": 3721048
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "f2ea6b48f17c4901c2e860f1dd5ee5eb7cd98794135a70aafa06c6cf7c1199e0",
+    "size": 6881920
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "21aa7e10e07e0f90e4006f6c967c0ab38bf062fd67795c9da0a35f00b4cce1ec",
+    "size": 1882536
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "14b5a34c96fc4d6a4e254cfeee04cc9959f026010684c78ed7745a40d0ff5a4e",
+    "size": 2073800
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "81bfdd865809f841a2d9d6bdb5b917a99d3c36e34218877d71e3451d4ebd58e9",
+    "size": 1120952
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "e9c9ca1ed371de75117b3fb1b7dc158a3ebb4e2e347ba3cf6d6ae2b03bdaab9f",
+    "size": 1780680
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "7c71a869491ce9f1b4ddc8ebd55f7071fe3ea34f9b50ade7dbd2630741ed73d8",
+    "size": 1303424
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "4838767b051f71a0927e3710ea0ec82a02df807c75ded10ec17943923d1c7ae5",
+    "size": 3406864
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "378f2c38b2ce834985698e99ae0d6789a000953dda7138e9b9e544a5d1909ce9",
+    "size": 4065256
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "503e752ed90d7bdd62ee21a8fac8c6946d52f077e0fee3c48b5045d1216e7d76",
+    "size": 2341472
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "f927e0a519e84edede7210adfdfb2089617fd998081cbe3ce087cef32486634a",
+    "size": 342576
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "98f29dff2ad6995d92e0a218f08f430543ff594ff32de87535cc3692eb8ef21a",
+    "size": 1123400
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "e68337bcc9a8f7b533257006f75ed881d3934e5269ed4bd06a966e94deb2e21e",
+    "size": 2003744
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "304eec2f8b128a769b62a890a7020126ff58b17f56f9b7e62fc0b07e8d145ba6",
+    "size": 1572792
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "30fdac0ed16751ae17c46445635acf32fa5d73768d424c9f43f57ff20ffef6e9",
+    "size": 2004944
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "0e05b505bd68d67d35708c6f438a44c986f8ca6a171986c5510c27f0c0e3a137",
+    "size": 1753320
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "632c86856baccda029aa01ea55909a1659b367fe6988b657a95cfaeff3a1393d",
+    "size": 3726016
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "dd15742d0a36e764263421ca5312ba104002be9a470011c1e61fba42dddfaf40",
+    "size": 1582064
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "660dbde66b8a85df1a4cba118a3d45d6feb1e7cebb1ee78b067980b5afd8f1e0",
+    "size": 710216
+   },
+   {
+    "module": "_mojolearn_x_ann",
+    "sha256": "dbd1efa44f5c3187fd78504d48bb13f1046b9f91fa0b925702e52eb1a8e5572a",
+    "size": 1672192
+   },
+   {
+    "module": "_mojolearn_x_cluster",
+    "sha256": "539960c3faa2191464584f1dcdc53b48ff76f5e926336b1ee385987c854954e6",
+    "size": 1600000
+   },
+   {
+    "module": "_mojolearn_x_cnn",
+    "sha256": "1acb1169b6595636264232a601610ac33fccc211321685f12354f1a149cad816",
+    "size": 1877824
+   },
+   {
+    "module": "_mojolearn_x_decomp",
+    "sha256": "308c1b75f3475da084cec22227306eb2c9e24019a02e7ee721b4038157a2c91c",
+    "size": 1119472
+   },
+   {
+    "module": "_mojolearn_x_linear",
+    "sha256": "f0416c68a4a6f92b6033884c8f3130be155e8a76f81621db28c65bef73f75e64",
+    "size": 1232712
+   },
+   {
+    "module": "_mojolearn_x_metrics",
+    "sha256": "6c4b4039ae941bbfa893714bb9ea5a0255eca153ea59b03f4416d940d9d0770b",
+    "size": 818840
+   },
+   {
+    "module": "_mojolearn_x_neighbors",
+    "sha256": "2d94eae458a9c250855157122dbb0ff221a38e84d9cc60edfe446ef6168b8d74",
+    "size": 1086592
+   },
+   {
+    "module": "_mojolearn_x_prep",
+    "sha256": "154e5c7fcaa74463622ee30cdfa006fd20f8f8196376d34ef1d60f56c5b8f401",
+    "size": 1837976
+   },
+   {
+    "module": "_mojolearn_x_sequence",
+    "sha256": "c8b5c5d2b56ae9bab685394afac33282ea77ad07d1ae08221c32a585b1067f51",
+    "size": 1709688
+   },
+   {
+    "module": "_mojolearn_x_trees",
+    "sha256": "021e3731107ef30669ff82974d4e8cd80212d3431e2a1275068b2ae93c753c21",
+    "size": 501368
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "3c9881b260eab454c70ee78cf73623ff5fdd8a70ea7363e153ac87ef99c56133",
+  "options": {
+   "require_backend": "hip",
+   "require_cpu": false,
+   "fail_on_refused": true,
+   "jobs": 1,
+   "lanes": "trees-dart-options",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "249654a8dd0a12416bc4d8d521e805b56305a80d49ebbdfe8b693a3e9e6be75c",
+  "provenance": {
+   "commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
+   "mode": "identical",
+   "vendor": "x86_64",
+   "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

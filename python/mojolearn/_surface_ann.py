@@ -49,8 +49,4 @@ TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE"
                        "ivf-filter": "the IVF-Flat index's sample filter",
                        "x-ann-cagra-filter": "the CAGRA sample filter",
                        "x-ann-refine-euclidean": "exact candidate refine under euclidean distance"}
-PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference",
-                        "x-ann-tsne-pca": "no reference", "x-ann-cagra": "no reference",
-                        "x-ann-ivf-sq": "no reference", "x-ann-refine": "no reference", "x-ann-filter": "no reference",
-                        "x-ann-ivf-rabitq": "no reference", "ivf-filter": "no reference",
-                        "x-ann-cagra-filter": "no reference", "x-ann-refine-euclidean": "no reference"}
+PUBLIC_PENDING_LANES = {}

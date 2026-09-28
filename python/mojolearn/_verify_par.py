@@ -61,7 +61,7 @@ import os
 import sys
 import time
 
-from ._verify_all import CannotRun, EXIT_CANNOT_RUN, EXIT_MISMATCH, EXIT_USAGE, EXIT_VERIFIED
+from ._verify_all import CannotRun, EXIT_CANNOT_RUN, EXIT_MISMATCH, EXIT_USAGE, EXIT_VERIFIED, EXIT_NO_REFERENCE
 from ._verify_all import _emit, _finish, load_harness, run_cell, family_map
 from . import _verify_reference as vref
 
@@ -524,7 +524,7 @@ def par_state(counts, compared):
 
 
 def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
-              repeats=1, log=None, perturb=False):
+              repeats=1, log=None, perturb=False, reference_table=None):
     """The two-device column, run ONCE, against the recorded one-device values.
 
     `perturb=True` moves every value of the input's first column up by one
@@ -537,7 +537,21 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
     from ._cpu_reference import reference_training
     log = log or (lambda s: None)
     vendor = _backend.vendor()
-    table, cls = vref.load_table(), vref.VENDOR_CLASS.get(vendor, "cpu")
+    table = vref.load_table(reference_table) if reference_table is not None else vref.load_table()
+    cls = vref.VENDOR_CLASS.get(vendor, "cpu")
+    if reference_table is not None:
+        # A malformed explicit candidate must fail before launching any work,
+        # never fall back to the shipped table or certify an empty scope.
+        if (not all(isinstance(table.get(k), dict) for k in ("cells", "fixtures", "heldout"))
+                or not isinstance(table.get("records"), list)):
+            raise vref.TableError("invalid reference table containers")
+        for lane in lanes:
+            for fx in fixtures:
+                cell = table["cells"].get(f"{lane}/{fx}")
+                if not isinstance(cell, dict) or any(
+                        not isinstance(cell.get(part), dict) or not isinstance(cell[part].get("ref"), str)
+                        for part in vref.PARTS):
+                    raise vref.TableError(f"incomplete reference table: {lane}/{fx}")
     cells, counts = [], {}
     cell_witnesses = []
     for lane in lanes:
@@ -790,7 +804,10 @@ def cmd_par_check(args, ml):
     try:
         result = par_check(harness, ml, chosen, fixtures, devices=devices,
                            repeats=max(1, int(getattr(args, "repeats", 1) or 1)),
-                           log=log, perturb=perturb)
+                           log=log, perturb=perturb,
+                           reference_table=getattr(args, "reference_table", None))
+    except vref.TableError as exc:
+        return _finish(args, EXIT_NO_REFERENCE, "NO REFERENCE", str(exc))
     except CannotRun as exc:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
     result.update(scope=scope, par_lanes=every, representative_of=per_family,

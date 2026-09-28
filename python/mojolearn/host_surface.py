@@ -896,10 +896,13 @@ TRAINING_LANE_NAMES = {
     "bootstrap": "the bootstrap",
     "permutation-test": "the permutation test",
     "monte-carlo": "Monte Carlo integration",
-    "resample-bca": "bias-corrected accelerated bootstrap intervals",
-    "resample-unpaired": "independent two-sample bootstrap",
-    "resample-perm-samples": "paired permutation and sign-flip tests",
-    "resample-utils": "resampling indices with and without replacement",
+    # lane/prep (merged by lane/merged): the resample options through the
+    # same host binding: BCa intervals, paired=False, permutation_type=
+    # 'samples', and sklearn.utils.resample / resample_indices.
+    "resample-bca": "the BCa bootstrap interval",
+    "resample-unpaired": "the unpaired two-sample bootstrap",
+    "resample-perm-samples": "the permutation test over samples (paired and sign-flip)",
+    "resample-utils": "resample and resample_indices (sklearn.utils.resample)",
     # lane/cpu-training-misc batch 3 (2026-09-15): the neural primitives
     # through the training family's host binding. optim-sgd and
     # cross-entropy-arms reach optimizer_step and ce_loss (the mlp lane's
@@ -2646,15 +2649,17 @@ FAMILIES = (
         # permutation_test and monte_carlo_integrate over
         # resample/host/resample_host.mojo (resample/estimator.mojo's entry
         # points with every device kernel restated on the host);
-        # resample_ranges_parallel_available is absent, so the multi-GPU
-        # range drivers refuse by name.
+        # resample_ranges_parallel_available reports the one-device
+        # cooperative pool (f90ad45de, the par-resample CPU arm). The
+        # option lanes (BCa, paired=False, permutation_type='samples',
+        # resample / resample_indices) route through the same entries.
         family="resample",
         binding="_mojolearn_resample_host",
         routes="_mojolearn_resample",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("bootstrap", "permutation-test", "monte-carlo", "resample-bca",
-                        "resample-unpaired", "resample-perm-samples", "resample-utils"),
+        training_lanes=("bootstrap", "permutation-test", "monte-carlo", "resample-bca", "resample-unpaired",
+                        "resample-perm-samples", "resample-utils"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("resample.bootstrap", "resample.permutation_test", "resample.monte_carlo_integrate"),
@@ -2663,8 +2668,9 @@ FAMILIES = (
         exports=(
             "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
-            "bootstrap", "bootstrap_unpaired", "permutation_test", "permutation_samples",
-            "resample_indices", "resample_ranges_parallel_available", "monte_carlo_integrate",
+            "bootstrap", "permutation_test", "monte_carlo_integrate",
+            "bootstrap_unpaired", "permutation_samples", "resample_indices",
+            "resample_ranges_parallel_available",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3556,27 +3562,16 @@ PUBLIC_PENDING_LANES = {
     # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
     # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
     # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
-    # 0.8.23 (DEVIATION 3133): GaussianMixture's kmeans init moved to classic
-    # k-means++, so these two lanes' IDENTICAL bits moved past the shipped
-    # table on purpose (LANE_REVISIONS classic-kmeanspp-init-1). They leave
-    # this table when the 0.8.23 record regenerates the reference.
+    # ADMITTED 2026-09-28: gmm and gmm-sample at classic-kmeanspp-init-1;
+    # complete nine-fixture witnesses and current CPU/Metal/HIP base agreement.
+    # See docs/CONSOLIDATED_REFERENCE_ADMISSION_124.md.
     # lane cpu (2026-09-27): new lanes, no release record carries them yet
-    # These registered fixtures use existing resample host exports. A CPU
-    # route is not a reference admission; keep their missing evidence visible.
-    "resample-bca": "no reference",
-    "resample-unpaired": "no reference",
-    "resample-perm-samples": "no reference",
-    "resample-utils": "no reference",
-    "pca-inverse": "no reference",
-    "pca-whiten-inverse": "no reference",
-    "tsvd-inverse": "no reference",
-    "gmm": "stale reference",
-    "gmm-sample": "stale reference",
     # lane/neural (2026-09-28): a covered lane whose CPU and NVIDIA columns
     # agree (algos_lane_check, nine fixtures), with no release record yet, so
     # the shipped table has no cell for it. It leaves at the next record.
-    "optim-maximize": "no reference",
-}
+    # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
+    # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
+    }
 # The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
 

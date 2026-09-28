@@ -113,7 +113,7 @@ def _(ml, X, yc, yr, Xh=None):
     y = np.ascontiguousarray(np.concatenate([raw, walk]), dtype=np.float32)
     m = ml.AutoARIMA(y).search(d=range(2), p=range(2), q=range(2))
     m.fit()
-    return _fit(dict(d=_h(m.d_), order=_h(m.order_), ic=_h(m.ic_), forecast=_h(m.forecast(12))))
+    return _fit(dict(d=_h(m.d_), order=_h(m.order_), ic=_h(m.ic_), forecast=_h(m.forecast(12))), est=[("forecast", 12, lambda h: (m.forecast(h),), -1)])
 
 
 @lane("sequence-stl")
@@ -129,7 +129,7 @@ def _(ml, X, yc, yr, Xh=None):
     b = ml.STL(y, period=12, robust=True, seasonal_deg=0, seasonal_jump=2, trend_jump=2,
                low_pass_jump=2).fit()
     return _fit(dict(seasonal=_h(a.seasonal), trend=_h(a.trend), resid=_h(a.resid),
-                     r_seasonal=_h(b.seasonal), r_trend=_h(b.trend), r_weights=_h(b.weights)))
+                     r_seasonal=_h(b.seasonal), r_trend=_h(b.trend), r_weights=_h(b.weights)), est=y)
 
 
 @lane("sequence-var")
@@ -144,7 +144,7 @@ def _(ml, X, yc, yr, Xh=None):
     a = ml.VAR(y).fit(maxlags=2)
     b = ml.VAR(y).fit(maxlags=1, trend="n")
     return _fit(dict(params=_h(a.params), sigma_u=_h(a.sigma_u), resid=_h(a.resid),
-                     forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))))
+                     forecast=_h(a.forecast(y, 10)), n_params=_h(b.params), n_forecast=_h(b.forecast(y, 10))), est=[("VAR", 10, lambda h: (a.forecast(y, h), b.forecast(y, h)), 0)])
 
 
 @lane("sequence-mlp")
@@ -267,7 +267,7 @@ def _(ml, X, yc, yr, Xh=None):
     opt.lr_schedule = ml.StepLR(1e-2, step_size=2)
     for k in range(5):
         opt.step([np.ascontiguousarray(X[16 + 16 * k:32 + 16 * k, 4:8], dtype=np.float32)])
-    return _fit(dict(bits=_h(bits), lstm=_h(r.params_, r.loss_curve_), nadam=_h(p1)))
+    return _fit(dict(bits=_h(bits), lstm=_h(r.params_, r.loss_curve_), nadam=_h(p1)), est=(sched, r))
 
 
 @lane("sequence-layernorm")
@@ -304,7 +304,7 @@ def _(ml, X, yc, yr, Xh=None):
     fa = a.predict(18)["mean"]
     d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
     fd = d.predict(18)["mean"]
-    return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))
+    return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)), est=[("Theta", 18, lambda h: (a.predict(h)["mean"], d.predict(h)["mean"]), -1)])
 
 
 @lane("sequence-croston")
@@ -316,10 +316,12 @@ def _(ml, X, yc, yr, Xh=None):
     y = np.where(c > np.float32(0.8), c + np.float32(1.0), np.float32(0.0)).astype(np.float32)
     y[4] = np.float32(0.0)
     y[5] = np.where(c[5] < np.float32(-1.0), c[5], y[5]).astype(np.float32)
-    out = {}
+    out, models = {}, []
     for k, cls in (("classic", ml.CrostonClassic), ("optimized", ml.CrostonOptimized), ("sba", ml.CrostonSBA)):
-        out[k] = _h(cls().fit(y).predict(4)["mean"])
-    return _fit(out)
+        model = cls().fit(y)
+        out[k] = _h(model.predict(4)["mean"])
+        models.append((k, 4, lambda h, model=model: (model.predict(h)["mean"],), -1))
+    return _fit(out, est=models)
 
 
 @lane("sequence-ets")
@@ -350,7 +352,7 @@ def _(ml, X, yc, yr, Xh=None):
                ana30=_h(ml.ETS(season_length=12, model="ANA", damped=False).fit(
                    np.ascontiguousarray(ys[:, :30])).predict(12)["mean"]),
                mnm5=_h(ml.ETS(season_length=5, model="MNM", damped=False).fit(p5).predict(12)["mean"]))
-    return _fit(out)
+    return _fit(out, est=[("ETS AAA", 12, lambda h: (aaa.predict(h)["mean"],), -1)])
 
 
 @lane("sequence-garch")
@@ -370,7 +372,7 @@ def _(ml, X, yc, yr, Xh=None):
     g = ml.GARCH().fit(r, horizon=5)
     j = ml.GARCH(p=1, o=1, q=1, mean="Zero").fit(r, horizon=5)
     return _fit(dict(params=_h(g.params_), ll=_h(g.loglikelihood_), vol=_h(g.conditional_volatility_),
-                     fc=_h(g.forecast(5)), gjr=_h(j.params_, j.loglikelihood_, j.forecast(5))))
+                     fc=_h(g.forecast(5)), gjr=_h(j.params_, j.loglikelihood_, j.forecast(5))), est=[("GARCH", 5, lambda h: (g.forecast(h), j.forecast(h)), -1)])
 
 
 @lane("sequence-prophet")
@@ -391,7 +393,7 @@ def _(ml, X, yc, yr, Xh=None):
     fa = a.predict(tf, holidays=hol[120:, None])
     m = ml.ProphetForecaster(seasonality_mode="multiplicative").fit(t, y, holidays=hol[:120, None])
     fm = m.predict(tf, holidays=hol[120:, None])
-    return _fit(dict(a_params=_h(a.params_), a_fc=_h(fa), m_params=_h(m.params_), m_fc=_h(fm)))
+    return _fit(dict(a_params=_h(a.params_), a_fc=_h(fa), m_params=_h(m.params_), m_fc=_h(fm)), est=[("Prophet", 21, lambda h: (a.predict(tf[:h], holidays=hol[120:120+h, None]), m.predict(tf[:h], holidays=hol[120:120+h, None])), -1)])
 
 
 @lane("sequence-moe")
@@ -409,3 +411,81 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(ya=_h(ya), la=_h(a.router_logits_), sa=_h(a.selected_experts_), wa=_h(a.routing_weights_),
                      yb=_h(yb), sb=_h(b.selected_experts_), wb=_h(b.routing_weights_)),
                 a, lambda e: (e(np.ascontiguousarray(Xh[:256, :16], dtype=np.float32)),))
+
+# Batch declarations describe the returned estimator's public inference axis.
+# Training minibatches are a separate property and are not inferred from these.
+_batch_decl(_rows_calls("predict", "hidden_sequence", prep=_sequence_seq),
+            "sequence-lstm", "sequence-gru", "sequence-rnn", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :10]), "sequence-mlp", revision="expansion-batch-2026-09-28-v1")
+# The fitted LayerNorm uses every fixture column (odd has 17, base has 16).
+_batch_decl(_rows_calls("forward", sl=slice(0, 256)), "sequence-layernorm", revision="layernorm-batch-width-2026-09-28-v2")
+_batch_decl(_rows_calls("__call__", sl=np.s_[:256, :16]), "sequence-moe", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:parameter-coupled optimizer (Adafactor factors second moments across tensor rows and "
+            "columns and scales updates by tensor RMS; splitting parameter rows changes the algorithm)",
+            "sequence-adafactor", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:parameter-coupled optimizer (LAMB uses tensor norms for its trust ratio and global "
+            "gradient clipping; a sliced parameter registry is a different optimization problem)",
+            "sequence-lamb", revision="expansion-batch-2026-09-28-v1")
+
+
+def _sequence_batch_forecasts(ml, entries, Xh):
+    return [_BatchPrefix(label, horizon, call, axis) for label, horizon, call, axis in entries]
+
+
+_batch_decl(_sequence_batch_forecasts, "sequence-autoarima", "sequence-var", "sequence-theta",
+            "sequence-croston", "sequence-ets", "sequence-garch", "sequence-prophet", revision="expansion-batch-2026-09-28-v1")
+
+
+def _sequence_batch_stl(ml, series, Xh):
+    def fit_rows(rows, options):
+        model = ml.STL(rows, period=12, **options).fit()
+        return tuple(np.asarray(getattr(model, name)) for name in ("seasonal", "trend", "resid"))
+    return [_BatchRows("STL " + label, series, lambda r, options=options: fit_rows(r, options))
+            for label, options in (("default", {}), ("robust", dict(robust=True, seasonal_deg=0,
+                                      seasonal_jump=2, trend_jump=2, low_pass_jump=2)))]
+
+
+_batch_decl(_sequence_batch_stl, "sequence-stl", revision="expansion-batch-2026-09-28-v1")
+
+
+def _sequence_batch_schedulers(ml, fitted, Xh):
+    schedules, rnn = fitted
+    steps = np.arange(1, 41, dtype=np.int64).reshape(-1, 1)
+    return [_BatchRows("scheduler bits at fixed absolute step", steps,
+                       lambda rows: (np.asarray([[s.bits_at(int(t)) for s in schedules]
+                                                  for t in rows[:, 0]], dtype=np.uint32),)),
+            _BatchRows("scheduled LSTM predict", _sequence_seq(Xh), lambda rows: (rnn.predict(rows),))]
+
+
+_batch_decl(_sequence_batch_schedulers, "sequence-lr-schedulers", revision="expansion-batch-2026-09-28-v1")
+
+
+def _sequence_batch_optimizer(name, options):
+    """Only coordinate-local optimizers; Adafactor/LAMB are declared separately."""
+    def spec(ml, e, Xh):
+        cls = getattr(ml, name)
+        params = np.ascontiguousarray(Xh[:64, :8])
+        gradients = [np.ascontiguousarray(Xh[64 + 64*j:128 + 64*j, 8:16]) for j in range(2)]
+        indices = np.arange(64, dtype=np.int64).reshape(-1, 1)
+        def evaluate(rows, kwargs):
+            ids = rows[:, 0]
+            p = np.ascontiguousarray(params[ids]).copy()
+            optimizer = cls([p], **kwargs)
+            for g in gradients:
+                optimizer.step([np.ascontiguousarray(g[ids])])
+            return (p,) + tuple(np.asarray(s).reshape(len(ids), 8) for s in optimizer.state)
+        return [_BatchRows(name + " " + label, indices, lambda r, kw=kw: evaluate(r, kw))
+                for label, kw in options]
+    return spec
+
+
+_batch_decl(_sequence_batch_optimizer("RMSprop", (("default", {}), ("centered", dict(
+    lr=3e-3, centered=True, momentum=0.7, weight_decay=1e-2)))), "sequence-rmsprop", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_sequence_batch_optimizer("Adagrad", (("default", {}), ("decay", dict(
+    lr=5e-2, lr_decay=0.1, weight_decay=1e-2, initial_accumulator_value=0.1)))), "sequence-adagrad", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_sequence_batch_optimizer("Lion", (("default", dict(lr=1e-3)), ("decay", dict(
+    lr=3e-3, betas=(0.95, 0.98), weight_decay=0.1)))), "sequence-lion", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_sequence_batch_optimizer("Adamax", (("default", {}), ("decay", dict(
+    lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)))), "sequence-adamax", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_sequence_batch_optimizer("NAdam", (("default", {}), ("decay", dict(
+    lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)))), "sequence-nadam", revision="expansion-batch-2026-09-28-v1")

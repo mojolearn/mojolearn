@@ -48,6 +48,19 @@ class CheckTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 driver.plan(Path(tmp))
 
+    def test_plan_binds_selected_batch_revisions(self):
+        driver = load_driver()
+        driver.alc = types.SimpleNamespace(
+            load_harness=lambda: types.SimpleNamespace(LANES={'a': None, 'b': None},
+                                                       BATCH_REVISIONS={'a': 'v2', 'b': 'v3'},
+                                                       LANE_REVISIONS={'a': 'glm-v2', 'b': 'shap-v2'}),
+            needed_bindings=lambda lanes: {l: ['binding'] for l in lanes})
+        with tempfile.TemporaryDirectory() as tmp, patch.object(driver, 'source_commit', return_value='commit'), patch.object(driver, 'structural_exclusions', return_value={}):
+            result = driver.plan(Path(tmp), 'a')
+            self.assertEqual(result['lane_revisions'], {'a': 'glm-v2'})
+            self.assertEqual(result['batch_revisions'], {'a': 'v2'})
+            self.assertEqual(json.loads((Path(tmp)/'plan.json').read_text())['batch_revisions'], {'a': 'v2'})
+
     def test_binding_and_selection_change_fingerprint(self):
         driver = load_driver()
         with tempfile.TemporaryDirectory() as tmp:

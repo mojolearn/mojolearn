@@ -37,6 +37,8 @@ def source_payload(root):
     for module, tool in (('_identity_break.py', 'identity_break.py'),
                          ('_identity_trace_diff.py', 'identity_trace_diff.py')):
         result['mojolearn/' + module] = root / 'tools' / tool
+    for fragment in sorted((root / "tools" / "identity_lanes").glob("*.py")):
+        result["mojolearn/_identity_lane_" + fragment.name] = fragment
     return result
 
 
@@ -44,7 +46,8 @@ def reference_payload(root):
     """Committed reference table and portable models used by installed checks."""
     package = Path(root) / 'python' / 'mojolearn'
     base = package / 'verify_reference'
-    paths = list(base.glob('*.json')) + list((base / 'models').glob('*'))
+    paths = (list(base.glob('*.json')) + list((base / 'models').glob('*'))
+             + list((base / 'ctr_models').glob('*.npz')))
     return {'mojolearn/' + path.relative_to(package).as_posix(): path
             for path in paths if path.is_file()}
 

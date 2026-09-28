@@ -310,7 +310,7 @@ def _(ml, X, yc, yr, Xh=None):
     cg1 = ml.AlternatingLeastSquares(factors=5, iterations=2, use_cg=True, cg_steps=1, random_state=4).fit(R[:150])
     return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc),
                      loss=_h(np.float64(lo.training_loss_), lo.user_factors),
-                     cg=_h(cg.user_factors, cg.item_factors), cg1=_h(cg1.user_factors, cg1.item_factors)))
+                     cg=_h(cg.user_factors, cg.item_factors), cg1=_h(cg1.user_factors, cg1.item_factors)), est=m)
 
 
 @lane("x-decomp-pca-randomized")
@@ -368,3 +368,35 @@ def _(ml, X, yc, yr, Xh=None):
     parts["t_man"] = _h(runs["man"].transform(X[384:448, :8]))
     parts["t_c5"] = _h(runs["c5"].transform(X[384:448, :8]))
     return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))
+
+_batch_decl(_batch_umap, "x-decomp-umap-options", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:transductive eigensystem (spectral embedding solves the full affinity matrix; "
+            "subsetting rows changes the eigenproblem and no transform is exposed)", "x-decomp-spectral-rbf", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:matrix factorization (LU, triangular solves and eigendecompositions consume complete "
+            "matrices; removing rows changes the operator rather than batching independent queries)", "x-decomp-lu", revision="expansion-batch-2026-09-28-v1")
+_batch_decl("n/a:matrix factorization (least squares and randomized SVD depend on all matrix rows; "
+            "this lane has no fitted out-of-sample estimator)", "x-decomp-lstsq-rsvd", revision="expansion-batch-2026-09-28-v1")
+
+# NMF.transform solves W jointly with a global convergence criterion. CD
+# sums row violations before stopping; MU also initializes from the input's
+# global mean. Removing rows changes this finite iterative solve's contract.
+# inverse_transform instead multiplies independent coefficient rows by the
+# fitted components, so it has the row-batching property checked here.
+def _decomp_batch_nmf(ml, e, Xh):
+    R = np.ascontiguousarray(Xh[:128, :int(e.n_components_)])
+    return [_BatchRows("inverse_transform", R, lambda rows: (e.inverse_transform(rows),))]
+
+
+_batch_decl(_decomp_batch_nmf, "x-decomp-nmf", revision="nmf-inverse-batch-2026-09-28-v2")
+
+
+def _decomp_batch_als(ml, e, Xh):
+    # The API accepts one user/item at a time. Its genuine variable-length
+    # inference axis is top-N: shorter results must be prefixes of the same rank.
+    count = int(e.item_factors.shape[0])
+    return [_BatchPrefix("similar_items top-N", count, lambda n: tuple(e.similar_items(2, N=n)), 0),
+            _BatchPrefix("recommend unfiltered top-N", count,
+                         lambda n: tuple(e.recommend(3, None, N=n, filter_already_liked_items=False)), 0)]
+
+
+_batch_decl(_decomp_batch_als, "x-decomp-als", revision="expansion-batch-2026-09-28-v1")
