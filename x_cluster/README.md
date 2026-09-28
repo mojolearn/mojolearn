@@ -30,6 +30,11 @@ updates) is one source compiled into both bindings. Entries are in
 | 5109 | E-step log-sum-exp: first max, ascending portable exp | `resp_row` | `checks/gauss_check.mojo` |
 | 5110 | mixture M-step moments, rows ascending | `nk_cell`, `xk_cell`, `cov_cell` | `checks/moments_check.mojo` |
 | 5111 | OPTICS's other metrics: features ascending, portable pow/sqrt | `pdist_cell` | `checks/pdist_check.mojo` |
+| 5117 | agglomerative Lance-Williams update: Float64 of the Float32 matrix, pinned products, one quotient | `lance_williams` | `checks/agglo_check.mojo` |
+| 5118 | agglomerative merge order: the lowest live pair, the lowest i then j on a tie (host loop) | `agglo.mojo::agglo_tree` | `checks/agglo_check.mojo` |
+| 5119 | SpectralClustering discretize / cluster_qr: a one-sided Jacobi SVD (column sums rows ascending, pinned products) for LAPACK's (host code) | `spectral_assign.mojo::jacobi_svd` | `checks/spectral_assign_check.mojo` |
+| 5120 | the device row order statistic: a four-pass radix select on the bits, one block per row, integer histograms (the same value as 5103's bisection) | `device_ops.mojo::_kth_kernel` | `checks/kth_check.mojo` (long rows) |
+| 5121 | the device M-step moments: a row tile's addends formed by every thread into shared memory, then each fold one thread's register chain over them rows ascending (the `*_term` / `chain_add` / final functions of 5110) | `device_ops.mojo::_moments_pass_kernel` | `checks/moments_check.mojo` (tiles, chains, fallback) |
 
 Each check first shows its fixture SEPARATES the pinned spelling from the
 alternative (VACUOUS otherwise), then holds the device and the CPU column to
