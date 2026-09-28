@@ -194,3 +194,15 @@ GMM trial arms (same job, mixture rebuilt with the define, digests equal):
 - E-step stacked products: taxi 2.4336 s, HIGGS 2.3522 s (E-step 620 ms): **taken, default on
   in 4174d14d2**.
 - M-step PLAN_SPLIT_16_1X1: 2.8591 / 2.7208 s, M-step unchanged: removed.
+
+## M3 Ultra (m3ultra-b), FAST, 1790613748972: before 037daa353 sources -> after 493ddcc37
+
+No FAST-only change in this round (`FUSED_STAGE_FTZ` and the `ftz` spelling are no-ops
+under FAST, where `ftz` is the identity). **Every FAST digest equal before and after**; times
+within run-to-run spread (kmeans taxi 0.0529 -> 0.0533, gmm taxi 0.3242 -> 0.3415 / HIGGS
+0.3690 -> 0.3603, spectral taxi 0.1991 -> 0.1750, KMeans coarse 0.689 -> 0.702 s).
+
+The DBSCAN fix reaches FAST: the probe at budgets 8000 and 4000 moves from 83a2d5a9baa55458
+/ 5a03789628c7946c to e10f0627f89268ce, the one-batch labels (default budget and one batch
+unchanged). A FAST batched fit now returns exactly the one-batch labels, so its quality is
+the reference's by construction.
