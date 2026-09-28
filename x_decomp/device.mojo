@@ -4,6 +4,9 @@
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -11,7 +14,11 @@ from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
+    div0,
+    sqrt0,
+    sub,
     F32Ptr,
     absmax_fold_cell,
     absmax_part_cell,
@@ -388,6 +395,155 @@ def orgqr_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int32, n: Int32, kk: Int3
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j < Int(qc):
         orgqr_col(h, tau, q, j, Int(m), Int(n), Int(kk), Int(qc))
+
+
+# ---- STAGED SERIAL FOLDS (lane decomp-apple, 2026-09-28). geqrf and orgqr
+# fold a column of an m x n row-major matrix in ONE thread, rows ascending
+# (their bits are that order). A lone GPU thread walking a strided column
+# pays a cache line per element: 7 s for linalg.qr at 200k x 28 on the M4
+# Pro. Here the whole block LOADS the column in chunks of STAGE rows into
+# threadgroup memory, and thread 0 folds each chunk from there: the same
+# cells' arithmetic on the same values in the same order, only the loads are
+# shared. Block STAGE_TPB threads; 2 x STAGE floats = 16 KB of threadgroup
+# memory.
+comptime STAGE = 2048
+comptime STAGE_TPB = 256
+
+
+def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    """`geqrf_head` (with its `reflector_norm`), the folds staged."""
+    var sh = stack_allocation[STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bc = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var K = Int(k)
+    var M = Int(m)
+    var N = Int(n)
+    var alpha = ftz(a.unsafe_load(K * N + K))
+    # pass 1: xmax over rows k+1.. (geqrf_head's scan, one thread ascending)
+    var xmax = Float32(0)
+    var c0 = K + 1
+    while c0 < M:
+        var cnt = min(STAGE, M - c0)
+        var t = tid
+        while t < cnt:
+            sh[t] = a.unsafe_load((c0 + t) * N + K)
+            t += STAGE_TPB
+        barrier()
+        if tid == 0:
+            for u in range(cnt):
+                var v = abs(ftz(sh[u]))
+                if v > xmax:
+                    xmax = v
+        barrier()
+        c0 += STAGE
+    if tid == 0:
+        bc[0] = xmax
+    barrier()
+    xmax = bc[0]
+    if xmax == Float32(0):
+        if tid == 0:
+            tau.unsafe_store(K, Float32(0))
+            scal.unsafe_store(0, Float32(1))
+            scal.unsafe_store(1, Float32(0))
+        return
+    # reflector_norm(a, k, k, m, n): its scan of rows k.. is |alpha| then
+    # the rows above in order, the same maximum
+    var mx = Float32(0)
+    if abs(alpha) > mx:
+        mx = abs(alpha)
+    if xmax > mx:
+        mx = xmax
+    var acc = Float32(0)
+    c0 = K
+    while c0 < M:
+        var cnt = min(STAGE, M - c0)
+        var t = tid
+        while t < cnt:
+            sh[t] = a.unsafe_load((c0 + t) * N + K)
+            t += STAGE_TPB
+        barrier()
+        if tid == 0:
+            for u in range(cnt):
+                var v = ftz(identical_div(ftz(sh[u]), mx))
+                acc = ftz(identical_mul_add(v, v, acc))
+        barrier()
+        c0 += STAGE
+    if tid == 0:
+        var nrm = ftz(identical_mul(sqrt0(acc), mx))
+        var beta = -nrm if alpha >= Float32(0) else nrm
+        tau.unsafe_store(K, div0(sub(beta, alpha), beta))
+        scal.unsafe_store(0, sub(alpha, beta))
+        scal.unsafe_store(1, Float32(1))
+        a.unsafe_store(K * N + K, beta)
+
+
+def geqrf_dot_staged_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    """`geqrf_dot` for column j = k + 1 + block, the fold staged."""
+    var sh = stack_allocation[2 * STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var K = Int(k)
+    var M = Int(m)
+    var N = Int(n)
+    var j = K + 1 + Int(block_idx.x)
+    if j >= N:
+        return
+    if scal.unsafe_load(1) == Float32(0):
+        if tid == 0:
+            w.unsafe_store(j, Float32(0))
+        return
+    var acc = ftz(a.unsafe_load(K * N + j))
+    var c0 = K + 1
+    while c0 < M:
+        var cnt = min(STAGE, M - c0)
+        var t = tid
+        while t < cnt:
+            sh[t] = a.unsafe_load((c0 + t) * N + K)
+            sh[STAGE + t] = a.unsafe_load((c0 + t) * N + j)
+            t += STAGE_TPB
+        barrier()
+        if tid == 0:
+            for u in range(cnt):
+                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+        barrier()
+        c0 += STAGE
+    if tid == 0:
+        w.unsafe_store(j, acc)
+
+
+def orgqr_dot_staged_kernel(
+    h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32
+):
+    """`orgqr_dot` for column j = block, the fold staged."""
+    var sh = stack_allocation[2 * STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var K = Int(k)
+    var M = Int(m)
+    var N = Int(n)
+    var QC = Int(qc)
+    var j = Int(block_idx.x)
+    if j >= QC:
+        return
+    if ftz(tau.unsafe_load(K)) == Float32(0):
+        if tid == 0:
+            w.unsafe_store(j, Float32(0))
+        return
+    var acc = ftz(q.unsafe_load(K * QC + j))
+    var c0 = K + 1
+    while c0 < M:
+        var cnt = min(STAGE, M - c0)
+        var t = tid
+        while t < cnt:
+            sh[t] = h.unsafe_load((c0 + t) * N + K)
+            sh[STAGE + t] = q.unsafe_load((c0 + t) * QC + j)
+            t += STAGE_TPB
+        barrier()
+        if tid == 0:
+            for u in range(cnt):
+                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+        barrier()
+        c0 += STAGE
+    if tid == 0:
+        w.unsafe_store(j, acc)
 
 
 def _blocks(count: Int) -> Int:
@@ -1022,17 +1178,17 @@ struct DevExec(Exec):
         # A[k:, k+1:] updated (one thread per cell): geqrf_serial's cells, in
         # its order per column, with no host round trip between the steps
         for k in range(kk):
-            ctx.enqueue_function[geqrf_head_kernel](
-                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=1
+            ctx.enqueue_function[geqrf_head_staged_kernel](
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=STAGE_TPB
             )
             if m - k - 1 > 0:
                 ctx.enqueue_function[geqrf_scale_kernel](
                     da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
                 )
             if n - k - 1 > 0:
-                ctx.enqueue_function[geqrf_dot_kernel](
+                ctx.enqueue_function[geqrf_dot_staged_kernel](
                     da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
-                    grid_dim=_blocks(n - k - 1), block_dim=TPB,
+                    grid_dim=n - k - 1, block_dim=STAGE_TPB,
                 )
                 ctx.enqueue_function[geqrf_update_kernel](
                     da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
@@ -1060,10 +1216,11 @@ struct DevExec(Exec):
         ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
         for r in range(kk):
             var k = kk - 1 - r
-            ctx.enqueue_function[orgqr_dot_kernel](
-                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
-                grid_dim=_blocks(qc), block_dim=TPB,
-            )
+            if qc > 0:
+                ctx.enqueue_function[orgqr_dot_staged_kernel](
+                    dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                    grid_dim=qc, block_dim=STAGE_TPB,
+                )
             ctx.enqueue_function[orgqr_update_kernel](
                 dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
                 grid_dim=_blocks((m - k) * qc), block_dim=TPB,
