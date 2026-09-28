@@ -41,6 +41,17 @@ ties and weights) in both trees and both modes (XMAB-EQ SAME required), and
    for empty classes, zero denominators, `MOJOLEARN_HOTPATH=python` and an
    older binary.
 
+5. Native expected MI (25ab062db): x_metrics/epilogue.mojo expected_mi,
+   with portable_log_c = packaging/portable_math/portable_math.c
+   mojolearn_log operation for operation (products pinned, fm = fma).
+6. Native multiclass row-sum check (459a122b7): row_sum_range.
+7. Count-bounded downloads (quads [lo, hi, CNT, mult]) and device
+   compaction of the kept curve points (bin_curve params 12, 13; ops
+   ck_cnt / ck_off / ck_fill 42 to 44) for the AUCs and roc_curve
+   (e22d0ba22).
+8. StratifiedKFold in one device program: group_sort, the class
+   permutations, strat_codes (op 45), fold_rows (cf20f1062).
+
 SHARED CODE: none outside x_metrics (the bindings `_mojolearn_x_metrics` and
 `_mojolearn_x_metrics_host` gain exports; `_surface_metrics.py` lists them;
 `tools/lane_select.py` gains `tools/apple_speed_metrics/` as measurement tooling).
@@ -93,5 +104,13 @@ case digest is equal base vs head in both modes.
 
 
 ## Unproven
-- 8b2075c22, 5b330a3ff: queued as steward request 1790603676019 on m4pro-b
-  (its name keeps the first sha; the request was retargeted in place to 5b330a3ff).
+- Proven by step 1 (1790603676019, m4pro-b, ran 2035801320): changes 1 to 4
+  and the skip-inputs download.
+- Not yet proven: 25ab062db (AMI), 459a122b7 (row sums), e22d0ba22
+  (bounded downloads + curve compaction), cf20f1062 (StratifiedKFold
+  device program), 204e3c81d, 78a1f9a03. Request 1790604342204 (m4pro-b)
+  failed at the build (`out` is a keyword and cannot name an argument);
+  1790619175919 (m4pro-a, 78a1f9a03) failed at the build too (`fn` local
+  in epilogue.mojo). main carried both renames (ca5c76ace, db92af88c);
+  origin/main merged into the lane, both bindings and the word tests built
+  locally on one core, resubmitted as 1790619894321 on m4pro-a.
