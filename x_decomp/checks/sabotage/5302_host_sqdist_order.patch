@@ -1,0 +1,14 @@
+diff --git a/x_decomp/host_simd.mojo b/x_decomp/host_simd.mojo
+index 6d6d3b195..fa9593044 100644
+--- a/x_decomp/host_simd.mojo
++++ b/x_decomp/host_simd.mojo
+@@ -214,7 +214,8 @@ def sqdist_task(t: Int, a: F32Ptr, bt: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d:
+     while j0 < nb:
+         var cols = min(NR, nb - j0)
+         var acc = InlineArray[V, MR * NV](fill=V(0))
+-        for p in range(d):
++        for pq in range(d):
++            var p = d - 1 - pq  # SABOTAGE 5302 (host): the host distance fold descending
+             var brow = bt + p * nbp + j0
+             var y = InlineArray[V, NV](fill=V(0))
+             comptime for v in range(NV):

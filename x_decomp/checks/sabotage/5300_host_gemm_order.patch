@@ -1,0 +1,14 @@
+diff --git a/x_decomp/host_simd.mojo b/x_decomp/host_simd.mojo
+index 6d6d3b195..663b9d70b 100644
+--- a/x_decomp/host_simd.mojo
++++ b/x_decomp/host_simd.mojo
+@@ -164,7 +164,8 @@ def _gemm_micro(
+             for r in range(rows):
+                 for q in range(cols):
+                     acc[r * NV + q // W][q % W] = dst.unsafe_load((i + r) * n + j + q)
+-    for p in range(kc):
++    for pq in range(kc):
++        var p = kc - 1 - pq  # SABOTAGE 5300 (host): the host gemm chunk descending
+         var brow = bt + p * np
+         var y = InlineArray[V, NV](fill=V(0))
+         comptime for v in range(NV):

@@ -1,17 +1,17 @@
 diff --git a/x_decomp/host.mojo b/x_decomp/host.mojo
-index 896d181d4..83b0f5173 100644
+index a80f98b3a..e385c0fd1 100644
 --- a/x_decomp/host.mojo
 +++ b/x_decomp/host.mojo
-@@ -61,7 +61,7 @@ struct HostExec(Exec):
-         for i in range(m):
-             for j in range(n):
-                 var v = fold_cell(pp, i * n + j, nb, m * n) if nb > 1 else gemm_cell(a, b, i, j, m, k, n, ta, tb)
--                comptime if X_DECOMP_HOST_SABOTAGE:
-+                comptime if True:  # SABOTAGE (end to end): the host gemm moves by one ulp
-                     # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
-                     # the host column's every product moves by one unit in the
-                     # last place; the GPU binding never defines it
-@@ -123,6 +123,9 @@ struct HostExec(Exec):
+@@ -67,7 +67,7 @@ struct HostExec(Exec):
+             for i in range(m):
+                 gemm_fold_rows(i, c, pp, m, n, nb)
+         _ = part^
+-        comptime if X_DECOMP_HOST_SABOTAGE:
++        comptime if True:  # SABOTAGE (end to end): the host gemm moves by one ulp
+             # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+             # the host column's every product moves by one unit in the
+             # last place; the GPU binding never defines it
+@@ -137,6 +137,9 @@ struct HostExec(Exec):
      @staticmethod
      def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
          lu_serial(a, piv, n, info)
