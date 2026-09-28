@@ -42,6 +42,7 @@ FAMILIES = (
             "xn_colsum",
             "xn_unary",
             "xn_knn_select",
+            "xn_knn_sq",
             "xn_group_mean",
             "xn_take_rows",
             "xn_take_cols",

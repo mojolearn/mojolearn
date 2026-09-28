@@ -261,6 +261,44 @@ def knn_select_item(t: Int, dmat: FP, dist: FP, idx: IP, n: Int, m: Int, k: Int,
         idx.unsafe_store(t * k + s, Int32(j))
 
 
+# DEVIATION 5206 + 5207 (rows 120, 121)
+def knn_sq_item(
+    t: Int, x: FP, y: FP, dist: FP, idx: IP,
+    n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+):
+    """`sqdist_item` fused into `knn_select_item` for x row t: the k smallest
+    squared euclidean distances to the rows of y, ascending by (value,
+    column). Each candidate's value is `sqdist_item`'s statements for cell
+    (t, j) (features ascending, the pinned fma, ftz), and the columns are
+    offered in ascending order to `knn_select_item`'s strict `<` insertion, so
+    the answer is the one the two ops return through an n x m matrix, bit for
+    bit; the matrix is never written. `worst` holds the last slot's value
+    (the one the insertion test reads) in a register."""
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    for s in range(k):
+        dist.unsafe_store(t * k + s, inf)
+        idx.unsafe_store(t * k + s, Int32(-1))
+    var worst = inf
+    for j in range(m):
+        if exclude_self != 0 and j == t:
+            continue
+        var acc = Float32(0)
+        for f in range(d):
+            var df = _sub(x.unsafe_load(t * d + f), y.unsafe_load(j * d + f))
+            acc = ftz(identical_mul_add(df, df, acc))
+        var v = acc
+        if not (v < worst):
+            continue
+        var s = k - 1
+        while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+            dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+            idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+            s -= 1
+        dist.unsafe_store(t * k + s, v)
+        idx.unsafe_store(t * k + s, Int32(j))
+        worst = dist.unsafe_load(t * k + k - 1)
+
+
 # DEVIATION 5209 (row 123)
 def group_mean_item(t: Int, x: FP, labels: IP, res: FP, n: Int, d: Int, n_groups: Int):
     """Mean of the rows labelled g, feature f, t = g*d + f: rows in ascending

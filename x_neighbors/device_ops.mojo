@@ -6,7 +6,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, knn_sq_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
 
 comptime BLOCK = 128
 
@@ -299,6 +299,37 @@ def op_knn_select(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, exclud
     _down_i(ctx, d_idx, idx, n * k)
     ctx.synchronize()
     _ = d_dmat^
+    _ = d_dist^
+    _ = d_idx^
+    _ = ctx^
+
+
+def knn_sq_kernel(x: FP, y: FP, dist: FP, idx: IP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, exclude_self_: Int64):
+    var n = Int(n_)
+    var m = Int(m_)
+    var d = Int(d_)
+    var k = Int(k_)
+    var exclude_self = Int(exclude_self_)
+    var t = _tid()
+    if t < n:
+        knn_sq_item(t, x, y, dist, idx, n, m, d, k, exclude_self)
+
+
+def op_knn_sq(x: Int, y: Int, dist: Int, idx: Int, n: Int, m: Int, d: Int, k: Int, exclude_self: Int) raises:
+    var ctx = xn_ctx()
+    var d_x = _buf(ctx, x, n * d, True)
+    var d_y = _buf(ctx, y, m * d, True)
+    var d_dist = _buf(ctx, dist, n * k, False)
+    var d_idx = _buf_i(ctx, idx, n * k, False)
+    ctx.enqueue_function[knn_sq_kernel](
+        d_x.unsafe_ptr(), d_y.unsafe_ptr(), d_dist.unsafe_ptr(), d_idx.unsafe_ptr(), Int64(n), Int64(m), Int64(d), Int64(k), Int64(exclude_self),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_dist, dist, n * k)
+    _down_i(ctx, d_idx, idx, n * k)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_y^
     _ = d_dist^
     _ = d_idx^
     _ = ctx^

@@ -25,6 +25,7 @@ variance) it is IEEE double arithmetic on float32 inputs, rounded once to
 float32, which is the same on every box.
 """
 import math
+import os
 
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
@@ -120,6 +121,11 @@ def _class_array(classes, codes):
     return vals
 
 
+#: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
+#: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
+_UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
+
+
 class _XNeighbors(NumericModeMixin):
     """The primitives, one method each. Every buffer is an owned Array held
     in a local for the duration of the call (the `_buffer` contract)."""
@@ -204,10 +210,24 @@ class _XNeighbors(NumericModeMixin):
         self._op("variance", [(X, 0), (out, 1)], (X.size,))
         return out.tolist()[0]
 
+    def _knn_sq(self, Q, R, k, exclude_self):
+        """(squared distances, indices) of the k nearest rows of R to each row
+        of Q, ascending by (value, index): `knn_select(sqdist(Q, R))` without
+        the n x m matrix (the fused `knn_sq` item runs the same statements;
+        MOJOLEARN_XN_UNFUSED_KNN=1 restores the two ops, an A/B arm)."""
+        if _UNFUSED_KNN:
+            return self._knn_select(self._sqdist(Q, R), k, exclude_self)
+        n, d = Q.shape
+        m = R.shape[0]
+        dist = empty((n, k), "<f4")
+        idx = empty((n, k), "<i4")
+        self._op("knn_sq", [(Q, 0), (R, 0), (dist, 1), (idx, 1)], (n, m, d, k, 1 if exclude_self else 0))
+        return dist, idx
+
     def _knn(self, Q, R, k, exclude_self):
         """Exact k-NN, euclidean: (distances, indices), ascending by (distance,
         index)."""
-        sq, idx = self._knn_select(self._sqdist(Q, R), k, exclude_self)
+        sq, idx = self._knn_sq(Q, R, k, exclude_self)
         return self._unary(sq, _U_SQRT), idx
 
 
@@ -955,7 +975,7 @@ class _LabelPropagationBase(_XNeighbors):
             return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_select(self._sqdist(X, X), k, False)
+            _, idx = self._knn_sq(X, X, k, False)
             g = empty((n, n), "<f4")
             self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
             return g
@@ -1017,7 +1037,7 @@ class _LabelPropagationBase(_XNeighbors):
         n = self.X_.shape[0]
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
-            _, idx = self._knn_select(self._sqdist(Q, self.X_), k, False)
+            _, idx = self._knn_sq(Q, self.X_, k, False)
             W = empty((nq, n), "<f4")
             self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
         else:
