@@ -86,6 +86,15 @@ is the one-shot form, which is what the gates and the card use.
 from bindings.hostptr import copy_f32
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+from core.neural_context import neural_ctx
+# ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
+# lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
+# queue and a pipeline load per call. Same kernels, same launches, same order
+# on one stream, and every entry still synchronizes before it returns, so no
+# bit moves. This module is compiled into ONE GPU binding, so the slot name
+# (per module and tier) is that binding's own.
+comptime _FAMILY_CTX = "MojoGpContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoGpContextOther"
 
 from cholesky.estimator import (
     CholeskyFactor,
@@ -672,7 +681,7 @@ def gpr_fit_host(
     trace.record_list_f32("gp.y_train", y)
 
     # --- K = kernel(X, X), on the device ---------------------------------
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, x)
     # DEVIATION 2487: self-kernel borrows dx twice; one upload.
     var dls = _upload(ctx, _length_scale_table(kernel))
@@ -902,7 +911,7 @@ def gpr_lml_grad_host(
     var cells = n * n
     var n_free = gp_free_count(kernel.kinds, kernel.ls_len, free)
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, x)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -1073,7 +1082,7 @@ def gpr_predict_host(
     )
     trace.record_scalar_f32("gp.kss", kss)
 
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
@@ -1268,7 +1277,7 @@ def gpr_sample_y_host(
     )
 
     # --- the mean, V, V^T V and K** on the device --------------------------
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, model.x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(model.kernel))
@@ -1363,7 +1372,7 @@ def gpr_sample_y_host(
     var z = gp_sample_y_normals(n_star, n_samples, seed)
 
     # --- L_C Z on the device -----------------------------------------------
-    var ctx2 = DeviceContext()
+    var ctx2 = neural_ctx[_FAMILY_CTX]()
     var dfl = _upload(ctx2, factor.l)
     var dz = _upload(ctx2, z)
     var dlz = ctx2.enqueue_create_buffer[DType.float32](n_star * n_samples)

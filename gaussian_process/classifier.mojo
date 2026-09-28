@@ -28,6 +28,15 @@ refusal of classification itself, is closed by DEVIATION 2830.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
+from core.neural_context import neural_ctx
+# ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
+# lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
+# queue and a pipeline load per call. Same kernels, same launches, same order
+# on one stream, and every entry still synchronizes before it returns, so no
+# bit moves. This module is compiled into ONE GPU binding, so the slot name
+# (per module and tier) is that binding's own.
+comptime _FAMILY_CTX = "MojoGpContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoGpContextOther"
 
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from cholesky.estimator import cholesky_factor_host, cholesky_solve_host
@@ -77,7 +86,7 @@ def _gpc_kernel_self(
     """`K = kernel(X)` on the device (`_gpc.py:261`), is_self True, so a
     WhiteKernel adds its noise to the diagonal as in the regressor."""
     var trace = IdentityTrace()
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, x)
     var dls = _upload(ctx, _length_scale_table(kernel))
     var dk = ctx.enqueue_create_buffer[DType.float32](n_train * n_train)
@@ -116,7 +125,7 @@ def _gpc_matvec(k: List[Float32], v: List[Float32], n: Int) raises -> List[Float
     """`K v` through the pinned gemm at `OP_TN` (`K` is symmetric by bits,
     so `K^T v` is `K v`), the host oracle's `gemm_oracle(k, v, OP_TN, n, 1,
     n)` on the device."""
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dk = _upload(ctx, k)
     var dv = _upload(ctx, v)
     var dc = ctx.enqueue_create_buffer[DType.float32](n)
@@ -252,7 +261,7 @@ def gpc_predict_binary_host(
     var r = gpc_residual(y, pi)
 
     var trace = IdentityTrace()
-    var ctx = DeviceContext()
+    var ctx = neural_ctx[_FAMILY_CTX]()
     var dx = _upload(ctx, x_train)
     var dxs = _upload(ctx, x_star)
     var dls = _upload(ctx, _length_scale_table(kernel))
