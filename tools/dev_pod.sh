@@ -38,7 +38,9 @@
 # the key itself (`run linear-amd ...`), names the AMD box.
 #
 # NVIDIA: a RunPod pod (MOJOLEARN_DEVPOD_GPUS; out of stock is retried for
-# MOJOLEARN_DEVPOD_RETRY_MINUTES, default 60).
+# MOJOLEARN_DEVPOD_RETRY_MINUTES, default 60). ONLY tools/nvidia_central.sh
+# rents one now (the shared pods nvc1..nvc3, MOJOLEARN_DEVPOD_GPU_COUNT GPUs
+# each); `up` for NVIDIA refuses any other caller (2026-09-28).
 # AMD: a RunPod AMD Instinct MI300X first (rocm/dev-ubuntu-22.04:6.4.1-complete
 # with tools/runpod_ssh_bootstrap.sh as its dockerStartCmd, exactly as
 # tools/release_wheel_smoke.sh --vendor hip), out of stock retried for
@@ -88,6 +90,9 @@ esac
 MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
 # No lease longer than this many minutes; a lane that needs more extends, visibly.
 MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
+# GPUs per NVIDIA pod: 1, except the shared pods tools/nvidia_central.sh brings up (4x/2x).
+NV_GPU_COUNT="${MOJOLEARN_DEVPOD_GPU_COUNT:-1}"
+[[ "$NV_GPU_COUNT" =~ ^[1-8]$ ]] || { echo "dev_pod: MOJOLEARN_DEVPOD_GPU_COUNT must be 1..8" >&2; exit 2; }
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
@@ -166,6 +171,16 @@ if [ -f "$_cc" ]; then
     CENTRAL_KEY=$(sed -n 's/^CENTRAL_KEY=//p' "$_cc" | head -1)
     CENTRAL_LEASE_END=$(sed -n 's/^LEASE_END=//p' "$_cc" | head -1); CENTRAL_LEASE_END=${CENTRAL_LEASE_END:-0}
 fi
+# THE SHARED NVIDIA PODS (tools/nvidia_central.sh, 2026-09-28): keys nvc1..nvc3.
+# Their lease is the pod's job queue, so `extend` refuses, and `down`, `run` and
+# `sync` refuse unless tools/nvidia_central.sh is the caller.
+case "$KEY" in nvc[0-9])
+    case "$cmd" in
+    extend) die "$KEY is a shared NVIDIA pod: its job queue keeps its lease (tools/nvidia_central.sh); nothing extended" ;;
+    down) [ "${MOJOLEARN_NVC_DOWN:-0}" = 1 ] || die "$KEY is a shared NVIDIA pod every lane uses; tools/nvidia_central.sh down $KEY (it refuses while jobs are queued)" ;;
+    run|sync) die "$KEY is a shared NVIDIA pod: use tools/nvidia_central.sh sync/submit/run/sh" ;;
+    esac ;;
+esac
 load_state() {
     [ -f "$D/state.env" ] || die "no box for $KEY (run: $0 up $lane_arg${VENDOR:+ --vendor $VENDOR})"
     . "$D/state.env"
@@ -249,11 +264,11 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >
 runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
     rp_call GET "$RP/pods"; case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE" ;; esac
-    python3 - "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" "$ROOT/tools/runpod_ssh_bootstrap.sh" <<'PY'
+    python3 - "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" "$ROOT/tools/runpod_ssh_bootstrap.sh" "$( [ "$4" = 1 ] && echo 1 || echo "$NV_GPU_COUNT")" <<'PY'
 import json, sys
 from pathlib import Path
-out, name, image, gpus, disk, amd, bootstrap = sys.argv[1:]
-req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": 1,
+out, name, image, gpus, disk, amd, bootstrap, count = sys.argv[1:]
+req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": int(count),
        "cloudType": "SECURE", "containerDiskInGb": int(disk), "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
 if amd != "1":
@@ -333,6 +348,7 @@ write_state() {
     {
         printf 'PROVIDER=%q\nVENDOR=%q\nPOD_ID=%q\nPOD_NAME=%q\nSSH_TARGET=%q\nCOST_HR=%q\nGPU=%q\nBOX_SUDO=%q\nBOX_ENV=%q\nBOX_DIR=%q\n' \
             "$PROVIDER" "$VENDOR" "$POD_ID" "$POD_NAME" "$SSH_TARGET" "$COST_HR" "$GPU" "$BOX_SUDO" "$BOX_ENV" "$BOX_DIR"
+        [ "$PROVIDER" != runpod ] || [ "$VENDOR" != nvidia ] || printf 'GPU_COUNT=%q\n' "$NV_GPU_COUNT"
         [ "$PROVIDER" != amdhost ] || printf 'SLOT=%q\n' "$SLOT"
         [ -z "${HOST_SLOTS:-}" ] || printf 'HOST_SLOTS=%q\n' "$HOST_SLOTS"
         if [ "$PROVIDER" = hotaisle ]; then
@@ -430,6 +446,10 @@ host)
 up)
     [ ! -f "$D/state.env" ] || die "$KEY already has a box ($D/state.env); down it first"
     if [ "$VENDOR" != amd ]; then
+        # Andrew 2026-09-28: "share a runpod or 2 runpods and not create 12 of them". A lane
+        # never rents its own NVIDIA pod; every lane submits to the shared pods.
+        [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || [ "${MOJOLEARN_DEVPOD_OWN_NVIDIA:-0}" = 1 ] \
+            || die "lanes do not rent NVIDIA pods: use the shared pods (tools/nvidia_central.sh sync/submit; the pods come up with tools/nvidia_central.sh up). MOJOLEARN_DEVPOD_OWN_NVIDIA=1 only with Andrew's OK"
         _live=$(curl -s -m 20 -H "Content-Type: application/json" -H "Authorization: Bearer $(cat "$HOME/.mojolearn_runpod_key" 2>/dev/null)" https://api.runpod.io/graphql \
             -d '{"query":"query { myself { pods { id } } }"}' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["myself"]["pods"]))' 2>/dev/null)
         [ -n "$_live" ] || die "could not count live RunPod pods; refusing to rent (cap $MAX_RUNPOD_PODS)"
