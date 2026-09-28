@@ -210,7 +210,7 @@ def min_lbfgs(
         var fresh = False
         lsret = ls_backtrack(
             ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
-            stage, fresh,
+            stage, fresh, gradp,
         )
         if dir_pending:
             if not fresh:
@@ -438,7 +438,7 @@ def min_owlqn(
         var fresh = False
         lsret = ls_backtrack_projected(
             ctx, param, f, fx, x, grad, pseudo, step, drt, xp, l1_penalty,
-            pg_limit, n, scalar, ls_iters, stage, fresh,
+            pg_limit, n, scalar, ls_iters, stage, fresh, gradp,
         )
         if dir_pending:
             if not fresh:
