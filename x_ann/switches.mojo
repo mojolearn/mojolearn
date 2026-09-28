@@ -81,3 +81,16 @@ comptime ANN3_ROW_THREADS = is_defined["MOJOLEARN_ANN3_ROW_THREADS"]()
 #: memory, seven pair joins, the merge). (distance, row id) is a total order,
 #: so the k least are the same entries: expected to move no bit.
 comptime ANN3_SCAN_SELECT = is_defined["MOJOLEARN_ANN3_SCAN_SELECT"]()
+
+#: FAST on Apple, t-SNE: Z (the sum of the rows' repulsion sums) as 128
+#: stripe sums joined by a halving tree in one threadgroup (one thread
+#: adding the n values in order otherwise). Moves FAST bits (the order of a
+#: float sum): paired trustworthiness and KL check.
+comptime ANN3_TSNE_ZSUM = is_defined["MOJOLEARN_ANN3_TSNE_ZSUM"]()
+
+#: FAST on Apple, t-SNE: the step launch runs one thread per ROW, which
+#: forms each neighbor's q once for both coordinates (one thread per
+#: coordinate otherwise, each forming q again). The same statements per
+#: coordinate; FAST pins no contraction, so the digest decides whether a bit
+#: moved.
+comptime ANN3_TSNE_STEP_ROWS = is_defined["MOJOLEARN_ANN3_TSNE_STEP_ROWS"]()
