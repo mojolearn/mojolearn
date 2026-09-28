@@ -55,7 +55,50 @@ Data from R2 (`tools/classical_two_datasets.py prep`, the bench board's
 blocks). Harness `~/mojolearn-evidence/neighbors-cpu/cpu_time.py` (one fit,
 one predict, sha256 of every output). Seconds; digests equal in every row.
 
-(table filled below)
+Full bench shapes, default thread count (the pod's 104 "physical cores"
+on a 22-CPU quota), before = main f237f1996, after = branch tip at the
+first full run (knn index packed per task then; see the second table):
+
+| dataset | algorithm | shape (fit / predict rows x d) | fit s before -> after | predict s before -> after |
+|---|---|---|---|---|
+| taxi | NearestNeighbors euclidean k=10 | 400,000 / 4,000 x 11 | - | 3.38 -> 2.94 |
+| taxi | manhattan | same | - | 3.43 -> 1.47 |
+| taxi | cosine | same | - | 3.74 -> 1.64 |
+| taxi | KNeighborsClassifier | same | - | 3.36 -> 2.79 |
+| taxi | KNeighborsRegressor distance | same | - | 3.56 -> 2.72 |
+| istella | NearestNeighbors euclidean | 400,000 / 4,000 x 220 | - | 47.7 -> 32.9 |
+| istella | manhattan | same | - | 70.3 -> 31.9 |
+| istella | cosine | same | - | 76.7 -> 32.7 |
+| taxi | KernelDensity gaussian | 100,000 / 2,000 x 11 | - | 0.63 -> 0.31 |
+| istella | KernelDensity gaussian | 100,000 / 2,000 x 220 | - | 8.06 -> 3.62 |
+| istella | KernelDensity epanechnikov | same | - | 7.50 -> 3.71 |
+| taxi | SVC rbf | 10,000 / 10,000 x 11 | 31.9 -> 5.62 | 0.88 -> 0.14 |
+| taxi | SVR rbf | same | 15.8 -> 2.46 | 0.73 -> 0.12 |
+| istella | SVC rbf | 10,000 / 10,000 x 220 | 14.6 -> 1.69 | 1.05 -> 0.46 |
+| istella | SVR rbf | same | 50.8 -> 5.96 | 2.49 -> 1.08 |
+| taxi | KernelRidge rbf | 4,000 / 10,000 x 10 | 29.2 -> 4.08 | 1.95 -> 1.57 |
+| istella | KernelRidge rbf | 4,000 / 10,000 x 219 | 39.7 -> 4.38 | 29.7 -> 3.02 |
+| taxi | Nystroem rbf, 1,000 components | 4,000 / 10,000 x 11 | 68.3 -> 63.4 (Jacobi eigh, decomp's) | 28.1 -> 1.65 |
+| istella | Nystroem | 4,000 / 10,000 x 220 | 53.2 -> 48.4 | 35.2 -> 1.96 |
+| istella | RBFSampler 1,000 components | same | - | 7.94 -> 0.58 |
+| istella | GaussianProcessRegressor, return_std | 4,000 / 10,000 x 219 | 54.9 -> 11.8 | 590 -> 50.6 |
+| taxi | GaussianProcessClassifier | 4,000 / 10,000 x 11 | 227 -> 30.0 | 199 -> 34.7 |
+| istella | GaussianProcessClassifier | 4,000 / 10,000 x 220 | 216 -> 43.3 | 603 -> 49.0 |
+
+After the index is packed once per call and the tile kernels are
+specialized per step kind at compile time (same pod, default threads,
+1,000 queries): istella euclidean 12.7 -> 2.01 s, manhattan 17.7 -> 1.30,
+cosine 18.4 -> 1.89, ball cover k-NN 16.2 -> 1.26, radius manhattan
+39.8 -> 4.04; taxi manhattan 0.88 -> 0.08. Single thread, 100,000 x 220
+index, 128 queries: 1.5 -> 9.8 G cell-steps/s. KDE istella 200 queries:
+0.86 -> 0.30 s. GP kernel matrix from pre-scaled operands: GPR predict
+(800 / 400 rows) 0.75 -> 0.09 s, GPC fit 1.85 -> 0.47 s. Every digest
+equal to the base in every row above (NearestNeighbors euclidean,
+sqeuclidean, manhattan, chebyshev, cosine, minkowski p=3, ball cover x3
+metrics, RadiusNeighbors x4 metrics, KNN classifier/regressor, KDE x7
+kernel/metric/weight arms, SVC rbf/poly/linear/sigmoid, SVR, KernelRidge
+rbf/poly/laplacian, Nystroem, RBFSampler, GPR rbf / Matern 1/2, 3/2, 5/2
+ARD / optimizer, GPC, on taxi and istella).
 
 ## OWED / NEXT
 
