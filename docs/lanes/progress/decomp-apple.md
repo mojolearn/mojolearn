@@ -45,10 +45,17 @@ buffers, synced twice and downloaded its output.
 | request | what |
 |---|---|
 | 1790581691613-speed-decomp-112ef9d1c7 (m4pro-a) | BEFORE: micro, decomp_speed at N=200k (N2 20k, N3 1500, N4 20k), digests |
-| 1790582024177-speed-decomp-0456bf3095 (m4pro-a) | AFTER (resident ew/gemm/folds/sqdist + orth + absmax, heap Dijkstra): the same |
-| 1790581701485-decomp-0456bf3095 | identity, 16 x-decomp lanes, e2e_host_all |
-| 1790581750691-decomp-df79910175 | identity, x-decomp-spectral-rbf, e2e_host_sqdist |
-| 1790581760634-decomp-df79910175 | identity, x-decomp-umap-options, e2e_p2b_options |
+| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | AFTER (resident ew/gemm/folds/sqdist + orth + absmax, heap Dijkstra): the same |
+| 1790581701486-decomp-06752fa5ff | identity, 16 x-decomp lanes, e2e_host_all |
+| 1790581750692-decomp-06752fa5ff | identity, x-decomp-spectral-rbf, e2e_host_sqdist |
+| 1790581760635-decomp-06752fa5ff | identity, x-decomp-umap-options, e2e_p2b_options |
+| AMD central job 0014 (lane decomp-apple) | gfx942 vs CPU part hashes of every x-decomp lane at 06752fa5f |
+
+do-amd steward: every request FAILs at "steward-do-amd-5 is dirty
+(training/checks/optimizer.mojo)", another lane's sabotage left in place;
+not ours. The first identity attempt (0456bf309) found a real defect: the
+CPU column refused every fit (the host binding's proxy raises ImportError
+for a missing name, which hasattr lets through); fixed in 06752fa5f.
 
 ## Before -> after (per algorithm, IDENTICAL, m4pro-a)
 
