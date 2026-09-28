@@ -13,7 +13,9 @@ from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from checks.numerics import ftz, identical_log
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
+from std.sys.info import has_apple_gpu_accelerator
+from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64
 from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
@@ -36,8 +38,11 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
         ts_perplexity_cell(i, nn_d, Int(nn), log_perp, p)
 
 
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 #: rows per threadgroup and staged candidate rows per tile of the repulsion
-comptime RTB = 128
+#: (lane ann-apple3, OPT-IN trials under FAST on Apple: 32 or 64 rows per
+#: threadgroup, x_ann/switches.mojo)
+comptime RTB = 32 if (_FAST_APPLE and ANN3_TSNE_RB32) else (64 if (_FAST_APPLE and ANN3_TSNE_RB64) else 128)
 comptime RTJ = 256
 
 

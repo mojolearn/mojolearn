@@ -42,3 +42,10 @@ comptime ANN3_COARSE_SEED = is_defined["MOJOLEARN_ANN3_COARSE_SEED"]()
 #: kernel's statement) and the n x rot_dim residual matrix is not downloaded;
 #: it stays on the device for the encode. Expected to move no bit.
 comptime ANN3_PQ_HOST_RESIDUALS = is_defined["MOJOLEARN_ANN3_PQ_HOST_RESIDUALS"]()
+
+#: FAST on Apple: rows per threadgroup of the t-SNE repulsion (128 in a
+#: default build). At 10,000 rows 128 makes 79 threadgroups, and the M3 Ultra
+#: is only 1.6 times the M4 there (4.3 times at CAGRA's 391 threadgroups).
+#: The per-row statements and their order do not depend on it: no bit moves.
+comptime ANN3_TSNE_RB32 = is_defined["MOJOLEARN_ANN3_TSNE_RB32"]()
+comptime ANN3_TSNE_RB64 = is_defined["MOJOLEARN_ANN3_TSNE_RB64"]()

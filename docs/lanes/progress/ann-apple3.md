@@ -58,6 +58,14 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 
 | (this commit) | FAST IVF-PQ: the codebook sample's residuals formed on the host, the 1M x 28 residual matrix not downloaded | FAST | OFF; `-D MOJOLEARN_ANN3_PQ_HOST_RESIDUALS` | UNBUILT, UNMEASURED; expected to move no bit (FAST's residual is one subtraction) |
 
+| (this commit) | FAST t-SNE repulsion at 32 or 64 rows per threadgroup (128 by default) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_TSNE_RB32` or `-D MOJOLEARN_ANN3_TSNE_RB64` | UNBUILT, UNMEASURED; moves no bit by construction |
+
+t-SNE, why the threadgroup size: FAST iterations are 753 ms on the M4 (job
+1) and 470 to 620 ms on the M3 Ultra (round 2), a ratio of 1.2 to 1.6,
+where CAGRA's k-NN (391 threadgroups) is 587 against 136 ms, 4.3. At 10,000
+rows the repulsion launches 79 threadgroups of 128 rows. Round 2 measured 64
+rows per threadgroup on the M4 only (1040 against 1052 ms, flat).
+
 The quality bench has an IVF-Flat row now (`--algos ivf`): the coarse
 seeding moves IVF-Flat's FAST results too.
 
