@@ -1155,8 +1155,16 @@ class _Graph:
         np = _np()
         self.n = int(n)
         self.src, self.dst = np.asarray(src, np.int64), np.asarray(dst, np.int64)
-        self.order_f = np.lexsort((self.src, self.dst))
-        self.order_t = np.lexsort((self.dst, self.src))
+        # lane/cnn-apple2: a stable argsort of the one int64 key (row * n +
+        # col, both in [0, n)) is lexsort's order exactly, at about a third
+        # of its time on 1M edges (host work that dominated the forward)
+        nn = max(self.n, 1)
+        if _LEGACY_STEP:
+            self.order_f = np.lexsort((self.src, self.dst))
+            self.order_t = np.lexsort((self.dst, self.src))
+        else:
+            self.order_f = np.argsort(self.dst * nn + self.src, kind="stable")
+            self.order_t = np.argsort(self.src * nn + self.dst, kind="stable")
         self.csr_f = self._csr(self.dst[self.order_f], self.src[self.order_f])
         self.csr_t = self._csr(self.src[self.order_t], self.dst[self.order_t])
         self.nnz = len(self.src)
@@ -1164,7 +1172,7 @@ class _Graph:
     def _csr(self, rows, cols):
         np = _np()
         ptr = np.zeros(self.n + 1, np.int64)
-        np.add.at(ptr, rows + 1, 1)
+        ptr[1:] = np.bincount(rows, minlength=self.n)[:self.n]
         return np.ascontiguousarray(np.concatenate([np.cumsum(ptr), cols, rows]).astype(np.int32))
 
     def vals_t(self, vals_f):

@@ -133,6 +133,11 @@ def launch[f: ElemFn](ctx: DeviceContext, a: FP, b: FP, c: FP, d: FP, q: IP, p: 
 # memory only between the barrier's two sides (no device-memory ordering is
 # assumed). `-D MOJOLEARN_XCNN_NO_TILED_LAYOUT` is the before arm.
 comptime TILED_LAYOUT = not is_defined["MOJOLEARN_XCNN_NO_TILED_LAYOUT"]()
+#: The pooled backward's rows tiled (`rows_bwd_tiled_kernel`) measured
+#: SLOWER on the M4 Pro (block 1 1.44 -> 1.73 ms, block 2 0.75 -> 0.96:
+#: each thread runs four max-pool gathers in series); opt-in only,
+#: `-D MOJOLEARN_XCNN_TILED_ROWS`.
+comptime TILED_ROWS = TILED_LAYOUT and is_defined["MOJOLEARN_XCNN_TILED_ROWS"]()
 comptime _LT = 32
 comptime _LR = 8
 
@@ -1504,7 +1509,7 @@ def conv_block_backward_into[resident: Bool = False](
         # layout in one launch (the same values)
         var di = put_i[resident](ctx, 4, idx, no)
         var dpb = put_prm(ctx, 6, both)
-        comptime if TILED_LAYOUT:
+        comptime if TILED_ROWS:
             var S = rows // N
             var g = _tiled_grid(N, S, OC)
             ctx.enqueue_function[rows_bwd_tiled_kernel](

@@ -15,7 +15,7 @@ from x_cnn.ops import (
     pool_relu_rows_bwd_at, fill_one_at, col2im_at,
 )
 from x_cnn.device import (
-    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, TILED_LAYOUT, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
+    cnn_ctx, launch, fp, ip, device_gemm, _conv_out, _im2col, TILED_ROWS, rows_bwd_tiled_kernel, _tiled_grid, _LT, _LR,
 )
 
 
@@ -99,7 +99,7 @@ def block(ctx: DeviceContext, name: String, N: Int, C: Int, H: Int, OC: Int) rai
                 elif s == 3:
                     launch[relu_maxpool_fwd_at](ctx, fp(yconv), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
                 elif s == 4:
-                    comptime if TILED_LAYOUT:
+                    comptime if TILED_ROWS:
                         var tg = _tiled_grid(N, OH * OH, OC)
                         ctx.enqueue_function[rows_bwd_tiled_kernel](
                             fp(g), fp(yconv), fp(grow), ip(di), ip(dpb), Int32(OH * OH), Int32(OC),
