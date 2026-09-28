@@ -383,6 +383,96 @@ def _moments_pass_kernel(
         cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
 
 
+# FAST ONLY (lane/cluster-apple): the moments split over row slices. Each
+# block (k, slice) sums its rows' addends per chain in a fixed thread layout
+# and writes one partial per chain; a second kernel adds the partials over
+# the slices. The same addends and finals as 5110/5121, another summation
+# order: bits move, quality is the paired check's (progress file).
+comptime MOMF_ROWS = 2048  # rows per slice
+
+
+@always_inline
+def _momf_term(resp: FPtr, x: FPtr, i: Int, D: Int, K: Int, k: Int, c: Int, cov_pass: Int32, means: FPtr) -> Float32:
+    var r = resp[i * K + k]
+    if cov_pass == Int32(0):
+        return r if c == D else xk_term(r, x[i * D + c])
+    var a = c // D
+    var b = c - a * D
+    return cov_term(r, x[i * D + a], x[i * D + b], means[k * D + a], means[k * D + b])
+
+
+def _momf_partial_kernel(
+    resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, part: FPtr, n_slices: Int32, cov_pass: Int32,
+):
+    var tid = Int(thread_idx.x)
+    var N = Int(n)
+    var D = Int(d)
+    var K = Int(kc)
+    var S = Int(n_slices)
+    var k = Int(block_idx.x) // S
+    var sl = Int(block_idx.x) - k * S
+    var nch = D + 1 if cov_pass == Int32(0) else D * D
+    var r0 = sl * MOMF_ROWS
+    var r1 = r0 + MOMF_ROWS
+    if r1 > N:
+        r1 = N
+    var red = stack_allocation[MOM_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c0 = 0
+    while c0 < nch:
+        var cc = nch - c0
+        if cc > MOM_TPB:
+            cc = MOM_TPB
+        var groups = MOM_TPB // cc
+        var mine = tid < groups * cc
+        var g = tid // cc
+        var c = c0 + (tid - g * cc)
+        var acc = Float32(0)
+        if mine:
+            var i = r0 + g
+            while i < r1:
+                acc = acc + _momf_term(resp, x, i, D, K, k, c, cov_pass, means)
+                i += groups
+        red[tid] = acc
+        barrier()
+        if mine and g == 0:
+            var tot = Float32(0)
+            for gg in range(groups):
+                tot = tot + red[gg * cc + tid]
+            part[(k * S + sl) * nch + c] = tot
+        barrier()
+        c0 += cc
+
+
+def _momf_final_kernel(
+    part: FPtr, n_slices: Int32, d: Int32, kc: Int32, reg: Float32, nk: FPtr, means: FPtr, cov: FPtr, cov_pass: Int32,
+):
+    var t = _tid()
+    var D = Int(d)
+    var K = Int(kc)
+    var S = Int(n_slices)
+    var nch = D + 1 if cov_pass == Int32(0) else D * D
+    if t >= K * nch:
+        return
+    var k = t // nch
+    var c = t - k * nch
+    var acc = Float32(0)
+    for sl in range(S):
+        acc = acc + part[(k * S + sl) * nch + c]
+    if cov_pass == Int32(0):
+        var nkacc = Float32(0)
+        for sl in range(S):
+            nkacc = nkacc + part[(k * S + sl) * nch + D]
+        var nkv = nk_final(nkacc)
+        if c == D:
+            nk[k] = nkv
+        else:
+            means[k * D + c] = mean_final(acc, nkv)
+    else:
+        var a = c // D
+        var b = c - a * D
+        cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
+
+
 def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
     var t = _tid()
     if t < Int(na) * Int(nb):
@@ -447,6 +537,9 @@ struct DeviceOps(ClusterOps):
     var i: List[DeviceBuffer[DType.int32]]
     var pend_f: List[List[Float32]]
     var pend_i: List[List[Int32]]
+    var mpart: DeviceBuffer[DType.float32]
+    """FAST moments' per-slice partials, grown once per fit."""
+    var mpart_n: Int
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -454,6 +547,8 @@ struct DeviceOps(ClusterOps):
         self.i = List[DeviceBuffer[DType.int32]]()
         self.pend_f = List[List[Float32]]()
         self.pend_i = List[List[Int32]]()
+        self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
+        self.mpart_n = 1
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -679,6 +774,25 @@ struct DeviceOps(ClusterOps):
     ) raises:
         if kc <= 0:
             return
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if d <= MOM_MAX_D and n > 0:
+                var S = (n + MOMF_ROWS - 1) // MOMF_ROWS
+                var need = kc * S * (d * d if d * d > d + 1 else d + 1)
+                if need > self.mpart_n:
+                    self.mpart = self.ctx.enqueue_create_buffer[DType.float32](need)
+                    self.mpart_n = need
+                var pp = self.mpart.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                for cp in range(2):
+                    var nch = d + 1 if cp == 0 else d * d
+                    self.ctx.enqueue_function[_momf_partial_kernel](
+                        self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), pp,
+                        Int32(S), Int32(cp), grid_dim=kc * S, block_dim=MOM_TPB,
+                    )
+                    self.ctx.enqueue_function[_momf_final_kernel](
+                        pp, Int32(S), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
+                        Int32(cp), grid_dim=_grid(kc * nch), block_dim=TPB,
+                    )
+                return
         if d <= MOM_MAX_D:
             self.ctx.enqueue_function[_moments_pass_kernel](
                 self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),
