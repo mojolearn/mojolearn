@@ -100,7 +100,12 @@ from spectral.impl.sparse.coo import CooGraph
 from umap.curve import fit_umap_curve
 from umap.graph import canonicalize_self_neighbors
 from umap.params import UMAPParams
-from umap.sparse_graph import SparseFuzzySimplicialGraph, sparse_fuzzy_simplicial_graph
+from umap.sparse_graph import (
+    SparseFuzzySimplicialGraph,
+    categorical_intersection,
+    general_intersection,
+    sparse_fuzzy_simplicial_graph,
+)
 
 
 #: The gate's negative control (module docstring). Read back by
@@ -198,11 +203,13 @@ def host_umap_fuzzy_graph(
     var indices = List[UInt32](length=n_samples * params.n_neighbors, fill=UInt32(0))
     host_knn_search(
         x_rowmajor, n_samples, x_rowmajor, n_samples, n_features, params.n_neighbors,
-        KNN_HOST_METRIC_FROM_IS_SQRT, True, distances, indices,
+        KNN_HOST_METRIC_FROM_IS_SQRT if params.metric == -1 else params.metric, True, distances, indices,
+        params.metric_arg,
     )
     canonicalize_self_neighbors(indices, distances, n_samples, params.n_neighbors)
     return sparse_fuzzy_simplicial_graph(
         indices^, distances^, n_samples, params.n_neighbors, params.set_op_mix_ratio,
+        params.local_connectivity,
     )
 
 
@@ -254,8 +261,8 @@ def host_umap_spectral_initialize(
         raise Error("UMAP spectral graph has no edges")
     var n_samples = graph.n_samples
     var coo = CooGraph(n_samples, rows^, cols^, vals^)
-    if n_components != 2 and n_components != 3:
-        raise Error("UMAP spectral initialization supports only 2D or 3D")
+    if n_components < 1 or n_components > 32:
+        raise Error("UMAP spectral initialization supports 1 to 32 output dimensions")
     if n_samples < 2 * n_components + 4:
         raise Error("UMAP spectral initialization has too few samples")
     if coo.n != n_samples:
@@ -426,6 +433,109 @@ def host_umap_vertex[C: Int](
         destination[v * C + c] = ftz(x[c] + acc[c])
 
 
+def host_umap_vertex_rt(
+    source: List[Float32],
+    row_offsets: List[UInt32],
+    tails: List[UInt32],
+    scaled: List[Float32],
+    mut destination: List[Float32],
+    v: Int,
+    n: Int,
+    epoch: Int,
+    alpha: Float32,
+    rate: Int,
+    neg2ab: Float32,
+    rep2b: Float32,
+    a: Float32,
+    b: Float32,
+    seed: UInt64,
+    C: Int,
+):
+    """`umap_identical_epoch_kernel_rt` at thread `v` (DEVIATION 5322): the
+    comptime vertex with the dimension read at run time, the rows in local
+    arrays of UMAP_RT_WIDTH."""
+    var epoch_f = Float32(epoch)
+    var next_f = Float32(epoch + 1)
+    var draw_epoch = epoch
+    comptime if UMAP_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: every negative draw keyed one epoch late. Wrong
+        # on purpose; see UMAP_ORACLE_HOST_SABOTAGE.
+        draw_epoch = epoch + 1
+    var epoch_u = UInt32(draw_epoch)
+    var n_u = UInt32(n)
+    var key = SIMD[DType.uint32, 2](UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF))
+    var x = InlineArray[Float32, 32](fill=Float32(0.0))
+    var acc = InlineArray[Float32, 32](fill=Float32(0.0))
+    for c in range(C):
+        x[c] = source[v * C + c]
+    var begin = Int(row_offsets[v])
+    var end = Int(row_offsets[v + 1])
+    for e in range(begin, end):
+        var s = scaled[e]
+        if Int(next_f * s) <= Int(epoch_f * s):
+            continue
+        var u = Int(tails[e])
+        var delta = InlineArray[Float32, 32](fill=Float32(0.0))
+        var d2 = Float32(0.0)
+        for c in range(C):
+            delta[c] = ftz(x[c] - source[u * C + c])
+            d2 = ftz(identical_mul_add(delta[c], delta[c], d2))
+        if d2 > Float32(0.0):
+            var dp = identical_pow(d2, b)
+            var coeff = identical_div(
+                identical_mul(neg2ab, identical_div(dp, d2)),
+                ftz(identical_mul_add(a, dp, Float32(1.0))),
+            )
+            for c in range(C):
+                var g = ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c])))))
+                comptime if UMAP_HOST_LIVE_BOTH_ARM:
+                    x[c] = ftz(x[c] + g)
+                    x[c] = ftz(x[c] + g)
+                elif UMAP_HOST_LIVE_ROW:
+                    x[c] = ftz(x[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+                else:
+                    acc[c] = ftz(acc[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+        var draw = SIMD[DType.uint32, 4](0)
+        for j in range(rate):
+            var lane = j & 3
+            if lane == 0:
+                draw = host_philox4x32_10(
+                    SIMD[DType.uint32, 4](
+                        UInt32(e & 0xFFFFFFFF),
+                        UInt32((e >> 32) & 0xFFFFFFFF),
+                        epoch_u,
+                        UInt32(j >> 2),
+                    ),
+                    key,
+                )
+            var other = Int(draw[lane] % n_u)
+            if other == v:
+                continue
+            var nd = InlineArray[Float32, 32](fill=Float32(0.0))
+            var n2 = Float32(0.0)
+            for c in range(C):
+                nd[c] = ftz(x[c] - source[other * C + c])
+                n2 = ftz(identical_mul_add(nd[c], nd[c], n2))
+            if n2 > Float32(0.0):
+                var np_ = identical_pow(n2, b)
+                var coeff = identical_div(
+                    rep2b,
+                    identical_mul(
+                        ftz(Float32(0.001) + n2),
+                        ftz(identical_mul_add(a, np_, Float32(1.0))),
+                    ),
+                )
+                for c in range(C):
+                    comptime if UMAP_HOST_LIVE_ROW or UMAP_HOST_LIVE_BOTH_ARM:
+                        x[c] = ftz(x[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
+                    else:
+                        acc[c] = ftz(acc[c] + ftz(identical_mul(alpha, _clip(ftz(identical_mul(coeff, nd[c]))))))
+    for c in range(C):
+        destination[v * C + c] = ftz(x[c] + acc[c])
+
+
 def host_optimize_csr_layout(
     initial: List[Float32],
     row_offsets: List[UInt32],
@@ -444,8 +554,8 @@ def host_optimize_csr_layout(
     """`optimize_csr_layout_identical_device`,
     `optimizer_identical_device.mojo:269-363`: the refusals, the flushed
     upload, one host loop over every vertex per epoch into the other buffer."""
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP device optimizer supports 2D/3D layouts")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP device optimizer supports 1 to 32 dimensions")
     if len(initial) != n_samples * n_components or len(row_offsets) != n_samples + 1:
         raise Error("UMAP device optimizer input shape mismatch")
     if len(tails) != len(scaled) or len(tails) == 0:
@@ -471,10 +581,15 @@ def host_optimize_csr_layout(
                         first, row_offsets, tails, scaled, second, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
                     )
-                else:
+                elif n_components == 3:
                     host_umap_vertex[3](
                         first, row_offsets, tails, scaled, second, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
+                    )
+                else:
+                    host_umap_vertex_rt(
+                        first, row_offsets, tails, scaled, second, v, n_samples,
+                        epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed, n_components,
                     )
             else:
                 if n_components == 2:
@@ -482,10 +597,15 @@ def host_optimize_csr_layout(
                         second, row_offsets, tails, scaled, first, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
                     )
-                else:
+                elif n_components == 3:
                     host_umap_vertex[3](
                         second, row_offsets, tails, scaled, first, v, n_samples,
                         epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed,
+                    )
+                else:
+                    host_umap_vertex_rt(
+                        second, row_offsets, tails, scaled, first, v, n_samples,
+                        epoch, alpha, negative_rate, neg2ab, rep2b, a, b, seed, n_components,
                     )
     if n_epochs % 2 == 0:
         return first^
@@ -509,8 +629,8 @@ def host_optimize_sparse_layout(
     `sparse_optimizer.mojo:175-214` (the refusals in its order), then
     `optimize_sparse_layout_identical_device`,
     `optimizer_identical_device.mojo:387-424` (the compaction)."""
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP optimizer supports at least two samples in 2D/3D")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP optimizer supports at least two samples in 1 to 32 dimensions")
     if len(initial_embedding) != n_samples * n_components or graph.n_samples != n_samples:
         raise Error("UMAP optimizer input shape mismatch")
     if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
@@ -551,27 +671,61 @@ def host_optimize_sparse_layout(
     )
 
 
+def host_supervise_graph(
+    graph: SparseFuzzySimplicialGraph, target: List[Float32], n_samples: Int,
+    target_kind: Int, target_dims: Int, target_n_neighbors: Int, target_weight: Float32, seed: UInt64,
+) raises -> SparseFuzzySimplicialGraph:
+    """`supervise_graph`, `sparse_estimator.mojo`, with the target's k-NN on
+    the host (the set operations are the shared host code)."""
+    if target_kind == 1:
+        var far = Float64(1.0e12)
+        if target_weight < Float32(1.0):
+            far = Float64(2.5) * (Float64(1.0) / (Float64(1.0) - Float64(target_weight)))
+        return categorical_intersection(graph, target, far)
+    var tp = UMAPParams(n_neighbors=target_n_neighbors, n_components=2, random_seed=seed)
+    var tgraph = host_umap_fuzzy_graph(target, n_samples, target_dims, tp)
+    return general_intersection(graph, tgraph, target_weight)
+
+
 def host_umap_fit_transform(
-    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams
+    x_rowmajor: List[Float32], n_samples: Int, n_features: Int, params: UMAPParams,
+    initial_given: List[Float32] = List[Float32](),
+    target: List[Float32] = List[Float32](),
+    target_kind: Int = 0,
+    target_dims: Int = 1,
+    target_n_neighbors: Int = 0,
+    target_weight: Float32 = Float32(0.5),
 ) raises -> List[Float32]:
-    """`sparse_fit_transform`, `sparse_estimator.mojo:91-129`, on the host."""
+    """`sparse_fit_transform`, `sparse_estimator.mojo`, on the host."""
     params.validate(n_samples)
     if n_features < 1 or len(x_rowmajor) != n_samples * n_features:
         raise Error("UMAP input does not match its declared shape")
-    if params.n_components != 2 and params.n_components != 3:
-        raise Error("UMAP fit_transform currently supports only 2D or 3D")
-    if n_samples < 2 * params.n_components + 4:
+    if params.n_components < 1 or params.n_components > 32:
+        raise Error("UMAP fit_transform supports 1 to 32 output dimensions")
+    var given = len(initial_given) > 0
+    if given and len(initial_given) != n_samples * params.n_components:
+        raise Error("UMAP initial embedding does not match n_samples x n_components")
+    if not given and n_samples < 2 * params.n_components + 4:
         raise Error("UMAP fit_transform has too few samples for spectral init")
     var graph = host_umap_fuzzy_graph(x_rowmajor, n_samples, n_features, params)
-    var initial = host_umap_spectral_initialize(graph.copy(), params.n_components, params.random_seed)
+    if target_kind != 0:
+        var tk = target_n_neighbors if target_n_neighbors > 0 else params.n_neighbors
+        graph = host_supervise_graph(
+            graph, target, n_samples, target_kind, target_dims, tk, target_weight, params.random_seed,
+        )
+    var initial: List[Float32]
+    if given:
+        initial = initial_given.copy()
+    else:
+        initial = host_umap_spectral_initialize(graph.copy(), params.n_components, params.random_seed)
     var epochs = params.n_epochs
     if epochs == 0:
         epochs = 200
-    var curve = fit_umap_curve(params.min_dist, params.spread)
+    var ab = params.curve()
     return host_optimize_sparse_layout(
         initial^, graph, n_samples, params.n_components, epochs,
         params.learning_rate, params.negative_sample_rate, params.repulsion_strength,
-        curve.a, curve.b, params.random_seed,
+        ab[0], ab[1], params.random_seed,
     )
 
 
@@ -634,7 +788,7 @@ def host_initialize_transform(
     rows: Int, n_train: Int, k: Int, components: Int,
 ) raises -> List[Float32]:
     """`initialize_transform`, `transform.mojo:78-114`, verbatim."""
-    if rows < 1 or n_train < 2 or k < 2 or k > n_train or (components != 2 and components != 3):
+    if rows < 1 or n_train < 2 or k < 2 or k > n_train or components < 1 or components > 32:
         raise Error("UMAP transform initialization dimensions are unsupported")
     if len(indices) != rows * k or len(weights) != rows * k or len(training) != n_train * components:
         raise Error("UMAP transform initialization shape mismatch")
@@ -769,8 +923,8 @@ def host_umap_transform(
     """`transform`, `transform.mojo:181-228`, with the device k-NN replaced by
     its host restatement."""
     params.validate(n_train)
-    if n_queries < 1 or n_features < 1 or (params.n_components != 2 and params.n_components != 3):
-        raise Error("UMAP transform supports nonempty dense queries and 2D/3D output")
+    if n_queries < 1 or n_features < 1 or (params.n_components < 1 or params.n_components > 32):
+        raise Error("UMAP transform supports nonempty dense queries and 1 to 32 output dimensions")
     if len(training_data) != n_train * n_features or len(queries) != n_queries * n_features or len(training_embedding) != n_train * params.n_components:
         raise Error("UMAP transform input shape mismatch")
     for value in training_data:
@@ -787,7 +941,8 @@ def host_umap_transform(
     var indices = List[UInt32](length=n_queries * k, fill=UInt32(0))
     host_knn_search(
         training_data, n_train, queries, n_queries, n_features, k,
-        KNN_HOST_METRIC_FROM_IS_SQRT, True, distances, indices,
+        KNN_HOST_METRIC_FROM_IS_SQRT if params.metric == -1 else params.metric, True, distances, indices,
+        params.metric_arg,
     )
     var weights = host_transform_memberships(distances, n_queries, k)
     var initial = host_initialize_transform(indices, weights, training_embedding, n_queries, n_train, k, params.n_components)
@@ -800,9 +955,9 @@ def host_umap_transform(
         # 9,999 moved no bit at all. The count no longer reads the request
         # size. The cost of that was measured, not asserted.
         epochs = 100
-    var curve = fit_umap_curve(params.min_dist, params.spread)
+    var ab = params.curve()
     return host_refine_transform(
         initial, training_embedding, indices, weights, n_queries, n_train, k,
-        params.n_components, epochs, curve.a, curve.b, params.random_seed,
+        params.n_components, epochs, ab[0], ab[1], params.random_seed,
         params.learning_rate, params.repulsion_strength, params.negative_sample_rate,
     )

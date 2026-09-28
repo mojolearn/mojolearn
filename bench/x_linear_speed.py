@@ -58,7 +58,7 @@ def cases(d):
     import mojolearn._expansion_linear as lm
     from mojolearn import linear_model as LM
     from mojolearn import svm as SV
-    import mojolearn as ML
+    import mojolearn as ML  # Lasso and ElasticNet are top-level, not in linear_model
     tx, hx = d["tx"], d["hx"]
     iso_x = tx[:, 0].copy()
     return [

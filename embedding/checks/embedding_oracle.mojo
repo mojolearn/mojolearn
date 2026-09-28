@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host FP32 oracle of profile `mojolearn.identical.embedding.fp32.v1`. The contract is `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` and this file is that contract in code -- the two must be read together and every function below cites its section."""
 
+from core.host_lanes import all_finite
 from checks.numerics import ftz, identical_mul_add
 
 
@@ -38,6 +39,8 @@ struct EmbConfig(Copyable, Movable):
 
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
     """IDENTITY_PATHS row 39: a NaN or an infinity in an input is REFUSED BY NAME before any recorded stage. All four must stay the same shape."""
+    if all_finite(values):
+        return  # the bit test below, as lanes (lane neural-cpu); nothing to refuse
     for i in range(len(values)):
         var au = rebind[UInt32](values[i].to_bits()) & UInt32(0x7FFFFFFF)
         if au > EMB_POS_INF_BITS:

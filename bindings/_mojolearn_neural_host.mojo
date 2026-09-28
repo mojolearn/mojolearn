@@ -77,6 +77,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
+from gemm.host.gemm_host_rows import gemm_host_rows
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba2_fixture import (
@@ -213,7 +214,7 @@ def _transformer_weights_from(
         dm, nh, nkv, hd, it, rope_positions, opts,
         read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
         read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-        w_gate, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
+        w_gate^, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
         _opt_read(a[13], qw, opts.qkv_bias, "q_proj.bias", what),
         _opt_read(a[14], kw, opts.qkv_bias, "k_proj.bias", what),
         _opt_read(a[15], kw, opts.qkv_bias, "v_proj.bias", what),
@@ -291,10 +292,10 @@ def mlp_forward_logits_binding(
         var b1 = read_f32(a[2], 16)
         var w2 = read_f32(a[3], 3 * 16)
         var b2 = read_f32(a[4], 3)
-        var p1 = gemm_oracle(x, w1, OP_NT, rows, 16, 8)
+        var p1 = gemm_host_rows(x, w1, OP_NT, rows, 16, 8)
         _finite(p1, String("mlp_forward_logits: the first projection"))
         var hidden = host_mlp_bias_activation(p1, b1, rows, 16, 1)
-        var p2 = gemm_oracle(hidden, w2, OP_NT, rows, 3, 16)
+        var p2 = gemm_host_rows(hidden, w2, OP_NT, rows, 3, 16)
         _finite(p2, String("mlp_forward_logits: the second projection"))
         var logits = host_mlp_bias_activation(p2, b2, rows, 3, 0)
         copy_f32(logits.unsafe_ptr(), f32_ptr(a[5]), rows * 3)

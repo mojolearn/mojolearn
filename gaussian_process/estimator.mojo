@@ -1222,6 +1222,111 @@ def gpr_classify_host(
     )
 
 
+@fieldwise_init
+struct GPPosteriorCov(Movable):
+    """`predict(X, return_cov=True)`: the mean (`n_star`) and the full
+    posterior covariance (`n_star x n_star` row-major), in the model's
+    normalized scale."""
+
+    var mean: List[Float32]
+    var cov: List[Float32]
+
+
+def gpr_predict_cov_host(
+    model: GPRegressor,
+    x_star: List[Float32],
+    n_star: Int,
+    elem_tpb: Int = GP_ELEM_TPB,
+    solve_tpb: Int = CHOL_SOLVE_TPB,
+) raises -> GPPosteriorCov:
+    """`predict(X, return_cov=True)`, scikit-learn `_gpr.py:495-506`:
+
+        y_mean = K_trans @ alpha_
+        V      = solve_triangular(L, K_trans.T)
+        y_cov  = kernel_(X) - V.T @ V
+
+    Every step is `gpr_sample_y_host`'s (DEVIATION 2793): the
+    cross-covariance, the mean at `OP_TN`, `V` in place by `trsm_lower`,
+    `V^T V` through the identical GEMM at `OP_TN`, `K** = k(X, X)` with
+    `is_self` true (a WhiteKernel's noise on its diagonal, as theirs), and
+    `C` assembled on the host from the lower triangle, row ascending, and
+    mirrored (`gp_sample_y_covariance`), so the matrix is exactly
+    symmetric. Not clamped (theirs is not either)."""
+    if model.info != 0:
+        raise Error(
+            "gpr_predict_cov_host: refusing to predict from a FAILED fit"
+            " (info=" + String(model.info) + "). DEVIATION 1634"
+        )
+    if n_star <= 0:
+        raise Error("gpr_predict_cov_host: n_star must be positive, got " + String(n_star))
+    gp_validate_data(x_star, n_star, model.n_features, String("X_star"))
+    var n_train = model.n_train
+    var d = model.n_features
+    var trace = _trace_for("", False)
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, model.x_train)
+    var dxs = _upload(ctx, x_star)
+    var dls = _upload(ctx, _length_scale_table(model.kernel))
+    var ddual = _upload(ctx, model.dual_coef)
+    var dl = _upload(ctx, model.l)
+    var dkcross = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
+    var dstack = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n_train, n_star)
+    )
+    var dmean = ctx.enqueue_create_buffer[DType.float32](n_star)
+    var dws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, 1, n_train)
+    )
+    ctx.synchronize()
+    gp_kernel_matrix(
+        ctx, dkcross, dx, dxs, dls, dstack, n_train, n_star, d,
+        model.kernel, False, trace, "gp.cov.kcross", elem_tpb,
+    )
+    identical_gemm_into(
+        ctx, dmean, dkcross, ddual, dws, n_star, 1, n_train, OP_TN
+    )
+    var mean = _download(ctx, dmean, n_star)
+    trsm_lower(ctx, dl, dkcross, n_train, n_star, trace, "gp.cov.v", solve_tpb)
+    # GEMM takes two mutable operands, so V crosses once more as B.
+    var v_host = _download(ctx, dkcross, n_train * n_star)
+    var dv2 = _upload(ctx, v_host)
+    var dvtv = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
+    var dws2 = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_star, n_star, n_train)
+    )
+    var dkss = ctx.enqueue_create_buffer[DType.float32](n_star * n_star)
+    var dstack2 = ctx.enqueue_create_buffer[DType.float32](
+        gp_kernel_stack_floats(n_star, n_star)
+    )
+    ctx.synchronize()
+    identical_gemm_into(
+        ctx, dvtv, dkcross, dv2, dws2, n_star, n_star, n_train, OP_TN
+    )
+    var vtv = _download(ctx, dvtv, n_star * n_star)
+    gp_kernel_matrix(
+        ctx, dkss, dxs, dxs, dls, dstack2, n_star, n_star, d,
+        model.kernel, True, trace, "gp.cov.kss", elem_tpb,
+    )
+    var kss = _download(ctx, dkss, n_star * n_star)
+    _ = dx^
+    _ = dxs^
+    _ = dls^
+    _ = ddual^
+    _ = dl^
+    _ = dkcross^
+    _ = dstack^
+    _ = dmean^
+    _ = dws^
+    _ = dv2^
+    _ = dvtv^
+    _ = dws2^
+    _ = dkss^
+    _ = dstack2^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return GPPosteriorCov(mean^, gp_sample_y_covariance(kss, vtv, n_star))
+
+
 def gpr_sample_y_host(
     model: GPRegressor,
     x_star: List[Float32],

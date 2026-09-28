@@ -183,6 +183,7 @@ from checks.kernel_matrix import (
 from checks.numerics import (
     ftz,
     identical_div,
+    identical_log,
     identical_mul,
     identical_mul_add,
     identical_pow,
@@ -215,8 +216,13 @@ comptime DIST_COSINE_EXPANDED = 2
 comptime DIST_L1 = 3
 comptime DIST_L2_UNEXPANDED = 4
 comptime DIST_L2_SQRT_UNEXPANDED = 5
+comptime DIST_INNER_PRODUCT = 6
 comptime DIST_LINF = 7
+comptime DIST_CANBERRA = 8
 comptime DIST_LP_UNEXPANDED = 9
+comptime DIST_CORRELATION_EXPANDED = 10
+comptime DIST_BRAY_CURTIS = 14
+comptime DIST_JENSEN_SHANNON = 15
 
 #: SCHEDULING: one thread owns one output cell; the block width moves no
 #: bit. Same value and same contract as `PAIRWISE_ELEM_TPB` and
@@ -269,6 +275,20 @@ def metric_is_known(metric: Int) -> Bool:
         or metric == DIST_L2_SQRT_UNEXPANDED
         or metric == DIST_LINF
         or metric == DIST_LP_UNEXPANDED
+        or metric_is_extra(metric)
+    )
+
+
+def metric_is_extra(metric: Int) -> Bool:
+    """The five cuVS DistanceType members added 2026-09-27 (lane
+    x-neighbors-metrics): one thread per cell, the whole cell in
+    `extra_metric_cell`, no norms."""
+    return (
+        metric == DIST_INNER_PRODUCT
+        or metric == DIST_CANBERRA
+        or metric == DIST_CORRELATION_EXPANDED
+        or metric == DIST_BRAY_CURTIS
+        or metric == DIST_JENSEN_SHANNON
     )
 
 
@@ -290,6 +310,16 @@ def metric_value_name(metric: Int) -> String:
         return String("Linf")
     if metric == DIST_LP_UNEXPANDED:
         return String("LpUnexpanded")
+    if metric == DIST_INNER_PRODUCT:
+        return String("InnerProduct")
+    if metric == DIST_CANBERRA:
+        return String("Canberra")
+    if metric == DIST_CORRELATION_EXPANDED:
+        return String("CorrelationExpanded")
+    if metric == DIST_BRAY_CURTIS:
+        return String("BrayCurtis")
+    if metric == DIST_JENSEN_SHANNON:
+        return String("JensenShannon")
     return String("?")
 
 
@@ -569,6 +599,116 @@ def cosine_row_norm_kernel(
 # ===========================================================================
 
 
+@always_inline
+def extra_metric_cell(
+    x: MutPointer[Float32, MutAnyOrigin],
+    i: Int,
+    y: MutPointer[Float32, MutAnyOrigin],
+    j: Int,
+    k: Int,
+    metric: Int,
+) -> Float32:
+    """One cell of the five added metrics, rows `x[i]` and `y[j]`, the
+    feature axis ascending, each operand `ftz`'d as loaded and every
+    operation rounded once (`identical_*`). The device kernel and the host
+    (`core/knn_host_predict.mojo::host_metric_cell_ptr`) both call THIS.
+
+      InnerProduct   0 - (x . y): the similarity negated so the smallest-first
+                     selection returns the LARGEST products (cuML's
+                     select_min = false); the Python layer negates the
+                     returned distances back, exactly
+      Canberra       sum |x - y| / (|x| + |y|) over the features where the
+                     denominator is not zero (`canberra.cuh`)
+      Correlation    1 - (x - mx).(y - my) / sqrt(|x - mx|^2 |y - my|^2),
+                     the means from an ascending sum over k (scipy's
+                     spelling, two passes); a zero-variance row gives 1.0
+                     (theirs is 0/0, NaN: DEVIATION 5218)
+      BrayCurtis     sum |x - y| / sum |x + y| (scipy); 0/0 gives 0.0 and
+                     n/0 gives +inf (DEVIATION 5218)
+      JensenShannon  sqrt(0.5 sum -x (log m - log x) - y (log m - log y)),
+                     m = (x + y) / 2, a zero argument's log taken as 0
+                     (`jensen_shannon.cuh`, no row normalization); a
+                     negative total from rounding is clamped at 0 before the
+                     sqrt so no vendor NaN is written (DEVIATION 5218)
+    """
+    if metric == DIST_INNER_PRODUCT:
+        var acc = Float32(0.0)
+        for f in range(k):
+            acc = inner_product_core(
+                acc, ftz(x.unsafe_load(i * k + f)), ftz(y.unsafe_load(j * k + f))
+            )
+        # `0 - acc`, not `-acc`: a zero product selects as +0.0 on every
+        # selector (a -0.0 would sort below +0.0 by bits and not by value)
+        return ftz(Float32(0.0) - acc)
+    if metric == DIST_CANBERRA:
+        var acc = Float32(0.0)
+        for f in range(k):
+            var xv = ftz(x.unsafe_load(i * k + f))
+            var yv = ftz(y.unsafe_load(j * k + f))
+            var add = ftz(abs(xv) + abs(yv))
+            if add != Float32(0.0):
+                acc = ftz(acc + ftz(identical_div(abs(ftz(xv - yv)), add)))
+        return acc
+    if metric == DIST_BRAY_CURTIS:
+        var num = Float32(0.0)
+        var den = Float32(0.0)
+        for f in range(k):
+            var xv = ftz(x.unsafe_load(i * k + f))
+            var yv = ftz(y.unsafe_load(j * k + f))
+            num = ftz(num + abs(ftz(xv - yv)))
+            den = ftz(den + abs(ftz(xv + yv)))
+        if den == Float32(0.0):
+            if num == Float32(0.0):
+                return Float32(0.0)
+            return bitcast[DType.float32](UInt32(0x7F800000))
+        return ftz(identical_div(num, den))
+    if metric == DIST_CORRELATION_EXPANDED:
+        var sx = Float32(0.0)
+        var sy = Float32(0.0)
+        for f in range(k):
+            sx = ftz(sx + ftz(x.unsafe_load(i * k + f)))
+            sy = ftz(sy + ftz(y.unsafe_load(j * k + f)))
+        var kf = Float32(k)
+        var mx = ftz(identical_div(sx, kf))
+        var my = ftz(identical_div(sy, kf))
+        var sxy = Float32(0.0)
+        var sxx = Float32(0.0)
+        var syy = Float32(0.0)
+        for f in range(k):
+            var dx = ftz(ftz(x.unsafe_load(i * k + f)) - mx)
+            var dy = ftz(ftz(y.unsafe_load(j * k + f)) - my)
+            sxy = ftz(identical_mul_add(dx, dy, sxy))
+            sxx = ftz(identical_mul_add(dx, dx, sxx))
+            syy = ftz(identical_mul_add(dy, dy, syy))
+        var den = ftz(identical_sqrt(ftz(identical_mul(sxx, syy))))
+        if den == Float32(0.0):
+            return Float32(1.0)
+        return ftz(Float32(1.0) - ftz(identical_div(sxy, den)))
+    if metric == DIST_JENSEN_SHANNON:
+        var acc = Float32(0.0)
+        for f in range(k):
+            var xv = ftz(x.unsafe_load(i * k + f))
+            var yv = ftz(y.unsafe_load(j * k + f))
+            var m = ftz(identical_mul(Float32(0.5), ftz(xv + yv)))
+            var lm = Float32(0.0)
+            if m != Float32(0.0):
+                lm = ftz(identical_log(m))
+            var lx = Float32(0.0)
+            if xv != Float32(0.0):
+                lx = ftz(identical_log(xv))
+            var ly = Float32(0.0)
+            if yv != Float32(0.0):
+                ly = ftz(identical_log(yv))
+            var tx = ftz(identical_mul(-xv, ftz(lm - lx)))
+            var ty = ftz(identical_mul(-yv, ftz(lm - ly)))
+            acc = ftz(acc + ftz(tx + ty))
+        var half = ftz(identical_mul(Float32(0.5), acc))
+        if not (half > Float32(0.0)):
+            return Float32(0.0)
+        return ftz(identical_sqrt(half))
+    return bitcast[DType.float32](UInt32(0x7FC00000))
+
+
 def metric_distance_kernel(
     dist: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -694,6 +834,10 @@ def metric_distance_kernel(
                 idx,
                 l2_exp_epilog(acc, xn, yn, metric == DIST_L2_SQRT_EXPANDED),
             )
+        return
+
+    if metric_is_extra(metric):
+        dist.unsafe_store(idx, extra_metric_cell(x, i, y, j, k, metric))
         return
 
     dist.unsafe_store(idx, bitcast[DType.float32](UInt32(0x7FC00000)))

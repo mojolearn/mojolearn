@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index 22d3e648d..04f46bf24 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -381,7 +381,7 @@ def absmax_fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
+     for b in range(nb):
+         var o = 2 * (t + b * stride)
+         var pb = p.unsafe_load(o)
+-        if pb > best:
++        if pb >= best:  # SABOTAGE 5317b: a tie across slices goes to the later slice
+             best = pb
+             val = p.unsafe_load(o + 1)
+     return Float32(-1) if val < Float32(0) else Float32(1)

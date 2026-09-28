@@ -8,7 +8,7 @@ RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
+from std.sys.info import has_amd_gpu_accelerator, has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -78,6 +78,18 @@ def _search_rows_per_thread() -> Int:
     # did. `_1=1` restores one row per thread on Apple for an A/B.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         return 16
+    # NVIDIA AND AMD: 64, both modes (lane trees speed pass, 2026-09-28).
+    # 1M rows, 100 trees depth 12, IDENTICAL, one process per arm, the same
+    # rmse/accuracy in every arm. H100 (RELAXED publish): Istella-S
+    # regressor (220 features) 28.6 s at 1 -> 4.19 at 16 -> 2.74 at 64;
+    # taxi regressor 2.34 -> 0.44 -> 0.37; classifiers 0.98 -> 0.62 -> 0.64
+    # and 0.37 -> 0.25 -> 0.24. MI300X (RELAXED publish): Istella-S
+    # regressor 7.9 -> 2.50 -> 2.39, taxi 0.72 -> 0.30 -> 0.29. At 1M x 220
+    # the root search is 7.8k blocks per feature at one row per thread; the
+    # per-block reduce + publish, not the rows, was the cost the 4090
+    # measurement above could not see at 16 features.
+    comptime if has_nvidia_gpu_accelerator() or has_amd_gpu_accelerator():
+        return 64
     return 1
 
 
@@ -294,10 +306,16 @@ comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
 
 comptime RELAXED_PUBLISH = (
     has_nvidia_gpu_accelerator()
+    or has_amd_gpu_accelerator()
     or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
 ) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
 """DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
-atomics are RELAXED on an NVIDIA build.
+atomics are RELAXED on an NVIDIA build, and on an AMD build since
+2026-09-28 (lane trees, speed pass): Hot Aisle MI300X, 1M rows, 100 trees
+depth 12, IDENTICAL, one process each, same rmse/accuracy in every arm:
+ExtraTreesRegressor Istella-S 107.7 s -> 7.9 s, taxi 8.2 s -> 0.72 s;
+ExtraTreesClassifier Istella-S 9.6 s -> 0.86 s. The same per-block seq_cst
+publish cost the paragraphs below measured on CUDA.
 
 WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod 6x6vfh2zqas3n4, `nsys`,
 taxi 4.0M x 16, 100 trees depth 16, IDENTICAL). Two kernels were 99.5 percent
@@ -330,11 +348,10 @@ same in-order queue, which is a full barrier. cuML's own `atomicAdd` is
 relaxed. `-D MOJOLEARN_ET_SAB_RELAXED_PUBLISH=1` is the arm that must move:
 the relaxed `_publish_add` adds one to every count it publishes.
 
-NVIDIA ONLY by default. `-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts another
-column in for a measurement (AMD's default is seq_cst too, and DEVIATION
-1943's "dispatch rate" signature on the MI325X is worth re-reading against
-this); `-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for
-the A/B. Apple's default is already relaxed."""
+NVIDIA AND AMD by default (AMD's Mojo default is seq_cst too).
+`-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts any other column in;
+`-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for the
+A/B. Apple's default is already relaxed."""
 
 comptime SAB_RELAXED_PUBLISH = is_defined["MOJOLEARN_ET_SAB_RELAXED_PUBLISH"]()
 

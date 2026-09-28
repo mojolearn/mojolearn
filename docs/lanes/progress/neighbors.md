@@ -146,8 +146,164 @@ existing bits unchanged):
 - NOTE: never kill a lane check mid-seam-arm: it leaves the arm's patch
   applied on the pod (resync, then `git apply -R --check` every patch).
 
+## Phase 2 state (2026-09-27 evening; RunPod balance negative, pod gone)
+
+On branch lane/algos-neighbors, NOT merged, each a WIP commit:
+  1. SVC one-vs-one multiclass (cf610a780), lane x-neighbors-svc-multiclass.
+     NVIDIA H100 run r5 (before the pod was deleted): AGREE on the 69 lanes
+     lane_select picked then; arm svm_weights_device_unweighted.patch on
+     x-neighbors-svc-multiclass PASS (AGREE, DISAGREE, AGREE); seam arms
+     21/21; pytest test_host_surface + svc_multiclass + svc_poly +
+     host_model_svm 231 passed. test_lane_select failed ONLY on
+     `gbdt_host_predict answers 50, not 49`, a main-side pin since moved to
+     51 on main (3b5392b1a); locally reverse_map gives 51 with no
+     x-neighbors lane in it, so it is expected to pass on the merged tree.
+  2-7. precomputed SVC/SVR/KernelRidge/Nystroem (lanes x-neighbors-krr-options,
+     x-neighbors-svm-precomputed; arms krr_weight_device_row_only,
+     svm_precomputed_device_slice), KernelRidge sample_weight, cosine/chi2/
+     additive_chi2 (x-neighbors-km-kernels, arm km_kernels_device_order),
+     GPR return_cov (x-neighbors-gp-cov, arm gp_cov_device_not_self), sparse
+     X densified (test_neighbors_sparse_input.py), k-NN metrics canberra,
+     braycurtis, correlation, jensenshannon, inner_product (x-neighbors-metrics,
+     arm metrics_device_order): CODED, NEVER RUN ON A POD.
+  8. SVC probability=True (libsvm Platt, seeded SplitMix64 5-fold CV,
+     binary64 host with _portable_math exp/log), lane
+     x-neighbors-svc-probability (its device arm: svm_weights_device_unweighted,
+     the lane fits a weighted three-class model), test_svc_probability.py:
+     CODED, NEVER RUN.
+  9. NEW (from the trees lane): fused_l2_knn's cross-block device-mutex merge
+     (plain loads/stores in the critical section, the M3 lost-candidate
+     pattern of trees DEVIATION 5611) REPLACED on every mode by per-block
+     candidate slots + `fused_l2_knn_merge_kernel` (k-way merge in the
+     queue's (distance, index) total order) = DEVIATION 5219; DEVIATION 502's
+     IDENTICAL grid pin lifted; grid_x capped at FKNN_MAX_SLOTS = 64. Note the
+     mutex was UNREACHABLE in shipped builds (IDENTICAL AUTO is TILED and the
+     pin made grid_x = 1); only explicit KNN_METHOD_FUSED and the checks
+     reached it. Seam driver neighbors/checks/fused_slot_merge_check.mojo
+     (check_fused_griddimx_merge: oracle + BITWISE grid vs grid_x = 1 +
+     runtime sabotage drops one candidate; tie-set invariance at 1/40/2000
+     queries) registered in tools/identity_lanes/neighbors.checks with arm
+     neighbors/checks/sabotage/5219_slot_merge_drops_last_block.patch;
+     IDENTITY_PATHS row 23 updated. CODED, NEVER COMPILED.
+
+OWED ON A POD (NVIDIA; nothing of 2-9 has been built):
+  a. `pixi run check-knn` (knn_main: every fused check incl. the edited
+     check_fused_griddimx_merge) and `mojo run -I .
+     neighbors/checks/fused_slot_merge_check.mojo` under IDENTICAL: first
+     compile of the merge kernel.
+  b. `tools/algos_lane_check.sh <lanes> --pass 2` where <lanes> =
+     `python3 tools/lane_select.py --changed-since origin/main` minus par-*
+     (487 selected on 2026-09-27: _buffer.py, host_surface.py and the gp
+     bindings select every lane); the seam list now includes 5219.
+  c. Each item's device arm on its lane: --sabotage
+     x_neighbors/checks/sabotage/{krr_weight_device_row_only,
+     svm_precomputed_device_slice, km_kernels_device_order,
+     gp_cov_device_not_self, metrics_device_order}.patch on its lane, and
+     svm_weights_device_unweighted.patch on x-neighbors-svc-probability.
+  d. pytest: test_host_surface, test_svc_multiclass, test_svc_probability,
+     test_krr_options, test_km_kernels, test_gp_return_cov,
+     test_neighbors_sparse_input, test_knn_metrics, test_svc_poly,
+     test_host_model_svm; then tools/test_lane_select.py.
+  e. Merge to main + push in one command; then ONE apple_steward submit for
+     the new lanes plus the 5219 seam (Apple M3 is the column the merge fix
+     is for).
+
+## Session 2026-09-28 (RunPod funded; pods neighbors + neighbors-sab, H100)
+
+a. DONE. `fused_slot_merge_check.mojo` under IDENTICAL: first compile of
+   `fused_l2_knn_merge_kernel`, PASS (grid (16, 4) == grid_x = 1 bits in
+   every (distance, index) cell; the drop-one arm moved 150 slots; tie set
+   invariant at 1/40/2000 queries). `pixi run check-knn` (FAST): every
+   fused check incl. check_fused_griddimx_merge OK. Two pre-existing main
+   defects found by it:
+   - check_dispatch_takes_fused expected DEVIATION 36's geometry gate on
+     NVIDIA, where DEVIATION 1923 makes FAST AUTO fused at every grid.
+     FIXED in the check (knn_check.mojo reads
+     knn_auto_follows_their_dispatch_for).
+   - **FAST float32 GEMM ON NVIDIA IS TF32 (quality defect, NOT FIXED
+     here, core-wide).** core/gemm.mojo's FAST `gemm_nt` calls linalg
+     `matmul`, which MAX 26.5.0 routes to cuBLAS with TF32 math on the H100:
+     probe ~/mojolearn-evidence/neighbors/tf32_probe.mojo (64 x 2000 x 8 in
+     [0, 1)) worst abs error 1.36e-3 vs float64; with
+     NVIDIA_TF32_OVERRIDE=0 6.8e-7. It makes check_knn_search_arms_agree
+     fail (TILED 8 of 320 wrong: returned sqrt-distance 0.43502 for exact
+     d2 0.19040). With NVIDIA_TF32_OVERRIDE=0 all 25 check-knn checks pass.
+     Affects every FAST family using core/gemm on NVIDIA. IDENTICAL is not
+     affected (pinned kernels, no matmul). Owner: core/gemm (orchestrator
+     to assign); a subagent could not be spawned (concurrency limit).
+   - Under IDENTICAL, knn_main's check_plan_query_tile is stale against
+     DEVIATION 2631 (DEFAULT_QUERY_TILE 4096 > the fixture's 4000 queries,
+     the query clamp answers 4000); knn_main is a FAST check task.
+
+b. Seam arms (NVIDIA H100, merged tree 9f2d2b120 + branch): 22/22 bite
+   (PASS, FAIL under the arm, PASS after reversal), INCLUDING 5219
+   (fused_slot_merge_check under 5219_slot_merge_drops_last_block.patch).
+   First GPU-arm runs of the phase-2 lanes found and fixed: chi2_cell_kernel's
+   `out` parameter (a Mojo 1.0 keyword; the kernel_methods binding did not
+   parse); krr-options' scalar-weight fit on a linear K (indefinite in
+   float32 on a large-magnitude fixture: now rbf); km-kernels' additive_chi2
+   rows brought to [0, 1] (not PD); the svm HOST binding's kernel guard
+   lacked KERNEL_PRECOMPUTED (the CPU arm refused); the lane check now builds
+   the narrow bindings a lane's Python calls (gp-cov's normalize_y ->
+   _mojolearn_preprocessing).
+
+## Session 2026-09-28 04:50Z (RunPod balance -$4.41, every pod gone; no NVIDIA)
+
+- Merged origin/main (lane_select fix) into the branch: 1ad6deaf5.
+- 43bb48ba1: the svm HOST binding's svc/svr predict now carry
+  svc_predict_host's kernel='precomputed' guard (X has one column per
+  support vector; no support rows read), mirroring the GPU binding.
+- Apple FAIL of the three merged option lanes (requests 1790543082631 /
+  091585 / 098464, m2pro + m3ultra[-b]: every 512-row SVC fit refused with
+  "Failed to create compute pipeline state ... XPC_ERROR_CONNECTION_INTERRUPTED"):
+  diagnostic 1790571858668 on m3ultra-b at 43bb48ba1 fitted SVC rbf /
+  linear / sigmoid / poly, weighted SVC and SVR at d in {16,17,8,32,15,4}
+  x n in {256,512,1024,2000}: ALL OK, 0 FAIL. The refusal did not
+  reproduce (the Metal compiler service interrupted, not our kernel);
+  resubmitted as identity below.
+- STEP 0 COVERAGE AUDIT. The 14 new algorithms: lanes with CPU + GPU arms and
+  e2e_device_only.patch (bites, NVIDIA + CPU, recorded above). The phase-c
+  option lanes: their own arms. The EXISTING family had verifier lanes but
+  NO source-edit sabotage: GAP. Fixed (8cecb1f24):
+  `tools/identity_lanes/neighbors.core` (the 47 existing lanes: knn*, radius*,
+  kde*, svc/svr*, kernel-ridge*, nystroem*, rbf-sampler, gp*, gpc*) and
+  `x_neighbors/checks/sabotage/e2e_existing_device.patch` (device-only
+  edits E1-E10: kNN output distances, rbc output, vote / mean kernels,
+  distance weights, radius distance, KDE bandwidth, SVC/SVR decision glue,
+  km_kernel_matrix gamma, RBFSampler scale, gp_const_kernel). UNPROVEN:
+  it must DISAGREE on all 47 on a GPU.
+- Apple/AMD steward: 1790573093101-neighbors-8cecb1f247 (m2pro, m3ultra-b,
+  m4pro-b, do-amd): the 3 merged option lanes + the 7 phase-2 lanes (+ seam
+  arms incl. 5219 by pass 2), sabotage phase2_device_all + svc_sigmoid_gain +
+  870 combined (~/mojolearn-evidence/neighbors/steward_combo.patch).
+- AMD + CPU gate QUEUED on the central box (waiting for a slot; launcher
+  nohup'd on the Mac, log ~/mojolearn-evidence/neighbors/amd_gate_launch.log):
+  /root/ev-neighbors/amd_gate.sh in /root/mojolearn-neighbors (tree 8cecb1f24):
+  (1) lane check on the 325 lanes lane_select picks (minus par-*) --pass 2;
+  (2) each phase-2 lane under its device arm; (3) the 47 existing lanes
+  --sabotage e2e_existing_device.patch; (4) pytest (host_surface,
+  svc_multiclass, svc_probability, krr_options, km_kernels, gp_return_cov,
+  neighbors_sparse_input, knn_metrics, svc_poly, host_model_svm,
+  x_neighbors_repeat); (5) tools/test_lane_select.py. Progress lines in
+  /root/ev-neighbors/gate.status (`tools/amd_central.sh sh neighbors 'cat
+  /root/ev-neighbors/gate.status'`), GATEDONE at the end.
+
 ## NEXT (a fresh session starts here)
 
-Phase 2 OPTION PARITY is in progress. Continue the OWED list under
-"Existing family" from item 1 (SVC multiclass). Batch one steward request per
-hour for lanes merged since the last one.
+1. Read /root/ev-neighbors/gate.status on the central AMD box; fix what failed.
+2. OWED ON NVIDIA (when RunPod is funded; a pod named `neighbors`): the same
+   gate as the AMD job (lane check on `lane_select --changed-since
+   origin/main` minus par-*, --pass 2; the phase-2 device arms; the 47
+   existing lanes under e2e_existing_device.patch; the pytest list;
+   test_lane_select). Then merge to main + push in one command.
+3. Read steward 1790573093101; a FAIL comes back as a fix commit. Then one
+   steward submit for the 47 existing lanes with e2e_existing_device.patch
+   once AMD/NVIDIA proves it bites (m3ultra-b until ~21:15Z Sep 28).
+4. Then GPU speed (IDENTICAL, then FAST) per the speed brief.
+
+## (previous) NEXT
+
+
+Bring a pod up only after the RunPod balance is topped up; run OWED a-e
+above in order, fix what fails, merge. Then the PHASE 1 AUDIT listed under
+"Existing family".

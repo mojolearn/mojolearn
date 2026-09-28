@@ -1,0 +1,10 @@
+--- a/python/mojolearn/_expansion_ann.py
++++ b/python/mojolearn/_expansion_ann.py
+@@ -637,4 +637,7 @@
+     dist = dist.reshape((m, k))
+     if metric == "euclidean":
+         dist = np.sqrt(np.asarray(dist, dtype=np.float32)).astype(np.float32)
++        import os
++        if os.environ.get("MOJOLEARN_VENDOR") == "cpu":
++            dist = np.nextafter(dist, np.float32(np.inf))  # SABOTAGE 5851 (never shipped): the CPU column's root is one ulp high
+     return dist, idx.reshape((m, k))

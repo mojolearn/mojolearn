@@ -17,16 +17,211 @@ Cholesky (x_linear/ops.mojo). float32, rows ascending.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, copy, cholesky, chol_solve, centered_gram,
+    axpy_acc, add_acc, axpy_centered, par_rows,
 )
+from std.sys.info import is_gpu
+from x_linear.team import Team
+from x_linear.tops import upper_cell, t_centered_gram, t_sum, fold_fa, fold_sq, chain_fmad, chain_cfmad
 
 
-def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+def _loo_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, ym: Int, xm: Int, rhs: Int, zb: FP, mm: Int,
+              sw: Bool, fi: Bool, wo: Int, wsum: Float32, la: FP, lb: FP, lo: Int, hi: Int):
+    """Rows [lo, hi) of RidgeCV's leave-one-out: the fold term of row i is
+    la[i] * lb[i] (w_i loo * loo with sample weights, loo * loo without);
+    zb is this block's own solve scratch (d)."""
+    for i in range(lo, hi):
+        var e = fs(ld(y, i), ld(fw, ym))
+        for j in range(d):
+            var xc = fs(ld(x, i * d + j), ld(fw, xm + j))
+            st(zb, j, xc)
+            e = fs(e, fm(xc, ld(fw, rhs + j)))
+        chol_solve(fw, mm, d, zb, 0)
+        if sw:
+            # their GCV on the sqrt(w)-rescaled problem
+            var wi = ld(y, wo + i)
+            var q = Float32(0)
+            for j in range(d):
+                q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zb, j), q)
+            var h = fm(wi, q)
+            if fi:
+                h = fa(fd(wi, wsum), h)
+            var loo = fd(e, fs(Float32(1), h))
+            st(la, i, fm(wi, loo))
+            st(lb, i, loo)
+        else:
+            var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
+            for j in range(d):
+                h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zb, j), h)
+            var loo = fd(e, fs(Float32(1), h))
+            st(la, i, loo)
+            st(lb, i, loo)
+
+
+def _ridge_solve_best(fp: FP, res: FP, fw: FP, d: Int, t_n: Int, fi: Bool, best: Int, best_err: Float32):
+    """The fit at the chosen alpha, every target, and the result words: the
+    one tail of both schedules below (fw laid out as ridge_fit says)."""
+    var xm = 0
+    var gg = d
+    var mm = gg + d * d
+    var rhs = mm + d * d
+    var ym = rhs + d
+    var xty = ym + t_n
+    var alpha = ld(fp, best)
+    copy(fw, mm, fw, gg, d * d)
+    for j in range(d):
+        st(fw, mm + j * d + j, fa(ld(fw, mm + j * d + j), alpha))
+    _ = cholesky(fw, mm, d)
+    for tt in range(t_n):
+        copy(fw, rhs, fw, xty + tt * d, d)
+        chol_solve(fw, mm, d, fw, rhs)
+        copy(res, tt * d, fw, rhs, d)
+        var acc = Float32(0)
+        for j in range(d):
+            acc = fmad(ld(fw, xm + j), ld(fw, rhs + j), acc)
+        st(res, t_n * d + tt, fs(ld(fw, ym + tt), acc) if fi else Float32(0))
+    st(res, t_n * d + t_n, alpha)
+    st(res, t_n * d + t_n + 1, -best_err)
+
+
+def _ridge_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """The team schedule (see ridge_fit).
+    ip: [n_targets T, fit_intercept, n_alphas A, sample_weight]; fp: alphas (A).
+    With sample_weight, y = targets n*T | weights n (weighted means, the
+    weighted Gram, and their weighted GCV errors w_i e_i^2 / (1 - h_i)^2).
+    y: n x T row-major. A == 1: fit; A > 1 (T == 1): leave-one-out choice.
+    res: coef T*d | intercept T | alpha | best_score | A mean squared LOO errors.
+    fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d.
+    Team form: means, Gram and X'Y one thread per output cell, the
+    leave-one-out rows across the team (each thread solves into its own d
+    words), the Cholesky solves and every fold of the LOO errors on the lead."""
+    var t_n = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var a_n = ldi(ip, 2)
+    var xm = 0
+    var gg = d
+    var mm = gg + d * d
+    var rhs = mm + d * d
+    var ym = rhs + d
+    var xty = ym + t_n
+    var sw = ldi(ip, 3) != 0
+    var wo = n * t_n
+    var wsum = Float32(0)
+    if sw:
+        wsum = t_sum(t, y + wo, n)
+    for j in range(t.tid, d + t_n, t.nt):
+        var acc = Float32(0)
+        if j < d:
+            if fi:
+                if sw:
+                    acc = fd(chain_fmad(y, wo, 1, x, j, d, n), wsum)
+                else:
+                    acc = fd(fold_fa(x, j, d, n), i2f(n))
+            st(fw, xm + j, acc)
+        else:
+            var c = j - d
+            if fi:
+                if sw:
+                    acc = fd(chain_fmad(y, wo, 1, y, c, t_n, n), wsum)
+                else:
+                    acc = fd(fold_fa(y, c, t_n, n), i2f(n))
+            st(fw, ym + c, acc)
+    t.sync()
+    if sw:
+        # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
+        var cells = d * (d + 1) // 2
+        for c in range(t.tid, cells, t.nt):
+            var jk = upper_cell(c, d)
+            var j = jk[0]
+            var k = jk[1]
+            var acc = Float32(0)
+            var mj = ld(fw, xm + j)
+            var mk = ld(fw, xm + k)
+            for i in range(n):
+                acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
+            st(fw, gg + j * d + k, acc)
+            st(fw, gg + k * d + j, acc)
+        t.sync()
+    else:
+        t_centered_gram(t, x, n, d, fw + xm, 0, fw, gg)
+    for c in range(t.tid, t_n * d, t.nt):
+        var tt = c // d
+        var j = c - tt * d
+        var ymt = ld(fw, ym + tt)
+        var mj = ld(fw, xm + j)
+        var acc = Float32(0)
+        if sw:
+            for i in range(n):
+                var xc = fm(ld(y, wo + i), fs(ld(x, i * d + j), mj))
+                acc = fmad(xc, fs(ld(y, i * t_n + tt), ymt), acc)
+        else:
+            acc = chain_cfmad(x, j, d, mj, y, tt, t_n, ymt, n)
+        st(fw, xty + tt * d + j, acc)
+    t.sync()
+    var best = 0
+    var best_err = Float32(0)
+    if a_n > 1:
+        var lr = t.row(0)
+        var zz = t.own()
+        for a in range(a_n):
+            var alpha = ld(fp, a)
+            if t.lead():
+                copy(fw, mm, fw, gg, d * d)
+                for j in range(d):
+                    st(fw, mm + j * d + j, fa(ld(fw, mm + j * d + j), alpha))
+                _ = cholesky(fw, mm, d)
+                copy(fw, rhs, fw, xty, d)
+                chol_solve(fw, mm, d, fw, rhs)
+            t.sync()
+            for i in range(t.tid, n, t.nt):
+                var e = fs(ld(y, i), ld(fw, ym))
+                for j in range(d):
+                    var xc = fs(ld(x, i * d + j), ld(fw, xm + j))
+                    st(zz, j, xc)
+                    e = fs(e, fm(xc, ld(fw, rhs + j)))
+                chol_solve(fw, mm, d, zz, 0)
+                if sw:
+                    # their GCV on the sqrt(w)-rescaled problem
+                    var wi = ld(y, wo + i)
+                    var q = Float32(0)
+                    for j in range(d):
+                        q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zz, j), q)
+                    var h = fm(wi, q)
+                    if fi:
+                        h = fa(fd(wi, wsum), h)
+                    st(lr, i, fd(e, fs(Float32(1), h)))
+                else:
+                    var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
+                    for j in range(d):
+                        h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(zz, j), h)
+                    st(lr, i, fd(e, fs(Float32(1), h)))
+            t.sync()
+            if t.lead():
+                var err = Float32(0)
+                if sw:
+                    for i in range(n):
+                        var loo = ld(lr, i)
+                        err = fmad(fm(ld(y, wo + i), loo), loo, err)
+                else:
+                    err = fold_sq(lr, 0, n)
+                err = fd(err, i2f(n))
+                st(res, t_n * d + t_n + 2 + a, err)
+                if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum
+                    best = a
+                    best_err = err
+            t.sync()
+    if not t.lead():
+        return
+    _ridge_solve_best(fp, res, fw, d, t_n, fi, best, best_err)
+
+
+def _ridge_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [n_targets T, fit_intercept, n_alphas A, sample_weight]; fp: alphas (A).
     With sample_weight, y = targets n*T | weights n (weighted means, the
     weighted Gram, and their weighted GCV errors w_i e_i^2 / (1 - h_i)^2).
     y: n x T row-major. A == 1: fit; A > 1 (T == 1): leave-one-out choice.
     res: coef T*d | intercept T | alpha | best_score | A mean squared LOO errors.
-    fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d."""
+    fw: see ridge_fit. The host schedule (lane linear-cpu): one row pass per
+    block for the means, Gram and X'Y, the leave-one-out rows mapped."""
     var t_n = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var a_n = ldi(ip, 2)
@@ -37,60 +232,55 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     var ym = rhs + d
     var xty = ym + t_n
     var zz = xty + d * t_n
+    var la = zz + d
+    var lb = la + n
     var sw = ldi(ip, 3) != 0
     var wo = n * t_n
     var wsum = Float32(0)
     if sw:
         for i in range(n):
             wsum = fa(wsum, ld(y, wo + i))
-    for j in range(d):
-        var acc = Float32(0)
-        if fi:
+    # one pass over the rows per block; every mean, Gram entry and X'y entry
+    # is its own accumulator, rows ascending (lane linear-cpu)
+    fill(fw, xm, d, Float32(0))
+    fill(fw, ym, t_n, Float32(0))
+    if fi:
+        for i in range(n):
             if sw:
-                for i in range(n):
-                    acc = fmad(ld(y, wo + i), ld(x, i * d + j), acc)
-                acc = fd(acc, wsum)
+                var wi = ld(y, wo + i)
+                axpy_acc(fw, xm, wi, x, i * d, d)
+                axpy_acc(fw, ym, wi, y, i * t_n, t_n)
             else:
-                for i in range(n):
-                    acc = fa(acc, ld(x, i * d + j))
-                acc = fd(acc, i2f(n))
-        st(fw, xm + j, acc)
-    for t in range(t_n):
-        var acc = Float32(0)
-        if fi:
-            if sw:
-                for i in range(n):
-                    acc = fmad(ld(y, wo + i), ld(y, i * t_n + t), acc)
-                acc = fd(acc, wsum)
-            else:
-                for i in range(n):
-                    acc = fa(acc, ld(y, i * t_n + t))
-                acc = fd(acc, i2f(n))
-        st(fw, ym + t, acc)
+                add_acc(fw, xm, x, i * d, d)
+                add_acc(fw, ym, y, i * t_n, t_n)
+        var den = wsum if sw else i2f(n)
+        for j in range(d):
+            st(fw, xm + j, fd(ld(fw, xm + j), den))
+        for tt in range(t_n):
+            st(fw, ym + tt, fd(ld(fw, ym + tt), den))
     if sw:
         # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
         for j in range(d):
-            for k in range(j, d):
-                var acc = Float32(0)
-                var mj = ld(fw, xm + j)
-                var mk = ld(fw, xm + k)
-                for i in range(n):
-                    acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
-                st(fw, gg + j * d + k, acc)
-                st(fw, gg + k * d + j, acc)
+            fill(fw, gg + j * d + j, d - j, Float32(0))
+        for i in range(n):
+            var wi = ld(y, wo + i)
+            for j in range(d):
+                var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+        for j in range(d):
+            for k in range(j + 1, d):
+                st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
     else:
         centered_gram(x, n, d, fw, xm, fw, gg)
-    for t in range(t_n):
-        var ymt = ld(fw, ym + t)
-        for j in range(d):
-            var acc = Float32(0)
-            var mj = ld(fw, xm + j)
-            for i in range(n):
-                var xc = fs(ld(x, i * d + j), mj)
-                if sw:
-                    xc = fm(ld(y, wo + i), xc)
-                acc = fmad(xc, fs(ld(y, i * t_n + t), ymt), acc)
-            st(fw, xty + t * d + j, acc)
+    fill(fw, xty, d * t_n, Float32(0))
+    for i in range(n):
+        var wi = ld(y, wo + i) if sw else Float32(1)
+        for tt in range(t_n):
+            var b = fs(ld(y, i * t_n + tt), ld(fw, ym + tt))
+            if sw:
+                axpy_centered[True](fw, xty + tt * d, b, x, i * d, fw, xm, d, wi)
+            else:
+                axpy_centered(fw, xty + tt * d, b, x, i * d, fw, xm, d)
     var best = 0
     var best_err = Float32(0)
     if a_n > 1:
@@ -102,48 +292,45 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
             _ = cholesky(fw, mm, d)
             copy(fw, rhs, fw, xty, d)
             chol_solve(fw, mm, d, fw, rhs)
+            # map: each row's leave-one-out residual (its own solve), then
+            # the fold of err rows ascending (lane linear-cpu)
+            var fwp = fw
+
+            def rows_loo(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm fwp, imm ym, imm xm, imm rhs,
+                                            imm zz, imm mm, imm sw, imm fi, imm wo, imm wsum, imm la, imm lb}:
+                comptime if is_gpu():
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, fwp + zz, mm, sw, fi, wo, wsum, fwp + la, fwp + lb, lo, hi)
+                else:
+                    var zb = List[Float32](length=max(d, 1), fill=Float32(0))
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, FP(unsafe_from_address=Int(zb.unsafe_ptr())), mm, sw, fi,
+                              wo, wsum, fwp + la, fwp + lb, lo, hi)
+                    _ = zb^
+
+            par_rows(rows_loo, n)
             var err = Float32(0)
             for i in range(n):
-                var e = fs(ld(y, i), ld(fw, ym))
-                for j in range(d):
-                    var xc = fs(ld(x, i * d + j), ld(fw, xm + j))
-                    st(fw, zz + j, xc)
-                    e = fs(e, fm(xc, ld(fw, rhs + j)))
-                chol_solve(fw, mm, d, fw, zz)
-                if sw:
-                    # their GCV on the sqrt(w)-rescaled problem
-                    var wi = ld(y, wo + i)
-                    var q = Float32(0)
-                    for j in range(d):
-                        q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), q)
-                    var h = fm(wi, q)
-                    if fi:
-                        h = fa(fd(wi, wsum), h)
-                    var loo = fd(e, fs(Float32(1), h))
-                    err = fmad(fm(wi, loo), loo, err)
-                else:
-                    var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
-                    for j in range(d):
-                        h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), h)
-                    var loo = fd(e, fs(Float32(1), h))
-                    err = fmad(loo, loo, err)
+                err = fmad(ld(fw, la + i), ld(fw, lb + i), err)
             err = fd(err, i2f(n))
             st(res, t_n * d + t_n + 2 + a, err)
             if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum
                 best = a
                 best_err = err
-    var alpha = ld(fp, best)
-    copy(fw, mm, fw, gg, d * d)
-    for j in range(d):
-        st(fw, mm + j * d + j, fa(ld(fw, mm + j * d + j), alpha))
-    _ = cholesky(fw, mm, d)
-    for t in range(t_n):
-        copy(fw, rhs, fw, xty + t * d, d)
-        chol_solve(fw, mm, d, fw, rhs)
-        copy(res, t * d, fw, rhs, d)
-        var acc = Float32(0)
-        for j in range(d):
-            acc = fmad(ld(fw, xm + j), ld(fw, rhs + j), acc)
-        st(res, t_n * d + t, fs(ld(fw, ym + t), acc) if fi else Float32(0))
-    st(res, t_n * d + t_n, alpha)
-    st(res, t_n * d + t_n + 1, -best_err)
+    _ridge_solve_best(fp, res, fw, d, t_n, fi, best, best_err)
+
+
+def ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """ip: [n_targets T, fit_intercept, n_alphas A, sample_weight]; fp: alphas (A).
+    With sample_weight, y = targets n*T | weights n (weighted means, the
+    weighted Gram, and their weighted GCV errors w_i e_i^2 / (1 - h_i)^2).
+    y: n x T row-major. A == 1: fit; A > 1 (T == 1): leave-one-out choice.
+    res: coef T*d | intercept T | alpha | best_score | A mean squared LOO errors.
+    fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d | loo terms 2n
+    (z and the loo terms: the host schedule's; the team keeps them in its
+    own words and row buffer).
+    Team form: means, Gram and X'Y one thread per output cell, the
+    leave-one-out rows across the team (each thread solves into its own d
+    words), the Cholesky solves and every fold of the LOO errors on the lead."""
+    comptime if is_gpu():
+        _ridge_fit_team(t, x, y, n, d, ip, fp, res, fw, iw)
+    else:
+        _ridge_fit_host(x, y, n, d, ip, fp, res, fw, iw)

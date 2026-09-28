@@ -12,7 +12,7 @@ from std.ffi import _Global
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from std.time import perf_counter_ns
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
@@ -116,7 +116,7 @@ def scan_finite_f32(src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Floa
         for k in range(chunks):
             _chunk(k)
     else:
-        sync_parallelize(_chunk, chunks)
+        host_parallelize(_chunk, chunks)
     _ = len(flags)
     for k in range(chunks):
         if flags[k] != 0:

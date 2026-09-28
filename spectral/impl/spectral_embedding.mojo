@@ -64,11 +64,16 @@ def transform(
     n_features: Int,
     mut embedding: List[Float32],
     mut trace: IdentityTrace,
+    tolerance: Float32 = Float32(1e-5),
 ) raises -> Int:
     """`transform(handle, config, dataset, embedding)` (`:14-21`). Returns
     the number of embedding columns (`n_components`, or `n_components - 1`
-    when `drop_first`)."""
-    return transform_dataset(ctx, to_cuvs(config), dataset, n_samples, n_features, embedding, trace)
+    when `drop_first`). `tolerance` is the Lanczos tolerance cuVS's params
+    carry (default its `1e-5f`); scikit-learn's float `eigen_tol` sets it
+    (lane/algos-decomp, 2026-09-27)."""
+    var params = to_cuvs(config)
+    params.tolerance = tolerance
+    return transform_dataset(ctx, params, dataset, n_samples, n_features, embedding, trace)
 
 
 def transform_connectivity(
@@ -77,7 +82,11 @@ def transform_connectivity(
     connectivity_graph: CooGraph,
     mut embedding: List[Float32],
     mut trace: IdentityTrace,
+    tolerance: Float32 = Float32(1e-5),
 ) raises -> Int:
     """`transform(handle, config, connectivity_graph, embedding)` (`:22-29`)
-    and the `(rows, cols, vals)` form (`:31-47`)."""
-    return transform_graph(ctx, to_cuvs(config), connectivity_graph, embedding, trace)
+    and the `(rows, cols, vals)` form (`:31-47`). `tolerance` as in
+    `transform`."""
+    var params = to_cuvs(config)
+    params.tolerance = tolerance
+    return transform_graph(ctx, params, connectivity_graph, embedding, trace)

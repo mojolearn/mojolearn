@@ -12,6 +12,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
+    geqrf_py, orgqr_py, als_cg_rows_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
@@ -64,6 +65,9 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[als_rows_py[HostExec]]("x_decomp_als_rows")
         m.def_function[absmax_sign_py[HostExec]]("x_decomp_absmax_sign")
         m.def_function[qr_r_py[HostExec]]("x_decomp_qr_r")
+        m.def_function[geqrf_py[HostExec]]("x_decomp_geqrf")
+        m.def_function[orgqr_py[HostExec]]("x_decomp_orgqr")
+        m.def_function[als_cg_rows_py[HostExec]]("x_decomp_als_cg_rows")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         return m.finalize()

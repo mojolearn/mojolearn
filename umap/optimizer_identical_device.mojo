@@ -99,6 +99,10 @@ comptime UMAP_LIVE_ROW = umap_device_optimizer_live_row_for[
 comptime UMAP_LIVE_BOTH_ARM = is_defined["MOJOLEARN_UMAP_LIVE_BOTH_ARM"]()
 
 
+#: The run-time-dimension kernel's per-vertex row width (UMAP_MAX_COMPONENTS).
+comptime UMAP_RT_WIDTH = 32
+
+
 def _clip(value: Float32) -> Float32:
     """`umap/optimizer.mojo::_clip`, repeated here so this module imports nothing from the host loops (they import this one)."""
     if value > UMAP_IDENTICAL_GRAD_CLIP:
@@ -237,6 +241,136 @@ def umap_identical_epoch_kernel[C: Int](
         destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
 
 
+def umap_identical_epoch_kernel_rt(
+    source: MutPointer[Float32, MutAnyOrigin],
+    row_offsets: MutPointer[UInt32, MutAnyOrigin],
+    tails: MutPointer[UInt32, MutAnyOrigin],
+    scaled: MutPointer[Float32, MutAnyOrigin],
+    destination: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    epoch_in: Int32,
+    alpha: Float32,
+    negative_rate_in: Int32,
+    neg2ab: Float32,
+    rep2b: Float32,
+    a: Float32,
+    b: Float32,
+    seed: UInt64,
+    c_in: Int32,
+):
+    """`umap_identical_epoch_kernel[C]` with the dimension C read at run
+    time (n_components 1 and 4 to 32; lane/algos-decomp, 2026-09-27,
+    DEVIATION 5322): the same statements in the same order, the per-vertex
+    rows in local arrays of UMAP_RT_WIDTH instead of 4-wide registers. 2 and
+    3 keep the comptime kernel, so their bits are unchanged."""
+    var C = Int(c_in)
+    var v = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if v >= n:
+        return
+    var epoch = Int(epoch_in)
+    var epoch_f = Float32(epoch)
+    var next_f = Float32(epoch + 1)
+    var epoch_u = UInt32(epoch)
+    var n_u = UInt32(n)
+    var key = SIMD[DType.uint32, 2](
+        UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF)
+    )
+    var x = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    var acc = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+    for c in range(C):
+        x[c] = source.unsafe_load(v * C + c)
+    var begin = Int(row_offsets.unsafe_load(v))
+    var end = Int(row_offsets.unsafe_load(v + 1))
+    var rate = Int(negative_rate_in)
+    for e in range(begin, end):
+        var s = scaled.unsafe_load(e)
+        if Int(next_f * s) <= Int(epoch_f * s):
+            continue
+        var u = Int(tails.unsafe_load(e))
+        var delta = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+        var d2 = Float32(0.0)
+        for c in range(C):
+            delta[c] = ftz(x[c] - source.unsafe_load(u * C + c))
+            d2 = ftz(identical_mul_add(delta[c], delta[c], d2))
+        if d2 > Float32(0.0):
+            var dp = identical_pow(d2, b)
+            var coeff = identical_div(
+                identical_mul(neg2ab, identical_div(dp, d2)),
+                ftz(identical_mul_add(a, dp, Float32(1.0))),
+            )
+            for c in range(C):
+                var g = ftz(
+                    identical_mul(alpha, _clip(ftz(identical_mul(coeff, delta[c]))))
+                )
+                comptime if UMAP_LIVE_BOTH_ARM:
+                    # Trial arm only: both moves applied to the running row.
+                    x[c] = ftz(x[c] + g)
+                    x[c] = ftz(x[c] + g)
+                elif UMAP_LIVE_ROW:
+                    # DEVIATION 2668: the head move lands on the running
+                    # position now, so the next edge's delta sees it; the
+                    # mirror (tail) move stays deferred to the epilogue.
+                    x[c] = ftz(x[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+                else:
+                    acc[c] = ftz(acc[c] + g)
+                    acc[c] = ftz(acc[c] + g)
+        var draw = SIMD[DType.uint32, 4](0)
+        for j in range(rate):
+            var lane = j & 3
+            if lane == 0:
+                draw = philox4x32_10(
+                    SIMD[DType.uint32, 4](
+                        UInt32(e & 0xFFFFFFFF),
+                        UInt32((e >> 32) & 0xFFFFFFFF),
+                        epoch_u,
+                        UInt32(j >> 2),
+                    ),
+                    key,
+                )
+            var other = Int(draw[lane] % n_u)
+            if other == v:
+                continue
+            var nd = InlineArray[Float32, UMAP_RT_WIDTH](fill=Float32(0.0))
+            var n2 = Float32(0.0)
+            for c in range(C):
+                nd[c] = ftz(x[c] - source.unsafe_load(other * C + c))
+                n2 = ftz(identical_mul_add(nd[c], nd[c], n2))
+            if n2 > Float32(0.0):
+                var np_ = identical_pow(n2, b)
+                var coeff = identical_div(
+                    rep2b,
+                    identical_mul(
+                        ftz(Float32(0.001) + n2),
+                        ftz(identical_mul_add(a, np_, Float32(1.0))),
+                    ),
+                )
+                for c in range(C):
+                    comptime if UMAP_LIVE_ROW or UMAP_LIVE_BOTH_ARM:
+                        # DEVIATION 2668: the repulsive move lands on the
+                        # running position, as cuML's serial kernel applies it.
+                        x[c] = ftz(
+                            x[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
+                            )
+                        )
+                    else:
+                        acc[c] = ftz(
+                            acc[c]
+                            + ftz(
+                                identical_mul(
+                                    alpha, _clip(ftz(identical_mul(coeff, nd[c])))
+                                )
+                            )
+                        )
+    for c in range(C):
+        destination.unsafe_store(v * C + c, ftz(x[c] + acc[c]))
+
+
 def _launch_epoch[C: Int](
     ctx: DeviceContext,
     source: MutPointer[Float32, MutAnyOrigin],
@@ -283,8 +417,8 @@ def optimize_csr_layout_identical_device(
     seed: UInt64,
 ) raises -> List[Float32]:
     """Run `n_epochs` device epochs over a validated positive-edge CSR (`row_offsets` has `n_samples + 1` entries; `scaled[e]` is the edge's weight over the graph maximum, flushed)."""
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP device optimizer supports 2D/3D layouts")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP device optimizer supports 1 to 32 dimensions")
     if len(initial) != n_samples * n_components or len(row_offsets) != n_samples + 1:
         raise Error("UMAP device optimizer input shape mismatch")
     if len(tails) != len(scaled) or len(tails) == 0:
@@ -336,10 +470,21 @@ def optimize_csr_layout_identical_device(
                 ctx, src, p_offsets, p_tails, p_scaled, dst, n_samples, epoch,
                 alpha, negative_rate, neg2ab, rep2b, a, b, seed,
             )
-        else:
+        elif n_components == 3:
             _launch_epoch[3](
                 ctx, src, p_offsets, p_tails, p_scaled, dst, n_samples, epoch,
                 alpha, negative_rate, neg2ab, rep2b, a, b, seed,
+            )
+        else:
+            ctx.enqueue_function[umap_identical_epoch_kernel_rt](
+                src, p_offsets, p_tails, p_scaled, dst,
+                Int32(n_samples), Int32(epoch), alpha, Int32(negative_rate),
+                neg2ab, rep2b, a, b, seed, Int32(n_components),
+                grid_dim=(
+                    (n_samples + UMAP_IDENTICAL_OPT_TPB - 1) // UMAP_IDENTICAL_OPT_TPB,
+                    1, 1,
+                ),
+                block_dim=(UMAP_IDENTICAL_OPT_TPB, 1, 1),
             )
     var host_out = ctx.enqueue_create_host_buffer[DType.float32](len(initial))
     if n_epochs % 2 == 0:

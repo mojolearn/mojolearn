@@ -35,6 +35,8 @@ because it is symmetric -- and the full tile is `[nnz x batch]` with
 `[batch x nnz]` column-major tile read the other way.
 """
 
+from std.gpu import block_dim, block_idx, thread_idx
+from checks.numerics import ftz
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from svm.checks.device_select import (
@@ -53,6 +55,7 @@ from svm.impl.distance.kernel_matrices import (
 from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
+    KERNEL_PRECOMPUTED,
     KERNEL_RBF,
     KernelParams,
 )
@@ -65,6 +68,45 @@ comptime CACHE_BATCHING_INITIALIZED = 2
 
 def _grid(n: Int) -> Int:
     return (n + SEL_TPB - 1) // SEL_TPB
+
+
+def gather_cols_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    idx: MutPointer[Int32, MutAnyOrigin],
+    n_rows_in: Int32,
+    src_cols_in: Int32,
+    n_idx_in: Int32,
+):
+    """kernel='precomputed', `extractColumnsForPrecomputed` for the square
+    tile: `dst[r * n_idx + c] = ftz(src[r * src_cols + idx[c]])`, a copy
+    with subnormals flushed (as every computed kernel cell is)."""
+    var w = Int(n_idx_in)
+    var total = Int(n_rows_in) * w
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < total:
+        var r = t // w
+        var c = t - r * w
+        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(idx.unsafe_load(c)))))
+
+
+def slice_cols_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    src_cols_in: Int32,
+    offset_in: Int32,
+    width_in: Int32,
+):
+    """kernel='precomputed', the full tile's batch: `dst[r * width + c] =
+    ftz(src[r * src_cols + offset + c])`, a flushed copy."""
+    var w = Int(width_in)
+    var total = Int(n_rows_in) * w
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < total:
+        var r = t // w
+        var c = t - r * w
+        dst.unsafe_store(t, ftz(src.unsafe_load(r * Int(src_cols_in) + Int(offset_in) + c)))
 
 
 @fieldwise_init
@@ -278,6 +320,15 @@ struct KernelCache(Movable):
                 self.ws_idx_mod.unsafe_ptr(), Int32(n_ws),
                 grid_dim=_grid(n_ws), block_dim=SEL_TPB,
             )
+        if self.kp.kernel == KERNEL_PRECOMPUTED:
+            # X IS the n x n kernel matrix: the gathered rows' ws columns.
+            ctx.enqueue_function[gather_cols_kernel](
+                self.kernel_tile.unsafe_ptr(), self.x_ws_dense.unsafe_ptr(),
+                self.ws_idx_mod.unsafe_ptr(), Int32(n_ws), Int32(self.n_cols),
+                Int32(n_ws),
+                grid_dim=_grid(n_ws * n_ws), block_dim=SEL_TPB,
+            )
+            return
         # The square tile is `x_ws . x_ws^T`: the SAME buffer on both sides.
         # Mojo refuses one buffer as two `mut` arguments (the same refusal
         # `core/gemm.mojo::gemm_tn_via_transpose` records), so the right
@@ -350,7 +401,15 @@ struct KernelCache(Movable):
         if batch_id != bd.batch_id + 1:
             raise Error("svm KernelCache: Inconsistent batch_id!")
         var n_uncached = bd.nnz_da - bd.n_cached
-        if n_uncached > 0:
+        if n_uncached > 0 and self.kp.kernel == KERNEL_PRECOMPUTED:
+            # X IS the n x n kernel matrix: the gathered rows' batch columns.
+            ctx.enqueue_function[slice_cols_kernel](
+                self.kernel_tile.unsafe_ptr(), self.x_ws_dense.unsafe_ptr(),
+                Int32(n_uncached), Int32(self.n_cols), Int32(offset),
+                Int32(batch_size),
+                grid_dim=_grid(n_uncached * batch_size), block_dim=SEL_TPB,
+            )
+        elif n_uncached > 0:
             var xb = x.create_sub_buffer[DType.float32](
                 offset * self.n_cols, batch_size * self.n_cols
             )
