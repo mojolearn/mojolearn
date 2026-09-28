@@ -285,3 +285,27 @@ were running; shard 1 finished 126 lanes (every exposed lane AGREE except the
 kmeans and x-decomp failures above). The AMD column of the global check is
 do-amd (MI325X, gfx942) through the steward shards. **The MI300X column is
 owed until Hot Aisle is topped up.**
+
+## Seam arms (found by the first Apple/do-amd shards at 003ea19ba)
+
+algos_lane_check runs every family's .checks seam arms at the clean stage and
+stops the whole run at the first arm that fails, so the first 22 shard runs
+reached no lane. What they found:
+- **ann.checks:11 cagra_5820_prune_high_rank.patch did not apply** (16 runs):
+  cut by algos-ann-b before ann-cpu moved CAGRA prune into host tasks
+  (3cfc52318). INTEGRATION: re-cut on lane/merged (8ab426638), same edit.
+- **trees.checks seam_5601_fused / seam_5603_libm_exp did not apply**: my own
+  xtrees/ops.mojo import change (sync_parallelize -> host_parallelize) was in
+  their context. INTEGRATION: fixed in 8ab426638. Every .checks patch of every
+  family now passes `git apply --check`.
+- **x_decomp/checks/sabotage/host_ew_onemsq_fused.patch NOT SEEN** by
+  fold_ew_check.mojo on m3ultra-b and m4-a (Arm): the host `1 - x*x` spelled
+  fused is not separated from the pinned unfused spelling there. Owner:
+  decomp-cpu (its host arm). If the Arm host compiler contracts the pinned
+  spelling, the decomp lanes' Apple CPU column will show it.
+- **x_cluster/checks/sabotage/5103_kth.patch NOT SEEN** by kth_check.mojo on
+  m4-a (4 runs). Owner: algos-cluster.
+The Apple/do-amd shards were withdrawn (70 queued copies, my own) and
+resubmitted at the lane/merged tip with the seam step skipped (lane verdicts
+only; seam arms are not part of the global check's lane comparison), one lane
+at a time so one failing arm cannot stop a shard.
