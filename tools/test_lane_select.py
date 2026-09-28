@@ -1579,9 +1579,15 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
       neural_inference.py  40 -> 41  optim-maximize (SGD/Adam/AdamW
                                      maximize=, DEVIATION 6200), through the
                                      same optimizer route as optim-adam-clip
-                                     and optim-sgd; no old lane moved"""
+                                     and optim-sgd; no old lane moved
+      kmeans_oracle        71 -> 75  measured on lane/neural over main
+                                     468af3718; the 75 include the x-cluster,
+                                     x-ann and x-decomp expansion lanes merged
+                                     2026-09-27/28, and no neural or linear
+                                     .core lane is among them (main's own
+                                     change, found red after the merge)"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 71),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 75),
                       ("core/gbdt_host_predict.mojo", 51),
                       ("core/forest_host_predict.mojo", 86),
                       ("core/forest_inference.mojo", 50),
