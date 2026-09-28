@@ -16,7 +16,7 @@ from x_decomp.api import (
 from x_decomp.device import DevExec
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_rowsum_py,
-    dev_sqdist_py, dev_upload_py,
+    dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py,
 )
 
 
@@ -59,6 +59,8 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
+        m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
+        m.def_function[dev_orth_py]("x_decomp_dev_orth")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
         return m.finalize()

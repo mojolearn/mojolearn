@@ -22,7 +22,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import (
+    absmax_scratch,
     colsum_scratch,
+    launch_absmax,
+    orth_on_device,
     gemm_scratch,
     launch_colsum,
     launch_ew,
@@ -225,3 +228,36 @@ def dev_sqdist_py(a: PythonObject, b: PythonObject, dst: PythonObject, p: Python
     var pw = Float32(Float64(py=p[4])) if len(p) > 4 else Float32(2)
     launch_sqdist(xd_ctx(), _ptr(_id(a), na * d), _ptr(_id(b), nb * d), _ptr(_id(dst), na * nb), na, nb, d, kind, pw)
     return PythonObject(na * nb)
+
+
+def dev_absmax_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    # p = [n, d, by_col], as x_decomp_absmax_sign
+    var n = _n(p, 0)
+    var d = _n(p, 1)
+    var by_col = Int(py=p[2]) != 0
+    var cnt = d if by_col else n
+    var ns = absmax_scratch(n, d, by_col)
+    var sid = pool_alloc(ns)
+    launch_absmax(xd_ctx(), _ptr(_id(a), n * d), _ptr(_id(dst), cnt), _ptr(sid, ns), n, d, by_col)
+    pool_free(sid)
+    return PythonObject(cnt)
+
+
+def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
+    """dst = the orthonormalized columns of a (DevExec.orth's passes on the
+    device copy; a is unchanged)."""
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var cells = m * l
+    var ia = _id(a)
+    var io = _id(dst)
+    _ = _ptr(ia, cells)
+    _ = _ptr(io, cells)
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    if cells > 0:
+        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        with GILReleased(Python()):
+            orth_on_device(ctx, sub, m, l)
+    return PythonObject(cells)

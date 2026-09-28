@@ -432,6 +432,10 @@ class _Kit:
     def orth(self, A):
         """A copy of A with its columns orthonormalized: two passes of the
         Householder R and a row-parallel A R^-1 (DEVIATION 5309)."""
+        if A.r * A.c and self._res():
+            Q = self._dout(A.r, A.c)
+            self.b.x_decomp_dev_orth(self._did(A), Q._d.id, [A.r, A.c])
+            return Q
         Q = A.copy()
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
         return Q
@@ -531,6 +535,10 @@ class _Kit:
         (ties to the lower index) is negative (x_decomp/cells.mojo
         `absmax_sign_cell`, DEVIATION 5317)."""
         cnt = A.c if by_col else A.r
+        if cnt and A.r * A.c and self._res():
+            out = self._dout(1, cnt)
+            self.b.x_decomp_dev_absmax(self._did(A), out._d.id, [A.r, A.c, 1 if by_col else 0])
+            return [v < 0 for v in out.s]
         out = _M.zeros(1, cnt)
         if cnt and len(A.s):
             self.b.x_decomp_absmax_sign(A.addr, out.addr, [A.r, A.c, 1 if by_col else 0])

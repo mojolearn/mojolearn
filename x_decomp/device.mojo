@@ -498,6 +498,66 @@ def launch_sqdist(
     )
 
 
+def absmax_scratch(n: Int, d: Int, by_col: Bool) -> Int:
+    var cnt = d if by_col else n
+    var length = n if by_col else d
+    var nb = (length + FOLD_BLOCK - 1) // FOLD_BLOCK
+    return 2 * nb * cnt if nb > 1 and cnt > 0 else 0
+
+
+def launch_absmax(ctx: DeviceContext, a: F32Ptr, dst: F32Ptr, p: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
+    """absmax_sign_cell per column (by_col) or row, in FOLD_BLOCK slices past
+    one block (DEVIATION 5317), enqueued."""
+    var cnt = d if by_col else n
+    var length = n if by_col else d
+    var nb = (length + FOLD_BLOCK - 1) // FOLD_BLOCK
+    if nb > 1:
+        ctx.enqueue_function[absmax_part_kernel](
+            a, p, Int32(n), Int32(d), Int32(1 if by_col else 0), Int32(nb),
+            grid_dim=_blocks(nb * cnt), block_dim=TPB,
+        )
+        ctx.enqueue_function[absmax_fold_kernel](p, dst, Int32(cnt), Int32(nb), grid_dim=_blocks(cnt), block_dim=TPB)
+    else:
+        ctx.enqueue_function[absmax_kernel](
+            a, dst, Int32(n), Int32(d), Int32(1 if by_col else 0), grid_dim=_blocks(cnt), block_dim=TPB,
+        )
+
+
+def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:
+    """DevExec.orth's two passes on a device matrix, in place (its values
+    replaced by the orthonormalized columns): R of the matrix (`qr_factor`
+    on a device copy, as `device_qr_r`), the rank guard on the host
+    (DEVIATION 5318), then A R^-1 by rows (`trsm_kernel`, DEVIATION 5309).
+    Waits for the device (the guard reads R on the host)."""
+    var cells = m * l if m * l > 0 else 1
+    var dq = ctx.enqueue_create_buffer[DType.float32](cells)
+    var dw = ctx.enqueue_create_buffer[DType.float32](cells)
+    var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
+    var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
+    var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
+    for p in range(2):
+        var src = da if p == 0 else dq
+        var dst = dq if p == 0 else da
+        ctx.enqueue_copy(dst_buf=dw, src_buf=src)
+        ctx.synchronize()
+        _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+        _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+        ctx.synchronize()
+        orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
+        ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
+        ctx.enqueue_function[trsm_kernel](
+            src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
+        )
+        ctx.synchronize()
+        _ = src^
+        _ = dst^
+    _ = dq^
+    _ = dw^
+    _ = scratch^
+    _ = r_buf^
+    ctx.synchronize()
+
+
 @fieldwise_init
 struct DevExec(Exec):
     @staticmethod
@@ -704,43 +764,15 @@ struct DevExec(Exec):
     def orth(a: F32Ptr, m: Int, l: Int) raises:
         """Two passes of: R of the matrix (`qr_factor` on a device copy, as
         `device_qr_r`), the rank guard on the host, then A R^-1 by rows
-        (`trsm_kernel`). The matrix stays on the device between the passes:
-        one upload, one download (it had been uploaded twice and downloaded
-        once per pass; the same values reach every kernel)."""
+        (`trsm_kernel`); `orth_on_device`. One upload, one download."""
         var ctx = xd_ctx()
-        var cells = m * l if m * l > 0 else 1
         var da = _up(ctx, a, m * l)
-        var dq = ctx.enqueue_create_buffer[DType.float32](cells)
-        var dw = ctx.enqueue_create_buffer[DType.float32](cells)
-        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
-        var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
-        var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
-        for p in range(2):
-            var src = da if p == 0 else dq
-            var dst = dq if p == 0 else da
-            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
-            ctx.synchronize()
-            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
-            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-            ctx.synchronize()
-            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
-            ctx.enqueue_function[trsm_kernel](
-                src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
-            )
-            ctx.synchronize()
-            _ = src^
-            _ = dst^
+        orth_on_device(ctx, da, m, l)
         _down(ctx, da, a, m * l)
         ctx.synchronize()
         _ = da^
-        _ = dq^
-        _ = dw^
-        _ = scratch^
-        _ = r_buf^
         ctx.synchronize()
         _ = ctx^
-        _ = r^
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
@@ -965,23 +997,10 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var cnt = d if by_col else n
-        var length = n if by_col else d
-        var nb = (length + FOLD_BLOCK - 1) // FOLD_BLOCK
         var dout = ctx.enqueue_create_buffer[DType.float32](cnt if cnt > 0 else 1)
-        var dp = ctx.enqueue_create_buffer[DType.float32](2 * nb * cnt if nb > 1 and cnt > 0 else 1)
-        if nb > 1:
-            ctx.enqueue_function[absmax_part_kernel](
-                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0), Int32(nb),
-                grid_dim=_blocks(nb * cnt), block_dim=TPB,
-            )
-            ctx.enqueue_function[absmax_fold_kernel](
-                dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(cnt), Int32(nb), grid_dim=_blocks(cnt), block_dim=TPB
-            )
-        else:
-            ctx.enqueue_function[absmax_kernel](
-                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
-                grid_dim=_blocks(cnt), block_dim=TPB,
-            )
+        var ns = absmax_scratch(n, d, by_col)
+        var dp = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+        launch_absmax(ctx, _p(da), _p(dout), _p(dp), n, d, by_col)
         _down(ctx, dout, dst, cnt)
         ctx.synchronize()
         _ = da^
