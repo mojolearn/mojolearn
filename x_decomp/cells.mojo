@@ -1034,37 +1034,79 @@ def als_cg_row(
 # DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
 # getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
 # 5308_getrs_order.
+def lu_pivot(a: F32Ptr, piv: I32Ptr, k: Int, n: Int):
+    """Step k's pivot row: the largest |a[i, k]| for i >= k, ties to the
+    LOWEST row (strict >), into piv[k]."""
+    var p = k
+    var best = abs(ftz(a.unsafe_load(k * n + k)))
+    for i in range(k + 1, n):
+        var v = abs(ftz(a.unsafe_load(i * n + k)))
+        if v > best:
+            best = v
+            p = i
+    piv.unsafe_store(k, Int32(p))
+
+
+@always_inline
+def lu_swap_elem(a: F32Ptr, piv: I32Ptr, k: Int, j: Int, n: Int):
+    """Column j of rows k and piv[k] exchanged (nothing when they are one)."""
+    var p = Int(piv.unsafe_load(k))
+    if p != k:
+        var t = a.unsafe_load(k * n + j)
+        a.unsafe_store(k * n + j, a.unsafe_load(p * n + j))
+        a.unsafe_store(p * n + j, t)
+
+
+def lu_diag(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int, n: Int):
+    """scal = [the pivot d, 1 when step k eliminates else 0]; an exactly-zero
+    pivot records info = k + 1 (the first one only) and skips the step."""
+    var d = ftz(a.unsafe_load(k * n + k))
+    scal.unsafe_store(0, d)
+    if d == Float32(0):
+        if info.unsafe_load(0) == Float32(0):
+            info.unsafe_store(0, Float32(k + 1))
+        scal.unsafe_store(1, Float32(0))
+    else:
+        scal.unsafe_store(1, Float32(1))
+
+
+@always_inline
+def lu_l_elem(a: F32Ptr, scal: F32Ptr, k: Int, i: Int, n: Int):
+    """l[i] = a[i, k] / d, stored in place (i > k)."""
+    if scal.unsafe_load(1) != Float32(0):
+        a.unsafe_store(i * n + k, div0(a.unsafe_load(i * n + k), scal.unsafe_load(0)))
+
+
+@always_inline
+def lu_update_elem(a: F32Ptr, scal: F32Ptr, k: Int, i: Int, j: Int, n: Int):
+    """a[i, j] = -l[i] a[k, j] + a[i, j], one fused multiply-add (i, j > k)."""
+    if scal.unsafe_load(1) != Float32(0):
+        var l = a.unsafe_load(i * n + k)
+        a.unsafe_store(i * n + j, ftz(identical_mul_add(-l, ftz(a.unsafe_load(k * n + j)), ftz(a.unsafe_load(i * n + j)))))
+
+
 def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     """In-place LU with partial pivoting (LAPACK getrf semantics, unblocked):
     the pivot is the largest |a[i, k]| for i >= k, ties broken by the LOWEST
     row index (strict >). L unit-lower below the diagonal, U on and above.
-    info[0] = 0 on success, k + 1 at the first exactly-zero pivot."""
+    info[0] = 0 on success, k + 1 at the first exactly-zero pivot. The host
+    column runs these cells in this loop; the device the same cells with the
+    swap, the multipliers and the trailing update in parallel (each cell of
+    the trailing matrix takes step k's one fused multiply-add, steps in
+    order; lane/algos-decomp 2026-09-28: one device thread took 7 s at 512)."""
     info.unsafe_store(0, Float32(0))
+    var scal = InlineArray[Float32, 2](fill=Float32(0))
+    var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
     for k in range(n):
-        var p = k
-        var best = abs(ftz(a.unsafe_load(k * n + k)))
+        lu_pivot(a, piv, k, n)
+        for j in range(n):
+            lu_swap_elem(a, piv, k, j, n)
+        lu_diag(a, info, sp, k, n)
         for i in range(k + 1, n):
-            var v = abs(ftz(a.unsafe_load(i * n + k)))
-            if v > best:
-                best = v
-                p = i
-        piv.unsafe_store(k, Int32(p))
-        if p != k:
-            for j in range(n):
-                var t = a.unsafe_load(k * n + j)
-                a.unsafe_store(k * n + j, a.unsafe_load(p * n + j))
-                a.unsafe_store(p * n + j, t)
-        var d = ftz(a.unsafe_load(k * n + k))
-        if d == Float32(0):
-            if info.unsafe_load(0) == Float32(0):
-                info.unsafe_store(0, Float32(k + 1))
-            continue
+            lu_l_elem(a, sp, k, i, n)
         for i in range(k + 1, n):
-            var l = div0(a.unsafe_load(i * n + k), d)
-            a.unsafe_store(i * n + k, l)
             for j in range(k + 1, n):
-                var v = ftz(identical_mul_add(-l, ftz(a.unsafe_load(k * n + j)), ftz(a.unsafe_load(i * n + j))))
-                a.unsafe_store(i * n + j, v)
+                lu_update_elem(a, sp, k, i, j, n)
 
 
 def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):

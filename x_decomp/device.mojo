@@ -46,7 +46,12 @@ from x_decomp.cells import (
     gamma_cell,
     lasso_row,
     lda_doc_row,
+    lu_diag,
+    lu_l_elem,
+    lu_pivot,
     lu_serial,
+    lu_swap_elem,
+    lu_update_elem,
     omp_row,
     lu_solve_serial,
     orth_rank_guard,
@@ -199,6 +204,40 @@ def rand_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: I
 def lu_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         lu_serial(a, piv, Int(n), info)
+
+
+def lu_info_init_kernel(info: F32Ptr):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        info.unsafe_store(0, Float32(0))
+
+
+def lu_pivot_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        lu_pivot(a, piv, Int(k), Int(n))
+
+
+def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(n):
+        lu_swap_elem(a, piv, Int(k), j, Int(n))
+
+
+def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        lu_diag(a, info, scal, Int(k), Int(n))
+
+
+def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        lu_l_elem(a, scal, Int(k), i, Int(n))
+
+
+def lu_update_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    var w = Int(n) - Int(k) - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if w > 0 and t < w * w:
+        lu_update_elem(a, scal, Int(k), Int(k) + 1 + t // w, Int(k) + 1 + t % w, Int(n))
 
 
 def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
@@ -509,9 +548,26 @@ struct DevExec(Exec):
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_function[lu_kernel](
-            da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1
-        )
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        # lu_serial's cells, step by step: the pivot search one thread, the
+        # swap, the multipliers and the trailing update one thread per cell
+        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for k in range(n):
+            ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
+            ctx.enqueue_function[lu_swap_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+            ctx.enqueue_function[lu_diag_kernel](
+                da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
+            )
+            if n - k - 1 > 0:
+                ctx.enqueue_function[lu_l_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                )
+                ctx.enqueue_function[lu_update_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n),
+                    grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
+                )
         _down(ctx, da, a, n * n)
         _down_i(ctx, dp, piv, n)
         _down(ctx, di, info, 1)
@@ -519,6 +575,7 @@ struct DevExec(Exec):
         _ = da^
         _ = dp^
         _ = di^
+        _ = ds^
         ctx.synchronize()
         _ = ctx^
 
