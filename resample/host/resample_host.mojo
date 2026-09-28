@@ -74,7 +74,14 @@ from metrics.checks.pinned_sum import (
 )
 from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
+    RESAMPLE_KIND_BOOTSTRAP_SECOND,
     RESAMPLE_KIND_MONTE_CARLO,
+    RESAMPLE_KIND_PERM_SAMPLES,
+    RESAMPLE_KIND_UTILS_PERMUTE,
+    RESAMPLE_KIND_UTILS_REPLACE,
+    utils_first_by_key,
+    utils_validate,
+    draw_pair_flip,
     RESAMPLE_KIND_PERMUTATION,
     draw_permutation_key,
     draw_row_index,
@@ -91,7 +98,11 @@ from resample.checks.intervals import (
     PValue,
     alpha_for,
     basic_interval,
-    bca_refuse,
+    bca_acceleration,
+    bca_acceleration_two,
+    bca_bias_percentile,
+    bca_interval,
+    bca_validate,
     distribution_standard_error,
     narrow_for_alternative,
     percentile_interval,
@@ -387,6 +398,63 @@ def host_point_estimate(
     return _mean_of_sum(host_tree_sum(keptv, kept), kept)
 
 
+def host_jackknife_one(
+    x: List[Float32], n: Int, n_features: Int, stat: Int, left_out: Int
+) -> Float32:
+    """`jackknife_stat_kernel[stat]`'s `theta_i[left_out]` (intervals.mojo,
+    DEVIATION 1700): slot `left_out` of the ordinary `chunk_count(n)` chunking
+    holds `+0.0`, the divisor is `n - 1`, the same tree as every fold here."""
+    var a = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        if i != left_out:
+            a[i] = ftz(x[i * n_features])
+    var m = n - 1
+    var value: Float32
+    if stat == STAT_MEAN:
+        value = _mean_of_sum(host_kernel_fold(a, n), m)
+    elif stat == STAT_DIFF_MEANS:
+        var b = List[Float32](length=n, fill=Float32(0.0))
+        for i in range(n):
+            if i != left_out:
+                b[i] = ftz(x[i * n_features + 1])
+        value = ftz(
+            _mean_of_sum(host_kernel_fold(a, n), m)
+            - _mean_of_sum(host_kernel_fold(b, n), m)
+        )
+    else:
+        var mb = _mean_of_sum(host_kernel_fold(a, n), m)
+        var sq = List[Float32](length=n, fill=Float32(0.0))
+        for i in range(n):
+            if i != left_out:
+                var dv = ftz(ftz(x[i * n_features]) - mb)
+                sq[i] = ftz(identical_mul(dv, dv))
+        value = ftz(identical_sqrt(ftz(identical_div(host_kernel_fold(sq, n), Float32(m - 1)))))
+    return canonicalize_nan(value)
+
+
+def host_jackknife(
+    x: List[Float32], n: Int, n_features: Int, stat: Int
+) -> List[Float32]:
+    """The `n` leave-one-out statistics, `jackknife_stat_kernel`'s output.
+    Each owns one slot, so splitting the range over tasks changes nothing."""
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    var op = out.unsafe_ptr()
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _rows(c: Int) {imm x, imm op, imm chunk, imm n, imm n_features, imm stat}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo, hi):
+            op.unsafe_store(i, host_jackknife_one(x, n, n_features, stat, i))
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+    return out^
+
+
 def host_bootstrap(
     x: List[Float32],
     n: Int,
@@ -448,7 +516,7 @@ def host_bootstrap(
             + String(confidence_level)
         )
     if method == METHOD_BCA:
-        bca_refuse()
+        bca_validate(statistic, n)
     if stat_needs_sort(statistic):
         if n_resamples * n > RESAMPLE_MAX_SORT_CELLS:
             raise Error(
@@ -518,19 +586,226 @@ def host_bootstrap(
     var theta_hat = host_point_estimate(x, n, n_features, statistic, q_or_prop)
     var alpha = alpha_for(confidence_level, alternative)
     var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
     if method == METHOD_BASIC:
         interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jack = host_jackknife(x, n, n_features, statistic)
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration(jack, n)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
     else:
         interval = percentile_interval(sorted_dist, n_resamples, alpha)
     interval = narrow_for_alternative(interval, alternative)
-    var h_lo = Float32(n_resamples - 1) * alpha
+    var h_lo = Float32(n_resamples - 1) * lvl_lo
     var pos_lo = Int(h_lo)
-    var h_hi = Float32(n_resamples - 1) * ftz(Float32(1.0) - alpha)
+    var h_hi = Float32(n_resamples - 1) * lvl_hi
     var pos_hi = Int(h_hi)
     var se = distribution_standard_error(dist, n_resamples)
     return HostBootstrapResult(
         theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
     )
+
+
+def _host_unpaired_validate(
+    x: List[Float32], n_x: Int, y: List[Float32], n_y: Int, n_resamples: Int,
+    method: Int, confidence_level: Float32, r_first: Int,
+) raises:
+    """`estimator.mojo::_unpaired_validate`, word for word."""
+    validate_positions(n_resamples, n_x)
+    validate_positions(n_resamples, n_y)
+    if r_first < 0:
+        raise Error(
+            "bootstrap: r_first must be non-negative; got " + String(r_first)
+        )
+    validate_positions(r_first + n_resamples, n_x)
+    validate_positions(r_first + n_resamples, n_y)
+    if len(x) < n_x or len(y) < n_y:
+        raise Error("bootstrap: paired=False: a sample holds fewer values than its n")
+    for k in range(2):
+        var m = n_x if k == 0 else n_y
+        for i in range(m):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "bootstrap: sample " + String(k) + " contains NaN or"
+                    " infinity at position " + String(i) + " (refused before"
+                    " any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+    if confidence_level <= Float32(0.0) or confidence_level >= Float32(1.0):
+        raise Error(
+            "bootstrap: confidence_level must be in (0, 1); got "
+            + String(confidence_level)
+        )
+    if method == METHOD_BCA and (n_x < 2 or n_y < 2):
+        raise Error(
+            "bootstrap: method='BCa' needs at least 2 observations in each"
+            " sample (each leave-one-out sample must itself have a mean); got"
+            " n_x=" + String(n_x) + ", n_y=" + String(n_y)
+        )
+
+
+def host_bootstrap_unpaired(
+    x: List[Float32],
+    n_x: Int,
+    y: List[Float32],
+    n_y: Int,
+    n_resamples: Int,
+    seed: UInt64,
+    method: Int,
+    confidence_level: Float32,
+    alternative: Int,
+    r_first: Int,
+) raises -> HostBootstrapResult:
+    """`estimator.mojo::bootstrap_unpaired_host` without the device: each
+    replicate's two means are `host_bootstrap_fold_statistic`'s `mean` arm
+    under the two keys, the difference one flushed subtraction."""
+    _host_unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
+    var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
+    var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
+    var dist = List[Float32](length=n_resamples, fill=Float32(0.0))
+    var dp = dist.unsafe_ptr()
+    var tasks = host_predict_task_count(n_resamples)
+    var chunk = host_predict_chunk(n_resamples, tasks)
+
+    def _replicates(c: Int) {imm x, imm y, imm dp, imm chunk, imm n_resamples, imm n_x, imm n_y, imm kx, imm ky, imm r_first}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_resamples)
+        for rr in range(lo, hi):
+            var a = host_bootstrap_fold_statistic(x, n_x, 1, kx, r_first + rr, STAT_MEAN)
+            var b = host_bootstrap_fold_statistic(y, n_y, 1, ky, r_first + rr, STAT_MEAN)
+            dp.unsafe_store(rr, canonicalize_nan(ftz(a - b)))
+
+    if tasks == 1:
+        _replicates(0)
+    else:
+        sync_parallelize(_replicates, tasks)
+    var sorted_dist = host_sorted_by_key(dist, 0, n_resamples)
+    var mx = host_point_estimate(x, n_x, 1, STAT_MEAN, Float32(0.5))
+    var my = host_point_estimate(y, n_y, 1, STAT_MEAN, Float32(0.5))
+    var theta_hat = ftz(mx - my)
+    var alpha = alpha_for(confidence_level, alternative)
+    var interval: Interval
+    var lvl_lo = alpha
+    var lvl_hi = ftz(Float32(1.0) - alpha)
+    if method == METHOD_BASIC:
+        interval = basic_interval(sorted_dist, n_resamples, alpha, theta_hat)
+    elif method == METHOD_BCA:
+        var z0p = bca_bias_percentile(sorted_dist, n_resamples, theta_hat)
+        var jxh = host_jackknife(x, n_x, 1, STAT_MEAN)
+        var jyh = host_jackknife(y, n_y, 1, STAT_MEAN)
+        var j0 = List[Float32](capacity=n_x)
+        for i in range(n_x):
+            j0.append(ftz(jxh[i] - my))
+        var j1 = List[Float32](capacity=n_y)
+        for i in range(n_y):
+            j1.append(ftz(mx - jyh[i]))
+        var ends = bca_interval(
+            sorted_dist, n_resamples, alpha, z0p, bca_acceleration_two(j0, n_x, j1, n_y)
+        )
+        interval = ends.interval
+        lvl_lo = ends.alpha_1
+        lvl_hi = ends.alpha_2
+    else:
+        interval = percentile_interval(sorted_dist, n_resamples, alpha)
+    interval = narrow_for_alternative(interval, alternative)
+    var pos_lo = Int(Float32(n_resamples - 1) * lvl_lo)
+    var pos_hi = Int(Float32(n_resamples - 1) * lvl_hi)
+    var se = distribution_standard_error(dist, n_resamples)
+    return HostBootstrapResult(
+        theta_hat, dist^, sorted_dist^, se, interval, pos_lo, pos_hi
+    )
+
+
+def _host_perm_samples_validate(
+    x: List[Float32], y: List[Float32], two: Bool, n_resamples: Int, r_first: Int
+) raises:
+    """`estimator.mojo::perm_samples_validate`, word for word."""
+    var n = len(x)
+    if n <= 0:
+        raise Error("permutation_test(permutation_type='samples'): the sample is empty")
+    if two and len(y) != n:
+        raise Error(
+            "permutation_test(permutation_type='samples'): the two samples"
+            " must be PAIRED, the same length; got n_x=" + String(n)
+            + ", n_y=" + String(len(y))
+        )
+    validate_positions(n_resamples, n)
+    if r_first < 0:
+        raise Error("permutation_test: r_first must be non-negative; got " + String(r_first))
+    validate_positions(r_first + n_resamples, n)
+    for k in range(2 if two else 1):
+        for i in range(n):
+            var v = x[i] if k == 0 else y[i]
+            if v != v or v > Float32(3.4e38) or v < Float32(-3.4e38):
+                raise Error(
+                    "permutation_test: sample " + String(k) + " contains NaN"
+                    " or infinity at position " + String(i) + " (refused"
+                    " before any launch, IDENTITY_PATHS row 39 FACT 2)"
+                )
+
+
+def host_permutation_samples(
+    x: List[Float32],
+    y: List[Float32],
+    two: Bool,
+    n_resamples: Int,
+    seed: UInt64,
+    alternative: Int,
+    r_first: Int,
+) raises -> HostPermutationResult:
+    """`estimator.mojo::permutation_samples_host` without the device: each
+    replicate's arranged columns (`perm_samples_kernel`'s lanes) folded by
+    `host_kernel_fold`, the kernel's tree and chain."""
+    _host_perm_samples_validate(x, y, two, n_resamples, r_first)
+    var n = len(x)
+    var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
+    var null_dist = List[Float32](length=n_resamples, fill=Float32(0.0))
+    var np_ = null_dist.unsafe_ptr()
+    var tasks = host_predict_task_count(n_resamples)
+    var chunk = host_predict_chunk(n_resamples, tasks)
+
+    def _replicates(c: Int) {imm x, imm y, imm two, imm np_, imm chunk, imm n_resamples, imm n, imm key, imm r_first}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_resamples)
+        var ax = List[Float32](length=n, fill=Float32(0.0))
+        var ay = List[Float32](length=n, fill=Float32(0.0))
+        for rr in range(lo, hi):
+            var r = r_first + rr
+            for i in range(n):
+                var a = ftz(x[i])
+                var flip = draw_pair_flip(key, r, i)
+                if two:
+                    var b = ftz(y[i])
+                    ax[i] = b if flip else a
+                    ay[i] = a if flip else b
+                else:
+                    ax[i] = -a if flip else a
+            var value = _mean_of_sum(host_kernel_fold(ax, n), n)
+            if two:
+                value = ftz(value - _mean_of_sum(host_kernel_fold(ay, n), n))
+            np_.unsafe_store(rr, canonicalize_nan(value))
+
+    if tasks == 1:
+        _replicates(0)
+    else:
+        sync_parallelize(_replicates, tasks)
+    var vx = List[Float32](capacity=n)
+    for i in range(n):
+        vx.append(ftz(x[i]))
+    var observed = _mean_of_sum(host_tree_sum(vx, n), n)
+    if two:
+        var vy = List[Float32](capacity=n)
+        for i in range(n):
+            vy.append(ftz(y[i]))
+        observed = ftz(observed - _mean_of_sum(host_tree_sum(vy, n), n))
+    var pv = permutation_pvalue(null_dist, n_resamples, observed, alternative)
+    return HostPermutationResult(observed, null_dist^, pv)
 
 
 # ===========================================================================
@@ -807,3 +1082,21 @@ def host_monte_carlo_integrate[
     var integral = mc_finish_host(partials, n_chunks, n_samples, volume)
     var mean = _mean_of_sum(host_fold_partials(partials, n_chunks), n_samples)
     return HostMonteCarloResult(integral, mean, volume)
+
+
+def host_resample_indices(n: Int, count: Int, replace: Bool, seed: UInt64) raises -> List[Int32]:
+    """`estimator.mojo::resample_indices_host` without the device: the same
+    draws position by position, the same host order."""
+    utils_validate(n, count, replace)
+    var key = resample_key(
+        seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
+    )
+    if replace:
+        var out = List[Int32](capacity=count)
+        for i in range(count):
+            out.append(draw_row_index(key, 0, i, Int32(n)))
+        return out^
+    var kl = List[UInt64](capacity=n)
+    for j in range(n):
+        kl.append(draw_permutation_key(key, 0, j))
+    return utils_first_by_key(kl, n, count)

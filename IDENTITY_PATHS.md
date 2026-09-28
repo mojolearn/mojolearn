@@ -602,8 +602,9 @@ sized to the count that lane asked for:
 | algorithm expansion `metrics` (2026-09-27, lane/metrics) | -- | **190-199** | 10 |
 | family lane `neural` (2026-09-27, lane/neural; DEVIATIONS 6200-6299) | -- | **200-209** | 10 |
 | lane `cpu` (2026-09-28, lane/cpu; DEVIATION 5900) | -- | **210-219** | 10 |
+| algorithm expansion `prep`, second range (2026-09-28, lane/algos-prep2; 140-149 full) | -- | **220-229** | 10 |
 
-Next free row after this table is **220** (200-209 went to the neural family lane on 2026-09-27, 210-219 to the cpu lane on 2026-09-28) (97-99 are unassigned; the
+Next free row after this table is **230** (200-209 went to the neural family lane on 2026-09-27, 210-219 to the cpu lane on 2026-09-28, 220-229 to prep's second range on lane/merged 2026-09-28: lane/algos-prep2 had taken 200-209, which collided with neural) (97-99 are unassigned; the
 expansion ranges start at 100 so the nine lanes of
 docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md never meet anyone already writing
 at 97). Each expansion lane writes its rows ONLY in its own section of
@@ -729,6 +730,12 @@ seam under `x_prep/seams/sabotage/` (listed in `tools/identity_lanes/prep.checks
 | 147 | **neighbour-radius counts and ties** (`mi_cc_unit`, `mi_cd_unit`, `mi_dc_unit`) | `<= nextafter(r, 0)` spelled `<= r`; the reference's 1e-10 tie-breaking noise lost in a float32 add | PIN, DEVIATION 5407: every distance a (primary, noise word) pair compared lexicographically (the noise as an infinitesimal, as the reference's float64 sum orders it); strictly inside r, and distance 0 at r == 0 | `check_radius_boundary`, arm `seam_5407_radius.patch` RED |
 | 148 | **operand flush** (`ld` in every unit) | a subnormal read raw on one column and flushed on another | PIN, DEVIATION 5408: every float operand through `ftz` at load | `check_operand_ftz` (a negative subnormal loads as -0.0), arm `seam_5408_operand_ftz.patch` RED |
 | 149 | **percentile interpolation** (`quantile_unit`: RobustScaler, SimpleImputer median, QuantileTransformer, spline quantile knots; `kbins_edges_unit` linear) | `a + (b - a) g` vs numpy's two-sided `_lerp` | PIN, DEVIATION 5409: numpy's spelling (`b - (b - a)(1 - g)` from g >= 0.5) | `check_lerp` (fixture separates the two), arm `seam_5409_lerp.patch` RED |
+
+### `prep`, second range: rows 220-229
+
+| number | what | hazard | move | status |
+|---|---|---|---|---|
+| 220 | **the normal CDF and its inverse** (`identical_ndtr` / `identical_ndtri`, checks/numerics.mojo: BCa's endpoints in resample/checks/intervals.mojo, IterativeImputer's sample_posterior draw in x_prep/iterative.mojo) | an inverse CDF has no IEEE spelling: SciPy's `ndtri` is Cephes float64, a stdlib call is a vendor libm, and a float32 re-derivation is a new construction with an unmeasured error | REPLACE, DEVIATION 5410: Wichura's AS 241 PPND7 and `0.5 (1 + erf(x / sqrt 2))`, every operation an existing seam (row 9 mul, row 10 sqrt / flush, row 12 log, row 49 div, `portable_erff`), edges as values (0 -> -inf, 1 -> +inf, NaN / out of range -> canonical NaN) | `pixi run check-ndtri` (checks/ndtri_check.mojo, under IDENTICAL): 2^20 hashed inputs per function in six / five classes, host == device bit for bit (certificate ndtri fnv1a 0x368d9ecc8e0fd775, ndtr 0x910accedd0f41cda), worst 6 ulps against a float64 oracle (PPND16 + two Newton steps on erfc; bound 8) and 9.9e-8 absolute for ndtr (bound 1.5e-7), exact fixture words and the symmetry ndtri(1 - p) = -ndtri(p); arm `seam_5410_ndtri.patch` (one PPND7 coefficient 1e-3 off) RED at 2172 ulps (H100, 2026-09-28). x-prep-iterative-options SAME BITS (the functions moved unchanged) |
 
 AMD and Apple columns for 140-149: OWED (the AMD box is being acquired; the M2 Pro steward is submitted after).
 

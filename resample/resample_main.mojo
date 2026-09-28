@@ -27,6 +27,7 @@ THE CARD, in the order it is written:
     resample.order_pos   i32 x2   the two order-statistic positions
     resample.se          f32 x1   the standard error
     resample.interval    f32 x2   the two endpoints
+    resample.bca.levels  f32 x2   BCa's adjusted levels alpha_1, alpha_2 (method=BCa)
     resample.bca.z0p     f32 x1   BCa's bias percentile        (diagnostics on)
     resample.jackknife   f32      the n leave-one-out statistics (diagnostics on)
     resample.bca.ahat    f32 x1   BCa's acceleration           (diagnostics on)
@@ -141,22 +142,9 @@ def main() raises:
         + " =="
     )
 
-    if method == METHOD_BCA:
-        # DEVIATION 1699. Print the refusal rather than letting the driver
-        # die with a stack trace: a card run that asks for BCa should say
-        # WHY it got no card, and the wording is `bca_refuse`'s.
-        print(
-            "  method=BCa is REFUSED (DEVIATION 1699). Run with"
-            " MOJOLEARN_RESAMPLE_METHOD=percentile or basic; the BCa"
-            " diagnostics (bias percentile, jackknife, acceleration) are"
-            " recorded on the card of every run whose statistic has a"
-            " jackknife arm."
-        )
-        return
-
     # The BCa diagnostics ride along for the three statistics that have a
-    # jackknife arm, so the identical half of DEVIATION 1699 appears on the
-    # card of an ordinary run rather than only inside a check.
+    # jackknife arm, so DEVIATION 1699's construction appears on the card of
+    # an ordinary run too. MOJOLEARN_RESAMPLE_METHOD=BCa adds the levels.
     var with_bca = (
         stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS
     )
@@ -184,7 +172,7 @@ def main() raises:
             " written"
         )
     else:
-        var stages = 11 if with_bca else 8
+        var stages = (11 if with_bca else 8) + (1 if method == METHOD_BCA else 0)
         print(
             "card written to "
             + trace_path
