@@ -42,7 +42,9 @@ for arm in $ARMS; do
         mkdir -p "$KEEP/$key"
         for b in $BUILDS; do
             t0=$(date +%s)
+            # the build gate is a Metal fit outside the Metal slot: skipped
             MOJOLEARN_EXTRA_DEFINES="$defs" MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_BUILD_JOBS=1 \
+                MOJOLEARN_SKIP_BUILD_GATE=1 \
                 $SLOT run pixi run -e default sh "bindings/build_$b.sh" > "$KEEP/$key/build_$b.log" 2>&1 \
                 || { echo "ARM $name build_$b FAILED"; grep -v '^\s*$' "$KEEP/$key/build_$b.log" | tail -n 40; exit 1; }
             cp "$OUTDIR/_mojolearn_$b.so" "$KEEP/$key/" || exit 1
