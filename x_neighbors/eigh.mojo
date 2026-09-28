@@ -11,14 +11,20 @@ from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from spectral.checks.symmetric_eig_host import symmetric_eig_host
-from x_neighbors.fast_eigh import symmetric_eig_ql, symmetric_eig_rows
+from x_neighbors.fast_eigh import symmetric_eig_rows
 from x_neighbors.items import FP
 
-#: lane neighbors-apple3 (2026-09-28): the same Jacobi with its rotations as
-#: vectors over contiguous rows (x_neighbors/fast_eigh.mojo). OPT-IN until
-#: its A/B and quality check pass: `-D MOJOLEARN_XN_EIGH_ROWS` (any mode: the
-#: IDENTICAL arm shows whether its words are the scalar routine's).
-comptime XN_EIGH_ROWS = is_defined["MOJOLEARN_XN_EIGH_ROWS"]()
+#: lane neighbors-apple3 (2026-09-28): on Apple the same Jacobi runs with
+#: its rotations as vectors over contiguous rows
+#: (x_neighbors/fast_eigh.mojo `symmetric_eig_rows`). The scalar routine's
+#: words in both modes: request 1790627549034 (M4 Pro), KernelPCA.fit 500
+#: rows, IDENTICAL 1.86 -> 1.19 s and 1.26 -> 0.82 s, FAST 0.56 -> 0.43 s
+#: and 0.38 -> 0.29 s (taxi, HIGGS), every digest equal.
+#: `-D MOJOLEARN_XN_EIGH_SCALAR` keeps the scalar routine (the A/B arm);
+#: `-D MOJOLEARN_XN_EIGH_ROWS` selects the row form on any target.
+comptime XN_EIGH_ROWS = is_defined["MOJOLEARN_XN_EIGH_ROWS"]() or (
+    has_apple_gpu_accelerator() and not is_defined["MOJOLEARN_XN_EIGH_SCALAR"]()
+)
 #: FAST on Apple, OPT-IN until its A/B and quality check pass
 #: (`-D MOJOLEARN_XN_EIGH_QL`): tridiagonal reduction and the QL iteration in
 #: binary64 (x_neighbors/fast_eigh.mojo `symmetric_eig_ql`). FAST's words
@@ -32,6 +38,8 @@ comptime XN_EIGH_QL = (
 
 def op_eigh(a: Int, n: Int, evals: Int, evecs: Int) raises -> Int:
     comptime if XN_EIGH_QL:
+        from x_neighbors.fast_eigh_ql import symmetric_eig_ql
+
         return symmetric_eig_ql(
             FP(unsafe_from_address=a), n, FP(unsafe_from_address=evals), FP(unsafe_from_address=evecs)
         )

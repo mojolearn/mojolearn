@@ -29,7 +29,7 @@ refusal of classification itself, is closed by DEVIATION 2830.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_idx, thread_idx
-from checks.numerics import ftz, identical_mul, identical_mul_add
+from checks.numerics import ftz, identical_mul
 from checks.numerics import NUMERIC_FAST as _NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 from cholesky.checks.potrf import (
@@ -240,44 +240,6 @@ comptime GPC_RESIDENT_K = (
     and has_apple_gpu_accelerator()
     and is_defined["MOJOLEARN_GPC_RESIDENT_K"]()
 )
-
-
-def gpc_scale_rows_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    kcross: MutPointer[Float32, MutAnyOrigin],
-    wsr: MutPointer[Float32, MutAnyOrigin],
-    n_train_in: Int32,
-    n_star_in: Int32,
-):
-    """`gpc_scale_rows`, one thread per cell."""
-    var n_train = Int(n_train_in)
-    var n_star = Int(n_star_in)
-    var e = Int(block_idx.x) * GPC_B_TPB + Int(thread_idx.x)
-    if e >= n_train * n_star:
-        return
-    var i = e // n_star
-    var sc = ftz(wsr[unsafe_offset = i])
-    dst[unsafe_offset = e] = ftz(identical_mul(sc, ftz(kcross[unsafe_offset = e])))
-
-
-def gpc_latent_var_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    v: MutPointer[Float32, MutAnyOrigin],
-    n_train_in: Int32,
-    n_star_in: Int32,
-    kss: Float32,
-):
-    """`gpc_latent_var`, one thread per column: the fold over i ascending."""
-    var n_train = Int(n_train_in)
-    var n_star = Int(n_star_in)
-    var t = Int(block_idx.x) * GPC_B_TPB + Int(thread_idx.x)
-    if t >= n_star:
-        return
-    var acc = Float32(0.0)
-    for i in range(n_train):
-        var vv = ftz(v[unsafe_offset = i * n_star + t])
-        acc = ftz(identical_mul_add(vv, vv, acc))
-    dst[unsafe_offset = t] = ftz(ftz(kss) - acc)
 
 
 def gpc_b_matrix_kernel(
@@ -625,20 +587,26 @@ def gpc_predict_binary_host(
     var t_v0 = Int(perf_counter_ns())
     if want_variance:
         comptime if GPC_DEVICE_VAR:
+            from gaussian_process.gpc_device_var import (
+                GPC_VAR_TPB,
+                gpc_latent_var_kernel,
+                gpc_scale_rows_kernel,
+            )
+
             var dwv = _upload(ctx, wsr)
             var dv2 = ctx.enqueue_create_buffer[DType.float32](n_train * n_star)
             var dvar = ctx.enqueue_create_buffer[DType.float32](n_star)
             ctx.enqueue_function[gpc_scale_rows_kernel](
                 dv2.unsafe_ptr(), dkc.unsafe_ptr(), dwv.unsafe_ptr(), Int32(n_train), Int32(n_star),
-                grid_dim=((n_train * n_star + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
-                block_dim=(GPC_B_TPB, 1, 1),
+                grid_dim=((n_train * n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
+                block_dim=(GPC_VAR_TPB, 1, 1),
             )
             var dl2 = _upload(ctx, l)
             trsm_lower(ctx, dl2, dv2, n_train, n_star, trace, "gpc.v", CHOL_SOLVE_TPB)
             ctx.enqueue_function[gpc_latent_var_kernel](
                 dvar.unsafe_ptr(), dv2.unsafe_ptr(), Int32(n_train), Int32(n_star), kss,
-                grid_dim=((n_star + GPC_B_TPB - 1) // GPC_B_TPB, 1, 1),
-                block_dim=(GPC_B_TPB, 1, 1),
+                grid_dim=((n_star + GPC_VAR_TPB - 1) // GPC_VAR_TPB, 1, 1),
+                block_dim=(GPC_VAR_TPB, 1, 1),
             )
             variance = _download(ctx, dvar, n_star)
             _ = dwv^
