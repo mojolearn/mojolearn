@@ -76,6 +76,8 @@ FAMILIES = (
             "xn_svgp",
             "xn_svgp_var",
             "xn_lp_iterate",
+            "xn_pr_iterate",
+            "xn_cc_iterate",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_vendor",

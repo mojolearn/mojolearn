@@ -125,9 +125,10 @@ def _class_array(classes, codes):
 #: A/B arm (lane neighbors-apple2): the k-NN primitive as the two ops it
 #: fuses, `sqdist` then `knn_select` through an n x m matrix. Same bits.
 _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
-#: A/B arm (lane neighbors-apple2): label propagation / spreading's fit loop
-#: in Python, three ops per iteration, instead of the resident `lp_iterate`.
-_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOP_LP", "") == "1"
+#: A/B arm (lane neighbors-apple2): the fit loops of label propagation /
+#: spreading, PageRank and connected_components in Python, one op per step,
+#: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
+_HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
 
 
 class _XNeighbors(NumericModeMixin):
@@ -1279,6 +1280,20 @@ class PageRank(_XNeighbors):
             p = self._unit(self.personalization, n, "personalization")
         dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
         x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
+        if not _HOST_LOOP_LP:
+            # The loop below as ONE resident op (x_neighbors/iter_device.mojo),
+            # Q uploaded once; n * tol passed as its float64 bits.
+            info = empty((2,), "<i4")
+            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+            x = Array.from_list(x.tolist(), "<f4")
+            self._op("pr_iterate", [(Q, 0), (x, 1), (p, 0), (dw, 0), (dangling, 0), (info, 1)],
+                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF), (_f32_scalar(self.alpha),))
+            it, ok = info.tolist()
+            if ok:
+                self.pagerank_ = x
+                self.n_iter_ = int(it)
+                return self
+            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
         s = empty((1,), "<f4")
         for it in range(int(self.max_iter)):
             nxt = empty((n,), "<f4")
@@ -1311,7 +1326,11 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
     A = _adjacency(A)
     n = A.shape[0]
     lab = _i32(list(range(n)), "labels")
-    while True:
+    if not _HOST_LOOP_LP:
+        # the loop below as ONE resident op, A uploaded once
+        info = empty((1,), "<i4")
+        est._op("cc_iterate", [(A, 0), (lab, 1), (info, 1)], (n,))
+    while _HOST_LOOP_LP:
         nxt = empty((n,), "<i4")
         est._op("cc_step", [(A, 0), (lab, 0), (nxt, 1)], (n,))
         if nxt.tolist() == lab.tolist():

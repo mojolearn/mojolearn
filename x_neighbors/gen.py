@@ -141,6 +141,12 @@ CUSTOM_OPS = [
      [("g", "fin", "n * n"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"),
       ("info", "iout", "2"), ("n", "int"), ("c", "int"), ("max_iter", "int"), ("variant", "int"),
       ("tol_hi", "int"), ("tol_lo", "int"), ("alpha", "float")]),
+    ("pr_iterate",
+     [("q", "fin", "n * n"), ("x", "finout", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"),
+      ("info", "iout", "2"), ("n", "int"), ("max_iter", "int"), ("thr_hi", "int"), ("thr_lo", "int"),
+      ("alpha", "float")]),
+    ("cc_iterate",
+     [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
 ]
 
 #: Ops whose GPU driver runs a threadgroup form of the (sequential) item
@@ -416,7 +422,7 @@ def gpu_binding():
     return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md):\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
-            + "".join(f"from x_neighbors.iter_device import op_{c[0]}\n" for c in CUSTOM_OPS) + wrappers() + """
+            + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + wrappers() + """
 
 def x_neighbors_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
@@ -439,7 +445,7 @@ def host_binding():
     return (HDR + GEN + '"""CPU binding for `_mojolearn_x_neighbors`: the GPU binding\'s export names and\naddress contract over the host drivers x_neighbors/host_ops.mojo. HOST ONLY."""\n'
             + BIND_HEAD + "from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name\n"
             + f"from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, {ops}\n"
-            + "".join(f"from x_neighbors.iter_host import op_{c[0]}\n" for c in CUSTOM_OPS) + wrappers() + """
+            + f"from x_neighbors.iter_host import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + wrappers() + """
 
 def x_neighbors_host_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
