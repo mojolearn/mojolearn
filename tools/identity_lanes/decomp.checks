@@ -24,3 +24,4 @@ x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/5318_orth_rank_guard.p
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5319_pdist_order.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_host_gemm_order.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5302_host_sqdist_order.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_host_rowdot_order.patch
