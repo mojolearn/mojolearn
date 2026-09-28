@@ -21,6 +21,8 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
 | ddc2f96ad | identical radix kernel: barriers order device memory on Apple (`air.wg.barrier(3, 1)`) | IDENTICAL (Apple) | same by construction (a missing ordering can only ever have produced a wrong read) | default |
 | eb1a0a257 | x_neighbors `knn_sq` item: sqdist fused into the strict-< insertion, no n x m matrix (LOF, label propagation / spreading) | both | same statements; host check 0 slots differ | default; `MOJOLEARN_XN_UNFUSED_KNN=1` arm |
 | 6f24c1d8b | OneClassSVM: the one-class SMO over one threadgroup (was ONE GPU thread); item factored into shared helpers | both | host check: refactored item == old item word for word; GPU arm vs serial arm pending | default; `-D MOJOLEARN_XN_SERIAL_SMO` arm |
+| df27366e9 | LabelPropagation / LabelSpreading fit: the iteration as one resident op `lp_iterate` (the n x n graph uploaded once, not per iteration) | both | same kernels, same order; host check: iterations and every word equal | default; `MOJOLEARN_XN_HOST_LOOPS=1` arm |
+| 4c4e5978d | PageRank / connected_components: resident `pr_iterate` / `cc_iterate` | both | same kernels, same order; host check equal | default; same arm |
 
 ## Shared code touched (the integration run must cover it)
 
@@ -30,9 +32,15 @@ environment, forward then reverse, IDENTICAL and FAST in one job).
   by `ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo`. Device-scope barrier
   on Apple; the round kernel is new.
 - `bindings/build_x_neighbors.sh` now passes MOJOLEARN_BUILD_EXTRA_DEFINES.
+- `x_neighbors/gen.py`: BLOCK_OPS (threadgroup GPU form of a sequential
+  item) and CUSTOM_OPS (hand-written resident drivers,
+  `x_neighbors/iter_device.mojo` / `iter_host.mojo`); both bindings are
+  regenerated.
 
 ## Speed requests
 
-- 1790603835054 (m4pro-a, 11899d3a6): large-k validation (IDENTICAL + FAST),
-  round-one k-NN digests, x_neighbors old / new arms. Raw:
+- 1790604175121 (m4pro-a, 4c4e5978d): large-k validation (IDENTICAL + FAST),
+  round-one k-NN digests, x_neighbors old / new arms (old = serial SMO +
+  unfused kNN + host loops), a stage profile of the round-one family.
+  Command: ~/mojolearn-evidence/neighbors-apple/r2_job1_cmd.txt. Raw:
   ~/mojolearn-evidence/neighbors-apple/<request>.txt
