@@ -71,6 +71,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 
 comptime WEAK_CC_TPB = 256
+comptime WEAK_CC_PASSES_PER_READ = 8
+"""Label-propagation passes enqueued per host read of the change flags
+(`weak_cc_batched`): scheduling only, the labels and the pass count are the
+reference's."""
 comptime MAX_LABEL = Int32(2147483647)
 
 
@@ -196,27 +200,42 @@ def weak_cc_batched(
     )
     var passes = 0
     var converged = False
-    for _it in range(max_iterations):
-        h_changed.unsafe_ptr().unsafe_store(0, Int32(0))
-        ctx.enqueue_copy(dst_buf=d_changed, src_ptr=h_changed.unsafe_ptr())
-        ctx.enqueue_function[weak_cc_label_kernel](
-            labels.unsafe_ptr(),
-            row_ind.unsafe_ptr(),
-            col_ind.unsafe_ptr(),
-            core.unsafe_ptr(),
-            d_changed.unsafe_ptr(),
-            Int32(start_vertex_id),
-            Int32(batch_size),
-            Int32(n_rows),
-            grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
-            block_dim=(WEAK_CC_TPB, 1, 1),
-        )
-        ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
+    # WEAK_CC_PASSES_PER_READ passes per host read (lane/cluster-apple), each
+    # pass with its OWN `changed` slot, so the host still learns the first
+    # pass that changed nothing and counts exactly the reference's passes.
+    # The passes enqueued after that one change no label: no core label moved
+    # in it, so every core label is at the fixed point, and each border label
+    # already holds the minimum of its core neighbours' (a border never
+    # pushes). The labels and the count are the one-pass-per-read loop's.
+    var flags = ctx.enqueue_create_buffer[DType.int32](WEAK_CC_PASSES_PER_READ)
+    var h_flags = ctx.enqueue_create_host_buffer[DType.int32](WEAK_CC_PASSES_PER_READ)
+    while passes < max_iterations and not converged:
+        var k = max_iterations - passes
+        if k > WEAK_CC_PASSES_PER_READ:
+            k = WEAK_CC_PASSES_PER_READ
+        ctx.enqueue_memset(flags, Int32(0))
+        for q in range(k):
+            ctx.enqueue_function[weak_cc_label_kernel](
+                labels.unsafe_ptr(),
+                row_ind.unsafe_ptr(),
+                col_ind.unsafe_ptr(),
+                core.unsafe_ptr(),
+                flags.unsafe_ptr() + q,
+                Int32(start_vertex_id),
+                Int32(batch_size),
+                Int32(n_rows),
+                grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
+                block_dim=(WEAK_CC_TPB, 1, 1),
+            )
+        ctx.enqueue_copy(dst_ptr=h_flags.unsafe_ptr(), src_buf=flags)
         ctx.synchronize()
-        passes += 1
-        if h_changed.unsafe_ptr().unsafe_load(0) == Int32(0):
-            converged = True
-            break
+        for q in range(k):
+            passes += 1
+            if h_flags.unsafe_ptr().unsafe_load(q) == Int32(0):
+                converged = True
+                break
+    _ = flags^
+    _ = h_flags^
     comptime if PIN_DETERMINISM:
         # DEVIATION 507. See DETERMINISM in the module docstring: the
         # order-independence of `atomicMin` is a property of the FIXED
