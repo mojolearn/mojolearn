@@ -1491,7 +1491,7 @@ default before the estash flip (its backward is the shipped
 
 
 comptime ATTN_APPLE_ESTASH_RECOMPUTE = (
-    ATTN_APPLE_ESTASH_GATED and not is_defined["MOJOLEARN_ATTN_APPLE_NO_ERECOMP"]()
+    ATTN_APPLE_ESTASH_GATED and is_defined["MOJOLEARN_ATTN_APPLE_ERECOMP"]()
 )
 """lane/neural-apple2 (2026-09-28): an Apple process DENIED the estash word
 (its kept stashes do not fit) recomputes ONE layer's exp stash in the
@@ -1505,8 +1505,14 @@ round 3 backward's (every final witness equal across the words). Memory: one
 layer's `[B, n_heads, L, S]` stash on top of the y/dy pair the round 3
 backward already allocates, granted by `attention_estash_memory_grant` under
 the same 35% rule. A recompute forward that raises the corner flag falls
-back to the round 3 backward, unchanged. `-D MOJOLEARN_ATTN_APPLE_NO_ERECOMP`
-restores the round 3 backward for every denied process."""
+back to the round 3 backward, unchanged.
+
+OPT-IN ONLY (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`). Measured on the M3 Ultra at the
+T3 shard (B4 L2048 d768 12L V50257, estash forced denied, steward job
+1790603073363, 5 steps each): round 3 backward 3.537 s a step, recompute
+3.619 s, the granted estash word 2.923 s; final witness and loss digests
+equal in all three. The recompute forward costs more than the round 3 zdot
+saves, so a denied process keeps the round 3 backward."""
 
 comptime ATTN_APPLE_ESTASH_FORCE_DENY = is_defined["MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY"]()
 """Measurement arm (lane/neural-apple2): the grant always refuses the kept
