@@ -3557,6 +3557,16 @@ def _(ml, X, yc, yr, Xh=None):
     Xc = _ctr_tables_x(X)
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
               cat_features=[0, 1, 2]).fit(Xc, yc)
+    # THE PUBLIC LOADER on this model, on both columns: `host_model(<saved
+    # file>)` must answer exactly what the fitted estimator answers. A raise,
+    # not a part, so the recorded cells do not move.
+    with tempfile.TemporaryDirectory(prefix="ib-ctr-tables-") as d:
+        saved = os.path.join(d, "m.npz")
+        m.save(saved)
+        hm = ml.host_model(saved)
+        for got, want in ((hm.predict(Xc), m.predict(Xc)), (hm.predict_proba(Xc), m.predict_proba(Xc))):
+            if not np.array_equal(np.asarray(got), np.asarray(want)):
+                raise RuntimeError("host_model(saved CTR model) does not answer what the estimator answers")
     return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
                 m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
 
