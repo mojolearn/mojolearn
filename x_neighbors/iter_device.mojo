@@ -15,7 +15,7 @@ same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -29,6 +29,29 @@ from x_neighbors.device_ops import (
     pagerank_step_kernel, cc_step_kernel,
     pcs_sketch_kernel, pcs_conv_kernel, pcs_copy0_kernel,
 )
+
+
+def lp_spmm_kernel(
+    indptr: IP, cols: IP, vals: FP, x: FP, res: FP, n_: Int64, c_: Int64,
+):
+    """`matmul_item` (G x, cell t = i*c + j, p ascending) over G's NONZERO
+    entries only, columns ascending. Exact when every x is finite: a
+    skipped term is fma(+-0, x, acc) with x finite, whose product is a zero
+    and whose sum is acc unchanged, because acc starts at +0.0 and an fma
+    returns -0.0 only from (-0) + (-0), so acc is never -0.0. The caller
+    checks x's finiteness each iteration and runs the dense kernel when it
+    fails."""
+    var n = Int(n_)
+    var c = Int(c_)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= n * c:
+        return
+    var i = t // c
+    var j = t - i * c
+    var acc = Float32(0)
+    for e in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
+        acc = ftz(identical_mul_add(ftz(vals.unsafe_load(e)), ftz(x.unsafe_load(Int(cols.unsafe_load(e)) * c + j)), acc))
+    res.unsafe_store(t, acc)
 
 
 def op_lp_iterate(
@@ -65,6 +88,38 @@ def op_lp_iterate(
     # the device fold.
     var hc = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
     var hp = List[Float32](length=nc if nc > 0 else 1, fill=Float32(0))
+    # G's nonzero entries (a knn graph holds ~k per row), row-major CSR,
+    # built once on the host from the caller's array. Sparse only when it
+    # pays (under an eighth nonzero) and only in the host-fold path, which
+    # has each iteration's x on the host for the finiteness test.
+    # `-D MOJOLEARN_XN_LP_DENSE` keeps the dense product.
+    var pg = FP(unsafe_from_address=g)
+    var h_ip = List[Int32](length=n + 1, fill=Int32(0))
+    var h_cols = List[Int32]()
+    var h_vals = List[Float32]()
+    var use_sparse = False
+    comptime if not is_defined["MOJOLEARN_XN_LP_DENSE"]() and not is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
+        var nnz = 0
+        for q in range(n * n):
+            if pg.unsafe_load(q) != Float32(0):
+                nnz += 1
+        use_sparse = nnz > 0 and nnz * 8 < n * n
+        if use_sparse:
+            for i in range(n):
+                for jj in range(n):
+                    var v = pg.unsafe_load(i * n + jj)
+                    if v != Float32(0):
+                        h_cols.append(Int32(jj))
+                        h_vals.append(v)
+                h_ip[i + 1] = Int32(len(h_cols))
+    var nnzb = len(h_cols) if len(h_cols) > 0 else 1
+    var d_ip = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var d_cols = ctx.enqueue_create_buffer[DType.int32](nnzb)
+    var d_vals = ctx.enqueue_create_buffer[DType.float32](nnzb)
+    if use_sparse:
+        ctx.enqueue_copy(dst_buf=d_ip, src_ptr=h_ip.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_cols, src_ptr=h_cols.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=d_vals, src_ptr=h_vals.unsafe_ptr())
     for it in range(max_iter):
         n_iter = it
         comptime if is_defined["MOJOLEARN_XN_LP_DEVICE_FOLD"]():
@@ -89,10 +144,23 @@ def op_lp_iterate(
         if Float64(hs[0]) < tol:
             converged = True
             break
-        ctx.enqueue_function[matmul_kernel](
-            d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
-            grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
-        )
+        var sparse_now = use_sparse
+        if sparse_now:
+            for q in range(nc):
+                var bits = bitcast[DType.uint32](hc[q]) & UInt32(0x7F800000)
+                if bits == UInt32(0x7F800000):
+                    sparse_now = False
+                    break
+        if sparse_now:
+            ctx.enqueue_function[lp_spmm_kernel](
+                d_ip.unsafe_ptr(), d_cols.unsafe_ptr(), d_vals.unsafe_ptr(), cur, d_nxt.unsafe_ptr(),
+                Int64(n), Int64(c), grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
+        else:
+            ctx.enqueue_function[matmul_kernel](
+                d_g.unsafe_ptr(), cur, d_nxt.unsafe_ptr(), Int64(n), Int64(n), Int64(c),
+                grid_dim=_grid(nc), block_dim=(BLOCK if nc > 1 else 1),
+            )
         # prev = ld; ld = clamp(nxt): the clamp writes over the buffer the
         # old prev held, then the two names swap.
         if variant == 0:
@@ -122,6 +190,12 @@ def op_lp_iterate(
     _ = hs^
     _ = hc^
     _ = hp^
+    _ = h_ip^
+    _ = h_cols^
+    _ = h_vals^
+    _ = d_ip^
+    _ = d_cols^
+    _ = d_vals^
     _ = d_g^
     _ = d_a^
     _ = d_b^
