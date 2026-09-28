@@ -29,18 +29,18 @@ from glm.impl.qn.simple_mat.dense import ieee_div_f32, ieee_sub_f32
 def scalar_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    res: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """out[4i..4i+3] = ieee_div, ieee_sub, raw a/b, raw a-b."""
+    """Res[4i..4i+3] = ieee_div, ieee_sub, raw a/b, raw a-b."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
         var x = a.unsafe_load(i)
         var y = b.unsafe_load(i)
-        out.unsafe_store(4 * i, ieee_div_f32(x, y))
-        out.unsafe_store(4 * i + 1, ieee_sub_f32(x, y))
-        out.unsafe_store(4 * i + 2, x / y)
-        out.unsafe_store(4 * i + 3, x - y)
+        res.unsafe_store(4 * i, ieee_div_f32(x, y))
+        res.unsafe_store(4 * i + 1, ieee_sub_f32(x, y))
+        res.unsafe_store(4 * i + 2, x / y)
+        res.unsafe_store(4 * i + 3, x - y)
 
 
 struct Rng:
