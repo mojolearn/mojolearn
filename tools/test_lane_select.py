@@ -1600,11 +1600,26 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      x-ann-cagra-filter, x-ann-refine-euclidean,
                                      each over an IVF or k-NN index whose
                                      coarse quantizer is this library's KMeans;
-                                     no old lane moved"""
+                                     no old lane moved
+
+    REMEASURED 2026-09-28 (lane/merged, every lane branch integrated; recomputed
+    with tools/lane_select.py on the merged tree against origin/main 9a8f9e390):
+      kmeans_oracle        75 -> 83  new lanes only: ivf-filter,
+                                     x-ann-cagra-filter, x-ann-refine-euclidean,
+                                     x-ann-tsne-pca (algos-ann-b), resample-bca,
+                                     resample-perm-samples, resample-unpaired
+                                     (algos-prep2), x-decomp-umap-options
+                                     (algos-decomp); no lane dropped
+      forest_host_predict  86 -> 88  bootstrap and metrics-classification (old
+                                     lanes): their bindings' closure now takes
+                                     in the merged host modules (core/
+                                     host_parallel, forest_host_groves,
+                                     gbdt_host_ctr, the ExtraTrees host fit);
+                                     no lane dropped"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 76),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 83),
                       ("core/gbdt_host_predict.mojo", 51),
-                      ("core/forest_host_predict.mojo", 86),
+                      ("core/forest_host_predict.mojo", 88),
                       ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
