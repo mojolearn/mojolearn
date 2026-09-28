@@ -40,26 +40,67 @@ buffers, synced twice and downloaded its output.
    (mock_resident.py). orth and absmax_sign followed (0456bf309): DevExec
    and the resident entries call the same orth_on_device / launch_absmax.
 
+4. **geqrf / orgqr staged folds** (0936290ea): the one-thread strided
+   column folds (geqrf_head + reflector_norm, geqrf_dot, orgqr_dot) now read
+   their column through threadgroup memory: the block loads 2048-row chunks,
+   thread 0 folds them in the cells' order with the cells' arithmetic.
+5. **Wide Jacobi eigh** (fb281eb88): x_decomp's eigh launches
+   jacobi_eigh_kernel 1024 wide from n = 256 (launch-width invariant under
+   IDENTICAL, DEVIATION 2680); FAST keeps device_eigh.
+
+## Verification done before Andrew's "no verification in your lane" (2026-09-28 ~08:30Z)
+
+Steward 1790581701486-decomp-06752fa5ff (16 x-decomp lanes, e2e_host_all):
+PASS on do-amd, m4-a, m3ultra-b, m2pro (Metal == CPU on M2/M3/M4 and
+gfx942 == CPU; the sabotage bit). It covers items 1-3. Items 4-5 are proven
+by digests inside their speed request (bench/decomp_out_digest.py GPU and
+CPU columns; decomp_eigh_width.py hashes per width).
+
+## Metal profile, BEFORE (m4pro-a, IDENTICAL, 1790581691614 at 112ef9d1c)
+
+Micro (median of 10, ms): a kit call's fixed cost ~0.2 ms; ew add 1M x 28
+64 ms (5 GB/s: copies), colsum 1M x 28 8.8 ms; gemm 1M x 28 @ 28 x 5
+18.9 ms; orth 1M x 10 110 ms; eigh 256: 177 ms.
+
+decomp_speed, synth N=200k (N2 20k, N3 1500, N4 20k), seconds:
+
+| algorithm | before | top entries |
+|---|---|---|
+| PCA(randomized,5) | 0.264 | orth 0.129, gemm 0.070 |
+| TruncatedSVD(randomized,5) | 0.320 | orth 0.160, gemm 0.093 |
+| IncrementalPCA | 0.077 | ew 0.040 |
+| GaussianRandomProjection / Sparse | 0.036 / 0.035 | ew 0.022 |
+| NMF mu / cd (20 it) | 0.467 / 0.429 | gemm 0.225 / 0.186 |
+| FastICA (20 it) | 0.323 | ew 338x 0.174 |
+| FactorAnalysis (20 it) | 0.312 | ew 0.133, svd 0.100 |
+| lstsq | 0.131 | svd 0.051 |
+| randomized_svd | 0.260 | orth 0.132 |
+| PLSRegression / CCA | 0.481 / 0.572 | gemm 0.310 / 0.245 |
+| MinCovDet (n2=20k x 8) | 46.98 | ew 91k calls 17.1, eigh 8.4k 6.8, colsum 6.0, gemm 5.9, lu 4.9 |
+| linalg.qr / linalg.svd | 8.86 / 8.91 | geqrf 6.94, orgqr 1.91 |
+| solve(512) | 0.146 | |
+| SparsePCA / DictionaryLearning | 0.363 / 0.375 | |
+| MiniBatchDictionaryLearning | 1.668 | ew 5776x 1.04 |
+| LatentDirichletAllocation | 0.503 | lda_rows 0.265 |
+| ALS / ALS cg | 3.97 / 1.42 | als_rows 3.68 |
+| Isomap (1500) | 107.5 | eigh 103.4, dijkstra 3.70 |
+| LocallyLinearEmbedding (1500) | 429.3 | svd 428.9 (one-sided Jacobi of a 1500 x 1500) |
+| ClassicalMDS (1500) | 69.1 | eigh 69.1 |
+| MDS (5 it) | 0.207 | |
+| SpectralEmbedding(knn, 20k) | FAILED | select_radix: k > 1024 refused (not this lane's code) |
+| SpectralEmbedding(rbf, 5k) | 3.19 | Python 3.04 |
+| UMAP default / c5 manhattan (20k) | 0.236 / 0.611 | |
+
 ## Requests in flight
 
 | request | what |
 |---|---|
-| 1790581691613-speed-decomp-112ef9d1c7 (m4pro-a) | BEFORE: micro, decomp_speed at N=200k (N2 20k, N3 1500, N4 20k), digests |
-| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | AFTER (resident ew/gemm/folds/sqdist + orth + absmax, heap Dijkstra): the same |
-| 1790581701486-decomp-06752fa5ff | identity, 16 x-decomp lanes, e2e_host_all |
-| 1790581750692-decomp-06752fa5ff | identity, x-decomp-spectral-rbf, e2e_host_sqdist |
-| 1790581760635-decomp-06752fa5ff | identity, x-decomp-umap-options, e2e_p2b_options |
-| AMD central job 0014 (lane decomp-apple) | gfx942 vs CPU part hashes of every x-decomp lane at 06752fa5f |
-
-do-amd steward: every request FAILs at "steward-do-amd-5 is dirty
-(training/checks/optimizer.mojo)", another lane's sabotage left in place;
-not ours. The first identity attempt (0456bf309) found a real defect: the
-CPU column refused every fit (the host binding's proxy raises ImportError
-for a missing name, which hasattr lets through); fixed in 06752fa5f.
+| 1790582024178-speed-decomp-fb281eb88d (m4pro-a) | AFTER all five: eigh widths, micro, decomp_speed (same sizes), out digests GPU + CPU |
+| 1790583099651-speed-decomp-06752fa5ff (m4pro-a) | after items 1-3 only (the before of items 4-5): micro, decomp_speed |
 
 ## Before -> after (per algorithm, IDENTICAL, m4pro-a)
 
-(pending the two speed requests)
+(pending)
 
 ## FAST
 
