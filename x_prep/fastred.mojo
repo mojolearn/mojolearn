@@ -129,7 +129,7 @@ def pt_fold_fast_kernel(f: FP, q: IP):
         if is_nan(x):
             continue
         cnt += 1
-        sm = add(sm, f[T + i * dd + c])
+        sm = add(sm, f[T + c * nn + i])
         if first:
             if method == 1:
                 sj = add(sj, logf(x))
@@ -158,10 +158,10 @@ def pt_fold_fast_kernel(f: FP, q: IP):
     var ss = Float32(0)
     if total > 0:
         for i in range(tid, nn, TGR):
-            var x = f[X + i * dd + c]
-            if is_nan(x):
+            var tv = f[T + c * nn + i]
+            if is_nan(tv):
                 continue
-            var e = sub(f[T + i * dd + c], mean)
+            var e = sub(f[T + c * nn + i], mean)
             ss = add(ss, mul(e, e))
     sh_s[tid] = ss
     barrier()

@@ -359,15 +359,21 @@ def pt_init_unit(t: Int, f: FP, q: IP):
 
 
 def pt_map_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, METHOD, LEVAL, T]; t = element. T = power(x, LEVAL[c])
-    of the flushed x (`_neg_llf`'s value); a NaN element writes nothing (the
-    fold skips it by X)."""
+    """q = [X, n, d, METHOD, LEVAL, T]; t = element i*d + c. T[c*n + i] =
+    power(x, LEVAL[c]) of the flushed x (`_neg_llf`'s value), COLUMN MAJOR so
+    the fold reads each column contiguously; a NaN element writes the
+    canonical NaN (the fold skips it by that word: `power` of a non-NaN x is
+    never NaN for yeo-johnson, and box-cox input with x <= 0, the only NaN
+    source, is refused after the fit, its values discarded)."""
+    var n = p(q, 1)
     var d = p(q, 2)
     var c = t % d
+    var i = t // d
     var x = ld(f, p(q, 0) + t)
     if is_nan(x):
+        f.unsafe_store(p(q, 5) + c * n + i, canonical_nan())
         return
-    f.unsafe_store(p(q, 5) + t, power(x, raw(f, p(q, 4) + c), p(q, 3)))
+    f.unsafe_store(p(q, 5) + c * n + i, power(x, raw(f, p(q, 4) + c), p(q, 3)))
 
 
 @always_inline
@@ -419,26 +425,37 @@ def pt_fold_unit(t: Int, f: FP, q: IP):
     var sj = raw(f, S + 8)
     if first:
         sj = Float32(0)
+    var Tc = T + c * n
     var full = n - n % RUN
-    for i0 in range(0, full, RUN):
-        var bx = run_block[RUN](f, X + i0 * d + c, d)
-        var bt = run_block[RUN](f, T + i0 * d + c, d)
-        comptime for u in range(RUN):
-            _pt_take1(ftz(bx[u]), bt[u], method, first, cnt, sm, sj)
-    for i in range(full, n):
-        _pt_take1(ld(f, X + i * d + c), raw(f, T + i * d + c), method, first, cnt, sm, sj)
     if first:
+        # sum J needs x: the one evaluation that reads X
+        for i0 in range(0, full, RUN):
+            var bx = run_block[RUN](f, X + i0 * d + c, d)
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(ftz(bx[u]), bt[u], method, True, cnt, sm, sj)
+        for i in range(full, n):
+            _pt_take1(ld(f, X + i * d + c), raw(f, Tc + i), method, True, cnt, sm, sj)
         f.unsafe_store(S + 8, sj)
+    else:
+        # a row is NaN exactly where its T word is (pt_map_unit)
+        for i0 in range(0, full, RUN):
+            var bt = run_block[RUN](f, Tc + i0, 1)
+            comptime for u in range(RUN):
+                _pt_take1(bt[u], bt[u], method, False, cnt, sm, sj)
+        for i in range(full, n):
+            var tv = raw(f, Tc + i)
+            _pt_take1(tv, tv, method, False, cnt, sm, sj)
     var ss = Float32(0)
     if cnt > 0:
         var mean = div(sm, Float32(cnt))
         for i0 in range(0, full, RUN):
-            var bx = run_block[RUN](f, X + i0 * d + c, d)
-            var bt = run_block[RUN](f, T + i0 * d + c, d)
+            var bt = run_block[RUN](f, Tc + i0, 1)
             comptime for u in range(RUN):
-                _pt_take2(ftz(bx[u]), bt[u], mean, ss)
+                _pt_take2(bt[u], bt[u], mean, ss)
         for i in range(full, n):
-            _pt_take2(ld(f, X + i * d + c), raw(f, T + i * d + c), mean, ss)
+            var tv = raw(f, Tc + i)
+            _pt_take2(tv, tv, mean, ss)
     pt_finish(t, f, q, cnt, sj, ss)
 
 
