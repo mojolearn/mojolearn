@@ -164,15 +164,18 @@ class _RecurrentBase:
 
     def _schedule(self, n, rng):
         bs = max(1, min(int(self.batch_size), n))
-        order, steps = [], []
-        for _ in range(int(self.max_epochs)):
-            perm = rng.permutation(n) if self.shuffle else np.arange(n)
-            base = len(order) * n
-            for s in range(0, n, bs):
-                steps += [base + s, min(bs, n - s)]
-            order.append(perm)
+        epochs = int(self.max_epochs)
+        if epochs * n >= 2 ** 31 - 1:
+            raise ValueError(f"max_epochs x n_samples = {epochs * n} must stay below 2^31 - 1")
+        order = [rng.permutation(n) if self.shuffle else np.arange(n) for _ in range(epochs)]
         order = np.ascontiguousarray(np.concatenate(order), dtype=np.float32)
-        return order, np.ascontiguousarray(steps, dtype=np.int32)
+        starts = np.arange(0, n, bs, dtype=np.int64)
+        offs = (np.arange(epochs, dtype=np.int64)[:, None] * n + starts[None, :]).ravel()
+        cnts = np.tile(np.minimum(bs, n - starts), epochs)
+        steps = np.empty(2 * len(offs), dtype=np.int32)
+        steps[0::2] = offs
+        steps[1::2] = cnts
+        return order, steps
 
     def _lrs(self, n_steps):
         """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`

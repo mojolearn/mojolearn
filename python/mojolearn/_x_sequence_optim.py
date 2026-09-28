@@ -40,6 +40,11 @@ class _SeqOptimizer:
         if init:
             self.state[1][:] = np.float32(init)
         self.t = 0
+        # the host scalars' running state (beta1^t, beta2^t, NAdam's mu
+        # product) after step _sc_t, advanced by the binding each step, so a
+        # step is O(1) instead of a replay of steps 1 .. t - 1
+        self._sc = np.ones(3, dtype=np.float32)
+        self._sc_t = 0
 
     def _pack(self, arrays, what):
         if isinstance(arrays, np.ndarray):
@@ -81,10 +86,15 @@ class _SeqOptimizer:
         self.t += 1
         if getattr(self, "lr_schedule", None) is not None:
             self.lr = float(self.lr_schedule.lr_at(self.t))
+        if self._sc_t >= self.t:
+            self._sc[:] = 1.0
+            self._sc_t = 0
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self.state],
-                         [self.n_total, self._kind, self._flags, self.t],
+        b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self.state]
+                         + [self._sc.ctypes.data],
+                         [self.n_total, self._kind, self._flags, self.t, self._sc_t],
                          [self.lr] + [float(v) for v in self._fp[:5]])
+        self._sc_t = self.t
         if not in_place:
             off = 0
             for p in self.params:
@@ -93,13 +103,22 @@ class _SeqOptimizer:
         return self
 
     def state_dict(self):
-        return dict(t=self.t, lr=self.lr, state=[s.copy() for s in self.state], options=dict(self.options))
+        return dict(t=self.t, lr=self.lr, state=[s.copy() for s in self.state], options=dict(getattr(self, "options", {})),
+                    scalars=(self._sc_t, self._sc.copy()))
 
     def load_state_dict(self, sd):
         self.t = int(sd["t"])
         self.lr = float(sd["lr"])
         for dst, src in zip(self.state, sd["state"]):
             dst[:] = np.asarray(src, dtype=np.float32)
+        # without the scalars (an older state dict) the next step replays
+        # them once from step 1: the same bits
+        self._sc[:] = 1.0
+        self._sc_t = 0
+        sc = sd.get("scalars")
+        if sc is not None and 0 <= int(sc[0]) <= self.t:
+            self._sc_t = int(sc[0])
+            self._sc[:] = np.asarray(sc[1], dtype=np.float32)
         return self
 
 
@@ -263,6 +282,8 @@ class LAMB(_SeqOptimizer):
         self.n_total = int(sum(p.size for p in self.params))
         self.state = [np.zeros(self.n_total, dtype=np.float32) for _ in range(2)]
         self.t = 0
+        self._sc = np.ones(2, dtype=np.float32)    # beta1^_sc_t, beta2^_sc_t
+        self._sc_t = 0
 
     def step(self, grads):
         g = self._pack(grads, "grads")
@@ -273,11 +294,17 @@ class LAMB(_SeqOptimizer):
         offs = [0]
         for p in self.params:
             offs.append(offs[-1] + p.size)
+        if self._sc_t >= self.t:
+            self._sc[:] = 1.0
+            self._sc_t = 0
         _backend.binding("_mojolearn_x_sequence", self.numeric_mode).lamb_step(
-            [flat.ctypes.data, g.ctypes.data, self.state[0].ctypes.data, self.state[1].ctypes.data],
+            [flat.ctypes.data, g.ctypes.data, self.state[0].ctypes.data, self.state[1].ctypes.data,
+             self._sc.ctypes.data],
             [len(self.params), self.t, self.flags] + offs,
             [self.lr, self.betas[0], self.betas[1], self.eps, self.weight_decay,
-             self.max_grad_norm if self.max_grad_norm is not None else 1.0])
+             self.max_grad_norm if self.max_grad_norm is not None else 1.0, float(self._sc_t)])
+        if self.flags & 8:
+            self._sc_t = self.t
         off = 0
         for p in self.params:
             p.ravel()[:] = flat[off:off + p.size]
