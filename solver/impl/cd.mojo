@@ -128,7 +128,6 @@ from glm.impl.preprocess import post_process_data, pre_process_data
 from solver.impl.linalg.axpy import AXPY_TPB, axpy_device_alpha
 from std.os import getenv
 from checks.numerics import identical_mul_add
-from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import (
     APPLE_LEAF_PREFETCH,
     CONTRACT_MAX_LEAVES,
@@ -281,64 +280,6 @@ def cd_axpy_pair_kernel(
     var a1 = ftz(coef.unsafe_load(Int(ci_in)))
     r = ftz(identical_mul_add(a1, ftz(x.unsafe_load(Int(ci_in) * n + i)), ftz(r)))
     residual.unsafe_store(i, r)
-
-
-comptime CD_TWO_LAUNCH = CD_THREE_LAUNCH and is_defined["MOJOLEARN_CD_TWO_LAUNCH"]()
-"""Opt-in (lane/linear-apple2): the pair of axpys moves INTO the leaf pass
-(cd_leaf_axpy_kernel), two launches per coordinate. Each leaf thread owns
-its leaf's residual rows, so every row still sees the two axpys in order
-and the chain reads the stored word."""
-
-
-def cd_leaf_axpy_kernel(
-    ws: MutPointer[Float32, MutAnyOrigin],
-    residual: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    coef: MutPointer[Float32, MutAnyOrigin],
-    conv: MutPointer[Float32, MutAnyOrigin],
-    ci_in: Int32,
-    prev_ci_in: Int32,
-    n_in: Int32,
-    leaf_in: Int32,
-    p_in: Int32,
-):
-    var p_count = Int(p_in)
-    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if t >= p_count:
-        return
-    var n = Int(n_in)
-    var leaf = Int(leaf_in)
-    var pb = t * leaf
-    var pe = min(pb + leaf, n)
-    var prev = Int(prev_ci_in)
-    var xc = x + Int(ci_in) * n
-    var xq = x + (prev if prev >= 0 else 0) * n
-    var a0 = ftz(conv.unsafe_load(0))
-    var a1 = ftz(coef.unsafe_load(Int(ci_in)))
-    var acc = Float32(0.0)
-    comptime U = 16
-    var p = pb
-    while p < pe:
-        var m = min(U, pe - p)
-        var xv = InlineArray[Float32, U](fill=Float32(0))
-        var qv = InlineArray[Float32, U](fill=Float32(0))
-        var rv = InlineArray[Float32, U](fill=Float32(0))
-        comptime for u in range(U):
-            if u < m:
-                xv[u] = xc.unsafe_load(p + u)
-                rv[u] = residual.unsafe_load(p + u)
-                if prev >= 0:
-                    qv[u] = xq.unsafe_load(p + u)
-        comptime for u in range(U):
-            if u < m:
-                var r = rv[u]
-                if prev >= 0:
-                    r = ftz(identical_mul_add(a0, ftz(qv[u]), ftz(r)))
-                r = ftz(identical_mul_add(a1, ftz(xv[u]), ftz(r)))
-                residual.unsafe_store(p + u, r)
-                acc = rtf_mul_add(ftz(xv[u]), ftz(r), acc)
-        p += U
-    ws.unsafe_store(t, ftz(acc))
 
 
 def cd_fold_update_kernel(
@@ -822,29 +763,20 @@ def cd_fit_traced(
         for j in range(n_cols):
             var ci = ri[j]
             var prev = ri[j - 1] if j > 0 else -1
-            comptime if CD_TWO_LAUNCH:
-                ctx.enqueue_function[cd_leaf_axpy_kernel](
-                    ws_rows.unsafe_ptr(), residual.unsafe_ptr(), x.unsafe_ptr(),
-                    coef.unsafe_ptr(), conv.unsafe_ptr(), Int32(ci), Int32(prev),
-                    Int32(n_rows), Int32(part[0]), Int32(part[1]),
-                    grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                    block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                )
-            else:
-                ctx.enqueue_function[cd_axpy_pair_kernel](
-                    residual.unsafe_ptr(), x.unsafe_ptr(), coef.unsafe_ptr(),
-                    conv.unsafe_ptr(), Int32(ci), Int32(prev), Int32(n_rows),
-                    grid_dim=((n_rows + AXPY_TPB - 1) // AXPY_TPB, 1, 1),
-                    block_dim=(AXPY_TPB, 1, 1),
-                )
-                ctx.enqueue_function[identical_gemm_leaf_kernel](
-                    ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
-                    residual.unsafe_ptr(),
-                    Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
-                    Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
-                    grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                    block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
-                )
+            ctx.enqueue_function[cd_axpy_pair_kernel](
+                residual.unsafe_ptr(), x.unsafe_ptr(), coef.unsafe_ptr(),
+                conv.unsafe_ptr(), Int32(ci), Int32(prev), Int32(n_rows),
+                grid_dim=((n_rows + AXPY_TPB - 1) // AXPY_TPB, 1, 1),
+                block_dim=(AXPY_TPB, 1, 1),
+            )
+            ctx.enqueue_function[identical_gemm_leaf_kernel](
+                ws_rows.unsafe_ptr(), x.unsafe_ptr() + ci * n_rows,
+                residual.unsafe_ptr(),
+                Int32(1), Int32(1), Int32(n_rows), Int32(part[0]), Int32(part[1]),
+                Int32(n_rows), Int32(1), Int32(1), Int32(n_rows), Int32(part[1]),
+                grid_dim=((part[1] + SPLITK_LEAF_LAUNCH_TPB - 1) // SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+                block_dim=(SPLITK_LEAF_LAUNCH_TPB, 1, 1),
+            )
             ctx.enqueue_function[cd_fold_update_kernel](
                 coef.unsafe_ptr(), ws_rows.unsafe_ptr(), squared.unsafe_ptr(),
                 conv.unsafe_ptr(), Int32(ci), Int32(part[1]), l1_alpha,
