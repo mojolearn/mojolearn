@@ -2890,7 +2890,10 @@ def _center_kernel(k, K):
 
 #: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
 #: under sklearn's own ARPACK policy for eigen_solver='auto' (KernelPCA /
-#: Isomap: n > 200 and fewer than 10 components), FAST mode only.
+#: Isomap: n > 200 and fewer than 10 components), FAST mode only. OPT-IN
+#: (MOJOLEARN_XD_LANCZOS=1) until its paired quality check
+#: (bench/decomp_fast_quality.py) has run on a GPU: the one Mac run could
+#: not load a FAST x_decomp binding.
 _LANCZOS_MIN_N = 200
 _LANCZOS_MAX_NC = 10
 #: Ritz residual bound, relative to the largest |Ritz value|, and the basis cap
@@ -2969,7 +2972,7 @@ def _top_eig(k, A, nc, fast=False):
     ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
     n = A.r
     got = None
-    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get("MOJOLEARN_XD_LANCZOS", "1") != "0":
+    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get("MOJOLEARN_XD_LANCZOS", "0") == "1":
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
