@@ -258,6 +258,13 @@ OWED (step 3):
   ten-lane `--pass 2` e2e lane check (MI300X == CPU at default threads),
   test_x_ann_repeat + test_host_surface, and the bench at threads 1/3/default
   with `--fit-on-gpu` (IVF family at 1M). Result: see below when recorded.
+  STATE at 05:31Z: both GPU slots busy (decomp, sequence); a Mac-side
+  `amd_central.sh run ann-cpu ...` waiter (120 min cap) was queued to
+  launch it. NEXT SESSION: `tools/amd_central.sh sh ann-cpu 'cat
+  /root/ev-ann-cpu/job.log'`; if it is absent, relaunch with
+  `tools/amd_central.sh run ann-cpu 'setsid nohup bash /root/ev-ann-cpu/amd_job.sh > /root/ev-ann-cpu/job.out 2>&1 < /dev/null &'`
+  (box tree already synced at 3cfc52318; do not sync while it runs). The
+  script's copy is ~/mojolearn-evidence/ann-cpu/amd_job.sh.
 - NVIDIA merge gate on a pod once RunPod is funded: `gate.sh` (the ten-lane
   e2e check + the two test files) plus `cpu_paths_fold_order.patch` on
   x-ann-tsne, x-ann-cagra, x-ann-ivf-pq, and the bench at threads 1/3/unset
