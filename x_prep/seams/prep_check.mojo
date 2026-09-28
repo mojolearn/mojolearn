@@ -21,10 +21,11 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.host.program import run_program_host_ptr
 from x_prep.device import run_program_device_ptr
 from checks.numerics import identical_cos
-from x_prep.prims import add, mul, logf, sqrtf, sort_cols_unit
+from x_prep.prims import add, sub, mul, logf, sqrtf, sort_cols_unit
 from x_prep.transform import pt_fit_unit
 from x_prep.target import te_enc_unit
 from x_prep.mutual_info import mi_cc_unit, mi_cd_unit, mi_dc_unit
+from x_prep.units import run_unit
 from x_prep.mutual_info import digammaf
 from x_prep.seams.prep_oracle import (
     seq_sum, rev_sum, pinned_dot, fused_dot, key_sorted, value_sorted, guarded_mean, raw_mean,
@@ -38,6 +39,9 @@ comptime OP_QUANTILE = 2
 comptime OP_PT_FIT = 44
 comptime OP_TE_ENC = 21
 comptime OP_MI_CD = 69
+comptime OP_CLASS_STATS = 16
+comptime OP_QDA_COV = 40
+comptime OP_QDA_DEC = 42
 comptime OP_MI_DC = 94
 comptime OP_MATMUL = 13
 comptime OP_ARGMAX = 15
@@ -395,6 +399,112 @@ def check_host_mi(mut card: IdentityTrace) raises:
     print("PASS host mutual_info: the units' terms (mi_cd, mi_dc, mi_cc; ties, secondary words, singleton class, k past a class, inf fallback)")
 
 
+def _units[OP: Int](arena: List[Float32], total: Int, params: List[Int]) raises -> List[Float32]:
+    """The device's unit OP, called per unit on the host: the oracle of a
+    host spelling."""
+    var f = arena.copy()
+    var q = List[Int32](length=STAGE_INTS, fill=0)
+    for i in range(len(params)):
+        q[i] = Int32(params[i])
+    var fp = f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    for t in range(total):
+        run_unit[OP](t, fp, qp)
+    _ = len(q)
+    return f^
+
+
+def _same[OP: Int](arena: List[Float32], total: Int, params: List[Int], what: String,
+                   mut card: IdentityTrace) raises:
+    var want = _units[OP](arena, total, params)
+    var got = Prog(arena, OP, total, params).run(False)
+    for i in range(len(want)):
+        _require(_b(got[i]) == _b(want[i]), what + ": arena word " + String(i))
+    card.record_list_f32(what, got)
+
+
+def _fx(seed: Int, count: Int, scale: Float32, mut out: List[Float32]):
+    for i in range(count):
+        out.append(sub(mul(_u(seed, i), scale), mul(scale, Float32(0.5))))
+
+
+def check_host_dense(mut card: IdentityTrace) raises:
+    """The host's grouped dense units (x_prep/host/dense.mojo) write the
+    units' words: matmul 5 x 37 (a block of 16 and a remainder) over K = 23
+    with transposed strides, a bias and a scale, and a 1 x 1; class_stats with
+    a class of no rows and a code outside [0, K), every output on and some
+    off; qda_cov (K = 3, d = 5); qda_dec at d = 5 and d = 70 (the unit)."""
+    # matmul: C[i, j] = alpha * sum_l A[i*sa0 + l*sa1] B[l*sb0 + j*sb1] + bias[j]
+    var a = List[Float32]()
+    _fx(61, 5 * 23, Float32(4), a)
+    var bo = len(a)
+    _fx(62, 23 * 37, Float32(3), a)
+    var bias = len(a)
+    _fx(63, 37, Float32(2), a)
+    var alpha = len(a)
+    a.append(Float32(0.7))
+    var co = len(a)
+    for _ in range(5 * 37):
+        a.append(Float32(-1))
+    _same[OP_MATMUL](a, 5 * 37, [0, 1, 5, bo, 1, 23, co, 37, 23, bias, alpha], "host_dense.matmul", card)
+    _same[OP_MATMUL](a, 5 * 37, [0, 23, 1, bo, 37, 1, co, 37, 23, -1, -1], "host_dense.matmul_plain", card)
+    _same[OP_MATMUL](a, 1, [0, 0, 1, bo, 1, 0, co, 1, 23, -1, alpha], "host_dense.matmul_1x1", card)
+    # class_stats: q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM]
+    var n = 40
+    var d = 6
+    var K = 4
+    var cs = List[Float32]()
+    _fx(71, n * d, Float32(10), cs)
+    var y = len(cs)
+    for i in range(n):
+        var k = Int(_u(72, i) * Float32(3))  # classes 0..2; class 3 has no rows
+        if i == 7:
+            k = 9  # outside [0, K): no class's row
+        cs.append(Float32(k))
+    var cnt = len(cs)
+    for _ in range(K + 3 * K * d):
+        cs.append(Float32(-5))
+    var mean = cnt + K
+    var var_ = mean + K * d
+    var sum_ = var_ + K * d
+    _same[OP_CLASS_STATS](cs, K * d, [0, n, d, y, K, cnt, mean, var_, sum_], "host_dense.class_stats", card)
+    _same[OP_CLASS_STATS](cs, K * d, [0, n, d, y, K, -1, mean, -1, sum_], "host_dense.class_stats_partial", card)
+    # qda_cov: q = [X, n, d, Y, MEAN, CNT, COV], K = 3, d = 5
+    var dq = 5
+    var Kq = 3
+    var qc = List[Float32]()
+    _fx(81, n * dq, Float32(6), qc)
+    var qy = len(qc)
+    for i in range(n):
+        qc.append(Float32(Int(_u(82, i) * Float32(3))))
+    var qm = len(qc)
+    _fx(83, Kq * dq, Float32(1), qc)
+    var qn = len(qc)
+    for k in range(Kq):
+        qc.append(Float32(7 + k))
+    var qo = len(qc)
+    for _ in range(Kq * dq * dq):
+        qc.append(Float32(-3))
+    _same[OP_QDA_COV](qc, Kq * dq * dq, [0, n, dq, qy, qm, qn, qo], "host_dense.qda_cov", card)
+    # qda_dec: q = [X, n, d, MEAN, R, LOGC, K, OUT]
+    for dd in [5, 70]:
+        var qd = List[Float32]()
+        var nn = 9
+        _fx(91, nn * dd, Float32(4), qd)
+        var me = len(qd)
+        _fx(92, 2 * dd, Float32(1), qd)
+        var rr = len(qd)
+        _fx(93, 2 * dd * dd, Float32(0.5), qd)
+        var lc = len(qd)
+        qd.append(Float32(-1.5))
+        qd.append(Float32(-0.25))
+        var out = len(qd)
+        for _ in range(nn * 2):
+            qd.append(Float32(0))
+        _same[OP_QDA_DEC](qd, nn * 2, [0, nn, dd, me, rr, lc, 2, out], "host_dense.qda_dec_d" + String(dd), card)
+    print("PASS host dense: matmul (blocks, strides, bias, scale), class_stats, qda_cov, qda_dec: the units' words")
+
+
 def check_empty_guard(mut card: IdentityTrace) raises:
     """DEVIATION 5403: an empty (all-NaN) column's statistics are 0, never 0/0."""
     var nan = _f(UInt32(0x7FC00000))
@@ -524,6 +634,7 @@ def main() raises:
     check_host_power(card)
     check_host_te(card)
     check_host_mi(card)
+    check_host_dense(card)
     check_empty_guard(card)
     check_first_max(card)
     check_eigen_sign(card)
