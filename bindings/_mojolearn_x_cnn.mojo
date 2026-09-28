@@ -3,7 +3,7 @@
 """THE CNN LANE'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, lane 8).
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
-from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -714,6 +714,135 @@ def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObjec
     return PythonObject(nn)
 
 
+# ------------------------------------------------------------ the fit epoch
+# lane/py-misc (2026-09-28, audit rank 10): CNNClassifier.fit's steps looped
+# HERE instead of in Python. `x_cnn_fit_epoch_r` runs a run of trainer steps
+# on the resident arrays: per step the pair gather of the step's rows, each
+# block's resident forward, the head, the softmax, the head's backward, each
+# block's backward (last to first) and the list-form optimizer, which are
+# the very calls `_expansion_cnn.CNNClassifier.fit` makes one binding call
+# at a time (the same `_into[True]` functions, the same arguments, the same
+# order, each still ending in its own wait). The step's loss is written as
+# the Float64 of the Float32 the softmax entry returns, which is what the
+# Python loop stored. The optimizer's hyper rows (Adam's step scalars in
+# double, SGD's first-step flag) come from Python, computed as before. No
+# kernel, operand or order changes: the bits cannot move.
+
+
+@always_inline
+def _at(a: Int) -> FP:
+    return FP(unsafe_from_address=a)
+
+
+@always_inline
+def _at_i(a: Int) -> IP:
+    return IP(unsafe_from_address=a)
+
+
+def _epoch_plan(
+    obj: PythonObject, nb: Int, mut cs: List[List[List[Int32]]], mut ps: List[List[List[Int32]]],
+    mut pools: List[List[Bool]],
+) raises:
+    """Appends one plan: [[conv params, pool params] per block] -> the blocks' parameter blocks."""
+    if Int(py=len(obj)) != nb:
+        raise Error("x_cnn fit epoch: one [conv, pool] plan per block")
+    var c = List[List[Int32]]()
+    var p = List[List[Int32]]()
+    var o = List[Bool]()
+    for j in range(nb):
+        var t = _block_prms(obj[j][0], obj[j][1])
+        c.append(t[0].copy())
+        p.append(t[1].copy())
+        o.append(t[2])
+    cs.append(c^)
+    ps.append(p^)
+    pools.append(o^)
+
+
+def fit_epoch_r_binding(
+    spec: PythonObject, rows_addr: PythonObject, hyper_addr: PythonObject, losses_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, batch, adam (0/1)]: ceil(n / batch) steps over host int32
+    rows[0:n] (the epoch's order), step t on rows[t*batch : t*batch + m];
+    hyper = float64 rows of 9 (Adam) or 6 (SGD) per step; losses = float64 per
+    step. spec: blocks [[w, b, gw, gb, out, idx, gout, cols, conv out] per
+    block], head [w, b, gw, gb], a [x, y, logits, glog, proba, ghead], opt
+    [params, grads, buffers, counts], data [X, y, row words], dims [flat, k],
+    plan_full / plan_last [[conv params, pool params] per block] at the batch
+    and at the last step's rows."""
+    var n = Int(py=params[0])
+    var batch = Int(py=params[1])
+    var adam = Int(py=params[2]) != 0
+    if n <= 0 or batch <= 0:
+        raise Error("x_cnn fit epoch: positive rows and batch required")
+    var nh = 9 if adam else 6
+    var blocks = spec["blocks"]
+    var nb = Int(py=len(blocks))
+    var bh = List[List[Int]]()
+    for j in range(nb):
+        var h = _ints(blocks[j])
+        if len(h) != 9:
+            raise Error("x_cnn fit epoch: a block is [w, b, gw, gb, out, idx, gout, cols, conv out]")
+        bh.append(h^)
+    var head = _ints(spec["head"])
+    var a = _ints(spec["a"])
+    var data = _ints(spec["data"])
+    var dims = _ints(spec["dims"])
+    var opt = spec["opt"]
+    var t = _many(opt[0], opt[1], opt[2], opt[3])
+    # plan 0 at the batch, plan 1 at the last step's rows
+    var cs = List[List[List[Int32]]]()
+    var ps = List[List[List[Int32]]]()
+    var pools = List[List[Bool]]()
+    _epoch_plan(spec["plan_full"], nb, cs, ps, pools)
+    _epoch_plan(spec["plan_last"], nb, cs, ps, pools)
+    var flat = dims[0]
+    var k = dims[1]
+    var steps = (n + batch - 1) // batch
+    var rows = _ip(rows_addr)
+    var hyp = f64_ptr(Int(py=hyper_addr))
+    var losses = f64_ptr(Int(py=losses_addr))
+    with GILReleased(Python()):
+        for st in range(steps):
+            var s0 = st * batch
+            var m = min(batch, n - s0)
+            var q = 0 if m == batch else 1
+            res_gather_pair(a[0], data[0], data[2], a[1], data[1], 1, rows + s0, m)
+            var src = a[0]
+            for j in range(nb):
+                conv_block_forward_into[True](
+                    _at(src), _at(bh[j][0]), _at(bh[j][1]), cs[q][j], ps[q][j], pools[q][j], _at(bh[j][4]),
+                    _at_i(bh[j][5]), bh[j][7], bh[j][8],
+                )
+                src = bh[j][4]
+            linear_forward_into[True](_at(src), _at(head[0]), _at(head[1]), m, flat, k, _at(a[2]))
+            var loss = softmax_xent_into[True](_at(a[2]), _at_i(a[1]), m, k, _at(a[3]), _at(a[4]))
+            losses[st] = Float64(loss)
+            var glast = bh[nb - 1][6] if nb > 0 else a[5]
+            linear_backward_into[True](
+                _at(src), _at(head[0]), _at(a[3]), m, flat, k, _at(glast), _at(head[2]), _at(head[3])
+            )
+            for jj in range(nb):
+                var j = nb - 1 - jj
+                var bsrc = bh[j - 1][4] if j > 0 else a[0]
+                var dx = bh[j - 1][6] if j > 0 else 0
+                var want = dx != 0
+                conv_block_backward_into[True](
+                    _at(bsrc), _at(bh[j][0]), _at(bh[j][1]), _at(bh[j][6]), _at_i(bh[j][5]), cs[q][j], ps[q][j],
+                    pools[q][j], want, _at(dx) if want else _at(bh[j][3]), _at(bh[j][2]), _at(bh[j][3]), bh[j][7],
+                    bh[j][8],
+                )
+            var h = List[Float32]()
+            for e in range(nh):
+                h.append(Float32(hyp[st * nh + e]))
+            if adam:
+                opt_many_resident[True](t[0], t[1], t[2], t[3], h)
+            else:
+                opt_many_resident[False](t[0], t[1], t[2], t[3], h)
+    return PythonObject(steps)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -769,6 +898,7 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[softmax_xent_binding[True]]("x_cnn_softmax_xent_r")
         m.def_function[sgd_binding[True]]("x_cnn_sgd_r")
         m.def_function[adam_binding[True]]("x_cnn_adam_r")
+        m.def_function[fit_epoch_r_binding]("x_cnn_fit_epoch_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn: ", e))
