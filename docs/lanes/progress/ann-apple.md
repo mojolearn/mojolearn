@@ -104,3 +104,27 @@ takes 8613 ms and the 14 codebook k-means (1M x 2, 256 codes each,
 is 1023 sequential picks, each several full passes over the rows (scan,
 search, gather, GEMM, cost, adopt), already enqueued without a sync on Apple
 (KMEANS_FAST_PP_NOSYNC). IDENTICAL cannot shorten it from this lane.
+
+## M4 Pro (m4pro-b), FAST: before origin/lane/merged 003ea19ba -> after 8ce6266d7
+
+Requests 1790584328631 (before) and 1790584331100 (after). FAST adds one
+change: 5d218f95d, IVF-PQ codebooks train on at most 256 rows per code, a
+seeded uniform sample (`PQ_FAST_TRAINSET`, FAISS's max_points_per_centroid
+rule; `-D MOJOLEARN_PQ_FAST_TRAINSET_OFF` reverts). Digests equal before and
+after for every algorithm except IVF-PQ / refine (the codebooks changed);
+quality below. (t-SNE did not run in either: lane/merged's TSNE needs the
+FAST `_mojolearn_estimators.so`, which these two requests did not build; a
+t-SNE pair follows.)
+
+| algorithm (s) | before fit | after fit | before search | after search |
+|---|---|---|---|---|
+| CAGRA (50k) | 12.465 | 0.936 | 0.070 | 0.050 |
+| IVF-Flat | 2.095 | 2.063 | 0.133 | 0.139 |
+| IVF-SQ | 2.692 | 2.284 | 0.519 | 0.377 |
+| IVF-RaBitQ | 2.118 | 2.081 | 0.621 | 0.382 |
+| IVF-PQ | 11.791 | 3.697 | 0.737 | 0.375 |
+| refine (0.045 -> 0.013 s) | | | | |
+
+After, stage split (ms): IVF-PQ coarse 2032 (FAST samples the coarse
+trainset on Apple already), codebooks 1256 (was 12726 under IDENTICAL, same
+Mac), residuals 184, encode 181; CAGRA k-NN 702.
