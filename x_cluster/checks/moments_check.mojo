@@ -40,12 +40,9 @@ def run[O: ClusterOps](mut ops: O, resp: List[Float32], x: List[Float32], n: Int
     return out^
 
 
-def main() raises:
-    var n = 200
-    var d = 3
-    var kc = 4
-    var x = seam_fixture(n, d, 15)
-    var u = seam_fixture(n, kc, 16)
+def _shape(n: Int, d: Int, kc: Int, sx: Int, su: Int) raises:
+    var x = seam_fixture(n, d, sx)
+    var u = seam_fixture(n, kc, su)
     var resp = List[Float32](capacity=n * kc)
     for i in range(n):
         var s = Float32(0)
@@ -54,12 +51,20 @@ def main() raises:
         for k in range(kc):
             resp.append((abs(u[i * kc + k]) + Float32(0.01)) / s)
     var want = oracle_moments(resp, x, n, d, kc, Float32(1e-6))
-    require_separates("5110 moments fold order", count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
+    var tag = " d=" + String(d)
+    require_separates("5110 moments fold order" + tag, count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
     var dev = DeviceOps()
     var got = run(dev, resp, x, n, d, kc)
-    _same("5110 moments device", count_diff_f32(got, want))
+    _same("5110 moments device" + tag, count_diff_f32(got, want))
     var host = HostOps()
-    _same("5110 moments host", count_diff_f32(run(host, resp, x, n, d, kc), want))
+    _same("5110 moments host" + tag, count_diff_f32(run(host, resp, x, n, d, kc), want))
     var tr = IdentityTrace()
-    tr.record_list_f32("x_cluster.moments", got)
+    tr.record_list_f32("x_cluster.moments" if d == 3 else "x_cluster.moments_d" + String(d), got)
+
+
+def main() raises:
+    _shape(200, 3, 4, 15, 16)
+    # d = 19: the host's vector lanes (two groups of eight) and its scalar
+    # tail (cluster-cpu lane, 2026-09-28); n large enough to split tasks.
+    _shape(3000, 19, 3, 17, 18)
     print("PASS x_cluster moments_check")

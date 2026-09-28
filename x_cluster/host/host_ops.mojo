@@ -19,7 +19,8 @@ the same order, so the bits are the same at every thread count; it is not a
 numeric row."""
 from std.sys.compile import is_defined
 
-from cluster.host.host_cells import host_cells
+from checks.numerics import ftz, identical_div
+from cluster.host.host_cells import ftz_v, host_cells, mul_v
 
 from x_cluster.bodies import (
     FPtr,
@@ -46,6 +47,9 @@ from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
 from x_cluster.ops import ClusterOps
 
 comptime X_CLUSTER_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+#: Cells per vector in the host moments.
+comptime MOMENTS_W = 8
 
 
 
@@ -252,15 +256,51 @@ struct HostOps(ClusterOps):
 
         host_cells(nk_body, kc, 2 * n)
 
-        def xk_body(t: Int) {imm pr, imm px, imm pn, imm pm, imm n, imm d, imm kc}:
-            xk_cell(pr, px, n, d, kc, pn, pm, t)
+        # The host's moments walk the rows once per output ROW of cells and
+        # carry MOMENTS_W neighbouring cells in the lanes of one vector: each
+        # lane is its cell's own chain (`bodies.xk_cell` / `bodies.cov_cell`,
+        # rows ascending, the same flushes and pinned products), read from
+        # contiguous memory instead of one strided walk per cell.
+        def xk_task(k: Int) {imm pr, imm px, imm pn, imm pm, imm n, imm d, imm kc}:
+            var a0 = 0
+            while a0 + MOMENTS_W <= d:
+                var acc = SIMD[DType.float32, MOMENTS_W](0)
+                for i in range(n):
+                    var r = SIMD[DType.float32, MOMENTS_W](pr[i * kc + k])
+                    var xv = ftz_v[MOMENTS_W]((px + i * d + a0).load[width=MOMENTS_W]())
+                    acc = ftz_v[MOMENTS_W](acc + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](r, xv)))
+                comptime for l in range(MOMENTS_W):
+                    pm[k * d + a0 + l] = ftz(identical_div(acc[l], pn[k]))
+                a0 += MOMENTS_W
+            for a in range(a0, d):
+                xk_cell(pr, px, n, d, kc, pn, pm, k * d + a)
 
-        host_cells(xk_body, kc * d, 4 * n)
+        host_cells(xk_task, kc, 4 * n * d)
 
-        def cov_body(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg}:
-            cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, t)
+        def cov_task(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg}:
+            var k = t // d
+            var a = t - k * d
+            var ma = pm[k * d + a]
+            var b0 = 0
+            while b0 + MOMENTS_W <= d:
+                var mb = (pm + k * d + b0).load[width=MOMENTS_W]()
+                var acc = SIMD[DType.float32, MOMENTS_W](0)
+                for i in range(n):
+                    var r = SIMD[DType.float32, MOMENTS_W](pr[i * kc + k])
+                    var da = SIMD[DType.float32, MOMENTS_W](ftz(ftz(px[i * d + a]) - ma))
+                    var db = ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((px + i * d + b0).load[width=MOMENTS_W]()) - mb)
+                    var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](da, db))
+                    acc = ftz_v[MOMENTS_W](acc + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](r, prod)))
+                comptime for l in range(MOMENTS_W):
+                    var v = ftz(identical_div(acc[l], pn[k]))
+                    if a == b0 + l:
+                        v = ftz(v + reg)
+                    pc[k * d * d + a * d + b0 + l] = v
+                b0 += MOMENTS_W
+            for b in range(b0, d):
+                cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, k * d * d + a * d + b)
 
-        host_cells(cov_body, kc * d * d, 7 * n)
+        host_cells(cov_task, kc * d, 7 * n * d)
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int

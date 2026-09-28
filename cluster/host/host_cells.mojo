@@ -19,10 +19,12 @@ bits are the same at every thread count. THIS IS NOT A NUMERIC ROW.
 is the same bit test and select (a subnormal becomes its signed zero,
 everything else is returned unchanged; nothing under FAST), and
 `mul_add_v` is one rounding per lane (`fma`) under IDENTICAL, the naive
-chain under FAST. So a SIMD lane computes exactly the scalar statement it
+chain under FAST; `mul_v` is `identical_mul` (the host's pinned product,
+`llvm.arithmetic.fence` of the product, never fused into a neighbor). So a SIMD lane computes exactly the scalar statement it
 replaces; vectors run ACROSS independent outputs, never along a fold."""
 from std.math import fma
 from std.memory import bitcast
+from std.sys import llvm_intrinsic
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_parallel import host_parallelize
@@ -81,3 +83,11 @@ def mul_add_v[w: Int](
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         return fma(a, b, c)
     return a * b + c
+
+
+@always_inline
+def mul_v[w: Int](a: SIMD[DType.float32, w], b: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """`identical_mul` (the host spelling of `pinned_mul_f32`), lane by lane."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return llvm_intrinsic["llvm.arithmetic.fence", SIMD[DType.float32, w], has_side_effect=False](a * b)
+    return a * b
