@@ -1,14 +1,14 @@
 diff --git a/x_ann/host/tsne_host.mojo b/x_ann/host/tsne_host.mojo
-index 2656757f5..dc3612c19 100644
+index 41659c880..6f5314c28 100644
 --- a/x_ann/host/tsne_host.mojo
 +++ b/x_ann/host/tsne_host.mojo
-@@ -56,7 +56,8 @@ def _repulse_host(y: F32P, n: Int, row_z: F32P, rep: F32P, yf0: F32P, yf1: F32P)
-             var z = zero
-             var r0 = zero
-             var r1 = zero
--            for j in range(n):
-+            for jr in range(n):
-+                var j = n - 1 - jr
-                 var bj0 = SIMD[DType.float32, W](yf0.unsafe_load(j))
-                 var bj1 = SIMD[DType.float32, W](yf1.unsafe_load(j))
-                 var d0 = ftz_v[W](yi0 - bj0)
+@@ -40,7 +40,8 @@ def _repulse_span[masked: Bool](
+     comptime W = REP_W
+     var one = SIMD[DType.float32, W](1.0)
+     var zero = SIMD[DType.float32, W](0.0)
+-    for j in range(j0, j1):
++    for jr in range(j1 - j0):
++        var j = j1 - 1 - jr  # SABOTAGE (never shipped): the CPU fold walks j descending
+         var bj0 = SIMD[DType.float32, W](yf0.unsafe_load(j))
+         var bj1 = SIMD[DType.float32, W](yf1.unsafe_load(j))
+         var d0 = ftz_v[W](yi0 - bj0)
