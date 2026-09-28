@@ -1043,16 +1043,22 @@ def _prep_batch_bootstrap_variant(paired):
         arms = (("mean", x, "mean"), ("std", x, "std"),
                 ("diff", np.column_stack((x, y)), "diff_means")) if paired else (
                 ("unpaired", (x, y), "diff_means"),)
-        return [_range_rows("bootstrap BCa " + name + " distribution", BATCH_RANGE_ROWS,
+        # BCa endpoints reduce over the complete replicate distribution and
+        # legitimately refuse tiny windows (infinite bias correction). The
+        # distribution itself uses the same counter-addressed samples for every
+        # interval method: compare full BCa output to percentile slice output.
+        return [_range_rows("BCa distribution vs percentile replicate slices " + name, BATCH_RANGE_ROWS,
                  lambda first, count, data=data, statistic=stat: (np.asarray(ml.resample.bootstrap(
-                     data, statistic=statistic, paired=paired, method="BCa", n_resamples=count,
+                     data, statistic=statistic, paired=paired,
+                     method="BCa" if first == 0 and count == BATCH_RANGE_ROWS else "percentile",
+                     n_resamples=count,
                      r_first=first, random_state=5).distribution),),
                  min_batch=2, refusal=BOOTSTRAP_ONE_REFUSAL) for name, data, stat in arms]
     return spec
 
 
-_batch_decl(_prep_batch_bootstrap_variant(True), "resample-bca", revision="expansion-batch-2026-09-28-v1")
-_batch_decl(_prep_batch_bootstrap_variant(False), "resample-unpaired", revision="expansion-batch-2026-09-28-v1")
+_batch_decl(_prep_batch_bootstrap_variant(True), "resample-bca", revision="bca-distribution-batch-2026-09-28-v2")
+_batch_decl(_prep_batch_bootstrap_variant(False), "resample-unpaired", revision="bca-distribution-batch-2026-09-28-v2")
 
 
 def _prep_batch_permutation_samples(ml, e, Xh):

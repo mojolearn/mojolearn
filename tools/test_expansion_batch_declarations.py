@@ -87,7 +87,7 @@ def test_all_historical_missing_batch_lanes_are_declared(harness):
     }
     assert len(expected) == 57
     assert set(harness.BATCH_REVISIONS) == expected
-    assert set(harness.BATCH_REVISIONS.values()) == {"expansion-batch-2026-09-28-v1"}
+    assert all(harness.BATCH_REVISIONS[name] for name in expected)
     assert all(name in harness.BATCH for name in expected)
     assert sum(callable(harness.BATCH[name]) for name in expected) == 41
 
@@ -286,3 +286,25 @@ def test_merge_rejects_different_batch_revisions(harness, tmp_path):
     b.write_text(json.dumps(record))
     with pytest.raises(SystemExit, match="batch_revisions"):
         harness.merge([str(a), str(b)], str(tmp_path / "merged.json"))
+
+
+@pytest.mark.parametrize("name", ["resample-bca", "resample-unpaired"])
+def test_bca_distribution_uses_valid_interval_method_for_slices(harness, name):
+    from types import SimpleNamespace
+    assert harness.BATCH_REVISIONS[name] == "bca-distribution-batch-2026-09-28-v2"
+    calls = []
+    class BCaResample(Resample):
+        def bootstrap(self, data, *, n_resamples, r_first, method, **kw):
+            calls.append((n_resamples, r_first, method))
+            if method == "BCa" and n_resamples < harness.BATCH_RANGE_ROWS:
+                raise ValueError("BCa bias percentile is infinite on this small slice")
+            return super().bootstrap(data, n_resamples=n_resamples, r_first=r_first, **kw)
+    ml = SimpleNamespace(resample=BCaResample(harness.BOOTSTRAP_ONE_REFUSAL))
+    held = np.random.RandomState(23).normal(size=(512, 16)).astype(np.float32)
+    value, error = harness._probe_batch(harness._fit({}), name, ml, held, 8, False)
+    assert error is None, error
+    assert len(value) == 16
+    assert (harness.BATCH_RANGE_ROWS, 0, "BCa") in calls
+    assert any(count == 1 and method == "percentile" for count, first, method in calls)
+    assert all(method == "percentile" for count, first, method in calls
+               if count != harness.BATCH_RANGE_ROWS or first != 0)
