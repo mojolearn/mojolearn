@@ -44,13 +44,13 @@ svd (one-sided):
 
 The eigh kernel's lanes DO hand device words to each other (a cell is
 written by lane i in a column stage and by lane j in a row stage), exactly
-as `jacobi_eigh_kernel`'s do; its rotation barrier is `dev_barrier`: an
-atomic fence, then the block barrier. (`air.wg.barrier(3, 1)` through
-`external_call` does not link in a module that also calls `barrier()`:
-"existing function with conflicting attributes"; `threadfence` is
-NVIDIA-only.) The svd kernel needs no device ordering at all.
+as `jacobi_eigh_kernel`'s do; its rotation barrier is the block barrier,
+the one `jacobi_eigh_kernel` uses between rotations (its Metal column is
+proven equal to the CPU's). An atomic fence before it compiled to AIR but
+Metal's pipeline creation refused the kernel (m4pro-b, 1790606245923);
+`air.wg.barrier(3, 1)` through `external_call` does not link in a module
+that also calls `barrier()`; `threadfence` is NVIDIA-only. The svd kernel needs no device ordering at all.
 """
-from std.atomic import fence
 from std.gpu import thread_idx
 from std.memory import stack_allocation
 from std.sys.info import is_apple_gpu
@@ -78,11 +78,7 @@ comptime S2_V = J2_TPB - S2_R
 @always_inline
 def dev_barrier():
     """A block barrier that also orders DEVICE memory (x_linear/team.mojo)."""
-    comptime if is_apple_gpu():
-        fence()
-        barrier()
-    else:
-        barrier()
+    barrier()
 
 
 @always_inline
@@ -127,7 +123,7 @@ def _block_finals(
     return SIMD[DType.float32, 4](fpp, fpq, fqp, fqq)
 
 
-def jacobi_eigh2_kernel(
+def jacobi_eigh2_kernel[U: Int = J2_U](
     a_io: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
     info_out: MutPointer[Float32, MutAnyOrigin],
@@ -209,13 +205,13 @@ def jacobi_eigh2_kernel(
 
                 var k0 = tid
                 while k0 < n:
-                    var akp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    var akq = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    var apk = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    var aqk = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    var vkp = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    var vkq = InlineArray[Float32, J2_U](fill=Float32(0.0))
-                    comptime for u in range(J2_U):
+                    var akp = InlineArray[Float32, U](fill=Float32(0.0))
+                    var akq = InlineArray[Float32, U](fill=Float32(0.0))
+                    var apk = InlineArray[Float32, U](fill=Float32(0.0))
+                    var aqk = InlineArray[Float32, U](fill=Float32(0.0))
+                    var vkp = InlineArray[Float32, U](fill=Float32(0.0))
+                    var vkq = InlineArray[Float32, U](fill=Float32(0.0))
+                    comptime for u in range(U):
                         var k = k0 + u * J2_TPB
                         if k < n:
                             vkp[u] = ftz(v.unsafe_load(p * n + k))
@@ -225,7 +221,7 @@ def jacobi_eigh2_kernel(
                                 akq[u] = ftz(a.unsafe_load(k * n + q))
                                 apk[u] = ftz(a.unsafe_load(p * n + k))
                                 aqk[u] = ftz(a.unsafe_load(q * n + k))
-                    comptime for u in range(J2_U):
+                    comptime for u in range(U):
                         var k = k0 + u * J2_TPB
                         if k < n:
                             if k != p and k != q:
@@ -256,7 +252,7 @@ def jacobi_eigh2_kernel(
                                     stash[nb + 1] = fin[3]
                             v.unsafe_store(p * n + k, _rot_sub(c, vkp[u], s, vkq[u]))
                             v.unsafe_store(q * n + k, _rot_add(s, vkp[u], c, vkq[u]))
-                    k0 += J2_U * J2_TPB
+                    k0 += U * J2_TPB
                 dev_barrier()
                 par = 1 - par
 
