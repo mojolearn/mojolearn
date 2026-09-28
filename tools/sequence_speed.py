@@ -60,10 +60,17 @@ def load(path, rows):
     return X, y
 
 
+#: HIGGS's continuous columns (the b-tags 8, 12, 16, 20 are discrete)
+CONTINUOUS = [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 13, 14, 15, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27]
+
+
 def series(X, B, n):
     """B series of n values from the columns of X, each standardised then
     shifted positive (the multiplicative forecasters need y > 0)."""
-    v = np.ascontiguousarray(X.T).ravel()[: B * n].reshape(B, n)
+    cols = [c for c in CONTINUOUS if c < X.shape[1]]
+    flat = np.ascontiguousarray(X[:, cols].T).ravel()
+    reps = -(-(B * n) // len(flat))
+    v = np.tile(flat, reps)[: B * n].reshape(B, n)
     return np.ascontiguousarray(v + np.float32(10.0), dtype=np.float32)
 
 
@@ -176,11 +183,11 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
         m = ml.GARCH(1, 0, 1).fit(Y - np.float32(10.0), horizon=5)
         outs = (m.params_ if hasattr(m, "params_") else m.params, m.forecast(5))
     elif name == "autoarima":
-        m = ml.AutoARIMA(Y).search(d=range(2), p=range(3), q=range(3))
+        m = ml.AutoARIMA(Y).search(d=range(2), p=range(2), q=range(2))
         m.fit()
         outs = (m.order_, m.forecast(12))
     elif name == "var":
-        Yv = np.ascontiguousarray(Y[:4].T) if not big else np.ascontiguousarray(series(X, 4, len(X) // 4).T)
+        Yv = np.ascontiguousarray(series(X, 4, len(X) if big else 500).T)
         r = ml.VAR(Yv).fit(maxlags=2)
         outs = (r.params, r.sigma_u)
         B, n_len = Yv.shape[1], Yv.shape[0]
