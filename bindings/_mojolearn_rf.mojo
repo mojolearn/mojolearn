@@ -51,7 +51,9 @@ from forest_inference_binding import (
 )
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
-from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
@@ -207,6 +209,57 @@ def _check_criterion(
     )
 
 
+#: FAST on Apple (trees-apple3): a wider node batch. A tree deeper than 12
+#: levels has levels of more than 4096 nodes, and every batch of a level is
+#: one more round of launches, uploads and a host wait for nodes of a few
+#: rows each (M4 Pro, taxi, 100 trees of depth 16: 32.8 node batches and
+#: 71.5 histogram rounds per tree). The queue is first in, first out and a
+#: node's split reads only its own rows and its own feature sample, so the
+#: batch width changes which launch a node rides, not its split. Only the
+#: default width (4096) is widened, only for trees without a leaf budget
+#: (max_leaves -1) that may grow past 12 levels, and only as far as `RF_FAST_BATCH_BYTES` of histogram
+#: workspace per stream allows. OPT-IN until its A/B passes: `-D
+#: MOJOLEARN_RF_FAST_BATCH16K` or `-D MOJOLEARN_RF_FAST_BATCH32K`.
+comptime RF_FAST_BATCH = 0 if not (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+) else (
+    32768 if is_defined["MOJOLEARN_RF_FAST_BATCH32K"]() else (
+        16384 if is_defined["MOJOLEARN_RF_FAST_BATCH16K"]() else 0
+    )
+)
+comptime RF_FAST_BATCH_BYTES = 536870912
+comptime RF_CUML_DEFAULT_BATCH = 4096
+
+
+def _rf_batch_size(params: PythonObject) raises -> Int:
+    """Slot 15, widened under `RF_FAST_BATCH` (see its note)."""
+    var batch = Int(py=params[15])
+    comptime if RF_FAST_BATCH > 0:
+        var depth = Int(py=params[4])
+        if (
+            batch == RF_CUML_DEFAULT_BATCH
+            and Int(py=params[5]) == -1
+            and (depth > 12 or depth < 1)
+        ):
+            var n_cols = Int(py=params[1])
+            var outputs = Int(py=params[2])
+            if outputs < 1:
+                outputs = 1
+            var cols = Int(Float64(py=params[6]) * Float64(n_cols)) + 1
+            if cols > n_cols:
+                cols = n_cols
+            if cols > 40:
+                cols = 40
+            # 8 bytes covers both bin types
+            var per_node = Int(py=params[7]) * outputs * cols * 8
+            var wide = RF_FAST_BATCH
+            if per_node > 0 and wide * per_node > RF_FAST_BATCH_BYTES:
+                wide = RF_FAST_BATCH_BYTES // per_node
+            if wide > batch:
+                batch = wide
+    return batch
+
+
 def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
     """Slots 3-15 into `RF_params`, read under the GIL."""
     return RF_params(
@@ -224,7 +277,7 @@ def _rf_params_from(params: PythonObject, criterion: Int) raises -> RF_params:
             min_samples_split=Int32(Int(py=params[9])),
             split_criterion=criterion,
             min_impurity_decrease=Float32(Float64(py=params[10])),
-            max_batch_size=Int32(Int(py=params[15])),
+            max_batch_size=Int32(_rf_batch_size(params)),
         ),
     )
 
