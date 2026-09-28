@@ -111,6 +111,21 @@ comptime N_BLKS_FOR_COLS = 40 if (
     )
 )
 
+@always_inline
+def blk_cols_for(n_sampled_cols: Int) -> Int:
+    """The column blocks one pass can hold for THIS forest: never more than
+    it samples (trees-apple2). Every pass launches `min(N_BLKS_FOR_COLS,
+    n_sampled_cols - col)` blocks per node, so a 16-column forest never
+    touched the rest of a 40-block workspace -- but it allocated and, under
+    zero-after-read, zeroed all of it once per fit (M4 Pro, 40 blocks:
+    DART taxireg 5839 -> 6422 ms, steward 1790614070834). Offsets are keyed
+    on `gridDim.y`, not on the workspace size, so no value moves."""
+    var n = n_sampled_cols
+    if n < 1:
+        n = 1
+    return min(N_BLKS_FOR_COLS, n)
+
+
 comptime SMALL_NODE_SLOTS = 2048
 """Shared bins `small_node_split_kernel` holds per block."""
 
@@ -698,7 +713,10 @@ def workspace_layout(
     """
     var max_batch = Int(max_batch_size)
     var max_len_histograms = (
-        max_batch * Int(max_n_bins) * N_BLKS_FOR_COLS * Int(num_outputs)
+        max_batch
+        * Int(max_n_bins)
+        * blk_cols_for(n_sampled_cols)
+        * Int(num_outputs)
     )
     var max_blocks = max_blocks_dimx_for(max_batch_size, n_sampled_rows)
 
@@ -1292,7 +1310,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var max_len_histograms = (
             max_batch
             * Int(params.max_n_bins)
-            * N_BLKS_FOR_COLS
+            * blk_cols_for(self.original_n_sampled_cols)
             * Int(num_outputs)
         )
 
@@ -1389,7 +1407,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.hist_clean = False
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
             self.split_cand = ctx.enqueue_create_buffer[DType.uint8](
-                size_of[Split[Self.O.DataT]]() * max_batch * N_BLKS_FOR_COLS
+                size_of[Split[Self.O.DataT]]()
+                * max_batch
+                * blk_cols_for(self.original_n_sampled_cols)
             )
         else:
             self.split_cand = ctx.enqueue_create_buffer[DType.uint8](1)
