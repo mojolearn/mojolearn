@@ -191,9 +191,7 @@ def check_rung1_scope(
             + " MiB: the raft::cache LRU is not implemented in rung 1; pass 0 (their"
             + " n_cache_sets == 0 path, taken exactly). See svm/NOT_IMPLEMENTED.tsv"
         )
-    if kp.kernel == KERNEL_PRECOMPUTED:
-        raise Error("svm: kernel=PRECOMPUTED is not implemented in rung 1")
-    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF and kp.kernel != KERNEL_POLYNOMIAL and kp.kernel != KERNEL_TANH:
+    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF and kp.kernel != KERNEL_POLYNOMIAL and kp.kernel != KERNEL_TANH and kp.kernel != KERNEL_PRECOMPUTED:
         raise Error("svm: unknown kernel " + String(kp.kernel))
     if kp.kernel == KERNEL_TANH:
         # cuVS `TanhKernel`: tanh(gain * K + offset), the kernel_methods

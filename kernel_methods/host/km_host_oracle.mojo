@@ -111,6 +111,9 @@ comptime KMH_KERNEL_RBF = 2
 comptime KMH_KERNEL_SIGMOID = 3
 comptime KMH_KERNEL_PRECOMPUTED = 4
 comptime KMH_KERNEL_LAPLACIAN = 5
+comptime KMH_KERNEL_COSINE = 6
+comptime KMH_KERNEL_CHI2 = 7
+comptime KMH_KERNEL_ADDITIVE_CHI2 = 8
 # Same bound as impl/distance/kernel_matrices.mojo, without importing GPU code.
 comptime KMH_MAX_DEGREE = 32
 
@@ -129,6 +132,12 @@ def kmh_kernel_name(kernel: Int) -> String:
         return String("precomputed")
     if kernel == KMH_KERNEL_LAPLACIAN:
         return String("laplacian")
+    if kernel == KMH_KERNEL_COSINE:
+        return String("cosine")
+    if kernel == KMH_KERNEL_CHI2:
+        return String("chi2")
+    if kernel == KMH_KERNEL_ADDITIVE_CHI2:
+        return String("additive_chi2")
     return String("unknown")
 
 
@@ -179,7 +188,7 @@ def kmh_validate_kernel(
     """The device's five kernel kinds and polynomial degree contract."""
     if kernel == KMH_KERNEL_PRECOMPUTED:
         raise Error(what + ": kernel='precomputed' is refused by name (DEVIATION 1683)")
-    if kernel < 0 or kernel > KMH_KERNEL_LAPLACIAN:
+    if kernel < 0 or kernel > KMH_KERNEL_ADDITIVE_CHI2:
         raise Error(what + ": unknown kernel value " + String(kernel))
     if kernel == KMH_KERNEL_POLYNOMIAL:
         if degree < 0 or degree > KMH_MAX_DEGREE:
@@ -188,7 +197,7 @@ def kmh_validate_kernel(
         raise Error(what + ": gamma is NaN")
     if coef0 != coef0:
         raise Error(what + ": coef0 is NaN")
-    if kernel != KMH_KERNEL_LINEAR and not (gamma > 0.0):
+    if kernel != KMH_KERNEL_LINEAR and kernel != KMH_KERNEL_COSINE and kernel != KMH_KERNEL_ADDITIVE_CHI2 and not (gamma > 0.0):
         raise Error(
             what
             + ": the " + kmh_kernel_name(kernel) + " kernel needs a POSITIVE gamma; got a value that is"
@@ -205,6 +214,21 @@ def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
             var v = ftz(x[i * k + c])
             acc = ftz(identical_mul_add(v, v, acc))
         out.append(ftz(acc))
+    return out^
+
+
+def _kmh_cosine_rows(x: List[Float32], rows: Int, k: Int) -> List[Float32]:
+    """`cosine_rows_kernel`: each row over its l2 norm, a zero row as is."""
+    var norms = kmh_row_norms(x, rows, k)
+    var out = List[Float32](capacity=rows * k)
+    for r in range(rows):
+        var q = ftz(norms[r])
+        for c in range(k):
+            var v = ftz(x[r * k + c])
+            if q == Float32(0.0):
+                out.append(v)
+            else:
+                out.append(ftz(identical_div(v, ftz(identical_sqrt(q)))))
     return out^
 
 
@@ -255,6 +279,28 @@ def kmh_kernel_matrix(
         else:
             host_parallelize(_rows, tasks)
         return out^
+    if kernel == KMH_KERNEL_CHI2 or kernel == KMH_KERNEL_ADDITIVE_CHI2:
+        # chi2_cell_kernel, cell by cell, the same line
+        var out = List[Float32](length=m * n, fill=Float32(0.0))
+        var gain = Float32(-gamma)
+        for i in range(m):
+            for j in range(n):
+                var acc = Float32(0.0)
+                for c in range(k):
+                    var x = ftz(a[i * k + c])
+                    var y = ftz(b[j * k + c])
+                    var s = ftz(x + y)
+                    if s != Float32(0.0):
+                        var d = ftz(x - y)
+                        acc = ftz(acc + ftz(identical_div(ftz(identical_mul(d, d)), s)))
+                if kernel == KMH_KERNEL_CHI2:
+                    out[i * n + j] = ftz(identical_exp(ftz(identical_mul(gain, acc))))
+                else:
+                    out[i * n + j] = -acc
+        return out^
+    if kernel == KMH_KERNEL_COSINE:
+        # cosine_rows_kernel on both operands, then the pinned GEMM
+        return gemm_oracle(_kmh_cosine_rows(a, m, k), _kmh_cosine_rows(b, n, k), OP_NT, m, n, k)
     var dot = gemm_oracle(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^
@@ -301,13 +347,37 @@ def kmh_kernel_ridge_fit(
     gamma: Float64,
     coef0: Float64,
     alpha: Float32,
+    sw: List[Float32] = List[Float32](),
 ) raises -> List[Float32]:
-    """`kernel_ridge_fit_host`: form `K`, ridge it, factor it, solve it.
-    Returns `dual_coef_`, `n x t` row-major; the fit refuses a non-zero
-    `info` by name (DEVIATION 1662)."""
+    """`kernel_ridge_fit_host`: form `K` (or take it, kernel='precomputed'),
+    weight it (`sw`, the per-row sqrt(sample_weight) factors, empty when
+    unweighted), ridge it, factor it, solve it. Returns `dual_coef_`,
+    `n x t` row-major; the fit refuses a non-zero `info` by name
+    (DEVIATION 1662)."""
     kmh_validate_matrix(x, n, d, "kernel_ridge X")
     kmh_validate_matrix(y, n, t, "kernel_ridge y")
-    kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
+    var precomputed = kernel == KMH_KERNEL_PRECOMPUTED
+    if precomputed:
+        if d != n:
+            raise Error(
+                "kernel_ridge_fit_host: kernel='precomputed' needs a square"
+                " kernel matrix, got " + String(n) + " x " + String(d)
+            )
+    else:
+        kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
+    var weighted = len(sw) > 0
+    if weighted:
+        if len(sw) != n:
+            raise Error(
+                "kernel_ridge_fit_host: sample weight factors hold "
+                + String(len(sw)) + " values, X has " + String(n) + " rows"
+            )
+        for i in range(n):
+            if not (sw[i] >= Float32(0.0)) or sw[i] > Float32(3.4028234663852886e38):
+                raise Error(
+                    "kernel_ridge_fit_host: sample weight factor " + String(i)
+                    + " is negative or not finite; refused by name"
+                )
     if alpha != alpha:
         raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
     if alpha < Float32(0.0):
@@ -316,7 +386,14 @@ def kmh_kernel_ridge_fit(
             " negative value. scikit-learn's own parameter constraint is"
             " Interval(Real, 0, None, closed='left'). DEVIATION 1686"
         )
-    var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x, x, n, n, d)
+    var k = x.copy() if precomputed else kmh_kernel_matrix(kernel, degree, gamma, coef0, x, x, n, n, d)
+    if weighted:
+        # krr_weight_kernel: ftz(ftz(K_ij) * ftz(ftz(s_i) * ftz(s_j)))
+        for i in range(n):
+            var si = ftz(sw[i])
+            for j in range(n):
+                var w = ftz(si * ftz(sw[j]))
+                k[i * n + j] = ftz(ftz(k[i * n + j]) * w)
     # add_ridge_diag_kernel
     for i in range(n):
         var dv = ftz(k[i * n + i])
@@ -339,9 +416,21 @@ def kmh_kernel_ridge_fit(
             + String(n)
             + ". THE CLOSURE IS alpha: raise it (DEVIATION 1662)"
         )
-    var dual = chol_host_solve(f, y, t)
+    var dual = chol_host_solve(f, kmh_scale_rows(y, sw, n, t) if weighted else y.copy(), t)
     _ = f^
+    if weighted:
+        return kmh_scale_rows(dual, sw, n, t)
     return dual^
+
+
+def kmh_scale_rows(v: List[Float32], sw: List[Float32], n: Int, t: Int) -> List[Float32]:
+    """`krr_scale_rows`: `ftz(ftz(v) * ftz(s_i))`, one rounding per cell."""
+    var out = List[Float32](capacity=n * t)
+    for i in range(n):
+        var si = ftz(sw[i])
+        for c in range(t):
+            out.append(ftz(ftz(v[i * t + c]) * si))
+    return out^
 
 
 def kmh_kernel_ridge_predict(
@@ -360,6 +449,11 @@ def kmh_kernel_ridge_predict(
     """`kernel_ridge_predict_host`: `K(X, X_fit) . dual` at OP_NN
     (DEVIATION 1680). `q x t` row-major."""
     kmh_validate_matrix(x_new, q, d, "predict X")
+    if kernel == KMH_KERNEL_PRECOMPUTED:
+        # X IS the q x n cross-kernel matrix.
+        if d != n:
+            raise Error("kernel_ridge predict: kernel='precomputed' needs X with n_samples columns")
+        return gemm_oracle(x_new, dual, OP_NN, q, t, n)
     kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
     var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x_new, x_fit, q, n, d)
     return gemm_oracle(k, dual, OP_NN, q, t, n)

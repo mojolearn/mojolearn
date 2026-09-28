@@ -86,3 +86,42 @@ def gpr_host_sample_y(
     _ = z^
     _ = lz^
     return y^
+
+
+def gpr_host_predict_cov(
+    x_train: List[Float32],
+    l: List[Float32],
+    dual: List[Float32],
+    n_train: Int,
+    n_features: Int,
+    spec: GPHostKernelSpec,
+    info: Int,
+    x_star: List[Float32],
+    n_star: Int,
+    mut mean_out: List[Float32],
+) raises -> List[Float32]:
+    """`predict(X, return_cov=True)`: `gpr_predict_cov_host`'s bytes. Writes
+    the mean into `mean_out`, returns the `n_star x n_star` covariance
+    (`gpr_host_sample_y`'s first half, the same line for line)."""
+    if info != 0:
+        raise Error(
+            "gpr_predict_cov_host: refusing to predict from a FAILED fit"
+            " (info=" + String(info) + "). DEVIATION 1634"
+        )
+    if n_star <= 0:
+        raise Error("gpr_predict_cov_host: n_star must be positive, got " + String(n_star))
+    gpr_host_validate_data(x_star, n_star, n_features, String("X_star"))
+    var kcross = gpr_host_kernel_matrix(
+        x_train, n_train, x_star, n_star, n_features, spec, False
+    )
+    mean_out = gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)
+    chol_host_trsm_lower(l, kcross, n_train, n_star)
+    var vtv = gemm_oracle(kcross, kcross, OP_TN, n_star, n_star, n_train)
+    var kss = gpr_host_kernel_matrix(
+        x_star, n_star, x_star, n_star, n_features, spec, True
+    )
+    var cov = gp_sample_y_covariance(kss, vtv, n_star)
+    _ = kcross^
+    _ = vtv^
+    _ = kss^
+    return cov^
