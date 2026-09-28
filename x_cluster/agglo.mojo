@@ -27,6 +27,9 @@ CODE, one source compiled into both bindings, as OPTICS's ordering loop:
   (i, j < i, in the order components are found from vertex 0) the closest
   pair of points, the lowest (row of i, row of j) on a tie, becomes an edge.
 """
+from std.os import getenv
+from std.time import perf_counter_ns
+
 from checks.numerics import identical_sqrt
 from x_cluster.bodies import LINK_SINGLE, LINK_WARD, lance_williams
 from x_cluster.ops import ClusterOps
@@ -222,6 +225,14 @@ def agglo_tree[O: ClusterOps](
                     adj[bj * n + bi] = True
 
     # -------------------------------------------------- the merge loop
+    # MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): the wall time
+    # of the loop's four parts, printed once. Off, four untaken branches a step.
+    var ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
+    var ph_t = Int(perf_counter_ns()) if ph_on else 0
+    var ph_init = 0
+    var ph_argmin = 0
+    var ph_lw = 0
+    var ph_rescan = 0
     var live = List[Bool](length=n, fill=True)
     var node = List[Int](capacity=n)
     var size = List[Float64](length=n, fill=Float64(1))
@@ -233,6 +244,10 @@ def agglo_tree[O: ClusterOps](
 
     for i in range(n):
         _rescan(i, n, live, adj, constrained, dm, dead, nn, md)
+    if ph_on:
+        var now = Int(perf_counter_ns())
+        ph_init = now - ph_t
+        ph_t = now
     children = List[Int32](capacity=2 * n_merges)
     dist = List[Float32](capacity=n_merges)
     for step in range(n_merges):
@@ -240,6 +255,10 @@ def agglo_tree[O: ClusterOps](
         for i in range(n):
             if live[i] and nn[i] >= 0 and (a < 0 or md[i] < md[a]):
                 a = i
+        if ph_on:
+            var now = Int(perf_counter_ns())
+            ph_argmin += now - ph_t
+            ph_t = now
         if a < 0:
             raise Error("AgglomerativeClustering: no connected pair is left to merge")
         var b = nn[a]
@@ -266,6 +285,10 @@ def agglo_tree[O: ClusterOps](
             if constrained and (ha or hb):
                 adj[a * n + k] = True
                 adj[k * n + a] = True
+        if ph_on:
+            var now = Int(perf_counter_ns())
+            ph_lw += now - ph_t
+            ph_t = now
         live[b] = False
         nn[b] = -1
         size[a] = na + nb
@@ -284,3 +307,13 @@ def agglo_tree[O: ClusterOps](
                 if nn[i] < 0 or v < md[i] or (v == md[i] and a < nn[i]):
                     nn[i] = a
                     md[i] = v
+        if ph_on:
+            var now = Int(perf_counter_ns())
+            ph_rescan += now - ph_t
+            ph_t = now
+    if ph_on:
+        print(
+            "XCPHASE agglo.loop init_ms=" + String(Float64(ph_init) / 1.0e6) + " argmin_ms="
+            + String(Float64(ph_argmin) / 1.0e6) + " lance_williams_ms=" + String(Float64(ph_lw) / 1.0e6)
+            + " rescan_ms=" + String(Float64(ph_rescan) / 1.0e6)
+        )

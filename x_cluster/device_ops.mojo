@@ -6,6 +6,8 @@ bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
+from std.time import perf_counter_ns
 from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -524,6 +526,15 @@ struct DeviceOps(ClusterOps):
     var mpart: DeviceBuffer[DType.float32]
     """FAST moments' per-slice partials, grown once per fit."""
     var mpart_n: Int
+    var ph_on: Bool
+    """MOJOLEARN_XC_PHASES=1 (a diagnostic, lane cluster-apple3): every
+    primitive drains the stream when it returns and its wall time is added to
+    its name; the time between two primitives is the driver's (`host`). The
+    table prints when the fit's ops die. Off, nothing changes."""
+    var ph_t: Int
+    var ph_names: List[String]
+    var ph_ns: List[Int]
+    var ph_calls: List[Int]
 
     def __init__(out self) raises:
         self.ctx = x_cluster_ctx()
@@ -533,6 +544,11 @@ struct DeviceOps(ClusterOps):
         self.pend_i = List[List[Int32]]()
         self.mpart = self.ctx.enqueue_create_buffer[DType.float32](1)
         self.mpart_n = 1
+        self.ph_on = getenv("MOJOLEARN_XC_PHASES") == "1"
+        self.ph_t = Int(perf_counter_ns())
+        self.ph_names = List[String]()
+        self.ph_ns = List[Int]()
+        self.ph_calls = List[Int]()
 
     def __del__(deinit self):
         # the buffers and the pending sources die with this value: drain first
@@ -540,6 +556,39 @@ struct DeviceOps(ClusterOps):
             self.ctx.synchronize()
         except:
             pass
+        if self.ph_on:
+            var now = Int(perf_counter_ns())
+            print("XCPHASE host_tail " + String(Float64(now - self.ph_t) / 1.0e6) + " ms")
+            for q in range(len(self.ph_names)):
+                print(
+                    "XCPHASE " + self.ph_names[q] + " " + String(Float64(self.ph_ns[q]) / 1.0e6) + " ms calls="
+                    + String(self.ph_calls[q])
+                )
+
+    def _ph_add(mut self, name: String, ns: Int):
+        for q in range(len(self.ph_names)):
+            if self.ph_names[q] == name:
+                self.ph_ns[q] += ns
+                self.ph_calls[q] += 1
+                return
+        self.ph_names.append(name)
+        self.ph_ns.append(ns)
+        self.ph_calls.append(1)
+
+    def _ph0(mut self):
+        """A primitive starts: the time since the last mark was the driver's."""
+        if self.ph_on:
+            var now = Int(perf_counter_ns())
+            self._ph_add("host", now - self.ph_t)
+            self.ph_t = now
+
+    def _ph1(mut self, name: String) raises:
+        """A primitive returns: drain, and the time since `_ph0` is its own."""
+        if self.ph_on:
+            self.ctx.synchronize()
+            var now = Int(perf_counter_ns())
+            self._ph_add(name, now - self.ph_t)
+            self.ph_t = now
 
     def _sync(mut self) raises:
         self.ctx.synchronize()
@@ -575,29 +624,37 @@ struct DeviceOps(ClusterOps):
         self.ctx.enqueue_copy(dst_buf=buf, src_ptr=self.pend_i[len(self.pend_i) - 1].unsafe_ptr())
 
     def put(mut self, v: List[Float32]) raises -> Int:
+        self._ph0()
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         self._upload(buf, v)
         self.f.append(buf^)
+        self._ph1("put")
         return len(self.f) - 1
 
     def put_i(mut self, v: List[Int32]) raises -> Int:
+        self._ph0()
         var n = len(v)
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         self._upload_i(buf, v)
         self.i.append(buf^)
+        self._ph1("put_i")
         return len(self.i) - 1
 
     def zeros(mut self, n: Int) raises -> Int:
+        self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         self.ctx.enqueue_memset(buf, Float32(0))
         self.f.append(buf^)
+        self._ph1("zeros")
         return len(self.f) - 1
 
     def zeros_i(mut self, n: Int) raises -> Int:
+        self._ph0()
         var buf = self.ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         self.ctx.enqueue_memset(buf, Int32(0))
         self.i.append(buf^)
+        self._ph1("zeros_i")
         return len(self.i) - 1
 
     def _enq_get(mut self, slot: Int, n: Int, mut out: List[Float32]) raises:
@@ -613,18 +670,23 @@ struct DeviceOps(ClusterOps):
             self.ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
 
     def get(mut self, slot: Int, n: Int) raises -> List[Float32]:
+        self._ph0()
         var out = List[Float32]()
         self._enq_get(slot, n, out)
         self._sync()
+        self._ph1("get")
         return out^
 
     def get_i(mut self, slot: Int, n: Int) raises -> List[Int32]:
+        self._ph0()
         var out = List[Int32]()
         self._enq_get_i(slot, n, out)
         self._sync()
+        self._ph1("get_i")
         return out^
 
     def gets(mut self, slots: List[Int], ns: List[Int]) raises -> List[List[Float32]]:
+        self._ph0()
         var outs = List[List[Float32]](capacity=len(slots))
         for q in range(len(slots)):
             outs.append(List[Float32](length=ns[q], fill=Float32(0)))
@@ -633,93 +695,123 @@ struct DeviceOps(ClusterOps):
                 var view = self.f[slots[q]].create_sub_buffer[DType.float32](0, ns[q])
                 self.ctx.enqueue_copy(dst_ptr=outs[q].unsafe_ptr(), src_buf=view)
         self._sync()
+        self._ph1("gets")
         return outs^
 
     def get_if(
         mut self, islot: Int, ni: Int, fslot: Int, nf: Int, mut oi: List[Int32], mut of: List[Float32]
     ) raises:
+        self._ph0()
         self._enq_get_i(islot, ni, oi)
         self._enq_get(fslot, nf, of)
         self._sync()
+        self._ph1("get_if")
 
     def set(mut self, slot: Int, v: List[Float32]) raises:
+        self._ph0()
         var n = len(v)
         if n == 0:
+            self._ph1("set")
             return
         var view = self.f[slot].create_sub_buffer[DType.float32](0, n)
         if n >= _PUT_SYNC_MIN:
             self.ctx.enqueue_copy(dst_buf=view, src_ptr=v.unsafe_ptr())
             self._sync()
+            self._ph1("set")
             return
         self.pend_f.append(v.copy())
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=self.pend_f[len(self.pend_f) - 1].unsafe_ptr())
+        self._ph1("set")
 
     def sqdist(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, dst: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_sqdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
+        self._ph1("sqdist")
 
     def nearest(mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, labels: Int, dist: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_nearest_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), self._ip(labels), self._fp(dist),
             grid_dim=_grid(na), block_dim=TPB,
         )
+        self._ph1("nearest")
 
     def sqrt(mut self, x: Int, n: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_sqrt_kernel](
             self._fp(x), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("sqrt")
 
     def kth(mut self, m: Int, n_rows: Int, n_cols: Int, k: Int, dst: Int) raises:
+        self._ph0()
         if n_rows <= 0:
+            self._ph1("kth")
             return
         self.ctx.enqueue_function[_kth_kernel](
             self._fp(m), Int32(n_rows), Int32(n_cols), Int32(k), self._fp(dst),
             grid_dim=n_rows if n_rows > 0 else 1, block_dim=KTH_TPB,
         )
+        self._ph1("kth")
 
     def meanshift(
         mut self, x: Int, n: Int, d: Int, bw: Float32, stop: Float32, max_iter: Int,
         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
     ) raises:
+        self._ph0()
         self.ctx.enqueue_function[_meanshift_kernel](
             self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
             self._fp(centers), Int32(ns), self._fp(scratch), self._ip(intensity), self._ip(iters),
             grid_dim=_grid(ns), block_dim=TPB,
         )
+        self._ph1("meanshift")
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
+        self._ph0()
         self.ctx.enqueue_function[_ap_r_kernel](
             self._fp(s), self._fp(a), self._fp(r), Int32(n), damping, grid_dim=n if n > 0 else 1, block_dim=AP_TPB,
         )
+        self._ph1("ap_r")
 
     def ap_a(mut self, r: Int, a: Int, n: Int, damping: Float32) raises:
+        self._ph0()
         self.ctx.enqueue_function[_ap_a_kernel](
             self._fp(r), self._fp(a), Int32(n), damping, grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("ap_a")
 
     def ap_noise(mut self, s: Int, m: Int, seed: UInt64) raises:
+        self._ph0()
         if m <= 0:
+            self._ph1("ap_noise")
             return
         self.ctx.enqueue_function[_ap_noise_kernel](self._fp(s), Int64(m), seed, grid_dim=_grid(m), block_dim=TPB)
+        self._ph1("ap_noise")
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_ap_e_kernel](
             self._fp(a), self._fp(r), Int32(n), self._ip(e), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("ap_e")
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_descend_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(centers), self._ip(nodes), self._ip(labels),
             grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("descend")
 
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
         seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
         weights: List[Float32] = List[Float32](),
     ) raises -> Float64:
+        self._ph0()
         var xc = x.copy()
         centers = List[Float32](length=k * d, fill=Float32(0))
         var lab = List[UInt32](length=n, fill=UInt32(0))
@@ -740,28 +832,37 @@ struct DeviceOps(ClusterOps):
         labels = List[Int32](capacity=n)
         for t in range(n):
             labels.append(Int32(lab[t]))
+        self._ph1("kmeans")
         return r.inertia
 
     def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_gauss_q_kernel](
             self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), Int32(kc), self._fp(dst),
             grid_dim=_grid(n * kc), block_dim=TPB,
         )
+        self._ph1("gauss_q")
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_resp_kernel](
             self._fp(q), self._fp(c), Int32(n), Int32(kc), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("resp")
 
     def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        self._ph0()
         self.ctx.enqueue_function[_exp_kernel](
             self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
         )
+        self._ph1("exp")
 
     def moments(
         mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
     ) raises:
+        self._ph0()
         if kc <= 0:
+            self._ph1("moments")
             return
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if d <= MOM_MAX_D and n > 0:
@@ -781,6 +882,7 @@ struct DeviceOps(ClusterOps):
                         pp, Int32(S), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means), self._fp(cov),
                         Int32(cp), grid_dim=_grid(kc * nch), block_dim=TPB,
                     )
+                self._ph1("moments")
                 return
         if d <= MOM_MAX_D:
             self.ctx.enqueue_function[_moments_pass_kernel](
@@ -792,6 +894,7 @@ struct DeviceOps(ClusterOps):
                 self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), reg, self._fp(nk), self._fp(means),
                 self._fp(cov), Int32(1), grid_dim=kc * g_per_k, block_dim=MOM_TPB,
             )
+            self._ph1("moments")
             return
         self.ctx.enqueue_function[_nk_kernel](
             self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
@@ -804,11 +907,14 @@ struct DeviceOps(ClusterOps):
             self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), self._fp(nk), reg,
             self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
         )
+        self._ph1("moments")
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
     ) raises:
+        self._ph0()
         self.ctx.enqueue_function[_pdist_kernel](
             self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), Int32(metric), p, self._fp(dst),
             grid_dim=_grid(na * nb), block_dim=TPB,
         )
+        self._ph1("pdist")
