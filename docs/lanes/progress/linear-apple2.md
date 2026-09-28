@@ -33,7 +33,7 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | c5179e11d | CD opt-in two-launch coordinate | IDENTICAL | REVERTED (cd7e61dd5): 4.98 vs 4.63 ms per epoch | - |
 | 1d7b8a2a7 | SGD pipelined shuffle: the order copy loads 16 words ahead | both | on | no |
 | 210de5ee8c, 90bad7fd9 | CD on Apple IDENTICAL: two launches per coordinate (fold + update of the previous coordinate inside the next axpy launch, every block folding for itself; coef and conv double-buffered) | IDENTICAL | on (`-D MOJOLEARN_CD_TWO_STEP_OFF=1` returns to three) | no |
-| ca3db4544 | x_linear GPU shuffle: the draw's remainder from float32 quotient estimates (exact) | both | on (pending measurement) | x_linear/ops.mojo |
+| ca3db4544 | x_linear GPU shuffle: the draw's remainder from float32 quotient estimates (exact) | both | REVERTED: slower (0.974 vs 0.898 s sgd-clf, m4-a 1790608464376) | - |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -177,4 +177,20 @@ M4 Pro, round 2: Lasso and ElasticNet 2.6x, 3.2x per epoch.
 | sgd-ocsvm | 1.005 | 0.852 |
 
 Digests equal on every line; SGDDIAG 72 of 72 same bits.
+
+### SGD on the M4 (m4-a, steward 1790608464376), IDENTICAL, 100k, four arms in one job
+
+| case | 037daa353 | 5097d69d4 | 1d7b8a2a7 | ca3db4544 (reverted) | host |
+|---|---|---|---|---|---|
+| sgd-clf | 4.320 | 1.045 | 0.898 | 0.974 | 0.181 |
+| sgd-reg | 3.049 | 1.021 | 0.884 | 0.961 | 0.089 |
+| perceptron | 2.665 | 1.025 | 0.859 | 0.938 | 0.112 |
+| pa-clf | 3.984 | 1.031 | 0.880 | 0.943 | 0.173 |
+| pa-reg | 2.802 | 1.013 | 0.873 | 0.939 | 0.096 |
+| sgd-ocsvm | 2.974 | 1.016 | 0.852 | 0.947 | 0.090 |
+
+Digests equal on every line and to the host; SGDDIAG 144 of 144 same bits.
+The shuffle (about 0.15 s per epoch, one lane) is still longer than the row
+pass (0.10 s per epoch) it overlaps; neither a load-ahead nor a cheaper
+remainder shortened it, so its cost is elsewhere in the step (not found).
 
