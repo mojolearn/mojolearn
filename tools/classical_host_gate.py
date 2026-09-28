@@ -233,6 +233,15 @@ def _ivf_probe(e, Q):
     return (d, i, e.n_candidates_)
 
 
+def _ivf_filter_probe(e, Q):
+    """identity_break's ivf-filter infer probe: `search(filter=)` with every
+    third indexed row removed, then `n_candidates_` (DEVIATION 5863)."""
+    import numpy as np
+    keep = (np.arange(len(e.list_indices_)) % 3) != 0
+    d, i = e.search(Q, filter=keep)
+    return (d, i, e.n_candidates_)
+
+
 _IVF_EXTRAS = {
     'search_second_batch_ids': lambda e, X: e.search(X[64:128])[1],
     'list_indices': lambda e, X: e.list_indices_,
@@ -447,6 +456,8 @@ LANES = {
     # identity_break's 512 held-out ids through the saved table.
     'ivf': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
     'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),
+    # lane/algos-ann-b (2026-09-28): the sample filter over the same saved index.
+    'ivf-filter': ('IVFIndex', lambda e, X: _ivf_filter_probe(e, X[:64]), {}),
     'embedding': ('Embedding', lambda e, X: _embedding_probe(e, X), {}),
     # Stage 2 of the same lane: an index built and EXTENDED on the GPU, saved;
     # the extras extend a clone of the loaded index by 64 held-out rows (the
@@ -513,6 +524,7 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                **{f'kernel-ridge-{kernel}': 'predict' for kernel in ('poly', 'sigmoid', 'laplacian')},
                **{f'nystroem-{kernel}': 'transform' for kernel in ('poly', 'sigmoid', 'laplacian')},
                'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
+               'ivf-filter': 'search_distances',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
                'svr': 'predict', 'svr-linear': 'predict',
                'dbscan': 'predict', 'agglomerative': 'predict',

@@ -1,0 +1,57 @@
+# The neighbors family's EXISTING lanes (registered in tools/identity_break.py):
+# checking any of them runs tools/identity_lanes/neighbors.checks (LANE CHARTER,
+# 2026-09-27: a family lane owns its existing algorithms too). The end-to-end
+# device-only sabotage for all of them is
+# x_neighbors/checks/sabotage/e2e_existing_device.patch.
+# k-NN search, classifier, regressor, radius
+knn
+knn-sqeuclidean
+knn-manhattan
+knn-chebyshev
+knn-cosine
+knn-minkowski-p3
+knn-rbc
+knn-clf
+knn-clf-distance
+knn-reg
+knn-reg-distance
+radius
+radius-manhattan
+radius-chebyshev
+radius-minkowski-p3
+# kernel density
+kde
+kde-tophat-sqeuclidean
+kde-epanechnikov-l1
+kde-exponential-chebyshev
+kde-linear-cosine
+kde-cosine-minkowski
+kde-weighted
+# SVM (SMO)
+svc
+svc-linear
+svc-poly
+svr
+svr-linear
+# Gaussian processes
+gp
+gp-normalize-y
+gp-sample-y
+gp-sample-y-normalize
+gp-optimize
+gp-optimize-restarts
+gp-matern12
+gp-matern32
+gp-matern52-ard
+gpc
+gpc-multiclass
+# kernel methods
+kernel-ridge
+kernel-ridge-poly
+kernel-ridge-sigmoid
+kernel-ridge-laplacian
+nystroem
+nystroem-poly
+nystroem-sigmoid
+nystroem-laplacian
+rbf-sampler

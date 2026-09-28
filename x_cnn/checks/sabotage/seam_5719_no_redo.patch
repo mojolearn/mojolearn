@@ -1,0 +1,20 @@
+--- a/x_cnn/host/gemm_host.mojo
++++ b/x_cnn/host/gemm_host.mojo
+@@ -226,7 +226,7 @@
+             acc[v] = identical_mul_add_simd[GW](av, b.unsafe_load[width=GW](base + v * GW), acc[v])
+         comptime for v in range(V):
+             trk = min(trk, _suspect(acc[v]))
+-    if trk.reduce_min() < SUB_LO:
++    if trk.reduce_min() < SUB_LO and False:  # SABOTAGE (seam 5719): the fallback removed
+         comptime for v in range(V):
+             var cr = GV(0)
+             for p in range(p0, p1):
+@@ -273,7 +273,7 @@
+                     min(min(_suspect(c4), _suspect(c5)), min(_suspect(c6), _suspect(c7))),
+                 ),
+             )
+-        if trk.reduce_min() < SUB_LO:
++        if trk.reduce_min() < SUB_LO and False:  # SABOTAGE (seam 5719): the fallback removed
+             # A nonzero subnormal raw result: this group again, flushed at
+             # every step (the oracle's chain as written).
+             var jr = jb

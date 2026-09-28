@@ -1,0 +1,13 @@
+diff --git a/mixture/checks/mstep.mojo b/mixture/checks/mstep.mojo
+index 74efc2812..99d9ec4ee 100644
+--- a/mixture/checks/mstep.mojo
++++ b/mixture/checks/mstep.mojo
+@@ -354,7 +354,7 @@ def weights_kernel(
+     if k >= ncomp:
+         return
+     var w = ftz(identical_div(ftz(nk.unsafe_load(k)), ftz(denom.unsafe_load(0))))
+-    weights.unsafe_store(k, w)
++    weights.unsafe_store(k, w * Float32(1.0000001))  # SABOTAGE: device mixture weights one ulp up
+     log_weights.unsafe_store(k, ftz(identical_log(w)))
+ 
+ 

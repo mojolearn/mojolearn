@@ -180,7 +180,13 @@ class IVFIndex(NumericModeMixin):
         self.metric_code_ = metric
         return self
 
-    def search(self, queries):
+    def search(self, queries, filter=None):
+        """`filter`: optional boolean array of shape (n_rows_,) over the
+        indexed rows' ORIGINAL ids; a False row is never scored, returned or
+        counted in `n_candidates_` (cuVS's sample filter, DEVIATION 5863:
+        applied to the merged candidates of the probed lists, before any
+        distance). A query whose probed lists keep fewer than `n_neighbors`
+        rows raises, as an unfiltered short query does (DEVIATION 1794)."""
         if not hasattr(self, "list_data_"):
             raise ValueError("mojolearn IVFIndex: call fit (or load) before search")
         q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -200,13 +206,23 @@ class IVFIndex(NumericModeMixin):
         cand = empty((m,), "<i4")
         centers = self.centers_.reshape((self.n_lists_ * dim,))
         data = self.list_data_.reshape((n * dim,))
+        addrs = [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
+                 addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
+                 addr_ro(data, name="list_data_"), addr_ro(q, name="queries"),
+                 addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")]
+        keep = None
+        if filter is not None:
+            import numpy as np
+            f = np.asarray(filter)
+            if f.shape != (n,) or f.dtype != np.bool_:
+                raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "
+                                 "one flag per indexed row")
+            keep = np.ascontiguousarray(f.astype(np.int32))   # held: the binding reads it below
+            addrs.append(addr_ro(keep, name="filter"))
         self._entry(self._extension(), "ivf_flat_search")(
             # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_search).
-            # centers, center_norms, offsets, indices, list_data, queries, dist_out, idx_out, cand_out
-            [addr_ro(centers, name="centers_"), addr_ro(self.center_norms_, name="center_norms_"),
-             addr_ro(self.list_offsets_, name="list_offsets_"), addr_ro(self.list_indices_, name="list_indices_"),
-             addr_ro(data, name="list_data_"), addr_ro(q, name="queries"),
-             addr(dist, name="distances"), addr(idx, name="indices"), addr(cand, name="n_candidates_")],
+            # centers, center_norms, offsets, indices, list_data, queries, dist_out, idx_out, cand_out[, filter]
+            addrs,
             # n, dim, n_lists, metric, m, k, n_probes
             [n, dim, self.n_lists_, self.metric_code_, m, k, int(self.n_probes)],
         )

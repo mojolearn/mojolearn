@@ -13,7 +13,10 @@ IDENTICAL show the same bits by eye (the lane check proves it by column).
 
 Data: GBM_BENCH_DATA (default ~/datasets/gbm-bench), staged from R2 with
 `tools/dataset_store.sh stage` (taxi/taxi_speed.npz, higgs/higgs_speed.npz).
-Lines: `XMSPEED <case> <seconds> <digest>`.
+Lines: `XMSPEED <case> <seconds> <digest>`. The CPU board (phase 5) is the
+same script under MOJOLEARN_VENDOR=cpu, at MOJOLEARN_CPU_THREADS=1 and at the
+default (one task per physical core): every digest must match across thread
+counts and match the GPU's.
 """
 import argparse
 import hashlib
@@ -161,8 +164,9 @@ def main():
     a = ap.parse_args()
     t0 = time.time()
     d = data(a.rows)
-    print("XMSPEED-DATA rows=%d load_s=%.2f mode=%s" % (a.rows, time.time() - t0,
-                                                         os.environ.get("MOJOLEARN_NUMERIC_MODE", "default")), flush=True)
+    print("XMSPEED-DATA rows=%d load_s=%.2f mode=%s vendor=%s cpu_threads=%s" % (
+        a.rows, time.time() - t0, os.environ.get("MOJOLEARN_NUMERIC_MODE", "default"),
+        os.environ.get("MOJOLEARN_VENDOR", "auto"), os.environ.get("MOJOLEARN_CPU_THREADS", "cores")), flush=True)
     only = set(x for x in a.only.split(",") if x)
     total = 0.0
     for name, fn in cases(d):

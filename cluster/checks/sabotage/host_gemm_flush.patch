@@ -1,0 +1,13 @@
+diff --git a/cluster/host/host_gemm_cells.mojo b/cluster/host/host_gemm_cells.mojo
+index 735007f88..d60fe415e 100644
+--- a/cluster/host/host_gemm_cells.mojo
++++ b/cluster/host/host_gemm_cells.mojo
+@@ -90,7 +90,7 @@ def host_gemm_oracle(
+             for p in range(p0, p1):
+                 var av = ap.unsafe_load(p * m + i) if tn else ap.unsafe_load(i * k + p)
+                 var aa = SIMD[DType.float32, GEMM_W](ftz(av))
+-                var bv = ftz_v[GEMM_W]((bp + p * n + j0).load[width=GEMM_W]())
++                var bv = (bp + p * n + j0).load[width=GEMM_W]()
+                 acc = ftz_v[GEMM_W](mul_add_v[GEMM_W](aa, bv, acc))
+             (out + j0).store(ftz_v[GEMM_W](acc))
+             j0 += GEMM_W

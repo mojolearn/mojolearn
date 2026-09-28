@@ -88,6 +88,12 @@ from solver.checks.profile_dot import (
     profile_dot_host,
     serial_dot_host,
 )
+from gemm.checks.gemm_oracle import (
+    OP_NT,
+    contract_leaf_size as _oracle_leaf,
+    gemm_oracle_cell,
+    gemm_oracle_serial_cell,
+)
 
 comptime SAB_NO_FTZ_RESID = is_defined["MOJOLEARN_CD_SABOTAGE_NO_FTZ_RESID"]()
 
@@ -286,6 +292,18 @@ def _dot(a: List[Float32], b: List[Float32], k: Int, profile: Bool) -> Float32:
     return serial_dot_host(a, b, k)
 
 
+def _col_dot(
+    x: List[Float32], ci: Int, d: Int, b: List[Float32], bj: Int, bm: Int, n: Int, profile: Bool
+) -> Float32:
+    """`_dot(column ci of x, row bj of b, n)` read in place (lane linear-cpu):
+    x holds d columns of n contiguous floats, so column ci is row ci of a
+    d x n NT operand and the cell is the same `gemm_oracle_cell` (or the
+    serial cell) `profile_dot_host` computes on a copy of it."""
+    if profile:
+        return gemm_oracle_cell(x, b, OP_NT, ci, bj, d, bm, n, _oracle_leaf(n))
+    return gemm_oracle_serial_cell(x, b, OP_NT, ci, bj, d, bm, n)
+
+
 def cd_oracle_fit(
     x_in: List[Float32],
     y_in: List[Float32],
@@ -297,13 +315,18 @@ def cd_oracle_fit(
     l1_ratio: Float32,
     tol: Float32,
     profile: Bool = True,
+    trace: Bool = True,
 ) -> CdOracleResult:
     """`cdFit` on the host, stage for stage. `coef` starts at zero (cuML's
     Python passes `cp.zeros`). `profile` selects the normative fold (True)
-    or the whole-row serial chain (False, diagnostic)."""
+    or the whole-row serial chain (False, diagnostic). `trace` False skips
+    the per-sweep copies (`coef_sweeps`, `resid_sweeps`, `conv_sweeps`) and
+    the input/output snapshots, which only the checks read; the fit's
+    values do not depend on it."""
     var out = CdOracleResult()
-    out.x_input = x_in.copy()
-    out.y_input = y_in.copy()
+    if trace:
+        out.x_input = x_in.copy()
+        out.y_input = y_in.copy()
     var x = x_in.copy()
     var y = y_in.copy()
     var ones = List[Float32]()
@@ -317,8 +340,7 @@ def cd_oracle_fit(
     var mu_labels = Float32(0.0)
     if fit_intercept:
         for j in range(d):
-            var col = column_as_list(x, j * n, n)
-            var s = _dot(col, ones, n, profile)
+            var s = _col_dot(x, j, d, ones, 0, 1, n, profile)
             mu_input.append(ftz(s * ratio))
         for j in range(d):
             var m = ftz(mu_input[j])
@@ -344,8 +366,7 @@ def cd_oracle_fit(
     # colNorm, + l2_alpha
     var squared = List[Float32]()
     for j in range(d):
-        var col = column_as_list(x, j * n, n)
-        var nn = _dot(col, col, n, profile)
+        var nn = _col_dot(x, j, d, x, j, d, n, profile)
         out.colnorm.append(nn)
         squared.append(ftz(nn + l2_alpha))
     out.squared = squared.copy()
@@ -370,8 +391,7 @@ def cd_oracle_fit(
                 var ri = _ftz_resid(residual[i])
                 residual[i] = _ftz_resid(identical_mul_add(a1, xi, ri))
             # coef[ci] = dot(X[:, ci], residual)
-            var col = column_as_list(x, ci * n, n)
-            coef[ci] = _dot(col, residual, n, profile)
+            coef[ci] = _col_dot(x, ci, d, residual, 0, 1, n, profile)
             # cdUpdateCoefKernel
             var c = ftz(coef[ci])
             var r: Float32
@@ -407,13 +427,14 @@ def cd_oracle_fit(
                 var ri = _ftz_resid(residual[i])
                 residual[i] = _ftz_resid(identical_mul_add(a2, xi, ri))
         n_iter += 1
-        out.coef_sweeps.append(coef.copy())
-        out.resid_sweeps.append(residual.copy())
-        var cv = List[Float32]()
-        cv.append(conv_coef)
-        cv.append(coef_max)
-        cv.append(diff_max)
-        out.conv_sweeps.append(cv^)
+        if trace:
+            out.coef_sweeps.append(coef.copy())
+            out.resid_sweeps.append(residual.copy())
+            var cv = List[Float32]()
+            cv.append(conv_coef)
+            cv.append(coef_max)
+            cv.append(diff_max)
+            out.conv_sweeps.append(cv^)
         if coef_max < tol or (diff_max / coef_max) < tol:
             break
 
@@ -431,8 +452,9 @@ def cd_oracle_fit(
 
     out.coef = coef^
     out.residual = residual^
-    out.x_after = x^
-    out.y_after = y^
+    if trace:
+        out.x_after = x^
+        out.y_after = y^
     out.intercept = intercept
     out.n_iter = n_iter
     return out^

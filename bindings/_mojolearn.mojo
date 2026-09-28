@@ -94,7 +94,7 @@ from bindings.hotpath_helpers import (
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -1288,7 +1288,7 @@ def column_mean_f64_binding(
         if groups == 1:
             _col_group_task(0)
         else:
-            sync_parallelize(_col_group_task, groups)
+            host_parallelize(_col_group_task, groups)
         # `acc` is read after the join, so its owner outlives every task
         # ([[mojo-parallelize-frees-captured-owner]]).
         for c in range(nc):
@@ -1375,7 +1375,7 @@ def center_columns_f32_binding(
             if nr > 0:
                 _center_task(0)
         else:
-            sync_parallelize(_center_task, chunks)
+            host_parallelize(_center_task, chunks)
     return PythonObject(0)
 
 
@@ -1429,7 +1429,7 @@ def scale_rows_f32_binding(
             if nr > 0:
                 _scale_task(0)
         else:
-            sync_parallelize(_scale_task, chunks)
+            host_parallelize(_scale_task, chunks)
     return PythonObject(0)
 
 

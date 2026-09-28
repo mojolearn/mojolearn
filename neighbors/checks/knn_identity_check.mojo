@@ -336,6 +336,11 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
     tie in whatever order the blocks arrived. So FAST reports the count and
     IDENTICAL requires zero.
 
+    2026-09-27, DEVIATION 5219: the grid pin is LIFTED, so under IDENTICAL
+    the 40-query launch now takes the x-split for real, and its tie set is
+    held to the single-block one by the slot merge's total order. This
+    check is what proves the lift did not move a tie.
+
     IDENTICAL now carries native32 and CDNA64 through aligned logical32
     queues. Other unsupported widths/modes still report a named skip.
     """
@@ -393,9 +398,10 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
                 + String(row_moves)
                 + " rows disagreed with row 0 and "
                 + String(shape_moves)
-                + " slots moved between query counts. With `grid_x` pinned"
-                " to 1 no merge decides a tie and no lane sees a different"
-                " column order, so both must be zero."
+                + " slots moved between query counts. The queue and the"
+                " slot merge (DEVIATION 5219) both order (distance, index),"
+                " so the tie set is the same at every grid and both must be"
+                " zero."
             )
         print(
             "check_knn_fused_tie_set_is_geometry_invariant OK (IDENTICAL):",
@@ -412,9 +418,10 @@ def check_knn_fused_tie_set_is_geometry_invariant() raises:
             row_moves,
             "rows disagreed with row 0 and",
             shape_moves,
-            "slots moved between query counts -- the mutex merge resolving",
-            "a tie by arrival order, on one device, in one process. This is",
-            "the behaviour DEVIATION 502's grid pin removes.",
+            "slots moved between query counts. Since DEVIATION 5219 (the",
+            "slot merge in the queue's (distance, index) order, no mutex)",
+            "this is expected to be zero here too; the old mutex merge",
+            "resolved a tie by arrival order.",
         )
 
 

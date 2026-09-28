@@ -8,7 +8,7 @@ after all workers finish; no cross-device floating-point sum is introduced.
 """
 from std.os import getenv
 from max.gpu.host import DeviceContext
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from bindings.hostptr import copy_f32
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -131,7 +131,7 @@ def parallel_optimizer_step_host(
             _ = unused^
         except:
             fp[rank] = 1
-    sync_parallelize(_update,devices)
+    host_parallelize(_update,devices)
     for rank in range(devices):
         if failures[rank] != 0:
             raise Error("parallel optimizer: shard " + String(rank) + " refused; caller state unchanged")

@@ -1,0 +1,16 @@
+diff --git a/x_decomp/host_qr.mojo b/x_decomp/host_qr.mojo
+index 367a025c2..23daa9012 100644
+--- a/x_decomp/host_qr.mojo
++++ b/x_decomp/host_qr.mojo
+@@ -59,7 +59,10 @@ def _dot_fold(p: F32Ptr) -> Float32:
+         for tt in range(QR_TPB):
+             acc = acc + p.unsafe_load(QR_TPB - 1 - tt)
+         return acc
+-    return _halving(p)
++    var ser = Float32(0.0)  # SABOTAGE (host QR): the dot lanes added serially ascending
++    for tt in range(QR_TPB):
++        ser = ser + p.unsafe_load(tt)
++    return ser
+ 
+ 
+ def qr_slice(a: F32Ptr, r_out: F32Ptr, m: Int, n: Int, n_slices: Int, b: Int):

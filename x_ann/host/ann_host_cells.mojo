@@ -17,8 +17,8 @@ The split is contiguous (`core/host_predict_threads.mojo`'s policy:
 MOJOLEARN_CPU_THREADS, else one task per physical core, never more tasks
 than indices), and every task runs in the caller's floating-point
 environment through `core/host_parallel.mojo::host_parallelize` (DEVIATION
-5900) once that module is on main; until then the tasks run in order on the
-calling thread (the brief: never parallelize a host loop without it).
+5900; the module is carried byte for byte from lane/cpu until it lands on
+main). One task runs on the calling thread with no dispatch.
 
 `ftz_v`, `mul_add_v` and `mul_v` are `checks/numerics.mojo`'s `ftz`,
 `identical_mul_add` and `identical_mul` lane by lane, spelled as vector
@@ -34,6 +34,7 @@ from std.memory import bitcast
 from std.sys import llvm_intrinsic
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 #: Scalar operations one task should carry at least, so a small call (a
@@ -60,8 +61,10 @@ def ann_task_count(n: Int, cost: Int) -> Int:
 def ann_tasks[F: def(Int) -> None](ref body: F, tasks: Int):
     """`body(c)` for every task c in [0, tasks): the one place the ann host
     paths fan out (module docstring)."""
-    for c in range(tasks):
-        body(c)
+    if tasks <= 1:
+        body(0)
+        return
+    host_parallelize(body, tasks)
 
 
 @always_inline

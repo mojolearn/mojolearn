@@ -13,6 +13,8 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from x_decomp.cells import (
     F32Ptr,
+    absmax_fold_cell,
+    absmax_part_cell,
     absmax_sign_cell,
     FOLD_BLOCK,
     colsum_part_cell,
@@ -29,12 +31,27 @@ from x_decomp.cells import (
     ew_cell,
     gemm_cell,
     als_row,
+    als_cg_row,
+    geqrf_dot,
+    geqrf_head,
+    geqrf_scale_elem,
+    geqrf_serial,
+    geqrf_update_elem,
+    orgqr_col,
+    orgqr_dot,
+    orgqr_init_elem,
+    orgqr_update_elem,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
     lasso_row,
     lda_doc_row,
+    lu_diag,
+    lu_l_elem,
+    lu_pivot,
     lu_serial,
+    lu_swap_elem,
+    lu_update_elem,
     omp_row,
     lu_solve_serial,
     orth_rank_guard,
@@ -115,6 +132,26 @@ def rowsum_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, nb: Int32):
         p.unsafe_store(t, rowsum_part_cell(a, i, Int(d), bl * FOLD_BLOCK, min(Int(d), (bl + 1) * FOLD_BLOCK)))
 
 
+def absmax_part_kernel(a: F32Ptr, p: F32Ptr, n: Int32, d: Int32, by_col: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var cnt = Int(d) if by_col != 0 else Int(n)
+    var length = Int(n) if by_col != 0 else Int(d)
+    if t < cnt * Int(nb):
+        var bl = t // cnt
+        var v = t % cnt
+        var r = absmax_part_cell(
+            a, v, Int(n), Int(d), by_col != 0, bl * FOLD_BLOCK, min(length, (bl + 1) * FOLD_BLOCK)
+        )
+        p.unsafe_store(2 * t, r[0])
+        p.unsafe_store(2 * t + 1, r[1])
+
+
+def absmax_fold_kernel(p: F32Ptr, dst: F32Ptr, cnt: Int32, nb: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(cnt):
+        dst.unsafe_store(t, absmax_fold_cell(p, t, Int(nb), Int(cnt)))
+
+
 def absmax_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32, by_col: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var cnt = Int(d) if by_col != 0 else Int(n)
@@ -167,6 +204,40 @@ def rand_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: I
 def lu_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         lu_serial(a, piv, Int(n), info)
+
+
+def lu_info_init_kernel(info: F32Ptr):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        info.unsafe_store(0, Float32(0))
+
+
+def lu_pivot_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        lu_pivot(a, piv, Int(k), Int(n))
+
+
+def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(n):
+        lu_swap_elem(a, piv, Int(k), j, Int(n))
+
+
+def lu_diag_kernel(a: F32Ptr, info: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        lu_diag(a, info, scal, Int(k), Int(n))
+
+
+def lu_l_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        lu_l_elem(a, scal, Int(k), i, Int(n))
+
+
+def lu_update_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
+    var w = Int(n) - Int(k) - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if w > 0 and t < w * w:
+        lu_update_elem(a, scal, Int(k), Int(k) + 1 + t // w, Int(k) + 1 + t % w, Int(n))
 
 
 def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
@@ -241,6 +312,72 @@ def als_kernel(
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
+
+
+def als_cg_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, steps: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32,
+    cg: Int32,
+):
+    var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if u < Int(n):
+        steps.unsafe_store(u, als_cg_row(c, y, yty, x, s, u, Int(m), Int(f), reg, Int(cg)))
+
+
+def geqrf_kernel(a: F32Ptr, tau: F32Ptr, m: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        geqrf_serial(a, tau, Int(m), Int(n))
+
+
+def geqrf_head_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        geqrf_head(a, tau, scal, Int(k), Int(m), Int(n))
+
+
+def geqrf_scale_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var i = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(m):
+        geqrf_scale_elem(a, scal, Int(k), i, Int(n))
+
+
+def geqrf_dot_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var j = Int(k) + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(n):
+        w.unsafe_store(j, geqrf_dot(a, scal, Int(k), j, Int(m), Int(n)))
+
+
+def geqrf_update_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32):
+    var cols = Int(n) - Int(k) - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cols > 0 and t < (Int(m) - Int(k)) * cols:
+        var i = Int(k) + t // cols
+        var j = Int(k) + 1 + t % cols
+        geqrf_update_elem(a, tau, scal, Int(k), i, j, Int(n), w.unsafe_load(j))
+
+
+def orgqr_init_kernel(q: F32Ptr, m: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < Int(m) * Int(qc):
+        orgqr_init_elem(q, t // Int(qc), t % Int(qc), Int(qc))
+
+
+def orgqr_dot_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(qc):
+        w.unsafe_store(j, orgqr_dot(h, tau, q, Int(k), j, Int(m), Int(n), Int(qc)))
+
+
+def orgqr_update_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, w: F32Ptr, k: Int32, m: Int32, n: Int32, qc: Int32):
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t < (Int(m) - Int(k)) * Int(qc):
+        var i = Int(k) + t // Int(qc)
+        var j = t % Int(qc)
+        orgqr_update_elem(h, tau, q, Int(k), i, j, Int(n), Int(qc), w.unsafe_load(j))
+
+
+def orgqr_kernel(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int32, n: Int32, kk: Int32, qc: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(qc):
+        orgqr_col(h, tau, q, j, Int(m), Int(n), Int(kk), Int(qc))
 
 
 def _blocks(count: Int) -> Int:
@@ -411,9 +548,26 @@ struct DevExec(Exec):
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_function[lu_kernel](
-            da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1
-        )
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        # lu_serial's cells, step by step: the pivot search one thread, the
+        # swap, the multipliers and the trailing update one thread per cell
+        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for k in range(n):
+            ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
+            ctx.enqueue_function[lu_swap_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
+            )
+            ctx.enqueue_function[lu_diag_kernel](
+                da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
+            )
+            if n - k - 1 > 0:
+                ctx.enqueue_function[lu_l_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                )
+                ctx.enqueue_function[lu_update_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n),
+                    grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
+                )
         _down(ctx, da, a, n * n)
         _down_i(ctx, dp, piv, n)
         _down(ctx, di, info, 1)
@@ -421,6 +575,7 @@ struct DevExec(Exec):
         _ = da^
         _ = dp^
         _ = di^
+        _ = ds^
         ctx.synchronize()
         _ = ctx^
 
@@ -491,28 +646,45 @@ struct DevExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
-        for _ in range(2):
-            var w = List[Float32](capacity=m * l)
-            for t in range(m * l):
-                w.append(a.unsafe_load(t))
-            var r = device_qr_r(xd_ctx(), w, m, l)
+        """Two passes of: R of the matrix (`qr_factor` on a device copy, as
+        `device_qr_r`), the rank guard on the host, then A R^-1 by rows
+        (`trsm_kernel`). The matrix stays on the device between the passes:
+        one upload, one download (it had been uploaded twice and downloaded
+        once per pass; the same values reach every kernel)."""
+        var ctx = xd_ctx()
+        var cells = m * l if m * l > 0 else 1
+        var da = _up(ctx, a, m * l)
+        var dq = ctx.enqueue_create_buffer[DType.float32](cells)
+        var dw = ctx.enqueue_create_buffer[DType.float32](cells)
+        var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, l) * l * l if l > 0 else 1)
+        var r_buf = ctx.enqueue_create_buffer[DType.float32](l * l if l > 0 else 1)
+        var r = List[Float32](length=l * l if l > 0 else 1, fill=Float32(0))
+        for p in range(2):
+            var src = da if p == 0 else dq
+            var dst = dq if p == 0 else da
+            ctx.enqueue_copy(dst_buf=dw, src_buf=src)
+            ctx.synchronize()
+            _ = qr_factor(ctx, dw, scratch, r_buf, m, l)
+            _down(ctx, r_buf, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
+            ctx.synchronize()
             orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-            var ctx = xd_ctx()
-            var da = _up(ctx, F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m * l)
-            var dr = _up(ctx, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
-            var dq = ctx.enqueue_create_buffer[DType.float32](m * l if m * l > 0 else 1)
+            ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
             ctx.enqueue_function[trsm_kernel](
-                da.unsafe_ptr(), dr.unsafe_ptr(), dq.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
+                src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
             )
-            _down(ctx, dq, a, m * l)
             ctx.synchronize()
-            _ = da^
-            _ = dr^
-            _ = dq^
-            ctx.synchronize()
-            _ = ctx^
-            _ = r^
-            _ = w^
+            _ = src^
+            _ = dst^
+        _down(ctx, da, a, m * l)
+        ctx.synchronize()
+        _ = da^
+        _ = dq^
+        _ = dw^
+        _ = scratch^
+        _ = r_buf^
+        ctx.synchronize()
+        _ = ctx^
+        _ = r^
 
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
@@ -706,15 +878,121 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var cnt = d if by_col else n
+        var length = n if by_col else d
+        var nb = (length + FOLD_BLOCK - 1) // FOLD_BLOCK
         var dout = ctx.enqueue_create_buffer[DType.float32](cnt if cnt > 0 else 1)
-        ctx.enqueue_function[absmax_kernel](
-            da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
-            grid_dim=_blocks(cnt), block_dim=TPB,
-        )
+        var dp = ctx.enqueue_create_buffer[DType.float32](2 * nb * cnt if nb > 1 and cnt > 0 else 1)
+        if nb > 1:
+            ctx.enqueue_function[absmax_part_kernel](
+                da.unsafe_ptr(), dp.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0), Int32(nb),
+                grid_dim=_blocks(nb * cnt), block_dim=TPB,
+            )
+            ctx.enqueue_function[absmax_fold_kernel](
+                dp.unsafe_ptr(), dout.unsafe_ptr(), Int32(cnt), Int32(nb), grid_dim=_blocks(cnt), block_dim=TPB
+            )
+        else:
+            ctx.enqueue_function[absmax_kernel](
+                da.unsafe_ptr(), dout.unsafe_ptr(), Int32(n), Int32(d), Int32(1 if by_col else 0),
+                grid_dim=_blocks(cnt), block_dim=TPB,
+            )
         _down(ctx, dout, dst, cnt)
         ctx.synchronize()
         _ = da^
         _ = dout^
+        _ = dp^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        var ctx = xd_ctx()
+        var kk = m if m < n else n
+        var da = _up(ctx, a, m * n)
+        var dt = ctx.enqueue_create_buffer[DType.float32](kk if kk > 0 else 1)
+        var ds = ctx.enqueue_create_buffer[DType.float32](2)
+        var dw = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        # step k: the reflector (one thread: its folds ascending), then v scaled
+        # (rows), w = v^T A[k:, j] (one thread per column, rows ascending), then
+        # A[k:, k+1:] updated (one thread per cell): geqrf_serial's cells, in
+        # its order per column, with no host round trip between the steps
+        for k in range(kk):
+            ctx.enqueue_function[geqrf_head_kernel](
+                da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=1, block_dim=1
+            )
+            if m - k - 1 > 0:
+                ctx.enqueue_function[geqrf_scale_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(m), Int32(n), grid_dim=_blocks(m - k - 1), block_dim=TPB
+                )
+            if n - k - 1 > 0:
+                ctx.enqueue_function[geqrf_dot_kernel](
+                    da.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks(n - k - 1), block_dim=TPB,
+                )
+                ctx.enqueue_function[geqrf_update_kernel](
+                    da.unsafe_ptr(), dt.unsafe_ptr(), ds.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n),
+                    grid_dim=_blocks((m - k) * (n - k - 1)), block_dim=TPB,
+                )
+        _down(ctx, da, a, m * n)
+        _down(ctx, dt, tau, kk)
+        ctx.synchronize()
+        _ = da^
+        _ = dt^
+        _ = ds^
+        _ = dw^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        var ctx = xd_ctx()
+        var dh = _up(ctx, h, m * n)
+        var dt = _up(ctx, tau, kk if kk > 0 else 1)
+        var dq = ctx.enqueue_create_buffer[DType.float32](m * qc if m * qc > 0 else 1)
+        var dw = ctx.enqueue_create_buffer[DType.float32](qc if qc > 0 else 1)
+        # orgqr_col's cells: e_j, then H_k for k descending (w per column, rows
+        # ascending; then every cell of the rows k.. updated)
+        ctx.enqueue_function[orgqr_init_kernel](dq.unsafe_ptr(), Int32(m), Int32(qc), grid_dim=_blocks(m * qc), block_dim=TPB)
+        for r in range(kk):
+            var k = kk - 1 - r
+            ctx.enqueue_function[orgqr_dot_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks(qc), block_dim=TPB,
+            )
+            ctx.enqueue_function[orgqr_update_kernel](
+                dh.unsafe_ptr(), dt.unsafe_ptr(), dq.unsafe_ptr(), dw.unsafe_ptr(), Int32(k), Int32(m), Int32(n), Int32(qc),
+                grid_dim=_blocks((m - k) * qc), block_dim=TPB,
+            )
+        _down(ctx, dq, q, m * qc)
+        ctx.synchronize()
+        _ = dh^
+        _ = dt^
+        _ = dq^
+        _ = dw^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
+    def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
+        var ctx = xd_ctx()
+        var dc = _up(ctx, c, n * m)
+        var dy = _up(ctx, y, m * f)
+        var dg = _up(ctx, yty, f * f)
+        var dx = _up(ctx, x, n * f)
+        var ds = ctx.enqueue_create_buffer[DType.float32](n * 3 * f if n * f > 0 else 1)
+        var dstp = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[als_cg_kernel](
+            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), dstp.unsafe_ptr(),
+            Int32(n), Int32(m), Int32(f), reg, Int32(cg), grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dx, x, n * f)
+        _down(ctx, dstp, steps, n)
+        ctx.synchronize()
+        _ = dc^
+        _ = dy^
+        _ = dg^
+        _ = dx^
+        _ = ds^
+        _ = dstp^
         ctx.synchronize()
         _ = ctx^
 

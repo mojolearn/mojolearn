@@ -1,0 +1,14 @@
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index bd7dfcc40..361ac05f7 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -80,7 +80,8 @@ def _sq_dists8(pa: FPtr, i: Int, d: Int, btp: FPtr, mp: Int, j0: Int) -> SIMD[DT
+     `t = ftz(ftz(a) - ftz(b))`, `acc = ftz(acc + ftz(t * t))` (the pinned
+     product), features ascending."""
+     var acc = SIMD[DType.float32, DIST_W](0)
+-    for f in range(d):
++    for ff_ in range(d):
++        var f = d - 1 - ff_
+         var av = SIMD[DType.float32, DIST_W](ftz(pa[i * d + f]))
+         var t = ftz_v[DIST_W](av - (btp + f * mp + j0).load[width=DIST_W]())
+         acc = ftz_v[DIST_W](acc + ftz_v[DIST_W](mul_v[DIST_W](t, t)))

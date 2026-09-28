@@ -265,6 +265,165 @@ def _(ml, X, yc, yr, Xh=None):
                      s_dual=_h(s.dual_coef_), s_predict=_h(s.predict(X[512:768]))),
                 p, lambda e: (e.predict(Xh[:256]),))
 
+@lane("x-neighbors-svc-multiclass")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC with four classes: one-vs-one over the binary solver (six pair
+    machines on their rows, gamma on the whole X), scikit-learn's layout
+    and orientation (_svm_impl.SVC._fit_ovo); decision_function 'ovo' and
+    'ovr', predict by vote and with break_ties, class_weight and
+    sample_weight cut to each pair's rows, a linear coef_ per pair."""
+    y4 = (yc[:384] + 2 * (X[:384, 5] > 0).astype(np.int32)).astype(np.int32)
+    w = (0.5 + 0.5 * (np.arange(384) % 4)).astype(np.float64)
+    m = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200).fit(X[:384], y4)
+    r = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200, decision_function_shape="ovr",
+               break_ties=True, class_weight="balanced").fit(X[:384], y4, sample_weight=w)
+    li = ml.SVC(C=0.5, kernel="linear", max_iter=200).fit(X[:384], y4)
+    return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), intercept=_h(m.intercept_),
+                     n_support=_h(m.n_support_), ovo=_h(m.decision_function(X[384:640])),
+                     predict=_h(m.predict(X[384:640])),
+                     ovr_dual=_h(r.dual_coef_), ovr=_h(r.decision_function(X[384:640])),
+                     ovr_predict=_h(r.predict(X[384:640])),
+                     coef=_h(li.coef_), linear_predict=_h(li.predict(X[384:640]))),
+                r, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+def _neighbors_int_gram(A, B):
+    """An integer-valued kernel matrix A B^T, exact in float32 under any
+    summation order (every partial sum is an integer below 2^24), so the
+    precomputed input is the same bits on every host's NumPy."""
+    ai = np.clip(np.rint(A * 2.0), -6, 6).astype(np.int64)
+    bi = np.clip(np.rint(B * 2.0), -6, 6).astype(np.int64)
+    return (ai @ bi.T).astype(np.float32)
+
+
+@lane("x-neighbors-krr-options")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge sample_weight (sqrt(w) on y, K * outer(sw, sw) on the
+    device, dual * sw; DEVIATION 1688) and kernel='precomputed' (the given
+    matrix copied onto the device in place of the kernel matrix)."""
+    w = (0.5 + 0.5 * (np.arange(256) % 4)).astype(np.float64)
+    w[3] = 0.0
+    y2 = np.stack([yr[:256], yr[:256] * 0.5 + 1.0], axis=1).astype(np.float32)
+    m = ml.KernelRidge(alpha=0.5, kernel="rbf", gamma=0.05).fit(X[:256], y2, sample_weight=w)
+    # the scalar weight on a bounded kernel: a linear K on the fixtures with
+    # large-magnitude columns is not positive definite at alpha 1 in float32
+    # (the fit refuses, DEVIATION 1661), which tests the refusal, not the weight
+    s = ml.KernelRidge(alpha=1.0, kernel="rbf", gamma=0.05).fit(X[:256], yr[:256], sample_weight=2.0)
+    K = _neighbors_int_gram(X[:256], X[:256])
+    p = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256])
+    pw = ml.KernelRidge(alpha=1.0, kernel="precomputed").fit(K, yr[:256], sample_weight=w)
+    Kq = _neighbors_int_gram(X[256:384], X[:256])
+    return _fit(dict(dual=_h(m.dual_coef_), predict=_h(m.predict(X[256:384])),
+                     scalar_dual=_h(s.dual_coef_),
+                     pre_dual=_h(p.dual_coef_), pre_predict=_h(p.predict(Kq)),
+                     prew_dual=_h(pw.dual_coef_)),
+                m, lambda e: (e.predict(Xh[:128]),))
+
+@lane("x-neighbors-svm-precomputed")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC and SVR kernel='precomputed': the solver's tiles are exact copies
+    of the given matrix's cells (gather_cols / slice_cols in KernelCache,
+    _kernel_cell on the host); predict reads the cross-kernel's support
+    columns. Binary, four-class one-vs-one (each pair's rows and columns)
+    and the regressor, on an integer-valued Gram exact on any host."""
+    K = _neighbors_int_gram(X[:256], X[:256])
+    Kq = _neighbors_int_gram(X[256:384], X[:256])
+    y4 = (yc[:256] + 2 * (X[:256, 5] > 0).astype(np.int32)).astype(np.int32)
+    b = ml.SVC(C=0.01, kernel="precomputed", max_iter=200).fit(K, yc[:256])
+    m = ml.SVC(C=0.01, kernel="precomputed", max_iter=200, decision_function_shape="ovr").fit(K, y4)
+    r = ml.SVR(C=0.01, kernel="precomputed", epsilon=0.1, max_iter=200).fit(K, yr[:256])
+    return _fit(dict(dual=_h(b.dual_coef_), support=_h(b.support_), decision=_h(b.decision_function(Kq)),
+                     predict=_h(b.predict(Kq)), multi_dual=_h(m.dual_coef_), multi=_h(m.decision_function(Kq)),
+                     svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(Kq))),
+                m, lambda e: (e.decision_function(_neighbors_int_gram(Xh[:128], X[:256])),
+                              e.predict(_neighbors_int_gram(Xh[:128], X[:256]))))
+
+@lane("x-neighbors-km-kernels")
+def _(ml, X, yc, yr, Xh=None):
+    """KernelRidge and Nystroem with scikit-learn's cosine, chi2 and
+    additive_chi2 kernels (kernel_matrix.mojo's chi2_cell_kernel and
+    cosine_rows_kernel then the pinned GEMM; km_host_oracle restates them).
+    The chi2 kernels take |X| (they refuse negative input)."""
+    A = np.abs(X[:256]).astype(np.float32)
+    A[::5, 1] = np.float32(0.0)                        # x + y == 0 cells take the skip branch
+    Aq = np.abs(X[256:384]).astype(np.float32)
+    c = ml.KernelRidge(alpha=1.0, kernel="cosine").fit(X[:256], yr[:256])
+    h = ml.KernelRidge(alpha=1.0, kernel="chi2", gamma=0.1).fit(A, yr[:256])
+    # additive_chi2 is not positive definite (its cells are <= 0): the ridge
+    # must dominate its most negative eigenvalue, so the rows are brought to
+    # [0, 1] first (a fixture with large-magnitude columns made K + 1e4 I
+    # indefinite and the fit refuse, DEVIATION 1661)
+    Aa = (A[:64] / np.float32(max(float(A[:64].max()), 1.0))).astype(np.float32)
+    a = ml.KernelRidge(alpha=1.0e4, kernel="additive_chi2").fit(Aa, yr[:64])
+    n = ml.Nystroem(kernel="chi2", n_components=32, random_state=2).fit(A)
+    nc = ml.Nystroem(kernel="cosine", n_components=32, random_state=2).fit(X[:256])
+    return _fit(dict(cos_dual=_h(c.dual_coef_), cos_predict=_h(c.predict(X[256:384])),
+                     chi2_dual=_h(h.dual_coef_), chi2_predict=_h(h.predict(Aq)),
+                     add_dual=_h(a.dual_coef_), add_predict=_h(a.predict(Aq)),
+                     ny_chi2=_h(n.transform(Aq)), ny_cos=_h(nc.transform(X[256:384]))),
+                c, lambda e: (e.predict(Xh[:128]),))
+
+@lane("x-neighbors-gp-cov")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessRegressor.predict(return_cov=True): the full posterior
+    covariance k(X, X) - V^T V (gpr_predict_cov_host / gpr_host_predict_cov,
+    sample_y's steps before its factorization), with a WhiteKernel on the
+    self-kernel diagonal, on two kernels and a shifted target."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
+    mean, cov = m.predict(X[256:320, :4], return_cov=True)
+    # normalize_y=True needs StandardScaler.fit, which has no host binding
+    # (CPU gap owed in docs/lanes/progress/neighbors.md); the second model
+    # takes a shifted target and a second kernel instead
+    y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+    k2 = ml.ConstantKernel(4.0) * ml.RBF(0.5) + ml.WhiteKernel(0.05)
+    n = ml.GaussianProcessRegressor(kernel=k2, optimizer=None).fit(X[:256, :4], y)
+    nmean, ncov = n.predict(X[256:320, :4], return_cov=True)
+    return _fit(dict(mean=_h(mean), cov=_h(cov), n_mean=_h(nmean), n_cov=_h(ncov)),
+                m, lambda e: e.predict(Xh[:64, :4], return_cov=True))
+
+@lane("x-neighbors-metrics")
+def _(ml, X, yc, yr, Xh=None):
+    """Brute-force k-NN under canberra, braycurtis, correlation,
+    jensenshannon and inner_product (distance_ops.mojo::extra_metric_cell on
+    the device and the host); jensenshannon on |X|, whose logs need x >= 0.
+    kneighbors for each, a classifier vote and a distance-weighted
+    regressor."""
+    A = np.abs(X[:512]).astype(np.float32)
+    A[::9, 3] = np.float32(0.0)                          # log(0) := 0 cells
+    out = {}
+    for metric in ("canberra", "braycurtis", "correlation", "jensenshannon", "inner_product"):
+        base = A if metric == "jensenshannon" else X[:512]
+        q = np.abs(X[512:640]).astype(np.float32) if metric == "jensenshannon" else X[512:640]
+        nn = ml.NearestNeighbors(n_neighbors=5, metric=metric).fit(base)
+        d, i = nn.kneighbors(q)
+        out[metric + "_d"] = _h(d)
+        out[metric + "_i"] = _h(i)
+    c = ml.KNeighborsClassifier(n_neighbors=7, metric="canberra").fit(X[:512], yc[:512])
+    r = ml.KNeighborsRegressor(n_neighbors=7, metric="correlation", weights="distance").fit(X[:512], yr[:512])
+    out["clf"] = _h(c.predict(X[512:640]))
+    out["reg"] = _h(r.predict(X[512:640]))
+    return _fit(out, c, lambda e: (e.predict(Xh[:128]),))
+
+@lane("x-neighbors-svc-probability")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC probability=True: libsvm's Platt scaling (a 5-fold CV per class
+    pair over a SplitMix64 shuffle keyed by random_state, each fold's
+    decisions from the binary solver, sigmoid_train, and for three classes
+    the pairwise coupling), all host arithmetic binary64 with the portable
+    exp/log (_svm_impl.SVC._fit_probability). Binary, weighted three-class,
+    and a second seed."""
+    y3 = (yc[:192] + (X[:192, 5] > 0.5).astype(np.int32)).astype(np.int32)
+    w = (0.5 + 0.5 * (np.arange(192) % 4)).astype(np.float64)
+    b = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200, probability=True).fit(X[:192], yc[:192])
+    m = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200, probability=True,
+               random_state=7).fit(X[:192], y3, sample_weight=w)
+    s = ml.SVC(C=0.5, kernel="linear", max_iter=200, probability=True, random_state=11).fit(X[:192], y3)
+    return _fit(dict(a=_h(b.probA_), b=_h(b.probB_), proba=_h(b.predict_proba(X[192:320])),
+                     log_proba=_h(b.predict_log_proba(X[192:320])),
+                     m_a=_h(m.probA_), m_b=_h(m.probB_), m_proba=_h(m.predict_proba(X[192:320])),
+                     s_a=_h(s.probA_), s_proba=_h(s.predict_proba(X[192:320]))),
+                m, lambda e: (e.predict_proba(Xh[:128]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -277,5 +436,7 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-neighbors-svr-kernels")
+_batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options", "x-neighbors-km-kernels")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
-            "x-neighbors-svc-sigmoid")
+            "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
+_batch_decl(_rows_calls("predict_proba", sl=slice(0, 128)), "x-neighbors-svc-probability")
