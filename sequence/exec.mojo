@@ -30,10 +30,17 @@ from sequence.host_gemm import host_gemm_pack, host_gemm_rows
 from sequence.ops import (
     FP,
     Args,
+    gates_of,
     OP_GEMM,
     OP_COLSUM,
     OP_CELL_FWD,
     OP_CELL_BWD,
+    OP_BIAS,
+    OP_CELL_FWD_H,
+    OP_CELL_BWD_H,
+    OP_GEMM_EPI,
+    OP_GEMM_EPI_TAIL,
+    OP_COLSUM_DIV,
     OP_CE,
     OP_SOFTMAX,
     OP_MLP_ROWLOSS,
@@ -77,7 +84,7 @@ def _element_weight[OP: Int](a: Args) -> Int:
     decides how many threads, never what a thread computes)."""
     comptime if OP == OP_GEMM:
         return max(a.i2, 1)
-    elif OP == OP_COLSUM:
+    elif OP == OP_COLSUM or OP == OP_COLSUM_DIV:
         return max(a.i0, 1)
     elif OP == OP_LN_BWD_W:
         return max(a.i0, 1)
@@ -192,6 +199,64 @@ struct HostExec(Exec):
             return
         comptime if OP == OP_GEMM:
             self._gemm(a)
+            return
+        # The device's fused launches (Apple speed, 2026-09-28) run here as
+        # the launches they fuse, so the GEMM keeps the host kernel: the
+        # same cells in the same order either way.
+        comptime if OP == OP_GEMM_EPI:
+            self._gemm(a)
+            self.launch[OP_GEMM_EPI_TAIL](a, n)
+            return
+        comptime if OP == OP_CELL_FWD_H:
+            # h_prev @ W_hh^T into GH, + b_hh, then the cell
+            var B = a.i1
+            var H = a.i2
+            var GH = gates_of(a.i0) * H
+            var g = Args()
+            g.p0 = a.p3
+            g.p1 = a.p7
+            g.p2 = a.p1
+            g.i0 = B
+            g.i1 = GH
+            g.i2 = H
+            g.i3 = H
+            g.i4 = 1
+            g.i5 = 1
+            g.i6 = H
+            g.i8 = GH
+            self._gemm(g)
+            var bb = Args()
+            bb.p0 = a.p1
+            bb.p1 = a.p8
+            bb.p2 = a.p1
+            bb.i0 = B
+            bb.i1 = GH
+            bb.i2 = GH
+            bb.i3 = GH
+            self.launch[OP_BIAS](bb, B * GH)
+            self.launch[OP_CELL_FWD](a, n)
+            return
+        comptime if OP == OP_CELL_BWD_H:
+            # dh += dGH_{s+1} @ W_hh (when a later step exists), then the cell
+            if a.i3 != 0:
+                var B = a.i1
+                var H = a.i2
+                var GH = gates_of(a.i0) * H
+                var g = Args()
+                g.p0 = a.p9 + a.i4
+                g.p1 = a.p11
+                g.p2 = a.p5
+                g.i0 = B
+                g.i1 = H
+                g.i2 = GH
+                g.i3 = GH
+                g.i4 = 1
+                g.i5 = H
+                g.i6 = 1
+                g.i7 = 1
+                g.i8 = H
+                self._gemm(g)
+            self.launch[OP_CELL_BWD](a, n)
             return
         var tasks = host_launch_tasks(n, _element_weight[OP](a), self.workers)
         if tasks <= 1:

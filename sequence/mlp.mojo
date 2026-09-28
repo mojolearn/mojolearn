@@ -147,6 +147,13 @@ def op_gemm_epi(t: Int, a: Args):
     The same values in the same order: the same bits. C must be dense
     (i8 = i1): the followers index it by t."""
     op_gemm(t, a)
+    gemm_epi_tail(t, a)
+
+
+@always_inline
+def gemm_epi_tail(t: Int, a: Args):
+    """`op_gemm_epi`'s follower alone (the host runs the GEMM on its own
+    kernel, `sequence/host_gemm.mojo`, then this)."""
     var e = Args()
     e.p0 = a.p2
     e.p1 = a.p3
@@ -166,6 +173,10 @@ def op_gemm_epi(t: Int, a: Args):
     elif a.i9 == EPI_ACT_BWD:
         e.i0 = a.i10
         op_act_bwd(t, e)
+
+
+def op_gemm_epi_tail(t: Int, a: Args):
+    gemm_epi_tail(t, a)
 
 
 def op_colsum_div(t: Int, a: Args):
