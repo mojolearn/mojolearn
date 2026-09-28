@@ -35,13 +35,26 @@ for rev in $(echo "$befores" | tr ',' ' '); do
 done
 arms="$arms after=$after_wt"
 echo "AB arms:$arms (after=$(git rev-parse --short HEAD)) algos=$algos reps=$reps modes=$modes host=$(hostname)"
+# the base binding (all_finite and friends) once, in the after worktree; every
+# arm gets a copy (only the ann bindings differ between arms)
+for mode in $modes; do
+    t0=$(date +%s)
+    MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh bindings/build.sh > /dev/null 2>"$HOME/ann-apple2-build.err" || {
+        echo "BUILD FAIL base $mode" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
+    echo "BUILT after $mode build.sh $(( $(date +%s) - t0 ))s"
+done
 for a in $arms; do
     wt=${a#*=}
+    if [ "$wt" != "$after_wt" ]; then
+        mkdir -p "$wt/python/mojolearn/identical"
+        cp -p python/mojolearn/_mojolearn.so "$wt/python/mojolearn/" 2>/dev/null || true
+        cp -p python/mojolearn/identical/_mojolearn.so "$wt/python/mojolearn/identical/" 2>/dev/null || true
+    fi
     for mode in $modes; do
         for b in build_x_ann.sh build_estimators.sh build_ivf.sh; do
             t0=$(date +%s)
-            (cd "$wt" && MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "bindings/$b" > /dev/null 2>"$wt/.ab_build.err") || {
-                echo "BUILD FAIL $wt $mode $b" >&2; tail -40 "$wt/.ab_build.err" >&2; exit 1; }
+            (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "bindings/$b" > /dev/null 2>"$HOME/ann-apple2-build.err") || {
+                echo "BUILD FAIL $wt $mode $b" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
             echo "BUILT ${a%%=*} $mode $b $(( $(date +%s) - t0 ))s"
         done
     done
