@@ -61,12 +61,14 @@ time)
     shift; exec $SLOT metal -- sh bench/cluster_apple3_local.sh _time "$@" ;;
 _time)
     rounds=$2; cases=$3; shift 3
+    # MODE=identical times the IDENTICAL tier (for its digests); default fast
+    export MOJOLEARN_NUMERIC_MODE=${MODE:-fast}
     for r in $(seq 1 "$rounds"); do
         for arm in "$@"; do
             # `<arm>:py` times the arm's binary with MOJOLEARN_HOTPATH=python
             # (the Python door's reference arm)
             case $arm in *:py) export MOJOLEARN_HOTPATH=python ;; *) unset MOJOLEARN_HOTPATH ;; esac
-            place "${arm%%:*}" fast
+            place "${arm%%:*}" "$MOJOLEARN_NUMERIC_MODE"
             pixi run -e default python bench/x_cluster_speed.py --dataset taxi,higgs --reps 2 --only "$cases" \
                 | sed "s/^XCSPEED/XC_$arm r$r/"
         done
@@ -76,6 +78,7 @@ quality)
     shift; exec $SLOT metal -- sh bench/cluster_apple3_local.sh _quality "$@" ;;
 _quality)
     arm=$2; cases=$3; seeds=${4:-0}
+    export MOJOLEARN_NUMERIC_MODE=fast
     place "$arm" fast; place "${IDENT:-identical}" identical
     pixi run -e default python bench/cluster_apple3_quality.py --dataset taxi,higgs --seeds "$seeds" --only "$cases" \
         | sed "s/^XCQUAL/XCQUAL_$arm/"
@@ -84,6 +87,7 @@ phases)
     shift; exec $SLOT metal -- sh bench/cluster_apple3_local.sh _phases "$@" ;;
 _phases)
     arm=$2; cases=$3
+    export MOJOLEARN_NUMERIC_MODE=fast
     place "$arm" fast
     MOJOLEARN_XC_PHASES=1 MOJOLEARN_STAGE_TIMES=1 pixi run -e default python bench/x_cluster_speed.py \
         --dataset taxi,higgs --reps 1 --no-quality --only "$cases" | sed "s/^/PH_$arm /"

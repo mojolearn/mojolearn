@@ -120,7 +120,51 @@ column answers False and keeps the matrix loop).
   their logs by fills, `_safe_log(0)` and `_safe_log(1)` taken once. Same value in every cell.
   Host code of every mode and column.
 
-### Written, opt-in, not built or measured yet (next job)
+### Laptop M4, FAST, run g1 (2026-09-28 22:02Z to 22:07Z): before / one change each / all
+
+Machine "laptop M4" (MacBook M4, 10 GPU cores, 16 GB), through tools/mac_slot.py, other lanes'
+builds running beside it, so times carry more spread than a cloud Mac's. The board's own rows
+(1M / 100k / 10k / 5k as in the table, 8 features, taxi and HIGGS). Four binaries of x_cluster
+built from this branch, ALTERNATED inside one Metal slot, two rounds of min-of-2 each; the
+table is the minimum. ~/mojolearn-evidence/cluster-apple3/laptop_g1_fast.log.
+
+- before: x_cluster of the lane's base 6856b5f8f.
+- one: WARD_ROUNDS, AP_EXACT, BGMM_ENT, MEANSHIFT_BLOCK, OPTICS_SIMD, MINIBATCH_ONE_PASS.
+- two: WARD_ROUNDS, AP_EXACT + AP_SPLIT, BGMM_ESTEP1, OPTICS_SIMD + OPTICS_HOSTROWS.
+- all: every switch (adds MOMENTS_ROWS and XC_ALLOC).
+
+| case (laptop M4, FAST) | before s | one s | two s | all s | digests |
+|---|---|---|---|---|---|
+| agglomerative-ward 10k taxi | 2.0476 | 0.0829 | 0.0814 | 0.0758 | 4c92e70e869dbfe0 in all four |
+| agglomerative-ward 10k higgs | 1.7871 | 0.1102 | 0.1016 | 0.1056 | e19cb487909db5f7 in all four |
+| affinity-prop 5k taxi | 2.8922 | 2.3054 | 2.9525 | 2.8379 | before = one (5aa61d5f); AP_SPLIT moves it (62395562, silhouette 0.36458 -> 0.367691) |
+| affinity-prop 5k higgs | 1.5831 | 1.1584 | 1.4085 | 1.3051 | 2f512d66 in all four |
+| bayesian-gmm 100k taxi | 1.6039 | 1.0999 | 1.6738 | 0.5452 | before = one = two (e16793a1); MOMENTS_ROWS moves it (3821bcd7), score 5.16114 in all |
+| bayesian-gmm 100k higgs | 1.9710 | 1.4061 | 1.7867 | 0.7013 | before = one = two (7ca64511); all b176120f, score -6.61045 in all |
+| optics 10k taxi | 0.7755 | 0.4669 | 0.3637 | 0.2619 | 7c4877a4 in all four (the host rows too) |
+| optics 10k higgs | 0.7725 | 0.4008 | 0.3559 | 0.2628 | 5cc308ab in all four |
+| meanshift 10k taxi | 0.3252 | 0.1345 | 0.3158 | 0.0989 | MEANSHIFT_BLOCK moves it (adabda1f -> a60f3e87), silhouette 0.368444 in all |
+| meanshift 10k higgs | 0.3090 | 0.1399 | 0.3257 | 0.0986 | b541ff14 -> 2bd9ed94, silhouette 0.592574 in all |
+| minibatch-kmeans 1M taxi | 0.3316 | 0.2536 | 0.2439 | 0.2324 | dcf6e634 in all four |
+| minibatch-kmeans 1M higgs | 0.4002 | 0.3678 | 0.3404 | 0.3073 | de3258c3 in all four |
+
+Reading:
+- WARD_ROUNDS: 2.05 -> 0.08 s and 1.79 -> 0.10 s, labels unchanged. Same result as on the M4 Pro.
+- OPTICS_SIMD 0.78 -> 0.40 to 0.47 s; with OPTICS_HOSTROWS 0.36 s; labels unchanged in both.
+- MEANSHIFT_BLOCK 0.32 -> 0.13 s; the silhouette is unchanged to six digits.
+- BGMM_ENT 1.60 -> 1.10 s and 1.97 -> 1.41 s with the fitted model unchanged; MOMENTS_ROWS
+  takes it to 0.55 / 0.70 s (the `all` column), score unchanged to six digits.
+- AP_EXACT 2.89 -> 2.31 s and 1.58 -> 1.16 s, labels unchanged.
+- AP_SPLIT is NOT a gain on this GPU (two 2.95 / 1.41 s against one 2.31 / 1.16 s): not taken.
+- BGMM_ESTEP1 alone and MINIBATCH_ONE_PASS: inside the spread of this run (`two` has no
+  ONE_PASS and times minibatch like `one`). To be measured alone with more rounds.
+- XC_ALLOC is only in `all`; optics and meanshift are lower there than in `one` / `two`. To be
+  measured alone.
+
+An earlier run of the same arms (laptop_g1_2150_IDENTICAL_by_mistake.log) ran the IDENTICAL tier
+by mistake (the driver did not set the mode): it times nothing of this round.
+
+### The opt-in switches
 
 Every switch below is `GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined[...]`, so an IDENTICAL
 build cannot take any of them; the device paths also need `ops.fast_device()` (the GPU binding).
