@@ -107,8 +107,11 @@ count, else keeps the fraction and records DEVIATION 2304 with the boundary case
 - Nothing imports numpy at module import time. `_verify.py` may import it lazily under a
   clear "diagnostics need numpy" error.
 - Python loops over big data are forbidden in fit/predict paths: any per-element scan
-  goes to a native helper or is a memoryview.cast slice operation; label encoding and
-  argmax over class counts are the only permitted Python loops (O(classes) or O(rows)
-  for labels).
+  goes to a native helper or is a memoryview.cast slice operation. Label encoding goes
+  through `_labels.encode_labels` and the class argmax through `_labels.argmax_rows`
+  (native in the base binding and in `_mojolearn_core_host`; lane py-shared retired the
+  O(rows) Python permission, 2026-09-28). Their Python routines stay as the definitions
+  and as the path for labels no numeric buffer holds (str, mixed objects, ints beyond
+  int64, more than 4096 classes); O(classes) Python stays permitted.
 - Tests keep NumPy in their separate environment; `np.asarray(result)` must be zero-copy.
 - Every changed function gets a DEVIATION number from its agent's range in a comment.

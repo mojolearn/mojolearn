@@ -57,7 +57,7 @@ from . import _backend
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, zeros
-from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, sorted_classes
+from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._scale_gamma import scale_gamma
 from .linear_model import (
@@ -182,7 +182,9 @@ def _as_labels(y):
             "NaN or inf cannot be fitted; a computed NaN carries a "
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
-    classes, _codes = sorted_classes(labels)
+    # lane py-shared: the native encoder (`sorted_classes` is its definition)
+    classes, _codes = encode_labels(labels)
+    _codes = _codes.tolist()
     if len(classes) < 2:
         raise ValueError(
             f"mojolearn SVC: y has {len(classes)} class; at least two are needed"
@@ -236,7 +238,8 @@ def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
                 )
     if class_weight is not None:
         labels, _shape = _labels_1d(y)
-        classes, codes = sorted_classes(labels)
+        classes, codes = encode_labels(labels)
+        codes = codes.tolist()
         if isinstance(class_weight, str):
             if class_weight != "balanced":
                 raise ValueError(

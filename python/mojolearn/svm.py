@@ -23,7 +23,7 @@ tol` (`linear.pyx:150-151`).
 
 from ._array import Array
 from ._buffer import as_f32_c
-from ._labels import argmax_rows, decode_labels, sorted_classes
+from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._svm_impl import SVC, SVR
 from .linear_model import (
@@ -136,7 +136,9 @@ class LinearSVC(_LinearSVMBase):
             raise ValueError("mojolearn LinearSVC requires a 1-D y")
         if len(labels) != rows:
             raise ValueError("mojolearn LinearSVC X and y lengths differ")
-        self.classes_, codes = sorted_classes(labels)
+        # lane py-shared: the native encoder (`sorted_classes` is its definition)
+        self.classes_, codes = encode_labels(labels)
+        codes = codes.tolist()
         n_classes = len(self.classes_)
         if n_classes < 2:
             raise ValueError("mojolearn LinearSVC: y has one class")

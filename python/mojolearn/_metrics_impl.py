@@ -66,7 +66,7 @@ from ._arrays import _addr, _addr_ro
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i64_c, empty
-from ._labels import sorted_classes
+from ._labels import encode_labels, sorted_classes
 from .linear_model import (
     _buffer_format, _dtype_name, _flatten, _is_integer_labels, _shape_of,
 )
@@ -927,10 +927,11 @@ def _silhouette(X, labels, metric, chunksize, caller):
         )
     # Same behavior as cuML's silhouette_score.pyx:99-101: monotonic labels via
     # cp.unique(..., return_inverse=True), and n_labels is how many distinct
-    # labels there are. `_labels.sorted_classes` (DEVIATION 2340) gives
-    # both in one O(rows) pass (DEVIATION 2377).
-    unique_labels, codes = sorted_classes(lab.tolist())
-    mapped = Array.from_list(codes, "<i4")
+    # labels there are. `_labels.encode_labels` gives both under the order
+    # rule (DEVIATION 2340), natively over the int32 buffer (lane py-shared
+    # retired DEVIATION 2377's O(rows) Python pass here; `sorted_classes`
+    # stays the definition, `tests/test_labels_native.py`).
+    unique_labels, mapped = encode_labels(lab)
     n_labels = len(unique_labels)
     chunk = 40000 if chunksize is None else int(chunksize)
     if chunk < 1:

@@ -629,10 +629,11 @@ def _encode_first_seen(values):
 
 
 def _encode_sorted(values):
-    from ._labels import sorted_classes
-    classes, _ = sorted_classes(list(values))
-    index = {c: i for i, c in enumerate(classes)}
-    return [index[v] for v in values], classes
+    # the order rule's classes and codes by the native encoder (lane
+    # py-shared); `sorted_classes` stays its definition and fallback
+    from ._labels import encode_labels
+    classes, codes = encode_labels(list(values))
+    return codes.tolist(), classes
 
 
 def _as_index(values):
