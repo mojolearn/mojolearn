@@ -1,0 +1,404 @@
+diff --git a/x_cluster/affinity.mojo b/x_cluster/affinity.mojo
+index fe097b57e..568442572 100644
+--- a/x_cluster/affinity.mojo
++++ b/x_cluster/affinity.mojo
+@@ -19,6 +19,7 @@ exemplar flags; the convergence window, the exemplar refinement and the
+ labels are the reference's host logic from one source."""
+ from checks.numerics import ftz, identical_mul
+ from x_cluster.ops import ClusterOps
++from x_cluster.optics import dist_slot
+ 
+ 
+ def affinity_fit[O: ClusterOps](
+@@ -37,7 +38,7 @@ def affinity_fit[O: ClusterOps](
+         s_m = x.copy()
+     else:
+         var xs = ops.put(x)
+-        var dm = ops.zeros(n * n)
++        var dm = dist_slot(ops, n * n)
+         ops.sqdist(xs, n, xs, n, d, dm)
+         s_m = ops.get(dm, n * n)
+         for t in range(n * n):
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index f3be6d0f6..fb1deff16 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -7,13 +7,15 @@ launch shape can move a bit. Only the GPU binding imports this file."""
+ from std.atomic import Atomic
+ from std.gpu import block_dim, block_idx, thread_idx
+ from std.os import getenv
++from std.sys.compile import is_defined
+ from std.time import perf_counter_ns
+ from std.ffi import _Global
+ from std.memory import bitcast, stack_allocation
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ from max.gpu.memory import AddressSpace
+ from max.gpu.sync import barrier
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_sqrt
+ 
+ from x_cluster.bodies import (
+     FPtr,
+@@ -142,6 +144,86 @@ def _meanshift_kernel(
+         meanshift_seed(x, Int(n), Int(d), bw, stop, Int(max_iter), centers, scratch, intensity, iters, t)
+ 
+ 
++# FAST ONLY (lane cluster-apple3), d <= MSB_MAX_D, OPT-IN
++# `-D MOJOLEARN_MEANSHIFT_BLOCK=1`: one BLOCK per seed. `_meanshift_kernel`
++# walks all n rows of every shift on one thread per seed, so a fit with a few
++# hundred seeds keeps a few blocks busy. Here the block's threads each fold
++# their stride of the rows and the partial sums fold in threadgroup memory.
++# The addends, the quotient and the stop test are `bodies.meanshift_seed`'s;
++# the order of the sum is not (bits move; the paired quality check).
++comptime MEANSHIFT_BLOCK = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_MEANSHIFT_BLOCK"]()
++comptime MSB_TPB = 256
++comptime MSB_MAX_D = 16
++comptime MSB_W = MSB_MAX_D + 1  # the feature sums, then the count
++
++
++def _meanshift_block_kernel(
++    x: FPtr, n: Int32, d: Int32, bw: Float32, stop: Float32, max_iter: Int32,
++    centers: FPtr, intensity: IPtr, iters: IPtr,
++):
++    var s = Int(block_idx.x)
++    var tid = Int(thread_idx.x)
++    var N = Int(n)
++    var D = Int(d)
++    var red = stack_allocation[MSB_TPB * MSB_W, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    # the seed's center lives in threadgroup memory between the shifts (a
++    # barrier orders threadgroup memory; on Apple it does not order the device's)
++    var cen = stack_allocation[MSB_MAX_D, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
++    var state = stack_allocation[3, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
++    if tid < D:
++        cen[tid] = centers[s * D + tid]
++    if tid == 0:
++        state[0] = Int32(0)  # 1: the seed is done
++        state[1] = Int32(0)  # completed shifts
++        state[2] = Int32(0)  # rows within the bandwidth at the last shift
++    barrier()
++    var o = tid * MSB_W
++    while True:
++        for f in range(D + 1):
++            red[o + f] = Float32(0)
++        for p in range(tid, N, MSB_TPB):
++            var acc = Float32(0)
++            for f in range(D):
++                var t = ftz(ftz(cen[f]) - ftz(x[p * D + f]))
++                acc = ftz(acc + ftz(identical_mul(t, t)))
++            if identical_sqrt(acc) <= bw:
++                for f in range(D):
++                    red[o + f] = ftz(red[o + f] + ftz(x[p * D + f]))
++                red[o + D] = red[o + D] + Float32(1)
++        barrier()
++        var off = MSB_TPB // 2
++        while off > 0:
++            if tid < off:
++                for f in range(D + 1):
++                    red[o + f] = ftz(red[o + f] + red[(tid + off) * MSB_W + f])
++            barrier()
++            off //= 2
++        if tid == 0:
++            var cnt = red[D]
++            state[2] = Int32(Int(cnt))
++            if cnt == Float32(0):
++                state[0] = Int32(1)
++            else:
++                var shift2 = Float32(0)
++                for f in range(D):
++                    var m = ftz(identical_div(red[f], cnt))
++                    var t = ftz(m - cen[f])
++                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
++                    cen[f] = m
++                if identical_sqrt(shift2) <= stop or state[1] == max_iter:
++                    state[0] = Int32(1)
++                else:
++                    state[1] = state[1] + Int32(1)
++        barrier()
++        if state[0] != Int32(0):
++            break
++    if tid < D:
++        centers[s * D + tid] = cen[tid]
++    if tid == 0:
++        intensity[s] = state[2]
++        iters[s] = state[1]
++
++
+ comptime AP_TPB = 256
+ 
+ 
+@@ -797,6 +879,15 @@ struct DeviceOps(ClusterOps):
+         centers: Int, ns: Int, scratch: Int, intensity: Int, iters: Int,
+     ) raises:
+         self._ph0()
++        comptime if MEANSHIFT_BLOCK:
++            if d <= MSB_MAX_D and ns > 0:
++                self.ctx.enqueue_function[_meanshift_block_kernel](
++                    self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
++                    self._fp(centers), self._ip(intensity), self._ip(iters),
++                    grid_dim=ns, block_dim=MSB_TPB,
++                )
++                self._ph1("meanshift")
++                return
+         self.ctx.enqueue_function[_meanshift_kernel](
+             self._fp(x), Int32(n), Int32(d), bw, stop, Int32(max_iter),
+             self._fp(centers), Int32(ns), self._fp(scratch), self._ip(intensity), self._ip(iters),
+@@ -967,3 +1058,10 @@ struct DeviceOps(ClusterOps):
+             grid_dim=l, block_dim=WNN_TPB,
+         )
+         self._ph1("ward_nn")
++
++    def alloc(mut self, n: Int) raises -> Int:
++        self._ph0()
++        var buf = self.ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
++        self.f.append(buf^)
++        self._ph1("alloc")
++        return len(self.f) - 1
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index 5ada0fc72..fa7b8a262 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -577,3 +577,6 @@ struct HostOps(ClusterOps):
+         var pm = self._fp(md)
+         for p in range(l):
+             ward_nn_row(pc, ps, l, d, pn, pm, p)
++
++    def alloc(mut self, n: Int) raises -> Int:
++        return self.zeros(n)
+diff --git a/x_cluster/meanshift.mojo b/x_cluster/meanshift.mojo
+index dd44f56fd..6134f2736 100644
+--- a/x_cluster/meanshift.mojo
++++ b/x_cluster/meanshift.mojo
+@@ -19,6 +19,7 @@ from std.math import floor
+ 
+ from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+ from x_cluster.ops import ClusterOps
++from x_cluster.optics import dist_slot
+ 
+ 
+ def estimate_bandwidth_ops[O: ClusterOps](
+@@ -28,7 +29,7 @@ def estimate_bandwidth_ops[O: ClusterOps](
+     if k < 1:
+         k = 1
+     var xs = ops.put(x)
+-    var dm = ops.zeros(n * n)
++    var dm = dist_slot(ops, n * n)
+     ops.sqdist(xs, n, xs, n, d, dm)
+     var kt = ops.zeros(n)
+     ops.kth(dm, n, n, k, kt)
+diff --git a/x_cluster/ops.mojo b/x_cluster/ops.mojo
+index 1f01b7060..5657883e7 100644
+--- a/x_cluster/ops.mojo
++++ b/x_cluster/ops.mojo
+@@ -133,3 +133,9 @@ trait ClusterOps(Movable):
+         (centroids c, l x d; sizes sz) at the lowest `bodies.ward_cell`, the
+         lowest q on a tie."""
+         ...
++
++    def alloc(mut self, n: Int) raises -> Int:
++        """A new float slot of `n` values that a primitive is about to fill
++        completely (`sqdist`, `pdist`): on the device NOT initialized, where
++        `zeros` writes n zeros first; on the host `zeros`."""
++        ...
+diff --git a/x_cluster/optics.mojo b/x_cluster/optics.mojo
+index 5d96c37db..6e8f51a80 100644
+--- a/x_cluster/optics.mojo
++++ b/x_cluster/optics.mojo
+@@ -16,9 +16,167 @@ strictly lower. The xi and dbscan extractions are the reference's host logic,
+ the ratios in Float64 from the Float32 plot. sklearn's `np.around(...,
+ decimals=precision)` of the core and reach distances is not carried
+ (NOT_IMPLEMENTED.tsv)."""
+-from checks.numerics import identical_mul64
++from std.math import sqrt
++from std.sys.compile import is_defined
++
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, identical_mul64
++from x_cluster.bodies import FPtr, IPtr
+ from x_cluster.ops import ClusterOps
+ 
++# Lane cluster-apple3, FAST only, OPT-IN while unproven.
++# `-D MOJOLEARN_OPTICS_SIMD=1`: the ordering loop's two row walks as vector
++# min, compare and select (the same point and the same updates at every
++# step, so the same ordering, reachability and predecessors).
++# `-D MOJOLEARN_XC_ALLOC=1`: a slot a distance kernel fills completely is
++# not zeroed first (`ops.alloc`; OPTICS, MeanShift, AffinityPropagation,
++# agglomerative).
++comptime OPTICS_SIMD = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_OPTICS_SIMD"]()
++comptime XC_ALLOC = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_XC_ALLOC"]()
++# `-D MOJOLEARN_OPTICS_HOSTROWS=1` (with OPTICS_SIMD, euclidean, the GPU
++# binding): the n x n distances are not read to the host; the loop forms the
++# one row a step needs from X (n * d operations by vectors). The core
++# distances stay the device's. The host's float32 row may differ from the
++# device's in the last place (bits move; the paired quality check).
++comptime OPTICS_HOSTROWS = OPTICS_SIMD and is_defined["MOJOLEARN_OPTICS_HOSTROWS"]()
++comptime _OW = 8
++
++
++def dist_slot[O: ClusterOps](mut ops: O, n: Int) raises -> Int:
++    """The slot of an n-value matrix a distance kernel is about to fill."""
++    comptime if XC_ALLOC:
++        if ops.fast_device():
++            return ops.alloc(n)
++    return ops.zeros(n)
++
++
++@always_inline
++def _relax(
++    dd: SIMD[DType.float32, _OW], j: Int, cpv: SIMD[DType.float32, _OW], ev: SIMD[DType.float32, _OW],
++    zero: SIMD[DType.float32, _OW], pv: SIMD[DType.int32, _OW], rp: FPtr, mp: FPtr, qp: IPtr,
++):
++    """Rows j .. j + 7 against the point's distances `dd`: an unprocessed row
++    within `max_eps` takes `max(dd, core)` when that is strictly lower."""
++    var rd = dd.gt(cpv).select(dd, cpv)
++    var rr = rp.load[width=_OW](j)
++    var take = dd.le(ev) & rd.lt(rr) & mp.load[width=_OW](j).lt(zero)
++    (rp + j).store(take.select(rd, rr))
++    (qp + j).store(take.select(pv, qp.load[width=_OW](j)))
++
++
++@always_inline
++def _relax1(dd: Float32, j: Int, cp: Float32, max_eps: Float32, point: Int, rp: FPtr, mp: FPtr, qp: IPtr):
++    if mp[j] < Float32(0) and dd <= max_eps:
++        var rd = dd if dd > cp else cp
++        if rd < rp[j]:
++            rp[j] = rd
++            qp[j] = Int32(point)
++
++
++def _order_simd(
++    dist: List[Float32], core: List[Float32], n: Int, max_eps: Float32,
++    mut ordering: List[Int], mut reach: List[Float32], mut pred: List[Int],
++    x: List[Float32], d: Int, host_rows: Bool,
++):
++    """The ordering loop of `optics_graph`, the same decisions by vectors.
++
++    `pm[j]` is -inf while row j is unprocessed and +inf after, so
++    `max(reach, pm)` is the row's reachability or +inf, and its minimum `m`
++    is the loop's `best`. The point is the FIRST unprocessed row whose
++    reachability equals `m` (every unprocessed row when m is +inf), which is
++    what the scalar walk's strict `<` keeps. No reachability is a NaN: a
++    value enters `reach` only through `dd <= max_eps`."""
++    var inf = Float32.MAX * Float32(2)
++    reach = List[Float32](length=n, fill=inf)
++    var pm = List[Float32](length=n, fill=-inf)
++    var pr = List[Int32](length=n, fill=Int32(-1))
++    ordering = List[Int](capacity=n)
++    var rp: FPtr = reach.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var mp: FPtr = pm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var qp: IPtr = pr.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var dp = dist.unsafe_ptr()
++    # host_rows: X feature-major (padded by a vector) and the step's row
++    var np = n + _OW
++    var xt = List[Float32](length=(d * np if host_rows else 1), fill=Float32(0))
++    var rowbuf = List[Float32](length=(np if host_rows else 1), fill=Float32(0))
++    if host_rows:
++        for j in range(n):
++            for f in range(d):
++                xt[f * np + j] = x[j * d + f]
++    var xp = xt.unsafe_ptr()
++    var bp: FPtr = rowbuf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
++    var zero = SIMD[DType.float32, _OW](0)
++    var ev = SIMD[DType.float32, _OW](max_eps)
++    for _step in range(n):
++        var vmin = SIMD[DType.float32, _OW](inf)
++        var j = 0
++        while j + _OW <= n:
++            vmin = min(vmin, max(rp.load[width=_OW](j), mp.load[width=_OW](j)))
++            j += _OW
++        var m = vmin.reduce_min()
++        while j < n:
++            var v = rp[j] if mp[j] < Float32(0) else inf
++            if v < m:
++                m = v
++            j += 1
++        var mv = SIMD[DType.float32, _OW](m)
++        j = 0
++        while j + _OW <= n:
++            var hit = rp.load[width=_OW](j).eq(mv) & mp.load[width=_OW](j).lt(zero)
++            if hit.reduce_or():
++                break
++            j += _OW
++        var point = -1
++        while j < n:
++            if mp[j] < Float32(0) and rp[j] == m:
++                point = j
++                break
++            j += 1
++        if point < 0:
++            # unreachable while no reachability is a NaN; never index with -1
++            for q in range(n):
++                if mp[q] < Float32(0):
++                    point = q
++                    break
++        if point < 0:
++            break
++        mp[point] = inf
++        ordering.append(point)
++        if core[point] != inf:
++            var cp = core[point]
++            var cpv = SIMD[DType.float32, _OW](cp)
++            var pv = SIMD[DType.int32, _OW](Int32(point))
++            if host_rows:
++                j = 0
++                while j < n:
++                    var acc = SIMD[DType.float32, _OW](0)
++                    for f in range(d):
++                        var t = SIMD[DType.float32, _OW](x[point * d + f]) - (xp + f * np).load[width=_OW](j)
++                        acc = acc + t * t
++                    var dd = sqrt(acc)
++                    if j + _OW <= n:
++                        _relax(dd, j, cpv, ev, zero, pv, rp, mp, qp)
++                    else:
++                        (bp + j).store(dd)
++                        for q in range(j, n):
++                            _relax1(bp[q], q, cp, max_eps, point, rp, mp, qp)
++                    j += _OW
++            else:
++                var row = dp + point * n
++                j = 0
++                while j + _OW <= n:
++                    _relax(row.load[width=_OW](j), j, cpv, ev, zero, pv, rp, mp, qp)
++                    j += _OW
++                while j < n:
++                    _relax1(row[j], j, cp, max_eps, point, rp, mp, qp)
++                    j += 1
++    pred = List[Int](capacity=n)
++    for i in range(n):
++        pred.append(Int(pr[i]))
++    _ = pm^
++    _ = pr^
++    _ = xt^
++    _ = rowbuf^
++
+ 
+ def optics_graph[O: ClusterOps](
+     mut ops: O, x: List[Float32], n: Int, d: Int, min_samples: Int, max_eps: Float32,
+@@ -37,10 +195,10 @@ def optics_graph[O: ClusterOps](
+                 raise Error("OPTICS: a precomputed distance matrix must be non-negative")
+         dm = xs
+     elif metric >= 0:
+-        dm = ops.zeros(n * n)
++        dm = dist_slot(ops, n * n)
+         ops.pdist(xs, n, xs, n, d, metric, p, dm)
+     else:
+-        dm = ops.zeros(n * n)
++        dm = dist_slot(ops, n * n)
+         ops.sqdist(xs, n, xs, n, d, dm)
+         ops.sqrt(dm, n * n)
+     var cs = ops.zeros(n)
+@@ -49,7 +207,15 @@ def optics_graph[O: ClusterOps](
+     for i in range(n):
+         if core[i] > max_eps:
+             core[i] = inf
++    comptime if OPTICS_HOSTROWS:
++        if n >= _OW and metric == -1 and ops.fast_device():
++            _order_simd(List[Float32](length=1, fill=Float32(0)), core, n, max_eps, ordering, reach, pred, x, d, True)
++            return
+     var dist = ops.get(dm, n * n)
++    comptime if OPTICS_SIMD:
++        if n >= _OW:
++            _order_simd(dist, core, n, max_eps, ordering, reach, pred, x, d, False)
++            return
+     reach = List[Float32](length=n, fill=inf)
+     pred = List[Int](length=n, fill=-1)
+     var processed = List[Bool](length=n, fill=False)

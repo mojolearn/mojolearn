@@ -11,15 +11,27 @@
 # needs the identical bindings: build them with MODE=identical in <bindings>,
 # written as identical/<name>), iboard:<list> and iprobe:<list> (the board and
 # the probe on the IDENTICAL bindings, for the digests)
-tag=$1; defs=$2; binds=$3; cases=$4
+# Optional fifth argument, the x_cluster sources of the arm: `base` (the lane's
+# base 6856b5f8f), `head` (this commit), `arm:<name>` (708762e1b, the tree
+# before the opt-in changes, plus bench/cluster_apple3_arms/<name>.patch: ONE
+# change alone, so a change that does not build costs its own arm only).
+tag=$1; defs=$2; binds=$3; cases=$4; src=${5:-}
+case $src in
+    base) git checkout -q 6856b5f8f -- x_cluster ;;
+    head) git checkout -q HEAD -- x_cluster ;;
+    arm:*) git checkout -q 708762e1b -- x_cluster && git apply "bench/cluster_apple3_arms/${src#arm:}.patch" || echo "PATCHFAIL $tag $src" ;;
+esac
 export MOJOLEARN_MOJO_BUILD_FLAGS="$defs"
+fail=0
 for b in $binds; do
     mode=${MOJOLEARN_NUMERIC_MODE:-identical}
     case $b in identical/*) mode=identical; b=${b#identical/} ;; esac
     f=bindings/build_$b.sh; [ "$b" = base ] && f=bindings/build.sh
-    MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh $f >/tmp/ca3_build_$b.log 2>&1 || { echo "BUILDFAIL $tag $b ($mode)"; grep -n -i "error" /tmp/ca3_build_$b.log | head -20; tail -15 /tmp/ca3_build_$b.log; }
+    MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh $f >/tmp/ca3_build_$b.log 2>&1 || { fail=1; echo "BUILDFAIL $tag $b ($mode)"; grep -n -i "error" /tmp/ca3_build_$b.log | head -20; tail -15 /tmp/ca3_build_$b.log; }
 done
 unset MOJOLEARN_MOJO_BUILD_FLAGS
+# a failed build leaves the previous arm's binary in place: never time it
+[ "$fail" = 0 ] || { echo "ARMSKIPPED $tag (a build failed)"; exit 0; }
 for c in $cases; do
     case $c in
         probe:*) pixi run python bench/kmeans_apple_probe.py --only "${c#probe:}" | sed "s/^KMPROBE/KM_$tag/" ;;
