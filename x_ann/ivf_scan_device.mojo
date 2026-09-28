@@ -24,14 +24,15 @@ coarse distance for every probe; this runs one thread per candidate.
 Queries go in chunks so the candidate buffer stays under CAND_BUDGET floats."""
 
 from std.gpu import block_idx, block_dim, thread_idx
-from std.memory import stack_allocation
+from std.memory import bitcast, stack_allocation
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_mul_add
 from x_ann.ivf_pq_core import (
-    F32P, I32P, ivf_row_removed, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
+    F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
 )
 from x_ann.ivf_sq_core import sq_candidate_dist
 from x_ann.ivf_rabitq_core import rq_candidate_est, rq_rotate
@@ -63,35 +64,138 @@ def coarse_kernel(count: Int32, q0: Int32, queries: F32P, dim: Int32, centers: F
         cd.unsafe_store(e, pq_coarse_dist(queries, (Int(q0) + lq) * Int(dim), centers, l, Int(dim)))
 
 
+@always_inline
+def _probe_walk_seq(lq: Int, cd: F32P, nl: Int, np: Int, offsets: I32P, probes: I32P, pstart: I32P):
+    """`pq_next_probe`'s walk for query lq over its stored coarse distances,
+    one thread (the cell's comparisons in the cell's order)."""
+    var row = lq * nl
+    var prev_d = Float32(0.0)
+    var prev_l = -1
+    var pos = 0
+    var p = 0
+    while p < np:
+        var best_d = Float32(0.0)
+        var best_l = -1
+        for l in range(nl):
+            var d = cd.unsafe_load(row + l)
+            if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
+                best_l = l
+                best_d = d
+        if best_l < 0:
+            break
+        probes.unsafe_store(lq * np + p, Int32(best_l))
+        pstart.unsafe_store(lq * np + p, Int32(pos))
+        pos += Int(offsets.unsafe_load(best_l + 1)) - Int(offsets.unsafe_load(best_l))
+        prev_l = best_l
+        prev_d = best_d
+        p += 1
+    while p < np:
+        probes.unsafe_store(lq * np + p, Int32(-1))
+        pstart.unsafe_store(lq * np + p, Int32(pos))
+        p += 1
+
+
 def probe_kernel(mc: Int32, cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P, probes: I32P, pstart: I32P):
     """`pq_next_probe`'s walk over the stored coarse distances; an unused
     probe is -1. pstart = the probe's first position in the query's
     candidate row (probes in walk order, slots in list order)."""
     var lq = _tid()
     if lq < Int(mc):
-        var nl = Int(n_lists)
-        var np = Int(n_probes)
-        var row = lq * nl
-        var prev_d = Float32(0.0)
-        var prev_l = -1
-        var pos = 0
-        var p = 0
-        while p < np:
-            var best_d = Float32(0.0)
-            var best_l = -1
-            for l in range(nl):
-                var d = cd.unsafe_load(row + l)
-                if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
-                    best_l = l
-                    best_d = d
-            if best_l < 0:
-                break
+        _probe_walk_seq(lq, cd, Int(n_lists), Int(n_probes), offsets, probes, pstart)
+
+
+@always_inline
+def _nan_bits(v: Float32) -> Bool:
+    """NaN by its bits (a float compare may be folded under fast math)."""
+    var b = bitcast[DType.uint32](v)
+    return (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (b & UInt32(0x007FFFFF)) != UInt32(0)
+
+
+#: threads per query in the threadgroup probe walk (a power of two)
+comptime PTPB = 256
+
+
+@always_inline
+def _probe_first(d: Float32, l: Int, bd: Float32, bl: Int) -> Bool:
+    """(d, l) is before (bd, bl) in the order (distance, list id); an empty
+    best (bl < 0) is last. `pq_probe_takes`'s second clause."""
+    return l >= 0 and (bl < 0 or d < bd or (d == bd and l < bl))
+
+
+def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P, probes: I32P, pstart: I32P):
+    """`probe_kernel` with one threadgroup per query (lane ann-apple2). Each
+    probe is the minimum under the TOTAL order (distance, list id) of the
+    lists after the previous probe: each thread takes the minimum of its
+    lists (l = t, t + PTPB, ...) through `pq_probe_takes`, then a tree over
+    the threads keeps the lesser pair. With no NaN distance the order is
+    total, so the minimum is the one element the one-thread walk finds, and
+    its own words are stored: the same bits. A NaN anywhere in the query's
+    row sends the query to the one-thread walk itself (`_probe_walk_seq`),
+    since NaN makes the walk's result depend on list order."""
+    var lq = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var nl = Int(n_lists)
+    var np = Int(n_probes)
+    var row = lq * nl
+    var sd = stack_allocation[PTPB, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sl = stack_allocation[PTPB, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var has_nan = False
+    for l in range(t, nl, PTPB):
+        var d = cd.unsafe_load(row + l)
+        if _nan_bits(d):
+            has_nan = True
+    sl[t] = Int32(1) if has_nan else Int32(0)
+    barrier()
+    var s = PTPB // 2
+    while s > 0:
+        if t < s:
+            sl[t] = sl[t] | sl[t + s]
+        barrier()
+        s //= 2
+    var any_nan = sl[0] != 0
+    barrier()
+    if any_nan:
+        if t == 0:
+            _probe_walk_seq(lq, cd, nl, np, offsets, probes, pstart)
+        return
+    var prev_d = Float32(0.0)
+    var prev_l = -1
+    var pos = 0
+    var p = 0
+    while p < np:
+        var best_d = Float32(0.0)
+        var best_l = -1
+        for l in range(t, nl, PTPB):
+            var d = cd.unsafe_load(row + l)
+            if pq_probe_takes(d, l, prev_d, prev_l, best_d, best_l):
+                best_l = l
+                best_d = d
+        sd[t] = best_d
+        sl[t] = Int32(best_l)
+        barrier()
+        s = PTPB // 2
+        while s > 0:
+            if t < s:
+                var od = sd[t + s]
+                var ol = Int(sl[t + s])
+                if _probe_first(od, ol, sd[t], Int(sl[t])):
+                    sd[t] = od
+                    sl[t] = Int32(ol)
+            barrier()
+            s //= 2
+        best_d = sd[0]
+        best_l = Int(sl[0])
+        barrier()
+        if best_l < 0:
+            break
+        if t == 0:
             probes.unsafe_store(lq * np + p, Int32(best_l))
             pstart.unsafe_store(lq * np + p, Int32(pos))
-            pos += Int(offsets.unsafe_load(best_l + 1)) - Int(offsets.unsafe_load(best_l))
-            prev_l = best_l
-            prev_d = best_d
-            p += 1
+        pos += Int(offsets.unsafe_load(best_l + 1)) - Int(offsets.unsafe_load(best_l))
+        prev_l = best_l
+        prev_d = best_d
+        p += 1
+    if t == 0:
         while p < np:
             probes.unsafe_store(lq * np + p, Int32(-1))
             pstart.unsafe_store(lq * np + p, Int32(pos))
@@ -204,6 +308,35 @@ def rq_score_kernel(
         cand.unsafe_store(base + slot, rq_candidate_est(ws, b * dd, qn2, codes, row, w, dd, norms, ips, scale))
 
 
+@always_inline
+def _select_seq(
+    lq: Int, qi: Int, np: Int, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P, pstart: I32P,
+    stride: Int, cand: F32P, kk: Int, out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    """The cell's top-k for query qi (chunk row lq), one thread: `pq_insert`
+    over the stored distances in the cell's order, masked rows skipped and
+    not counted."""
+    var base = qi * kk
+    for s in range(kk):
+        out_d.unsafe_store(base + s, pq_inf())
+        out_i.unsafe_store(base + s, Int32(-1))
+    var n_cand = 0
+    for p in range(np):
+        var l = Int(probes.unsafe_load(lq * np + p))
+        if l < 0:
+            break
+        var start = Int(offsets.unsafe_load(l))
+        var stop = Int(offsets.unsafe_load(l + 1))
+        var cbase = lq * stride + Int(pstart.unsafe_load(lq * np + p)) - start
+        for slot in range(start, stop):
+            var row = Int(list_indices.unsafe_load(slot))
+            if ivf_row_removed(mask, row):
+                continue
+            pq_insert(kk, base, cand.unsafe_load(cbase + slot), Int32(row), out_d, out_i)
+            n_cand += 1
+    out_n.unsafe_store(qi, Int32(n_cand))
+
+
 def select_kernel(
     mc: Int32, q0: Int32, n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P,
     pstart: I32P, stride: Int32, cand: F32P, k: Int32, out_d: F32P, out_i: I32P, out_n: I32P,
@@ -212,27 +345,97 @@ def select_kernel(
     order, masked rows skipped and not counted."""
     var lq = _tid()
     if lq < Int(mc):
+        _select_seq(lq, Int(q0) + lq, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride),
+                    cand, Int(k), out_d, out_i, out_n)
+
+
+#: threads per query in the split top-k (lane ann-apple2)
+comptime SEL_T = 128
+
+
+def select_part_kernel(
+    n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P, pstart: I32P, stride: Int32,
+    cand: F32P, k: Int32, part_d: F32P, part_i: I32P, part_n: I32P,
+):
+    """Lane ann-apple2: one threadgroup per query, thread t keeps the top-k
+    of the query's candidates at slots t, t + SEL_T, ... of every probe
+    (`pq_insert` into its own k words of part_d / part_i) and counts them;
+    part_n = the count, or -1 when a candidate distance is NaN."""
+    var lq = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var np = Int(n_probes)
+    var kk = Int(k)
+    var pb = (lq * SEL_T + t) * kk
+    for s in range(kk):
+        part_d.unsafe_store(pb + s, pq_inf())
+        part_i.unsafe_store(pb + s, Int32(-1))
+    var wd = pq_inf()
+    var wi = Int32(-1)
+    var n_cand = 0
+    var has_nan = False
+    for p in range(np):
+        var l = Int(probes.unsafe_load(lq * np + p))
+        if l < 0:
+            break
+        var start = Int(offsets.unsafe_load(l))
+        var stop = Int(offsets.unsafe_load(l + 1))
+        var cbase = lq * Int(stride) + Int(pstart.unsafe_load(lq * np + p)) - start
+        for slot in range(start + t, stop, SEL_T):
+            var row = Int(list_indices.unsafe_load(slot))
+            if ivf_row_removed(mask, row):
+                continue
+            var v = cand.unsafe_load(cbase + slot)
+            if _nan_bits(v):
+                has_nan = True
+            n_cand += 1
+            # pq_insert's own first test, against a register copy of the last slot
+            if pq_better(v, Int32(row), wd, wi):
+                pq_insert(kk, pb, v, Int32(row), part_d, part_i)
+                wd = part_d.unsafe_load(pb + kk - 1)
+                wi = part_i.unsafe_load(pb + kk - 1)
+    part_n.unsafe_store(lq * SEL_T + t, Int32(-1) if has_nan else Int32(n_cand))
+
+
+def select_merge_kernel(
+    mc: Int32, q0: Int32, n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P,
+    pstart: I32P, stride: Int32, cand: F32P, k: Int32, part_d: F32P, part_i: I32P, part_n: I32P,
+    out_d: F32P, out_i: I32P, out_n: I32P,
+):
+    """Lane ann-apple2: one thread per query joins the SEL_T partial top-k
+    lists with `pq_insert`. With no NaN candidate the order (distance, row
+    id) is total (row ids are distinct), so the k least of the partial
+    lists are the k least of all candidates, the list the cell's sequential
+    insertion keeps: the same words (an empty slot stays (+inf, -1)). A NaN
+    candidate makes the cell's result depend on insertion order, so that
+    query runs the cell's own sequential insertion (`_select_seq`). The
+    count is the sum of the partial counts (integers)."""
+    var lq = _tid()
+    if lq < Int(mc):
         var qi = Int(q0) + lq
         var kk = Int(k)
-        var np = Int(n_probes)
+        var any_nan = False
+        var n_cand = 0
+        for u in range(SEL_T):
+            var c = Int(part_n.unsafe_load(lq * SEL_T + u))
+            if c < 0:
+                any_nan = True
+            else:
+                n_cand += c
+        if any_nan:
+            _select_seq(lq, qi, Int(n_probes), offsets, list_indices, mask, probes, pstart, Int(stride), cand, kk,
+                        out_d, out_i, out_n)
+            return
         var base = qi * kk
         for s in range(kk):
             out_d.unsafe_store(base + s, pq_inf())
             out_i.unsafe_store(base + s, Int32(-1))
-        var n_cand = 0
-        for p in range(np):
-            var l = Int(probes.unsafe_load(lq * np + p))
-            if l < 0:
-                break
-            var start = Int(offsets.unsafe_load(l))
-            var stop = Int(offsets.unsafe_load(l + 1))
-            var cbase = lq * Int(stride) + Int(pstart.unsafe_load(lq * np + p)) - start
-            for slot in range(start, stop):
-                var row = Int(list_indices.unsafe_load(slot))
-                if ivf_row_removed(mask, row):
-                    continue
-                pq_insert(kk, base, cand.unsafe_load(cbase + slot), Int32(row), out_d, out_i)
-                n_cand += 1
+        for u in range(SEL_T):
+            var pb = (lq * SEL_T + u) * kk
+            for s in range(kk):
+                var id = part_i.unsafe_load(pb + s)
+                if id < 0:
+                    break
+                pq_insert(kk, base, part_d.unsafe_load(pb + s), id, out_d, out_i)
         out_n.unsafe_store(qi, Int32(n_cand))
 
 
@@ -281,6 +484,10 @@ def ivf_scan_search[KIND: Int](
     var dcand = ctx.enqueue_create_buffer[DType.float32](mc * stride)
     var dws = ctx.enqueue_create_buffer[DType.float32]((mc * np * D) if KIND == 2 else 1)
     var dqn = ctx.enqueue_create_buffer[DType.float32]((mc * np) if KIND == 2 else 1)
+    comptime SERIAL = is_defined["MOJOLEARN_ANN_SERIAL_SCAN"]()
+    var dpd = ctx.enqueue_create_buffer[DType.float32](1 if SERIAL else mc * SEL_T * k)
+    var dpi = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T * k)
+    var dpn = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T)
     var use_lut = 1 if pq_dim * n_codes <= LUT_MAX else 0
     var st = AnnStages("ivf_scan")
     st.mark(ctx, "alloc")
@@ -292,10 +499,16 @@ def ivf_scan_search[KIND: Int](
             dcd.unsafe_ptr(), grid_dim=_grid(c * n_lists), block_dim=TPB,
         )
         st.mark(ctx, "coarse")
-        ctx.enqueue_function[probe_kernel](
-            Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
-            dpstart.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
-        )
+        comptime if SERIAL:
+            ctx.enqueue_function[probe_kernel](
+                Int32(c), dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
+                dpstart.unsafe_ptr(), grid_dim=_grid(c), block_dim=TPB,
+            )
+        else:
+            ctx.enqueue_function[probe_group_kernel](
+                dcd.unsafe_ptr(), Int32(n_lists), Int32(np), doff, dprobes.unsafe_ptr(),
+                dpstart.unsafe_ptr(), grid_dim=c, block_dim=PTPB,
+            )
         st.mark(ctx, "probe")
         comptime if KIND == 0:
             ctx.enqueue_function[pq_score_kernel](
@@ -324,14 +537,29 @@ def ivf_scan_search[KIND: Int](
                 grid_dim=c * np, block_dim=STPB,
             )
         st.mark(ctx, "score")
-        ctx.enqueue_function[select_kernel](
-            Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
-            dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-            dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
-        )
+        comptime if SERIAL:
+            ctx.enqueue_function[select_kernel](
+                Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
+                dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
+                dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
+            )
+        else:
+            ctx.enqueue_function[select_part_kernel](
+                Int32(np), doff, dli, dmask, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
+                dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
+                grid_dim=c, block_dim=SEL_T,
+            )
+            ctx.enqueue_function[select_merge_kernel](
+                Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
+                dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
+                dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(), dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
+            )
         st.mark(ctx, "select")
         q0 += c
     ctx.synchronize()
+    _ = dpn^
+    _ = dpi^
+    _ = dpd^
     _ = dqn^
     _ = dws^
     _ = dcand^
