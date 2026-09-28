@@ -3550,10 +3550,13 @@ def _(ml, X, yc, yr, Xh=None):
     one_hot_max_size, so the saved model carries real CTR tables (Borders at
     three priors and FeatureFreq per column, ctr_table and ctr_entry records)
     beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
-    carry unseen and seen-once categories."""
+    carry unseen and seen-once categories. Fitted on BOTH columns: the CPU
+    column trains through gbdt/host/gbdt_oracle_ctr.mojo (every permutation's
+    ordered Borders columns, its cursor and its leaves) and predicts through
+    HostGBDT."""
     Xc = _ctr_tables_x(X)
-    m = _ctr_saved_or_fit(ml, lambda: _gbdt(ml.GradientBoosting, 
-        n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+              cat_features=[0, 1, 2]).fit(Xc, yc)
     return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
                 m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
 
