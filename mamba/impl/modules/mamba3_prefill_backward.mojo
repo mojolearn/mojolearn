@@ -7,6 +7,8 @@ Python/native API qualification is required separately from historical dumps.
 No incoming cache or final-state cotangent is accepted.
 """
 from std.memory import bitcast
+from std.os import getenv
+from std.time import perf_counter_ns
 
 from max.gpu.host import DeviceContext
 
@@ -90,12 +92,24 @@ struct Mamba3PrefillGradients(Movable):
         self.out_proj_weight = List[Float32]()
 
 
+def _mtick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
+    """MOJOLEARN_MAMBA_TIMING (lane/neural-apple2): synchronize, print
+    `timing m3bwd.<name> <ms> ms`, advance `t`. A no-op when off."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print("timing m3bwd." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
+
+
 def mamba3_prefill_backward(
     weights: Mamba3Weights,
     input: List[Float32],
     grad_output: List[Float32],
     b: Int,
     l: Int,
+    var ctx_in: Optional[DeviceContext] = None,
 ) raises -> Mamba3PrefillGradients:
     comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         raise Error("mamba3 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
@@ -109,7 +123,19 @@ def mamba3_prefill_backward(
             raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
-    var ctx = DeviceContext()
+    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+    # context (core/neural_context.mojo); a fresh context per call meant a
+    # new Metal queue and a pipeline compile of every kernel on every call.
+    # Same kernels, same launches, same order: no bit moves.
+    var ctx: DeviceContext
+    if ctx_in:
+        ctx = ctx_in.take()
+    else:
+        ctx = DeviceContext()
+    # lane/neural-apple2: MOJOLEARN_MAMBA_TIMING=1 prints a wall per stage
+    # (a synchronize around each; measurement only, off by default).
+    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     var device_weights = Mamba3DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)
     var stages = Mamba3DeviceStages(ctx, b, l, 0, dims)
@@ -119,14 +145,18 @@ def mamba3_prefill_backward(
         ctx, stages, state, device_weights, x, b, l,
         trace, String("m3.backward.tail"),
     )
+    _mtick(ctx, ton, tk, "mamba3_block_forward")
 
     # residual.out = x + out_proj, hence the objective cotangent reaches the
     # projection unchanged; the pass continues through every public leaf.
     var d_output = mamba_upload(
         ctx, grad_output
     )
-    var d_gate = mamba_zeros(ctx, m * dims.d_inner)
-    var d_weight = mamba_zeros(ctx, dims.d_model * dims.d_inner)
+    # lane/neural-apple2: every scratch below is filled and used on the one
+    # in-order `ctx` and kept alive to the final synchronize (the explicit
+    # last uses at the end), so its allocation needs no wait of its own.
+    var d_gate = mamba_zeros[False](ctx, m * dims.d_inner)
+    var d_weight = mamba_zeros[False](ctx, dims.d_model * dims.d_inner)
     var workspace = mamba_zeros(
         ctx, mamba3_backward_workspace_max_floats(dims, m)
     )
@@ -134,36 +164,40 @@ def mamba3_prefill_backward(
         ctx, d_gate, d_output, device_weights.w_out, workspace,
         PROJ3_OUT, dims, m,
     )
+    _mtick(ctx, ton, tk, "proj_a")
     mamba3_backward_proj_b_into(
         ctx, d_weight, d_output, stages.gate_out, workspace,
         PROJ3_OUT, dims, m,
     )
+    _mtick(ctx, ton, tk, "proj_b")
     var tail_cells = m * dims.d_inner
     var head_cells = m * dims.nheads
-    var d_skip = mamba_zeros(ctx, tail_cells)
-    var d_z = mamba_zeros(ctx, tail_cells)
-    var d_v = mamba_zeros(ctx, tail_cells)
-    var d_qkdot = mamba_zeros(ctx, head_cells)
-    var d_d_product = mamba_zeros(ctx, head_cells)
-    var d_d = mamba_zeros(ctx, dims.nheads)
-    var ones = mamba_zeros(ctx, mamba3_backward_ones_floats(m))
+    var d_skip = mamba_zeros[False](ctx, tail_cells)
+    var d_z = mamba_zeros[False](ctx, tail_cells)
+    var d_v = mamba_zeros[False](ctx, tail_cells)
+    var d_qkdot = mamba_zeros[False](ctx, head_cells)
+    var d_d_product = mamba_zeros[False](ctx, head_cells)
+    var d_d = mamba_zeros[False](ctx, dims.nheads)
+    var ones = mamba_zeros[False](ctx, mamba3_backward_ones_floats(m))
     ones.enqueue_fill(Float32(1.0))
     mamba3_backward_gate_skip_into(
         ctx, d_skip, d_z, d_v, d_qkdot, d_d_product, d_gate,
         stages.skip_out, stages.qkdot, stages.in_proj,
         device_weights.d_skip, dims, m,
     )
+    _mtick(ctx, ton, tk, "gate_skip")
     mamba3_backward_reduce_into(
         ctx, d_d, d_d_product, ones, workspace, RED3_D, dims, m
     )
+    _mtick(ctx, ton, tk, "reduce")
     var qk_cells = m * dims.nheads * M3_D_STATE
-    var d_b_qk = mamba_zeros(ctx, qk_cells)
-    var d_c_qk = mamba_zeros(ctx, qk_cells)
-    var d_b_bias_qk = mamba_zeros(ctx, qk_cells)
-    var d_c_bias_qk = mamba_zeros(ctx, qk_cells)
-    var d_gamma_qk = mamba_zeros(ctx, head_cells)
-    var d_dt_qk = mamba_zeros(ctx, head_cells)
-    var d_trap_qk = mamba_zeros(ctx, head_cells)
+    var d_b_qk = mamba_zeros[False](ctx, qk_cells)
+    var d_c_qk = mamba_zeros[False](ctx, qk_cells)
+    var d_b_bias_qk = mamba_zeros[False](ctx, qk_cells)
+    var d_c_bias_qk = mamba_zeros[False](ctx, qk_cells)
+    var d_gamma_qk = mamba_zeros[False](ctx, head_cells)
+    var d_dt_qk = mamba_zeros[False](ctx, head_cells)
+    var d_trap_qk = mamba_zeros[False](ctx, head_cells)
     mamba3_backward_qkdot_into(
         ctx, d_b_qk, d_c_qk, d_b_bias_qk, d_c_bias_qk, d_gamma_qk,
         d_dt_qk, d_trap_qk,
@@ -171,24 +205,26 @@ def mamba3_prefill_backward(
         device_weights.c_bias, stages.gamma_work, stages.dt_work,
         stages.sig_work, dims, m,
     )
+    _mtick(ctx, ton, tk, "qkdot")
     var state_cells = m * dims.nheads * M3_D_STATE
-    var d_q_s16 = mamba_zeros(ctx, state_cells)
-    var d_ks_s16 = mamba_zeros(ctx, state_cells)
-    var d_v_s16 = mamba_zeros(ctx, tail_cells)
-    var d_krot_s15 = mamba_zeros(ctx, state_cells)
-    var d_scale_s15 = mamba_zeros(ctx, head_cells)
+    var d_q_s16 = mamba_zeros[False](ctx, state_cells)
+    var d_ks_s16 = mamba_zeros[False](ctx, state_cells)
+    var d_v_s16 = mamba_zeros[False](ctx, tail_cells)
+    var d_krot_s15 = mamba_zeros[False](ctx, state_cells)
+    var d_scale_s15 = mamba_zeros[False](ctx, head_cells)
     mamba3_backward_s16_s15_into(
         ctx, d_q_s16, d_ks_s16, d_v_s16, d_krot_s15, d_scale_s15,
         d_skip, stages.rotq_work, stages.kscale_work, stages.v_work,
         stages.seg_l, stages.rotk_work, stages.scale_work,
         b, l, dims, M3_CHUNK_SIZE,
     )
-    var d_value_total = mamba_zeros(ctx, tail_cells)
-    var d_gamma_scale = mamba_zeros(ctx, head_cells)
-    var d_beta_scale = mamba_zeros(ctx, head_cells)
-    var d_qraw_rot = mamba_zeros(ctx, state_cells)
-    var d_kraw_rot = mamba_zeros(ctx, state_cells)
-    var d_theta_rot = mamba_zeros(ctx, m * dims.nheads * M3_NUM_ROPE_ANGLES)
+    _mtick(ctx, ton, tk, "s16_s15")
+    var d_value_total = mamba_zeros[False](ctx, tail_cells)
+    var d_gamma_scale = mamba_zeros[False](ctx, head_cells)
+    var d_beta_scale = mamba_zeros[False](ctx, head_cells)
+    var d_qraw_rot = mamba_zeros[False](ctx, state_cells)
+    var d_kraw_rot = mamba_zeros[False](ctx, state_cells)
+    var d_theta_rot = mamba_zeros[False](ctx, m * dims.nheads * M3_NUM_ROPE_ANGLES)
     mamba3_backward_join_rotary_into(
         ctx, d_value_total, d_gamma_scale, d_beta_scale, d_qraw_rot,
         d_kraw_rot, d_theta_rot, d_v, d_v_s16, d_scale_s15,
@@ -196,62 +232,92 @@ def mamba3_prefill_backward(
         device_weights.b_bias, device_weights.c_bias, stages.theta_out,
         m, dims,
     )
-    var d_b_total=mamba_zeros(ctx,state_cells);var d_c_total=mamba_zeros(ctx,state_cells)
-    var d_gamma_total=mamba_zeros(ctx,head_cells);var d_dt_total=mamba_zeros(ctx,head_cells);var d_trap_total=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "join_rotary")
+    var d_b_total=mamba_zeros[False](ctx,state_cells);var d_c_total=mamba_zeros[False](ctx,state_cells)
+    var d_gamma_total=mamba_zeros[False](ctx,head_cells);var d_dt_total=mamba_zeros[False](ctx,head_cells);var d_trap_total=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_join_current_into(ctx,d_b_total,d_c_total,d_gamma_total,d_dt_total,d_trap_total,d_b_qk,d_c_qk,d_kraw_rot,d_qraw_rot,d_gamma_qk,d_gamma_scale,d_dt_qk,d_trap_qk,d_beta_scale,stages.dt_work,stages.sig_work,b,l,dims)
-    var d_angle_rate=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
-    var d_angle_raw=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES)
-    var d_dt_angle=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "join_current")
+    var d_angle_rate=mamba_zeros[False](ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
+    var d_angle_raw=mamba_zeros[False](ctx,m*M3_NUM_ROPE_ANGLES)
+    var d_dt_angle=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_angle_into(ctx,d_angle_rate,d_angle_raw,d_dt_angle,d_theta_rot,stages.dt_work,stages.in_proj,b,l,dims)
-    var d_dt_available=mamba_zeros(ctx,head_cells);var d_dt_raw=mamba_zeros(ctx,head_cells);var d_dt_bias_rows=mamba_zeros(ctx,head_cells);var d_dt_bias=mamba_zeros(ctx,dims.nheads)
+    _mtick(ctx, ton, tk, "angle")
+    var d_dt_available=mamba_zeros[False](ctx,head_cells);var d_dt_raw=mamba_zeros[False](ctx,head_cells);var d_dt_bias_rows=mamba_zeros[False](ctx,head_cells);var d_dt_bias=mamba_zeros[False](ctx,dims.nheads)
     mamba3_backward_dt_partial_into(ctx,d_dt_available,d_dt_raw,d_dt_bias_rows,d_dt_total,d_dt_angle,stages.in_proj,device_weights.dt_bias,m,dims)
+    _mtick(ctx, ton, tk, "dt_partial")
     mamba3_backward_reduce_into(ctx,d_dt_bias,d_dt_bias_rows,ones,workspace,RED3_DT_BIAS,dims,m)
+    _mtick(ctx, ton, tk, "reduce")
     var seg_cells=b*stages.nc*dims.nheads*M3_CHUNK_SIZE*M3_CHUNK_SIZE
-    var d_seg=mamba_zeros(ctx,seg_cells);var d_adt_seg=mamba_zeros(ctx,head_cells)
+    var d_seg=mamba_zeros[False](ctx,seg_cells);var d_adt_seg=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_seg_adt_into(ctx,d_seg,d_adt_seg,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.seg_l,b,l,dims,M3_CHUNK_SIZE)
-    var d_a_seg=mamba_zeros(ctx,head_cells);var d_dt_seg=mamba_zeros(ctx,head_cells);var d_dt_with_seg=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "seg_adt")
+    var d_a_seg=mamba_zeros[False](ctx,head_cells);var d_dt_seg=mamba_zeros[False](ctx,head_cells);var d_dt_with_seg=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_adt_product_into(ctx,d_a_seg,d_dt_seg,d_dt_with_seg,d_adt_seg,stages.a_out,stages.dt_out,d_dt_available,head_cells)
+    _mtick(ctx, ton, tk, "adt_product")
     var chunk_state_cells=b*stages.nc*dims.nheads*M3_HEADDIM*M3_D_STATE
     var initial_state_cells=b*dims.nheads*M3_HEADDIM*M3_D_STATE
-    var d_state_direct=mamba_zeros(ctx,chunk_state_cells);var d_state_total=mamba_zeros(ctx,chunk_state_cells);var d_initial_state=mamba_zeros(ctx,initial_state_cells)
+    var d_state_direct=mamba_zeros[False](ctx,chunk_state_cells);var d_state_total=mamba_zeros[False](ctx,chunk_state_cells);var d_initial_state=mamba_zeros[False](ctx,initial_state_cells)
     mamba3_backward_s17_state_into(ctx,d_state_direct,d_state_total,d_initial_state,d_skip,stages.rotq_work,stages.dacs,b,l,dims,M3_CHUNK_SIZE)
-    var d_q17=mamba_zeros(ctx,state_cells);var d_dacs_read17=mamba_zeros(ctx,head_cells);var d_k17=mamba_zeros(ctx,state_cells);var d_v17=mamba_zeros(ctx,tail_cells);var d_dacs_rec17=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "s17_state")
+    var d_q17=mamba_zeros[False](ctx,state_cells);var d_dacs_read17=mamba_zeros[False](ctx,head_cells);var d_k17=mamba_zeros[False](ctx,state_cells);var d_v17=mamba_zeros[False](ctx,tail_cells);var d_dacs_rec17=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_s17_operands_into(ctx,d_q17,d_dacs_read17,d_k17,d_v17,d_dacs_rec17,d_skip,stages.rotq_work,stages.kscale_work,stages.v_work,stages.dacs,stages.pass_states,d_state_total,b,l,dims,M3_CHUNK_SIZE)
-    var d_q_join=mamba_zeros(ctx,state_cells);var d_k_join=mamba_zeros(ctx,state_cells);var d_v_join=mamba_zeros(ctx,tail_cells);var d_dacs_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "s17_operands")
+    var d_q_join=mamba_zeros[False](ctx,state_cells);var d_k_join=mamba_zeros[False](ctx,state_cells);var d_v_join=mamba_zeros[False](ctx,tail_cells);var d_dacs_join=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_join_s16_s17_into(ctx,d_q_join,d_k_join,d_v_join,d_dacs_join,d_q_s16,d_q17,d_ks_s16,d_k17,d_value_total,d_v17,d_dacs_read17,d_dacs_rec17,state_cells,tail_cells,head_cells)
-    var d_krot_join=mamba_zeros(ctx,state_cells);var d_scale_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "join_s16_s17")
+    var d_krot_join=mamba_zeros[False](ctx,state_cells);var d_scale_join=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_s15_only_into(ctx,d_krot_join,d_scale_join,d_k_join,stages.rotk_work,stages.scale_work,head_cells)
-    var d_qraw_join=mamba_zeros(ctx,state_cells);var d_kraw_join=mamba_zeros(ctx,state_cells);var d_theta_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
+    _mtick(ctx, ton, tk, "s15_only")
+    var d_qraw_join=mamba_zeros[False](ctx,state_cells);var d_kraw_join=mamba_zeros[False](ctx,state_cells);var d_theta_join=mamba_zeros[False](ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES)
     mamba3_backward_rotary_only_into(ctx,d_qraw_join,d_kraw_join,d_theta_join,d_q_join,d_krot_join,stages.bcnorm_b,stages.bcnorm_c,device_weights.b_bias,device_weights.c_bias,stages.theta_out,m*dims.nheads*(M3_D_STATE//2),dims.nheads)
-    var d_adt_from_dacs=mamba_zeros(ctx,head_cells);var d_adt_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "rotary_only")
+    var d_adt_from_dacs=mamba_zeros[False](ctx,head_cells);var d_adt_join=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_dacs_to_adt_into(ctx,d_adt_from_dacs,d_dacs_join,b,l,dims.nheads,M3_CHUNK_SIZE)
+    _mtick(ctx, ton, tk, "dacs_to_adt")
     mamba3_backward_join_two_into(ctx,d_adt_join,d_adt_seg,d_adt_from_dacs,head_cells)
-    var d_a_join=mamba_zeros(ctx,head_cells);var d_dt_join_adt=mamba_zeros(ctx,head_cells);var d_dt_join_scratch=mamba_zeros(ctx,head_cells);var zero_dt=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "join_two")
+    var d_a_join=mamba_zeros[False](ctx,head_cells);var d_dt_join_adt=mamba_zeros[False](ctx,head_cells);var d_dt_join_scratch=mamba_zeros[False](ctx,head_cells);var zero_dt=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_adt_product_into(ctx,d_a_join,d_dt_join_adt,d_dt_join_scratch,d_adt_join,stages.a_out,stages.dt_out,zero_dt,head_cells)
-    var d_a_raw_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "adt_product")
+    var d_a_raw_join=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_a_heavy_tail_into(ctx,d_a_raw_join,d_a_join,stages.in_proj,m,dims)
-    var d_b_join=mamba_zeros(ctx,state_cells);var d_c_join=mamba_zeros(ctx,state_cells);var d_gamma_join=mamba_zeros(ctx,head_cells);var d_dt_join_current=mamba_zeros(ctx,head_cells);var d_trap_join=mamba_zeros(ctx,head_cells);var d_beta_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "a_heavy_tail")
+    var d_b_join=mamba_zeros[False](ctx,state_cells);var d_c_join=mamba_zeros[False](ctx,state_cells);var d_gamma_join=mamba_zeros[False](ctx,head_cells);var d_dt_join_current=mamba_zeros[False](ctx,head_cells);var d_trap_join=mamba_zeros[False](ctx,head_cells);var d_beta_join=mamba_zeros[False](ctx,head_cells)
     ctx.enqueue_copy(dst_buf=d_beta_join, src_buf=d_scale_join)
     mamba3_backward_join_current_into(ctx,d_b_join,d_c_join,d_gamma_join,d_dt_join_current,d_trap_join,d_b_qk,d_c_qk,d_kraw_join,d_qraw_join,d_gamma_qk,d_scale_join,d_dt_qk,d_trap_qk,d_beta_join,stages.dt_work,stages.sig_work,b,l,dims)
-    var d_angle_rate_join=mamba_zeros(ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=mamba_zeros(ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=mamba_zeros(ctx,head_cells)
+    _mtick(ctx, ton, tk, "join_current")
+    var d_angle_rate_join=mamba_zeros[False](ctx,m*dims.nheads*M3_NUM_ROPE_ANGLES);var d_angle_raw_join=mamba_zeros[False](ctx,m*M3_NUM_ROPE_ANGLES);var d_dt_angle_join=mamba_zeros[False](ctx,head_cells)
     mamba3_backward_angle_into(ctx,d_angle_rate_join,d_angle_raw_join,d_dt_angle_join,d_theta_join,stages.dt_work,stages.in_proj,b,l,dims)
-    var d_dt_join_base=mamba_zeros(ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
-    var d_dt_join_available=mamba_zeros(ctx,head_cells);var d_dt_raw_join=mamba_zeros(ctx,head_cells);var d_dt_bias_rows_join=mamba_zeros(ctx,head_cells);var d_dt_bias_join=mamba_zeros(ctx,dims.nheads)
+    _mtick(ctx, ton, tk, "angle")
+    var d_dt_join_base=mamba_zeros[False](ctx,head_cells);mamba3_backward_join_two_into(ctx,d_dt_join_base,d_dt_join_current,d_dt_join_adt,head_cells)
+    _mtick(ctx, ton, tk, "join_two")
+    var d_dt_join_available=mamba_zeros[False](ctx,head_cells);var d_dt_raw_join=mamba_zeros[False](ctx,head_cells);var d_dt_bias_rows_join=mamba_zeros[False](ctx,head_cells);var d_dt_bias_join=mamba_zeros[False](ctx,dims.nheads)
     mamba3_backward_dt_partial_into(ctx,d_dt_join_available,d_dt_raw_join,d_dt_bias_rows_join,d_dt_join_base,d_dt_angle_join,stages.in_proj,device_weights.dt_bias,m,dims)
+    _mtick(ctx, ton, tk, "dt_partial")
     mamba3_backward_reduce_into(ctx,d_dt_bias_join,d_dt_bias_rows_join,ones,workspace,RED3_DT_BIAS,dims,m)
-    var d_b_raw=mamba_zeros(ctx,m*M3_D_STATE);var d_c_raw=mamba_zeros(ctx,m*M3_D_STATE);var d_bw_rows=mamba_zeros(ctx,m*M3_D_STATE);var d_cw_rows=mamba_zeros(ctx,m*M3_D_STATE)
+    _mtick(ctx, ton, tk, "reduce")
+    var d_b_raw=mamba_zeros[False](ctx,m*M3_D_STATE);var d_c_raw=mamba_zeros[False](ctx,m*M3_D_STATE);var d_bw_rows=mamba_zeros[False](ctx,m*M3_D_STATE);var d_cw_rows=mamba_zeros[False](ctx,m*M3_D_STATE)
     mamba3_backward_bcnorm_into(ctx,d_b_raw,d_bw_rows,d_b_join,stages.in_proj,device_weights.bnorm_w,m,dims,dims.col_b())
+    _mtick(ctx, ton, tk, "bcnorm")
     mamba3_backward_bcnorm_into(ctx,d_c_raw,d_cw_rows,d_c_join,stages.in_proj,device_weights.cnorm_w,m,dims,dims.col_c())
-    var d_bw=mamba_zeros(ctx,M3_D_STATE);var d_cw=mamba_zeros(ctx,M3_D_STATE);var d_bb=mamba_zeros(ctx,dims.nheads*M3_D_STATE);var d_cb=mamba_zeros(ctx,dims.nheads*M3_D_STATE)
+    _mtick(ctx, ton, tk, "bcnorm")
+    var d_bw=mamba_zeros[False](ctx,M3_D_STATE);var d_cw=mamba_zeros[False](ctx,M3_D_STATE);var d_bb=mamba_zeros[False](ctx,dims.nheads*M3_D_STATE);var d_cb=mamba_zeros[False](ctx,dims.nheads*M3_D_STATE)
     mamba3_backward_reduce_into(ctx,d_bw,d_bw_rows,ones,workspace,RED3_BNORM_W,dims,m);mamba3_backward_reduce_into(ctx,d_cw,d_cw_rows,ones,workspace,RED3_CNORM_W,dims,m)
+    _mtick(ctx, ton, tk, "reduce")
     mamba3_backward_reduce_into(ctx,d_bb,d_b_join,ones,workspace,RED3_B_BIAS,dims,m);mamba3_backward_reduce_into(ctx,d_cb,d_c_join,ones,workspace,RED3_C_BIAS,dims,m)
-    var d_in_proj=mamba_zeros(ctx,m*dims.d_in_proj());var d_norm=mamba_zeros(ctx,m*dims.d_model);var d_w_in=mamba_zeros(ctx,dims.d_in_proj()*dims.d_model)
+    _mtick(ctx, ton, tk, "reduce")
+    var d_in_proj=mamba_zeros[False](ctx,m*dims.d_in_proj());var d_norm=mamba_zeros[False](ctx,m*dims.d_model);var d_w_in=mamba_zeros[False](ctx,dims.d_in_proj()*dims.d_model)
     mamba3_backward_pack_in_proj_into(ctx,d_in_proj,d_z,d_v_join,d_b_raw,d_c_raw,d_dt_raw_join,d_a_raw_join,d_trap_join,d_angle_raw_join,m,dims)
+    _mtick(ctx, ton, tk, "pack_in_proj")
     mamba3_backward_proj_a_into(ctx,d_norm,d_in_proj,device_weights.w_in,workspace,PROJ3_IN,dims,m)
+    _mtick(ctx, ton, tk, "proj_a")
     mamba3_backward_proj_b_into(ctx,d_w_in,d_in_proj,stages.norm_out,workspace,PROJ3_IN,dims,m)
-    var d_x=mamba_zeros(ctx,m*dims.d_model);var d_norm_w_rows=mamba_zeros(ctx,m*dims.d_model);var d_norm_w=mamba_zeros(ctx,dims.d_model)
+    _mtick(ctx, ton, tk, "proj_b")
+    var d_x=mamba_zeros[False](ctx,m*dims.d_model);var d_norm_w_rows=mamba_zeros[False](ctx,m*dims.d_model);var d_norm_w=mamba_zeros[False](ctx,dims.d_model)
     mamba3_backward_block_norm_into(ctx,d_x,d_norm_w_rows,d_norm,d_output,x,stages.norm_sumsq,device_weights.norm_w,m,dims)
+    _mtick(ctx, ton, tk, "block_norm")
     mamba3_backward_reduce_into(ctx,d_norm_w,d_norm_w_rows,ones,workspace,RED3_NORM_W,dims,m)
+    _mtick(ctx, ton, tk, "reduce")
     ctx.synchronize()
 
     var result = Mamba3PrefillGradients()
@@ -265,6 +331,7 @@ def mamba3_prefill_backward(
     result.C_bias = mamba_download(ctx, d_cb, dims.nheads*M3_D_STATE)
     result.D = mamba_download(ctx, d_d, dims.nheads)
     result.out_proj_weight = mamba_download(ctx, d_weight, dims.d_model*dims.d_inner)
+    _mtick(ctx, ton, tk, "downloads")
 
     # Explicit ownership extends all GPU buffers through synchronization.
     _ = d_norm_w^

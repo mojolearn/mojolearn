@@ -111,6 +111,7 @@ def mamba1_prefill_backward(
     grad_output: List[Float32],
     b: Int,
     l: Int,
+    var ctx_in: Optional[DeviceContext] = None,
 ) raises -> Mamba1PrefillGradients:
     comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         raise Error("mamba1 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
@@ -124,7 +125,15 @@ def mamba1_prefill_backward(
             raise Error("mamba1 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
-    var ctx = DeviceContext()
+    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+    # context (core/neural_context.mojo); a fresh context per call meant a
+    # new Metal queue and a pipeline compile of every kernel on every call.
+    # Same kernels, same launches, same order: no bit moves.
+    var ctx: DeviceContext
+    if ctx_in:
+        ctx = ctx_in.take()
+    else:
+        ctx = DeviceContext()
     var dweights = MambaDeviceWeights(ctx, weights)
     # The forward mutates its recurrent state. Backward T2 needs the state
     # entering that call, so retain a distinct zero-state allocation.

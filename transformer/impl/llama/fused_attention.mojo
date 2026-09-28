@@ -1490,17 +1490,50 @@ default before the estash flip (its backward is the shipped
 `_pf`)."""
 
 
+comptime ATTN_APPLE_ESTASH_RECOMPUTE = (
+    ATTN_APPLE_ESTASH_GATED and is_defined["MOJOLEARN_ATTN_APPLE_ERECOMP"]()
+)
+"""lane/neural-apple2 (2026-09-28): an Apple process DENIED the estash word
+(its kept stashes do not fit) recomputes ONE layer's exp stash in the
+backward instead of running the round 3 zdot: the estash forward's own
+instantiation (`fused_forward_launch_estash_ran` under the column default,
+writing `e`, the row maxima and the denominators into per-call scratch) and
+then the estash backward over it, exactly the granted path's two launches
+with the forward repeated. Same kernels, same inputs, so the same `e` bits
+the granted process keeps, and the granted backward's bits, which equal the
+round 3 backward's (every final witness equal across the words). Memory: one
+layer's `[B, n_heads, L, S]` stash on top of the y/dy pair the round 3
+backward already allocates, granted by `attention_estash_memory_grant` under
+the same 35% rule. A recompute forward that raises the corner flag falls
+back to the round 3 backward, unchanged.
+
+OPT-IN ONLY (`-D MOJOLEARN_ATTN_APPLE_ERECOMP`). Measured on the M3 Ultra at the
+T3 shard (B4 L2048 d768 12L V50257, estash forced denied, steward job
+1790603073363, 5 steps each): round 3 backward 3.537 s a step, recompute
+3.619 s, the granted estash word 2.923 s; final witness and loss digests
+equal in all three. The recompute forward costs more than the round 3 zdot
+saves, so a denied process keeps the round 3 backward."""
+
+comptime ATTN_APPLE_ESTASH_FORCE_DENY = is_defined["MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY"]()
+"""Measurement arm (lane/neural-apple2): the grant always refuses the kept
+stashes, so a large-memory Mac times the denied path."""
+
+
 struct _AttnEstashGate(Defaultable, Movable):
     var granted: Bool
     var denied: Bool
     var need: Int
     var free: Int
+    var recompute: Bool
+    var recompute_denied: Bool
 
     def __init__(out self):
         self.granted = False
         self.denied = False
         self.need = 0
         self.free = 0
+        self.recompute = False
+        self.recompute_denied = False
 
 
 comptime _ATTN_ESTASH_GATE = _Global[StorageType=_AttnEstashGate,
@@ -1547,7 +1580,7 @@ def attention_estash_memory_grant(
     )
     var mem = ctx.get_memory_info()
     var free = Int(mem[0])
-    var ok = need * 100 <= free * 35
+    var ok = need * 100 <= free * 35 and not ATTN_APPLE_ESTASH_FORCE_DENY
     var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
     g[].need = need
     g[].free = free
@@ -1555,14 +1588,37 @@ def attention_estash_memory_grant(
         g[].granted = True
     else:
         g[].denied = True
+        # lane/neural-apple2: one layer's recomputed stash beside the y/dy
+        # pair (ATTN_APPLE_ESTASH_RECOMPUTE), under the same rule; a refusal
+        # is sticky like the grant's.
+        comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+            var need_r = 3 * 4 * b * nh * l * s + step_transient_bytes
+            if need_r * 100 <= free * 35:
+                g[].recompute = True
+            else:
+                g[].recompute_denied = True
     return g[].granted and not g[].denied
 
 
+def attention_estash_recompute_granted() -> Bool:
+    """Whether this process's denied backward recomputes one layer's exp
+    stash (ATTN_APPLE_ESTASH_RECOMPUTE): the estash word was refused, the
+    recompute was granted and never refused. False on every other build."""
+    comptime if not ATTN_APPLE_ESTASH_RECOMPUTE:
+        return False
+    try:
+        var g = _ATTN_ESTASH_GATE.get_or_create_ptr()
+        return g[].denied and g[].recompute and not g[].recompute_denied
+    except:
+        return False
+
+
 def attention_estash_gate_state() -> List[Int]:
-    """[gated, granted, denied, need_bytes, free_bytes] of the last grant
-    (all zero when nothing asked), for a run's read-back."""
+    """[gated, granted, denied, need_bytes, free_bytes, recompute] of the
+    last grant (all zero when nothing asked), for a run's read-back."""
     var out = List[Int]()
     comptime if not ATTN_APPLE_ESTASH_GATED:
+        out.append(0)
         out.append(0)
         out.append(0)
         out.append(0)
@@ -1576,8 +1632,10 @@ def attention_estash_gate_state() -> List[Int]:
         out.append(1 if g[].denied else 0)
         out.append(g[].need)
         out.append(g[].free)
+        out.append(1 if attention_estash_recompute_granted() else 0)
     except:
         out.append(1)
+        out.append(0)
         out.append(0)
         out.append(0)
         out.append(0)
@@ -4717,7 +4775,14 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
                         ys.unsafe_load(tr * ESTRIDE + jj),
                         z,
                     )
-        barrier()
+        # lane/neural-apple2 (2026-09-28): on Apple no barrier here. The fold
+        # reads only `ys` and `dys`; the next block rewrites them only after
+        # its staging barrier, which the folding threads reach only once
+        # their fold is done, and the staging writes `ks` / `vs`, whose last
+        # readers passed the barrier above. Synchronization only.
+        # `-D MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER` restores it.
+        comptime if TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_ZDOT_STASH_FOLD_BARRIER"]():
+            barrier()
     if valid and lane == 0:
         var zf = ftz(z)
         if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
@@ -7641,6 +7706,16 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     mpart[u] = identical_fmax(mpart[u], masked)
                     var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                     sstash.unsafe_store(cell, masked)
+        # lane/neural-apple2 (2026-09-28): no barrier here. The next block's
+        # staging writes `kv` and `emin`, whose readers (the matrix step and
+        # the admission read) all passed the barrier above; its matrix step
+        # rewrites `tile` only after its staging barrier, which every thread
+        # reaches after its row phase. One barrier after the loop guards the
+        # row-maximum store into `tile` below. Synchronization only;
+        # `-D MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER` restores the per-block barrier.
+        comptime if is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
+            barrier()
+    comptime if not is_defined["MOJOLEARN_ATTN_FWD_AMMA_P1_BARRIER"]():
         barrier()
     comptime for u in range(RPT):
         tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
@@ -7654,7 +7729,20 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     barrier()
 
     # Pass 2: exp, the stash, the serial denominator (the original's lines).
+    # lane/neural-apple2 (2026-09-28): the exp tile alternates between `tile`
+    # and `wT` (unused until pass 3, and at least TQ * 33 floats), so the
+    # barrier after warp 0's denominator fold goes: block kb + 1 writes the
+    # other page, and the page block kb + 2 rewrites was last read by warp 0
+    # before it reached block kb + 1's barrier. Synchronization only.
+    # `-D MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER` restores the single page and the
+    # barrier.
+    comptime P2_ONE_PAGE = is_defined["MOJOLEARN_ATTN_FWD_AMMA_P2_BARRIER"]()
+    comptime assert P2_ONE_PAGE or BK * WST >= TQ * 33, "amma forward: pass 2's second page must hold TQ x 33"
     for kb in range(kb_lo, kb_hi + 1):
+        var pg = tile
+        comptime if not P2_ONE_PAGE:
+            if ((kb - kb_lo) & 1) == 1:
+                pg = wT
         comptime for u in range(RPT):
             var r = tr + u * 16
             var t = t0 + r
@@ -7667,15 +7755,16 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     var masked = sstash.unsafe_load(cell)
                     var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
                     sstash.unsafe_store(cell, e)
-                    tile.unsafe_store(r * 33 + jj, e)
+                    pg.unsafe_store(r * 33 + jj, e)
         barrier()
         if tid < TQ and t0 + tid < l:
             var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
             comptime for jj in range(BK):
                 var j = kb * BK + jj
                 if j >= rr[0] and j <= rr[1]:
-                    dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
-        barrier()
+                    dacc = ftz(ftz(dacc) + ftz(pg.unsafe_load(tid * 33 + jj)))
+        comptime if P2_ONE_PAGE:
+            barrier()
     if tid < TQ and t0 + tid < l:
         stats.unsafe_store(TQ + tid, ftz(dacc))
         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
@@ -7942,7 +8031,17 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
                 var j = kb * BK + jj
                 if j >= rr[0] and j <= rr[1]:
                     z = _step_preflushed(tdy[tid * 33 + jj], ty[tid * 33 + jj], z)
-        barrier()
+        # lane/neural-apple2 (2026-09-28): no barrier here by default. The
+        # fold above is warp 0's (TQ = 32 threads) and reads only `tdy` and
+        # `ty`; the next block's first writes to them (the matrix step, then
+        # the y/dy lines) come after the next staging barrier, which warp 0
+        # reaches only once its fold is done. The next staging writes `vb`
+        # and `emin`, which the fold never reads and whose last readers
+        # passed the barrier above. So warps 1-7 stage the next key block
+        # while warp 0 folds. `-D MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER`
+        # restores the barrier. Synchronization only: no operand or order moves.
+        comptime if is_defined["MOJOLEARN_ATTN_ZDOT_AMMA_FOLD_BARRIER"]():
+            barrier()
     if tid < TQ and t0 + tid < l:
         var t = t0 + tid
         var rr = _row_range(t, pos0, key_lo, window, s)
@@ -8139,6 +8238,51 @@ def fused_bwd_zdot_stash_amma_kernel[HD: Int](
         zdot.unsafe_store(row, zf)
 
 
+comptime ATTN_SCRATCH_CACHE = (
+    TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_ATTN_NO_SCRATCH_CACHE"]()
+)
+"""lane/neural-apple2 (2026-09-28): on Apple the attention launchers' big
+`[B, n_heads, L, S]` scratches (the round 3 forward's score/exp stash, the
+backward's y and dy stashes) come from a process cache that grows to the
+largest call and is reused, instead of a fresh allocation per call (per
+layer, per step: about 2.4 GB of fresh pages per layer at the T3 shard).
+Every launcher waits before it returns, so a cached buffer is never in use
+by two calls. Every kernel writes each cell it later reads within the call
+(the fresh buffers were never guaranteed zero on Metal, DEVIATION 2712), so
+no bit moves. `-D MOJOLEARN_ATTN_NO_SCRATCH_CACHE` allocates per call."""
+
+
+struct _AttnScratch(Defaultable, Movable):
+    var bufs: List[DeviceBuffer[DType.float32]]
+    var cells: List[Int]
+
+    def __init__(out self):
+        self.bufs = List[DeviceBuffer[DType.float32]]()
+        self.cells = List[Int]()
+
+
+comptime _ATTN_SCRATCH = _Global[StorageType=_AttnScratch,
+    name="MojolearnAttnScratchV1", init_fn=_AttnScratch.__init__]
+
+
+def _attn_scratch(ctx: DeviceContext, slot: Int, cells: Int) raises -> DeviceBuffer[DType.float32]:
+    """Scratch `slot` (0 forward stash, 1 backward y, 2 backward dy) of at
+    least `cells` floats: the cached buffer (grown when smaller) under
+    ATTN_SCRATCH_CACHE, else a fresh allocation. The caller synchronizes
+    before it returns, as every attention launcher does."""
+    step_count_device_alloc()
+    comptime if not ATTN_SCRATCH_CACHE:
+        return ctx.enqueue_create_buffer[DType.float32](cells)
+    var g = _ATTN_SCRATCH.get_or_create_ptr()
+    while len(g[].bufs) <= slot:
+        g[].bufs.append(ctx.enqueue_create_buffer[DType.float32](1))
+        g[].cells.append(1)
+    if g[].cells[slot] < cells:
+        g[].bufs[slot] = ctx.enqueue_create_buffer[DType.float32](cells)
+        g[].cells[slot] = cells
+    return g[].bufs[slot].create_sub_buffer[DType.float32](0, cells)
+
+
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
@@ -8158,8 +8302,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     `fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]` at `TQ` rows per
     block. Generic, so a build that never calls it (every shipped build)
     instantiates none of it."""
-    step_count_device_alloc()
-    var sstash = ctx.enqueue_create_buffer[DType.float32](b * nh * l * s)
+    var sstash = _attn_scratch(ctx, 0, b * nh * l * s)
     # No wait after the allocation (lane/neural-apple, 2026-09-28): the
     # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
@@ -8286,10 +8429,8 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     them."""
     comptime TQ = FUSED_THREADS // HD
     var cells = b * nh * l * s
-    step_count_device_alloc()
-    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
-    step_count_device_alloc()
-    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var y_st = _attn_scratch(ctx, 1, cells)
+    var dy_st = _attn_scratch(ctx, 2, cells)
     # No wait after the allocations or after the zdot kernel (lane/
     # neural-apple, 2026-09-28): zdot, dq and dk/dv are enqueued on the same
     # in-order `ctx`, so dq and dk/dv read the finished stashes and zdot
@@ -8873,10 +9014,8 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     var y_cells = cells
     comptime if ATTN_V1_ALIAS_Y_ESTASH:
         y_cells = 1
-    step_count_device_alloc()
-    var y_st = ctx.enqueue_create_buffer[DType.float32](y_cells)
-    step_count_device_alloc()
-    var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var y_st = _attn_scratch(ctx, 1, y_cells)
+    var dy_st = _attn_scratch(ctx, 2, cells)
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
@@ -9916,4 +10055,83 @@ def fused_backward_launch_estash_report(
     return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
         b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+    )
+
+
+def fused_backward_launch_erecomp_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    mut repaired: Int,
+) raises -> Int:
+    """ATTN_APPLE_ESTASH_RECOMPUTE's backward (lane/neural-apple2): the
+    column default's estash forward into per-call scratch (`e`, row maxima,
+    denominators, context), then the column default's estash backward over
+    that `e` and those denominators. When the default word does not run the
+    estash backward at this head_dim, or the recompute forward does not end
+    FUSED_RAN (a regime refusal or the corner flag), the plain launcher runs,
+    exactly the denied process's old path. `amax` and `denom` (the caller's
+    forward row scalars) are read only by that fallback."""
+    repaired = 0
+    comptime if ATTN_APPLE_ESTASH_RECOMPUTE:
+        var arm = ATTN_ARM_DEFAULT
+        if hd == ATTN_STASH_HD and fused_attention_arm_estash_runs(arm):
+            var cells = b * nh * l * s
+            var rows = b * nh * l
+            step_count_device_alloc()
+            var kept = ctx.enqueue_create_buffer[DType.float32](cells)
+            step_count_device_alloc()
+            var ctx_s = ctx.enqueue_create_buffer[DType.float32](b * l * nh * hd)
+            step_count_device_alloc()
+            var amax_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            step_count_device_alloc()
+            var denom_s = ctx.enqueue_create_buffer[DType.float32](rows)
+            var fran = 0
+            var kept_cells = 0
+            var fs = fused_forward_launch_estash_ran(
+                ctx, ctx_s, amax_s, denom_s, q_rope, k_cache, v_cache, kept,
+                b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, fran,
+                kept_cells,
+            )
+            if fs == FUSED_RAN and kept_cells == cells:
+                var bran = 0
+                var st = fused_backward_launch_estash_report(
+                    ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache,
+                    amax_s, denom_s, kept, kept_cells, b, l, nh, nkv, hd, s,
+                    pos0, key_lo, window, scale, arm, bran, repaired,
+                )
+                # The estash backward waits before it returns; the scratch
+                # is released after it.
+                _ = kept^
+                _ = ctx_s^
+                _ = amax_s^
+                _ = denom_s^
+                return st
+            step_count_sync()
+            ctx.synchronize()
+            _ = kept^
+            _ = ctx_s^
+            _ = amax_s^
+            _ = denom_s^
+    return fused_backward_launch(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
     )
