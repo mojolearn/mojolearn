@@ -15,7 +15,7 @@ from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
 )
-from x_prep.dmi import mi_cd_device, mi_big_n, mi_scratch_words
+from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -99,12 +99,13 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
+    var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_MI_CD:
             var mq = host_q + (s * STAGE_INTS + 2)
-            mi_w = max(mi_w, Int(mq[2]) * mi_big_n(Int(mq[1])))
+            mi_w = max(mi_w, mi_w_words(Int(mq[1]), Int(mq[2])))
             mi_u = max(mi_u, mi_scratch_words(Int(mq[1]), Int(mq[2])))
     var ctx = x_prep_ctx()
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
@@ -132,7 +133,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         if mi_sorted and op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
-            mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]))
+            mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
+                         Int(hq[7]), mi_ties)
             continue
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)

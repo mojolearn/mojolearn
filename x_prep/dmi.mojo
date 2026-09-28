@@ -61,21 +61,31 @@ def mi_scratch_words(n: Int, d: Int) -> Int:
     return d * (6 * n + 1 + 4)
 
 
-def _load_kernel(f: FP, w: WP, Z: Int32, n: Int32, d: Int32, big_n: Int32, total: Int32):
+def _load_kernel(f: FP, w: WP, pl: WP, Z: Int32, n: Int32, d: Int32, big_n: Int32, total: Int32, zs1: Int32,
+                 ties: Int32):
+    """w[t] = the sort word of X[j, c], pl[t] = j (t = c * N + j). ties == 0:
+    (key(x), j); else (key(x), key(s)) with s the noise word (lane
+    prep-apple2: a run of equal x is then in secondary order, and
+    `_point_ties_kernel` searches it instead of walking it)."""
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= Int(total):
         return
     var bn = Int(big_n)
     var c = t // bn
     var j = t - c * bn
+    pl[t] = UInt64(j)
     if j < Int(n):
         var x = ld(f, Int(Z) + j * Int(d) + c)
-        w[t] = (UInt64(key(x)) << UInt64(32)) | UInt64(j)
+        if ties != Int32(0):
+            var sb = Int(zs1) + c if Int(zs1) > 0 else 0
+            w[t] = (UInt64(key(x)) << UInt64(32)) | UInt64(key(_sec(f, sb, j * Int(d))))
+        else:
+            w[t] = (UInt64(key(x)) << UInt64(32)) | UInt64(j)
     else:
         w[t] = PAD64
 
 
-def _global_kernel(w: WP, big_n: Int32, k: Int32, j: Int32, total: Int32):
+def _global_kernel(w: WP, pl: WP, big_n: Int32, k: Int32, j: Int32, total: Int32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t >= Int(total):
         return
@@ -90,15 +100,21 @@ def _global_kernel(w: WP, big_n: Int32, k: Int32, j: Int32, total: Int32):
     if (a <= b) != ((i & Int(k)) == 0):
         w[base + i] = b
         w[base + i + jj] = a
+        var pa = pl[base + i]
+        pl[base + i] = pl[base + i + jj]
+        pl[base + i + jj] = pa
 
 
-def _tile_kernel(w: WP, big_n: Int32, k_lo: Int32, k_hi: Int32):
+def _tile_kernel(w: WP, pl: WP, big_n: Int32, k_lo: Int32, k_hi: Int32):
     var s = stack_allocation[MTILE, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
+    var sp = stack_allocation[MTILE, Scalar[DType.uint64], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var g0 = Int(block_idx.x) * MTILE
     var row0 = g0 % Int(big_n)
     s[tid] = w[g0 + tid]
     s[tid + MTG] = w[g0 + tid + MTG]
+    sp[tid] = pl[g0 + tid]
+    sp[tid + MTG] = pl[g0 + tid + MTG]
     barrier()
     var k = Int(k_lo)
     while k <= Int(k_hi):
@@ -110,11 +126,16 @@ def _tile_kernel(w: WP, big_n: Int32, k_lo: Int32, k_hi: Int32):
             if (a <= b) != (((row0 + i) & k) == 0):
                 s[i] = b
                 s[i + jj] = a
+                var pa = sp[i]
+                sp[i] = sp[i + jj]
+                sp[i + jj] = pa
             barrier()
             jj //= 2
         k *= 2
     w[g0 + tid] = s[tid]
     w[g0 + tid + MTG] = s[tid + MTG]
+    pl[g0 + tid] = sp[tid]
+    pl[g0 + tid + MTG] = sp[tid + MTG]
 
 
 #: labels whose fill counters `_prep_kernel` keeps in registers (more: in the scratch)
@@ -124,6 +145,7 @@ comptime MRUN = 16
 
 
 def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
+    # w: the sorted rows' payload words (the row index j)
     """One thread per column c: `_cd_column`'s split of the sorted order.
     Lane prep-apple2: MRUN rows' words are loaded before any is used (the
     gathers through the sorted order were one memory latency each), the fill
@@ -202,7 +224,7 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
             var m = min(MRUN, n - r0)
             var jj = InlineArray[Int, MRUN](fill=0)
             for v in range(m):
-                jj[v] = Int(w[wb + r0 + v] & UInt64(0xFFFFFFFF))
+                jj[v] = Int(w[wb + r0 + v])
             var ll = InlineArray[Int, MRUN](fill=0)
             var xx = InlineArray[UInt32, MRUN](fill=UInt32(0))
             var ss = InlineArray[UInt32, MRUN](fill=UInt32(0))
@@ -237,7 +259,7 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
     for l in range(nlab):
         fu[fillb + l] = fu[start + l]
     for r in range(n):
-        var j = Int(w[wb + r] & UInt64(0xFFFFFFFF))
+        var j = Int(w[wb + r])
         var l = Int(ld(f, lb + j))
         var at = Int(fu[fillb + l])
         fu[fillb + l] = UInt32(at + 1)
@@ -245,14 +267,14 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
         fu[bs + at] = bitcast[DType.uint32](_sec(f, sb, j * d))
         fu[pos + j] = UInt32(at)
     for r in range(n):
-        var j = Int(w[wb + r] & UInt64(0xFFFFFFFF))
+        var j = Int(w[wb + r])
         var l = Int(ld(f, lb + j))
         if Int(ld(f, cb + l)) > 1:
             fu[ax + na] = bitcast[DType.uint32](ld(f, zb + j * d))
             na += 1
     na = 0
     for r in range(n):
-        var j = Int(w[wb + r] & UInt64(0xFFFFFFFF))
+        var j = Int(w[wb + r])
         var l = Int(ld(f, lb + j))
         if Int(ld(f, cb + l)) > 1:
             fu[as_ + na] = bitcast[DType.uint32](_sec(f, sb, j * d))
@@ -388,14 +410,322 @@ def _point_kernel(f: FP, u: UP, q: IP, total: Int32):
     st(f, out, sub(sub(digammaf(Float32(kl)), digammaf(Float32(cnt))), digammaf(Float32(mall))))
 
 
+# ------------------------------------------- tie-aware search (lane prep-apple2)
+# With the class arrays in (key(x), key(s)) order, a run of equal x words is
+# in secondary order, so the candidates of one run come in the order of their
+# secondary distance (`_dsec`): ascending s where the run lies right of x_i,
+# descending s left of it, outward from s_i where the primary words tie. The
+# walk of `_point_kernel` visits every point of a tied run (a taxi column of
+# two values: tens of thousands of points per query); this takes each run's
+# first kl candidates in that order (no later one can enter the kl best) and
+# counts the boundary runs of `_count_within` by binary search. Every primary
+# and secondary distance is the unit's own (`_dist`, `_dsec`), each run's
+# distances are monotone in its order (IEEE subtraction is), and the runs are
+# taken in the walk's order with its stop rule, so the kl-th pair and the
+# count are the walk's.
+
+
+@always_inline
+def _kx(u: UP, i: Int) -> UInt32:
+    return key(_fx(u, i))
+
+
+def _run_hi(u: UP, xb: Int, lo: Int, hi: Int) -> Int:
+    """The end of the run of x words equal to x[lo] in [lo, hi) (sorted by key)."""
+    var kr = _kx(u, xb + lo)
+    var l = lo + 1
+    var h = hi
+    while l < h:
+        var m = (l + h) // 2
+        if _kx(u, xb + m) <= kr:
+            l = m + 1
+        else:
+            h = m
+    return l
+
+
+def _run_lo(u: UP, xb: Int, lo: Int, hi: Int) -> Int:
+    """The start of the run of x words equal to x[hi - 1] in [lo, hi)."""
+    var kr = _kx(u, xb + hi - 1)
+    var l = lo
+    var h = hi - 1
+    while l < h:
+        var m = (l + h) // 2
+        if _kx(u, xb + m) < kr:
+            l = m + 1
+        else:
+            h = m
+    return l
+
+
+@always_inline
+def _take(dp: Float32, dsec: Float32, kl: Int, mut bp: InlineArray[Float32, MAX_K],
+          mut bs: InlineArray[Float32, MAX_K]) -> Bool:
+    """`_point_kernel`'s insertion; False when the pair is not below the kl-th."""
+    if not _less(dp, dsec, bp[kl - 1], bs[kl - 1]):
+        return False
+    var m = kl - 1
+    while m > 0 and _less(dp, dsec, bp[m - 1], bs[m - 1]):
+        bp[m] = bp[m - 1]
+        bs[m] = bs[m - 1]
+        m -= 1
+    bp[m] = dp
+    bs[m] = dsec
+    return True
+
+
+def _take_run(u: UP, xb: Int, sbb: Int, rs: Int, re: Int, skip: Int, xi: Float32, si: Float32, kl: Int,
+              mut bp: InlineArray[Float32, MAX_K], mut bs: InlineArray[Float32, MAX_K]):
+    """Offer the candidates of run [rs, re) (point `skip` excluded; -1: none)
+    in ascending secondary distance until one is not below the kl-th."""
+    var xr = _fx(u, xb + rs)
+    var dp = _dist(xr, xi)
+    var dz = sub(xr, xi)
+    if dz > Float32(0):
+        for r in range(rs, re):
+            if r != skip and not _take(dp, sub(_fx(u, sbb + r), si), kl, bp, bs):
+                return
+        return
+    if dz < Float32(0):
+        var r = re - 1
+        while r >= rs:
+            if r != skip and not _take(dp, -sub(_fx(u, sbb + r), si), kl, bp, bs):
+                return
+            r -= 1
+        return
+    # tied primary words: outward from s_i by |s_j - s_i|
+    var L: Int
+    var R: Int
+    if skip >= rs and skip < re:
+        L = skip - 1
+        R = skip + 1
+    else:
+        var ks = key(si)
+        var l = rs
+        var h = re
+        while l < h:
+            var m = (l + h) // 2
+            if key(_fx(u, sbb + m)) < ks:
+                l = m + 1
+            else:
+                h = m
+        L = l - 1
+        R = l
+    while L >= rs or R < re:
+        var dl = abs(sub(_fx(u, sbb + L), si)) if L >= rs else BIG
+        var dr = abs(sub(_fx(u, sbb + R), si)) if R < re else BIG
+        var take_left = L >= rs and (R >= re or dl <= dr)
+        if take_left:
+            if not _take(dp, dl, kl, bp, bs):
+                return
+            L -= 1
+        else:
+            if not _take(dp, dr, kl, bp, bs):
+                return
+            R += 1
+
+
+@always_inline
+def _inside(dsec: Float32, rp: Float32, rs: Float32) -> Bool:
+    """`_within` at dp == rp."""
+    if rp == Float32(0) and rs == Float32(0):
+        return dsec == Float32(0)
+    return dsec < rs
+
+
+def _first_not(u: UP, sbb: Int, lo: Int, hi: Int, si: Float32, sign: Float32, rp: Float32, rs: Float32,
+               want: Bool) -> Int:
+    """The first r in [lo, hi) where _inside(sign * sub(s_r, si)) != want
+    (the predicate is monotone over the run), or hi."""
+    var l = lo
+    var h = hi
+    while l < h:
+        var m = (l + h) // 2
+        var ds = sub(_fx(u, sbb + m), si)
+        if sign < Float32(0):
+            ds = -ds
+        if _inside(ds, rp, rs) == want:
+            l = m + 1
+        else:
+            h = m
+    return l
+
+
+def _count_run(u: UP, xb: Int, sbb: Int, rs: Int, re: Int, xi: Float32, si: Float32, rp: Float32,
+               rsec: Float32) -> Int:
+    """How many points of run [rs, re) (primary distance rp) satisfy `_within`."""
+    var xr = _fx(u, xb + rs)
+    var dz = sub(xr, xi)
+    if rp == Float32(0) and rsec == Float32(0):
+        # dsec == 0 exactly where sub(s_j, s_i) == 0, a stretch of the run
+        var l = rs
+        var h = re
+        while l < h:
+            var m = (l + h) // 2
+            if sub(_fx(u, sbb + m), si) < Float32(0):
+                l = m + 1
+            else:
+                h = m
+        var a = l
+        h = re
+        while l < h:
+            var m = (l + h) // 2
+            if sub(_fx(u, sbb + m), si) <= Float32(0):
+                l = m + 1
+            else:
+                h = m
+        return l - a
+    if dz > Float32(0):
+        # dsec = s_j - s_i rises along the run: a prefix is inside
+        return _first_not(u, sbb, rs, re, si, Float32(1), rp, rsec, True) - rs
+    if dz < Float32(0):
+        # dsec = s_i - s_j falls along the run: a suffix is inside
+        return re - _first_not(u, sbb, rs, re, si, Float32(-1), rp, rsec, False)
+    # tied primary words: |s_j - s_i| < rs on a stretch around s_i
+    var ks = key(si)
+    var l = rs
+    var h = re
+    while l < h:
+        var m = (l + h) // 2
+        if key(_fx(u, sbb + m)) < ks:
+            l = m + 1
+        else:
+            h = m
+    var p = l
+    var right = _first_not(u, sbb, p, re, si, Float32(1), rp, rsec, True) - p
+    var left = p - _first_not(u, sbb, rs, p, si, Float32(-1), rp, rsec, False)
+    return right + left
+
+
+def _count_within_ties(u: UP, axb: Int, asb: Int, hi: Int, xi: Float32, si: Float32, rp: Float32,
+                       rs: Float32) -> Int:
+    """`_count_within` with its boundary walks replaced by run counts."""
+    var l = 0
+    var h = hi
+    while l < h:
+        var m = (l + h) // 2
+        if _fx(u, axb + m) < xi:
+            l = m + 1
+        else:
+            h = m
+    var mid = l
+    var cnt = 0
+    l = mid
+    h = hi
+    while l < h:
+        var m = (l + h) // 2
+        if _dist(_fx(u, axb + m), xi) < rp:
+            l = m + 1
+        else:
+            h = m
+    cnt += l - mid
+    var r = l
+    while r < hi and _dist(_fx(u, axb + r), xi) == rp:
+        var re = _run_hi(u, axb, r, hi)
+        # a run straddling a word of another distance cannot happen: equal x words
+        cnt += _count_run(u, axb, asb, r, re, xi, si, rp, rs)
+        r = re
+    l = 0
+    h = mid
+    while l < h:
+        var m = (l + h) // 2
+        if _dist(_fx(u, axb + m), xi) < rp:
+            h = m
+        else:
+            l = m + 1
+    cnt += mid - l
+    var qq = l - 1
+    while qq >= 0 and _dist(_fx(u, axb + qq), xi) == rp:
+        var rs0 = _run_lo(u, axb, 0, qq + 1)
+        cnt += _count_run(u, axb, asb, rs0, qq + 1, xi, si, rp, rs)
+        qq = rs0 - 1
+    return cnt
+
+
+def _point_ties_kernel(f: FP, u: UP, q: IP, total: Int32):
+    """`_point_kernel` over runs: the same kl-th pair and count (above)."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= Int(total):
+        return
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var i = t // d
+    var c = t % d
+    var U = c * (6 * n + 5)
+    var meta = U + 6 * n + 1
+    if u[meta + _M_FLAG] != UInt32(0):
+        mi_cd_unit(t, f, q)
+        return
+    var zb = p(q, 0) + c
+    var sb = p(q, 7) + c if p(q, 7) > 0 else 0
+    var k = p(q, 5)
+    var li = Int(ld(f, p(q, 3) + i))
+    var cnt = Int(ld(f, p(q, 4) + li))
+    var out = p(q, 6) + t
+    if cnt <= 1:
+        st(f, out, Float32(0))
+        return
+    var kl = k if k < cnt - 1 else cnt - 1
+    var xi = ld(f, zb + i * d)
+    var si = _sec(f, sb, i * d)
+    var bx = U
+    var bsb = U + n
+    var start = U + 5 * n
+    var b = Int(u[start + li])
+    var e = Int(u[start + li + 1])
+    var bp = InlineArray[Float32, MAX_K](fill=BIG)
+    var bs = InlineArray[Float32, MAX_K](fill=BIG)
+    var pi = Int(u[U + 2 * n + i])
+    # the run holding point i, then runs outward with the walk's stop rule:
+    # stop once kl points were considered and the next run is farther
+    var g0 = _run_lo(u, bx, b, pi + 1)
+    var g1 = _run_hi(u, bx, pi, e)
+    _take_run(u, bx, bsb, g0, g1, pi, xi, si, kl, bp, bs)
+    var considered = g1 - g0 - 1
+    var D = _dist(_fx(u, bx + pi), xi)
+    var Lr = g0
+    var Rr = g1
+    while Lr > b or Rr < e:
+        var dl = _dist(_fx(u, bx + Lr - 1), xi) if Lr > b else BIG
+        var dr = _dist(_fx(u, bx + Rr), xi) if Rr < e else BIG
+        var take_left = Lr > b and (Rr >= e or dl <= dr)
+        var dn = dl if take_left else dr
+        if considered >= kl and dn > D:
+            break
+        D = dn
+        if take_left:
+            var ls = _run_lo(u, bx, b, Lr)
+            _take_run(u, bx, bsb, ls, Lr, -1, xi, si, kl, bp, bs)
+            considered += Lr - ls
+            Lr = ls
+        else:
+            var rend = _run_hi(u, bx, Rr, e)
+            _take_run(u, bx, bsb, Rr, rend, -1, xi, si, kl, bp, bs)
+            considered += rend - Rr
+            Rr = rend
+    var rp = bp[kl - 1]
+    var rs = bs[kl - 1]
+    var na = Int(u[meta + _M_NA])
+    var mall = _count_within_ties(u, U + 3 * n, U + 4 * n, na, xi, si, rp, rs)
+    st(f, out, sub(sub(digammaf(Float32(kl)), digammaf(Float32(cnt))), digammaf(Float32(mall))))
+
+
 def _blocks(total: Int, bs: Int) -> Int:
     return (total + bs - 1) // bs
 
 
+def mi_w_words(n: Int, d: Int) -> Int:
+    """UInt64 words of `mi_cd_device`'s sort scratch: the sort words, then
+    their payload (the row index)."""
+    return 2 * d * mi_big_n(n)
+
+
 def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.uint64],
                  mut du: DeviceBuffer[DType.uint32], mut dq: DeviceBuffer[DType.int32], qoff: Int, total: Int,
-                 n: Int, d: Int, Z: Int) raises:
-    """Enqueue the whole `mi_cd` stage (its params at dq[qoff:])."""
+                 n: Int, d: Int, Z: Int, zs1: Int, ties: Bool) raises:
+    """Enqueue the whole `mi_cd` stage (its params at dq[qoff:]); `dw` holds
+    mi_w_words(n, d) words. ties: the (x, secondary) order and the searched
+    runs of `_point_ties_kernel` (MOJOLEARN_XPREP_MI_TIES, default on)."""
     if n <= 0 or d <= 0:
         return
     var big_n = mi_big_n(n)
@@ -403,25 +733,30 @@ def mi_cd_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw
     if tot > 2 ** 31 - 1:
         raise Error("x_prep: mi_cd too large for the device search")
     var f = df.unsafe_ptr()
-    var w = dw.unsafe_ptr()
+    var w = WP(unsafe_from_address=Int(dw.unsafe_ptr()))
+    var pl = WP(unsafe_from_address=Int(dw.unsafe_ptr()) + 8 * tot)
     var u = du.unsafe_ptr()
     var qp = dq.unsafe_ptr() + qoff
     comptime BS = 256
     ctx.enqueue_function[_load_kernel](
-        f, w, Int32(Z), Int32(n), Int32(d), Int32(big_n), Int32(tot), grid_dim=_blocks(tot, BS), block_dim=BS,
+        f, w, pl, Int32(Z), Int32(n), Int32(d), Int32(big_n), Int32(tot), Int32(zs1), Int32(1 if ties else 0),
+        grid_dim=_blocks(tot, BS), block_dim=BS,
     )
     var tiles = tot // MTILE
-    ctx.enqueue_function[_tile_kernel](w, Int32(big_n), Int32(2), Int32(MTILE), grid_dim=tiles, block_dim=MTG)
+    ctx.enqueue_function[_tile_kernel](w, pl, Int32(big_n), Int32(2), Int32(MTILE), grid_dim=tiles, block_dim=MTG)
     var pairs = tot // 2
     var k = 2 * MTILE
     while k <= big_n:
         var j = k // 2
         while j >= MTILE:
             ctx.enqueue_function[_global_kernel](
-                w, Int32(big_n), Int32(k), Int32(j), Int32(pairs), grid_dim=_blocks(pairs, BS), block_dim=BS,
+                w, pl, Int32(big_n), Int32(k), Int32(j), Int32(pairs), grid_dim=_blocks(pairs, BS), block_dim=BS,
             )
             j //= 2
-        ctx.enqueue_function[_tile_kernel](w, Int32(big_n), Int32(k), Int32(k), grid_dim=tiles, block_dim=MTG)
+        ctx.enqueue_function[_tile_kernel](w, pl, Int32(big_n), Int32(k), Int32(k), grid_dim=tiles, block_dim=MTG)
         k *= 2
-    ctx.enqueue_function[_prep_kernel](f, w, u, qp, Int32(big_n), grid_dim=_blocks(d, 32), block_dim=32)
-    ctx.enqueue_function[_point_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)
+    ctx.enqueue_function[_prep_kernel](f, pl, u, qp, Int32(big_n), grid_dim=_blocks(d, 32), block_dim=32)
+    if ties:
+        ctx.enqueue_function[_point_ties_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)
+    else:
+        ctx.enqueue_function[_point_kernel](f, u, qp, Int32(total), grid_dim=_blocks(total, BS), block_dim=BS)
