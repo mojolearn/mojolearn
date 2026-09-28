@@ -152,3 +152,7 @@ Same arms as the M3 Ultra table (10 RF columns per pass in both arms; 2031 alrea
 | same | m4pro-a | 1790613700948 | depthwise istella | 3547 | 3542 | 0.999 | e9c0f7e913af5a8a |
 | same | m4pro-a | 1790613700948 | lossguide istella | 5938 | 5912 | 0.996 | eb0d9510ee08a16f |
 | 2031 sym ridx IDENTICAL (bfc552c67) | m4pro-b | 1790609413669 | symmetric taxi | 966 | 872 | 0.903 | 8e760782efae56c8 |
+| RF 40 columns per pass IDENTICAL (72437f655, workspace uncapped) | m3ultra-b | 1790614067535 | rf:istellareg | 19706 | 18547 | 0.941 | 3a5e8c09dd0d5fc7 |
+| same | m3ultra-b | 1790614067535 | rf:taxireg / dt:istellareg / dt:taxireg | 3232 / 446 / 68 | 3142 / 433 / 70 | 0.972 / 0.972 / 1.022 | equal |
+| same | m4pro-b | 1790614070834 | rf:taxireg / rf:taxi | 5162 / 2942 | 5019 / 2954 | 0.972 / 1.004 | equal |
+| same | m4pro-b | 1790614070834 | dart:taxireg / adaboost:taxireg / bagging:taxi / dt:taxireg | 5839 / 2062 / 634 / 81 | 6422 / 2169 / 665 / 84 | **1.100 / 1.052 / 1.048 / 1.039** -> workspace capped at the sampled columns (a91fe60be) | equal |
