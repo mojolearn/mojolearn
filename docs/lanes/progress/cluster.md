@@ -305,3 +305,33 @@ and the speed logs; session 5 was cut off before writing it.)
    (468af3718); the lane keeps it (c37595651 merges main with the lane's
    tree). Owed: its NVIDIA + CPU gate before it merges again.
 4. Step 0 coverage audit (night plan): see the table below.
+
+### Step 0 coverage audit (2026-09-28)
+
+Family (ALGORITHM_EXPANSION_PLAN.md "Families"): 12 algorithms. A verifier
+lane = a lane in tools/identity_break.py or tools/identity_lanes/cluster.py
+that the lane check runs on the GPU column AND the CPU column (host binding).
+A sabotage = a committed SOURCE patch that makes that lane DISAGREE.
+
+| algorithm | lanes (GPU + CPU arms) | source sabotage | bites (NVIDIA + CPU) |
+|---|---|---|---|
+| KMeans | kmeans, kmeans-array, kmeans-classic-pp, kmeans-random, kmeans-sqrt, kmeans-weighted, x-cluster-kmeans-init | e2e_kmeans_finalize (NEW), e2e_kmeans_init | kmeans-init: H100 PASS (gate_s5b); the six: OWED (was a -D define only) |
+| DBSCAN | dbscan, dbscan-weighted, dbscan-brute-l1, x-cluster-dbscan-metrics | e2e_dbscan_radius (NEW), e2e_dbscan_metrics | metrics: H100 PASS; the three: OWED |
+| HDBSCAN | hdbscan, hdbscan-leaf, x-cluster-hdbscan-epsilon | e2e_hdbscan_core (NEW), e2e_hdbscan_epsilon, e2e_hdbscan_probabilities | epsilon/probabilities: H100 PASS; hdbscan, hdbscan-leaf: OWED |
+| AgglomerativeClustering | agglomerative, x-cluster-agglo-linkages, x-cluster-agglo-connectivity | e2e_agglomerative_roots (NEW), e2e_device_fold_reversed + arms 5117/5118 | x-cluster: H100 PASS; agglomerative: OWED |
+| SpectralClustering | spectral, spectral-precomputed, x-cluster-spectral-affinities | e2e_spectral_laplacian (NEW), x_decomp e2e_host_sqdist + arm 5119 | affinities: H100 PASS; spectral, spectral-precomputed: OWED |
+| GaussianMixture | gmm, gmm-random-init, x-cluster-gmm-options | e2e_gmm_weights (NEW), e2e_device_fold_reversed | gmm-options: H100 PASS; gmm, gmm-random-init: OWED |
+| MiniBatchKMeans | x-cluster-minibatch-kmeans, -options, -partial | e2e_device_fold_reversed + seam arms | H100 PASS (gate_s5b) |
+| BisectingKMeans | x-cluster-bisecting-kmeans, -options | same | H100 PASS |
+| MeanShift | x-cluster-meanshift, -binned | same | H100 PASS |
+| OPTICS | x-cluster-optics, -optics-metrics | same | H100 PASS |
+| AffinityPropagation | x-cluster-affinity-propagation, -ap-precomputed | same | H100 PASS |
+| BayesianGaussianMixture | x-cluster-bgmm, -covtypes, -inits | same | H100 PASS |
+
+Gap closed at the root this session: the six existing algorithms had only
+`-D` define sabotages (a define-only arm can reuse a cached device kernel),
+no committed source edit. Six new patches in x_cluster/checks/sabotage/
+(9263469bf), each editing a kernel only the GPU binding runs (the host
+oracles are separate code). Their bites run first on the central AMD box
+(AMD + CPU, below); the NVIDIA + CPU bite is OWED on a pod.
+Not implemented (not an audit row): Birch (brief addition 2026-09-27).
