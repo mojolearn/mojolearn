@@ -39,7 +39,10 @@ bindings rebuilt in turn). Job scripts: ~/mojolearn-evidence/linear-apple2/.
 | 0a760cd68 | Huber / Quantile / LogisticRegressionCV: each moved fold leads its own warp (27b180f47's same-warp placement was slower) | both | on | no |
 | 449d0c127 | Quantile: the next iteration's A'(y - r - u) chains run in this iteration's A' dr pass | both | on (m4-a: 46.0 -> 34.8 s, digest equal) | no |
 | 9d450625f | SGD pipelined shuffle: draws computed by a third warp's lanes (splitmix64 skip-ahead), two epochs ahead | both | on (M3 Ultra sgd-clf 1.037 -> 0.652 s) | no |
-| ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower) | both | no-op | x_linear/tops.mojo |
+| ea80a9110 | x_linear chains: CHAIN_U_APPLE constant (stays 32: 64 and 128 are slower, 16 and 8 mixed) | both | no-op | x_linear/tops.mojo |
+| 9adb972ea | SGD warp folds: a chunk's fetches issued before its chains | both | on | no |
+| 1290bedea | QN on Apple: loss sum and bias mean chains spread over STATS_TPB / 32 blocks, then the same one-block fold | both (words unchanged) | on (`-D MOJOLEARN_QN_SPLIT_REDUCE_OFF=1`) | glm/impl/qn only |
+| c128c4f3e | strided walks load 32 terms ahead (was 8) | both (words unchanged) | on | core/strided_walk.mojo (users: glm/impl/qn, core/xtdz_coalesced, i.e. QN, ridge and lstsq xty) |
 | 90c722752 | FAST QN on Apple: X^T dZ through xtdz_coalesced where D * C <= 1024 | FAST (words change: paired quality job) | on (`-D MOJOLEARN_QN_FAST_COALESCED_OFF=1`) | glm/impl/qn only |
 
 ## Jobs
@@ -355,4 +358,33 @@ across arms in both modes:
 | FAST | linear-svr | 0.207 | 0.186 | 0.173 |
 
 The M4 is bandwidth bound; the M3 Ultra A/B decides.
+
+### FINAL 2 before / after on the M4 Pro (m4pro-b, steward 1790618009626)
+
+Every file the lane changed (gemm_identical, glm_base, glm_softmax,
+strided_walk, cd, x_linear sgd / huber / quantile / logcv / tops) at 037daa353
+vs c128c4f3e, bindings rebuilt per arm and mode, second run shown. Digests
+equal before vs after on EVERY line except FAST logistic / svc / svr
+(90c722752, quality matched); SGDDIAG at HEAD 36 of 36 same bits.
+
+| mode | case | before s | after s | speedup |
+|---|---|---|---|---|
+| IDENTICAL | lasso / elasticnet (1M) | 0.208 / 0.201 | 0.085 / 0.078 | 2.4x / 2.6x |
+| IDENTICAL | lasso per epoch | 9.04 ms | 2.76 ms | 3.3x |
+| IDENTICAL | logistic / linear-svc / linear-svr (1M) | 0.268 / 0.211 / 0.159 | 0.221 / 0.205 / 0.131 | 1.21x / 1.03x / 1.21x |
+| IDENTICAL | logistic / linear-svr per iteration | 2.59 / 2.90 ms | 2.01 / 2.35 ms | 1.29x / 1.23x |
+| IDENTICAL | sgd-clf / sgd-reg / perceptron (100k) | 4.398 / 3.079 / 2.753 | 0.601 / 0.626 / 0.554 | 7.3x / 4.9x / 5.0x |
+| IDENTICAL | pa-clf / pa-reg / sgd-ocsvm | 4.040 / 2.799 / 3.005 | 0.569 / 0.578 / 0.553 | 7.1x / 4.8x / 5.4x |
+| IDENTICAL | huber / quantile / logistic-cv (100k) | 1.261 / 67.04 / 5.855 | 1.033 / 28.40 / 4.725 | 1.22x / 2.36x / 1.24x |
+| IDENTICAL | ols / ridge | 0.057 / 0.047 | 0.056 / 0.049 | untouched |
+| FAST | logistic / linear-svc / linear-svr | 0.785 / 0.475 / 0.648 | 0.261 / 0.206 / 0.123 | 3.0x / 2.3x / 5.3x |
+| FAST | logistic / linear-svr per iteration | 7.38 / 9.78 ms | 2.07 / 2.21 ms | 3.6x / 4.4x |
+| FAST | sgd family | 4.183 / 2.957 / 2.840 / 4.082 / 2.958 / 2.958 | 0.939 / 0.874 / 0.887 / 0.867 / 0.913 / 0.870 | 3.2x to 4.7x |
+| FAST | ols / ridge / lasso / elasticnet | 0.085 / 0.046 / 0.055 / 0.039 | 0.097 / 0.035 / 0.040 / 0.066 | untouched (noise) |
+
+The split one-block reductions (1290bedea) alone, HEAD with the define off:
+logistic 2.16 -> 2.01 ms per iteration, linear-svr 2.32 -> 2.35 (the M4 Pro is
+bandwidth bound; the gain is the walk block, c128c4f3e). Open: FAST SGD
+(0.87 to 0.94 s) is slower than IDENTICAL SGD (0.55 to 0.63 s) on the same
+Mac at HEAD; not investigated.
 
