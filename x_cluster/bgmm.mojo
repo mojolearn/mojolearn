@@ -33,6 +33,9 @@ from x_cluster.ops import ClusterOps
 # formed the n K Float64 products itself. Another rounding of the same sum.
 comptime BGMM_ENT = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ENT"]()
 comptime BGMM_ENT_G = 4
+# `-D MOJOLEARN_BGMM_ESTEP1=1` (FAST, the GPU binding): the E-step's three
+# kernels as one launch, a row per thread (`ops.estep`; the same values).
+comptime BGMM_ESTEP1 = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and is_defined["MOJOLEARN_BGMM_ESTEP1"]()
 
 comptime LOG2 = 0.6931471805599453
 comptime LOG_2PI = 1.8378770664093453
@@ -463,6 +466,9 @@ def bgmm_fit[O: ClusterOps](
     var ent_dev = False
     comptime if BGMM_ENT:
         ent_dev = pr.variational and ops.fast_device()
+    var estep1 = False
+    comptime if BGMM_ESTEP1:
+        estep1 = ops.fast_device()
     var n_ent = (n * kc + BGMM_ENT_G - 1) // BGMM_ENT_G
     var es = ops.zeros(n_ent if ent_dev else 1)
     var max_lb = Float64(0)
@@ -546,9 +552,12 @@ def bgmm_fit[O: ClusterOps](
             ops.set(ms, _f32(st.means))
             ops.set(ps, _f32(st.pchol))
             ops.set(cs, bgmm_constants(pr, st))
-            ops.gauss_q(xs, n, d, ms, ps, kc, qs)
-            ops.resp(qs, cs, n, kc, lpn)
-            ops.exp(qs, rs, n * kc)
+            if estep1:
+                ops.estep(xs, n, d, ms, ps, cs, kc, qs, rs, lpn)
+            else:
+                ops.gauss_q(xs, n, d, ms, ps, kc, qs)
+                ops.resp(qs, cs, n, kc, lpn)
+                ops.exp(qs, rs, n * kc)
             # M-step
             ops.moments(rs, xs, n, d, kc, reg, nks, xks, sks)
             # one wait per iteration: the moments and what the bound reads

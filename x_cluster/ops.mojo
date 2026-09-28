@@ -160,3 +160,11 @@ trait ClusterOps(Movable):
         completely (`sqdist`, `pdist`): on the device NOT initialized, where
         `zeros` writes n zeros first; on the host `zeros`."""
         ...
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        """`gauss_q`, `resp` and `exp` of one E-step as ONE primitive: row i's
+        kc Mahalanobis squares, its log-sum-exp and its responsibilities by
+        the same bodies in the same order (the same values)."""
+        ...

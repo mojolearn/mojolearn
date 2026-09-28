@@ -614,3 +614,10 @@ struct HostOps(ClusterOps):
 
     def alloc(mut self, n: Int) raises -> Int:
         return self.zeros(n)
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        self.gauss_q(x, n, d, means, pchol, kc, q)
+        self.resp(q, c, n, kc, lpn)
+        self.exp(q, r, n * kc)

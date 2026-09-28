@@ -590,6 +590,22 @@ def _momf_final_kernel(
         cov[k * nch + c] = cov_final(acc, nk[k], reg, a == b)
 
 
+def _estep_row_kernel(
+    x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, c: FPtr, kc: Int32, q: FPtr, r: FPtr, lpn: FPtr,
+):
+    """Lane cluster-apple3: row i's whole E-step on its one thread, the three
+    bodies in the order the three kernels ran them."""
+    var i = _tid()
+    if i >= Int(n):
+        return
+    var K = Int(kc)
+    for k in range(K):
+        gauss_q_cell(x, Int(d), means, pchol, K, q, i * K + k)
+    resp_row(q, c, K, lpn, i)
+    for k in range(K):
+        exp_cell(q, r, i * K + k)
+
+
 def _dot_groups_kernel(a: FPtr, b: FPtr, n: Int32, g: Int32, parts: FPtr):
     """FAST (lane cluster-apple3): thread q sums a * b over its run of `g`
     consecutive cells."""
@@ -1446,3 +1462,13 @@ struct DeviceOps(ClusterOps):
         self.f.append(buf^)
         self._ph1("alloc")
         return len(self.f) - 1
+
+    def estep(
+        mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, c: Int, kc: Int, q: Int, r: Int, lpn: Int
+    ) raises:
+        self._ph0()
+        self.ctx.enqueue_function[_estep_row_kernel](
+            self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), self._fp(c), Int32(kc),
+            self._fp(q), self._fp(r), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self._ph1("estep")
