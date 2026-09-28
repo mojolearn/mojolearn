@@ -6,6 +6,7 @@ The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+from x_ann.device_ctx import x_ann_ctx
 
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
@@ -63,7 +64,7 @@ def _coarse(
     """The coarse quantizer IS IVF-Flat's build (`ivf/estimator.mojo::
     ivf_flat_build_host`: cluster/'s k-means, L2Expanded, its CSR lists);
     the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var flat = ivf_flat_build_host(ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
     ctx.synchronize()
     centers = flat.centers.copy()
@@ -83,7 +84,7 @@ def _codebooks(
     k-means++, L2Expanded, one restart) over that subspace's residual
     columns; the host twin is `host_kmeans_fit`."""
     var codebooks = List[Float32](capacity=pq_dim * n_codes * pq_len)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     for j in range(pq_dim):
         var sub = List[Float32](capacity=n * pq_len)
         for i in range(n):
@@ -120,7 +121,7 @@ def ivf_pq_build_device(
     var list_indices = List[Int32]()
     var labels = List[Int32]()
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)
@@ -158,7 +159,7 @@ def ivf_pq_search_device(
 ) raises:
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
@@ -224,7 +225,7 @@ def ivf_sq_build_device(
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var labels = List[Int32]()
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)
@@ -261,7 +262,7 @@ def ivf_sq_search_device(
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
@@ -308,7 +309,7 @@ def refine_device(
     x: List[Float32], n: Int, d: Int, queries: List[Float32], m: Int, cand: List[Int32], k0: Int, k: Int,
     mut out_d: List[Float32], mut out_i: List[Int32],
 ) raises:
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dq = upload_f32(ctx, queries)
     var dcand = upload_i32(ctx, cand)
@@ -359,7 +360,7 @@ def ivf_rabitq_build_device(
     var scale = rq_scale(D)
     var labels = List[Int32]()
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)
@@ -395,7 +396,7 @@ def ivf_rabitq_search_device(
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dq = upload_f32(ctx, queries)
     var dc = upload_f32(ctx, centers)
     var doff = upload_i32(ctx, offsets)
@@ -439,7 +440,7 @@ def pq_encode_device(
     """The encoding launch alone over given residuals and codebooks (the
     DEVIATION 5801 check plants duplicate codewords through it)."""
     var rot_dim = pq_dim * pq_len
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dr = upload_f32(ctx, r)
     var dcb = upload_f32(ctx, cb)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
@@ -458,7 +459,7 @@ def pq_encode_device(
 
 def sq_range_device(r: List[Float32], n: Int, dim: Int, mut vmin: List[Float32], mut delta: List[Float32]) raises:
     """The SQ range launch alone over given residuals (the 5830 check)."""
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dr = upload_f32(ctx, r)
     var dv = ctx.enqueue_create_buffer[DType.float32](dim)
     var dd = ctx.enqueue_create_buffer[DType.float32](dim)
@@ -477,7 +478,7 @@ def sq_encode_given_device(
     r: List[Float32], n: Int, dim: Int, vmin: List[Float32], delta: List[Float32],
 ) raises -> List[Int32]:
     """The SQ encoding launch alone with a given range (the 5831 check)."""
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dr = upload_f32(ctx, r)
     var dv = upload_f32(ctx, vmin)
     var dd = upload_f32(ctx, delta)
@@ -503,7 +504,7 @@ def rq_encode_given_device(
     var D = rq_pow2(dim)
     var words = (D + 31) // 32
     var scale = rq_scale(D)
-    var ctx = DeviceContext()
+    var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)

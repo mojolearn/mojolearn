@@ -146,6 +146,16 @@ KEY="$lane_arg"; [ "$VENDOR" = amd ] && KEY="$lane_arg-amd"
 [ "$cmd" = host ] && KEY=$HOST_KEY
 D="$STATE_ROOT/$KEY"
 BOX_SUDO=0; BOX_ENV=""
+# THE CENTRAL AMD BOX (tools/amd_central.sh, 2026-09-28): the box named by
+# CENTRAL_KEY in ~/mojolearn-evidence/amd_central.env is shared by every lane.
+# `extend` on it never shortens its lease below LEASE_END, `down` refuses
+# (MOJOLEARN_CENTRAL_DOWN=1 overrides), and `run` on it takes GPU 0's slot lock.
+CENTRAL_KEY=""; CENTRAL_LEASE_END=0
+_cc="${MOJOLEARN_AMD_CENTRAL_CONF:-$HOME/mojolearn-evidence/amd_central.env}"
+if [ -f "$_cc" ]; then
+    CENTRAL_KEY=$(sed -n 's/^CENTRAL_KEY=//p' "$_cc" | head -1)
+    CENTRAL_LEASE_END=$(sed -n 's/^LEASE_END=//p' "$_cc" | head -1); CENTRAL_LEASE_END=${CENTRAL_LEASE_END:-0}
+fi
 load_state() {
     [ -f "$D/state.env" ] || die "no box for $KEY (run: $0 up $lane_arg${VENDOR:+ --vendor $VENDOR})"
     . "$D/state.env"
@@ -512,10 +522,16 @@ sync)
 run)
     load_state; [ $# -gt 0 ] || die "run needs a command"
     # shellcheck disable=SC2086
-    ssh $SSH_OPTS $SSH_TARGET "$(box_cmd "$BOX_PATH; ${BOX_ENV:+export $BOX_ENV; }cd $BOX_DIR && $*")"
+    _lk=""; [ -z "$CENTRAL_KEY" ] || [ "$KEY" != "$CENTRAL_KEY" ] \
+        || _lk="mkdir -p /var/lock/mojolearn-central; exec 9>/var/lock/mojolearn-central/gpu0.lock; flock 9; echo 'lane=$KEY (dev_pod run)' > /var/lock/mojolearn-central/gpu0.owner; "
+    ssh $SSH_OPTS $SSH_TARGET "$(box_cmd "$_lk$BOX_PATH; ${BOX_ENV:+export $BOX_ENV; }cd $BOX_DIR && $*")"
     ;;
 extend)
     load_state; minutes="${1:-120}"
+    if [ -n "$CENTRAL_KEY" ] && [ "$KEY" = "$CENTRAL_KEY" ]; then
+        _left=$(( (CENTRAL_LEASE_END - $(now)) / 60 ))
+        [ "$minutes" -ge "$_left" ] || { say "$KEY is the central AMD box: extending to its lease end ($_left min), not $minutes"; minutes=$_left; }
+    fi
     if [ "$PROVIDER" = amdhost ]; then
         [ -f "$HD/state.env" ] || die "the shared AMD host is gone; $KEY's slot is stale (down $KEY)"
         host_extend "$minutes"
@@ -536,6 +552,8 @@ extend)
     ;;
 down)
     load_state
+    [ -z "$CENTRAL_KEY" ] || [ "$KEY" != "$CENTRAL_KEY" ] || [ "${MOJOLEARN_CENTRAL_DOWN:-0}" = 1 ] \
+        || die "$KEY is the central AMD box every lane shares (tools/amd_central.sh); refusing (MOJOLEARN_CENTRAL_DOWN=1 overrides)"
     if [ "$PROVIDER" = amdhost ]; then
         grep -qx "key=$KEY" "$HD/slots/$SLOT/owner" 2>/dev/null && rm -rf "$HD/slots/$SLOT"
         mv "$D" "$D.down-$(date -u +%Y%m%dT%H%M%SZ)"
