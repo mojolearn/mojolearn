@@ -49,6 +49,7 @@ oracle and host == oracle bit for bit. One sabotage arm per seam,
 | 5514 | MoE top-k routing | strict `>`, ties to the lower expert | ties to the higher expert |
 | 5515 | LayerNorm statistics | mean columns ascending, then centred squares | mean columns descending |
 | 5516 | SES recursion (Croston) | `alpha x + (1 - alpha) f`, one fma | `f + alpha (x - f)` |
+| 5540 | host GEMM vector cells (`host_gemm.mojo`, the CPU column only) | `op_gemm`'s cell per lane: k ascending, one fused fma per term, the same flush | the product rounded before the add |
 
 ## ARIMA, ExponentialSmoothing (Holt-Winters) and KPSS
 

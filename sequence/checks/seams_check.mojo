@@ -33,7 +33,7 @@ from sequence.stl import stl_rwts
 from sequence.nm import Objective, nelder_mead
 from sequence.recurrent import Net, Work, forward, head, backward
 from sequence.checks.oracle import (
-    o_gemm, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle,
+    o_gemm, o_gemm_split, o_colsum, o_lstm, o_gru, o_bptt_dw, o_ce, o_adam, o_adamax, o_binary_logloss, o_shuffle,
     o_stl_rwts, o_colscale, o_cholsolve, o_nm_quantized, quant_obj, o_moe_route, o_layer_norm, o_croston,
 )
 
@@ -255,6 +255,26 @@ def main() raises:
     var g = _both[OP_GEMM](hx, dx, [A.copy(), Bm.copy(), C0.copy()], [M, N, K, K, 1, N, 1, 1, N], List[Float32](), M * N)
     _check("5500_gemm_k_order", o_gemm(A, Bm, C0, M, N, K, False), o_gemm(A, Bm, C0, M, N, K, True),
            g.dev[2], g.host[2], tr)
+
+    # ---- 5540 the host GEMM's vector cells (`sequence/host_gemm.mojo`):
+    # M 7 (a 4-row block, then 3 single rows), N 37 (full vectors at every
+    # host width, then a scalar tail), K 29, accumulate into C; B read along
+    # n (stride 1), then B stored [N, K] (the packed panel). The device runs
+    # op_gemm on both.
+    var M2 = 7; var N2 = 37; var K2 = 29
+    var A2 = _mixed(M2 * K2, 41)
+    var B2 = _mixed(K2 * N2, 42)
+    var C2 = _mixed(M2 * N2, 43)
+    var B2t = List[Float32](length=K2 * N2, fill=Float32(0.0))
+    for k in range(K2):
+        for n in range(N2):
+            B2t[n * K2 + k] = B2[k * N2 + n]
+    var gv = _both[OP_GEMM](hx, dx, [A2.copy(), B2.copy(), C2.copy()], [M2, N2, K2, K2, 1, N2, 1, 1, N2], List[Float32](), M2 * N2)
+    var gp = _both[OP_GEMM](hx, dx, [A2.copy(), B2t.copy(), C2.copy()], [M2, N2, K2, K2, 1, 1, K2, 1, N2], List[Float32](), M2 * N2)
+    var want2 = o_gemm(A2, B2, C2, M2, N2, K2, False)
+    var alt2 = o_gemm_split(A2, B2, C2, M2, N2, K2)
+    _check("5540_host_gemm_vector", _cat(want2, want2), _cat(alt2, alt2),
+           _cat(gv.dev[2], gp.dev[2]), _cat(gv.host[2], gp.host[2]), tr)
 
     # ---- 5501 column sums, R 41, C 3.
     var R = 41; var Cc = 3
