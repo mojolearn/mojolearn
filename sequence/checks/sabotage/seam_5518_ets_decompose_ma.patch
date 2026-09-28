@@ -1,0 +1,29 @@
+diff --git a/sequence/ets.mojo b/sequence/ets.mojo
+index fcd56c3aa..11f2194f5 100644
+--- a/sequence/ets.mojo
++++ b/sequence/ets.mojo
+@@ -248,17 +248,14 @@ def _moving_average(y: FP, i: Int, m: Int) -> Float32:
+     """5518: statsmodels' centred moving average at i (2 x m for an even m):
+     the taps in index order, the half-weight ends as 0.5 x, one division."""
+     var half = m // 2
+-    var acc: Float32
++    var w = div(Float32(1.0), Float32(m))
++    var hw = div(Float32(0.5), Float32(m))
++    var acc = mul(hw if m % 2 == 0 else w, ld(y, i - half))
++    for k in range(1, m):
++        acc = fma3(w, ld(y, i - half + k), acc)
+     if m % 2 == 0:
+-        acc = mul(Float32(0.5), ld(y, i - half))
+-        for k in range(1, m):
+-            acc = add(acc, ld(y, i - half + k))
+-        acc = fma3(Float32(0.5), ld(y, i + half), acc)
+-    else:
+-        acc = ld(y, i - half)
+-        for k in range(1, m):
+-            acc = add(acc, ld(y, i - half + k))
+-    return div(acc, Float32(m))
++        acc = fma3(hw, ld(y, i + half), acc)
++    return acc
+ 
+ 
+ @always_inline

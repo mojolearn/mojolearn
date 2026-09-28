@@ -127,13 +127,103 @@ def _ts_sort_i32(mut a: List[Int32]):
         a[s + 1] = v
 
 
+def _tsne_rows_distinct(n: Int, nn: Int, nn_i: List[Int32]) -> Bool:
+    var stamp = List[Int32](length=n, fill=Int32(-1))
+    for i in range(n):
+        for s in range(nn):
+            var j = Int(nn_i[i * nn + s])
+            if j < 0 or j >= n or Int(stamp[j]) == i:
+                return False
+            stamp[j] = Int32(i)
+    return True
+
+
+def _tsne_symmetrize_distinct(
+    n: Int, nn: Int, nn_i: List[Int32], p_cond: List[Float32],
+    mut indptr: List[Int32], mut indices: List[Int32], mut values: List[Float32],
+) raises:
+    """`tsne_symmetrize` for distinct rows (its docstring): per row, the
+    forward entries (j, p_cond[i, s]) and the reverse entries (j, p_cond[j, s])
+    with nn_i[j, s] == i, sorted by j, a repeated j merged into one edge."""
+    var fwd_j = List[List[Int32]](capacity=n)
+    var fwd_v = List[List[Float32]](capacity=n)
+    var side = List[List[Int32]](capacity=n)
+    for _ in range(n):
+        fwd_j.append(List[Int32]())
+        fwd_v.append(List[Float32]())
+        side.append(List[Int32]())
+    # side 0 = row i's own slot (a), side 1 = row j's slot naming i (b)
+    for i in range(n):
+        for s in range(nn):
+            var j = Int(nn_i[i * nn + s])
+            var v = p_cond[i * nn + s]
+            fwd_j[i].append(Int32(j))
+            fwd_v[i].append(v)
+            side[i].append(Int32(0))
+            fwd_j[j].append(Int32(i))
+            fwd_v[j].append(v)
+            side[j].append(Int32(1))
+    indptr = List[Int32](capacity=n + 1)
+    indices = List[Int32]()
+    values = List[Float32]()
+    indptr.append(Int32(0))
+    for i in range(n):
+        var m = len(fwd_j[i])
+        # insertion sort by column; ties keep their order (a column holds at
+        # most one side-0 and one side-1 entry, and they are merged below)
+        for t in range(1, m):
+            var cj = fwd_j[i][t]
+            var cv = fwd_v[i][t]
+            var cs = side[i][t]
+            var u = t - 1
+            while u >= 0 and fwd_j[i][u] > cj:
+                fwd_j[i][u + 1] = fwd_j[i][u]
+                fwd_v[i][u + 1] = fwd_v[i][u]
+                side[i][u + 1] = side[i][u]
+                u -= 1
+            fwd_j[i][u + 1] = cj
+            fwd_v[i][u + 1] = cv
+            side[i][u + 1] = cs
+        var t = 0
+        while t < m:
+            var j = fwd_j[i][t]
+            var a = Float32(0.0)
+            var b = Float32(0.0)
+            while t < m and fwd_j[i][t] == j:
+                if side[i][t] == 0:
+                    a = fwd_v[i][t]
+                else:
+                    b = fwd_v[i][t]
+                t += 1
+            indices.append(j)
+            values.append(ftz(a + b))
+        indptr.append(Int32(len(indices)))
+    var total = Float32(0.0)
+    for e in range(len(values)):
+        total = ftz(total + values[e])
+    if total < Float32(1.1920929e-07):
+        total = Float32(1.1920929e-07)
+    for e in range(len(values)):
+        values[e] = ftz(identical_div(values[e], total))
+
+
 def tsne_symmetrize(
     n: Int, nn: Int, nn_i: List[Int32], p_cond: List[Float32],
     mut indptr: List[Int32], mut indices: List[Int32], mut values: List[Float32],
 ) raises:
     """P = (P_cond + P_cond^T) / sum, as CSR with ascending columns. Integer
     graph work plus one add per edge (the row's own term first) and one
-    ascending sum (DEVIATION 5812); the same host code in both drivers."""
+    ascending sum (DEVIATION 5812); the same host code in both drivers.
+
+    Lane ann-cpu (2026-09-28): when every k-NN row names `nn` DISTINCT rows
+    in [0, n) (the exact k-NN always does), edge (i, j)'s two terms are the
+    one slot of j in row i and the one slot of i in row j, so each side is
+    carried with its edge (`_tsne_symmetrize_distinct`) instead of searched
+    for (O(n nn^2) per call); the same values, the same `ftz(a + b)` with a
+    missing side 0.0, the same order. Otherwise the search below."""
+    if _tsne_rows_distinct(n, nn, nn_i):
+        _tsne_symmetrize_distinct(n, nn, nn_i, p_cond, indptr, indices, values)
+        return
     var rows = List[List[Int32]](capacity=n)
     for _ in range(n):
         rows.append(List[Int32]())
