@@ -6,6 +6,7 @@ from std.ffi import _Global
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import memcpy
+from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -94,6 +95,28 @@ def seq_kernel[OP: Int](
         apply[OP](t, a)
 
 
+#: host copies of at least two grains are split over threads (apple2: the
+#: optimizer steps moved ~150 MB a step through one memcpy); data movement
+#: only, the bytes are the same
+comptime PCOPY_GRAIN = 1 << 20
+
+
+def _pcopy(dst: FP, src: FP, n: Int):
+    if n < 2 * PCOPY_GRAIN:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    var tasks = min(8, n // PCOPY_GRAIN)
+    var chunk = (n + tasks - 1) // tasks
+
+    def _c(i: Int) {imm dst, imm src, imm chunk, imm n}:
+        var lo = i * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_c, tasks)
+
+
 struct DeviceExec(Exec):
     var ctx: DeviceContext
     var bufs: List[DeviceBuffer[DType.float32]]
@@ -159,7 +182,7 @@ struct DeviceExec(Exec):
         var found = self._find(dst, n)
         var host = self.ctx.enqueue_create_host_buffer[DType.float32](n)
         # written at once, as the element loop it replaces did
-        memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+        _pcopy(host.unsafe_ptr(), src, n)
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_buf=view, src_ptr=host.unsafe_ptr())
         _ = view^
@@ -179,7 +202,7 @@ struct DeviceExec(Exec):
         var view = self.bufs[found[0]].create_sub_buffer[DType.float32](found[1], n)
         self.ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         self.sync()
-        memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+        _pcopy(dst, host.unsafe_ptr(), n)
         _ = view^
         _ = host^
 
@@ -218,8 +241,7 @@ struct DeviceExec(Exec):
         self.ctx.synchronize()
         self.staged.clear()
         for i in range(len(self.pend_dst)):
-            memcpy(dest=FP(unsafe_from_address=self.pend_dst[i]), src=self.pend_host[i].unsafe_ptr(),
-                   count=self.pend_n[i])
+            _pcopy(FP(unsafe_from_address=self.pend_dst[i]), self.pend_host[i].unsafe_ptr(), self.pend_n[i])
         self.pend_host.clear()
         self.pend_dst.clear()
         self.pend_n.clear()
