@@ -371,6 +371,82 @@ def trsm_lower_multi_rhs_kernel(
         barrier()
 
 
+#: lane/neighbors-apple (2026-09-28): `trsm_upper_staged_kernel` whose
+#: serial chain reads x from threadgroup memory as well: the newest
+#: CHOL_BACK_CH values from a ring thread 0 fills as it solves (index masked,
+#: never `%`: a 64-bit modulo per step made the first attempt 3.6x slower),
+#: older ones staged by the whole block beside their L column. Operands of
+#: CHOL_BACK_UNROLL steps are loaded before the steps run, as in the staged
+#: kernel. The same steps in the same order on the same words.
+#: `-D MOJOLEARN_CHOL_BACK_RING_OFF` keeps the staged kernel.
+comptime CHOL_BACK_RING = CHOL_SWEEP_SOLVES and not is_defined["MOJOLEARN_CHOL_BACK_RING_OFF"]()
+
+
+def trsm_upper_ring_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_upper_kernel`'s arithmetic, one serial chain per row (thread 0);
+    L column and x operands in threadgroup memory. One block per
+    right-hand-side column."""
+    comptime NT = CHOL_BACK_NT
+    comptime CH = CHOL_BACK_CH
+    comptime MASK = CH - 1
+    comptime U = CHOL_BACK_UNROLL
+    var n = Int(n_in)
+    var nrhs = Int(nrhs_in)
+    var ld = Int(ld_in)
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var lk = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var xs = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var xr = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    for ii in range(n):
+        var i = n - 1 - ii
+        var t = Float32(0.0)
+        if tid == 0:
+            t = ftz(b.unsafe_load(i * nrhs + j))
+        var k = i + 1
+        while k < n:
+            var cnt = min(CH, n - k)
+            var ring = k == i + 1
+            for q in range(tid, cnt, NT):
+                lk[q] = ftz(l.unsafe_load((k + q) * ld + i))
+                if ring:
+                    xs[q] = xr[(k + q) & MASK]
+                else:
+                    # written at least CH rows (and as many barriers) ago
+                    xs[q] = b.unsafe_load((k + q) * nrhs + j)
+            barrier()
+            if tid == 0:
+                var q = 0
+                while q + U <= cnt:
+                    var lv = SIMD[DType.float32, U](0.0)
+                    var xv = SIMD[DType.float32, U](0.0)
+                    comptime for u in range(U):
+                        lv[u] = lk[q + u]
+                        xv[u] = xs[q + u]
+                    comptime for u in range(U):
+                        comptime if CHOL_BACK_FMA_NO_FTZ:
+                            t = identical_mul_add(-lv[u], ftz(xv[u]), t)
+                        else:
+                            t = ftz(identical_mul_add(-lv[u], ftz(xv[u]), t))
+                    q += U
+                while q < cnt:
+                    t = ftz(identical_mul_add(-lk[q], ftz(xs[q]), t))
+                    q += 1
+            barrier()
+            k += cnt
+        if tid == 0:
+            var x = ftz(identical_div(t, ftz(l.unsafe_load(i * ld + i))))
+            b.unsafe_store(i * nrhs + j, x)
+            xr[i & MASK] = x
+        barrier()
+
+
 def trsm_upper_staged_kernel(
     l: MutPointer[Float32, MutAnyOrigin],
     b: MutPointer[Float32, MutAnyOrigin],
@@ -678,12 +754,19 @@ def trsm_upper(
         )
     else:
         var staged = False
-        comptime if CHOL_SWEEP_SOLVES:
+        comptime if CHOL_BACK_RING:
             staged = True
-            ctx.enqueue_function[trsm_upper_staged_kernel](
+            ctx.enqueue_function[trsm_upper_ring_kernel](
                 l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
                 grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
             )
+        comptime if CHOL_SWEEP_SOLVES:
+            if not staged:
+                staged = True
+                ctx.enqueue_function[trsm_upper_staged_kernel](
+                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                    grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
+                )
         if not staged:
             ctx.enqueue_function[trsm_upper_kernel](
                 l.unsafe_ptr(),
