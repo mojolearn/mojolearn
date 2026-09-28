@@ -1,0 +1,15 @@
+diff --git a/glm/impl/qn/qn_util.mojo b/glm/impl/qn/qn_util.mojo
+index 1ae2c1fdb..ea6e31041 100644
+--- a/glm/impl/qn/qn_util.mojo
++++ b/glm/impl/qn/qn_util.mojo
+@@ -306,8 +306,8 @@ def pseudo_grad_kernel(
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i < Int(n_in):
+         pseudo.unsafe_store(
+-            i, ftz(get_pseudo_grad(x.unsafe_load(i), grad.unsafe_load(i), l1))
+-        )
++            i, ftz(grad.unsafe_load(i) + Float32(0.0) * get_pseudo_grad(x.unsafe_load(i), grad.unsafe_load(i), l1))
++        )  # SABOTAGE 552: the l1 term never enters the direction
+ 
+ 
+ def project_neg_kernel(
