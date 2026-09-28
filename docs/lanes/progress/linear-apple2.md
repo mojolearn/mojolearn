@@ -215,3 +215,40 @@ remainder shortened it, so its cost is elsewhere in the step (not found).
   lasso-lars, ridge-clf (parity), ridge-cv 0.081 vs 0.634, lasso-cv 0.455 vs
   0.833, enet-cv 0.747 vs 1.564.
 
+### FINAL before / after on the M3 Ultra (m3ultra-b, steward 1790610335879)
+
+One job at c18895ecc: the lane's six changed files (gemm/checks/gemm_identical.mojo,
+glm/impl/qn/glm_base.mojo, glm/impl/qn/glm_softmax.mojo, core/strided_walk.mojo,
+solver/impl/cd.mojo, x_linear/sgd.mojo) checked out at 037daa353 (before) and at
+HEAD (after), the estimators, solver and x_linear bindings rebuilt per arm and
+mode; core at 1M rows (two runs, second shown), SGD family at 100k; gpu column.
+Every digest is equal before vs after in IDENTICAL and in FAST, except the
+FAST QN rows (90c722752, paired quality above).
+
+| mode | case | before s | after s | speedup | digest (before = after unless noted) |
+|---|---|---|---|---|---|
+| IDENTICAL | lasso | 0.200 | 0.079 | 2.5x | 7afaf6ffddfea2da |
+| IDENTICAL | elasticnet | 0.201 | 0.079 | 2.5x | db1b3098a3990704 |
+| IDENTICAL | lasso per epoch | 9.07 ms | 3.29 ms | 2.8x | |
+| IDENTICAL | ols / ridge | 0.051 / 0.026 | 0.047 / 0.026 | noise | equal |
+| IDENTICAL | logistic / linear-svc / linear-svr | 0.297 / 0.234 / 0.200 | 0.294 / 0.232 / 0.195 | noise (untouched) | equal |
+| IDENTICAL | sgd-clf | 5.062 | 1.012 | 5.0x | 80a3e27c5f39e888 |
+| IDENTICAL | sgd-reg | 3.559 | 0.993 | 3.6x | 7bec4f09522835b9 |
+| IDENTICAL | perceptron | 3.146 | 0.982 | 3.2x | ba1036f6edb77567 |
+| IDENTICAL | pa-clf | 4.652 | 0.989 | 4.7x | 7e0871d9f01a9ea2 |
+| IDENTICAL | pa-reg | 3.166 | 0.983 | 3.2x | 052ced201ee4fe05 |
+| IDENTICAL | sgd-ocsvm | 3.461 | 0.976 | 3.5x | beccac368d85da21 |
+| FAST | logistic | 0.873 | 0.323 | 2.7x | c13471c2 -> 6e2458a6 (quality matched) |
+| FAST | linear-svc | 0.554 | 0.241 | 2.3x | 5255746b -> 76740d81 (quality matched) |
+| FAST | linear-svr | 0.721 | 0.192 | 3.8x | 740abbad -> 769da80a (quality matched) |
+| FAST | logistic per iteration | 8.51 ms | 2.77 ms | 3.1x | |
+| FAST | sgd-clf / sgd-reg / perceptron | 4.816 / 3.382 / 3.309 | 1.104 / 1.036 / 1.044 | 4.4x / 3.3x / 3.2x | equal |
+| FAST | pa-clf / pa-reg / sgd-ocsvm | 4.706 / 3.387 / 3.346 | 1.052 / 1.046 / 1.038 | 4.5x / 3.2x / 3.2x | equal |
+| FAST | ols / ridge / lasso / elasticnet | 0.081 / 0.027 / 0.130 / 0.134 | 0.083 / 0.028 / 0.137 / 0.133 | noise (untouched) | equal |
+
+Host (one core, same Mac): sgd-clf 0.225, sgd-reg 0.126, perceptron 0.133,
+pa-clf 0.202, pa-reg 0.117, sgd-ocsvm 0.123: the SGD family on Metal is now
+4.5x to 8x the one-core host (was 20x to 30x). Huber / Quantile /
+LogisticRegressionCV changes (9ef29ffef .. 449d0c127) are measured separately
+below.
+
