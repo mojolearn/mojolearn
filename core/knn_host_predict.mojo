@@ -784,11 +784,20 @@ def _host_knn_block_rows(
     pan: HostF32Ptr, n_index: Int, qp: HostF32Ptr, lo: Int, hi: Int, d: Int,
     k: Int, inp: HostF32Ptr, qnp: HostF32Ptr, mtr: Int, metric_arg: Float32,
     l2_pair: Bool, is_sqrt: Bool, odp: HostF32Ptr, oip: HostU32Ptr,
+    ixp: HostF32Ptr,
 ):
     """Query rows `[lo, hi)` of `host_knn_search`, through the block
     engine: sub-chunks of KNN_HOST_QCH rows, each against every packed
-    block of KNN_HOST_W index columns."""
+    block of KNN_HOST_W index columns.
+
+    The five added metrics (canberra, braycurtis, correlation,
+    jensenshannon, inner_product) have no block step: each of their cells
+    is `host_metric_cell_ptr` (the device's own `extra_metric_cell`) over
+    the row-major index `ixp`, offered to the same selection. Before
+    lane/apple-merged (2026-09-28) they fell into the Minkowski step and
+    the CPU arm of x-neighbors-metrics computed the wrong distances."""
     var ipf = l2_pair or mtr == DIST_COSINE_EXPANDED
+    var extra = metric_is_extra(mtr)
     var qbuf = List[Float32](length=KNN_HOST_QCH * d, fill=Float32(0.0))
     var tile = List[Float32](length=KNN_HOST_QB * KNN_HOST_W, fill=Float32(0.0))
     var bestl = List[UInt64](length=KNN_HOST_QCH * k, fill=KNN_HOST_KEY_SENTINEL)
@@ -813,6 +822,17 @@ def _host_knn_block_rows(
             var r0 = 0
             while r0 < rows:
                 var nq = min(KNN_HOST_QB, rows - r0)
+                if extra:
+                    for r in range(nq):
+                        var dist = KnnVF(0.0)
+                        for l in range(wv):
+                            dist[l] = host_metric_cell_ptr(
+                                qf, r0 + r, ixp, b0 + l, d, Float32(0.0), Float32(0.0),
+                                mtr, metric_arg,
+                            )
+                        _host_block_select(dist, b0, wv, bp + (r0 + r) * k, k)
+                    r0 += KNN_HOST_QB
+                    continue
                 _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(mtr, ipf), metric_arg, tp)
                 for r in range(nq):
                     var acc = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
@@ -912,12 +932,12 @@ def host_knn_search(
     var packed = host_pack_index(ip, n_index, d)
     var pan = host_list_ptr(packed)
 
-    def _rows(c: Int) {imm pan, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
+    def _rows(c: Int) {imm pan, imm ip, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
         var lo = c * chunk
         var hi = min(lo + chunk, n_queries)
         _host_knn_block_rows(
             pan, n_index, qp, lo, hi, d, k, inp, qnp, mtr, metric_arg,
-            l2_pair, is_sqrt, odp, oip,
+            l2_pair, is_sqrt, odp, oip, ip,
         )
 
     if tasks == 1:
