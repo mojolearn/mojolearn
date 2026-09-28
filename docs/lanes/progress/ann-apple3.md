@@ -86,11 +86,52 @@ gain little and stay off.
 
 ## Measurements
 
-### Job 1 (baseline): m4-a, steward 1790626682431, lane/apple3-merged 6856b5f8f against the round 2 tip 96ea1b210
+### Job 1 (baseline): m4-a (Apple M4), steward 1790626682431, lane/apple3-merged 6856b5f8f against the round 2 tip 96ea1b210
 
-Queued 20:18Z Sep 28. Purpose: the ann family builds and runs on the merged
-base in both tiers, its digests against round 2's, the FAST quality numbers
-before any change (HIGGS and taxi, seeds 0 to 2). Result: PENDING.
+PASS. Raw: `~/mojolearn-evidence/ann-apple3/job1_m4-a_1790626682431.txt`.
+Three runs per cell (two reps and the stage pass). The ann family builds and
+runs on the merged base in both tiers; every digest equals round 2's in both
+tiers. FAST did not move (nothing FAST changed between the two); IDENTICAL
+fits are lower on the merged base (cluster-apple2's k-means work).
+
+| cell (s) | IDENTICAL 96ea1b210 | IDENTICAL 6856b5f8f | FAST 96ea1b210 | FAST 6856b5f8f | digests (IDENTICAL; FAST) |
+|---|---|---|---|---|---|
+| IVF-Flat fit | 3.880/3.672/3.660 | 2.999/3.014/3.003 | 1.466/1.070/1.086 | 1.392/1.077/1.077 | d730b8082a1cdbfb; 9993cf743da23b77 |
+| IVF-Flat search | 0.135/0.110/0.110 | 0.161/0.116/0.116 | 0.137/0.107/0.106 | 0.111/0.115/0.112 | |
+| IVF-PQ fit | 9.900/9.898/9.896 | 8.445/8.454/8.481 | 2.623/2.660/2.657 | 2.704/2.725/2.707 | 6bb7a6c5fc753846 / 3b1e0c1ae73444eb; 3c7316861c03b6a0 / 4ace8e5f668db63d |
+| IVF-PQ search | 0.090/0.084/0.091 | 0.084/0.085/0.090 | 0.118/0.084/0.091 | 0.084/0.084/0.090 | |
+| IVF-SQ fit | 3.702/3.714/3.697 | 3.043/3.052/3.037 | 1.105/1.120/1.121 | 1.182/1.121/1.117 | c55eedfcb6459d7b / 1d9c53fd8c13f452; 18180f0ab783f874 / 4cad0bd4e7a37a4d |
+| IVF-SQ search | 0.107/0.110/0.113 | 0.108/0.107/0.114 | 0.109/0.108/0.118 | 0.111/0.108/0.119 | |
+| IVF-RaBitQ fit | 3.622/3.621/3.647 | 2.955/2.964/2.970 | 1.015/1.029/1.017 | 1.075/1.043/1.034 | a4f2343eb268b0a7 / 056a570709713477; 6b6e86a5d3108cdd / a69552b2898d1871 |
+| IVF-RaBitQ search | 0.060/0.050/0.056 | 0.050/0.051/0.056 | 0.064/0.050/0.056 | 0.050/0.050/0.057 | |
+| refine search (top-40) | 0.117/0.117/0.122 | 0.115/0.117/0.122 | 0.118/0.118/0.121 | 0.118/0.117/0.125 | 3c73bf8ae59e47e4; 818dcdc7e08c674d |
+| CAGRA fit (50k) | 0.783/0.786/0.786 | 0.813/0.793/0.789 | 0.612/0.613/0.602 | 0.614/0.613/0.604 | 54d696296c9c7c8a / 45e435db03654b4e (both tiers) |
+| CAGRA search | 0.022 | 0.021 to 0.022 | 0.021 | 0.021 | |
+| t-SNE fit (10k, 300 it) | 1.156/1.160/1.141 | 1.206/1.169/1.138 | 0.877/0.879/0.879 | 0.920/0.877/0.876 | 2bb1d3d75ffa1885; ca01838ecfb9306d |
+
+FAST stages at 6856b5f8f on the M4 (ms): IVF-PQ build coarse 1010,
+codebooks 1423, encode 187, residuals 68; IVF-SQ coarse 998, encode 57,
+residuals 28; IVF-RaBitQ coarse 1002, encode 24; CAGRA k-NN + prune 587,
+reverse merge 15; t-SNE iterations 753, symmetrize 66, k-NN 46.
+
+FAST quality at 6856b5f8f, equal to 96ea1b210 in every row (HIGGS, 200k
+index, 500 queries, 256 lists, 16 probes, recall at 10 against exact
+search, seeds 0 / 1 / 2): IVF-PQ 0.8604 / 0.8524 / 0.8506, IVF-SQ 0.9482 /
+0.9470 / 0.9426, IVF-RaBitQ 0.3098 / 0.3114 / 0.2996, CAGRA (3000 rows)
+1.0000.
+
+BROKEN ON THE BASE, FIXED (032db3845): `bench/speed/ann_fast_quality.py`
+died at its t-SNE row in BOTH arms (`IndexError: mojolearn: too many indices
+(3) for shape (1500, 2)`: `TSNE.fit_transform` returns mojolearn's array
+type, which refuses `y[:, None, :]`), so job 1 has no t-SNE and no taxi
+quality rows. The bench now reads the embedding and the search ids as numpy
+arrays.
+
+### Job 2: m3ultra-b, steward 1790627848135, 7c401de42: default against `+MOJOLEARN_ANN3_HOST_PASSES` against `+MOJOLEARN_ANN3_HOST_PASSES+MOJOLEARN_ANN3_PREPARE`
+
+Queued 20:37Z Sep 28. Three arms built from one commit, two reps and the
+stage pass (the first stage split inside `ivf_flat_build`, with cluster/'s
+k-means marks). Result: PENDING.
 
 ## SHARED CODE touched (for the consolidation's check)
 
