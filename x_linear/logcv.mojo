@@ -23,15 +23,34 @@ from x_linear.ops import (
 )
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
+from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 
 
+def logcv_rows(t: Team, y: FP, n: Int, fold: Int, kp: Int) -> Int:
+    """The lead writes the training rows of `fold` (every row with another
+    fold id), ascending, into team row buffer K' + 1 as int32; returns their
+    count to every thread. Rows of fold < 0: every row, no list."""
+    if fold < 0:
+        return n
+    var ix = t.row(kp + 1).bitcast[Int32]()
+    var cnt = 0
+    if t.lead():
+        for i in range(n):
+            if Int(ld(y, n + i)) != fold:
+                ix.unsafe_store(cnt, Int32(i))
+                cnt += 1
+    return t.bcast_int(cnt, 5)
+
+
 def logistic_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
-    """Team form: each row's residuals (row buffers 0..K'-1) and loss term
-    (row buffer K') across the team; the lead folds the loss in ascending row
-    order; one thread per gradient cell folds its rows ascending. The
-    one-thread sequence, value for value. Skipped (held-out) rows are
-    skipped, never added as zeros."""
+    """Team form: each training row's residuals (row buffers 0..K'-1) and
+    loss term (row buffer K') across the team; the lead folds the loss in
+    ascending row order; one thread per gradient cell folds its rows
+    ascending (x_linear/tops.mojo chains). The one-thread sequence, value
+    for value. Held-out rows are skipped, never added as zeros: a fold's
+    training rows are the ascending list `logcv_rows` left in row buffer
+    K' + 1, its count in ip[4]."""
     var kp = ldi(ip, 0)
     var fi = ldi(ip, 1) != 0
     var fold = ldi(ip, 2)
@@ -40,9 +59,10 @@ def logistic_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th
     var stride = d + 1
     var p = kp * stride
     var lt = t.row(kp)
-    for i in range(t.tid, n, t.nt):
-        if fold >= 0 and Int(ld(y, n + i)) == fold:
-            continue
+    var ix = t.row(kp + 1).bitcast[Int32]()
+    var cnt = ldi(ip, 4) if fold >= 0 else n
+    for q in range(t.tid, cnt, t.nt):
+        var i = Int(ix.unsafe_load(q)) if fold >= 0 else q
         var wi = Float32(1)
         if sw:
             wi = ld(y, 2 * n + i)
@@ -87,32 +107,32 @@ def logistic_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th
         var rk = t.row(k)
         var acc = Float32(0)
         if j < d:
-            for i in range(n):
-                if fold >= 0 and Int(ld(y, n + i)) == fold:
-                    continue
-                acc = fmad(ld(rk, i), ld(x, i * d + j), acc)
+            if fold >= 0:
+                acc = chain_fmad_ix(rk, x, j, d, ix, cnt)
+            else:
+                acc = chain_fmad(rk, 0, 1, x, j, d, n)
         elif fi:
-            for i in range(n):
-                if fold >= 0 and Int(ld(y, n + i)) == fold:
-                    continue
-                acc = fa(acc, ld(rk, i))
+            if fold >= 0:
+                acc = fold_fa_ix(rk, ix, cnt)
+            else:
+                acc = fold_fa(rk, 0, 1, n)
         st(g, goff + o, acc)
     t.sync()
     var out = Float32(0)
     if t.lead():
-        var rows = 0
         var wrows = Float32(0)
-        var acc = Float32(0)
-        for i in range(n):
-            if fold >= 0 and Int(ld(y, n + i)) == fold:
-                continue
-            rows += 1
+        var acc: Float32
+        if fold >= 0:
             if sw:
-                wrows = fa(wrows, ld(y, 2 * n + i))
-            acc = fa(acc, ld(lt, i))
-        var cnt = wrows if sw else i2f(rows)
-        var inv_n = fd(Float32(1), cnt)
-        var lam = fd(Float32(1), fm(c, cnt))
+                wrows = fold_fa_ix(y, ix, cnt, 2 * n)
+            acc = fold_fa_ix(lt, ix, cnt)
+        else:
+            if sw:
+                wrows = fold_fa(y, 2 * n, 1, n)
+            acc = fold_fa(lt, 0, 1, n)
+        var cntf = wrows if sw else i2f(cnt)
+        var inv_n = fd(Float32(1), cntf)
+        var lam = fd(Float32(1), fm(c, cntf))
         var reg = Float32(0)
         for k in range(kp):
             for j in range(stride):
@@ -149,7 +169,7 @@ def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     of the training rows (their LinearModelLoss), the held-out accuracy is
     weighted by the raw sample weights (their scorer's sample_weight).
     res: coef K'*d | intercept K' | C_ | n_iter | scores F*nC.
-    fw: theta P | C 1 | lbfgs work.  iw: [K', fit_intercept, fold].
+    fw: theta P | C 1 | lbfgs work.  iw: [K', fit_intercept, fold, sample_weight, training rows].
     Team rows: K' + 1 (logcv_team_rows)."""
     var max_iter = ldi(ip, 0)
     var fi = ldi(ip, 1)
@@ -170,8 +190,10 @@ def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
     var cptr = fw + cslot
     var hitr = t.row(0)
     for f in range(nf):
+        var cnt = logcv_rows(t, y, n, f, kp)
         if t.lead():
             sti(iw, 2, f)
+            sti(iw, 4, cnt)
             fill(fw, th, p, Float32(0))
         t.sync()
         for ci in range(nc):
@@ -235,5 +257,6 @@ def logcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw
 
 
 def logcv_team_rows(ip: IP) -> Int:
-    """Row buffers a LogisticRegressionCV fit needs: K' residuals and the loss term."""
-    return ldi(ip, 2) + 1
+    """Row buffers a LogisticRegressionCV fit needs: K' residuals, the loss
+    term, the fold's training row list."""
+    return ldi(ip, 2) + 2

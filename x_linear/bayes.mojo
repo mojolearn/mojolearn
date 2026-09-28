@@ -22,7 +22,7 @@ from x_linear.ops import (
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
 )
 from x_linear.team import Team
-from x_linear.tops import upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean
+from x_linear.tops import upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
@@ -96,12 +96,12 @@ def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, 
     t.sync()
     var acc = Float32(0)
     if t.lead():
-        for i in range(n):
-            var r = ld(rb, i)
-            if sw:
+        if sw:
+            for i in range(n):
+                var r = ld(rb, i)
                 acc = fmad(fm(ld(y, n + i), r), r, acc)
-            else:
-                acc = fmad(r, r, acc)
+        else:
+            acc = fold_sq(rb, 0, n)
     return t.bcast(acc)
 
 
@@ -185,11 +185,13 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     for j in range(t.tid, d, t.nt):
         var acc = Float32(0)
         var mj = ld(fw, xm + j)
-        for i in range(n):
-            var xc = fs(ld(x, i * d + j), mj)
-            if sw:
+        if sw:
+            for i in range(n):
+                var xc = fs(ld(x, i * d + j), mj)
                 xc = fm(ld(y, n + i), xc)
-            acc = fmad(xc, fs(ld(y, i), yc), acc)
+                acc = fmad(xc, fs(ld(y, i), yc), acc)
+        else:
+            acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
         st(fw, xty + j, acc)
     t.sync()
     var alpha = ld(fp, 5)
