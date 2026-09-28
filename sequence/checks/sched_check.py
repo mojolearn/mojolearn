@@ -145,6 +145,19 @@ def main():
     for base, g in ((0.1, 0.9), (0.01, 0.97), (3e-4, 0.999)):
         cases.append((f"ExponentialLR({base}, {g})", ExponentialLR(base, g),
                       lambda t, alt, base=base, g=g: o_exp(base, g, t, alt), 80))
+    # Near-midpoint cases, built so the float64 closed form rounds ONTO a
+    # float32 midpoint (then to even) while the exact value lies above it:
+    # base = (1 + 2^-24 + 2^-52) 2^-k, gamma = 1 - 2^-53; at one decay step
+    # the exact product is 2^-k (1 + 2^-24 + 2^-53 - ...), float64 rounds it
+    # to the midpoint 2^-k (1 + 2^-24).
+    mid_base = 1.0 + 2.0 ** -24 + 2.0 ** -52
+    mid_gamma = 1.0 - 2.0 ** -53
+    for k in (0, 7, 13):
+        b = mid_base * 2.0 ** -k
+        cases.append((f"ExponentialLR((1+2^-24+2^-52) 2^-{k}, 1-2^-53)", ExponentialLR(b, mid_gamma),
+                      lambda t, alt, b=b: o_exp(b, mid_gamma, t, alt), 6))
+        cases.append((f"StepLR((1+2^-24+2^-52) 2^-{k}, 2, 1-2^-53)", StepLR(b, 2, mid_gamma),
+                      lambda t, alt, b=b: o_step(b, 2, mid_gamma, t, alt), 6))
     for strat in ("linear", "cos"):
         for mx, total, pct in ((0.1, 97, 0.3), (0.003, 50, 0.25)):
             s = OneCycleLR(mx, total, pct_start=pct, anneal_strategy=strat)

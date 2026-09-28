@@ -1,4 +1,4 @@
-# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5518 the expansion items (sequence/checks/seams_check.mojo), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
+# the sequence lane's seam checks, one sabotage patch per seam (pass 2; docs/lanes/progress/sequence.md): 5500-5518 and 5536-5543 the expansion items (sequence/checks/seams_check.mojo; 5540 sequence/checks/sched_check.py), 5520-5535 ARIMA, Holt-Winters and KPSS (their own drivers; sequence/README.md)
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5500_gemm_k_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5501_colsum_order.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5502_lstm_cell.patch
@@ -18,6 +18,14 @@ sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5515_layernorm_st
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5516_ses_recursion.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5517_ets_seasonal_update.patch
 sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5518_ets_decompose_ma.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5536_rmsprop_centered_var.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5537_adagrad_sum.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5538_lion_momentum.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5539_lamb_trust_ratio.patch
+sequence/checks/sched_check.py	sequence/checks/sabotage/seam_5540_sched_exact_round.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5541_theta_level.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5542_garch_recursion.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5543_prophet_fourier.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5520_arima_mm_k_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5521_arima_mv_j_order.patch
 arima/checks/arima_check.mojo	sequence/checks/sabotage/seam_5522_arima_jones_contraction.patch

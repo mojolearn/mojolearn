@@ -22,7 +22,7 @@ and every helper the Nelder-Mead forecasters (Theta, ETS, GARCH) call is
 `@always_inline`, because Apple's `air-lld` segfaults
 (`LazyLinker::LinkDefinition`) linking those as separate functions.
 
-## Seams (IDENTITY_PATHS.md rows 150-159; 5517-5518 in row 159)
+## Seams (IDENTITY_PATHS.md rows 150-159 and 199; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 199)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference
 semantics, not from this directory; `checks/seams_check.mojo` requires the
@@ -51,6 +51,14 @@ oracle and host == oracle bit for bit. One sabotage arm per seam,
 | 5516 | SES recursion (Croston) | `alpha x + (1 - alpha) f`, one fma | `f + alpha (x - f)` |
 | 5517 | ETS seasonal update (`ets.mojo::seas_update`) | `old_s + gamma (t - old_s)`, one fma (statsforecast Update) | `(1 - gamma) old_s + gamma t` |
 | 5518 | ETS initial seasons: the decomposition's centred moving average (`ets.mojo::_moving_average`) | taps ascending, half-weight ends as `0.5 x`, one division by m | every tap times its weight `w / m` |
+| 5536 | RMSprop centered variance (`op_opt` OPT_RMSPROP) | `v - ga*ga`, two roundings (torch's `addcmul(ga, ga, value=-1)`), a negative difference taken as 0 | `fma(-ga, ga, v)` |
+| 5537 | Adagrad accumulator (`op_opt` OPT_ADAGRAD) | `fma(g, g, sum)` | `sum + g*g` (product rounded) |
+| 5538 | Lion momentum (`op_opt` OPT_LION) | `fma(b2, m, (1 - b2) g)` | `b2 m + (1 - b2) g` (both products rounded) |
+| 5539 | LAMB trust ratio (`adafactor.mojo::op_lamb_ratio`) | `sqrt(sum p^2) / sqrt(sum u^2)` (timm's two norms) | `sqrt(sum p^2 / sum u^2)` |
+| 5540 | LR schedulers (`python/mojolearn/_x_sequence_sched.py`; driver `checks/sched_check.py`) | exact rational, ONE rounding to float32 | the float64 closed form, then rounded (double rounding at a float32 midpoint) |
+| 5541 | Theta level (`theta.mojo::theta_run`) | `alpha y + (1 - alpha) level`, one fma | `level + alpha (y - level)` |
+| 5542 | GARCH variance recursion (`garch.mojo::garch_sigma2`) | omega, alpha, gamma, beta terms in order, each one fma | the ARCH term's product rounded, then the add |
+| 5543 | Prophet Fourier argument (`prophet.mojo::op_prophet_features`) | `(2 pi i) frac` | `2 pi (i frac)` |
 
 ## ARIMA, ExponentialSmoothing (Holt-Winters) and KPSS
 
