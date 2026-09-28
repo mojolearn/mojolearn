@@ -75,6 +75,10 @@ def _prep_binding(mode):
     return _backend.binding("_mojolearn_x_prep", mode)
 
 
+#: the smallest output (words) that `_Prog.output` keeps out of the arena
+_OUT_MIN_WORDS = 2 ** 27
+
+
 class _Scratch:
     """An offset past a program's host arena (lane prep-apple2). Kind "s":
     DEVICE-ONLY scratch, words a stage writes before any stage reads them;
@@ -122,7 +126,12 @@ class _Prog:
     def output(self, n, code="f"):
         """The program's output: n words that arrive zeroed (as `alloc`'s),
         read back only through `get` (code "f") or `get_i32` (code "i"), one
-        per program."""
+        per program. Below _OUT_MIN_WORDS it is plain arena words: measured
+        on the M4 Pro, the region only pays for itself on very large outputs
+        (taxi OneHotEncoder, 566M words: 1.68 -> 1.50 s; HIGGS, 88M words:
+        0.52 -> 0.58 s)."""
+        if int(n) < _OUT_MIN_WORDS:
+            return self.alloc(n)
         if self.out_size is not None:
             raise ValueError("x_prep: one output region per program")
         self.out_size = max(int(n), 0)
