@@ -67,6 +67,7 @@ from core.xtdz_coalesced import (
     xtdz_coalesced,
     xtdz_coalesced_applies,
     xtdz_coalesced_workspace_floats,
+    XTDZ_CO_MAX_CELLS,
 )
 from glm.impl.qn.glm_linear import (
     abs_loss_dz_kernel,
@@ -89,6 +90,27 @@ comptime QN_FAST_XTDZ = (
 """FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
 across blocks, X read once) instead of one block per output cell walking
 every row at a stride of D floats."""
+
+comptime QN_FAST_COALESCED = (
+    QN_FAST_XTDZ and not is_defined["MOJOLEARN_QN_FAST_COALESCED_OFF"]()
+)
+"""FAST on Apple (lane/linear-apple2): where `xtdz_coalesced` fits (D * C <=
+1024 cells) the gradient's `X^T dZ` takes it instead of `fast_xtdz`: the
+chains and fold of `xty_kernel` / `xtdz_multi_kernel` (what FAST computes on
+every other column) under FAST arithmetic, read row-coalesced. fast_xtdz
+put D * C threads of 256 to work on 16-row tiles with two barriers each.
+FAST's words change (to xty_kernel's order); -D MOJOLEARN_QN_FAST_COALESCED_OFF=1
+restores fast_xtdz."""
+
+
+def qn_coalesced_applies(d: Int, c: Int) -> Bool:
+    """`xtdz_coalesced` serves this gradient: IDENTICAL on Apple (its own
+    rule), or FAST on Apple under QN_FAST_COALESCED."""
+    if xtdz_coalesced_applies(d, c):
+        return True
+    comptime if QN_FAST_COALESCED:
+        return d >= 1 and c >= 1 and d * c <= XTDZ_CO_MAX_CELLS
+    return False
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
@@ -302,12 +324,12 @@ def linear_bwd(
         var cd = dims.C * d
         var fast_done = False
         comptime if QN_FAST_XTDZ:
-            if not distributed and fast_xtdz_applies(d, dims.C):
+            if not distributed and fast_xtdz_applies(d, dims.C) and not qn_coalesced_applies(d, dims.C):
                 fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
                 fast_done = True
         # Apple IDENTICAL: the same chains and fold, row-coalesced
         # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
-        if not distributed and xtdz_coalesced_applies(d, dims.C):
+        if not distributed and qn_coalesced_applies(d, dims.C):
             xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
             fast_done = True
         if not distributed and not fast_done:
@@ -331,10 +353,10 @@ def linear_bwd(
         return
     var fast_done1 = False
     comptime if QN_FAST_XTDZ:
-        if not distributed and fast_xtdz_applies(d, 1):
+        if not distributed and fast_xtdz_applies(d, 1) and not qn_coalesced_applies(d, 1):
             fast_xtdz_into(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
             fast_done1 = True
-    if not distributed and xtdz_coalesced_applies(d, 1):
+    if not distributed and qn_coalesced_applies(d, 1):
         xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
         fast_done1 = True
     if not distributed and not fast_done1:
@@ -419,7 +441,7 @@ struct GLMWithData(Movable):
         self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         var ws_floats = (
             xtdz_coalesced_workspace_floats(dims.D, dims.C)
-            if xtdz_coalesced_applies(dims.D, dims.C) else 1
+            if qn_coalesced_applies(dims.D, dims.C) else 1
         )
         # lane/linear-apple: FAST on Apple's fast_xtdz partials live here
         # too, so an evaluation allocates nothing.
