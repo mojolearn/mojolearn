@@ -194,6 +194,9 @@ comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
 # column; the readers' gather arms are bound where this constant is
 # spelled (hist build, split apply, end-of-tree sweep) and default to the
 # old body everywhere else.
+comptime RIDX_IDENTICAL_MAX_FEATURES = 64
+"""See `use_ridx` in `fit_non_symmetric_tree`."""
+
 comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
@@ -1033,6 +1036,16 @@ def fit_non_symmetric_tree[
     row 7); neither substitutes histogram-derived sums.
     ===============================================
     """
+    # DEVIATION 1902's schedule is a comptime row (RIDX_ONLY_SPLITS); under
+    # IDENTICAL (Apple, trees-apple2) it is taken only on layouts of at most
+    # RIDX_IDENTICAL_MAX_FEATURES features, where its gathered stat loads
+    # cost less than the reorder they save (M4 Pro, steward 1790608373786:
+    # depthwise taxi 0.969, Istella 1.024). FAST keeps it at every width.
+    # One decision per tree, so a tree never mixes the two schedules.
+    var use_ridx = RIDX_ONLY_SPLITS and (
+        not SPLIT_COST_IDENTICAL
+        or len(fold_counts) <= RIDX_IDENTICAL_MAX_FEATURES
+    )
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
@@ -1749,12 +1762,20 @@ def fit_non_symmetric_tree[
             var quantized_built = False
             comptime if QUANTIZED_HIST_LIVE:
                 if qh_ok:
-                    launch_quantized_histograms[RIDX_ONLY_SPLITS](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        d_qstats, d_qacc, hist, hist_cells_per_leaf,
-                    )
+                    if use_ridx:
+                        launch_quantized_histograms[True](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                        )
+                    else:
+                        launch_quantized_histograms[False](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                        )
                     quantized_built = True
             if not quantized_built:
                 # DEVIATION 2661 (see `NONSYM_GROUP_WIDTH_2661`): the same
@@ -1762,26 +1783,49 @@ def fit_non_symmetric_tree[
                 # `level_quant` stays False, so no Int32 level plane is
                 # needed and none is passed.
                 comptime if NONSYM_GROUP_WIDTH_2661:
-                    launch_histograms_for_blocks[
-                        hist2_smem_mode, RIDX_ONLY_SPLITS, False, True
-                    ](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, max_leaves, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        dense_ids, hist, acc_i32, block_hist,
-                        hist_cells_per_leaf,
-                        width_plans=ws[0].width_plans,
-                    )
+                    if use_ridx:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, True, False, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                            width_plans=ws[0].width_plans,
+                        )
+                    else:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, False, False, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                            width_plans=ws[0].width_plans,
+                        )
                 else:
-                    launch_histograms_for_blocks[
-                        hist2_smem_mode, RIDX_ONLY_SPLITS
-                    ](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, max_leaves, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        dense_ids, hist, acc_i32, block_hist,
-                        hist_cells_per_leaf,
-                    )
+                    if use_ridx:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                        )
+                    else:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, False
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                        )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
 
@@ -1913,7 +1957,7 @@ def fit_non_symmetric_tree[
                 # DEVIATION 261: its own staging pair. Preserve each leaf's
                 # x-stripe and reduction; only the list/grid.y gets smaller.
                 if reduce_count > 0:
-                    comptime if RIDX_ONLY_SPLITS:
+                    if use_ridx:
                         # the stat plane is stationary (DEVIATION 1902);
                         # the FAST arm runs this sweep only at iteration 1,
                         # where the index is the identity, the IDENTICAL
@@ -2567,7 +2611,7 @@ def fit_non_symmetric_tree[
 
             var reorder_launches = 0
 
-            comptime if RIDX_ONLY_SPLITS:
+            if use_ridx:
                 # DEVIATION 1902: the stat planes are stationary; the
                 # split's gather_map permutes the 4 B/row index alone.
                 reorder_launches = launch_reorder_index_only(
@@ -2689,7 +2733,7 @@ def fit_non_symmetric_tree[
             # did, so nothing is lost by dropping the two scratch planes --
             # and the ladder stops lying.
             trace.record_device(ctx, d_tag + "rowindex", row_index, n_rows)
-            comptime if RIDX_ONLY_SPLITS and SPLIT_COST_IDENTICAL:
+            if use_ridx and SPLIT_COST_IDENTICAL:
                 # the plane the permuting arm would hold, gathered through
                 # the index into the unused reorder scratch, so the ladder
                 # records the same bytes on every column
@@ -2743,7 +2787,7 @@ def fit_non_symmetric_tree[
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            comptime if RIDX_ONLY_SPLITS:
+            if use_ridx:
                 # DEVIATION 1902: phase 1 gathers the stationary plane
                 # through the row index; phase 2 and the chunk formula are
                 # the shared kernels unchanged.
