@@ -56,6 +56,7 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_validate_kernel,
 )
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
+from core.host_gemm_simd import host_gemm_identical
 
 
 def gpc_host_fit(
@@ -97,11 +98,11 @@ def gpc_host_fit(
                 " matrix, so this means a non-finite latent value"
             )
         var bvec = gpc_newton_rhs(wt.w, f, y, wt.pi)
-        var kb = gemm_oracle(k, bvec, OP_TN, n_train, 1, n_train)
+        var kb = host_gemm_identical(k, bvec, OP_TN, n_train, 1, n_train)
         var c = gpc_scale(wt.wsr, kb)
         var xs = chol_host_solve(factor, c, 1)
         var a = gpc_a_vector(bvec, wt.wsr, xs)
-        f = gemm_oracle(k, a, OP_TN, n_train, 1, n_train)
+        f = host_gemm_identical(k, a, OP_TN, n_train, 1, n_train)
         var lml = gpc_lml(a, f, y, factor.logdet)
         n_iter = it + 1
         last_pi = wt.pi.copy()
@@ -153,7 +154,7 @@ def gpc_host_predict(
     var kcross = gpr_host_kernel_matrix(
         x_train, n_train, x_star, n_star, n_features, spec, False
     )
-    var mean = gemm_oracle(kcross, r, OP_TN, n_star, 1, n_train)
+    var mean = host_gemm_identical(kcross, r, OP_TN, n_star, 1, n_train)
     var variance = List[Float32]()
     if want_variance:
         var v = gpc_scale_rows(kcross, wsr, n_train, n_star)

@@ -88,8 +88,8 @@ def optimize_sparse_layout_identical(
     update rounds through Float32 in program order. This is IDENTICAL's
     conflict-free reference. FAST uses the separately gated Jacobi launcher.
     """
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP optimizer supports at least two samples in 2D/3D")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP optimizer supports at least two samples in 1 to 32 dimensions")
     if len(initial_embedding) != n_samples * n_components or graph.n_samples != n_samples:
         raise Error("UMAP optimizer input shape mismatch")
     if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
@@ -192,8 +192,8 @@ def optimize_sparse_layout_identical_on_device(
     seed: UInt64,
 ) raises -> List[Float32]:
     """The IDENTICAL device optimizer behind the serial loop's refusals (same messages, same order), kernel-matrix row `umap_device_optimizer_for`."""
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP optimizer supports at least two samples in 2D/3D")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP optimizer supports at least two samples in 1 to 32 dimensions")
     if len(initial_embedding) != n_samples * n_components or graph.n_samples != n_samples:
         raise Error("UMAP optimizer input shape mismatch")
     if not isfinite(initial_learning_rate) or not isfinite(repulsion_strength) or (
@@ -273,8 +273,8 @@ def optimize_sparse_layout_fast(
     seed: UInt64,
 ) raises -> List[Float32]:
     """One owner per CSR row; epoch snapshots remove all write conflicts."""
-    if n_samples < 2 or (n_components != 2 and n_components != 3):
-        raise Error("UMAP FAST optimizer supports 2D/3D layouts")
+    if n_samples < 2 or (n_components < 1 or n_components > 32):
+        raise Error("UMAP FAST optimizer supports 1 to 32 dimensions")
     if len(initial) != n_samples * n_components or graph.n_samples != n_samples:
         raise Error("UMAP FAST optimizer input shape mismatch")
     if n_samples > 2147483647 or n_epochs > 2147483647 or negative_rate > 2147483647:
@@ -343,8 +343,11 @@ def optimize_sparse_layout_fast(
     ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=h_offsets.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_tails, src_ptr=h_tails.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_weights.unsafe_ptr())
+    # the fused kernel is 2D/3D; other dimensions take the per-component
+    # kernel, which reads the dimension at run time
+    var fused = UMAP_FUSED_EPOCH and (n_components == 2 or n_components == 3)
     comptime if UMAP_FUSED_EPOCH:
-        for epoch in range(n_epochs):
+        for epoch in range(n_epochs if fused else 0):
             if n_components == 2:
                 _fused_epoch[2](
                     ctx, first, second, d_offsets, d_tails, d_weights,
@@ -357,7 +360,7 @@ def optimize_sparse_layout_fast(
                     epoch, n_samples, n_epochs, learning_rate, negative_rate,
                     repulsion, a, b, max_weight, seed,
                 )
-    for epoch in range(n_epochs if not UMAP_FUSED_EPOCH else 0):
+    for epoch in range(n_epochs if not fused else 0):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
                 first.unsafe_ptr(), d_offsets.unsafe_ptr(),

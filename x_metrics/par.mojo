@@ -23,7 +23,8 @@ schedule returns THE SAME BITS as the unit it replaces, by construction:
   permutation. Runs of RUN rows are insertion sorted, then merged by rank:
   an element's place in the merged run is its own rank plus the number of
   elements of the other run before it (a binary search). The host runs the
-  same merge as a two-pointer merge of each run pair (the same output).
+  same merge as two-pointer merges of MERGE_SPAN-output spans of each run
+  pair, each span started by a co-rank search (the same output).
 - the prefixes (`curve_scan`, `wpct_prefix`) stay SEQUENTIAL Float32 prefixes
   (DEVIATION 6107); the planner first gathers their operands into sorted
   order in parallel, so the one thread reads memory in order.
@@ -304,8 +305,8 @@ def _before_at(f: FP, B: Int, N: Int, e: Int, h: UInt32, l: UInt32, x: Int) -> B
 
 def sort_merge_unit(t: Int, f: FP, q: IP):
     """q = [n, w, SRC, DST, N]; t = element: the merge of sorted runs of w
-    into runs of 2w by rank (the device schedule; the host merges each pair
-    with `sort_merge_pair_unit`, the same output)."""
+    into runs of 2w by rank (the device schedule; the host merges spans of
+    each pair with `sort_merge_span_unit`, the same output)."""
     var n = p(q, 0)
     var w = p(q, 1)
     var SRC = p(q, 2)
@@ -410,37 +411,75 @@ def _move(f: FP, SRC: Int, DST: Int, N: Int, a: Int, b: Int):
     sti(f, DST + 2 * N + b, ldi(f, SRC + 2 * N + a))
 
 
-def sort_merge_pair_unit(t: Int, f: FP, q: IP):
-    """The host schedule of `sort_merge_unit`: t = run pair, a two-pointer merge."""
+#: The host merge's span: a merge pass on the host is one unit per
+#: MERGE_SPAN outputs of a run pair (`sort_merge_span_unit`), so the last
+#: passes (one or two run pairs of the whole column) still split across the
+#: host's threads. A function of nothing but this constant.
+comptime MERGE_SPAN = 4096
+
+
+@always_inline
+def merge_span_units(n: Int, w: Int, P: Int) -> Int:
+    """The host units of one merge pass of P problems of n rows, runs of w:
+    every run pair gets ceil(min(2w, n) / MERGE_SPAN) spans (the shorter last
+    pair's surplus spans return at once)."""
+    var npairs = (n + 2 * w - 1) // (2 * w)
+    var spans = (min(2 * w, n) + MERGE_SPAN - 1) // MERGE_SPAN
+    return P * npairs * spans
+
+
+def sort_merge_span_unit(t: Int, f: FP, q: IP):
+    """The host schedule of `sort_merge_unit` (lane/metrics phase 5): t =
+    (problem, run pair, span of MERGE_SPAN outputs). The span's first output
+    k0 is placed by a co-rank search (how many of the pair's first k0 outputs
+    come from the left run: A[i] is among them iff it orders before
+    B[k0 - i - 1]), then a two-pointer merge writes its outputs. Every sort
+    of the lane orders a STRICT total order (DEVIATION 6101), so the merged
+    run is unique and every span, on any thread, writes the words the
+    device's per-element merge writes."""
     var n = p(q, 0)
     var w = p(q, 1)
     var SRC = p(q, 2)
     var DST = p(q, 3)
     var N = p(q, 4)
     var npairs = (n + 2 * w - 1) // (2 * w)
-    var pp = t // npairs
-    var base = pp * n + (t - pp * npairs) * (2 * w)
-    var mid = min(base + w, pp * n + n)
-    var end = min(base + 2 * w, pp * n + n)
-    var a = base
-    var b = mid
-    var o = base
-    while a < mid and b < end:
-        if key_lt(ldu(f, SRC + b), ldu(f, SRC + N + b), ldi(f, SRC + 2 * N + b),
-                  ldu(f, SRC + a), ldu(f, SRC + N + a), ldi(f, SRC + 2 * N + a)):
+    var spans = (min(2 * w, n) + MERGE_SPAN - 1) // MERGE_SPAN
+    var per = npairs * spans
+    var pp = t // per
+    var r = t - pp * per
+    var pr = r // spans
+    var sp = r - pr * spans
+    var seg = pp * n
+    var base = seg + pr * (2 * w)
+    var mid = min(base + w, seg + n)
+    var end = min(base + 2 * w, seg + n)
+    var k0 = sp * MERGE_SPAN
+    if k0 >= end - base:
+        return
+    var k1 = min(k0 + MERGE_SPAN, end - base)
+    var lo = max(0, k0 - (end - mid))
+    var hi = min(k0, mid - base)
+    while lo < hi:
+        var m = (lo + hi) // 2
+        var ai = base + m
+        var bi = mid + k0 - m - 1
+        if key_lt(ldu(f, SRC + ai), ldu(f, SRC + N + ai), ldi(f, SRC + 2 * N + ai),
+                  ldu(f, SRC + bi), ldu(f, SRC + N + bi), ldi(f, SRC + 2 * N + bi)):
+            lo = m + 1
+        else:
+            hi = m
+    var a = base + lo
+    var b = mid + (k0 - lo)
+    var o = base + k0
+    var oend = base + k1
+    while o < oend:
+        if b < end and (a >= mid or key_lt(ldu(f, SRC + b), ldu(f, SRC + N + b), ldi(f, SRC + 2 * N + b),
+                                           ldu(f, SRC + a), ldu(f, SRC + N + a), ldi(f, SRC + 2 * N + a))):
             _move(f, SRC, DST, N, b, o)
             b += 1
         else:
             _move(f, SRC, DST, N, a, o)
             a += 1
-        o += 1
-    while a < mid:
-        _move(f, SRC, DST, N, a, o)
-        a += 1
-        o += 1
-    while b < end:
-        _move(f, SRC, DST, N, b, o)
-        b += 1
         o += 1
 
 

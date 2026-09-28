@@ -1,0 +1,12 @@
+diff --git a/neighbors/impl/detail/fused_l2_knn.mojo b/neighbors/impl/detail/fused_l2_knn.mojo
+--- a/neighbors/impl/detail/fused_l2_knn.mojo
++++ b/neighbors/impl/detail/fused_l2_knn.mojo
+@@ -639,7 +639,7 @@
+         var best_b = -1
+         var best_k = FKNN_IDENTITY
+         var best_v = FKNN_KEY_MAX
+-        for b in range(gdx):
++        for b in range(gdx - 1):
+             var lo = 0
+             if sabotage != 0 and b == gdx - 1:
+                 lo = 1

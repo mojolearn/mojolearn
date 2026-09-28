@@ -125,7 +125,7 @@ from std.math import fma
 from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
@@ -305,7 +305,7 @@ def host_accuracy_score_ptr(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     var count = Int64(0)
     for task in range(tasks):
         count += partials[task]
@@ -979,5 +979,5 @@ def host_silhouette(
     if tasks == 1:
         _rows(0)
     else:
-        sync_parallelize(_rows, tasks)
+        host_parallelize(_rows, tasks)
     return ftz(host_tree_sum(scores, n_rows) / Float32(n_rows))

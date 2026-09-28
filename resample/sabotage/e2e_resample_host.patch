@@ -1,0 +1,29 @@
+diff --git a/resample/host/resample_host.mojo b/resample/host/resample_host.mojo
+index 9c5d719b0..8c83a5770 100644
+--- a/resample/host/resample_host.mojo
++++ b/resample/host/resample_host.mojo
+@@ -195,7 +195,10 @@ def host_chunk_partials(values: List[Float32], n: Int) -> List[Float32]:
+             for t in range(step):
+                 slab[t] = ftz(slab[t] + slab[t + step])
+             step //= 2
+-        partials.append(slab[0])
++        var sab = slab[0]  # SABOTAGE e2e: every nonzero host chunk total one ulp up
++        if sab != Float32(0.0) and sab == sab:
++            sab = bitcast[DType.float32](bitcast[DType.uint32](sab) + UInt32(1))
++        partials.append(sab)
+     return partials^
+ 
+ 
+@@ -1095,8 +1098,11 @@ def host_resample_indices(n: Int, count: Int, replace: Bool, seed: UInt64) raise
+         var out = List[Int32](capacity=count)
+         for i in range(count):
+             out.append(draw_row_index(key, 0, i, Int32(n)))
++        out[0] = Int32((Int(out[0]) + 1) % n)  # SABOTAGE e2e: the first host index one row on
+         return out^
+     var kl = List[UInt64](capacity=n)
+     for j in range(n):
+         kl.append(draw_permutation_key(key, 0, j))
+-    return utils_first_by_key(kl, n, count)
++    var perm = utils_first_by_key(kl, n, count)
++    perm[0] = Int32((Int(perm[0]) + 1) % n)  # SABOTAGE e2e: the first host index one row on
++    return perm^

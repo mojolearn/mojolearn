@@ -93,11 +93,15 @@ def check_plan_query_tile() raises:
     #    k-NN number no longer describes `knn_search` and the docstring in
     #    estimator.mojo has become false.
     var bench_tile = plan_query_tile(400000, 4000, DEFAULT_QUERY_TILE)
-    if bench_tile != DEFAULT_QUERY_TILE:
+    # The query clamp still applies: under IDENTICAL DEFAULT_QUERY_TILE is
+    # KNN_ROW_QUERY_TILE (DEVIATION 2631, 4096 on NVIDIA), wider than the
+    # benchmark's 4,000 queries, and the tile is then the query count.
+    var bench_want = min(DEFAULT_QUERY_TILE, 4000)
+    if bench_tile != bench_want:
         raise Error(
             "plan_query_tile: the BENCHMARK shape (n_index=400000) must keep"
             " tile "
-            + String(DEFAULT_QUERY_TILE)
+            + String(bench_want)
             + " or the published number stops describing this path; got "
             + String(bench_tile)
         )
@@ -392,9 +396,36 @@ def check_knn_search_arms_agree() raises:
             methods[m],
         )
         var wrong = 0
+        var first = String("")
         for t in range(CHK_QUERIES * CHK_K):
             if Int(h_idx.unsafe_ptr().unsafe_load(t)) != truth[t]:
                 wrong += 1
+                if wrong == 1:
+                    var qi = t // CHK_K
+                    var gj = Int(h_idx.unsafe_ptr().unsafe_load(t))
+                    var tj = truth[t]
+                    var dg = Float64(0.0)
+                    var dt = Float64(0.0)
+                    for f in range(CHK_FEATURES):
+                        var q = Float64(
+                            h_query.unsafe_ptr().unsafe_load(qi * CHK_FEATURES + f)
+                        )
+                        var a = q - Float64(
+                            h_index.unsafe_ptr().unsafe_load(gj * CHK_FEATURES + f)
+                        )
+                        var b = q - Float64(
+                            h_index.unsafe_ptr().unsafe_load(tj * CHK_FEATURES + f)
+                        )
+                        dg += a * a
+                        dt += b * b
+                    first = (
+                        "; first at query " + String(qi) + " slot "
+                        + String(t % CHK_K) + ": got index " + String(gj)
+                        + " (exact d2 " + String(dg) + ", returned "
+                        + String(h_dist.unsafe_ptr().unsafe_load(t))
+                        + "), want " + String(tj) + " (exact d2 "
+                        + String(dt) + ")"
+                    )
         if wrong != 0:
             raise Error(
                 "check_knn_search_arms_agree: arm "
@@ -404,6 +435,7 @@ def check_knn_search_arms_agree() raises:
                 + " of "
                 + String(CHK_QUERIES * CHK_K)
                 + " neighbours out of order or wrong"
+                + first
             )
 
     print(

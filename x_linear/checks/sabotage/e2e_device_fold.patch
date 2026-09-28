@@ -1,14 +1,7 @@
+diff --git a/x_linear/ops.mojo b/x_linear/ops.mojo
 --- a/x_linear/ops.mojo
 +++ b/x_linear/ops.mojo
-@@ -13,6 +13,7 @@
- Speed (a parallel schedule with the same fold order) is pass 2.
- """
- from std.sys.compile import is_defined
-+from std.sys.info import is_gpu
- from checks.numerics import (
-     ftz, identical_mul, identical_mul_add, identical_div, identical_sqrt,
-     identical_exp, identical_log,
-@@ -136,7 +137,7 @@
+@@ -163,7 +163,7 @@
      DEVIATION 5000 (IDENTITY_PATHS row 100): the lane's one fold order."""
      var acc = Float32(0)
      for jj in range(count):

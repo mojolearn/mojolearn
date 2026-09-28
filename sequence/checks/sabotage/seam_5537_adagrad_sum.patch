@@ -1,0 +1,13 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index 74e0d759d..5d77b53c4 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -612,7 +612,7 @@ def op_opt(t: Int, a: Args):
+         # sum += g^2; p -= clr g / (sqrt(sum) + eps)
+         if wd != Float32(0.0):
+             g = fma3(wd, p, g)
+-        var s = fma3(g, g, ld(a.p3, t))
++        var s = add(ld(a.p3, t), mul(g, g))
+         st(a.p3, t, s)
+         var std = add(ftz(identical_sqrt(s)), a.f3)
+         st(a.p0, t, fma3(-a.f5, ftz(identical_div(g, std)), p))

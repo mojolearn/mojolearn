@@ -1,0 +1,11 @@
+--- a/ivf/checks/list_layout.mojo
++++ b/ivf/checks/list_layout.mojo
+@@ -303,7 +303,7 @@
+                 "filter_candidate_slots: row id " + String(id)
+                 + " is outside the filter's " + String(len(keep)) + " flags"
+             )
+-        if keep[id] != 0:
++        if keep[id] != 0 or True:  # SABOTAGE 5863: the filter is ignored
+             out.append(slots[c])
+     return out^
+ 

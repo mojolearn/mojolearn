@@ -1,5 +1,5 @@
---- a/bindings/_mojolearn_x_cnn_host.mojo	2026-09-27 13:45:27
-+++ b/bindings/_mojolearn_x_cnn_host.mojo	2026-09-27 13:45:27
+--- a/bindings/_mojolearn_x_cnn_host.mojo
++++ b/bindings/_mojolearn_x_cnn_host.mojo
 @@ -3,7 +3,17 @@
  """CPU binding for `_mojolearn_x_cnn` (the CNN expansion lane). HOST ONLY;
  the GPU binding's export names and address contract, the work is
@@ -19,3 +19,15 @@
  from std.os import abort
  from std.python import Python, PythonObject
  from std.python._cpython import GILReleased
+@@ -64,8 +74,9 @@
+     production it does nothing. The end-to-end sabotage arm
+     (x_cnn/checks/sabotage/e2e_host_output_bit.patch) flips every word's low
+     bit here, and in `copy_f32` for the entries that still copy a result."""
+-    _ = p
+-    _ = n
++    # SABOTAGE (end to end): the address-out entries' words, low bit flipped.
++    for i in range(n):
++        p.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](p.unsafe_load(i)) ^ UInt32(1)))
+ 
+ 
+ def _ints(params: PythonObject) raises -> List[Int]:

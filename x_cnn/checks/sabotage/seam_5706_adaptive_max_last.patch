@@ -1,0 +1,11 @@
+--- a/x_cnn/ops.mojo
++++ b/x_cnn/ops.mojo
+@@ -929,7 +929,7 @@
+     for h in range(_astart(oh, OH, H), _aend(oh, OH, H)):
+         for w in range(_astart(ow, OW, W), _aend(ow, OW, W)):
+             var v = ftz(x.unsafe_load((nc * H + h) * W + w))
+-            if bi < 0 or v > best or v != v:
++            if bi < 0 or v >= best or v != v:
+                 best = v
+                 bi = h * W + w
+     dst.unsafe_store(i, best)

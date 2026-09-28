@@ -362,6 +362,7 @@ def spectral_embedding_dataset_host(
     drop_first: Bool,
     seed: UInt64,
     mut embedding: List[Float32],
+    tolerance: Float32 = Float32(1e-5),
 ) raises -> Int:
     """`ML::SpectralEmbedding::transform(handle, config, dataset,
     embedding)`: the kNN connectivity graph, the Laplacian, the Lanczos.
@@ -393,7 +394,7 @@ def spectral_embedding_dataset_host(
         + " drop_first=" + String(drop_first)
         + " seed=" + String(seed)
     )
-    return transform(ctx, config, dataset, n_samples, n_features, embedding, trace)
+    return transform(ctx, config, dataset, n_samples, n_features, embedding, trace, tolerance)
 
 
 def spectral_embedding_graph_host(
@@ -406,6 +407,7 @@ def spectral_embedding_graph_host(
     drop_first: Bool,
     seed: UInt64,
     mut embedding: List[Float32],
+    tolerance: Float32 = Float32(1e-5),
 ) raises -> Int:
     """`ML::SpectralEmbedding::transform(handle, config, rows, cols, vals,
     embedding)`: the affinity graph is GIVEN as COO triples, so no kNN runs.
@@ -442,4 +444,4 @@ def spectral_embedding_graph_host(
     var c = cols.copy()
     var v = vals.copy()
     var graph = coo_remove_diagonal(CooGraph(n_samples, r^, c^, v^))
-    return transform_connectivity(ctx, config, graph, embedding, trace)
+    return transform_connectivity(ctx, config, graph, embedding, trace, tolerance)

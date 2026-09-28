@@ -1,6 +1,8 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index cad6e4672..8842420d4 100644
 --- a/x_cluster/device_ops.mojo
 +++ b/x_cluster/device_ops.mojo
-@@ -54,13 +54,13 @@
+@@ -54,13 +54,13 @@ def _tid() -> Int:
  def _sqdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
@@ -16,7 +18,7 @@
  
  
  def _sqrt_kernel(x: FPtr, n: Int32):
-@@ -136,7 +136,7 @@
+@@ -136,7 +136,7 @@ def _meanshift_kernel(
  ):
      var t = _tid()
      if t < Int(ns):
@@ -25,7 +27,7 @@
  
  
  def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
-@@ -148,7 +148,7 @@
+@@ -148,7 +148,7 @@ def _ap_r_kernel(s: FPtr, a: FPtr, r: FPtr, n: Int32, damping: Float32):
  def _ap_a_kernel(r: FPtr, a: FPtr, n: Int32, damping: Float32):
      var t = _tid()
      if t < Int(n):
@@ -33,8 +35,8 @@
 +        ap_availability_col[True](r, a, Int(n), damping, t)
  
  
- def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
-@@ -160,7 +160,7 @@
+ def _ap_noise_kernel(s: FPtr, m: Int64, seed: UInt64):
+@@ -166,7 +166,7 @@ def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
  def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
      var t = _tid()
      if t < Int(n) * Int(kc):
@@ -43,7 +45,7 @@
  
  
  def _resp_kernel(q: FPtr, c: FPtr, n: Int32, kc: Int32, lpn: FPtr):
-@@ -314,7 +314,7 @@
+@@ -308,7 +308,7 @@ def _moments_pass_kernel(
  def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
      var t = _tid()
      if t < Int(na) * Int(nb):
