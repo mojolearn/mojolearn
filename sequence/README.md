@@ -31,7 +31,7 @@ lane still DISAGREEd on m4-a and m3ultra-b (steward 1790564279351); with all
 four, Metal == CPU on both (speed probes 1790565936440, 1790565937835). New
 kernels spell every such clamp `max` / `min`.
 
-## Seams (IDENTITY_PATHS.md rows 150-159 and 199; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 199, 5544 (host GEMM) in row 150)
+## Seams (IDENTITY_PATHS.md rows 150-159 and 240; 5517-5518 in row 159, 5536-5540 in row 154, 5541-5543 in row 240, 5544 (host GEMM) in row 150)
 
 Each seam's host oracle is in `checks/oracle.mojo`, written from the reference
 semantics, not from this directory; `checks/seams_check.mojo` requires the
