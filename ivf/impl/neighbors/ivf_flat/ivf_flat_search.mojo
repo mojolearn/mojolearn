@@ -447,17 +447,30 @@ struct IvfFlatDevice(Movable):
         ctx.synchronize()
         _ = h_off^
         _ = h_ind^
+        # lane ann-apple3: the host layout (a copy of the index's three
+        # lists, the n_rows x dim vectors among them) is read by the
+        # per-query path only, so it is made by `ensure_layout` when a
+        # search first takes that path. The one-launch scans never read it.
         self.layout = ListLayout(
-            n_lists,
+            n_lists, index.n_rows, index.dim, List[Int32](), List[UInt32](), List[Float32]()
+        )
+        self.list_sizes = List[Int32]()
+        for l in range(n_lists):
+            self.list_sizes.append(Int32(index.list_size(l)))
+
+    def ensure_layout(mut self, index: IvfFlatIndex):
+        """The host CSR layout the per-query path gathers from, copied from
+        the index on first use (the same three lists `__init__` copied)."""
+        if len(self.layout.offsets) == index.n_lists + 1:
+            return
+        self.layout = ListLayout(
+            index.n_lists,
             index.n_rows,
             index.dim,
             index.list_offsets.copy(),
             index.list_indices.copy(),
             index.list_data.copy(),
         )
-        self.list_sizes = List[Int32]()
-        for l in range(n_lists):
-            self.list_sizes.append(Int32(index.list_size(l)))
 
 
 def ivf_flat_search_traced(
@@ -699,6 +712,7 @@ def ivf_flat_search_prepared(
                 _ = dpbuf_idx^
                 return IvfSearchResult(fd^, fi^, counts^)
     # ---- steps 3-5: the candidates of each query -----------------------
+    dev.ensure_layout(index)
 
     # ONE ALLOCATION AT THE WORST CASE, REUSED. The worst case is
     # `n_probes == n_lists`, where every vector is a candidate; anything

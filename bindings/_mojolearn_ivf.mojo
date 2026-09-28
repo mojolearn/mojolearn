@@ -330,10 +330,21 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     )
     bst.host("read_admit")
     var labels = _labels_from_arrays(arrays.offsets, arrays.list_indices, arrays.n_lists, arrays.n_rows)
+    # lane ann-apple3: the admitted arrays move into the index (they were
+    # copied, the n_rows x dim list data among them)
+    var centers = List[Float32]()
+    var center_norms = List[Float32]()
+    var offsets = List[Int32]()
+    var list_indices = List[UInt32]()
+    var list_data = List[Float32]()
+    swap(centers, arrays.centers)
+    swap(center_norms, arrays.center_norms)
+    swap(offsets, arrays.offsets)
+    swap(list_indices, arrays.list_indices)
+    swap(list_data, arrays.list_data)
     var index = IvfFlatIndex(
         arrays.n_lists, arrays.dim, arrays.n_rows, arrays.metric,
-        arrays.centers.copy(), arrays.center_norms.copy(), arrays.offsets.copy(),
-        arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
+        centers^, center_norms^, offsets^, list_indices^, list_data^, labels^,
     )
     bst.host("index_copy")
     var ctx = process_ctx[_DEVCTX_SLOT]()
