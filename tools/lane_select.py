@@ -188,6 +188,11 @@ MEASUREMENT_TOOLING_PREFIXES = (
     # The consolidated check driver (2026-09-28): builds and compares lanes
     # through algos_lane_check's own pieces; no lane computes through it.
     os.path.join("tools", "consolidated_check") + os.sep,
+    # lane/py-consolidated's one check and lane/apple3-merged's light check
+    # driver (2026-09-28): the same kind. They build a tree, run lanes' two
+    # columns through algos_lane_check and compare; no lane computes through them.
+    os.path.join("tools", "py_consolidated") + os.sep,
+    os.path.join("tools", "merged_check") + os.sep,
 )
 
 #: Tools whose text is not evidence that a lane reaches a path.
