@@ -7,6 +7,7 @@ The coarse quantizer is the same Lloyd cells over whole rows."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
+from x_ann.stage_timer import AnnStages
 
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
@@ -120,7 +121,9 @@ def ivf_pq_build_device(
     var offsets = List[Int32]()
     var list_indices = List[Int32]()
     var labels = List[Int32]()
+    var st = AnnStages("ivf_pq_build")
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    st.host("coarse")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
@@ -132,7 +135,9 @@ def ivf_pq_build_device(
     )
     ctx.synchronize()
     var r = download_f32(ctx, dr, n * rot_dim)
+    st.host("residuals")
     var codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    st.host("codebooks")
     var dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
     ctx.enqueue_function[assign_kernel](
@@ -141,6 +146,7 @@ def ivf_pq_build_device(
     )
     ctx.synchronize()
     var codes = download_i32(ctx, dcodes, n * pq_dim)
+    st.host("encode")
     _ = dcodes^
     _ = dcb^
     _ = dr^
@@ -224,7 +230,9 @@ def ivf_sq_build_device(
 ) raises:
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var labels = List[Int32]()
+    var st = AnnStages("ivf_sq_build")
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    st.host("coarse")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
@@ -237,8 +245,10 @@ def ivf_sq_build_device(
         Int32(n * dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
         Int32(dim), dr.unsafe_ptr(), grid_dim=_grid(n * dim), block_dim=TPB,
     )
+    st.mark(ctx, "upload_residuals")
     ctx.enqueue_function[sq_range_kernel](Int32(dim), dr.unsafe_ptr(), Int32(n), dvmin.unsafe_ptr(),
                                           ddelta.unsafe_ptr(), grid_dim=_grid(dim), block_dim=TPB)
+    st.mark(ctx, "range")
     ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
                                            ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
                                            block_dim=TPB)
@@ -246,6 +256,7 @@ def ivf_sq_build_device(
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)
     codes = download_i32(ctx, dcodes, n * dim)
+    st.host("encode")
     _ = dcodes^
     _ = ddelta^
     _ = dvmin^
@@ -359,7 +370,9 @@ def ivf_rabitq_build_device(
     var words = (D + 31) // 32
     var scale = rq_scale(D)
     var labels = List[Int32]()
+    var st = AnnStages("ivf_rabitq_build")
     _coarse(x, n, dim, n_lists, kmeans_n_iters, seed, centers, offsets, list_indices, labels)
+    st.host("coarse")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
     var dc = upload_f32(ctx, centers)
@@ -377,6 +390,7 @@ def ivf_rabitq_build_device(
     codes = download_i32(ctx, dcodes, n * words)
     norms = download_f32(ctx, dnorm, n)
     ips = download_f32(ctx, dip, n)
+    st.host("encode")
     _ = dip^
     _ = dnorm^
     _ = dcodes^

@@ -6,6 +6,7 @@ symmetrization is the shared host function (`tsne_symmetrize`)."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
+from x_ann.stage_timer import AnnStages
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from checks.numerics import identical_log
@@ -99,8 +100,10 @@ def tsne_fit_device(
 ) raises:
     tsne_validate(n, d, perplexity, max_iter, exploration)
     var nn = tsne_nn(n, perplexity)
+    var st = AnnStages("tsne_fit")
     var ctx = x_ann_ctx()
     var dx = upload_f32(ctx, x)
+    st.mark(ctx, "upload")
     var dnd = ctx.enqueue_create_buffer[DType.float32](n * nn)
     var dni = ctx.enqueue_create_buffer[DType.int32](n * nn)
     var dp = ctx.enqueue_create_buffer[DType.float32](n * nn)
@@ -109,12 +112,14 @@ def tsne_fit_device(
     ctx.enqueue_function[perplexity_kernel](Int32(n), dnd.unsafe_ptr(), Int32(nn), identical_log(perplexity),
                                             dp.unsafe_ptr(), grid_dim=_grid(n), block_dim=TPB)
     ctx.synchronize()
+    st.host("knn_perplexity")
     var nn_i = download_i32(ctx, dni, n * nn)
     var p_cond = download_f32(ctx, dp, n * nn)
     var indptr = List[Int32]()
     var indices = List[Int32]()
     var values = List[Float32]()
     tsne_symmetrize(n, nn, nn_i, p_cond, indptr, indices, values)
+    st.host("symmetrize")
 
     var dptr = upload_i32(ctx, indptr)
     var dind = upload_i32(ctx, indices)
@@ -127,6 +132,7 @@ def tsne_fit_device(
     var drep = ctx.enqueue_create_buffer[DType.float32](2 * n)
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
+    st.mark(ctx, "upload_graph")
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
@@ -134,6 +140,7 @@ def tsne_fit_device(
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
         else:
             _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
+    st.mark(ctx, "iterations")
     if max_iter % 2 == 0:
         _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl)
     else:
@@ -148,6 +155,7 @@ def tsne_fit_device(
     for i in range(n):
         total = total + kl[i]
     kl_out = total
+    st.host("kl_download")
     _ = dkl^
     _ = dz^
     _ = drep^
