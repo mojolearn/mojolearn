@@ -6,8 +6,9 @@ shipped-before kernels (MOJOLEARN_XD_JACOBI=1) against x_decomp/jacobi2.mojo
 one call for each arm and the sha256 of every output byte; the IDENTICAL
 contract is that the two hashes are EQUAL. Then the manifold fits whose
 time is those solvers (Isomap, ClassicalMDS, LocallyLinearEmbedding) at
-N3 rows, timed and hashed per arm. env: EIGH (comma sizes), SVD (comma
-m:n), N3, FITS (0 skips the fits), ARMS (default "1,2")."""
+N3 rows, ALS and MinCovDet (the LU and ALS switches), timed and hashed
+per arm. env: EIGH (comma sizes), SVD (comma m:n), N3, N2 (MinCovDet
+rows), FITS (0 skips the fits), ARMS (default "1,2")."""
 import os, sys, time, hashlib, warnings
 sys.path.insert(0, os.environ.get("ML_PY", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python")))
 warnings.filterwarnings("ignore")
@@ -38,10 +39,16 @@ def h(*ms):
     return d.hexdigest()[:16]
 
 
+OLD = {"MOJOLEARN_XD_JACOBI": "1", "MOJOLEARN_XD_LU_SERIAL": "0", "MOJOLEARN_XD_ALS_TEAM": "0"}
+NEW = {"MOJOLEARN_XD_JACOBI": "2", "MOJOLEARN_XD_LU_SERIAL": "16", "MOJOLEARN_XD_ALS_TEAM": "1"}
+
+
 def arm(name, fn):
+    """arm 1 = every switch of this lane at its shipped-before value, arm 2 =
+    every switch at the new default."""
     res = {}
     for a in ARMS:
-        os.environ["MOJOLEARN_XD_JACOBI"] = a
+        os.environ.update(OLD if a == "1" else NEW)
         t = time.perf_counter()
         try:
             out = fn()
@@ -69,6 +76,11 @@ for mn in [x for x in os.environ.get("SVD", "200000:28,5000:64,1000:256,800:800,
     arm(f"svd {m}x{n}", lambda: k.svd(A))
 
 if os.environ.get("FITS", "1") != "0":
+    rr = np.random.default_rng(0)
+    R = (rr.random((20000, 2000)) < 0.01).astype(np.float32)
+    arm("ALS(32f,5it) 20000x2000", lambda: (ml.AlternatingLeastSquares(factors=32, iterations=5, random_state=0).fit(R).user_factors,))
+    Xc = (rr.standard_normal((int(os.environ.get("N2", "20000")), 8)) @ rr.standard_normal((8, 8))).astype(np.float32)
+    arm(f"MinCovDet {Xc.shape[0]}x8", lambda: (ml.MinCovDet(random_state=0).fit(Xc).covariance_,))
     n3 = int(os.environ.get("N3", "1500"))
     rg = np.random.default_rng(0)
     X = (rg.standard_normal((n3, 28)) @ rg.standard_normal((28, 28))).astype(np.float32)

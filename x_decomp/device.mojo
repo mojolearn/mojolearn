@@ -38,6 +38,9 @@ from x_decomp.cells import (
     ew_cell,
     gemm_cell,
     als_row,
+    als_row_solve,
+    add,
+    mul,
     als_cg_row,
     geqrf_dot,
     geqrf_head,
@@ -77,6 +80,16 @@ from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending
 from decomposition.impl.linalg.detail.pca import SIGNFLIP_TPB, sign_flip_kernel
+
+
+def lu_serial_max() -> Int:
+    """Largest n whose LU runs as ONE `lu_kernel` launch (MOJOLEARN_XD_LU_SERIAL,
+    default 16; timing only, the cells and their order are the same)."""
+    var v = String(getenv("MOJOLEARN_XD_LU_SERIAL", "16"))
+    try:
+        return Int(v)
+    except:
+        return 16
 
 
 def jacobi2_on() -> Bool:
@@ -341,6 +354,63 @@ def als_kernel(
     var u = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if u < Int(n):
         flags.unsafe_store(u, als_row(c, y, yty, x, s, u, Int(m), Int(f), reg))
+
+
+comptime ALS_TEAM_TPB = 256
+#: Largest f*f + f the team kernel keeps in threadgroup memory (f <= 63).
+comptime ALS_TEAM_CELLS = 4096
+
+
+def als_team_kernel(
+    c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, s: F32Ptr, flags: F32Ptr, n: Int32, m: Int32, f: Int32, reg: Float32
+):
+    """`als_row` for user `block_idx.x`, by a block (lane/decomp-apple2):
+    thread t owns cells t, t + 256, ... of the user's f*f + f accumulators
+    (A row-major, then b) and runs, for each of them, exactly `als_row`'s
+    sequence (the YtY value, + reg on the diagonal, then one fused
+    multiply-add per item with c_ui != 0, items ascending), in threadgroup
+    memory. Thread 0 then writes them to the row's scratch and runs
+    `als_row_solve`, `als_row`'s own tail. No device word crosses threads."""
+    var u = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var ff = Int(f)
+    var mm = Int(m)
+    var cells = ff * ff + ff
+    var sh = stack_allocation[ALS_TEAM_CELLS, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var cc = tid
+    while cc < cells:
+        if cc < ff * ff:
+            var v = yty.unsafe_load(cc)
+            if cc // ff == cc % ff:
+                v = add(v, reg)
+            sh[cc] = v
+        else:
+            sh[cc] = Float32(0)
+        cc += ALS_TEAM_TPB
+    for i in range(mm):
+        var conf = ftz(c.unsafe_load(u * mm + i))
+        if conf == Float32(0):
+            continue
+        var pos = conf > Float32(0)
+        var ca = conf if pos else -conf
+        var cm1 = sub(ca, Float32(1))
+        cc = tid
+        while cc < cells:
+            if cc < ff * ff:
+                var j = cc // ff
+                var l = cc - j * ff
+                var t = mul(cm1, y.unsafe_load(i * ff + j))
+                sh[cc] = ftz(identical_mul_add(t, ftz(y.unsafe_load(i * ff + l)), ftz(sh[cc])))
+            elif pos:
+                var j = cc - ff * ff
+                sh[cc] = ftz(identical_mul_add(conf, ftz(y.unsafe_load(i * ff + j)), ftz(sh[cc])))
+            cc += ALS_TEAM_TPB
+    barrier()
+    if tid == 0:
+        var ab = u * cells
+        for q in range(cells):
+            s.unsafe_store(ab + q, sh[q])
+        flags.unsafe_store(u, als_row_solve(x, s, u, ff))
 
 
 def als_cg_kernel(
@@ -875,8 +945,14 @@ struct DevExec(Exec):
         var ds = ctx.enqueue_create_buffer[DType.float32](2)
         # lu_serial's cells, step by step: the pivot search one thread, the
         # swap, the multipliers and the trailing update one thread per cell
-        ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
-        for k in range(n):
+        if n <= lu_serial_max():
+            # A small matrix: lu_serial itself on one device thread, the
+            # same cells in the same order as the step-by-step launches
+            # below (which exist for large n), in ONE launch instead of 5n.
+            ctx.enqueue_function[lu_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        else:
+            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        for k in range(n if n > lu_serial_max() else 0):
             ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
             ctx.enqueue_function[lu_swap_kernel](
                 da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
@@ -1253,10 +1329,16 @@ struct DevExec(Exec):
         var dx = ctx.enqueue_create_buffer[DType.float32](n * f if n * f > 0 else 1)
         var ds = ctx.enqueue_create_buffer[DType.float32](n * (f * f + f) if n > 0 else 1)
         var df = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
-        ctx.enqueue_function[als_kernel](
-            dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
-            Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
-        )
+        if n > 0 and f * f + f <= ALS_TEAM_CELLS and String(getenv("MOJOLEARN_XD_ALS_TEAM", "1")) != "0":
+            ctx.enqueue_function[als_team_kernel](
+                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+                Int32(n), Int32(m), Int32(f), reg, grid_dim=n, block_dim=ALS_TEAM_TPB,
+            )
+        else:
+            ctx.enqueue_function[als_kernel](
+                dc.unsafe_ptr(), dy.unsafe_ptr(), dg.unsafe_ptr(), dx.unsafe_ptr(), ds.unsafe_ptr(), df.unsafe_ptr(),
+                Int32(n), Int32(m), Int32(f), reg, grid_dim=_blocks(n), block_dim=TPB,
+            )
         _down(ctx, dx, x, n * f)
         _down(ctx, df, flags, n)
         ctx.synchronize()
