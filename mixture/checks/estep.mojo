@@ -107,6 +107,7 @@ from mixture.checks.gmm_sabotage import (
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_exp,
@@ -783,6 +784,69 @@ def gmm_estep_scratch_floats(n: Int, d: Int) -> Int:
     return n * d + d
 
 
+#: lane cluster-apple2 TRIAL (opt-in): the E-step's per-component products
+#: in ONE launch each. `X . [P_1 .. P_K]` (n x Kd, k = d) and
+#: `[mu_1 .. mu_K]^T . [P_1 .. P_K]` (K x Kd, k = d) instead of K pairs of
+#: `X . P_k` and `mu_k . P_k`: a cell of the identical GEMM is a function of
+#: its A row, its B column and k alone (every plan takes (L, P) from
+#: `contract_partition(k)`), so the cells used are the per-component
+#: products' words; then one Mahalanobis launch over (sample, component)
+#: with `mahal_kernel`'s fold.
+comptime GMM_ESTEP_STACK_TRIAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GMM_ESTEP_STACK_TRIAL"]()
+)
+
+
+def stack_prec_kernel(
+    prec: MutPointer[Float32, MutAnyOrigin],
+    pstack: MutPointer[Float32, MutAnyOrigin],
+    d_in: Int32,
+    ncomp_in: Int32,
+):
+    """`pstack[t][k*d + j] = prec[k][t][j]` (a copy)."""
+    var d = Int(d_in)
+    var kd = d * Int(ncomp_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= d * kd:
+        return
+    var t = idx // kd
+    var r = idx % kd
+    var kc = r // d
+    var j = r % d
+    pstack.unsafe_store(idx, prec.unsafe_load(kc * d * d + t * d + j))
+
+
+def mahal_stacked_kernel(
+    ystack: MutPointer[Float32, MutAnyOrigin],
+    mstack: MutPointer[Float32, MutAnyOrigin],
+    mahal: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+):
+    """`mahal_kernel` for every component: thread (i, k) folds
+    `ystack[i][k*d + j] - mstack[k][k*d + j]` over j ascending."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var kd = d * ncomp
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= n * ncomp:
+        return
+    var i = t // ncomp
+    var kc = t % ncomp
+    var acc = Float32(0.0)
+    for j in range(d):
+        var tv = ftz(
+            ftz(ystack.unsafe_load(i * kd + kc * d + j))
+            - ftz(mstack.unsafe_load(kc * kd + kc * d + j))
+        )
+        acc = ftz(identical_mul_add(tv, tv, acc))
+    mahal.unsafe_store(i * ncomp + kc, acc)
+
+
 def gmm_e_step(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -922,7 +986,35 @@ def gmm_e_step(
                 Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
                 grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
             )
-    for kc in range(0 if fused else ncomp):
+    var stacked = False
+    comptime if GMM_ESTEP_STACK_TRIAL:
+        stacked = not fused and sabotage == GMM_SAB_NONE
+    if stacked:
+        var kd = ncomp * d
+        var pstack = ctx.enqueue_create_buffer[DType.float32](d * kd)
+        var ystack = ctx.enqueue_create_buffer[DType.float32](n * kd)
+        var mstack = ctx.enqueue_create_buffer[DType.float32](ncomp * kd)
+        var w1 = identical_gemm_workspace_max_floats(n, kd, d)
+        var w2 = identical_gemm_workspace_max_floats(ncomp, kd, d)
+        var sws = ctx.enqueue_create_buffer[DType.float32](max(w1, w2))
+        ctx.enqueue_function[stack_prec_kernel](
+            prec.unsafe_ptr(), pstack.unsafe_ptr(), Int32(d), Int32(ncomp),
+            grid_dim=((d * kd + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+        )
+        identical_gemm_into(ctx, ystack, x, pstack, sws, n, kd, d, OP_NN)
+        identical_gemm_into(ctx, mstack, means, pstack, sws, ncomp, kd, d, OP_NN)
+        ctx.enqueue_function[mahal_stacked_kernel](
+            ystack.unsafe_ptr(), mstack.unsafe_ptr(), mahal.unsafe_ptr(),
+            Int32(n), Int32(d), Int32(ncomp),
+            grid_dim=((n * ncomp + row_tpb - 1) // row_tpb, 1, 1),
+            block_dim=(row_tpb, 1, 1),
+        )
+        ctx.synchronize()
+        _ = pstack^
+        _ = ystack^
+        _ = mstack^
+        _ = sws^
+    for kc in range(0 if (fused or stacked) else ncomp):
         var pk = prec.create_sub_buffer[DType.float32](kc * d * d, d * d)
         var muk = means.create_sub_buffer[DType.float32](kc * d, d)
 
