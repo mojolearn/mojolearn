@@ -93,11 +93,13 @@ comptime CONN_TPB = 256
 def fill_indices2(
     indices: MutPointer[Int32, MutAnyOrigin], m_in: Int32, nnz_in: Int32
 ):
-    """`connectivities.cuh:110-117`. `indices[tid] = tid % m`."""
+    """`connectivities.cuh:110-117`. `indices[tid] = tid % m`, in 32-bit
+    unsigned arithmetic (`nnz <= PAIRWISE_MAX_ROWS^2 < 2^31`; a 64-bit
+    remainder per cell is a long emulated sequence on every GPU)."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if tid >= Int(nnz_in):
         return
-    indices.unsafe_store(tid, Int32(tid % Int(m_in)))
+    indices.unsafe_store(tid, Int32(UInt32(tid) % UInt32(m_in)))
 
 
 def indptr_sequence_kernel(
@@ -114,13 +116,18 @@ def indptr_sequence_kernel(
 def self_loop_max_kernel(
     data: MutPointer[Float32, MutAnyOrigin], m_in: Int32, nnz_in: Int32
 ):
-    """`connectivities.cuh:162-175`: self-loops get max distance.
-    `idx % m == idx / m` is the diagonal."""
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= Int(nnz_in):
-        return
+    """`connectivities.cuh:162-175`: self-loops get max distance. Theirs
+    runs one thread per cell and tests `idx % m == idx / m`; the cells
+    written are exactly the diagonal, so this runs one thread per ROW `i`
+    and writes cell `i * m + i` (lane/cluster-apple: the per-cell 64-bit
+    division over m * m threads was a measurable stage on Apple).
+    `nnz_in` is kept for the signature and bounds the store."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var m = Int(m_in)
-    if idx % m == idx // m:
+    if i >= m:
+        return
+    var idx = i * m + i
+    if idx < Int(nnz_in):
         data.unsafe_store(idx, FLOAT32_MAX)
 
 
@@ -245,12 +252,12 @@ def pairwise_distances(
                 block_dim=(CONN_TPB, 1, 1),
             )
 
-    # `:162-175` self-loops get max distance
+    # `:162-175` self-loops get max distance (one thread per row)
     ctx.enqueue_function[self_loop_max_kernel](
         data.unsafe_ptr(),
         Int32(m),
         Int32(nnz),
-        grid_dim=((nnz + CONN_TPB - 1) // CONN_TPB, 1, 1),
+        grid_dim=((m + CONN_TPB - 1) // CONN_TPB, 1, 1),
         block_dim=(CONN_TPB, 1, 1),
     )
     ctx.synchronize()
