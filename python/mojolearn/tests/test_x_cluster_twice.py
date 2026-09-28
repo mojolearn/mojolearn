@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Every x_cluster entry point (x_cluster/entries.mojo, `_E_*` in
-python/mojolearn/_expansion_cluster.py) called at least TWICE in one process,
+python/mojolearn/_expansion_cluster.py, `_E_AGGLO` in _hierarchy_impl.py,
+`_E_SPECTRAL_ASSIGN` in _spectral_impl.py) called at least TWICE in one process,
 on the GPU binding and on the CPU host binding, with the second call's output
 equal to the first's byte for byte.
 
@@ -45,6 +46,11 @@ _CHILD = textwrap.dedent('''
         out += [a.cluster_centers_indices_, a.labels_]
         g = ml.BayesianGaussianMixture(n_components=3, max_iter=20, random_state=1).fit(X)        # _E_BGMM
         out += [g.means_, g.score_samples(Q)]                                                     # _E_BGMM_SCORE
+        h = ml.AgglomerativeClustering(n_clusters=3, linkage="ward", compute_distances=True).fit(X)  # _E_AGGLO
+        out += [h.children_, h.distances_, h.labels_]
+        for how in ("discretize", "cluster_qr"):                                                   # ENTRY_SPECTRAL_ASSIGN
+            c = ml.SpectralClustering(n_clusters=3, assign_labels=how, random_state=1).fit(X)
+            out += [c.labels_]
         return [np.asarray(v).tobytes() for v in out]
 
     first = run()

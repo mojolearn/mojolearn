@@ -45,6 +45,25 @@ def load(args, n, m):
     return np.ascontiguousarray(x[:n]), np.ascontiguousarray(x[n:n + m])
 
 
+def gpu_fit(args, algo):
+    """Fit `algo` in a child with the GPU route, return the unpickled
+    estimator and the child's wall time (recorded as fit_s, GPU)."""
+    import pickle
+    import subprocess
+    import sys
+    import tempfile
+    env = {k: v for k, v in os.environ.items() if k not in ("MOJOLEARN_VENDOR", "MOJOLEARN_HOST_DIR")}
+    stem = tempfile.mktemp(prefix="ann_fit_")
+    argv = [a for a in sys.argv[1:] if a != "--fit-on-gpu"]
+    t = time.perf_counter()
+    subprocess.run([sys.executable, "-u", __file__, *argv, "--algos", algo, "--fit-only", stem, "--out", ""],
+                   env=env, check=True)
+    dt = time.perf_counter() - t
+    with open(f"{stem}.{algo}.pkl", "rb") as f:
+        est = pickle.load(f)
+    return est, dt
+
+
 def timed(fn):
     t = time.perf_counter()
     r = fn()
@@ -66,6 +85,10 @@ def main():
     ap.add_argument("--kmeans-iters", type=int, default=10)
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--out", default="")
+    ap.add_argument("--fit-on-gpu", action="store_true",
+                    help="IVF family: fit on the GPU in a child process (MOJOLEARN_VENDOR unset), pickle the "
+                         "fitted estimator, then time only the CPU search (the fitted arrays are the same bits)")
+    ap.add_argument("--fit-only", default="", help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     import mojolearn as ml
@@ -97,7 +120,16 @@ def main():
             if a == "refine":
                 kw["n_neighbors"] = 4 * k
             est = cls(**kw)
-            _, tf = timed(lambda: est.fit(x))
+            if args.fit_only:
+                est.fit(x)
+                import pickle
+                with open(f"{args.fit_only}.{a}.pkl", "wb") as f:
+                    pickle.dump(est, f)
+                continue
+            if args.fit_on_gpu:
+                est, tf = gpu_fit(args, a)
+            else:
+                _, tf = timed(lambda: est.fit(x))
             (d, i), ts = timed(lambda: est.search(q))
             if a == "refine":
                 (rd, ri), tr = timed(lambda: ml.refine(x, q, i, k))

@@ -213,9 +213,21 @@ def _heap_pop(mut a: List[TFeatureBin]):
 
 
 def best_split(
-    var values: List[Float32], max_borders_count: Int
+    var values: List[Float32], max_borders_count: Int,
+    flush_subnormals: Bool = False,
 ) raises -> List[Float32]:
     """Their `BestSplit` for `GreedyLogSum` (`binarization.h:23`).
+
+    `flush_subnormals` (DEVIATION 5900, lane/trees-cpu): the search as a
+    denormals-are-zero, flush-to-zero thread computes it, BY BITS (`ftz`,
+    IDENTITY_PATHS row 10), so its answer does not depend on the calling
+    thread's MXCSR/FPCR: every value flushed as it enters, each half of the
+    midpoint and their sum flushed, no fused multiply-add. This is the
+    statement-for-statement arithmetic of the host oracle's
+    `_best_split_phase_b` (gbdt/host/gbdt_oracle.mojo). `train`'s phase B
+    asks for it, because Mojo's `sync_parallelize` workers run FTZ+DAZ while
+    a calling thread runs IEEE, and the recorded GBDT borders are the
+    workers'.
 
     `values` is consumed and sorted, as theirs is. NaNs are dropped, which is
     their `filterNans`.
@@ -245,7 +257,10 @@ def best_split(
     var clean = List[Float32]()
     for i in range(len(values)):
         if values[i] == values[i]:
-            clean.append(values[i])
+            if flush_subnormals:
+                clean.append(ftz(values[i]))
+            else:
+                clean.append(values[i])
     if len(clean) == 0:
         return List[Float32]()
 
@@ -291,9 +306,14 @@ def best_split(
         # build fused `0.5 * below` into the add, which moves a border only
         # where a half is inexact (subnormal columns); explicit so the
         # border's bits do not depend on the contraction mode (lane/explicit-fma-contract-proof)
-        borders.append(
-            identical_mul_add(Float32(0.5), clean[s - 1], Float32(0.5) * clean[s])
-        )
+        if flush_subnormals:
+            var half_below = ftz(Float32(0.5) * clean[s - 1])
+            var half_above = ftz(Float32(0.5) * clean[s])
+            borders.append(ftz(half_below + half_above))
+        else:
+            borders.append(
+                identical_mul_add(Float32(0.5), clean[s - 1], Float32(0.5) * clean[s])
+            )
     _sort_ascending(borders)
 
     # their `THashSet<float>` drops duplicates; two adjacent bins can round to
