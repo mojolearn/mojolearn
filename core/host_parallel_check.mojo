@@ -19,7 +19,11 @@ from std.memory import bitcast
 
 from max.algorithm import sync_parallelize
 
-from core.host_parallel import host_fp_env, host_parallelize
+from core.host_parallel import (
+    host_fp_env,
+    host_parallelize,
+    host_parallelize_pool_env,
+)
 
 
 def _bits(x: Float64) -> UInt64:
@@ -50,6 +54,19 @@ def main() raises:
               + "computes in the caller's mode on this platform")
         return
     var bad = 0
+    # The GBDT entry keeps the WORKER's environment: its bits are the plain
+    # split's, task for task (the recorded GBDT columns; see the module).
+    var pool = List[Float64](length=N, fill=Float64(-1.0))
+    var pp = pool.unsafe_ptr()
+
+    def pool_task(i: Int) {imm pp, imm a, imm b}:
+        pp.store(i, a / b)
+
+    host_parallelize_pool_env(pool_task, N)
+    for i in range(N):
+        if _bits(pool[i]) != _bits(raw[i]):
+            print("  pool entry task", i, "result", pool[i], "!= plain worker", raw[i])
+            bad += 1
     for tasks in [1, 2, 3, 7, 16]:
         var got = List[Float64](length=N, fill=Float64(-1.0))
         var envs = List[UInt64](length=N, fill=UInt64(0))
@@ -73,4 +90,5 @@ def main() raises:
         abort("host_parallel_check: FAIL (DEVIATION 5900): " + String(bad)
               + " task(s) did not compute in the caller's environment")
     print("host_parallel_check: PASS (caller env " + hex(env)
-          + "; plain workers separate, host_parallelize matches the oracle at 1, 2, 3, 7, 16 tasks)")
+          + "; plain workers separate, host_parallelize matches the oracle at 1, 2, 3, 7, 16 tasks,"
+          + " host_parallelize_pool_env matches the plain workers)")

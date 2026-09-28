@@ -94,7 +94,6 @@ from bindings.hotpath_helpers import (
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased

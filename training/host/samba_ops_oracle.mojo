@@ -67,7 +67,6 @@ from std.math import isfinite
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from checks.numerics import (

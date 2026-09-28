@@ -117,7 +117,6 @@ from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from checks.fixed_point import choose_scale

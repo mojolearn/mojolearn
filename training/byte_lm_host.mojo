@@ -42,7 +42,7 @@ fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
@@ -342,7 +342,7 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
     if tasks == 1:
         _row_task(0)
     else:
-        sync_parallelize(_row_task, tasks)
+        host_parallelize(_row_task, tasks)
     _ = held^
     _ = ropes^
     for c in range(tasks):
@@ -423,7 +423,7 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     if tasks == 1:
         _row_task(0)
     else:
-        sync_parallelize(_row_task, tasks)
+        host_parallelize(_row_task, tasks)
     _ = held^
     _ = ropes^
     for c in range(tasks):

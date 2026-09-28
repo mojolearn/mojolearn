@@ -14,7 +14,7 @@ the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
-from max.algorithm import sync_parallelize
+from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone
@@ -153,7 +153,7 @@ def _rbc_rows(
             s.ctx.synchronize()
         except:
             fp[rank] = 1
-    sync_parallelize(task, count)
+    host_parallelize(task, count)
     for rank in range(count):
         if failures[rank] != 0:
             raise Error("DBSCAN neighborhood shard failed: " + String(rank))

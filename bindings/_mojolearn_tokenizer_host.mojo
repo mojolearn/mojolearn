@@ -78,7 +78,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from bindings.hostptr import i32_ptr

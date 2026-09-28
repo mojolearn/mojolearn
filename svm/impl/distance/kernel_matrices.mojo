@@ -52,7 +52,6 @@ from core.gemm import gemm_nt
 from core.multi_gpu import peer_clone
 from core.step_phase import STEP_PHASE_TIMERS
 from std.os import getenv
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from gemm.checks.gemm_identical import (
     identical_gemm_into,

@@ -145,7 +145,6 @@ from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from checks.kernel_matrix import (

@@ -45,7 +45,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count

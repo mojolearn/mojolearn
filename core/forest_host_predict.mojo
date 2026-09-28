@@ -34,7 +34,6 @@ carrying their own copies of the loops, and the rows fan out to host threads.
 The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement.
 """
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from std.os import getenv
 from std.sys.compile import is_defined

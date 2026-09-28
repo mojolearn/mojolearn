@@ -25,7 +25,6 @@ pointers only. Callers keep every owner alive past the call; the one owner
 created here (`flags`) is transferred after the join.
 """
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from std.memory import bitcast, memcpy
 

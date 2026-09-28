@@ -59,7 +59,6 @@ FAIL on association alone; a fixture whose lane sums add exactly in both
 orders reads IDENTICAL under it, and that is a fact about the fixture
 (tools/forest_groves_identity.py reports it per cell).
 """
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from std.memory import bitcast
 from std.sys.compile import is_defined

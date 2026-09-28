@@ -1,6 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""THE ONE HOST THREAD SPLIT: `sync_parallelize` with the caller's
-floating-point environment (lane cpu, 2026-09-27, DEVIATION 5900).
+"""THE ONE HOST THREAD SPLIT: `sync_parallelize` with a PINNED floating-point
+environment (lane cpu, 2026-09-27, DEVIATION 5900).
+
+EVERY host thread split in the tree goes through this module.
+`tools/check_host_parallel_sites.py` (run by `pixi run check-host-parallel`)
+refuses any `.mojo` file outside it that calls `sync_parallelize` directly.
+This module also absorbs lane/algos-linear's `core/host_fp_env.mojo`
+(`host_ieee_fp_enter` / `host_ieee_fp_leave` around each task body): that
+file never reached main, `host_parallelize` below does the same job at the
+split rather than inside each body, and no second environment module is
+ever added.
 
 MEASURED, NOT ASSUMED. On an x86 RunPod box (AMD EPYC 7352, the pinned
 toolchain) the calling thread's MXCSR reads 0x1fa0 (the IEEE default) and
@@ -14,16 +23,38 @@ bits depended on the THREAD COUNT and on which rows a task owned:
 default thread count and IDENTICAL at MOJOLEARN_CPU_THREADS=1, and the
 GPU binding's serial host link agreed with the one-thread run.
 
-THE MOVE IS PIN: every task runs in the calling thread's environment.
-`host_parallelize` reads MXCSR (x86) or FPCR (Arm) on the calling thread,
-and each task installs it, runs the body, and restores the worker's own
-value, so the runtime's pool is left as it was found. Float32 arithmetic
-spelled through `ftz` (`checks/numerics.mojo`, an integer test) reads the
-same under either mode; what this pins is everything that is not: float64
-host arithmetic (the probability links, `portable_exp64`/`portable_log64`)
-and any float32 operation whose operand or result can be subnormal before
-its flush. A target with neither register (none today) runs the tasks as
-`sync_parallelize` does.
+THE MOVE IS PIN. There are exactly two entries:
+
+- `host_parallelize(func, n)`: every task runs in the CALLING thread's
+  environment. It reads MXCSR (x86) or FPCR (Arm) on the caller; each task
+  installs it, runs the body and restores the worker's own value, so the
+  runtime's pool is left as it was found. This is the entry for every host
+  loop. The caller's environment is the one a one-task (serial) run uses,
+  so a split's bits no longer depend on the task count.
+- `host_parallelize_pool_env(func, n)`: the tasks keep the runtime WORKER's
+  environment (FTZ+DAZ on x86). Only the GBDT fit's host regions use it
+  (`gbdt/train.mojo`, `gbdt/resident_model.mojo`, `gbdt/host/gbdt_oracle.mojo`):
+  every recorded GBDT column (CUDA, AMD, Apple and CPU) was computed with
+  their border search and staging on pool workers, and pinning the caller's
+  environment there moved 74 `denormal`-fixture cells of the gbdt,
+  cross-val and saved-model lanes on the CUDA column (measured at 762f811cc).
+  Moving GBDT to the caller's environment is a column re-record and is the
+  trees lane's call (docs/lanes/progress/cpu.md, "the GBDT environment
+  question"). Its bits do not depend on the task count: a pool task runs
+  with FTZ+DAZ even at n = 1. OPEN, named: gbdt_oracle's serial small-fit
+  arm (`n_rows * n_features < 2^18`) runs on the calling thread.
+
+Float32 arithmetic spelled through `ftz` (`checks/numerics.mojo`, an integer
+test) reads the same under either mode; what the pin fixes is everything
+that is not: float64 host arithmetic (the probability links,
+`portable_exp64`/`portable_log64`) and any float32 operation whose operand
+or result can be subnormal before its flush. A target with neither register
+(none today) runs the tasks as `sync_parallelize` does.
+
+CELLS THAT MOVED (DEVIATION 5900; each was thread-count dependent before,
+none moved at MOJOLEARN_CPU_THREADS=1): `logistic-unpenalized-no-intercept`
+on `dupes` (infer, batch), CPU column only; it now equals the CUDA column.
+The full per-lane record is in docs/lanes/progress/cpu.md.
 
 `host_fp_env` / `host_fp_env_set` are exported for a caller that owns its
 own threads.
@@ -52,7 +83,9 @@ def host_fp_env() -> UInt64:
 
 @always_inline
 def host_fp_env_set(v: UInt64):
-    """Install a control word `host_fp_env` read (no-op elsewhere)."""
+    """Install a control word `host_fp_env` read (no-op elsewhere). The
+    write is an intrinsic with side effects on memory, so the task's loads
+    and the arithmetic that reads them stay after it."""
     comptime if CompilationTarget.is_x86():
         var p = stack_allocation[1, UInt32]()
         p.store(0, UInt32(v))
@@ -74,3 +107,10 @@ def host_parallelize[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
         host_fp_env_set(saved)
 
     sync_parallelize(task, n)
+
+
+def host_parallelize_pool_env[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
+    """`sync_parallelize(func, n)` with the runtime WORKER's environment
+    (FTZ+DAZ on x86), for the GBDT fit's host regions only; see the module
+    note. Every other host loop uses `host_parallelize`."""
+    sync_parallelize(func, n)

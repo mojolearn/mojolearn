@@ -81,7 +81,6 @@ the reference divides zero by zero.
 from std.math import fma, sqrt
 from std.memory import bitcast
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from checks.numerics import (

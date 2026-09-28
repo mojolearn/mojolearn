@@ -36,7 +36,6 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from bindings.hostptr import f32_ptr, f64_ptr

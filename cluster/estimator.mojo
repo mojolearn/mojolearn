@@ -111,7 +111,6 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 """
 
 from std.math import fma
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx

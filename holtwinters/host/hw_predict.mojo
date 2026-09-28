@@ -28,7 +28,6 @@ prediction is NaN before `d + s*D`.
 
 from std.memory import bitcast
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from checks.numerics import ftz, identical_mul_add

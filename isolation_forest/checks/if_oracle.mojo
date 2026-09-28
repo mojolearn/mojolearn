@@ -31,7 +31,6 @@ drifts from its own double is caught before a device is asked anything.
 
 from std.math import log, exp2
 from std.memory import bitcast
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from isolation_forest.impl.rng.xorwow import (

@@ -45,7 +45,6 @@ from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from core.host_predict_threads import (

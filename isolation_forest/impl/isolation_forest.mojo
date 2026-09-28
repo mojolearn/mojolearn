@@ -98,7 +98,6 @@ from checks.numerics import (
 )
 from ensemble.host_layout import colmajor_ftz_from_rowmajor_f32
 from std.os import getenv
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from metrics.checks.device_io import upload_i32
 

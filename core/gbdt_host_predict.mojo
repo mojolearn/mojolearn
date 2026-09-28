@@ -79,7 +79,6 @@ What moved: a model that is malformed AND fed a NaN on an `AsIs` column is
 refused for the model before the NaN, where the old loops refused the NaN
 first; both are refusals.
 """
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from std.sys.compile import is_defined
 

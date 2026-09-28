@@ -63,7 +63,6 @@ from std.math import exp, fma, inf, isnan, tanh
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 
 from gemm.host.identical_gemm import (

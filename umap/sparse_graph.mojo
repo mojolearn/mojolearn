@@ -15,7 +15,6 @@ from core.host_predict_threads import (
     host_predict_chunk,
     host_predict_task_count,
 )
-from max.algorithm import sync_parallelize
 from core.host_parallel import host_parallelize
 from umap.graph import _finite, _sigma_fast, _sigma_identical
 
