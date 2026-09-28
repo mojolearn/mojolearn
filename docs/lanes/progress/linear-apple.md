@@ -144,3 +144,43 @@ Next commits, measured by the queued jobs: 90129fdd4 (the direction's launch
 also does S/Y, the xp/gradp saves and dg_init; the gemv reads w in place: five
 fewer launches per iteration) and 06ef7f558 (the CD coordinate in two
 launches instead of six).
+
+## x_linear on Metal: the team fits were wrong (ROOT CAUSE FIXED, 64c57a692)
+
+lane/merged's team fits (x_linear/team.mojo) gave wrong Metal results: coef
+all zero (sgd-*, poisson), NaN (bayes-ridge), off by 1e-6 (lars); only
+ridge-cv matched. The Apple device-memory barrier (2979a9de0) was needed but
+did not cure it. Cause: `Team` stored its scratch as Int addresses and
+rebuilt pointers with `FP(unsafe_from_address=...)`; on Metal that pointer
+has no device address space behind it. Fix: the fields are pointers
+(MutUntrackedOrigin), derived from the kernel argument by arithmetic.
+
+Proof, M3 Ultra, steward 1790594257141 (team.mojo swapped in one job):
+- 2000 x 8, Metal coef vs host coef: BEFORE sgd-reg/sgd-clf/poisson all
+  zero, bayes-ridge NaN, lars 1.2e-6 off; AFTER all six bit-identical.
+- Board 100k, AFTER: Metal digest == host digest on all 14 cases, and equal
+  to main's one-thread digests and the RTX 4090's.
+
+| case (100k rows) | main, one thread, m4pro-a | lane/merged + fix, m3ultra | host |
+|---|---|---|---|
+| sgd-clf | 6.468 | 8.192 | 0.241 |
+| sgd-reg | 3.893 | 5.746 | 0.138 |
+| perceptron | 3.097 | 4.745 | 0.149 |
+| pa-clf | 4.406 | 6.714 | 0.219 |
+| pa-reg | 3.122 | 4.659 | 0.131 |
+| sgd-ocsvm | 3.524 | 5.090 | 0.137 |
+| tweedie | 6.611 | 0.118 | 0.122 |
+| bayes-ridge | 5.629 | 0.055 | 0.053 |
+| ard | 5.848 | 0.059 | 0.071 |
+| lars | 4.972 | 0.021 | 0.022 |
+| lasso-lars | 4.970 | 0.021 | 0.022 |
+| ridge-clf | | 0.052 | 0.053 |
+| ridge-cv | | 0.087 | 0.634 |
+| isotonic | | 0.083 | 0.053 |
+
+(Different Macs across the first two columns; the team fits are 50x to 240x
+faster than the one-thread fits, the SGD family is not: its pass is
+row-serial.) 75b48fb07 runs an SGD problem on a warp (below).
+
+Also reverted: 06ef7f558 (a two-launch CD coordinate) gave no speedup on
+Metal, see 84cff1857.
