@@ -50,17 +50,17 @@ def triu_nonzero(dis: F32Ptr, n: Int, pos: I32Ptr, mir: I32Ptr) -> Int:
     return m
 
 
-def argsort_f32(x: F32Ptr, m: Int, out: I32Ptr) raises:
+def argsort_f32(x: F32Ptr, m: Int, dst: I32Ptr) raises:
     """`sorted(range(m), key=lambda i: x[i])` (stable: ties in index order)."""
     var keys = List[UInt64](capacity=m)
     for i in range(m):
         keys.append((UInt64(f32_key(x.unsafe_load(i))) << 32) | UInt64(i))
     sort(keys)
     for a in range(m):
-        out.unsafe_store(a, Int32(Int(keys[a] & UInt64(0xFFFFFFFF))))
+        dst.unsafe_store(a, Int32(Int(keys[a] & UInt64(0xFFFFFFFF))))
 
 
-def iso_order(x: F32Ptr, y: F32Ptr, xorder: I32Ptr, m: Int, out: I32Ptr) raises:
+def iso_order(x: F32Ptr, y: F32Ptr, xorder: I32Ptr, m: Int, dst: I32Ptr) raises:
     """`sorted(range(m), key=lambda i: (x[i], y[i]))` given `xorder`, the
     stable order by x alone: each run of equal x is re-sorted by (y, index)."""
     var a = 0
@@ -71,7 +71,7 @@ def iso_order(x: F32Ptr, y: F32Ptr, xorder: I32Ptr, m: Int, out: I32Ptr) raises:
         while b < m and x.unsafe_load(Int(xorder.unsafe_load(b))) == xa:
             b += 1
         if b - a == 1:
-            out.unsafe_store(a, xorder.unsafe_load(a))
+            dst.unsafe_store(a, xorder.unsafe_load(a))
         else:
             keys.clear()
             for t in range(a, b):
@@ -79,7 +79,7 @@ def iso_order(x: F32Ptr, y: F32Ptr, xorder: I32Ptr, m: Int, out: I32Ptr) raises:
                 keys.append((UInt64(f32_key(y.unsafe_load(i))) << 32) | UInt64(i))
             sort(keys)
             for t in range(b - a):
-                out.unsafe_store(a + t, Int32(Int(keys[t] & UInt64(0xFFFFFFFF))))
+                dst.unsafe_store(a + t, Int32(Int(keys[t] & UInt64(0xFFFFFFFF))))
         a = b
     for t in range(m):
         _ = f32_key(y.unsafe_load(t))          # a NaN y is refused as the full sort would meet it

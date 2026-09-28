@@ -510,24 +510,24 @@ def triu_nonzero_py(dis: PythonObject, n: PythonObject, pos: PythonObject, mir: 
     return PythonObject(m)
 
 
-def argsort_f32_py(x: PythonObject, m: PythonObject, out: PythonObject) raises -> PythonObject:
+def argsort_f32_py(x: PythonObject, m: PythonObject, order: PythonObject) raises -> PythonObject:
     """The stable order of x (m float32 values); NaN refused."""
     var n = Int(py=m)
     var px = _f(x)
-    var po = _i(out)
+    var po = _i(order)
     argsort_f32(px, n, po)
     return PythonObject(n)
 
 
 def iso_order_py(
-    x: PythonObject, y: PythonObject, xorder: PythonObject, m: PythonObject, out: PythonObject
+    x: PythonObject, y: PythonObject, xorder: PythonObject, m: PythonObject, order: PythonObject
 ) raises -> PythonObject:
     """The stable order by (x, y) given the stable order by x; NaN refused."""
     var n = Int(py=m)
     var px = _f(x)
     var py_ = _f(y)
     var pxo = _i(xorder)
-    var po = _i(out)
+    var po = _i(order)
     iso_order(px, py_, pxo, n, po)
     return PythonObject(n)
 
