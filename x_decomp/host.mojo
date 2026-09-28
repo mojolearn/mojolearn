@@ -37,7 +37,6 @@ from x_decomp.cells import (
     barycenter_row,
     gamma_cell,
     lasso_row,
-    lda_doc_row,
     omp_row,
     lu_solve_serial,
     orth_rank_guard,
@@ -49,6 +48,7 @@ from x_decomp.cells import (
 from x_decomp.exec_trait import Exec
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
+from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
     gemm_fold_rows,
@@ -386,10 +386,16 @@ struct HostExec(Exec):
         x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
         prior: Float32, max_iter: Int, tol: Float32,
     ) raises:
-        def row(i: Int) {imm x, imm ew, imm d, imm e, imm s, imm its, imm k, imm v, imm prior, imm max_iter, imm tol}:
-            its.unsafe_store(i, lda_doc_row(x, ew, d, e, s, i, k, v, prior, max_iter, tol))
+        # lda_doc_row's statements, the folds' lanes across words then topics
+        # (x_decomp/host_lda.mojo); s (the cell's scratch) is not needed
+        var ewt = lda_pack_t(ew, k, v)
+        var pt = F32Ptr(unsafe_from_address=Int(ewt.unsafe_ptr()))
+
+        def row(i: Int) {imm x, imm ew, imm pt, imm d, imm e, imm its, imm k, imm v, imm prior, imm max_iter, imm tol}:
+            its.unsafe_store(i, lda_doc_row_host(x, ew, pt, d, e, i, k, v, prior, max_iter, tol))
 
         xd_parallel(row, n)
+        _ = ewt^
 
     @staticmethod
     def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:

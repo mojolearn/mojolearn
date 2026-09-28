@@ -26,7 +26,7 @@ FAMILIES = (
         forest_kinds=(),
         classes=("IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "NMF", "FastICA", "FactorAnalysis", "SpectralEmbedding", "lu_factor", "lstsq", "PLSRegression", "PLSCanonical", "CCA", "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding", "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares", "SparseCoder"),
         display="the decomposition and linear algebra expansion",
-        host_modules=("x_decomp/host.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo"),
+        host_modules=("x_decomp/host.mojo", "x_decomp/host_simd.mojo", "x_decomp/host_graph.mojo", "x_decomp/host_qr.mojo", "x_decomp/host_jacobi.mojo", "x_decomp/host_lda.mojo", "x_decomp/cells.mojo", "x_decomp/api.mojo", "x_decomp/exec_trait.mojo"),
         exports=(
             "x_decomp_host_numeric_mode", "x_decomp_host_vendor", "x_decomp_host_column", "x_decomp_host_sabotage",
             "x_decomp_gemm", "x_decomp_ew", "x_decomp_colsum", "x_decomp_rowsum", "x_decomp_sqdist",
