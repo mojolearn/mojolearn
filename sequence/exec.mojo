@@ -133,6 +133,13 @@ trait Exec:
         """This Exec's buffer `src` -> host memory `dst` (n floats)."""
         ...
 
+    def bind(mut self, src: FP, n: Int) raises -> FP:
+        """A buffer of this Exec holding host memory `src`'s n floats, for an
+        entry that updates the caller's arrays in place: the device
+        allocates and uploads; the host returns `src` itself (no copy), so
+        a later `download(src, buf, n)` is the identity."""
+        ...
+
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         """Run operation OP over elements 0..n-1."""
         ...
@@ -174,8 +181,11 @@ struct HostExec(Exec):
             memcpy(dest=dst, src=src, count=n)
 
     def download(mut self, dst: FP, src: FP, n: Int) raises:
-        if n > 0:
+        if n > 0 and Int(dst) != Int(src):
             memcpy(dest=dst, src=src, count=n)
+
+    def bind(mut self, src: FP, n: Int) raises -> FP:
+        return src
 
     def launch[OP: Int](mut self, a: Args, n: Int) raises:
         if n <= 0:
