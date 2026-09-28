@@ -58,6 +58,7 @@ def cases(d):
     import mojolearn._expansion_linear as lm
     from mojolearn import linear_model as LM
     from mojolearn import svm as SV
+    import mojolearn as ML
     tx, hx = d["tx"], d["hx"]
     iso_x = tx[:, 0].copy()
     return [
@@ -84,8 +85,8 @@ def cases(d):
         ("isotonic", "x", lambda: lm.IsotonicRegression(), iso_x, d["fare"]),
         ("ols", "core", lambda: LM.LinearRegression(), tx, d["fare"]),
         ("ridge", "core", lambda: LM.Ridge(alpha=1.0), tx, d["fare"]),
-        ("lasso", "core", lambda: LM.Lasso(alpha=0.01), tx, d["fare"]),
-        ("elasticnet", "core", lambda: LM.ElasticNet(alpha=0.01, l1_ratio=0.5), tx, d["fare"]),
+        ("lasso", "core", lambda: ML.Lasso(alpha=0.01), tx, d["fare"]),
+        ("elasticnet", "core", lambda: ML.ElasticNet(alpha=0.01, l1_ratio=0.5), tx, d["fare"]),
         ("logistic", "core", lambda: LM.LogisticRegression(max_iter=100), hx, d["hy"]),
         ("linear-svc", "core", lambda: SV.LinearSVC(max_iter=100), hx, d["hy"]),
         ("linear-svr", "core", lambda: SV.LinearSVR(max_iter=100), tx, d["fare"]),
