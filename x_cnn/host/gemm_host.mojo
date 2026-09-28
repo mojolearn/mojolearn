@@ -213,6 +213,32 @@ def _transpose_flush(src: FP, dst: FP, rows: Int, cols: Int):
 
 
 @always_inline
+def _leaf_group[V: Int](arow: FP, b: FP, dst: FP, n: Int, jb: Int, p0: Int, p1: Int):
+    """Cells [jb, jb + V * GW) of one output row over leaf [p0, p1): V SIMD
+    chains with the flush deferred, and the flush-every-step rerun when a
+    raw result was a nonzero subnormal (the argument in the module doc)."""
+    var acc = InlineArray[GV, V](fill=GV(0))
+    var trk = GU(0xFFFFFFFF)
+    for p in range(p0, p1):
+        var av = GV(arow.unsafe_load(p))
+        var base = p * n + jb
+        comptime for v in range(V):
+            acc[v] = identical_mul_add_simd[GW](av, b.unsafe_load[width=GW](base + v * GW), acc[v])
+        comptime for v in range(V):
+            trk = min(trk, _suspect(acc[v]))
+    if trk.reduce_min() < SUB_LO:
+        comptime for v in range(V):
+            var cr = GV(0)
+            for p in range(p0, p1):
+                cr = ftz_v(identical_mul_add_simd[GW](
+                    GV(arow.unsafe_load(p)), b.unsafe_load[width=GW](p * n + jb + v * GW), cr))
+            dst.unsafe_store[width=GW](jb + v * GW, cr)
+    else:
+        comptime for v in range(V):
+            dst.unsafe_store[width=GW](jb + v * GW, acc[v])
+
+
+@always_inline
 def _leaf_row(arow: FP, b: FP, dst: FP, n: Int, p0: Int, p1: Int):
     """dst[j] = the leaf [p0, p1) partial of every cell j of one output row:
     `arow` is the row's flushed A values indexed by p, `b` the flushed
@@ -268,11 +294,17 @@ def _leaf_row(arow: FP, b: FP, dst: FP, n: Int, p0: Int, p1: Int):
             dst.unsafe_store[width=GW](jb + 6 * GW, c6)
             dst.unsafe_store[width=GW](jb + 7 * GW, c7)
         jb += group
-    while jb + GW <= n:
-        var cv = GV(0)
-        for p in range(p0, p1):
-            cv = ftz_v(identical_mul_add_simd[GW](GV(arow.unsafe_load(p)), b.unsafe_load[width=GW](p * n + jb), cv))
-        dst.unsafe_store[width=GW](jb, cv)
+    # The row's remaining cells in smaller groups (4, 2, 1 vectors), each
+    # with the same deferred flush: independent chains in flight instead of
+    # one flushed chain per vector (n = 16 .. 63 is every small conv's OC).
+    if jb + 4 * GW <= n:
+        _leaf_group[4](arow, b, dst, n, jb, p0, p1)
+        jb += 4 * GW
+    if jb + 2 * GW <= n:
+        _leaf_group[2](arow, b, dst, n, jb, p0, p1)
+        jb += 2 * GW
+    if jb + GW <= n:
+        _leaf_group[1](arow, b, dst, n, jb, p0, p1)
         jb += GW
     while jb < n:
         var cs = Float32(0)
