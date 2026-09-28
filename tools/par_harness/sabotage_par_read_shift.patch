@@ -1,0 +1,13 @@
+diff --git a/python/mojolearn/_parallel_pool.py b/python/mojolearn/_parallel_pool.py
+index c49fc05a6..34ac35c13 100644
+--- a/python/mojolearn/_parallel_pool.py
++++ b/python/mojolearn/_parallel_pool.py
+@@ -258,7 +258,7 @@ def driver_read_shift(index, first, devices):
+     """
+     if first < 1 or len(devices) < 2 or index % len(devices) == 0:
+         return 0
+-    return 1 if par_driver_sabotage() else 0
++    return 1  # SABOTAGE (tools/par_harness): every owner above rank 0 reads one position early, switch or not
+ 
+ 
+ def _cpu_refusal(requests, cooperative, n_devices=1):
