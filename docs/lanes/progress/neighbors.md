@@ -208,6 +208,33 @@ OWED ON A POD (NVIDIA; nothing of 2-9 has been built):
      the new lanes plus the 5219 seam (Apple M3 is the column the merge fix
      is for).
 
+## Session 2026-09-28 (RunPod funded; pods neighbors + neighbors-sab, H100)
+
+a. DONE. `fused_slot_merge_check.mojo` under IDENTICAL: first compile of
+   `fused_l2_knn_merge_kernel`, PASS (grid (16, 4) == grid_x = 1 bits in
+   every (distance, index) cell; the drop-one arm moved 150 slots; tie set
+   invariant at 1/40/2000 queries). `pixi run check-knn` (FAST): every
+   fused check incl. check_fused_griddimx_merge OK. Two pre-existing main
+   defects found by it:
+   - check_dispatch_takes_fused expected DEVIATION 36's geometry gate on
+     NVIDIA, where DEVIATION 1923 makes FAST AUTO fused at every grid.
+     FIXED in the check (knn_check.mojo reads
+     knn_auto_follows_their_dispatch_for).
+   - **FAST float32 GEMM ON NVIDIA IS TF32 (quality defect, NOT FIXED
+     here, core-wide).** core/gemm.mojo's FAST `gemm_nt` calls linalg
+     `matmul`, which MAX 26.5.0 routes to cuBLAS with TF32 math on the H100:
+     probe ~/mojolearn-evidence/neighbors/tf32_probe.mojo (64 x 2000 x 8 in
+     [0, 1)) worst abs error 1.36e-3 vs float64; with
+     NVIDIA_TF32_OVERRIDE=0 6.8e-7. It makes check_knn_search_arms_agree
+     fail (TILED 8 of 320 wrong: returned sqrt-distance 0.43502 for exact
+     d2 0.19040). With NVIDIA_TF32_OVERRIDE=0 all 25 check-knn checks pass.
+     Affects every FAST family using core/gemm on NVIDIA. IDENTICAL is not
+     affected (pinned kernels, no matmul). Owner: core/gemm (orchestrator
+     to assign); a subagent could not be spawned (concurrency limit).
+   - Under IDENTICAL, knn_main's check_plan_query_tile is stale against
+     DEVIATION 2631 (DEFAULT_QUERY_TILE 4096 > the fixture's 4000 queries,
+     the query clamp answers 4000); knn_main is a FAST check task.
+
 ## NEXT (a fresh session starts here)
 
 Bring a pod up only after the RunPod balance is topped up; run OWED a-e
