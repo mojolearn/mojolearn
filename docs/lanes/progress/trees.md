@@ -310,6 +310,17 @@ SESSION trees-cpu (the trees CPU-speed lane, branch lane/trees-cpu, pod
   (gbdt-tensor-ctr-tables was NOTHING COMPARED on both sides: lane/algos-trees'
   CPU arm was not on main yet; after merging it, see below). The 15 par-* lanes need two GPUs and were not run (the
   phase-B pin is inert on every recorded fixture).
+- AFTER MERGING MAIN (lane/algos-trees' tensor CTR CPU arm, 276990727):
+  gbdt-categorical-ctr-tables, gbdt-tensor-ctr-tables, gbdt-feature-freq,
+  gbdt-symmetric, gbdt-categorical-ctr, saved-model-host-infer AGREE.
+  test_host_surface then found `host_model` with NO lane (both CTR table
+  lanes had reached it through `_ctr_saved_or_fit`); the CTR tables lane
+  now checks `ml.host_model(<saved file>)` answers exactly what the fitted
+  estimator answers, as a raise and not a part (its cells unchanged on both
+  columns, identity_break --diff IDENTICAL). test_lane_select pin
+  neural_inference.py 41 -> 40 (gbdt-tensor-ctr-tables no longer reaches
+  it). test_host_surface + test_trees_repeat 201 passed; test_lane_select
+  82 passed.
 
 NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
 then type B (features).
