@@ -988,6 +988,17 @@ def als_row(
             var t = mul(cm1, Y.unsafe_load(i * f + j))
             for l in range(f):
                 S.unsafe_store(ab + j * f + l, ftz(identical_mul_add(t, ftz(Y.unsafe_load(i * f + l)), ftz(S.unsafe_load(ab + j * f + l)))))
+    return als_row_solve(X, S, u, f)
+
+
+def als_row_solve(X: F32Ptr, S: F32Ptr, u: Int, f: Int) -> Float32:
+    """`als_row`'s tail on its accumulated scratch (A at u * (f*f + f), b
+    after it): the Cholesky (lower, left-looking, sums ascending), then the
+    two solves into row u of X. Returns 1 at a non-positive pivot (x_u = 0),
+    else 0. Split out so the device's team kernel (x_decomp/device.mojo
+    `als_team_kernel`) runs the same tail after a parallel accumulation."""
+    var ab = u * (f * f + f)
+    var bb = ab + f * f
     # Cholesky (lower, left-looking, sums ascending), then the two solves
     for j in range(f):
         var acc = ftz(S.unsafe_load(ab + j * f + j))
