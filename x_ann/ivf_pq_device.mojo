@@ -5,6 +5,9 @@
 The coarse quantizer is the same Lloyd cells over whole rows."""
 
 from std.gpu import block_idx, block_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import X_ANN_POOL_SIZE, x_ann_ctx, x_ann_pool_ctx
 from core.host_parallel import host_parallelize
@@ -16,7 +19,7 @@ from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from std.sys.compile import is_defined
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_ann.refine_core import refine_cell
@@ -55,6 +58,69 @@ def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32
     var e = _tid()
     if e < Int(count):
         pq_assign_cell(e, r, cb, Int(pq_dim), Int(rot_dim), Int(pq_len), Int(n_codes), codes)
+
+
+#: the staged encode's limits: codebook words per subspace, subspace width
+comptime ASSIGN_CB_MAX = 4096
+comptime ASSIGN_LEN_MAX = 16
+
+
+def assign_staged_kernel(
+    n: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32, pq_len: Int32, n_codes: Int32, codes: I32P
+):
+    """`pq_assign_cell` for rows block_idx.x * TPB + t of subspace j =
+    block_idx.y, with subspace j's codebook staged once per threadgroup as
+    ftz(cb) and the row's residual as ftz(r) in registers (lane ann-apple2):
+    `pq_subdist`'s `ftz(ftz(a) - ftz(b))` and fused fold on the same words
+    (ftz is idempotent), codes ascending, the strict `<`: the same code."""
+    var t = Int(thread_idx.x)
+    var j = Int(block_idx.y)
+    var i = Int(block_idx.x) * TPB + t
+    var pl = Int(pq_len)
+    var nc = Int(n_codes)
+    var per = nc * pl
+    var tile = stack_allocation[ASSIGN_CB_MAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    for e in range(t, per, TPB):
+        tile[e] = ftz(cb.unsafe_load(j * per + e))
+    barrier()
+    if i >= Int(n):
+        return
+    var rv = InlineArray[Float32, ASSIGN_LEN_MAX](fill=Float32(0.0))
+    var off = i * Int(rot_dim) + j * pl
+    for u in range(pl):
+        rv[u] = ftz(r.unsafe_load(off + u))
+    var best = 0
+    var bd = Float32(0.0)
+    for c in range(nc):
+        var acc = Float32(0.0)
+        for u in range(pl):
+            var diff = ftz(rv[u] - tile[c * pl + u])
+            acc = ftz(identical_mul_add(diff, diff, acc))
+        if c == 0:
+            bd = acc
+        elif acc < bd:
+            bd = acc
+            best = c
+    codes.unsafe_store(i * Int(pq_dim) + j, Int32(best))
+
+
+def _enqueue_assign(
+    ctx: DeviceContext, n: Int, r: F32P, cb: F32P, pq_dim: Int, rot_dim: Int, pq_len: Int, n_codes: Int,
+    codes: I32P,
+) raises:
+    """The encode launch: the staged kernel when the subspace codebook fits
+    (`-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` keeps the one-thread-per-cell kernel)."""
+    comptime if not is_defined["MOJOLEARN_PQ_ASSIGN_UNSTAGED"]():
+        if n_codes * pq_len <= ASSIGN_CB_MAX and pq_len <= ASSIGN_LEN_MAX:
+            ctx.enqueue_function[assign_staged_kernel](
+                Int32(n), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
+                grid_dim=((n + TPB - 1) // TPB, pq_dim), block_dim=TPB,
+            )
+            return
+    ctx.enqueue_function[assign_kernel](
+        Int32(n * pq_dim), r, cb, Int32(pq_dim), Int32(rot_dim), Int32(pq_len), Int32(n_codes), codes,
+        grid_dim=_grid(n * pq_dim), block_dim=TPB,
+    )
 
 
 def _dp[dt: DType](mut b: DeviceBuffer[dt]) -> MutPointer[Scalar[dt], MutAnyOrigin]:
@@ -240,10 +306,7 @@ def ivf_pq_build_device(
     st.host("codebooks")
     var dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
-    ctx.enqueue_function[assign_kernel](
-        Int32(n * pq_dim), dr.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(rot_dim),
-        Int32(pq_len), Int32(n_codes), dcodes.unsafe_ptr(), grid_dim=_grid(n * pq_dim), block_dim=TPB,
-    )
+    _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
     var codes = download_i32(ctx, dcodes, n * pq_dim)
     st.host("encode")
@@ -620,10 +683,7 @@ def pq_encode_device(
     var dr = upload_f32(ctx, r)
     var dcb = upload_f32(ctx, cb)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
-    ctx.enqueue_function[assign_kernel](
-        Int32(n * pq_dim), dr.unsafe_ptr(), dcb.unsafe_ptr(), Int32(pq_dim), Int32(rot_dim),
-        Int32(pq_len), Int32(n_codes), dcodes.unsafe_ptr(), grid_dim=_grid(n * pq_dim), block_dim=TPB,
-    )
+    _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
     var codes = download_i32(ctx, dcodes, n * pq_dim)
     _ = dcodes^
