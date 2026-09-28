@@ -31,3 +31,4 @@ x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_svd_fold_order.pa
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_eigh_col_split.patch
 x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_lu_split.patch
 x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/host_lda_topic_fold.patch
+x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/host_ew_onemsq_fused.patch
