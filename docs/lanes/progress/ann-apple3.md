@@ -205,6 +205,25 @@ with the prepared index; score 8.1, select 8.6, probe 3.1, coarse 1.2.
 CAGRA search 19 (one thread per query, 16 threadgroups of 64). t-SNE
 iterations 472.
 
+### Job 3: m3ultra-b, steward 1790629592016, c831de064, FAST only, with the quality pass on every arm
+
+Queued 21:06Z Sep 28. Arms, all built from c831de064:
+- `after`: the default build (host passes and prepare on);
+- B = `+MOJOLEARN_ANN3_PQ_HOST_RESIDUALS+MOJOLEARN_ANN3_DIRECT_OUT+MOJOLEARN_ANN3_TRAINSET_COPY` (expected to move no bit);
+- B `+MOJOLEARN_ANN3_PQ_SEED+MOJOLEARN_ANN3_TSNE_RB64`;
+- B `+MOJOLEARN_ANN3_PQ_SEED+MOJOLEARN_ANN3_COARSE_SEED+MOJOLEARN_ANN3_TSNE_RB32`.
+
+Quality: HIGGS and taxi, seeds 0 to 4, IVF-Flat / PQ / SQ / RaBitQ / CAGRA
+recall at 10 and t-SNE trustworthiness and KL. Result: PENDING.
+
+### NVIDIA: nvc1-0020 (2x A40 shared pod), `tools/ann_apple3_cuda.sh`, the lane's one job
+
+Queued 21:09Z Sep 28 behind seven jobs of other lanes. IDENTICAL only: the
+default build against the build with every default-on switch turned off,
+HIGGS 1M, and both against the Apple IDENTICAL digests of job 2. It runs
+the tree as synced when it starts; the tree is synced again when a switch
+becomes default on (while the job is still queued). Result: PENDING.
+
 ## SHARED CODE touched (for the consolidation's check)
 
 - `ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo` upload/download helpers are imported by `ivf_flat_search.mojo`, `ivf/checks/ivf_check.mojo` and `neighbors/checks/fused_logical32_check.mojo`.
