@@ -340,6 +340,110 @@ def ghr_tile(
     _ = scratch_l^
 
 
+#: At most this many output rows take the unpacked path (`ghr_small_m`): a
+#: decode step's product, where packing the right operand costs as much as
+#: the product itself. A schedule knob: it moves no bit.
+comptime GHR_SMALL_M = 4  # ghr_small_m keeps one accumulator per row: four named registers
+
+
+@always_inline
+def _b_vec(b: GhrPtr, op: Int, n: Int, k: Int, p: Int, j0: Int) -> GhrF:
+    """`ftz(B_eff[p, j0 : j0 + GHR_FW])` read in place: a contiguous load for
+    NN and TN (B is k x n), a gather down column p of the rows j0.. for NT."""
+    if op == OP_NT:
+        var v = GhrF(0.0)
+        comptime for r in range(GHR_FW):
+            v[r] = b.unsafe_load((j0 + r) * k + p)
+        return ghr_ftz_lanes(v)
+    return ghr_ftz_lanes(b.unsafe_load[width=GHR_FW](p * n + j0))
+
+
+@always_inline
+def _a_val(a: GhrPtr, op: Int, m: Int, k: Int, i: Int, p: Int) -> Float32:
+    if op == OP_TN:
+        return ftz(a.unsafe_load(p * m + i))
+    return ftz(a.unsafe_load(i * k + p))
+
+
+def ghr_small_m(
+    a: GhrPtr, b: GhrPtr, c: GhrPtr, op: Int, m: Int, n: Int, k: Int,
+    jlo: Int, jhi: Int, real_k: Int = -1,
+):
+    """Columns `[jlo, jhi)` of a product with `m <= GHR_SMALL_M` rows, with no
+    packed copy of either operand: the per-cell chains of `ghr_tile`
+    (leaves at `contract_leaf_size(k)`, each seeded `+0.0`, one fused
+    multiply-add and one flush per step, the right-zero-padded compression at
+    `real_k`, the balanced fold) with GHR_FW cells of a row as lanes, reading
+    `B_eff` in place (`_b_vec`) and flushing at every step (no deferral)."""
+    if jhi <= jlo:
+        return
+    var rk = k
+    if real_k >= 0 and real_k < k:
+        rk = real_k
+    var leaf = contract_leaf_size(k)
+    var pcount = leaf_count(k, leaf)
+    if k <= 0:
+        for i in range(m):
+            for j in range(jlo, jhi):
+                c.unsafe_store(i * n + j, Float32(0.0))
+        return
+    var width = m * GHR_FW
+    var scratch_l = List[Float32](length=max(pcount, 1) * width, fill=Float32(0.0))
+    var scratch = rebind[GhrPtr](scratch_l.unsafe_ptr())
+    var j0 = jlo
+    while j0 < jhi:
+        var full = j0 + GHR_FW <= jhi
+        for t in range(pcount):
+            var pb = t * leaf
+            var pe = min(pb + leaf, k)
+            var ae = max(min(pe, rk), pb)
+            var dst = scratch.unsafe_offset(t * width)
+            if full:
+                var c0 = GhrF(0.0)
+                var c1 = GhrF(0.0)
+                var c2 = GhrF(0.0)
+                var c3 = GhrF(0.0)
+                for p in range(pb, ae):
+                    var bv = _b_vec(b, op, n, k, p, j0)
+                    c0 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](GhrF(_a_val(a, op, m, k, 0, p)), bv, c0))
+                    if m > 1:
+                        c1 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](GhrF(_a_val(a, op, m, k, 1, p)), bv, c1))
+                    if m > 2:
+                        c2 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](GhrF(_a_val(a, op, m, k, 2, p)), bv, c2))
+                    if m > 3:
+                        c3 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](GhrF(_a_val(a, op, m, k, 3, p)), bv, c3))
+                dst.unsafe_store(0, c0)
+                if m > 1:
+                    dst.unsafe_store(GHR_FW, c1)
+                if m > 2:
+                    dst.unsafe_store(2 * GHR_FW, c2)
+                if m > 3:
+                    dst.unsafe_store(3 * GHR_FW, c3)
+            else:
+                for i in range(m):
+                    for jj in range(GHR_FW):
+                        var acc = Float32(0.0)
+                        var j = j0 + jj
+                        if j < jhi:
+                            for p in range(pb, ae):
+                                var bs: Float32
+                                if op == OP_NT:
+                                    bs = ftz(b.unsafe_load(j * k + p))
+                                else:
+                                    bs = ftz(b.unsafe_load(p * n + j))
+                                acc = ftz(identical_mul_add(_a_val(a, op, m, k, i, p), bs, acc))
+                        dst.unsafe_store(i * GHR_FW + jj, acc)
+            if ae < pe:
+                ghr_zero_tail_step(dst, width)
+        if pcount > 1:
+            ghr_fold_in_place(scratch, pcount, width)
+        var cnt = min(GHR_FW, jhi - j0)
+        for i in range(m):
+            unsafe_memcpy(dest=c.unsafe_offset(i * n + j0), src=scratch.unsafe_offset(i * GHR_FW), count=cnt)
+        j0 += GHR_FW
+    _ = scratch_l^
+
+
 #: Fused multiply-adds below which a product runs on the calling thread: a
 #: thread split costs tens of microseconds, about this much arithmetic.
 comptime GHR_SERIAL_FMAS = 1 << 20
@@ -389,6 +493,23 @@ def gemm_host_rows_into(
         else:
             out = gemm_oracle(la, lb, op, m, n, k)
         unsafe_memcpy(dest=c, src=out.unsafe_ptr(), count=m * n)
+        return
+    if m <= GHR_SMALL_M:
+        # No packing: split the columns over tasks when the product is big
+        # enough to be worth a fork.
+        var stasks = 1
+        if m * n * max(k, 1) >= GHR_SERIAL_FMAS:
+            stasks = max(1, min(host_predict_task_count(n // GHR_FW + 1), (m * n * k) // GHR_SERIAL_FMAS))
+        if stasks <= 1:
+            ghr_small_m(a, b, c, op, m, n, k, 0, n, real_k)
+            return
+        var cblocks = (n + GHR_FW - 1) // GHR_FW
+        var bchunk = (cblocks + stasks - 1) // stasks
+
+        def _cols(t: Int) {imm a, imm b, imm c, imm op, imm m, imm n, imm k, imm bchunk, imm real_k}:
+            ghr_small_m(a, b, c, op, m, n, k, min(t * bchunk * GHR_FW, n), min((t + 1) * bchunk * GHR_FW, n), real_k)
+
+        host_parallelize(_cols, stasks)
         return
     var npan = ghr_panel_count(n)
     var ap_l = List[Float32](length=max(m * k, 1), fill=Float32(0.0))
