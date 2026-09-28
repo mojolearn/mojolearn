@@ -55,3 +55,15 @@ back + synchronize ~180 us, empty synchronize 12 us. A Lossguide leaf split
 paid two host waits (~360 us) and about ten small uploads plus ~16 launches;
 at ~0.9 ms per split that is nearly all overhead, which is what the id-arena
 change (7298ebd92) trims.
+| GBDT ridx-only splits IDENTICAL (44b69e68f; both arms carry 7298ebd92) | m4pro-a | 1790608373786 | lossguide taxi | 3980 | 3838 | 0.965 | b1761eecc6dfbc73 |
+| same | m4pro-a | 1790608373786 | lossguide istella | 6015 | 5996 | 0.997 | eb0d9510ee08a16f |
+| same | m4pro-a | 1790608373786 | depthwise taxi | 1768 | 1713 | 0.969 | 5694af7699036c65 |
+| same | m4pro-a | 1790608373786 | depthwise istella | 3587 | 3673 | **1.024 (slower)** | e9c0f7e913af5a8a |
+| GBDT id arena IDENTICAL (7298ebd92) | m4-a | 1790608353263 | lossguide taxi | 7354 | 6865 | 0.933 | b1761eecc6dfbc73 |
+| same | m4-a | 1790608353263 | depthwise taxi | 3317 | 3266 | 0.985 | 5694af7699036c65 |
+| FAST GBDT 2031 sym ridx (define arm, e314b925d) | m4pro-b | 1790608403999 | symmetric taxi | 919 | 835 | 0.909 | 388959920a036d2d |
+| FAST GBDT id arena (e314b925d; before = ids separate) | m4pro-b | 1790608403999 | lossguide taxi | 4102 | 3820 | 0.931 | FAST lossguide/depthwise digests vary run to run in BOTH arms (not deterministic in FAST), so no digest comparison |
+| same | m4pro-b | 1790608403999 | depthwise taxi | 1538 | 1524 | 0.991 | as above |
+
+Decision on IDENTICAL ridx for the non-symmetric driver: kept on (3 of 4
+cells faster, geomean 0.989), with the Istella depthwise 1.024 noted.
