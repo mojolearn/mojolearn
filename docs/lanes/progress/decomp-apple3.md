@@ -35,6 +35,70 @@ kernel of the merged tree. Job 1 measures both.
 |---|---|---|---|---|
 | 1 | 1790626766529 | m4-a | 0097b3d0c | builds IDENTICAL and FAST x_decomp; eigh A/B in both modes, arms d (tree default: device_eigh), 2 (jacobi2 unroll 4), 3 (jacobi2 unroll 1), with float64 quality columns; MinCovDet, Isomap, ClassicalMDS at 1000 rows; FAST Lanczos quality (N = 600, 2 seeds); out_digest default against MOJOLEARN_XD_JACOBI=2 |
 
+| 2 | 1790628127426 | m4-a | 8c02dd401 | first build of the round-robin solvers (x_decomp/jacobi_par.mojo); FAST eigh A/B (device_eigh, jacobi2, round robin) to n = 800, FAST svd A/B to 800 x 800, LLE / Isomap / ClassicalMDS quality at 500 rows, IDENTICAL out_digest |
+
 ## Results
 
-(none yet)
+### Job 1 (1790626766529, m4-a = M4, commit 0097b3d0c). Output: ~/mojolearn-evidence/decomp-apple3/job1_m4-a.txt
+
+The device-barrier jacobi2 eigh BUILDS AND RUNS on the M4 that produced
+"cannot select", at unroll 4 and at unroll 1, in the IDENTICAL and in the
+FAST binding. Arm d = the tree default on Metal (`device_eigh`), arm 2 =
+jacobi2 unroll 4, arm 3 = jacobi2 unroll 1. Every row's three hashes are
+EQUAL, in both modes.
+
+| call | mode | d (device_eigh) s | 2 (unroll 4) s | 3 (unroll 1) s | d / 3 | hashes |
+|---|---|---|---|---|---|---|
+| eigh 64 | IDENTICAL | 0.020 | 0.022 | 0.016 | 1.25x | equal |
+| eigh 256 | IDENTICAL | 0.375 | 0.459 | 0.326 | 1.15x | equal |
+| eigh 800 | IDENTICAL | 9.922 | 10.768 | 6.586 | 1.51x | equal |
+| Isomap(10nn) 1000 | IDENTICAL | 21.657 | 23.764 | 12.398 | 1.75x | equal |
+| ClassicalMDS 1000 | IDENTICAL | 11.944 | 13.124 | 6.819 | 1.75x | equal |
+| MinCovDet 20000 x 8 | IDENTICAL | 1.191 | 1.192 | 1.195 | 1.00x | equal |
+| eigh 64 | FAST | 0.015 | 0.019 | 0.012 | 1.25x | equal |
+| eigh 256 | FAST | 0.291 | 0.348 | 0.226 | 1.29x | equal |
+| eigh 800 | FAST | 8.876 | 7.332 | 5.359 | 1.66x | equal |
+| Isomap(10nn) 1000 | FAST | 20.183 | 15.173 | 10.465 | 1.93x | equal |
+| ClassicalMDS 1000 | FAST | 11.111 | 8.381 | 5.659 | 1.96x | equal |
+| MinCovDet 20000 x 8 | FAST | 0.840 | 0.801 | 0.806 | 1.04x | equal |
+
+(eigh 8 is left out: each arm's first call pays its pipeline creation.
+MinCovDet is the native x_decomp_mcd of lane/py-decomp-nbrs now: 1.2 s
+where round 2 measured 22 s, and its small solves run on the host executor,
+so the eigh kernel no longer shows in it.)
+
+Quality of the eigh arms against numpy's float64 eigh of the same matrix
+(largest eigenvalue error over the largest |eigenvalue| / residual /
+orthogonality), the same for the three arms because the bytes are the same:
+n = 64: 8.8e-06 / 8.1e-06 / 8.3e-06; n = 256: 4.2e-05 / 4.2e-05 / 4.4e-05;
+n = 800: 1.4e-04 / 1.5e-04 / 1.6e-04.
+
+IDENTICAL digests (bench/decomp_out_digest.py, 27 algorithms): tree default
+== MOJOLEARN_XD_JACOBI=2 == the round-2 record (m4pro-b 1790619265077) on
+every row.
+
+DECISION: FAST on Metal takes jacobi2 eigh at unroll 1 by default
+(8c02dd401). A/B gain on every row from n = 64, outputs byte-equal to the
+before arm, so the quality is the before arm's. IDENTICAL on Metal keeps
+main's `device_eigh` default: the evidence above says jacobi2 is safe there
+too (1.5x to 1.75x, equal digests), and that flip is left to the
+consolidation (MOJOLEARN_XD_JACOBI=2 is the opt-in).
+
+FAST Lanczos (MOJOLEARN_XD_LANCZOS=1), first GPU quality check
+(bench/decomp_fast_quality.py, N = 600, 2 datasets x 2 seeds, FAST binding
+built in the job): 8/8 PASS. Errors against the float64 eigendecomposition
+(eigenvalue / eigenvector), IDENTICAL = exact dense Jacobi:
+
+| fit | data, seed | IDENTICAL s | IDENTICAL w / v | FAST s | FAST w / v |
+|---|---|---|---|---|---|
+| Isomap | swissroll 0 | 3.692 | 3.6e-05 / 2.0e-05 | 0.167 | 7.6e-07 / 1.1e-06 |
+| ClassicalMDS | swissroll 0 | 1.805 | 5.3e-06 / 7.4e-06 | 0.035 | 2.2e-07 / 4.9e-07 |
+| Isomap | swissroll 1 | 4.109 | 2.6e-05 / 1.5e-05 | 0.114 | 5.7e-07 / 9.4e-07 |
+| ClassicalMDS | swissroll 1 | 1.809 | 2.3e-06 / 4.3e-06 | 0.035 | 1.3e-07 / 2.1e-06 |
+| Isomap | gauss 0 | 4.120 | 5.4e-05 / 2.9e-05 | 0.125 | 2.8e-06 / 1.6e-06 |
+| ClassicalMDS | gauss 0 | 2.260 | 7.7e-06 / 6.0e-06 | 0.036 | 7.2e-07 / 6.8e-07 |
+| Isomap | gauss 1 | 4.133 | 6.4e-05 / 3.3e-05 | 0.128 | 2.7e-06 / 1.6e-06 |
+| ClassicalMDS | gauss 1 | 2.251 | 7.7e-06 / 6.6e-06 | 0.033 | 1.3e-06 / 7.0e-07 |
+
+FAST's errors are under IDENTICAL's on every row. The check at the timing
+size (1000 and 1500 rows) and on the M3 Ultra is in job 3.
