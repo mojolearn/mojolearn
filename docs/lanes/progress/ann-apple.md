@@ -72,3 +72,35 @@ Sabotage arms retargeted to the shared helpers (all apply): 5804, 5810,
 | IVF-SQ search | 0.580 | 0.375 | 1d9c53fd8c13f452 both |
 | IVF-RaBitQ search | 0.673 | 0.345 | 056a570709713477 both |
 | IVF-PQ search | 0.873 | 0.355 | 3b1e0c1ae73444eb both |
+
+## M4 Pro (m4pro-b, home), IDENTICAL: before origin/lane/merged 003ea19ba -> after 8ce6266d7 (changes 1-4 merged onto lane/merged)
+
+Requests 1790584322570 (before) and 1790584324545 (after). Every digest
+equal before and after (lane/merged's t-SNE digest is 2bb1d3d75ffa1885; it
+moved from main's f31f68ec8bad9247 by lane/merged's own t-SNE changes, not
+by this lane).
+
+| algorithm (s) | before fit | after fit | before search | after search |
+|---|---|---|---|---|
+| t-SNE (10k, 300 it) | 2.476 | 1.767 | - | - |
+| CAGRA (50k) | 13.627 | 1.050 | 0.052 | 0.052 |
+| IVF-Flat | 8.679 | 8.662 | 0.140 | 0.141 |
+| IVF-SQ | 9.122 | 8.824 | 0.532 | 0.368 |
+| IVF-RaBitQ | 8.645 | 8.651 | 0.604 | 0.378 |
+| IVF-PQ | 21.727 | 21.631 | 0.756 | 0.373 |
+| refine (0.014 -> 0.013 s) | | | | |
+
+After, stage split (ms): t-SNE k-NN + perplexity 92, symmetrize (host,
+threaded by lane/merged) 120, 300 iterations 1472; CAGRA k-NN 862, prune
+(host, threaded) 111, reverse merge 27, search 49; IVF-SQ range 1.8 (was
+~430 ms on the M3 Ultra), encode 171; IVF-PQ residuals 184, encode 196.
+
+FINDING (cluster/, not this lane's code): the IVF fits are the coarse
+k-means and the PQ codebook k-means. On the M4 Pro the coarse k-means (1M x
+28, 1024 lists, k-means++ then 10 Lloyd iterations, `kmeans_fit_main_traced`)
+takes 8613 ms and the 14 codebook k-means (1M x 2, 256 codes each,
+`kmeans_fit`) 12726 ms; the same calls take 1280 and 2460 ms on the M3 Ultra
+(about 7x, more than the GPU core ratio). k-means++ with k = 1024 on 1M rows
+is 1023 sequential picks, each several full passes over the rows (scan,
+search, gather, GEMM, cost, adopt), already enqueued without a sync on Apple
+(KMEANS_FAST_PP_NOSYNC). IDENTICAL cannot shorten it from this lane.
