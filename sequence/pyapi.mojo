@@ -14,6 +14,7 @@ from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
+from sequence.ets import ets_scratch
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -762,40 +763,53 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
 
 
 def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """Non-seasonal ETS over a batch of series (`sequence/ets.mojo`).
-    addrs = [y (B, n), forecast (B, h) out, info (B, 8) out];
-    ip = [B, n, h, error (0 A, 1 M), trend (0 N, 1 A), damped, fixed mask];
-    fp = [alpha, beta, phi] (read where fixed)."""
-    if len(addrs) != 3 or len(ip) != 7 or len(fp) != 3:
-        raise Error("ets: requires 3 addresses, 7 integer and 3 float parameters")
+    """ETS over a batch of series (`sequence/ets.mojo`).
+    addrs = [y (B, n), forecast (B, h) out, info (B, 10) out, seasonal states (B, m) out];
+    ip = [B, n, h, error (0 A, 1 M), trend (0 N, 1 A), damped, fixed mask, season (0 N, 1 A, 2 M), m];
+    fp = [alpha, beta, phi, gamma] (read where fixed)."""
+    if len(addrs) != 4 or len(ip) != 9 or len(fp) != 4:
+        raise Error("ets: requires 4 addresses, 9 integer and 4 float parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
     var h = ival(ip, 2)
+    var season = ival(ip, 7)
+    var m = ival(ip, 8) if season != 0 else 1
     if B < 1 or n < 4 or h < 1:
         raise Error("ets: B >= 1, n >= 4 and h >= 1")
+    if season < 0 or season > 2 or (season != 0 and (m < 2 or m > 58 or n <= m)):
+        raise Error("ets: a season needs 2 <= m <= 58 and n > m")
+    var stride = ets_scratch(n, m)
     var Y = ex.alloc(B * n)
     ex.upload(Y, fptr(addrs[0], "y"), B * n)
     var F = ex.alloc(B * h)
-    var I = ex.alloc(B * 8)
-    var S = ex.alloc(B * 128)
+    var I = ex.alloc(B * 10)
+    var S = ex.alloc(B * stride)
+    var SS = ex.alloc(B * m)
     var a = Args()
     a.p0 = Y
     a.p1 = F
     a.p2 = I
     a.p3 = S
+    a.p4 = SS
     a.i0 = n
     a.i1 = h
     a.i2 = ival(ip, 3)
     a.i3 = ival(ip, 4)
     a.i4 = ival(ip, 5)
     a.i5 = ival(ip, 6)
+    a.i6 = season
+    a.i7 = m
+    a.i8 = stride
     a.f0 = fval(fp, 0)
     a.f1 = fval(fp, 1)
     a.f2 = fval(fp, 2)
+    a.f3 = fval(fp, 3)
     ex.launch[OP_ETS](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
-    ex.download(fptr(addrs[2], "info"), I, B * 8)
+    ex.download(fptr(addrs[2], "info"), I, B * 10)
+    if season != 0:
+        ex.download(fptr(addrs[3], "seasonal states"), SS, B * m)
     return PythonObject(B * h)
 
 

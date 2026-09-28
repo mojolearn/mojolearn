@@ -83,14 +83,24 @@ def rq_encode_cell(
 ):
     """Row i: rotated residual, its norm, the sign bits (0 counts as
     negative) and <x_bar, o> = sum |r_j| * scale / norm."""
+    rq_encode_row(i, x, centers, labels, dim, D, seed, scale, ws, i * D, words, codes, norms, ips)
+
+
+@always_inline
+def rq_encode_row(
+    i: Int, x: F32P, centers: F32P, labels: I32P, dim: Int, D: Int, seed: Int, scale: Float32,
+    ws: F32P, w_off: Int, words: Int, codes: I32P, norms: F32P, ips: F32P,
+):
+    """`rq_encode_cell` with the rotation workspace at `ws[w_off:]` (the
+    device gives each row its own; a host task reuses one)."""
     var l = Int(labels.unsafe_load(i))
-    rq_rotate(x, i * dim, centers, l * dim, dim, D, seed, scale, ws, i * D)
+    rq_rotate(x, i * dim, centers, l * dim, dim, D, seed, scale, ws, w_off)
     var sq = Float32(0.0)
     var sabs = Float32(0.0)
     for w in range(words):
         codes.unsafe_store(i * words + w, Int32(0))
     for j in range(D):
-        var v = ws.unsafe_load(i * D + j)
+        var v = ws.unsafe_load(w_off + j)
         sq = ftz(identical_mul_add(v, v, sq))
         sabs = ftz(sabs + abs(v))
         if v > Float32(0.0):

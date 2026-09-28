@@ -1,0 +1,14 @@
+diff --git a/x_ann/host/cagra_host.mojo b/x_ann/host/cagra_host.mojo
+index 20b303da1..c44dacf2b 100644
+--- a/x_ann/host/cagra_host.mojo
++++ b/x_ann/host/cagra_host.mojo
+@@ -47,7 +47,8 @@ def knn_rows_host(x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P):
+             var jb = 0
+             while jb < n_pad:
+                 var acc = InlineArray[SIMD[DType.float32, W], R](fill=SIMD[DType.float32, W](0.0))
+-                for c in range(d):
++                for cr in range(d):
++                    var c = d - 1 - cr
+                     var b = tp.load[width=W](c * n_pad + jb)
+                     comptime for r in range(R):
+                         if r < rows:
