@@ -245,7 +245,7 @@ def _im2col(
 #: their own runs time it).
 comptime DIRECT_CONV = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_XCNN_NO_DIRECT_CONV"]()
 comptime DC_MAXK = 32
-comptime DC_MAXW = 4096
+comptime DC_MAXW = 2048  # 8 KB of threadgroup memory: four blocks fit a core
 comptime DC_TPB = 256
 
 

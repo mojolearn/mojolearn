@@ -1192,6 +1192,26 @@ class _Graph:
         return out
 
 
+def _graph_key(n, *arrays):
+    """lane/cnn-apple2: a content key for a layer's graph (the node count
+    and the bytes of each array): a forward on the same edges reuses the
+    CSR views and normalized values it built, which are functions of these
+    alone (the same words; PyG's cached=False recomputes them on the GPU,
+    here the build is host NumPy and dominated the forward)."""
+    import hashlib
+    np = _np()
+    h = hashlib.blake2b(digest_size=16)
+    h.update(str(int(n)).encode())
+    for a in arrays:
+        if a is None:
+            h.update(b"none")
+            continue
+        a = np.ascontiguousarray(np.asarray(a))
+        h.update(str((a.dtype.str, a.shape)).encode())
+        h.update(a.tobytes())
+    return h.digest()
+
+
 def _edges(edge_index, n):
     np = _np()
     ei = np.asarray(edge_index)
@@ -1255,7 +1275,16 @@ class GCNConv(_Layer):
         x = _f32(x, "x")
         n = x.shape[0]
         b = self._binding()
-        g, vals = self._graph(n, edge_index, edge_weight)
+        if _LEGACY_STEP:
+            g, vals = self._graph(n, edge_index, edge_weight)
+        else:
+            key = (_graph_key(n, edge_index, edge_weight), self.improved, self.add_self_loops, self.normalize)
+            hit = getattr(self, "_gcache", None)
+            if hit is not None and hit[0] == key:
+                g, vals = hit[1]
+            else:
+                g, vals = self._graph(n, edge_index, edge_weight)
+                self._gcache = (key, (g, vals))
         h = _gemm(b, x, self.weight_, n, self.out_channels, self.in_channels, 1)
         out = g.spmm(b, vals, h, 0)
         if self.bias:
@@ -1314,8 +1343,15 @@ class SAGEConv(_Layer):
         x = _f32(x, "x")
         n = x.shape[0]
         b = self._binding()
-        src, dst = _edges(edge_index, n)
-        g = _Graph(src, dst, n)
+        key = None if _LEGACY_STEP else _graph_key(n, edge_index)
+        hit = getattr(self, "_gcache", None)
+        if key is not None and hit is not None and hit[0] == key:
+            g = hit[1]
+        else:
+            src, dst = _edges(edge_index, n)
+            g = _Graph(src, dst, n)
+            if key is not None:
+                self._gcache = (key, g)
         xs = x
         if self.project:
             xs = self._relu_p.forward(self.lin.forward(x))
