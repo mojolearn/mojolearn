@@ -98,6 +98,8 @@ comptime OP_ETS_LIK = 56
 comptime OP_ETS_INIT = 57
 comptime OP_CELL_FWD_H = 58
 comptime OP_CELL_BWD_H = 59
+comptime OP_GEMM_EPI = 60
+comptime OP_COLSUM_DIV = 61
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

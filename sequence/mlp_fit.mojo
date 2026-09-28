@@ -5,6 +5,9 @@
 from sequence.exec import Exec
 from sequence.mlp import (
     ACT_SOFTMAX,
+    EPI_ACT_BWD,
+    EPI_BIAS_ACT,
+    EPI_L2GRAD,
     SplitMix,
     fisher_yates,
 )
@@ -12,9 +15,11 @@ from sequence.ops import (
     FP,
     OP_ACT,
     OP_ACT_BWD,
+    OP_COLSUM_DIV,
     OP_COPY,
     OP_DIVS,
     OP_GATHER_ROWS,
+    OP_GEMM_EPI,
     OP_L2GRAD,
     OP_MLP_BLOSS,
     OP_MLP_ROWLOSS,
@@ -63,6 +68,32 @@ struct MLPNet(Copyable, Movable):
         return self.w_off(self.n_layers())
 
 
+def gemm_epi[E: Exec](
+    mut ex: E, A: FP, Bm: FP, C: FP, M: Int, N: Int, K: Int,
+    sam: Int, sak: Int, sbk: Int, sbn: Int, epi: Int, p3: FP, i10: Int, f0: Float32, f1: Float32,
+) raises:
+    """`gemm` (dense C, no accumulate) with its follower in the same launch
+    (mlp.mojo::op_gemm_epi)."""
+    var a = Args()
+    a.p0 = A
+    a.p1 = Bm
+    a.p2 = C
+    a.p3 = p3
+    a.i0 = M
+    a.i1 = N
+    a.i2 = K
+    a.i3 = sam
+    a.i4 = sak
+    a.i5 = sbk
+    a.i6 = sbn
+    a.i8 = N
+    a.i9 = epi
+    a.i10 = i10
+    a.f0 = f0
+    a.f1 = f1
+    ex.launch[OP_GEMM_EPI](a, M * N)
+
+
 def _act_launch[E: Exec](mut ex: E, z: FP, rows: Int, cols: Int, act: Int) raises:
     var a = Args()
     a.p0 = z
@@ -81,9 +112,12 @@ def mlp_forward[E: Exec](mut ex: E, net: MLPNet, P: FP, acts: List[FP], B: Int) 
     for i in range(L):
         var fi = net.sizes[i]
         var fo = net.sizes[i + 1]
-        gemm(ex, acts[i], P + net.w_off(i), acts[i + 1], B, fo, fi, fi, 1, fo, 1, False, fo)
-        bias_rows(ex, acts[i + 1], P + net.b_off(i), acts[i + 1], B, fo)
-        _act_launch(ex, acts[i + 1], B, fo, net.out_act if i == L - 1 else net.act)
+        # one launch: the GEMM, its bias and (not softmax) its activation
+        var act = net.out_act if i == L - 1 else net.act
+        gemm_epi(ex, acts[i], P + net.w_off(i), acts[i + 1], B, fo, fi, fi, 1, fo, 1,
+                 EPI_BIAS_ACT, P + net.b_off(i), 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
+        if act == ACT_SOFTMAX:
+            _act_launch(ex, acts[i + 1], B, fo, act)
 
 
 def mlp_fit[E: Exec](
@@ -174,25 +208,19 @@ def mlp_fit[E: Exec](
             while i >= 0:
                 var fi = net.sizes[i]
                 var fo = net.sizes[i + 1]
-                gemm(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1, False, fo)
-                var g = Args()
-                g.p0 = Gr + net.w_off(i)
-                g.p1 = P + net.w_off(i)
-                g.f0 = alpha
-                g.f1 = Float32(B)
-                ex.launch[OP_L2GRAD](g, fi * fo)
-                colsum(ex, deltas[i + 1], Gr + net.b_off(i), B, fo)
-                var dv = Args()
-                dv.p0 = Gr + net.b_off(i)
-                dv.f0 = Float32(B)
-                ex.launch[OP_DIVS](dv, fo)
+                # one launch each: GEMM + L2 term, column sum + mean, GEMM + act'
+                gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
+                         EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
+                var cs = Args()
+                cs.p0 = deltas[i + 1]
+                cs.p1 = Gr + net.b_off(i)
+                cs.i0 = B
+                cs.i2 = fo
+                cs.f0 = Float32(B)
+                ex.launch[OP_COLSUM_DIV](cs, fo)
                 if i > 0:
-                    gemm(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo, False, fi)
-                    var ab = Args()
-                    ab.p0 = deltas[i]
-                    ab.p1 = acts[i]
-                    ab.i0 = net.act
-                    ex.launch[OP_ACT_BWD](ab, B * fi)
+                    gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
+                             EPI_ACT_BWD, acts[i], net.act, Float32(0.0), Float32(0.0))
                 i -= 1
             var o = Args()
             o.p0 = P
