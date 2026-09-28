@@ -26,8 +26,10 @@ IEEE standard, and it is scikit-learn's own precision for the same step.
 """
 import array
 import ctypes
+import itertools
 import math as _math
 import numbers
+import operator
 import warnings
 
 from . import _backend
@@ -1252,10 +1254,15 @@ def _binary_curve(y_true, y_score, pos_label, sample_weight, numeric_mode, calle
 
 
 def _drop_collinear(fps, tps, thr):
-    keep = [0] + [i for i in range(1, len(fps) - 1)
-                  if (fps[i + 1] - fps[i]) != (fps[i] - fps[i - 1])
-                  or (tps[i + 1] - tps[i]) != (tps[i] - tps[i - 1])] + [len(fps) - 1]
-    return [fps[i] for i in keep], [tps[i] for i in keep], [thr[i] for i in keep]
+    """Keep the first and last points and every point where either step
+    changes: (f[i+1] - f[i]) != (f[i] - f[i-1]), the same binary64
+    subtractions and compares, iterated in C (lane metrics-apple)."""
+    df = list(map(operator.sub, fps[1:], fps[:-1]))
+    dt = list(map(operator.sub, tps[1:], tps[:-1]))
+    inner = map(operator.or_, map(operator.ne, df[1:], df[:-1]), map(operator.ne, dt[1:], dt[:-1]))
+    keep = list(itertools.chain((True,), inner, (True,)))
+    return (list(itertools.compress(fps, keep)), list(itertools.compress(tps, keep)),
+            list(itertools.compress(thr, keep)))
 
 
 def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_intermediate=True,
@@ -1325,7 +1332,12 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
 
 
 def _trapezoid(x, y):
-    return _fsum([(x[i] - x[i - 1]) * (y[i] + y[i - 1]) / 2 for i in range(1, len(x))])
+    """fsum of (x[i] - x[i-1]) * (y[i] + y[i-1]) / 2, the same binary64
+    operations per term, iterated in C (lane metrics-apple)."""
+    terms = map(operator.truediv,
+                map(operator.mul, map(operator.sub, x[1:], x[:-1]), map(operator.add, y[1:], y[:-1])),
+                itertools.repeat(2))
+    return _fsum(list(terms))
 
 
 def auc(x, y):
@@ -1352,8 +1364,8 @@ def _binary_auc(fps, tps, max_fpr):
         _undefined_warning("Only one class is present in y_true. ROC AUC score is not defined in that case.")
         return float("nan")
     fps, tps, _ = _drop_collinear(fps, tps, fps) if len(fps) > 2 else (fps, tps, fps)
-    fpr = [0.0] + [v / fps[-1] for v in fps]
-    tpr = [0.0] + [v / tps[-1] for v in tps]
+    fpr = [0.0] + list(map(operator.truediv, fps, itertools.repeat(fps[-1])))
+    tpr = [0.0] + list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
     if max_fpr is None or max_fpr == 1:
         return float(_trapezoid(fpr, tpr))
     import bisect
@@ -1396,19 +1408,57 @@ def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
     w = _weights(sample_weight, n, caller)
     index = {c: i for i, c in enumerate(classes)}
     codes = _label_map(true, lambda v: index[v])
-    flags = []
     code_list = codes.tolist()
-    for c in range(k):
-        flags.extend(1 if v == c else 0 for v in code_list)
-    curves = _curves(s, Array.from_list(flags, "<i4"), w, n, k, numeric_mode, stride=k)
+    if k <= 256:
+        # class-major 0/1 flags as int32 words, built with bytes.translate
+        # and a strided byte copy (little-endian '<i4'), and the unweighted
+        # support by bytes.count: the same values (lane metrics-apple)
+        cb = bytes(code_list)
+        words = bytearray(4 * n * k)
+        words[0::4] = b"".join(cb.translate(bytes(int(j == c) for j in range(256))) for c in range(k))
+        store = array.array("i")
+        store.frombytes(words)
+        if not _LITTLE:
+            store.byteswap()
+        flags = Array._owned(store, (n * k,), "<i4", "C")
+    else:
+        flags = []
+        for c in range(k):
+            flags.extend(1 if v == c else 0 for v in code_list)
+        flags = Array.from_list(flags, "<i4")
+    curves = _curves(s, flags, w, n, k, numeric_mode, stride=k)
     support = [0.0] * k
     if w is None:
-        for v in code_list:
-            support[v] += 1
+        if k <= 256:
+            support = [float(cb.count(c)) for c in range(k)]
+        else:
+            for v in code_list:
+                support[v] += 1
     else:
         for v, wt in zip(code_list, w.tolist()):
             support[v] += wt
     return curves, support, s, code_list, classes, w
+
+
+_LITTLE = array.array("i", [1]).tobytes()[0] == 1
+
+
+def _rows_sum_to_one(s, k):
+    """No row's correctly rounded sum is farther than 1e-8 + 1e-5 from 1
+    (scikit-learn's check; the scores are finite float32). Each row's
+    `math.fsum` is `_fsum`'s value (finite float32 terms never overflow
+    binary64; a zero sum only differs in its sign, which |s - 1| drops),
+    the rows iterated in C; |fl(s - 1)| is monotone on either side of 1,
+    so the largest and smallest sums decide every row (lane metrics-apple)."""
+    flat = array.array("f")
+    flat.frombytes(s.tobytes())
+    if not _LITTLE:
+        flat.byteswap()
+    if not len(flat):
+        return True
+    sums = list(map(_math.fsum, zip(*[flat[c::k] for c in range(k)])))
+    tol = 1e-8 + 1e-5
+    return not (abs(max(sums) - 1) > tol or abs(min(sums) - 1) > tol)
 
 
 def _average_scores(scores, support, average):
@@ -1459,11 +1509,9 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
                          "'sample_weight' must be None in this case.")
     s_check = _scores(y_score, len(true), "roc_auc_score", ndim=2)
     k = s_check.shape[1]
-    vals = s_check.tolist()
-    for row in vals:
-        if abs(_fsum(row) - 1) > 1e-8 + 1e-5:
-            raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
-                             "should sum up to 1.0 over classes")
+    if not _rows_sum_to_one(s_check, k):
+        raise ValueError("Target scores need to be probabilities for multiclass roc_auc, i.e. they "
+                         "should sum up to 1.0 over classes")
     if multi_class == "ovr":
         curves, support, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, labels, "roc_auc_score",
                                                      numeric_mode)
@@ -1477,6 +1525,7 @@ def roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_clas
         return _average_scores(scores, support, average)
     # one-vs-one (scikit-learn _average_multiclass_ovo_score)
     from ._metrics_impl import _selected_labels
+    vals = s_check.tolist()
     classes = present if labels is None else _selected_labels(labels, kind, present)
     if len(classes) != k:
         raise ValueError("Number of classes in y_true not equal to the number of columns in 'y_score'")
@@ -1994,26 +2043,49 @@ def _expected_mi(a_counts, b_counts, n):
     of large log-gamma values, portable binary64 log / exp only."""
     if len(a_counts) == 1 or len(b_counts) == 1:
         return 0.0
+    # Each walk away from the mode stops at the first u that is exactly 0:
+    # every later u is that 0 times a finite ratio, so it adds nothing to z
+    # (an exact sum) and its term is skipped as pr == 0 (the same bits as
+    # walking the whole support; lane metrics-apple).
     emi_terms = []
+    logs = {}
+
+    def plog(v):
+        r = logs.get(v)
+        if r is None:
+            r = logs[v] = pmath.log(v)
+        return r
     for a in a_counts:
+        la = plog(a)
         for b in b_counts:
+            lb = plog(b)
             lo, hi = max(0, a + b - n), min(a, b)
             mode = min(max((a + 1) * (b + 1) // (n + 2), lo), hi)
-            u = {mode: 1.0}
-            x = mode
+            up = [1.0]
+            x, v = mode, 1.0
             while x < hi:
-                u[x + 1] = u[x] * ((a - x) * (b - x)) / ((x + 1) * (n - a - b + x + 1))
+                v = v * ((a - x) * (b - x)) / ((x + 1) * (n - a - b + x + 1))
+                if v == 0:
+                    break
+                up.append(v)
                 x += 1
-            x = mode
+            down = []
+            x, v = mode, 1.0
             while x > lo:
-                u[x - 1] = u[x] * (x * (n - a - b + x)) / ((a - x + 1) * (b - x + 1))
+                v = v * (x * (n - a - b + x)) / ((a - x + 1) * (b - x + 1))
+                if v == 0:
+                    break
+                down.append(v)
                 x -= 1
-            z = _fsum(list(u.values()))
-            for nij in range(max(1, lo), hi + 1):
-                pr = u[nij] / z
+            z = _fsum(up + down)
+            first = mode - len(down)
+            for nij, u in zip(range(first, mode + len(up)), down[::-1] + up):
+                if nij < 1:
+                    continue
+                pr = u / z
                 if pr == 0:
                     continue
-                emi_terms.append((nij / n) * (pmath.log(n * nij) - pmath.log(a) - pmath.log(b)) * pr)
+                emi_terms.append((nij / n) * (plog(n * nij) - la - lb) * pr)
     return _fsum(emi_terms)
 
 

@@ -346,6 +346,63 @@ def sort_merge_unit(t: Int, f: FP, q: IP):
     sti(f, DST + 2 * N + d, x)
 
 
+#: outputs per thread of the device merge-path schedule (a power of two
+#: that divides 2 * RUN, so a chunk never crosses a run pair)
+comptime MERGE_CHUNK = 8
+
+
+def merge_path_chunks(total: Int, n: Int) -> Int:
+    """Threads of `sort_merge_path_unit` for a merge stage of `total` = P*n."""
+    return (total // n) * ((n + MERGE_CHUNK - 1) // MERGE_CHUNK)
+
+
+def sort_merge_path_unit(t: Int, f: FP, q: IP):
+    """q = [n, w, SRC, DST, N]; t = chunk of MERGE_CHUNK merged outputs (the
+    Apple-speed device schedule of a merge pass, lane metrics-apple): one
+    binary search on the merge diagonal finds how many of the chunk's
+    predecessors come from each run, then a two-pointer merge writes the
+    chunk. The order is strict (6101), so this writes the unique merged
+    order, the same words as `sort_merge_unit` and `sort_merge_pair_unit`."""
+    var n = p(q, 0)
+    var w = p(q, 1)
+    var SRC = p(q, 2)
+    var DST = p(q, 3)
+    var N = p(q, 4)
+    var cpp = (n + MERGE_CHUNK - 1) // MERGE_CHUNK
+    var pp = t // cpp
+    var o0 = (t - pp * cpp) * MERGE_CHUNK
+    var seg = pp * n
+    var base = (o0 // (2 * w)) * (2 * w)
+    var mid = min(base + w, n)
+    var end = min(base + 2 * w, n)
+    var o = o0 - base
+    var lo = max(0, o - (end - mid))
+    var hi = min(o, mid - base)
+    while lo < hi:
+        var md = (lo + hi) // 2
+        var bi = seg + mid + (o - md - 1)
+        if _before_at(f, SRC, N, seg + base + md, ldu(f, SRC + bi), ldu(f, SRC + N + bi), ldi(f, SRC + 2 * N + bi)):
+            lo = md + 1
+        else:
+            hi = md
+    var a = base + lo
+    var b = mid + (o - lo)
+    var out = o0
+    var stop = min(o0 + MERGE_CHUNK, end)
+    while out < stop:
+        var take_a = b >= end
+        if a < mid and b < end:
+            take_a = _before_at(f, SRC, N, seg + a, ldu(f, SRC + seg + b), ldu(f, SRC + N + seg + b),
+                                ldi(f, SRC + 2 * N + seg + b))
+        if take_a:
+            _move(f, SRC, DST, N, seg + a, seg + out)
+            a += 1
+        else:
+            _move(f, SRC, DST, N, seg + b, seg + out)
+            b += 1
+        out += 1
+
+
 @always_inline
 def _move(f: FP, SRC: Int, DST: Int, N: Int, a: Int, b: Int):
     stu(f, DST + b, ldu(f, SRC + a))
@@ -521,3 +578,60 @@ def wpct_prefix_unit(t: Int, f: FP, q: IP):
 def copy_unit(t: Int, f: FP, q: IP):
     """q = [SRC, DST]; t = element: a word copy."""
     f.unsafe_store(p(q, 1) + t, f.unsafe_load(p(q, 0) + t))
+
+
+# ---------------------------------------------------------------------------
+# The column maximum (col_max, lane metrics-apple)
+# ---------------------------------------------------------------------------
+# `col_max_unit` keeps m = the column's first value and replaces it by each
+# later value v with v > m: a first NaN is the answer; otherwise NaNs never
+# win and the answer is the EARLIEST of the values equal to the largest
+# (-0.0 and +0.0 compare equal, so the earlier one's bits stay). A chunk
+# keeps its earliest largest non-NaN value; the chunks meet left to right
+# by the same `>`, so the earliest one wins again: the same word.
+
+def cm_chunk_unit(t: Int, f: FP, q: IP):
+    """q = [V, n, D, S, C, CH]; t = column * C + chunk: S[2t] = the chunk's
+    earliest largest non-NaN value, S[2t+1] = 1 when it has one."""
+    var V = p(q, 0)
+    var n = p(q, 1)
+    var D = p(q, 2)
+    var S = p(q, 3)
+    var C = p(q, 4)
+    var CH = p(q, 5)
+    var col = t // C
+    var c = t - col * C
+    var m = Float32(0)
+    var found = 0
+    for r in range(c * CH, min(n, c * CH + CH)):
+        var v = ld(f, V + r * D + col)
+        if v == v:  # not NaN
+            if found == 0:
+                m = v
+                found = 1
+            elif v > m:
+                m = v
+    st(f, S + 2 * t, m)
+    sti(f, S + 2 * t + 1, found)
+
+
+def cm_final_unit(t: Int, f: FP, q: IP):
+    """q = [V, D, S, C, OUT]; t = column: col_max_unit's word."""
+    var V = p(q, 0)
+    var D = p(q, 1)
+    var S = p(q, 2)
+    var C = p(q, 3)
+    var v0 = ld(f, V + t)
+    var m = v0
+    if v0 == v0:  # not NaN
+        var found = 0
+        for c in range(C):
+            var k = S + 2 * (t * C + c)
+            if ldi(f, k + 1) != 0:
+                var s = ld(f, k)
+                if found == 0:
+                    m = s
+                    found = 1
+                elif s > m:
+                    m = s
+    st(f, p(q, 4) + t, m)
