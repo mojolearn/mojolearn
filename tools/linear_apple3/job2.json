@@ -24,7 +24,7 @@
      "cases": "sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,poisson,gamma,tweedie,huber,bayes-ridge,ard,lars,lasso-lars,quantile,ridge-clf,ridge-cv,lasso-cv,enet-cv,logistic-cv,isotonic",
      "rows": [100000, 1000000],
      "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,isotonic"},
-    {"name": "cdgram", "defines": "-D MOJOLEARN_CD_GRAM_BLOCKS=1", "builds": ["estimators", "solver"],
+    {"name": "cdgram", "defines": "-D MOJOLEARN_CD_GRAM_BLOCKS=1 -D MOJOLEARN_OLS_FAST_SMALL_NT=1", "builds": ["estimators", "solver"],
      "cases": "lasso,elasticnet,ols,ridge", "warm_rows": 2000, "rows": [1000000, 2000000], "reps": 2},
     {"name": "cdbefore", "defines": "", "builds": ["estimators", "solver"],
      "cases": "lasso,elasticnet,ols,ridge", "warm_rows": 2000, "rows": [1000000, 2000000], "reps": 2}
@@ -32,7 +32,7 @@
   "base": {
     "commit": "origin/lane/apple3-merged",
     "files": ["x_linear/device.mojo", "x_linear/ops.mojo", "x_linear/sgd.mojo", "x_linear/tops.mojo",
-              "solver/impl/cd.mojo"],
+              "solver/impl/cd.mojo", "glm/impl/linalg/detail/lstsq.mojo"],
     "builds": ["x_linear", "estimators", "solver"],
     "modes": ["identical", "fast"],
     "runs": [["sgd-clf,sgd-reg,perceptron,pa-clf,pa-reg,sgd-ocsvm,poisson,tweedie,huber,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,logistic-cv,isotonic", 100000],
