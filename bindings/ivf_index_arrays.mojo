@@ -94,11 +94,13 @@ def ivf_read_index_arrays(
     n_addrs: Int = 9,
     n_params: Int = 7,
     partial_storage: Bool = False,
+    allow_filter: Bool = False,
 ) raises -> IvfIndexArrays:
     """Addresses 0 to 4 and params 0 to 3 of `ivf_flat_search` (9 addresses,
-    7 params) or `ivf_flat_extend` (10 and 5), read and admitted (module
-    docstring)."""
-    if len(addrs) != n_addrs:
+    7 params; with `allow_filter`, a 10th address is the sample filter,
+    `ivf_read_search_filter`) or `ivf_flat_extend` (10 and 5), read and
+    admitted (module docstring)."""
+    if len(addrs) != n_addrs and not (allow_filter and len(addrs) == n_addrs + 1):
         raise Error(
             what + ": addrs must contain " + String(n_addrs) + " addresses"
             " (see bindings/ivf_index_arrays.mojo), got " + String(len(addrs))
@@ -141,6 +143,15 @@ def ivf_read_index_arrays(
         n_lists, dim, n, metric, centers^, center_norms^, offsets^,
         list_indices^, list_data^,
     )
+
+
+def ivf_read_search_filter(addrs: PythonObject, n_rows: Int) raises -> List[Int32]:
+    """`ivf_flat_search`'s optional address 9: the sample filter, one int32
+    per ORIGINAL row id (0 removes the row; DEVIATION 5863). Absent (9
+    addresses) is no filter and returns an empty list."""
+    if len(addrs) < 10:
+        return List[Int32]()
+    return read_i32(Int(py=addrs[9]), n_rows)
 
 
 def ivf_search_extents(params: PythonObject) raises -> Tuple[Int, Int, Int]:

@@ -140,6 +140,7 @@ from ivf.checks.sabotage_layout import (
     sabotage_sort_probe_slots,
 )
 from ivf.impl.neighbors.ivf_common import calc_chunk_indices
+from ivf.host.ivf_host import IvfHostIndex, host_ivf_search
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
     compute_row_norms,
     download_f32,
@@ -2193,12 +2194,100 @@ def check_extend_matches_build() raises:
           + " rows, " + String(shared) + " lists take new rows beside old ones")
 
 
+def check_filter_matches_oracle() raises:
+    """THE SAMPLE FILTER (DEVIATION 5863). A filtered search, on the device
+    and on the host, equals `oracle_ivf_search` over the SAME index with the
+    removed rows deleted from their lists (offsets recomputed, centres
+    unchanged, so the probes are the same), bit for bit, candidate counts
+    included. The oracle never sees a filter: the removal is a different
+    statement of the same set. Also: an all-ones filter is the unfiltered
+    search, bit for bit.
+
+    SEPARATION: some query's UNFILTERED answer must hold a removed row, or
+    a filter that is ignored passes (VACUOUS otherwise)."""
+    var ctx = DeviceContext()
+    var x = ivf_index_fixture(N_ROWS, DIM, 29)
+    var q = ivf_query_fixture(x, N_ROWS, N_QUERIES, DIM, 29)
+    var index = _build_index(ctx, x, N_ROWS, DIM, N_LISTS, UInt64(31))
+    var n_probes = 3
+    var keep = List[Int32](capacity=N_ROWS)
+    var ones = List[Int32](capacity=N_ROWS)
+    for i in range(N_ROWS):
+        keep.append(Int32(0) if (i * 7 + 3) % 5 < 2 else Int32(1))
+        ones.append(Int32(1))
+    var plain = _search(ctx, index, q, N_QUERIES, K, n_probes)
+    var hits = 0
+    for i in range(N_QUERIES * K):
+        if keep[Int(plain.indices[i])] == 0:
+            hits += 1
+    if hits == 0:
+        raise Error("check_filter_matches_oracle: VACUOUS fixture (no unfiltered answer holds a removed row)")
+
+    var sp = IvfFlatSearchParams(n_probes)
+    var trace = IdentityTrace.disabled()
+    var all_kept = ivf_flat_search_traced(
+        ctx, trace, index, sp, q, N_QUERIES, K, PINNED_TILE_TPB, IVF_EXPAND_TPB, False, ones
+    )
+    for i in range(N_QUERIES * K):
+        if not _same_bits(all_kept.distances[i], plain.distances[i]) or all_kept.indices[i] != plain.indices[i]:
+            raise Error("check_filter_matches_oracle: FAIL an all-ones filter moved slot " + String(i))
+    var got = ivf_flat_search_traced(
+        ctx, trace, index, sp, q, N_QUERIES, K, PINNED_TILE_TPB, IVF_EXPAND_TPB, False, keep
+    )
+
+    # The oracle's index: every list with its removed rows deleted.
+    var offsets = List[Int32]()
+    var ids = List[UInt32]()
+    var data = List[Float32]()
+    offsets.append(Int32(0))
+    for l in range(N_LISTS):
+        for sl in range(Int(index.list_offsets[l]), Int(index.list_offsets[l + 1])):
+            var id = Int(index.list_indices[sl])
+            if keep[id] != 0:
+                ids.append(UInt32(id))
+                for f in range(DIM):
+                    data.append(index.list_data[sl * DIM + f])
+        offsets.append(Int32(len(ids)))
+    var want = oracle_ivf_search(
+        index.centers, N_LISTS, offsets, ids, data, len(ids), q, N_QUERIES, DIM, K, n_probes, False,
+    )
+    var host = host_ivf_search(
+        IvfHostIndex(
+            N_LISTS, DIM, N_ROWS, index.metric, index.centers.copy(), index.center_norms.copy(),
+            index.list_offsets.copy(), index.list_indices.copy(), index.list_data.copy(),
+        ),
+        q, N_QUERIES, K, n_probes, False, keep,
+    )
+    for qi in range(N_QUERIES):
+        if got.n_candidates[qi] != want.n_candidates[qi] or host.n_candidates[qi] != want.n_candidates[qi]:
+            raise Error(
+                "check_filter_matches_oracle: FAIL query " + String(qi) + " counts device "
+                + String(got.n_candidates[qi]) + " host " + String(host.n_candidates[qi])
+                + " oracle " + String(want.n_candidates[qi])
+            )
+    for i in range(N_QUERIES * K):
+        if keep[Int(got.indices[i])] == 0:
+            raise Error("check_filter_matches_oracle: FAIL slot " + String(i) + " returns removed row " + String(got.indices[i]))
+        if not _same_bits(got.distances[i], want.distances[i]) or got.indices[i] != want.indices[i]:
+            raise Error(
+                "check_filter_matches_oracle: FAIL slot " + String(i) + " device ("
+                + _hex32(got.distances[i]) + ", " + String(got.indices[i]) + ") oracle ("
+                + _hex32(want.distances[i]) + ", " + String(want.indices[i]) + ")"
+            )
+        if not _same_bits(host.distances[i], want.distances[i]) or host.indices[i] != want.indices[i]:
+            raise Error("check_filter_matches_oracle: FAIL slot " + String(i) + " host differs from the oracle")
+    print("  OK check_filter_matches_oracle: " + String(N_QUERIES) + " queries, " + String(hits)
+          + " unfiltered answers held a removed row; device == host == oracle")
+    _ = ctx^
+
+
 def main() raises:
     print("ivf_check mode=" + _mode_name())
     check_nprobe_equals_nlists_is_brute_force()
     check_ivf_refusals()
     check_list_layout_and_index_carry()
     check_extend_matches_build()
+    check_filter_matches_oracle()
     check_empty_list()
     check_assignment_ties()
     check_quantizer_is_reproducible()

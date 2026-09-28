@@ -46,6 +46,8 @@
 #   gbm-bench/higgs/higgs_speed.npz           1,276,000,490   (decoded 11,000,000 x 28 float32; skips the 2.6 GB gzip and its parse)
 #   gbm-bench/covtype/covtype_speed.npz          127,823,140   (decoded 581,012 x 54 float32 + int32 target; skips figshare)
 #   gbm-bench/year/year_speed.npz               187,586,070   (decoded 515,345 x 90 float32; skips the 211 MB zip)
+#   ann-bench/sift1m/sift1m.npz                 521,120,740   (TEXMEX SIFT1M decoded: base 1,000,000 x 128 f32,
+#                                                               query 10,000 x 128, gt 10,000 x 100 int32; the ann lane's 1M floor)
 #   corpus/enwik8/input.txt                     100,000,000   (neural, English kind)
 #   corpus/pile_github/input.txt                 97,124,565   (neural, source-code kind)
 #   vocab/mojolearn-bpe-50257-v1/ranks.tsv          967,306   (OUR 50,256-rank BPE vocabulary, trained by
@@ -105,6 +107,7 @@ gbm-bench/covtype/covtype_speed.npz	HOME/datasets/gbm-bench/covtype/covtype_spee
 gbm-bench/year/year_speed.npz	HOME/datasets/gbm-bench/year/year_speed.npz
 gbm-bench/epsilon/epsilon_X.npy	HOME/.cache/mojolearn/epsilon_X.npy
 gbm-bench/epsilon/epsilon_y.npy	HOME/.cache/mojolearn/epsilon_y.npy
+ann-bench/sift1m/sift1m.npz	HOME/datasets/ann-bench/sift1m/sift1m.npz
 corpus/enwik8/input.txt	ROOT/training/corpus/enwik8/input.txt
 corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
 vocab/mojolearn-bpe-50257-v1/ranks.tsv	HOME/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.ranks.tsv

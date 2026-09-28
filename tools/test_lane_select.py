@@ -1593,7 +1593,14 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      x-ann and x-decomp expansion lanes merged
                                      2026-09-27/28, and no neural or linear
                                      .core lane is among them (main's own
-                                     change, found red after the merge)"""
+                                     change, found red after the merge)
+
+    REMEASURED 2026-09-28 (lane/algos-ann-b, session B's new lanes):
+      kmeans_oracle        71 -> 75  ivf-filter, x-ann-tsne-pca,
+                                     x-ann-cagra-filter, x-ann-refine-euclidean,
+                                     each over an IVF or k-NN index whose
+                                     coarse quantizer is this library's KMeans;
+                                     no old lane moved"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 76),
                       ("core/gbdt_host_predict.mojo", 51),
@@ -2028,8 +2035,8 @@ def test_the_real_manifest_edits_of_the_three_branches_are_placed():
     """The three branches' host_surface.py edits, replayed on the manifest in
     this tree (a lane that exists here stands in for ivf-filter)."""
     old = lane_select._read(lane_select.MANIFEST)
-    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "par-ivf")',
-               'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend")',
+    anchors = ('training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter", "par-ivf")',
+               'inference_lanes=("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")',
                '"gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad"',
                '"pca_fit", "pca_fit_full", "tsvd_fit"')
     for a in anchors:
