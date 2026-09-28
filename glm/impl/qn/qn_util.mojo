@@ -41,6 +41,8 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.ffi import external_call
+from std.sys.info import is_apple_gpu
 from std.memory import bitcast
 
 from core.column_stats import STATS_TPB
@@ -263,6 +265,20 @@ def host_le_eps_times(ys: Float32, yy: Float32) -> Bool:
     return ks <= kp
 
 
+@always_inline
+def _dev_barrier():
+    """A block barrier that also orders DEVICE memory: `drt` is shared
+    through device memory in `lbfgs_dir_kernel`. On NVIDIA and AMD
+    `barrier()` already covers global memory within the block; on Apple it is
+    `threadgroup_barrier(mem_threadgroup)`, which does not, so Apple gets
+    `air.wg.barrier(3, 1)` = `threadgroup_barrier(mem_device |
+    mem_threadgroup)` (the x_linear team fix, 2979a9de0)."""
+    comptime if is_apple_gpu():
+        external_call["air.wg.barrier", NoneType](Int32(3), Int32(1))
+    else:
+        barrier()
+
+
 def lbfgs_dir_kernel(
     drt: MutPointer[Float32, MutAnyOrigin],
     g: MutPointer[Float32, MutAnyOrigin],
@@ -316,7 +332,7 @@ def lbfgs_dir_kernel(
     while i < n:
         drt.unsafe_store(i, ftz(neg_one * g.unsafe_load(i)))
         i += STATS_TPB
-    barrier()
+    _dev_barrier()
     var j = (end_prev + 1) % m
     for _ in range(bound):
         j = (j + m - 1) % m
@@ -332,12 +348,12 @@ def lbfgs_dir_kernel(
                 i, ftz(identical_mul_add(na, yj.unsafe_load(i), drt.unsafe_load(i)))
             )
             i += STATS_TPB
-        barrier()
+        _dev_barrier()
     i = tid
     while i < n:
         drt.unsafe_store(i, ftz(scale * drt.unsafe_load(i)))
         i += STATS_TPB
-    barrier()
+    _dev_barrier()
     for _ in range(bound):
         var d = _block_dot_bcast(y_all + j * n, drt, n, tid)
         var beta = ieee_div_f32(d, yhist.unsafe_load(j))
@@ -349,7 +365,7 @@ def lbfgs_dir_kernel(
                 i, ftz(identical_mul_add(c, sj.unsafe_load(i), drt.unsafe_load(i)))
             )
             i += STATS_TPB
-        barrier()
+        _dev_barrier()
         j = (j + 1) % m
 
 
