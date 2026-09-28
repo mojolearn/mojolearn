@@ -725,3 +725,104 @@ def add_arrays_unit(t: Int, f: FP, q: IP):
     """q = [A, B, OUT]; t = element: OUT = A + B (a running count plus a
     batch's, the naive Bayes partial_fit)."""
     st(f, p(q, 2) + t, add(ld(f, p(q, 0) + t), ld(f, p(q, 1) + t)))
+
+
+# ---------------------------------------------------------------- scalers (item 5)
+def scaler_stats_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, W, OUT]; t = column (StandardScaler fit with NaN and / or
+    sample_weight, sklearn `_incremental_mean_and_var` on a fresh scaler).
+    Over the rows ascending whose entry is not NaN and whose weight is not
+    zero (W < 0: every weight is one): OUT rows of d are the count (the
+    weight sum; unweighted, the row count), the mean sum(w x) / sum(w) and the
+    population variance sum(w (x - mean)^2) / sum(w). A column whose counted
+    entries are all equal keeps that value as its mean and variance zero
+    (STD-1's exact-constant rule, the binding's standard_fit). No counted
+    entry: the count is zero and mean and variance are NaN (the reference's
+    0 / 0). DEVIATION 5400 (rows fold ascending), 5408 (operands flushed by
+    `ld`)."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var W = p(q, 3)
+    var O = p(q, 4)
+    var c = t
+    var cnt = 0
+    var sw = Float32(0)
+    var s = Float32(0)
+    var first = Float32(0)
+    var changed = False
+    for i in range(n):
+        var v = ld(f, X + i * d + c)
+        if is_nan(v):
+            continue
+        var w = Float32(1)
+        if W >= 0:
+            w = ld(f, W + i)
+            if w == Float32(0):
+                continue
+        if cnt == 0:
+            first = v
+        elif v != first:
+            changed = True
+        if W >= 0:
+            s = add(s, mul(w, v))
+            sw = add(sw, w)
+        else:
+            s = add(s, v)
+        cnt += 1
+    if W < 0:
+        sw = Float32(cnt)
+    var mean = canonical_nan()
+    var var_ = canonical_nan()
+    if cnt > 0:
+        if not changed:
+            mean = first
+            var_ = Float32(0)
+        else:
+            mean = div(s, sw)
+            var ss = Float32(0)
+            for i in range(n):
+                var v = ld(f, X + i * d + c)
+                if is_nan(v):
+                    continue
+                var w = Float32(1)
+                if W >= 0:
+                    w = ld(f, W + i)
+                    if w == Float32(0):
+                        continue
+                var e = sub(v, mean)
+                if W >= 0:
+                    ss = add(ss, mul(w, mul(e, e)))
+                else:
+                    ss = add(ss, mul(e, e))
+            var_ = div(ss, sw)
+    st(f, O + c, sw)
+    f.unsafe_store(O + d + c, mean)
+    f.unsafe_store(O + 2 * d + c, var_)
+
+
+def std_scale_unit(t: Int, f: FP, q: IP):
+    """q = [VAR, SCALE]; t = column: StandardScaler's scale from a variance,
+    the binding's rule (STD-2): exactly zero -> one, else sqrt(var); a NaN
+    variance (a column never seen) stays NaN."""
+    var v = raw(f, p(q, 0) + t)
+    if is_nan(v):
+        f.unsafe_store(p(q, 1) + t, v)
+    elif ftz(v) == Float32(0):
+        st(f, p(q, 1) + t, Float32(1))
+    else:
+        st(f, p(q, 1) + t, sqrtf(v))
+
+
+def nan_keep_unit(t: Int, f: FP, q: IP):
+    """q = [X, d, T, COLNAN, OUT]; t = element (a scaler transform with NaN):
+    a NaN entry of X is copied bit for bit, an element of a column flagged in
+    COLNAN (its statistics are NaN: never seen in fit) is the quiet NaN word,
+    anything else is T's bits (the binding's transform of the NaN-filled X)."""
+    var x = raw(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 4) + t, x)
+    elif raw(f, p(q, 3) + t % p(q, 1)) != Float32(0):
+        f.unsafe_store(p(q, 4) + t, canonical_nan())
+    else:
+        f.unsafe_store(p(q, 4) + t, raw(f, p(q, 2) + t))

@@ -27,7 +27,8 @@ FAMILIES = (
         forest_kinds=(),
         classes=("IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex"),
         display="the ann lane (IVF-PQ, t-SNE, CAGRA)",
-        host_modules=("x_ann/host/ivf_pq_host.mojo", "x_ann/host/tsne_host.mojo", "x_ann/host/cagra_host.mojo"),
+        host_modules=("x_ann/host/ivf_pq_host.mojo", "x_ann/host/tsne_host.mojo", "x_ann/host/cagra_host.mojo",
+                      "x_ann/host/ann_host_cells.mojo"),
         exports=(
             "x_ann_host_numeric_mode", "x_ann_host_vendor", "x_ann_host_column", "x_ann_host_sabotage",
             "x_ann_ivf_pq_build", "x_ann_ivf_pq_search", "x_ann_tsne_fit",
