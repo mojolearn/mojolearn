@@ -569,16 +569,46 @@ def scan_chunk(m: Int, stride: Int) -> Int:
     return c if c < m else m
 
 
+def scan_gather_i32(
+    ctx: DeviceContext, src: I32P, dli: I32P, n_slots: Int, width: Int,
+) raises -> DeviceBuffer[DType.int32]:
+    """A per-row int32 array of `width` words laid out in list order (the
+    launch `ivf_scan_search` makes per search; a resident index makes it
+    once, lane ann-apple3). Enqueued, not drained."""
+    var out = ctx.enqueue_create_buffer[DType.int32](max(n_slots * width, 1))
+    if n_slots > 0:
+        ctx.enqueue_function[gather_i32_kernel](Int32(n_slots * width), Int32(width), src, dli, out.unsafe_ptr(),
+                                                grid_dim=_grid(n_slots * width), block_dim=TPB)
+    return out^
+
+
+def scan_gather_f32(ctx: DeviceContext, src: F32P, dli: I32P, n_slots: Int) raises -> DeviceBuffer[DType.float32]:
+    var out = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1))
+    if n_slots > 0:
+        ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), src, dli, out.unsafe_ptr(),
+                                                grid_dim=_grid(n_slots), block_dim=TPB)
+    return out^
+
+
 # KIND: 0 = IVF-PQ, 1 = IVF-SQ, 2 = IVF-RaBitQ
 def ivf_scan_search[KIND: Int](
     ctx: DeviceContext, dq: F32P, dc: F32P, doff: I32P, dli: I32P, dcodes: I32P, dmask: I32P, fa: F32P, fb: F32P,
     offsets: List[Int32], n_lists: Int, dim: Int, m: Int, k: Int, n_probes: Int,
     pq_dim: Int, pq_len: Int, n_codes: Int, D: Int, words: Int, seed: Int, scale: Float32,
     dd: F32P, di: I32P, dn: I32P,
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool, pre_mask: I32P,
 ) raises:
     """Run the whole search and synchronize. The pointers are device
     buffers'. fa/fb: PQ codebooks (fb unused); SQ vmin, delta; RaBitQ norms,
-    ips."""
+    ips.
+
+    `have_pre` (lane ann-apple3, the resident index): `pre_codes` (and, for
+    RaBitQ, `pre_a` / `pre_b`) are the list-order arrays `scan_gather_i32` /
+    `scan_gather_f32` made from dcodes (fa, fb) when the index was prepared,
+    so this search does not gather them again; `mask_pre` says `pre_mask` is
+    the mask in list order too (the all-ones filter, the same words in any
+    order). Without `have_pre` every array is gathered here, as before. The
+    score kernels read the same words either way."""
     var np = n_probes if n_probes < n_lists else n_lists
     var stride = scan_stride(offsets, n_lists, np)
     var mc = scan_chunk(m, stride)
@@ -600,20 +630,32 @@ def ivf_scan_search[KIND: Int](
     # into list order once per search; the score kernels index them by slot
     var n_slots = Int(offsets[n_lists])
     var width = pq_dim if KIND == 0 else (dim if KIND == 1 else words)
-    var dpcodes = ctx.enqueue_create_buffer[DType.int32](max(n_slots * width, 1))
-    var dpmask = ctx.enqueue_create_buffer[DType.int32](max(n_slots, 1))
-    var dpa = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if KIND == 2 else 1)
-    var dpb = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if KIND == 2 else 1)
+    var own_codes = not have_pre
+    var own_mask = not (have_pre and mask_pre)
+    var dpcodes = ctx.enqueue_create_buffer[DType.int32](max(n_slots * width, 1) if own_codes else 1)
+    var dpmask = ctx.enqueue_create_buffer[DType.int32](max(n_slots, 1) if own_mask else 1)
+    var dpa = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if (KIND == 2 and own_codes) else 1)
+    var dpb = ctx.enqueue_create_buffer[DType.float32](max(n_slots, 1) if (KIND == 2 and own_codes) else 1)
     if n_slots > 0:
-        ctx.enqueue_function[gather_i32_kernel](Int32(n_slots * width), Int32(width), dcodes, dli,
-                                                dpcodes.unsafe_ptr(), grid_dim=_grid(n_slots * width), block_dim=TPB)
-        ctx.enqueue_function[gather_i32_kernel](Int32(n_slots), Int32(1), dmask, dli, dpmask.unsafe_ptr(),
-                                                grid_dim=_grid(n_slots), block_dim=TPB)
+        if own_codes:
+            ctx.enqueue_function[gather_i32_kernel](Int32(n_slots * width), Int32(width), dcodes, dli,
+                                                    dpcodes.unsafe_ptr(), grid_dim=_grid(n_slots * width),
+                                                    block_dim=TPB)
+        if own_mask:
+            ctx.enqueue_function[gather_i32_kernel](Int32(n_slots), Int32(1), dmask, dli, dpmask.unsafe_ptr(),
+                                                    grid_dim=_grid(n_slots), block_dim=TPB)
         comptime if KIND == 2:
-            ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fa, dli, dpa.unsafe_ptr(),
-                                                    grid_dim=_grid(n_slots), block_dim=TPB)
-            ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fb, dli, dpb.unsafe_ptr(),
-                                                    grid_dim=_grid(n_slots), block_dim=TPB)
+            if own_codes:
+                ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fa, dli, dpa.unsafe_ptr(),
+                                                        grid_dim=_grid(n_slots), block_dim=TPB)
+                ctx.enqueue_function[gather_f32_kernel](Int32(n_slots), fb, dli, dpb.unsafe_ptr(),
+                                                        grid_dim=_grid(n_slots), block_dim=TPB)
+    # the list-order arrays the score kernels read: this search's or the
+    # resident index's
+    var gcodes = rebind[I32P](dpcodes.unsafe_ptr()) if own_codes else pre_codes
+    var gmask = rebind[I32P](dpmask.unsafe_ptr()) if own_mask else pre_mask
+    var ga = rebind[F32P](dpa.unsafe_ptr()) if own_codes else pre_a
+    var gb = rebind[F32P](dpb.unsafe_ptr()) if own_codes else pre_b
     st.mark(ctx, "alloc")
     var q0 = 0
     while q0 < m:
@@ -637,15 +679,15 @@ def ivf_scan_search[KIND: Int](
         comptime if KIND == 0:
             ctx.enqueue_function[pq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
-                dli, dpcodes.unsafe_ptr(), fa, Int32(pq_dim), Int32(pq_len),
+                dli, gcodes, fa, Int32(pq_dim), Int32(pq_len),
                 Int32(n_codes), Int32(use_lut), dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride),
-                dpmask.unsafe_ptr(), dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
+                gmask, dcand.unsafe_ptr(), grid_dim=c * np, block_dim=STPB,
             )
         elif KIND == 1:
             ctx.enqueue_function[sq_score_kernel](
                 Int32(q0), Int32(np), dq, Int32(dim), dc, doff,
-                dli, dpcodes.unsafe_ptr(), fa, fb, dprobes.unsafe_ptr(),
-                dpstart.unsafe_ptr(), Int32(stride), dpmask.unsafe_ptr(), dcand.unsafe_ptr(),
+                dli, gcodes, fa, fb, dprobes.unsafe_ptr(),
+                dpstart.unsafe_ptr(), Int32(stride), gmask, dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         else:
@@ -655,9 +697,9 @@ def ivf_scan_search[KIND: Int](
                 grid_dim=_grid(c * np), block_dim=TPB,
             )
             ctx.enqueue_function[rq_score_kernel](
-                Int32(np), doff, dli, dpcodes.unsafe_ptr(), dpa.unsafe_ptr(),
-                dpb.unsafe_ptr(), Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
-                Int32(stride), dpmask.unsafe_ptr(), dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
+                Int32(np), doff, dli, gcodes, ga,
+                gb, Int32(D), Int32(words), scale, dprobes.unsafe_ptr(), dpstart.unsafe_ptr(),
+                Int32(stride), gmask, dws.unsafe_ptr(), dqn.unsafe_ptr(), dcand.unsafe_ptr(),
                 grid_dim=c * np, block_dim=STPB,
             )
         st.mark(ctx, "score")

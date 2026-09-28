@@ -269,6 +269,7 @@ def ivf_pq_search_device(
     ivf_pq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
         pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False,
     )
     _ = dmask^
     _ = dcb^
@@ -284,10 +285,13 @@ def ivf_pq_search_on(
     offsets: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """The search over an index already on the device (`ivf_pq_search_device`
     uploads it first; `x_ann/resident.mojo` holds it): the queries up, the
-    scan, the three outputs down."""
+    scan, the three outputs down. `have_pre` ... `mask_pre`: the resident
+    index's list-order arrays (`ivf_scan_search`); `mask_pre` says dmask is
+    the all-ones filter, which is its own list-order copy."""
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
     var dq = upload_f32(ctx, queries)
@@ -299,6 +303,7 @@ def ivf_pq_search_on(
     ivf_scan_search[0](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dcb, dcb,
         offsets, n_lists, dim, m, k, n_probes, pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -469,6 +474,7 @@ def ivf_sq_search_device(
     ivf_sq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
         n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False,
     )
     _ = dmask^
     _ = ddelta^
@@ -485,6 +491,7 @@ def ivf_sq_search_on(
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
     var dq = upload_f32(ctx, queries)
@@ -494,6 +501,7 @@ def ivf_sq_search_on(
     ivf_scan_search[1](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dvmin, ddelta,
         offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -604,6 +612,7 @@ def ivf_rabitq_search_device(
     ivf_rabitq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
         n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dnorm), _dp(dip), False,
     )
     _ = dmask^
     _ = dip^
@@ -620,6 +629,7 @@ def ivf_rabitq_search_on(
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int, seed: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """`ivf_pq_search_on`'s RaBitQ twin: the index already on the device."""
     var D = rq_pow2(dim)
@@ -632,6 +642,7 @@ def ivf_rabitq_search_on(
     ivf_scan_search[2](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dnorm, dip,
         offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, D, words, seed, scale, _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
