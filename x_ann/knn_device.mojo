@@ -48,7 +48,7 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
     var dd = Int(d)
     var k = Int(nn)
     var i = Int(block_idx.x) * KTB + t
-    var tile = stack_allocation[KTJ * MAXD, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var tile = stack_allocation[KTJ * MAXD, Scalar[DType.float32], alignment=16, address_space=AddressSpace.SHARED]()
     var live = i < nr
     var xi = InlineArray[Float32, MAXD](fill=Float32(0.0))
     if live:
@@ -76,9 +76,13 @@ def knn_tiled_kernel[MAXD: Int](n: Int32, x: F32P, d: Int32, nn: Int32, nn_d: F3
                 if j == i:
                     continue
                 var acc = Float32(0.0)
-                comptime for c in range(MAXD):
-                    var diff = ftz(xi[c] - tile[r * MAXD + c])
-                    acc = ftz(identical_mul_add(diff, diff, acc))
+                # the staged row four floats per load; the fold is the same
+                # statements in the same order, lane by lane
+                comptime for c4 in range(MAXD // 4):
+                    var tv = tile.unsafe_load[width=4, alignment=16](r * MAXD + 4 * c4)
+                    comptime for u in range(4):
+                        var diff = ftz(xi[4 * c4 + u] - tv[u])
+                        acc = ftz(identical_mul_add(diff, diff, acc))
                 if filled == k and not ts_knn_beats(acc, j, ld, li):
                     continue
                 filled = ts_knn_offer(acc, j, base, k, filled, nn_d, nn_i)
