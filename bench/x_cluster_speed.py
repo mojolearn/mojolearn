@@ -111,7 +111,7 @@ def cases(ml, seed):
         "bayesian-gmm": (100_000, lambda: ml.BayesianGaussianMixture(
             n_components=8, max_iter=100, random_state=seed), lambda x, e: float(e.score(x))),
         "dbscan": (100_000, lambda: ml.DBSCAN(eps=0.5, min_samples=10), sil),
-        "hdbscan": (100_000, lambda: ml.HDBSCAN(min_cluster_size=50), sil),
+        "hdbscan": (40_000, lambda: ml.HDBSCAN(min_cluster_size=50), sil),
         "agglomerative": (10_000, lambda: ml.AgglomerativeClustering(n_clusters=8), sil),
         "agglomerative-ward": (10_000, lambda: ml.AgglomerativeClustering(n_clusters=8, linkage="ward"), sil),
         "spectral": (10_000, lambda: ml.SpectralClustering(n_clusters=8, random_state=seed), sil),
