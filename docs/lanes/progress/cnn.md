@@ -266,8 +266,15 @@ Apple m4pro-a IDENTICAL speed, phase 4 (before 025c7a921 -> after 1dfafaeb1, N25
 | Conv2d N256 64->128 16x16 | 40.4 / 57.2 ms | 35.2 / 49.0 ms |
 | CNNClassifier fit 2048 / 8192 rows, 1 epoch | 859.9 / 3430.9 ms | 470.4 / 1840.7 ms |
 | predict_proba 2048 / 8192 | 314.4 / 1301.6 ms | 203.7 / 851.9 ms |
-STILL QUEUED on do-amd (not collectable this session): 1790549424046, 1790549425139 (FAST before/after),
-1790549425969, 1790549426913 (IDENTICAL before/after). Read `apple_steward.py status` next session.
+do-amd speed, COLLECTED session 3 (MI300X droplet, `XCNN-SPEED` lines, median):
+| shape | FAST before 6226c8417 -> after fad716a02 | IDENTICAL before 025c7a921 -> after 1dfafaeb1 |
+|---|---|---|
+| Conv2d N256 3->64 32x32 fwd / bwd | 14.9 / 10.4 -> 7.0 / 3.8 ms | 6.9 / 3.8 -> 5.8 / 2.1 ms |
+| Conv2d N256 64->64 32x32 fwd / bwd | 24.6 / 36.9 -> 12.0 / 16.0 ms | 13.0 / 17.0 -> 10.2 / 14.0 ms |
+| Conv2d N256 64->128 16x16 fwd / bwd | 10.4 / 12.9 -> 4.9 / 5.5 ms | 5.1 / 6.0 -> 4.1 / 4.3 ms |
+| CNNClassifier fit 2048 / 8192 rows | 795.5 / 3220.7 -> 133.0 / 506.1 ms | 137.0 / 529.2 -> 27.5 / 94.2 ms |
+| predict_proba 2048 / 8192 | 420.3 / 1334.7 -> 28.6 / 100.8 ms | 29.9 / 105.4 -> 9.4 / 27.0 ms |
+Every phase-3/phase-4 steward speed job is now collected (none owed).
 
 Owed items done:
 1. gemm_host_check (413680dd1) at MOJOLEARN_CPU_THREADS=1, 3 and unset: PASS (432 cases equal gemm_oracle).
@@ -302,7 +309,57 @@ CPU timing (bench_p5.py, N64 conv shapes, fit 1024 rows (32,64) batch 256 1 epoc
 | predict_proba 1024 | 40266 ms | 6013 ; 602 ms | 2112 ; 326 ms (124x) |
 (main at t=12 equals main at t=1: its host path is serial.) Logs: ~/mojolearn-evidence/algos-cnn/bench_p5_run{1..4}.log.
 
-GATE_PLACEHOLDER
+### Phase 5 session 3 (2026-09-28 ~05Z): the pod is GONE, NOT MERGED
+
+The phase-5 gate ran on `cnn-cpu` at the end of session 2 (test_host_surface 200 passed,
+test_lane_select 0 failures), but the pod was deleted mid-way (RunPod balance -$4.41, EVERY RunPod
+pod deleted) before the lane-check result and the main-tree baseline hash compare came back. Nothing
+was pulled. The gate is therefore NOT recorded as passed. No renting until the balance is topped up
+(orchestrator).
+
+Step 0 coverage audit (2026-09-28). Public names (`_expansion_cnn.__all__`, 15) -> lane / specific arm(s):
+| algorithm | lane(s) | arm(s) that bite (besides e2e_host_output_bit) |
+|---|---|---|
+| Conv2d, Conv1d | x-cnn-conv2d, x-cnn-conv1d, x-cnn-conv-options | 5700 (device + host `seam_5700_col2im_host_order`), 5701, 5711, 5719 x3 (host GEMM) |
+| MaxPool2d, MaxPool1d | x-cnn-pool, x-cnn-pool-options | 5706 (device + host `seam_5706_maxpool_host_last`) |
+| AvgPool2d, AvgPool1d | x-cnn-pool, x-cnn-pool-options | 5707 |
+| CNNClassifier | x-cnn-trainer, x-cnn-trainer-options | 5705, 5708, 5709, 5715 (+ conv/pool arms) |
+| BatchNorm2d, BatchNorm1d | x-cnn-batchnorm, x-cnn-bn-options | 5702 |
+| Dropout2d | x-cnn-dropout2d | 5703 |
+| AdaptiveAvgPool2d | x-cnn-globalpool, x-cnn-pool-options | 5712 |
+| AdaptiveMaxPool2d | x-cnn-globalpool, x-cnn-pool-options | 5706 adaptive (`5706_adaptive_max_tie`, `seam_5706_adaptive_max_last`) NEW |
+| BasicBlock | x-cnn-resnet-block | 5700, 5701, 5702 (its conv + BN) |
+| GCNConv | x-cnn-gcn | 5704, 5710 |
+| SAGEConv | x-cnn-sage, x-cnn-gnn-options | 5704, 5713, 5714 |
+Gaps found and fixed at the root (commit "cnn coverage audit", on lane/algos-cnn, NOT merged):
+- AdaptiveMaxPool2d's forward tie (`adapt_max_fwd_at`) is its own copy of the 5706 rule and had no
+  seam check and no arm (on main too). New oracle `o_adapt_max_fwd`, seam `5706_adaptive_max_tie`
+  (7x5 onto 3x4 overlapping windows, integer ties), arm `seam_5706_adaptive_max_last.patch`.
+- Phase 5's host loops copy seams 5700 (col2im, ops_host `_col2im_planes`/`col2im_host`) and 5706
+  (max pool, `_maxpool_fwd_planes`), but the 5700/5706 arms patch only x_cnn/ops.mojo, so no arm
+  reached the host copies. New arms `seam_5700_col2im_host_order.patch`, `seam_5706_maxpool_host_last.patch`.
+All three arms are in tools/identity_lanes/cnn.checks (22 seam arms now). x_cnn/README.md names them.
+
+Done on the central AMD box (tools/amd_central.sh, lane key `cnn`, tree /root/mojolearn-cnn, logs /root/ev-cnn;
+CPU work under `sh`, no GPU slot), tree = the audit commit (includes 77aa9bc5d):
+- gemm_host_check at MOJOLEARN_CPU_THREADS=1, 3 and unset: PASS (648 cases equal gemm_oracle).
+- CPU bits (q5.py, 197 arrays, MOJOLEARN_VENDOR=cpu): main's x_cnn (/root/before-cnn, t1) == this branch at
+  t1, t3 and default, and main t1 == main default: 197/197 every pair. So 77aa9bc5d moves no CPU bit.
+- QUEUED at session end, waiting for a GPU slot (both held by decomp/sequence): seams_check clean, then each
+  arm (the 3 new + 5700/5706 device arms) must FAIL with its own line and PASS after reversal:
+  `/root/ev-cnn/seam_arms.log` (script /root/ev-cnn/seam_arms.sh). Read it first next session.
+
+OWED before merge (next session, in order):
+1. Read /root/ev-cnn/seam_arms.log on the central box (AMD + CPU proof of the three new arms); rerun
+   `tools/amd_central.sh run cnn 'bash /root/ev-cnn/seam_arms.sh > /root/ev-cnn/seam_arms.log 2>&1'` if empty.
+2. NVIDIA gate (needs a RunPod pod once the balance is topped up: `tools/dev_pod.sh up cnn-cpu`):
+   `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`
+   (22 seam arms each FAIL with its own line and PASS after reversal; 15 lanes AGREE, DISAGREE under e2e,
+   AGREE restored); lane-check output hashes == the phase-4 gate run's (cmplc.py, run main's tree as the
+   baseline on the same pod); q5.py GPU == CPU (197/197); test_host_surface; test_lane_select (cnn.checks changed).
+3. Merge lane/algos-cnn to main and push in one command; one batched steward identity request (15 lanes + e2e arm).
+4. Then phase 5 continues: CPU speed, both tiers (no-copy pools, BatchNorm and the optimizers: measure first).
+
 
 ## Earlier next list (history)
 
