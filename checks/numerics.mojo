@@ -92,6 +92,16 @@ def ftz(x: Float32) -> Float32:
         ](x, Int32(0x90))
         var zero = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
         return zero if subnormal else x
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_apple_gpu() and not is_defined["MOJOLEARN_FTZ_TWO_TEST"]():
+        # lane ann-apple2 (2026-09-28), Apple GPU only: ONE test. A word whose
+        # exponent field is zero becomes its sign word; for a subnormal that
+        # is the signed zero (as below) and for +-0 it IS the word, so every
+        # input maps to the same word as the two-test spelling, with the
+        # mantissa test and its AND gone. `-D MOJOLEARN_FTZ_TWO_TEST` reverts.
+        var b1 = bitcast[DType.uint32](x)
+        if (b1 & UInt32(0x7F800000)) == UInt32(0):
+            return bitcast[DType.float32](b1 & UInt32(0x80000000))
+        return x
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (
