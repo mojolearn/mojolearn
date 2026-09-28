@@ -1278,12 +1278,12 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
         _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
         fpr = [float("nan")] * len(fps)
     else:
-        fpr = [v / fps[-1] for v in fps]
+        fpr = list(map(operator.truediv, fps, itertools.repeat(fps[-1])))
     if tps[-1] <= 0:
         _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
         tpr = [float("nan")] * len(tps)
     else:
-        tpr = [v / tps[-1] for v in tps]
+        tpr = list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
     return (Array.from_list(fpr, "<f8"), Array.from_list(tpr, "<f8"), Array.from_list(thr, "<f8"))
 
 
@@ -1381,13 +1381,11 @@ def _binary_ap(fps, tps):
     if not tps or tps[-1] == 0:
         # sklearn: recall is set to one; the sum over diff(recall) is 0
         return 0.0
-    prev = 0.0
-    terms = []
-    for f, t in zip(fps, tps):
-        r = t / tps[-1]
-        terms.append((r - prev) * (t / (t + f)))
-        prev = r
-    return float(max(0.0, _fsum(terms)))
+    # (r - r_prev) * (t / (t + f)) per point, r = t / T, in C (lane metrics-apple)
+    rs = list(map(operator.truediv, tps, itertools.repeat(tps[-1])))
+    terms = map(operator.mul, map(operator.sub, rs, itertools.chain((0.0,), rs[:-1])),
+                map(operator.truediv, tps, map(operator.add, tps, fps)))
+    return float(max(0.0, _fsum(list(terms))))
 
 
 def _ovr(y_true, y_score, sample_weight, labels, caller, numeric_mode):
