@@ -11,7 +11,9 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
-from x_ann.switches import ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED
+from x_ann.switches import (
+    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED, ANN3_ROW_THREADS,
+)
 from x_ann.kpp_seed import kpp_seed
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
@@ -60,6 +62,34 @@ def residual_kernel(count: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int
     var e = _tid()
     if e < Int(count):
         pq_residual_cell(e, x, centers, labels, Int(dim), Int(rot_dim), dst)
+
+
+def residual_rows_kernel(n: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int32, rot_dim: Int32, dst: F32P):
+    """`residual_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): thread i runs `pq_residual_cell` for its row's
+    rot_dim cells in order. A cell reads its own inputs and writes its own
+    word, so the words are the ones one thread per cell writes."""
+    var i = _tid()
+    if i < Int(n):
+        var rd = Int(rot_dim)
+        for c in range(rd):
+            pq_residual_cell(i * rd + c, x, centers, labels, Int(dim), rd, dst)
+
+
+def _enqueue_residual(
+    ctx: DeviceContext, n: Int, dim: Int, rot_dim: Int, x: F32P, centers: F32P, labels: I32P, dst: F32P,
+) raises:
+    """The residual launch: one thread per row under `ANN3_ROW_THREADS`, one
+    per cell otherwise."""
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[residual_rows_kernel](
+            Int32(n), x, centers, labels, Int32(dim), Int32(rot_dim), dst, grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[residual_kernel](
+            Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
+            grid_dim=_grid(n * rot_dim), block_dim=TPB,
+        )
 
 
 def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32, pq_len: Int32, n_codes: Int32, codes: I32P):
@@ -258,10 +288,7 @@ def ivf_pq_build_device(
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)
     var dr = ctx.enqueue_create_buffer[DType.float32](n * rot_dim)
-    ctx.enqueue_function[residual_kernel](
-        Int32(n * rot_dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
-        Int32(rot_dim), dr.unsafe_ptr(), grid_dim=_grid(n * rot_dim), block_dim=TPB,
-    )
+    _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
     # FAST, OPT-IN (lane ann-apple3, `ANN3_PQ_HOST_RESIDUALS`): when the
     # codebooks train on a sample, the sampled rows' residuals are formed
@@ -473,6 +500,16 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
         sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
 
 
+def sq_encode_rows_kernel(n: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
+    """`sq_encode_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): the row's dim cells in order, each `sq_encode_cell`."""
+    var i = _tid()
+    if i < Int(n):
+        var d = Int(dim)
+        for c in range(d):
+            sq_encode_cell(i * d + c, r, d, vmin, delta, codes)
+
+
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
@@ -493,16 +530,18 @@ def ivf_sq_build_device(
     var dvmin = ctx.enqueue_create_buffer[DType.float32](dim)
     var ddelta = ctx.enqueue_create_buffer[DType.float32](dim)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * dim)
-    ctx.enqueue_function[residual_kernel](
-        Int32(n * dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
-        Int32(dim), dr.unsafe_ptr(), grid_dim=_grid(n * dim), block_dim=TPB,
-    )
+    _enqueue_residual(ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     st.mark(ctx, "upload_residuals")
     _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
-    ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
-                                           ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
-                                           block_dim=TPB)
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[sq_encode_rows_kernel](Int32(n), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                                    ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n),
+                                                    block_dim=TPB)
+    else:
+        ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                               ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
+                                               block_dim=TPB)
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)

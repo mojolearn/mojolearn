@@ -67,3 +67,9 @@ comptime ANN3_DIRECT_OUT = is_defined["MOJOLEARN_ANN3_DIRECT_OUT"]()
 #: memcpy into a list made by length (one append per float otherwise).
 #: Plain copies: no bit moves.
 comptime ANN3_TRAINSET_COPY = is_defined["MOJOLEARN_ANN3_TRAINSET_COPY"]()
+
+#: The IVF-PQ / IVF-SQ residual launch and the IVF-SQ encode launch run one
+#: thread per ROW, each walking its row's cells in order, instead of one
+#: thread per cell (28 M threads at 1M x 28). Each cell is the same statement
+#: on the same words: no bit moves.
+comptime ANN3_ROW_THREADS = is_defined["MOJOLEARN_ANN3_ROW_THREADS"]()

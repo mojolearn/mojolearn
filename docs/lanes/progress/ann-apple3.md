@@ -60,6 +60,7 @@ A/B script builds an arm as `<commit>+<DEFINE>[+<DEFINE>]`.
 | (this commit) | FAST t-SNE repulsion at 32 or 64 rows per threadgroup (128 by default) | FAST, Apple | OFF; `-D MOJOLEARN_ANN3_TSNE_RB32` or `-D MOJOLEARN_ANN3_TSNE_RB64` | UNBUILT, UNMEASURED; moves no bit by construction |
 
 | (this commit) | the coarse quantizer's FAST training sample gathered by memcpy | FAST (the sample is FAST's) | OFF; `-D MOJOLEARN_ANN3_TRAINSET_COPY` | UNBUILT, UNMEASURED; plain copies |
+| (after job 3 was queued) | IVF-PQ / IVF-SQ residual launch and IVF-SQ encode launch: one thread per row (one per cell otherwise, 28 M threads at 1M x 28) | both | OFF; `-D MOJOLEARN_ANN3_ROW_THREADS` | UNBUILT, UNMEASURED; the same cell statements, no bit moves by construction; NOT in job 3 |
 | 7a9bb0aeb | IVF-PQ / IVF-SQ builds download their codes straight into the caller's arrays | both | OFF; `-D MOJOLEARN_ANN3_DIRECT_OUT` | UNBUILT, UNMEASURED; plain copies |
 
 t-SNE, why the threadgroup size: FAST iterations are 753 ms on the M4 (job
