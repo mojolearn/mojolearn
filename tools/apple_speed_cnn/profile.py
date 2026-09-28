@@ -86,6 +86,10 @@ if "family" in only:
     tf = t(lambda: bn.forward(x), 5)
     tb = t(lambda: bn.backward(x), 5)
     print(f"XCNN-SPEED {mode} BatchNorm2d 64 N64 H32: fwd {tf:.1f} ms  bwd {tb:.1f} ms", flush=True)
+    bn2 = ml.BatchNorm2d(64, numeric_mode=mode)
+    yb = bn2.forward(x)
+    print(f"XCNN-DIGEST BatchNorm2d y {digest(yb)} dx {digest(bn2.backward(x))} "
+          f"dgamma {digest(bn2.grad_weight_)} dbeta {digest(bn2.grad_bias_)}", flush=True)
     xp = rng.standard_normal((256, 64, 32, 32)).astype(np.float32)
     mp = ml.MaxPool2d(2, numeric_mode=mode)
     yp = mp.forward(xp)

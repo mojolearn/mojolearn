@@ -721,13 +721,22 @@ def _bn(aux: FP, slot: Int, c: Int, C: Int) -> Int:
 
 
 @always_inline
+def bn_mean_row(a: Int, N: Int) -> Int:
+    """The image the mean's fold visits a-th: ascending (seam 5702; the
+    device's threadgroup form, x_cnn/device.mojo `bn_stats_block_kernel`,
+    reads the same order through this)."""
+    return a
+
+
+@always_inline
 def bn_stats_at(c: Int, x: FP, aux: FP, f2: FP, f3: FP, q: IP, p: IP):
     """Training statistics of channel c: mean, then the biased variance as a
     second fold of (x - mean)^2, invstd = rsqrt(var + eps)."""
     var N = _g(p, 0); var C = _g(p, 1); var HW = _g(p, 2)
     var count = Float32(N * HW)
     var acc = Float32(0)
-    for n in range(N):
+    for a in range(N):
+        var n = bn_mean_row(a, N)
         var base = (n * C + c) * HW
         for k in range(HW):
             acc = ftz(acc + ftz(x.unsafe_load(base + k)))

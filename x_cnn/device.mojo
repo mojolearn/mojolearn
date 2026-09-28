@@ -17,7 +17,7 @@ from std.ffi import _Global
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_rsqrt
 from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
@@ -34,7 +34,7 @@ from x_cnn.ops import (
     im2col_at, im2col_taps_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
-    conv_out_val, pool_relu_row_val,
+    conv_out_val, pool_relu_row_val, bn_mean_row, BN_MEAN, BN_VAR, BN_INVSTD, BN_SUMG, BN_SUMGX,
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
@@ -1109,6 +1109,102 @@ def sgd_device(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List
     return sw^
 
 
+# lane/cnn-apple2: BatchNorm's per-channel folds (x_cnn/ops.mojo bn_stats_at,
+# bn_bwd_red_at) are serial chains, 64 threads each walking N*HW words one
+# dependent load at a time (23 ms for 64 x 64 x 32 x 32 on the M4 Pro). Here
+# one THREADGROUP per channel: all its threads stage BN_TILE words of the
+# channel in threadgroup memory (coalesced), then thread 0 folds them in the
+# same (n, hw) order with the same steps, so every sum is the element
+# function's. Threadgroup memory only across the barriers.
+# `-D MOJOLEARN_XCNN_NO_BN_BLOCK` is the before arm.
+comptime BN_BLOCK = not is_defined["MOJOLEARN_XCNN_NO_BN_BLOCK"]()
+comptime BN_TILE = 2048
+comptime BN_TPB = 256
+
+
+def bn_stats_block_kernel(x: FP, aux: FP, p: IP):
+    var t = stack_allocation[BN_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+    var count = Float32(N * HW)
+    var acc = Float32(0)
+    for a in range(N):
+        var n = bn_mean_row(a, N)
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(BN_TILE, HW - k0)
+            var j = tid
+            while j < cnt:
+                t[j] = x.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    acc = ftz(acc + ftz(t[q]))
+            barrier()
+            k0 += cnt
+    var mean = ftz(identical_div(acc, count))
+    var sq = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(BN_TILE, HW - k0)
+            var j = tid
+            while j < cnt:
+                t[j] = x.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    var d = ftz(ftz(t[q]) - mean)
+                    sq = ftz(sq + ftz(identical_mul(d, d)))
+            barrier()
+            k0 += cnt
+    if tid == 0:
+        var var_b = ftz(identical_div(sq, count))
+        aux.unsafe_store(2 + BN_MEAN * C + c, mean)
+        aux.unsafe_store(2 + BN_VAR * C + c, var_b)
+        aux.unsafe_store(2 + BN_INVSTD * C + c, ftz(identical_rsqrt(ftz(var_b + aux.unsafe_load(0)))))
+
+
+def bn_bwd_red_block_kernel(x: FP, g: FP, aux: FP, p: IP):
+    comptime HT = BN_TILE // 2
+    var tx = stack_allocation[HT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tg = stack_allocation[HT, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var c = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var N = _gp(p, 0); var C = _gp(p, 1); var HW = _gp(p, 2)
+    var mean = aux.unsafe_load(2 + BN_MEAN * C + c)
+    var invstd = aux.unsafe_load(2 + BN_INVSTD * C + c)
+    var sg = Float32(0)
+    var sgx = Float32(0)
+    for n in range(N):
+        var base = (n * C + c) * HW
+        var k0 = 0
+        while k0 < HW:
+            var cnt = min(HT, HW - k0)
+            var j = tid
+            while j < cnt:
+                tx[j] = x.unsafe_load(base + k0 + j)
+                tg[j] = g.unsafe_load(base + k0 + j)
+                j += BN_TPB
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    var gv = ftz(tg[q])
+                    var xhat = ftz(identical_mul(ftz(ftz(tx[q]) - mean), invstd))
+                    sg = ftz(sg + gv)
+                    sgx = ftz(sgx + ftz(identical_mul(gv, xhat)))
+            barrier()
+            k0 += cnt
+    if tid == 0:
+        aux.unsafe_store(2 + BN_SUMG * C + c, sg)
+        aux.unsafe_store(2 + BN_SUMGX * C + c, sgx)
+
+
 def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], training: Bool, y_out: FP) raises:
     """y into y_out; running (2C) and aux (2 + 7C, the statistics the backward reads) in place."""
     var C = Int(prm[1])
@@ -1122,7 +1218,10 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     var dp = upload_i32(ctx, prm)
     var dout = ctx.enqueue_create_buffer[DType.float32](total)
     if training:
-        launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
+        comptime if BN_BLOCK:
+            ctx.enqueue_function[bn_stats_block_kernel](fp(dx), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+        else:
+            launch[bn_stats_at](ctx, fp(dx), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     else:
         launch[bn_eval_stats_at](ctx, fp(dr), fp(da), fp(da), fp(da), ip(dp), ip(dp), C)
     launch[bn_apply_at](ctx, fp(dx), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), total)
@@ -1166,7 +1265,10 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, prm: List[Int32], training: B
     var da = up(ctx, aux, na)
     var dp = upload_i32(ctx, prm)
     var dout = ctx.enqueue_create_buffer[DType.float32](total)
-    launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
+    comptime if BN_BLOCK:
+        ctx.enqueue_function[bn_bwd_red_block_kernel](fp(dx), fp(dg), fp(da), ip(dp), grid_dim=(C, 1, 1), block_dim=(BN_TPB, 1, 1))
+    else:
+        launch[bn_bwd_red_at](ctx, fp(dx), fp(dg), fp(da), fp(da), ip(dp), ip(dp), C)
     if training:
         launch[bn_bwd_dx_at](ctx, fp(dx), fp(dg), fp(da), fp(dout), ip(dp), ip(dp), total)
     else:
