@@ -26,11 +26,23 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+#: --slot (the laptop M4, this round only): every build through
+#: `tools/mac_slot.py run`, every fit through `tools/mac_slot.py metal`,
+#: MAC_SLOTS=2, one compile job.
+SLOT = "--slot" in sys.argv
+PY = ["pixi", "run", "-e", "default", "python"] if SLOT else [sys.executable]
+
+
+def slot(kind, cmd):
+    return ["python3", "tools/mac_slot.py", kind] + cmd if SLOT else cmd
 
 
 def sh(cmd, env=None, quiet=False):
     e = dict(os.environ)
     e["PYTHONUNBUFFERED"] = "1"
+    if SLOT:
+        e["MAC_SLOTS"] = "2"
+        e["MOJOLEARN_COMPILE_JOBS"] = "1"
     if env:
         e.update(env)
     r = subprocess.run(cmd, cwd=ROOT, env=e, shell=isinstance(cmd, str), stdout=subprocess.PIPE,
@@ -42,7 +54,7 @@ def sh(cmd, env=None, quiet=False):
 
 
 def build(mode, defines, binding):
-    rc, out = sh(["sh", f"bindings/build_{binding}.sh"],
+    rc, out = sh(slot("run", ["sh", f"bindings/build_{binding}.sh"]),
                  {"MOJOLEARN_MOJO_BUILD_FLAGS": defines, "MOJOLEARN_NUMERIC_MODE": mode}, quiet=True)
     if rc:
         lines = [l for l in out.splitlines() if "ld: warning" not in l]
@@ -52,8 +64,8 @@ def build(mode, defines, binding):
 
 
 def speed(tag, mode, cases, rows, column="gpu"):
-    rc, out = sh([sys.executable, "bench/x_linear_speed.py", "--rows", str(rows), "--column", column,
-                  "--only", cases], {"MOJOLEARN_NUMERIC_MODE": mode}, quiet=True)
+    rc, out = sh(slot("metal", PY + ["bench/x_linear_speed.py", "--rows", str(rows), "--column", column,
+                                     "--only", cases]), {"MOJOLEARN_NUMERIC_MODE": mode}, quiet=True)
     got = {}
     for l in out.splitlines():
         print(f"[{tag} {mode} {rows}] {l}", flush=True)
@@ -64,7 +76,7 @@ def speed(tag, mode, cases, rows, column="gpu"):
 
 
 def main():
-    job = json.load(open(sys.argv[1]))
+    job = json.load(open([a for a in sys.argv[1:] if not a.startswith("--")][0]))
     rc, head = sh("git rev-parse --short HEAD", quiet=True)
     rc, cpu = sh("sysctl -n machdep.cpu.brand_string", quiet=True)
     print(f"L3AB commit={head.strip()} job={sys.argv[1]} {cpu.strip()}", flush=True)
@@ -80,6 +92,9 @@ def main():
             ok = build("fast", defines, b) and ok
         if not ok:
             continue
+        if arm.get("compile_only"):
+            print(f"BUILD OK {name}", flush=True)
+            continue
         cases = arm["cases"]
         # the first fit of a process builds the pipelines
         speed(name + " warm", "fast", cases, arm.get("warm_rows", 20000), arm.get("warm_column", "gpu"))
@@ -87,9 +102,9 @@ def main():
             for _ in range(arm.get("reps", 1)):
                 speed(name, "fast", cases, r)
         for extra in arm.get("extra", []):
-            sh([sys.executable] + extra, {"MOJOLEARN_NUMERIC_MODE": "fast"})
+            sh(slot("metal", PY + extra), {"MOJOLEARN_NUMERIC_MODE": "fast"})
         if arm.get("qual_script"):
-            sh([sys.executable, arm["qual_script"], "--arm", name, "--seeds", arm.get("seeds", "0,1,2,3,4")],
+            sh(slot("metal", PY + [arm["qual_script"], "--arm", name, "--seeds", arm.get("seeds", "0,1,2,3,4")]),
                {"MOJOLEARN_NUMERIC_MODE": "fast"})
         if arm.get("qual"):
             if not host_built:
@@ -104,12 +119,13 @@ def main():
                     os.replace(so + ".l3prev", so)
                     print("HOST reference binding: the one in place (not rebuilt)", flush=True)
                 host_built = True
-            cmd = [sys.executable, "bench/linear_apple3_quality.py", "--arm", name, "--cases", arm["qual"],
-                   "--seeds", arm.get("seeds", "0,1,2,3,4")]
+            cmd = PY + ["bench/linear_apple3_quality.py", "--arm", name, "--cases", arm["qual"],
+                        "--seeds", arm.get("seeds", "0,1,2,3,4")]
+            cmd += ["--train", str(arm.get("train", 100000)), "--test", str(arm.get("test", 100000))]
             if not (first_qual or arm.get("host_ref")):
                 cmd.append("--no-host")
             first_qual = False
-            sh(cmd, {"MOJOLEARN_NUMERIC_MODE": "fast"})
+            sh(slot("metal", cmd), {"MOJOLEARN_NUMERIC_MODE": "fast"})
     base = job.get("base")
     if base:
         files = [f for f in base["files"]
@@ -125,11 +141,13 @@ def main():
                     for cases, rows in base["runs"]:
                         got.update({f"{k}@{rows}": v for k, v in speed(f"{side}", mode, cases, rows).items()})
                     if side == "head" and mode == "identical" and base.get("qual_script_identical"):
-                        sh([sys.executable, base["qual_script_identical"], "--arm", "identical", "--seeds",
-                            base.get("seeds", "0,1,2,3,4")], {"MOJOLEARN_NUMERIC_MODE": "identical"})
+                        sh(slot("metal", PY + [base["qual_script_identical"], "--arm", "identical", "--seeds",
+                                               base.get("seeds", "0,1,2,3,4")]),
+                           {"MOJOLEARN_NUMERIC_MODE": "identical"})
                     if side == "head" and mode == "identical" and base.get("qual"):
-                        sh([sys.executable, "bench/linear_apple3_quality.py", "--arm", "identical", "--cases",
-                            base["qual"], "--seeds", base.get("seeds", "0,1,2,3,4"), "--no-host"],
+                        sh(slot("metal", PY + ["bench/linear_apple3_quality.py", "--arm", "identical", "--cases",
+                                               base["qual"], "--seeds", base.get("seeds", "0,1,2,3,4"),
+                                               "--no-host"]),
                            {"MOJOLEARN_NUMERIC_MODE": "identical"})
                 if side == "base":
                     sh(["git", "checkout", "HEAD", "--"] + files)
@@ -140,6 +158,8 @@ def main():
                 a, b = sides["head"].get(k), sides["base"].get(k)
                 print(f"DIGEST {mode} {k} {'SAME' if a and a == b else 'MOVED'} head={a} base={b}", flush=True)
     for b in sorted(touched):
+        if job.get("no_restore"):
+            break
         build("fast", "", b)
         if base and "identical" in base.get("modes", ["identical", "fast"]):
             build("identical", "", b)
