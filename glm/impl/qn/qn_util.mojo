@@ -35,10 +35,15 @@ the card (`qn.n_iter`) as the certificate's integer stage.
 literal below and not derived.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
+from core.column_stats import STATS_TPB
+from core.pinned_reduce import pinned_block_sum
 from glm.impl.qn.simple_mat.dense import (
     VEC_ELEM_TPB,
     ax,
@@ -46,10 +51,15 @@ from glm.impl.qn.simple_mat.dense import (
     axpy_inplace,
     copy_vec,
     dot,
+    dot_kernel,
+    dot_self_kernel,
+    ieee_div_f32,
+    ieee_sub_f32,
+    read_scalars,
     squared_norm,
 )
 from glm.impl.linear_model.qn import QNParams
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul_add
 
 
 # `LINE_SEARCH_ALGORITHM`, `qn_util.cuh:30-35`
@@ -183,6 +193,110 @@ def check_convergence(
     return False
 
 
+@always_inline
+def _block_dot_bcast(
+    u: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    tid: Int,
+) -> Float32:
+    """`dense.dot_kernel`'s value, character for character (the same
+    strided `identical_mul_add` partials over STATS_TPB threads, the same
+    pinned fold, the same ftz), handed to every thread of the block through
+    one threadgroup word."""
+    var acc = Float32(0.0)
+    var i = tid
+    while i < n:
+        acc = identical_mul_add(u.unsafe_load(i), v.unsafe_load(i), acc)
+        i += STATS_TPB
+    var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
+    var slot = stack_allocation[
+        1, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    if tid == 0:
+        slot[0] = s0
+    barrier()
+    var r = slot[0]
+    barrier()
+    return r
+
+
+def lbfgs_two_loop_kernel(
+    drt: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    s_all: MutPointer[Float32, MutAnyOrigin],
+    y_all: MutPointer[Float32, MutAnyOrigin],
+    yhist: MutPointer[Float32, MutAnyOrigin],
+    alpha: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    m_in: Int32,
+    bound_in: Int32,
+    end_in: Int32,
+    set_at: Int32,
+    set_val: Float32,
+    neg_one: Float32,
+    scale: Float32,
+):
+    """lane/linear-apple: `lbfgs_search_dir`'s two-loop recursion in ONE
+    launch of ONE block of STATS_TPB threads (grid 1).
+
+    Every stored word is the word the host-driven sequence stored:
+    `drt = neg_one * g` is `ax_kernel`; each dot is `_block_dot_bcast` (=
+    `dot_kernel`); each update is `axpy_inplace_kernel`'s
+    `ftz(identical_mul_add(a, x, drt))`; `drt *= scale` is
+    `ax_inplace_kernel` with the host's `ys / yy`. The host scalars
+    `alpha[j] = dot / yhist[j]`, `-alpha[j]`, `beta = dot / yhist[j]`
+    and `alpha[j] - beta` are computed here by `ieee_div_f32` /
+    `ieee_sub_f32` / negation, which return the host's IEEE words. A
+    barrier separates every write of `drt` from the next read of it by
+    another thread. `yhist[set_at] = set_val` is the host's `yhist[end] =
+    ys`, done by thread 0 before the first barrier."""
+    var n = Int(n_in)
+    var m = Int(m_in)
+    var tid = Int(thread_idx.x)
+    if tid == 0:
+        yhist.unsafe_store(Int(set_at), set_val)
+    var i = tid
+    while i < n:
+        drt.unsafe_store(i, ftz(neg_one * g.unsafe_load(i)))
+        i += STATS_TPB
+    barrier()
+    var j = Int(end_in)
+    for _ in range(Int(bound_in)):
+        j = (j + m - 1) % m
+        var d = _block_dot_bcast(s_all + j * n, drt, n, tid)
+        var a = ieee_div_f32(d, yhist.unsafe_load(j))
+        if tid == 0:
+            alpha.unsafe_store(j, a)
+        var na = -a
+        var yj = y_all + j * n
+        i = tid
+        while i < n:
+            drt.unsafe_store(
+                i, ftz(identical_mul_add(na, yj.unsafe_load(i), drt.unsafe_load(i)))
+            )
+            i += STATS_TPB
+        barrier()
+    i = tid
+    while i < n:
+        drt.unsafe_store(i, ftz(scale * drt.unsafe_load(i)))
+        i += STATS_TPB
+    barrier()
+    for _ in range(Int(bound_in)):
+        var d = _block_dot_bcast(y_all + j * n, drt, n, tid)
+        var beta = ieee_div_f32(d, yhist.unsafe_load(j))
+        var c = ieee_sub_f32(alpha.unsafe_load(j), beta)
+        var sj = s_all + j * n
+        i = tid
+        while i < n:
+            drt.unsafe_store(
+                i, ftz(identical_mul_add(c, sj.unsafe_load(i), drt.unsafe_load(i)))
+            )
+            i += STATS_TPB
+        barrier()
+        j = (j + 1) % m
+
+
 def lbfgs_search_dir(
     ctx: DeviceContext,
     param: LBFGSParam,
@@ -190,42 +304,63 @@ def lbfgs_search_dir(
     end_prev: Int,
     mut S: List[DeviceBuffer[DType.float32]],
     mut Y: List[DeviceBuffer[DType.float32]],
+    mut s_all: DeviceBuffer[DType.float32],
+    mut y_all: DeviceBuffer[DType.float32],
+    mut hist: DeviceBuffer[DType.float32],
     mut g: DeviceBuffer[DType.float32],
     mut drt: DeviceBuffer[DType.float32],
     mut yhist: List[Float32],
     mut alpha: List[Float32],
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
+    mut stage: HostBuffer[DType.float32],
 ) raises -> Int:
     """`lbfgs_search_dir`, `qn_util.cuh:176-241`: `drt = -H g` by the
     two-loop recursion over the `S`, `Y` history. `svec`/`yvec` are
     `S[end_prev]`/`Y[end_prev]`, which the caller just wrote
-    (`col_ref(S, svec, end)`). Returns the new `end`."""
+    (`col_ref(S, svec, end)`). Returns the new `end`.
+
+    lane/linear-apple (2026-09-28): `S`/`Y` are views of the contiguous
+    `s_all`/`y_all` (m x n), `hist` holds the device copies of `yhist`
+    (words 0..m-1) and `alpha` (m..2m-1). `ys` and `yy` come home behind
+    one synchronize (scalar words 0 and 1); the two loops are
+    `lbfgs_two_loop_kernel`, one launch and no synchronize. Before this,
+    the function synchronized 2 + 2 * min(m, n_vec) times per iteration.
+    The host lists `yhist`/`alpha` keep the host's copy of `yhist`; the
+    device `alpha` is the only one read."""
     var end = end_prev
-    var ys = dot(ctx, S[end], Y[end], n, scalar)
-    var yy = squared_norm(ctx, Y[end], n, scalar)
+    ctx.enqueue_function[dot_kernel](
+        scalar.unsafe_ptr(), S[end].unsafe_ptr(), Y[end].unsafe_ptr(), Int32(n),
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    var scalar1 = scalar.create_sub_buffer[DType.float32](1, 1)
+    ctx.enqueue_function[dot_self_kernel](
+        scalar1.unsafe_ptr(), Y[end].unsafe_ptr(), Int32(n),
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    read_scalars(ctx, scalar, stage, 2)
+    _ = scalar1^
+    var ys = stage.unsafe_ptr().unsafe_load(0)
+    var yy = stage.unsafe_ptr().unsafe_load(1)
     # Skipping test (`:190-206`): the Hessian is ~0, keep the direction.
     if ys <= FLOAT_EPSILON * yy:
         return end
     n_vec += 1
     yhist[end] = ys
+    var set_at = end
 
-    ax(ctx, drt, Float32(-1.0), g, n)
     var bound = min(param.m, n_vec)
     end = (end + 1) % param.m
-    var j = end
-    for _ in range(bound):
-        j = (j + param.m - 1) % param.m
-        alpha[j] = dot(ctx, S[j], drt, n, scalar) / yhist[j]
-        axpy_inplace(ctx, drt, -alpha[j], Y[j], n)
-
-    ax_inplace(ctx, drt, ys / yy, n)
-
-    for _ in range(bound):
-        var beta = dot(ctx, Y[j], drt, n, scalar) / yhist[j]
-        axpy_inplace(ctx, drt, alpha[j] - beta, S[j], n)
-        j = (j + 1) % param.m
-
+    var hist_alpha = hist.create_sub_buffer[DType.float32](param.m, param.m)
+    ctx.enqueue_function[lbfgs_two_loop_kernel](
+        drt.unsafe_ptr(), g.unsafe_ptr(), s_all.unsafe_ptr(), y_all.unsafe_ptr(),
+        hist.unsafe_ptr(), hist_alpha.unsafe_ptr(),
+        Int32(n), Int32(param.m), Int32(bound), Int32(end),
+        Int32(set_at), ys, Float32(-1.0), ys / yy,
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    _ = hist_alpha^
+    _ = len(alpha)
     return end
 
 
@@ -364,7 +499,8 @@ def update_pseudo(
             grid_dim=((n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
             block_dim=(VEC_ELEM_TPB, 1, 1),
         )
-    ctx.synchronize()
+    # lane/linear-apple: no synchronize. Nothing on the host reads `pseudo`;
+    # the next launch on this context is ordered after this one.
 
 
 def project_direction(
@@ -379,4 +515,4 @@ def project_direction(
         grid_dim=((n + VEC_ELEM_TPB - 1) // VEC_ELEM_TPB, 1, 1),
         block_dim=(VEC_ELEM_TPB, 1, 1),
     )
-    ctx.synchronize()
+    # lane/linear-apple: no synchronize (nothing on the host reads `drt`).

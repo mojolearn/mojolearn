@@ -178,8 +178,11 @@ def owlqn_objective(
     closure to hand across files and `ls_backtrack_projected` below is its
     other caller. Two roundings on the host, both flushed (row 10).
     """
-    var tmp = f.evaluate(ctx, x, grad)
-    var pen = nrm1(ctx, x, pg_limit, scalar)
+    # lane/linear-apple: the l1 norm comes home with the loss (one
+    # synchronize); the same kernel on the same `x`, after the same launches.
+    var tmp = f.evaluate_pen(ctx, x, grad, pg_limit)
+    var pen = f.last_pen
+    _ = len(scalar)
     return ftz(tmp + ftz(l1_penalty * pen))
 
 

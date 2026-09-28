@@ -137,16 +137,23 @@ def min_lbfgs(
             + String(param.check_param()) + ")"
         )
     # SETUP WORKSPACE (`:146-164`): S, Y as `param.m` column buffers each.
+    # lane/linear-apple: S and Y are views of one contiguous m x n buffer
+    # each, so the fused two-loop kernel reaches every column from one
+    # pointer; `hist` is the device yhist (0..m-1) and alpha (m..2m-1).
+    var s_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var y_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var hist = ctx.enqueue_create_buffer[DType.float32](2 * param.m)
+    var stage = ctx.enqueue_create_host_buffer[DType.float32](4)
     var S = List[DeviceBuffer[DType.float32]]()
     var Y = List[DeviceBuffer[DType.float32]]()
-    for _ in range(param.m):
-        S.append(ctx.enqueue_create_buffer[DType.float32](n))
-        Y.append(ctx.enqueue_create_buffer[DType.float32](n))
+    for jm in range(param.m):
+        S.append(s_all.create_sub_buffer[DType.float32](jm * n, n))
+        Y.append(y_all.create_sub_buffer[DType.float32](jm * n, n))
     var xp = ctx.enqueue_create_buffer[DType.float32](n)
     var grad = ctx.enqueue_create_buffer[DType.float32](n)
     var gradp = ctx.enqueue_create_buffer[DType.float32](n)
     var drt = ctx.enqueue_create_buffer[DType.float32](n)
-    var scalar = ctx.enqueue_create_buffer[DType.float32](1)
+    var scalar = ctx.enqueue_create_buffer[DType.float32](4)
     ctx.synchronize()
 
     var ys = List[Float32]()
@@ -169,6 +176,10 @@ def min_lbfgs(
 
     # Early exit if the initial x is already a minimizer
     if check_convergence(param, k, fx, gnorm, fx_hist):
+        _ = len(s_all)
+        _ = len(y_all)
+        _ = len(hist)
+        _ = stage.unsafe_ptr()
         _release(S, Y, xp, grad, gradp, drt, scalar)
         return OPT_SUCCESS
 
@@ -209,6 +220,10 @@ def min_lbfgs(
             ls.append(Int32(ls_iters))
             trace.record_list_i32(tag + ".ls", ls)
         if stop:
+            _ = len(s_all)
+            _ = len(y_all)
+            _ = len(hist)
+            _ = stage.unsafe_ptr()
             _release(S, Y, xp, grad, gradp, drt, scalar)
             return retcode
 
@@ -217,11 +232,16 @@ def min_lbfgs(
         axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
         # drt <- -H * g
         end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, grad, drt, ys, alpha, n, scalar
+            ctx, param, n_vec, end, S, Y, s_all, y_all, hist, grad, drt, ys,
+            alpha, n, scalar, stage,
         )
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
+    _ = len(s_all)
+    _ = len(y_all)
+    _ = len(hist)
+    _ = stage.unsafe_ptr()
     _release(S, Y, xp, grad, gradp, drt, scalar)
     return OPT_MAX_ITERS_REACHED
 
@@ -326,17 +346,24 @@ def min_owlqn(
             + String(pg_limit) + ", n " + String(n) + ")"
         )
     # SETUP WORKSPACE (`:279-297`): `min_lbfgs`'s, plus `pseudo`.
+    # lane/linear-apple: S and Y are views of one contiguous m x n buffer
+    # each, so the fused two-loop kernel reaches every column from one
+    # pointer; `hist` is the device yhist (0..m-1) and alpha (m..2m-1).
+    var s_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var y_all = ctx.enqueue_create_buffer[DType.float32](param.m * n)
+    var hist = ctx.enqueue_create_buffer[DType.float32](2 * param.m)
+    var stage = ctx.enqueue_create_host_buffer[DType.float32](4)
     var S = List[DeviceBuffer[DType.float32]]()
     var Y = List[DeviceBuffer[DType.float32]]()
-    for _ in range(param.m):
-        S.append(ctx.enqueue_create_buffer[DType.float32](n))
-        Y.append(ctx.enqueue_create_buffer[DType.float32](n))
+    for jm in range(param.m):
+        S.append(s_all.create_sub_buffer[DType.float32](jm * n, n))
+        Y.append(y_all.create_sub_buffer[DType.float32](jm * n, n))
     var xp = ctx.enqueue_create_buffer[DType.float32](n)
     var grad = ctx.enqueue_create_buffer[DType.float32](n)
     var gradp = ctx.enqueue_create_buffer[DType.float32](n)
     var drt = ctx.enqueue_create_buffer[DType.float32](n)
     var pseudo = ctx.enqueue_create_buffer[DType.float32](n)  # OWL-QN
-    var scalar = ctx.enqueue_create_buffer[DType.float32](1)
+    var scalar = ctx.enqueue_create_buffer[DType.float32](4)
     ctx.synchronize()
 
     var ys = List[Float32]()
@@ -364,6 +391,10 @@ def min_owlqn(
 
     # Early exit if the initial x is already a minimizer
     if check_convergence(param, k, fx, gnorm, fx_hist):
+        _ = len(s_all)
+        _ = len(y_all)
+        _ = len(hist)
+        _ = stage.unsafe_ptr()
         _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
         return OPT_SUCCESS
 
@@ -407,6 +438,10 @@ def min_owlqn(
             ls.append(Int32(ls_iters))
             trace.record_list_i32(tag + ".ls", ls)
         if stop:
+            _ = len(s_all)
+            _ = len(y_all)
+            _ = len(hist)
+            _ = stage.unsafe_ptr()
             _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
             return retcode
 
@@ -421,7 +456,8 @@ def min_owlqn(
         axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
         # OWL-QN: `drt <- -H * pseudo`, the PSEUDO gradient (`:388-390`).
         end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, pseudo, drt, ys, alpha, n, scalar
+            ctx, param, n_vec, end, S, Y, s_all, y_all, hist, pseudo, drt, ys,
+            alpha, n, scalar, stage,
         )
         # OWL-QN: project the direction onto the orthant of -pseudo (`:393`).
         project_direction(ctx, drt, pseudo, n)
@@ -429,6 +465,10 @@ def min_owlqn(
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
+    _ = len(s_all)
+    _ = len(y_all)
+    _ = len(hist)
+    _ = stage.unsafe_ptr()
     _release_owlqn(S, Y, xp, grad, gradp, drt, pseudo, scalar)
     return OPT_MAX_ITERS_REACHED
 
