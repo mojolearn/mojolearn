@@ -26,7 +26,8 @@ from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from x_prep.common import FP, IP, p, ld, st, key
+from checks.numerics import ftz
+from x_prep.common import FP, IP, p, ld, st, key, run_block
 from x_prep.prims import sub
 from x_prep.mutual_info import MAX_K, digammaf, _sec, _dsec, _less, _within, mi_cd_unit
 
@@ -116,8 +117,19 @@ def _tile_kernel(w: WP, big_n: Int32, k_lo: Int32, k_hi: Int32):
     w[g0 + tid + MTG] = s[tid + MTG]
 
 
+#: labels whose fill counters `_prep_kernel` keeps in registers (more: in the scratch)
+comptime MLAB = 64
+#: rows `_prep_kernel` loads before it uses any (lane prep-apple2)
+comptime MRUN = 16
+
+
 def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
-    """One thread per column c: `_cd_column`'s split of the sorted order."""
+    """One thread per column c: `_cd_column`'s split of the sorted order.
+    Lane prep-apple2: MRUN rows' words are loaded before any is used (the
+    gathers through the sorted order were one memory latency each), the fill
+    counters of up to MLAB labels live in registers, and the two passes that
+    list the points of classes with more than one member are one. The same
+    words land in the same slots."""
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = p(q, 1)
     var d = p(q, 2)
@@ -138,18 +150,79 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
     var fu = u
     var flag = 0
     var nlab = 0
-    for j in range(n):
-        var x = ld(f, zb + j * d)
-        var s = _sec(f, sb, j * d)
-        var l = Int(ld(f, lb + j))
-        if not _fin(x) or not _fin(s) or l < 0:
-            flag = 1
+    var full = n - n % MRUN
+    for j0 in range(0, full, MRUN):
+        var bxv = run_block[MRUN](f, zb + j0 * d, d)
+        var blv = run_block[MRUN](f, lb + j0, 1)
+        var bsv = run_block[MRUN](f, sb - 1 + j0 * d, d) if sb > 0 else SIMD[DType.float32, MRUN](0)
+        comptime for v in range(MRUN):
+            var l = Int(ftz(blv[v]))
+            if not _fin(ftz(bxv[v])) or not _fin(ftz(bsv[v])) or l < 0:
+                flag = 1
+            elif flag == 0 and l + 1 > nlab:
+                nlab = l + 1
+        if flag != 0:
             break
-        if l + 1 > nlab:
-            nlab = l + 1
+    if flag == 0:
+        for j in range(full, n):
+            var x = ld(f, zb + j * d)
+            var s = _sec(f, sb, j * d)
+            var l = Int(ld(f, lb + j))
+            if not _fin(x) or not _fin(s) or l < 0:
+                flag = 1
+                break
+            if l + 1 > nlab:
+                nlab = l + 1
     fu[meta + _M_FLAG] = UInt32(flag)
     fu[meta + _M_NLAB] = UInt32(nlab)
     if flag != 0:
+        return
+    var wb = c * Int(big_n)
+    var fillb = as_
+    if nlab <= MLAB:
+        var cntr = InlineArray[UInt32, MLAB + 1](fill=UInt32(0))
+        for j0 in range(0, full, MRUN):
+            var blv = run_block[MRUN](f, lb + j0, 1)
+            comptime for v in range(MRUN):
+                cntr[Int(ftz(blv[v])) + 1] += 1
+        for j in range(full, n):
+            var l = Int(ld(f, lb + j))
+            cntr[l + 1] += 1
+        for l in range(nlab):
+            cntr[l + 1] += cntr[l]
+        for l in range(nlab + 1):
+            fu[start + l] = cntr[l]
+        # cntr[l] is now label l's fill counter
+        var multi = InlineArray[Bool, MLAB](fill=False)
+        for l in range(nlab):
+            multi[l] = Int(ld(f, cb + l)) > 1
+        var na = 0
+        var r0 = 0
+        while r0 < n:
+            var m = min(MRUN, n - r0)
+            var jj = InlineArray[Int, MRUN](fill=0)
+            for v in range(m):
+                jj[v] = Int(w[wb + r0 + v] & UInt64(0xFFFFFFFF))
+            var ll = InlineArray[Int, MRUN](fill=0)
+            var xx = InlineArray[UInt32, MRUN](fill=UInt32(0))
+            var ss = InlineArray[UInt32, MRUN](fill=UInt32(0))
+            for v in range(m):
+                ll[v] = Int(ld(f, lb + jj[v]))
+                xx[v] = bitcast[DType.uint32](ld(f, zb + jj[v] * d))
+                ss[v] = bitcast[DType.uint32](_sec(f, sb, jj[v] * d))
+            for v in range(m):
+                var l = ll[v]
+                var at = Int(cntr[l])
+                cntr[l] = UInt32(at + 1)
+                fu[bx + at] = xx[v]
+                fu[bs + at] = ss[v]
+                fu[pos + jj[v]] = UInt32(at)
+                if multi[l]:
+                    fu[ax + na] = xx[v]
+                    fu[as_ + na] = ss[v]
+                    na += 1
+            r0 += m
+        fu[meta + _M_NA] = UInt32(na)
         return
     for l in range(nlab + 1):
         fu[start + l] = 0
@@ -159,10 +232,8 @@ def _prep_kernel(f: FP, w: WP, u: UP, q: IP, big_n: Int32):
     for l in range(nlab):
         fu[start + l + 1] = fu[start + l + 1] + fu[start + l]
     var na = 0
-    var wb = c * Int(big_n)
     # the fill counters (one per label) live in the all_s slots until the
     # class split is done; all_s is written last
-    var fillb = as_
     for l in range(nlab):
         fu[fillb + l] = fu[start + l]
     for r in range(n):
