@@ -3449,6 +3449,13 @@ comptime APPLE_MMA_FM = get_defined_int["MOJOLEARN_APPLE_MMA_FM", 4]()
 comptime APPLE_MMA_FN = get_defined_int["MOJOLEARN_APPLE_MMA_FN", 4]()
 comptime APPLE_MMA_KB = get_defined_int["MOJOLEARN_APPLE_MMA_KB", 16]()
 comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
+#: lane/neural-apple (2026-09-28): the small tile for outputs with fewer than
+#: `APPLE_MMA_SMALL_BLOCKS` default tiles (scheduling only; the arms are
+#: -D knobs, `MOJOLEARN_APPLE_MMA_SMALL_OFF` reverts).
+comptime APPLE_MMA_SMALL_TILE = not is_defined["MOJOLEARN_APPLE_MMA_SMALL_OFF"]()
+comptime APPLE_MMA_SMALL_FM = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FM", 2]()
+comptime APPLE_MMA_SMALL_FN = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FN", 2]()
+comptime APPLE_MMA_SMALL_BLOCKS = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_BLOCKS", 512]()
 comptime APPLE_MMA_BM = 8 * APPLE_MMA_FM * APPLE_MMA_SGM
 comptime APPLE_MMA_BN = 8 * APPLE_MMA_FN * APPLE_MMA_SGN
 comptime _AMMA_M64 = SIMD[DType.float32, 64]
@@ -3762,6 +3769,28 @@ def _launch_apple_mma(
         APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_FM, APPLE_MMA_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
     ]
     var blocks = ((m + APPLE_MMA_BM - 1) // APPLE_MMA_BM) * ((n + APPLE_MMA_BN - 1) // APPLE_MMA_BN)
+    comptime if APPLE_MMA_SMALL_TILE:
+        # lane/neural-apple (2026-09-28): an output too small to fill the GPU
+        # with the default tile (the weight gradients: 768 x 768 is 144
+        # blocks, each walking k = 8192 tokens) takes the same kernel at a
+        # quarter of the tile, four times the blocks. The tile is a
+        # schedule: every cell's leaf chains and leaf fold are the same.
+        if blocks < APPLE_MMA_SMALL_BLOCKS:
+            comptime ks = identical_gemm_apple_mma_kernel[
+                APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, APPLE_MMA_KB, TUNED_FOLD_SLOTS
+            ]
+            comptime SBM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
+            comptime SBN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
+            var sblocks = ((m + SBM - 1) // SBM) * ((n + SBN - 1) // SBN)
+            step_count_launch()
+            ctx.enqueue_function[ks](
+                c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+                grid_dim=(sblocks, 1, 1),
+                block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
+            )
+            return
     step_count_launch()
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),
