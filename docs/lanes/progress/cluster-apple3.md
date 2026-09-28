@@ -49,7 +49,7 @@ Round 2 left nothing opt-in in the tree. Its unproven commits are the consolidat
 |---|---|---|---|---|---|
 | 1790626681580 | m4pro-b | fast | 8241f61dc | base FAST board, probes, cProfile, the existing stage timers | PASS |
 | 1790627893200 | m4pro-a | fast | c55df5b59 | before (base x_cluster) / phase tables / ward rounds + quality | PASS |
-| 1790628511800 | m3ultra-b | fast + identical boards | 057e55f6e | before (base sources) / after (ward rounds, GMM init fill, Python door), phases, quality | queued 20:48Z |
+| 1790628511800 | m3ultra-b | fast + identical boards | 057e55f6e | before (base sources) / after (ward rounds, GMM init fill, Python door), phases, quality | claimed about 21:19Z; m3ultra-b stopped answering ssh at about 21:26Z (reported to the orchestrator, nothing touched) |
 
 Outputs are kept in ~/mojolearn-evidence/cluster-apple3/.
 
