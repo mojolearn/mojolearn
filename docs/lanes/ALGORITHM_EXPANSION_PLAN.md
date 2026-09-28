@@ -53,11 +53,19 @@ for a before and an after), or your own `<lane>-amd` box.
 (gfx942) identity and speed work on ONE shared Hot Aisle box: 2x MI300X
 (dev_pod key `linear-amd`), 2 GPU slots, lease to 2026-09-29T01:09Z. Never
 rent a per-lane AMD box. From your worktree after merging origin/main:
-`tools/amd_central.sh sync <lane> <worktree>`, then
-`tools/amd_central.sh run <lane> '<cmd>'` (takes a free GPU slot, waits for
-one; `--gpus 2` for two-device checks), `sh` for no-GPU commands, `fetch` for
-results, `status` for slots. Your tree is `/root/mojolearn-<lane>`. Do not
-extend or down the box. Full usage: `~/mojolearn-evidence/amd_central.md`.
+`tools/amd_central.sh sync <lane> <worktree>`, write your gate as a script on
+the box (e.g. `/root/ev-<lane>/gate.sh`, running in the foreground), then
+`tools/amd_central.sh submit <lane> [--gpus 2] [--cap MIN] <script>`: it
+prints a job id and the box's FIFO queue (a systemd service; survives your
+session and reboots) runs it in submission order when its slots free, writing
+`/root/amd-queue/<id>/{status,log,exit}`. `queue`, `status <id>`, `log <id>`,
+`cancel <lane> <id>` (your own jobs only). NEVER run a poll-waiter (a waiting
+`run` loop, Mac-side or box-side): it dies with your session and holds no
+place in line; `run` is for short interactive GPU commands and yields to
+queued jobs. `sh` for no-GPU commands, `fetch` for results. Your tree is
+`/root/mojolearn-<lane>`. Do not extend or down the box. Full usage:
+`~/mojolearn-evidence/amd_central.md`; moved jobs:
+`~/mojolearn-evidence/amd_queue_jobs.md`.
 
 **CHECK NOW, every lane with an `x_*` binding (cpu lane finding,
 2026-09-27):** x_cluster and x_neighbors hang on the SECOND GPU call in a

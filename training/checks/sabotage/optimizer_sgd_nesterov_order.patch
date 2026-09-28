@@ -1,0 +1,13 @@
+diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
+index 3dff4557b..2d7a9583f 100644
+--- a/training/checks/optimizer.mojo
++++ b/training/checks/optimizer.mojo
+@@ -818,7 +818,7 @@ def sgd_update_kernel(
+             b = ftz(identical_mul_add(c_damp, g, bs))
+         buf.unsafe_store(i, ftz(b))
+         if nesterov_in != Int32(0):
+-            comptime if SAB_NESTEROV_ORDER:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB_NESTEROV_ORDER at its use site
+                 # SABOTAGE: the transposed reading. Contract 7.3c.
+                 # INERT at t = 1, where b == g.
+                 g = ftz(identical_mul_add(momentum, g, b))

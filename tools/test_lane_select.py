@@ -1582,13 +1582,32 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      CPU too (gbdt/host/gbdt_oracle_ctr.mojo)
                                      and keeps the edge: its body checks the
                                      public `host_model` on its saved model;
-                                     no other lane moved"""
+                                     no other lane moved
+    REMEASURED 2026-09-28 (lane/neural):
+      neural_inference.py  40 -> 41  optim-maximize (SGD/Adam/AdamW
+                                     maximize=, DEVIATION 6200), through the
+                                     same optimizer route as optim-adam-clip
+                                     and optim-sgd; no old lane moved
+      kmeans_oracle        71 -> 75  measured on lane/neural over main
+                                     468af3718; the 75 include the x-cluster,
+                                     x-ann and x-decomp expansion lanes merged
+                                     2026-09-27/28, and no neural or linear
+                                     .core lane is among them (main's own
+                                     change, found red after the merge)
+    REMEASURED 2026-09-28 (merge gate gate2, lane/algos-decomp over main
+    1605b66c6):
+      forest_host_predict  86 -> 88  bootstrap and metrics-classification:
+                                     the decomp lane's rule that a lane's own
+                                     non-registry seed is followed even when
+                                     every lane reaches it now walks their
+                                     seeds into the forest host binding; a
+                                     wider map, no lane dropped"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 76),
                       ("core/gbdt_host_predict.mojo", 51),
-                      ("core/forest_host_predict.mojo", 86),
+                      ("core/forest_host_predict.mojo", 88),
                       ("core/forest_inference.mojo", 50),
-                      ("python/mojolearn/neural_inference.py", 40)):
+                      ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1681,9 +1700,10 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 40, \
-        ("the re-export rule moved neural_inference.py off its measured 40 lanes (40 + hf-checkpoint,"
-         " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28)")
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
+        ("the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint,"
+         " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
+         " plus optim-maximize, 2026-09-28)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
@@ -2254,3 +2274,108 @@ def test_a_grown_host_binding_selects_the_lanes_that_run_it():
     assert "GAINED exports (probe_export)" in sel["reasons"][path], sel["reasons"][path]
     assert declared <= set(sel["lanes"]), sorted(declared - set(sel["lanes"]))[:5]
     assert len(sel["lanes"]) < sel["total"] // 2, len(sel["lanes"])
+
+
+# ---------------------------------------------------------------- 2026-09-28
+# THE CLASSICAL HOST GATE, ENTRY BY ENTRY. After the rewrite of 2026-09-27,
+# `--changed-since origin/main` on lane/algos-ann-b (92313095a) refused with
+# `UNATTRIBUTED PATH: tools/classical_host_gate.py`: that branch added one
+# LANES entry (`ivf-filter`), its PROBE_NAMES entry and the probe helper they
+# call. The gate is now read like the manifest: an entry edit selects the lane
+# whose entry changed, a helper edit the lanes whose entries reach it, a
+# machinery edit the gate's own lanes (never the whole registry), and an edit
+# it cannot read is refused by name.
+
+_GATE = os.path.join("tools", "classical_host_gate.py")
+
+
+def _gate_text():
+    return lane_select._read(_GATE)
+
+
+def _gate_edit(*pairs):
+    text = _gate_text()
+    for old, new in pairs:
+        assert text.count(old) == 1, f"the gate changed shape; update this replay ({old[:60]!r})"
+        text = text.replace(old, new)
+    return text
+
+
+def _gate_answer(new, every=None):
+    """(lanes, why) for the gate edited to `new`, against the tree's gate."""
+    every = set(lane_select.lane_sources()[0]) if every is None else every
+    with _Seeded({_GATE: _gate_text()}, {_GATE: new}):
+        return lane_select.gate_lanes(_FAKE_REF, _GATE, every)
+
+
+#: lane/algos-ann-b's edit of the gate, as committed (be0049af0).
+ANN_B_GATE_EDIT = (
+    ("\n\n_IVF_EXTRAS = {",
+     "\n\n\ndef _ivf_filter_probe(e, Q):\n"
+     "    import numpy as np\n"
+     "    keep = (np.arange(len(e.list_indices_)) % 3) != 0\n"
+     "    d, i = e.search(Q, filter=keep)\n"
+     "    return (d, i, e.n_candidates_)\n\n\n_IVF_EXTRAS = {"),
+    ("    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),\n",
+     "    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),\n"
+     "    'ivf-filter': ('IVFIndex', lambda e, X: _ivf_filter_probe(e, X[:64]), {}),\n"),
+    ("'ivf-extend': 'search_distances',\n",
+     "'ivf-extend': 'search_distances',\n               'ivf-filter': 'search_distances',\n"),
+)
+
+
+def test_the_ann_b_gate_edit_selects_ivf_filter_alone():
+    """The branch's own edit, where `ivf-filter` is a registered lane (it is
+    on that branch): exactly that lane, not the other IVF lanes, not all."""
+    every = set(lane_select.lane_sources()[0]) | {"ivf-filter"}
+    lanes, why = _gate_answer(_gate_edit(*ANN_B_GATE_EDIT), every)
+    assert lanes == ["ivf-filter"], (lanes, why)
+
+
+def test_a_gate_entry_for_no_registered_lane_is_refused_by_name():
+    """The same edit where `ivf-filter` is NOT registered (this tree): refused,
+    naming the entry, never read as selecting nothing."""
+    lanes, why = _gate_answer(_gate_edit(*ANN_B_GATE_EDIT))
+    assert lanes is None and "ivf-filter" in why, (lanes, why)
+
+
+def test_a_gate_entry_edit_is_selected_through_select_by_its_lane():
+    new = _gate_edit(("    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:64]), _IVF_EXTRAS),\n",
+                      "    'ivf-euclidean': ('IVFIndex', lambda e, X: _ivf_probe(e, X[:32]), _IVF_EXTRAS),\n"))
+    with _Seeded({_GATE: _gate_text()}, {_GATE: new}):
+        sel = lane_select.select([_GATE], ref=_FAKE_REF)
+    assert not sel["unattributed"], sel["reasons"][_GATE]
+    assert sel["by_path"][_GATE] == ["ivf-euclidean"], (sel["by_path"].get(_GATE), sel["reasons"][_GATE])
+
+
+def test_a_gate_helper_edit_selects_the_lanes_whose_entries_call_it():
+    lanes, why = _gate_answer(_gate_edit(("    d, i = e.search(Q)\n    return (d, i, e.n_candidates_)",
+                                          "    d, i = e.search(Q[:])\n    return (d, i, e.n_candidates_)")))
+    assert lanes and {"ivf", "ivf-euclidean", "ivf-extend"} <= set(lanes), (lanes, why)
+    assert all(n.startswith("ivf") for n in lanes), (lanes, why)
+    extras, why = _gate_answer(_gate_edit(("'list_data': lambda e, X: e.list_data_,",
+                                           "'list_data': lambda e, X: e.list_data_[:],")))
+    assert extras and {"ivf", "ivf-euclidean"} <= set(extras), (extras, why)
+    assert all(n.startswith("ivf") for n in extras), (extras, why)
+
+
+def test_a_gate_lane_tuple_edit_selects_the_lanes_it_builds():
+    """`_KMEANS_LANES` feeds KIND_PROBES and three spreads: the k-means lanes."""
+    lanes, why = _gate_answer(_gate_edit(("'kmeans-sqrt', 'kmeans-classic-pp')", "'kmeans-classic-pp')")))
+    assert lanes and "kmeans-sqrt" in lanes, (lanes, why)
+    assert all(n.startswith("kmeans") for n in lanes), (lanes, why)
+
+
+def test_a_gate_machinery_edit_selects_the_gates_lanes_never_every_lane():
+    every = set(lane_select.lane_sources()[0])
+    lanes, why = _gate_answer(_gate_edit(("    out['seconds'] = round(time.perf_counter() - started, 6)",
+                                          "    out['seconds'] = round(time.perf_counter() - started, 3)")))
+    gate = lane_select.gate_lane_set() & every
+    assert lanes is not None and set(lanes) == gate, (len(lanes or ()), len(gate), why)
+    assert len(lanes) < len(every) and "mamba1" not in lanes, (len(lanes), len(every))
+
+
+def test_a_gate_helper_nothing_names_is_inert_and_says_so():
+    lanes, why = _gate_answer(_gate_edit(("\n\n_IVF_EXTRAS = {",
+                                          "\n\n\ndef _unused_probe(e, Q):\n    return Q\n\n\n_IVF_EXTRAS = {")))
+    assert lanes == [] and "_unused_probe" in why, (lanes, why)

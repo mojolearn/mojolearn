@@ -147,6 +147,7 @@ def needed_bindings(lanes):
     derived map. Refuses a lane with no GPU binding or no host binding."""
     import lane_select
     _, why = lane_select.lane_sources()
+    ROUTES = lane_select.host_routes()
     out = {}
     for lane in lanes:
         declared = set(why[lane]["declared"])
@@ -158,6 +159,16 @@ def needed_bindings(lanes):
         ubiq = set(why[lane].get("ubiquitous", ()))
         declared |= {b for b in BASE_BINDINGS if b in ubiq}
         declared.add("_mojolearn_core_host")     # the base binding's CPU route, on every CPU arm
+        # EVERY GPU BINDING THE LANE CALLS, AND ITS CPU ROUTE (lane/neural,
+        # 2026-09-28). `declared` is the families a lane BELONGS to; a binding
+        # the lane reaches "narrow" (through a shared door) is left out of it on
+        # purpose, but the fit still calls its exports. samba calls ten
+        # _mojolearn_mamba and eight _mojolearn_transformer exports and neither
+        # was built: run alone on the central AMD box its every cell REFUSED
+        # (`_mojolearn_mamba.so ... is not built`); with mamba1..3 and
+        # transformer in the same run it passed only because they built them.
+        called = {b for b, use in why[lane].get("binding_use", {}).items() if use.get("exports")}
+        declared |= called | set().union(*[ROUTES.get(b, set()) for b in called])
         declared = sorted(declared)
         gpu = [b for b in declared if not b.endswith("_host")]
         host = [b for b in declared if b.endswith("_host")]
@@ -303,7 +314,15 @@ def arm_env(kind):
     return env
 
 
-def run_arm(kind, lane, backend, fixtures, out, log):
+def run_arm(kind, lane, backend, fixtures, out, log, moved_ok=False):
+    """One column of one lane. `moved_ok` (the sabotaged stage only): the
+    harness exits 1 when a part it compares INSIDE one column moved (a byte
+    LM's sampler-vs-trainer `rlpair`, a batch part), which is exactly what a
+    biting sabotage does; if it still wrote its JSON, `compare` reads that
+    within-column verdict as DISAGREE. Before 2026-09-27 the arm raised here,
+    so a sabotage that bit byte-lm read as a failed GPU arm (do-amd request
+    1790542457986-dedupe). A missing JSON, any other exit, or a clean or
+    restored stage still fails."""
     cmd = [sys.executable, "-u", str(HARNESS), "--lanes", lane, "--repeats", "1", "--fail-on-refused",
            "--json", str(out)]
     if fixtures:
@@ -323,6 +342,10 @@ def run_arm(kind, lane, backend, fixtures, out, log):
                        f"MOJOLEARN_LANE_CHECK_ARM_TIMEOUT); last cell started: "
                        + next((ln for ln in reversed(Path(log).read_text(errors='replace').splitlines())
                                if ln.startswith("# START")), "(none)"))
+    if moved_ok and rc == 1 and out.is_file():
+        say(f"{lane}: the {kind} arm exited 1 under the sabotage with its JSON written (a part moved "
+            "inside the column); the diff decides")
+        return
     if rc or not out.is_file():
         tail = Path(log).read_text(errors="replace").splitlines()[-15:]
         raise Fail(f"{lane}: the {kind} arm failed (exit {rc}); last lines of {log}:\n    " + "\n    ".join(tail))
@@ -537,8 +560,8 @@ def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     verdicts = {}
     for lane in lanes:
         gpu_json, cpu_json = out / f"{stage}.{lane}.gpu.json", out / f"{stage}.{lane}.cpu.json"
-        run_arm("gpu", lane, backend, fixtures, gpu_json, log)
-        run_arm("cpu", lane, backend, fixtures, cpu_json, log)
+        run_arm("gpu", lane, backend, fixtures, gpu_json, log, moved_ok=stage == "sabotaged")
+        run_arm("cpu", lane, backend, fixtures, cpu_json, log, moved_ok=stage == "sabotaged")
         verdict, detail = compare(ib, lane, gpu_json, cpu_json, fixtures, log, backend)
         print(f"{stage.upper()}: {lane}: {verdict}: {detail}", flush=True)
         verdicts[lane] = verdict

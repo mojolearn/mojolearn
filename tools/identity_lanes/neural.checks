@@ -1,0 +1,14 @@
+# the neural family's seam check drivers, one sabotage patch per seam (docs/lanes/progress/neural.md).
+# Its identity lanes live in tools/identity_break.py itself, not in a fragment; tools/identity_lanes/neural.core names them.
+# Each patch turns one DEVICE-side seam switch on as a source edit (the host oracles are untouched), so the
+# driver (device == oracle, bit for bit) must FAIL, and the lane's GPU column must DISAGREE with its CPU one.
+transformer/checks/transformer_check.mojo	transformer/checks/sabotage/transformer_s1_fold_descending.patch
+mamba/checks/mamba_check.mojo	mamba/checks/sabotage/mamba1_s1_fold_descending.patch
+mamba/checks/mamba2_check.mojo	mamba/checks/sabotage/mamba2_segsum_descending.patch
+mamba/checks/mamba3_check.mojo	mamba/checks/sabotage/mamba3_segsum_descending.patch
+embedding/checks/embedding_check.mojo	embedding/checks/sabotage/embedding_fold_descending.patch
+training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_moment_lerp.patch
+training/checks/loss_check.mojo	training/checks/sabotage/loss_exp_stdlib.patch
+training/checks/maximize_check.mojo	training/checks/sabotage/maximize_6200_subtract_from_zero.patch
+training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_sgd_nesterov_order.patch
+training/checks/optimizer_check.mojo	training/checks/sabotage/optimizer_clip_param_order.patch

@@ -1,0 +1,13 @@
+diff --git a/training/maximize.mojo b/training/maximize.mojo
+index 962ecdfc0..011f316d8 100644
+--- a/training/maximize.mojo
++++ b/training/maximize.mojo
+@@ -41,7 +41,7 @@ comptime _SIGN_BIT = UInt32(0x80000000)
+ @always_inline
+ def maximize_negate(x: Float32) -> Float32:
+     """torch's `-grad`: the sign bit flipped (DEVIATION 6200). Exact."""
+-    return bitcast[DType.float32](bitcast[DType.uint32](x) ^ _SIGN_BIT)
++    return Float32(0.0) - x  # SABOTAGE (DEVIATION 6200): the subtraction spelling, +0.0 at g = +0.0
+ 
+ 
+ def maximize_negated_copy(

@@ -18,3 +18,5 @@ linear-svc
 linear-svc-squared-hinge
 linear-svr
 linear-svr-squared
+qn-squared
+qn-absolute
