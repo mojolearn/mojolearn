@@ -101,7 +101,37 @@ staged fold). All 47 sequence patches `git apply --check` clean at 7281afb93.
 - ETS: skipping the unused log term under additive errors (1.59 -> 1.65); cycle snapshot
   (no repeat found).
 
-## Other Macs
+## M3 Ultra (m3ultra, one request 1790586969944: after at 7281afb93, then the sequence
+sources checked out at 084fcaf5c and rebuilt for before, then restored)
 
-M3 Ultra before/after (IDENTICAL and FAST, one request) is 1790586969944 on m3ultra; see
-below when it lands.
+| algo | IDENTICAL before | after | x | bits | FAST before | after | x | bits |
+|---|---|---|---|---|---|---|---|---|
+| lstm | 2.06 / 0.27 | 0.57 / 0.14 | 3.62x | same | 2.00 / 0.26 | 0.54 / 0.13 | 3.74x | same |
+| gru | 1.96 / 0.22 | 0.47 / 0.12 | 4.13x | same | 1.91 / 0.21 | 0.45 / 0.11 | 4.26x | same |
+| rnn | 1.99 / 0.10 | 0.39 / 0.06 | 5.14x | same | 1.90 / 0.10 | 0.37 / 0.06 | 5.15x | same |
+| mlp | 2.04 / 0.13 | 0.91 / 0.09 | 2.24x | same | 1.86 / 0.13 | 0.77 / 0.09 | 2.41x | same |
+| moe | 0.42 | 0.21 | 2.03x | same | 0.42 | 0.19 | 2.18x | same |
+| layernorm | 1.26 | 0.76 | 1.65x | same | 1.25 | 0.74 | 1.67x | same |
+| rmsprop | 1.00 | 0.32 | 3.18x | same | 1.00 | 0.32 | 3.19x | same |
+| adagrad | 1.00 | 0.31 | 3.23x | same | 1.02 | 0.34 | 3.02x | same |
+| lion | 1.00 | 0.31 | 3.20x | same | 1.01 | 0.34 | 3.00x | same |
+| adamax | 1.02 | 0.31 | 3.27x | same | 1.01 | 0.33 | 3.03x | same |
+| nadam | 1.00 | 0.31 | 3.20x | same | 0.99 | 0.33 | 3.03x | same |
+| lamb | 2.76 | 2.00 | 1.38x | same | 1.85 | 1.31 | 1.41x | same |
+| adafactor | 1.45 | 1.22 | 1.19x | same | 0.96 | 0.77 | 1.25x | same |
+| stl | 0.20 | 0.19 | 1.10x | same | 0.17 | 0.15 | 1.11x | same |
+| theta | 0.26 | 0.25 | 1.02x | same | 0.17 | 0.16 | 1.05x | same |
+| croston | 0.005 | 0.005 | 1.0x | same | 0.005 | 0.005 | 1.0x | same |
+| ets | 0.46 | 0.46 | 1.0x | same | 0.36 | 0.36 | 1.0x | same |
+| garch | 4.16 | 0.50 | 8.33x | same | 3.62 | 0.39 | 9.18x | same |
+| var | 1.18 | 0.73 | 1.63x | same | 1.20 | 0.75 | 1.60x | same |
+
+On the Ultra (many more GPU cores than the M4), the launch and sync savings dominate:
+LSTM/GRU/RNN run 3.6-5.1x faster, against ~2x on the M4.
+
+## Left for later (largest remaining Apple costs)
+
+- ETS (m4-a 1.60 s): every series hits the 1000-iteration cap with no fixed point or
+  repeat. Only a FAST stop rule could help, and that needs the paired quality runs.
+- LAMB / Adafactor: one-thread 4M-float norms, each a single fma chain in fixed order.
+- LSTM fit (m4-a 1.66 s): compute in the fused step and the backward weight GEMMs.
