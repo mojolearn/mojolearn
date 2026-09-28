@@ -22,6 +22,8 @@ from x_prep.host.program import run_program_host_ptr
 from x_prep.device import run_program_device_ptr
 from checks.numerics import identical_cos
 from x_prep.prims import add, mul, logf, sqrtf, sort_cols_unit
+from x_prep.transform import pt_fit_unit
+from x_prep.target import te_enc_unit
 from x_prep.mutual_info import digammaf
 from x_prep.seams.prep_oracle import (
     seq_sum, rev_sum, pinned_dot, fused_dot, key_sorted, value_sorted, guarded_mean, raw_mean,
@@ -32,6 +34,8 @@ from x_prep.seams.prep_oracle import (
 comptime OP_SORT = 0
 comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
+comptime OP_PT_FIT = 44
+comptime OP_TE_ENC = 21
 comptime OP_MATMUL = 13
 comptime OP_ARGMAX = 15
 comptime OP_EIGH = 18
@@ -204,6 +208,91 @@ def check_host_sort(mut card: IdentityTrace) raises:
     print("PASS 5402 host key sort: the heap sort's words on every column (mixed NaN payloads, canon 0 and 1)")
 
 
+def check_host_power(mut card: IdentityTrace) raises:
+    """The host's `pt_fit` (x_prep/host/power.mojo) writes `pt_fit_unit`'s
+    lambdas: yeo-johnson over a column with negatives, zeros and NaNs (the
+    Jacobian's two signs and the NaN skip) and box-cox over a positive
+    column; the device's unit is called directly as the oracle."""
+    var nan = _f(UInt32(0x7FC00000))
+    var c0: List[Float32] = [-3.0, 0.5, nan, 2.0, -0.25, 7.5, 0.0, -1.5, nan, 11.0, 0.125, -6.0]
+    var c1: List[Float32] = [0.5, 3.0, 1.25, nan, 8.0, 0.0625, 2.5, 40.0, 1.0, 0.75, nan, 5.0]
+    var n = len(c0)
+    for method in range(2):
+        var arena = List[Float32]()
+        for i in range(n):
+            arena.append(c0[i] if method == 0 else c1[i])
+        var st_ = len(arena)
+        for _ in range(6):
+            arena.append(Float32(1))  # ST rows of d = 1: a nonzero variance (row 2), not a constant column
+        var lam = len(arena)
+        arena.append(0)
+        var params: List[Int] = [0, n, 1, method, st_, lam]
+        var f = arena.copy()
+        var q = List[Int32](length=STAGE_INTS, fill=0)
+        for i in range(len(params)):
+            q[i] = Int32(params[i])
+        pt_fit_unit(0, f.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]())
+        _ = len(q)
+        var got = Prog(arena, OP_PT_FIT, 1, params).run(False)
+        _require(_b(got[lam]) == _b(f[lam]), "host pt_fit method " + String(method) + ": lambda word")
+        card.record_list_f32("host_power.method" + String(method), got)
+    print("PASS host pt_fit: pt_fit_unit's lambdas (yeo-johnson with NaN and both signs, box-cox)")
+
+
+def check_host_te(mut card: IdentityTrace) raises:
+    """The host's `te_enc` (x_prep/host/target.mojo) writes `te_enc_unit`'s
+    encodings: 2 features, 2 target columns, 3 folds (+ the full fit), an
+    unknown code, a code past NCAT, an empty category, both the "auto" and a
+    fixed smoothing; the device's unit, called per unit, is the oracle."""
+    var n = 11
+    var d = 2
+    var T = 2
+    var F = 3
+    var cmax = 4
+    var codes: List[Float32] = [0, 1, 2, 0, 1, 1, 0, 3, 2, 0, -1, 1, 0, 2, 1, 0, 2, 2, 1, 0, 0, 1]
+    var y: List[Float32] = [0.5, 1.0, 2.0, -1.0, 3.0, 0.25, 7.0, 0.0, 1.5, 2.5, -3.0, 4.0, 0.125, 1.0,
+                            -2.0, 6.0, 0.75, 1.0, 5.0, -0.5, 2.0, 3.5]
+    var fold: List[Float32] = [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1]
+    for sm in range(2):
+        var arena = List[Float32]()
+        var co = 0
+        for v in codes:
+            arena.append(v)
+        var yo = len(arena)
+        for v in y:
+            arena.append(v)
+        var fo = len(arena)
+        for v in fold:
+            arena.append(v)
+        var nco = len(arena)
+        arena.append(3)  # feature 0: categories 0..2 (its code 3 is past NCAT)
+        arena.append(3)  # feature 1: category 3 never occurs within NCAT; category 2 is present
+        var meta = len(arena)
+        for k in range(2 * (F + 1) * T):
+            arena.append(Float32(0.5) + Float32(k) * Float32(0.25))
+        var smo = len(arena)
+        arena.append(Float32(-1) if sm == 0 else Float32(2.5))
+        var enc = len(arena)
+        var total = (F + 1) * d * cmax * T
+        for _ in range(total):
+            arena.append(Float32(-9))
+        var params: List[Int] = [co, n, d, yo, T, fo, cmax, nco, meta, smo, enc]
+        var want = arena.copy()
+        var q = List[Int32](length=STAGE_INTS, fill=0)
+        for i in range(len(params)):
+            q[i] = Int32(params[i])
+        var wp = want.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        var qp = q.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        for t in range(total):
+            te_enc_unit(t, wp, qp)
+        _ = len(q)
+        var got = Prog(arena, OP_TE_ENC, total, params).run(False)
+        for i in range(total):
+            _require(_b(got[enc + i]) == _b(want[enc + i]), "host te_enc smooth " + String(sm) + " unit " + String(i))
+        card.record_list_f32("host_te.smooth" + String(sm), got)
+    print("PASS host te_enc: te_enc_unit's encodings (folds, unknown and past-NCAT codes, auto and fixed smoothing)")
+
+
 def check_empty_guard(mut card: IdentityTrace) raises:
     """DEVIATION 5403: an empty (all-NaN) column's statistics are 0, never 0/0."""
     var nan = _f(UInt32(0x7FC00000))
@@ -330,6 +419,8 @@ def main() raises:
     check_contraction(card)
     check_sort_key(card)
     check_host_sort(card)
+    check_host_power(card)
+    check_host_te(card)
     check_empty_guard(card)
     check_first_max(card)
     check_eigen_sign(card)

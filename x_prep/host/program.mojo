@@ -20,16 +20,25 @@ from core.host_predict_threads import host_predict_chunk, host_predict_task_coun
 from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.host.sort import sort_cols_host_unit
+from x_prep.host.power import pt_fit_host_unit
+from x_prep.host.target import te_enc_host_groups, te_enc_host_group
 
-#: op 0 of x_prep/units.mojo, `sort_cols`: the host runs x_prep/host/sort.mojo,
-#: the same output words (that file says why).
+#: Ops of x_prep/units.mojo the host runs through its own spelling of the
+#: SAME words (each file says why): 0 `sort_cols` (x_prep/host/sort.mojo),
+#: 44 `pt_fit` (x_prep/host/power.mojo); and ops whose units the host runs
+#: GROUPED, one task item per group of units: 21 `te_enc`
+#: (x_prep/host/target.mojo, one group per fold, feature and target column).
 comptime OP_SORT_COLS = 0
+comptime OP_TE_ENC = 21
+comptime OP_PT_FIT = 44
 
 
 @always_inline
 def _host_unit[K: Int](t: Int, f: FP, q: IP):
     comptime if K == OP_SORT_COLS:
         sort_cols_host_unit(t, f, q)
+    elif K == OP_PT_FIT:
+        pt_fit_host_unit(t, f, q)
     else:
         run_unit[K](t, f, q)
 
@@ -38,23 +47,41 @@ def run_program_host(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: In
     run_program_host_ptr(FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages)
 
 
-def _run_stage[K: Int](total: Int, f: FP, q: IP):
-    """Units [0, total) of one stage: serially on the calling thread when one
-    task covers them, else contiguous ranges across the pool."""
-    var tasks = host_predict_task_count(total)
-    if tasks <= 1:
-        for t in range(total):
-            _host_unit[K](t, f, q)
-        return
-    var chunk = host_predict_chunk(total, tasks)
+def _items[K: Int](total: Int, q: IP) -> Int:
+    """The task items of a stage of `total` units: its groups for a grouped
+    op, else its units."""
+    comptime if K == OP_TE_ENC:
+        return te_enc_host_groups(total, q)
+    else:
+        return total
 
-    def body(c: Int) {imm f, imm q, imm chunk, imm total}:
+
+@always_inline
+def _host_item[K: Int](t: Int, f: FP, q: IP):
+    comptime if K == OP_TE_ENC:
+        te_enc_host_group(t, f, q)
+    else:
+        _host_unit[K](t, f, q)
+
+
+def _run_stage[K: Int](total: Int, f: FP, q: IP):
+    """Items [0, items) of one stage: serially on the calling thread when one
+    task covers them, else contiguous ranges across the pool."""
+    var items = _items[K](total, q)
+    var tasks = host_predict_task_count(items)
+    if tasks <= 1:
+        for t in range(items):
+            _host_item[K](t, f, q)
+        return
+    var chunk = host_predict_chunk(items, tasks)
+
+    def body(c: Int) {imm f, imm q, imm chunk, imm items}:
         var lo = c * chunk
         var hi = lo + chunk
-        if hi > total:
-            hi = total
+        if hi > items:
+            hi = items
         for t in range(lo, hi):
-            _host_unit[K](t, f, q)
+            _host_item[K](t, f, q)
 
     host_parallelize(body, tasks)
 
