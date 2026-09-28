@@ -41,6 +41,63 @@ class _ResidentForest:
                 and all(a is b for a, b in zip(arrays, self.arrays)))
 
 
+class ForestDataSession:
+    """One X staged on the device for the member fits of ONE boosted ensemble
+    (trees-apple3, `rf_data_session_open`): the NaN scan, the pinned copy and
+    the upload of X run once instead of once per member. `share_tables` also
+    keeps the first member's quantile table and bins for the later members
+    (FAST only; the binding refuses it under IDENTICAL). One thread uses a
+    session at a time; `close` releases the device copy."""
+
+    def __init__(self, native, X, row_major, share_tables):
+        self.native = native
+        self.shape = (int(X.shape[0]), int(X.shape[1]))
+        self.share_tables = bool(share_tables)
+        self.handle = native.rf_data_session_open(
+            _addr_ro(X), [self.shape[0], self.shape[1], 1 if row_major else 0,
+                          1 if share_tables else 0])
+        self._finalizer = weakref.finalize(self, native.rf_data_session_close, self.handle)
+
+    def close(self):
+        if self._finalizer.alive:
+            self._finalizer()
+
+    def fit_regressor(self, y32, params, criterion):
+        return _export_fit_result(self.native, self.native.rf_regressor_fit_session_export(
+            self.handle, _addr_ro(y32), params, criterion))
+
+    def fit_classifier_weighted(self, y32, params, criterion, weights):
+        return _export_fit_result(self.native, self.native.rf_classifier_fit_weighted_session_export(
+            self.handle, _addr_ro(y32), params, criterion, _addr_ro(weights)))
+
+
+def forest_data_session_choice(mode):
+    """What `MOJOLEARN_FOREST_SESSION` asks for: None (no session: every
+    member stages X itself), 'exact' (the session; each member draws its own
+    quantile sample, so its forest is the one its own fit returns) or
+    'share' (FAST only: later members reuse the first member's tables).
+    OPT-IN (trees-apple3, unproven): unset means no session."""
+    import os
+    choice = os.environ.get("MOJOLEARN_FOREST_SESSION", "0").strip().lower()
+    if choice in ("", "0", "off", "no"):
+        return None
+    if choice in ("1", "on", "exact"):
+        return "exact"
+    if choice == "share":
+        return "share" if mode == "fast" else "exact"
+    raise ValueError("MOJOLEARN_FOREST_SESSION must be 0, 1 (exact) or share")
+
+
+def open_forest_data_session(native, X, *, row_major, mode):
+    """A `ForestDataSession` for X on this binding, or None when the choice
+    is off or the binary has no session entry (a CPU host build, an older
+    binding)."""
+    choice = forest_data_session_choice(mode)
+    if choice is None or not callable(getattr(native, "rf_data_session_open", None)):
+        return None
+    return ForestDataSession(native, X, row_major, choice == "share")
+
+
 def forest_estimator(kind):
     """Register the explicit public constructor, including the mode wrapper."""
     def decorate(cls):

@@ -53,7 +53,7 @@ from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -93,7 +93,9 @@ from ensemble.randomforest import (
     RF_params,
     RandomForest,
     RandomForestMetaData,
+    ForestPrep,
     fit_forest,
+    fit_forest_prepared,
 )
 
 comptime DT = DType.float32
@@ -527,6 +529,328 @@ def rf_regressor_fit_binding[EXPORT: Bool = False](
     params: PythonObject, criterion: PythonObject,
 ) raises -> PythonObject:
     return _rf_regressor_fit[EXPORT](x_addr, y_addr, params, criterion)
+
+
+# ---------------------------------------------------------------------------
+# THE DATA SESSION (trees-apple3). A boosted ensemble (DART, AdaBoost) fits
+# one small forest per member on the SAME X: each member's fit scanned X for
+# NaN, copied it into a pinned stage and uploaded it again (M4 Pro, 1M x 16:
+# about 10 ms of a 30 ms member fit). A session does that once. Its member
+# fits are `fit_forest_prepared` on the staged X: the same kernels on the
+# same bytes, so a member's forest is the forest `rf_*_fit` returns.
+# `share_tables` also keeps the first member's quantile table and binned
+# dataset for the later members. Their quantile SAMPLE is then the first
+# member's (the sample is drawn with the fit's seed), so the later members'
+# bins differ from their own fits': a FAST-only option with a quality check.
+# One thread uses a session at a time.
+struct RfDataSession(Movable):
+    var id: Int
+    var hx: HostBuffer[DT]
+    var dx: DeviceBuffer[DT]
+    var n_rows: Int
+    var n_cols: Int
+    var host_x: Int
+    var share_tables: Bool
+    var prep: List[ForestPrep]
+
+    def __init__(
+        out self,
+        id: Int,
+        var hx: HostBuffer[DT],
+        var dx: DeviceBuffer[DT],
+        n_rows: Int,
+        n_cols: Int,
+        host_x: Int,
+        share_tables: Bool,
+    ):
+        self.id = id
+        self.hx = hx^
+        self.dx = dx^
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.host_x = host_x
+        self.share_tables = share_tables
+        self.prep = List[ForestPrep]()
+
+
+struct RfSessionRegistry(Defaultable, Movable):
+    var sessions: List[RfDataSession]
+    var next_id: Int
+
+    def __init__(out self):
+        self.sessions = List[RfDataSession]()
+        self.next_id = 1
+
+    def find(self, id: Int) raises -> Int:
+        for i in range(len(self.sessions)):
+            if self.sessions[i].id == id:
+                return i
+        raise Error("unknown or closed forest data session handle")
+
+
+comptime RF_SESSIONS = _Global[StorageType=RfSessionRegistry,
+    name=("MojoRFDataSessionIdentical" if GLOBAL_NUMERIC_MODE == 1 else
+          "MojoRFDataSessionDeterministic" if GLOBAL_NUMERIC_MODE == 2 else
+          "MojoRFDataSessionFast"), init_fn=RfSessionRegistry.__init__]
+
+
+def rf_data_session_open_binding(
+    x_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Stage X on the device for the member fits of one ensemble. `params`
+    is [n_rows, n_cols, row_major, share_tables]; `x` is float32, ROW-major
+    when `row_major` is 1 and COLUMN-major otherwise, borrowed through this
+    call only. Returns the session handle."""
+    if len(params) != 4:
+        raise Error("rf_data_session_open: params must hold 4 values")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var row_major = Int(py=params[2]) != 0
+    var share_tables = Int(py=params[3]) != 0
+    if n_rows <= 0 or n_cols <= 0:
+        raise Error("rf_data_session_open: invalid shape")
+    comptime if GLOBAL_NUMERIC_MODE == 1:
+        if share_tables:
+            raise Error(
+                "rf_data_session_open: shared quantile tables are a FAST"
+                " option; an IDENTICAL member draws its own sample"
+            )
+    var xp = _f32_ptr(Int(py=x_addr))
+    if has_nan_f32_threaded(xp, n_rows * n_cols):
+        raise Error("rf_data_session_open: " + RF_NAN_REFUSAL)
+    var made = List[RfDataSession]()
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var hx = ctx.enqueue_create_host_buffer[DT](n_rows * n_cols)
+        ctx.synchronize()
+        var hxp = hx.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        if row_major:
+            colmajor_from_rowmajor_f32(xp, hxp, n_rows, n_cols)
+        else:
+            copy_f32_threaded(xp, hxp, n_rows * n_cols)
+        var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=hx.unsafe_ptr())
+        ctx.synchronize()
+        made.append(
+            RfDataSession(
+                0, hx^, dx^, n_rows, n_cols, Int(hxp), share_tables
+            )
+        )
+        _ = ctx^
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var id = reg[].next_id
+    reg[].next_id += 1
+    var session = made.pop()
+    session.id = id
+    reg[].sessions.append(session^)
+    return PythonObject(id)
+
+
+def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(Int(py=handle))
+    var session = reg[].sessions.pop(si)
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    ctx.synchronize()
+    _ = session^
+    _ = ctx^
+    return PythonObject(None)
+
+
+def _session_shape_check(
+    name: StaticString, session_rows: Int, session_cols: Int,
+    n_rows: Int, n_cols: Int,
+) raises:
+    if session_rows != n_rows or session_cols != n_cols:
+        raise Error(
+            String(name)
+            + ": params name "
+            + String(n_rows)
+            + " x "
+            + String(n_cols)
+            + ", the session holds "
+            + String(session_rows)
+            + " x "
+            + String(session_cols)
+        )
+
+
+def rf_regressor_fit_session_binding(
+    handle: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject,
+) raises -> PythonObject:
+    """`rf_regressor_fit_export` on a data session's X: same params, same
+    checks, same export descriptor."""
+    if len(params) != N_RF_FIT_PARAMS:
+        raise Error(
+            "rf_regressor_fit_session: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    if Int(py=params[2]) != 0:
+        raise Error("rf_regressor_fit_session: n_classes (slot 2) must be 0")
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var yp = _f32_ptr(Int(py=y_addr))
+    var crit = Int(py=criterion)
+    _check_criterion("rf_regressor_fit_session", crit, _reg_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_regressor_fit_session", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var share_tables = reg[].sessions[si].share_tables
+    var host_x = reg[].sessions[si].host_x
+    # the kept tables leave the session for the fit and return after it
+    var prep = List[ForestPrep]()
+    swap(prep, reg[].sessions[si].prep)
+
+    var forest: RandomForestMetaData[DT, RLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
+            0, n_rows * n_cols
+        )
+        var hy = ctx.enqueue_create_host_buffer[RLT](n_rows)
+        ctx.synchronize()
+        copy_f32(yp, hy.unsafe_ptr(), n_rows)
+        var dy = ctx.enqueue_create_buffer[RLT](n_rows)
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+        var dsw = ctx.enqueue_create_buffer[DT](1)
+        ctx.synchronize()
+        # the label scale, as `_rf_regressor_fit` chooses it
+        var mag = Float64(0.0)
+        for i in range(n_rows):
+            var v = Float64(yp[i])
+            mag += v if v >= 0.0 else -v
+        var scales = BinScales(
+            Float32(choose_scale(mag, n_rows)), Float32(1.0)
+        )
+        forest = fit_forest_prepared[RegObj](
+            ctx, dxv, dy, dsw, n_rows, n_cols, 1, rf_params, prep,
+            share_tables, scales, host_x_addr=host_x,
+        )
+        ctx.synchronize()
+        _ = dxv^
+        _ = dy^
+        _ = dsw^
+        _ = hy^
+        _ = ctx^
+    var back = RF_SESSIONS.get_or_create_ptr()
+    var bi = back[].find(session_id)
+    swap(prep, back[].sessions[bi].prep)
+    _ = prep^
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^)
+
+
+def rf_classifier_fit_weighted_session_binding(
+    handle: PythonObject, y_addr: PythonObject,
+    params: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
+) raises -> PythonObject:
+    """`rf_classifier_fit_weighted_export` on a data session's X (its
+    COLUMN-major stage): same params, same weight checks, same export
+    descriptor."""
+    if len(params) != N_RF_FIT_PARAMS:
+        raise Error(
+            "rf_classifier_fit_weighted_session: params must hold "
+            + String(N_RF_FIT_PARAMS)
+            + " values, got "
+            + String(len(params))
+        )
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var n_classes = Int(py=params[2])
+    if n_classes < 2:
+        raise Error("rf_classifier_fit_weighted_session: n_classes must be >= 2")
+    var yp = _i32_ptr(Int(py=y_addr))
+    var crit = Int(py=criterion)
+    _check_criterion("rf_classifier_fit_weighted_session", crit, _cls_criteria())
+    var rf_params = _rf_params_from(params, crit)
+    var weights_address = Int(py=weights_addr)
+    if weights_address == 0:
+        raise Error("weighted RF requires a nonzero Float32 weight pointer")
+
+    var weights = List[Float32]()
+    var weight_total = Float64(0)
+    var wp = _f32_ptr(weights_address)
+    var total = Float64(0)
+    var all_unit = True
+    for i in range(n_rows):
+        var w = wp[i]
+        if not (w >= 0 and w <= Float32(3.4028234663852886e38)):
+            raise Error("class weights must be finite and nonnegative")
+        weights.append(w)
+        total += Float64(w)
+        all_unit = all_unit and w == Float32(1)
+    weight_total = total
+    if total <= 0:
+        raise Error("class weights must have positive total")
+    if all_unit:
+        weights = List[Float32]()
+
+    var session_id = Int(py=handle)
+    var reg = RF_SESSIONS.get_or_create_ptr()
+    var si = reg[].find(session_id)
+    _session_shape_check(
+        "rf_classifier_fit_weighted_session", reg[].sessions[si].n_rows,
+        reg[].sessions[si].n_cols, n_rows, n_cols,
+    )
+    var share_tables = reg[].sessions[si].share_tables
+    var host_x = reg[].sessions[si].host_x
+    var prep = List[ForestPrep]()
+    swap(prep, reg[].sessions[si].prep)
+
+    var forest: RandomForestMetaData[DT, CLT]
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dxv = reg[].sessions[si].dx.create_sub_buffer[DT](
+            0, n_rows * n_cols
+        )
+        var hy = ctx.enqueue_create_host_buffer[CLT](n_rows)
+        ctx.synchronize()
+        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        var dy = ctx.enqueue_create_buffer[CLT](n_rows)
+        ctx.enqueue_copy(dst_buf=dy, src_ptr=hy.unsafe_ptr())
+        var dsw = ctx.enqueue_create_buffer[DT](max(1, len(weights)))
+        ctx.synchronize()
+        if len(weights) > 0:
+            ctx.enqueue_copy(dst_buf=dsw, src_ptr=weights.unsafe_ptr())
+        if len(weights) > 0 and not rf_params.bootstrap:
+            var scale = choose_scale(weight_total, n_rows)
+            if scale < Float64(1.1754943508222875e-38) or scale > Float64(3.4028234663852886e38):
+                raise Error("class weights exceed Float32 fixed-point scale range")
+            var scales = BinScales(Float32(1), Float32(scale))
+            forest = fit_forest_prepared[WeightedClsObj](
+                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                prep, share_tables, scales, sample_weight_host=weights,
+                host_x_addr=host_x,
+            )
+        else:
+            forest = fit_forest_prepared[ClsObj](
+                ctx, dxv, dy, dsw, n_rows, n_cols, n_classes, rf_params,
+                prep, share_tables, sample_weight_host=weights,
+                host_x_addr=host_x,
+            )
+        ctx.synchronize()
+        _ = dxv^
+        _ = dy^
+        _ = dsw^
+        _ = hy^
+        _ = ctx^
+    _ = weights^
+    var back = RF_SESSIONS.get_or_create_ptr()
+    var bi = back[].find(session_id)
+    swap(prep, back[].sessions[bi].prep)
+    _ = prep^
+    var export_trees = forest.trees^
+    forest.trees = RFExportTrees()
+    return _retain_rf_export(export_trees^)
 
 
 def rf_regressor_fit_rowmajor_binding[EXPORT: Bool = False](
@@ -1007,6 +1331,10 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
+        m.def_function[rf_data_session_open_binding]("rf_data_session_open")
+        m.def_function[rf_data_session_close_binding]("rf_data_session_close")
+        m.def_function[rf_regressor_fit_session_binding]("rf_regressor_fit_session_export")
+        m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()

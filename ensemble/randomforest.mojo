@@ -36,6 +36,7 @@ from ensemble.decisiontree.batched_levelalgo.dataset import (
 )
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     compute_quantiles,
+    QuantileResult,
     Quantiles,
 )
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
@@ -2411,6 +2412,40 @@ def _record_tree[
     _ = leaves^
 
 
+struct ForestPrep(Movable):
+    """The per-dataset tables of a forest fit: the quantile table and the
+    binned dataset (DEVIATION 314), with what they were built for. One fit
+    builds them and drops them; a data session (trees-apple3,
+    `bindings/_mojolearn_rf.mojo`) may keep them across the member fits of
+    one boosted ensemble, which all see the same X."""
+
+    var qr: QuantileResult
+    var d_bins: DeviceBuffer[DType.uint8]
+    var max_n_bins: Int
+    var n_rows: Int
+    var n_cols: Int
+    var use_bins: Bool
+    var bins_row_major: Bool
+
+    def __init__(
+        out self,
+        var qr: QuantileResult,
+        var d_bins: DeviceBuffer[DType.uint8],
+        max_n_bins: Int,
+        n_rows: Int,
+        n_cols: Int,
+        use_bins: Bool,
+        bins_row_major: Bool,
+    ):
+        self.qr = qr^
+        self.d_bins = d_bins^
+        self.max_n_bins = max_n_bins
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.use_bins = use_bins
+        self.bins_row_major = bins_row_major
+
+
 def fit_forest[
     O: ObjectiveLike, oob_sabotage: Int = 0
 ](
@@ -2422,6 +2457,39 @@ def fit_forest[
     n_cols: Int,
     n_unique_labels: Int,
     mut rf_params: RF_params,
+    scales: BinScales = BinScales(1.0, 1.0),
+    sample_weight_host: List[Float32] = List[Float32](),
+    row_major: Bool = False,
+    oob_score: Bool = False,
+    host_x_addr: Int = 0,
+    tree_start: Int = 0,
+) raises -> RandomForestMetaData[O.DataT, O.LabelT] where (
+    O.DataT == DType.float32
+):
+    """`fit_forest_prepared` with this fit's own quantile table and bins,
+    built at its start and dropped at its end: every caller's fit before
+    the data session existed, unchanged."""
+    var prep = List[ForestPrep]()
+    return fit_forest_prepared[O, oob_sabotage](
+        ctx, x, y, sample_weight, n_rows, n_cols, n_unique_labels,
+        rf_params, prep, False, scales, sample_weight_host, row_major,
+        oob_score, host_x_addr, tree_start,
+    )
+
+
+def fit_forest_prepared[
+    O: ObjectiveLike, oob_sabotage: Int = 0
+](
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[O.LabelT],
+    mut sample_weight: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+    n_unique_labels: Int,
+    mut rf_params: RF_params,
+    mut prep: List[ForestPrep],
+    keep_prep: Bool,
     scales: BinScales = BinScales(1.0, 1.0),
     sample_weight_host: List[Float32] = List[Float32](),
     row_major: Bool = False,
@@ -2580,54 +2648,10 @@ def fit_forest[
         )
 
     # `:317-325` -- ONCE, for the whole forest, with their literal 4.
+    # `prep` (trees-apple3): with `keep_prep` a table a former fit of the
+    # same data session left is used as it is (its quantile sample was
+    # drawn with THAT fit's seed); otherwise the table is this fit's own.
     var t_stage = instr.times.start()
-    var qr = compute_quantiles(
-        ctx,
-        x,
-        Int(rf_params.tree_params.max_n_bins),
-        n_rows,
-        n_cols,
-        4,
-        rf_params.seed,
-        row_major,
-    )
-    instr.times.stop(ctx, "quantiles", t_stage)
-    # DEVIATION 401 -- the forest's ONE quantile table. `nbins` is the
-    # per-feature bin count, which is where the subnormal-flush divergence
-    # (DEVIATION 123) lands FIRST on a cross-backend diff; `values` is the
-    # full col-major table, whose tail past `nbins[col]` is the unique
-    # pass's leftover -- a pure function of the input data, deterministic
-    # per backend, so hashing the whole logical allocation is sound.
-    if instr.trace.enabled:
-        instr.trace.record_device(
-            ctx, "forest.quantiles.nbins", qr.n_bins_array
-        )
-        instr.trace.record_device(
-            ctx, "forest.quantiles.values", qr.quantiles_array
-        )
-    # `rebind` because `O.DataT` and `DType.float32` are EQUAL by this
-    # function's `where` clause but not syntactically the same expression,
-    # so the pointer types do not unify on their own. This is rebind's
-    # documented job and it reinterprets nothing at runtime.
-    var quantiles = Quantiles[O.DataT](
-        rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
-            qr.quantiles_array.unsafe_ptr()
-            .unsafe_origin_cast[MutUntrackedOrigin]()
-        ),
-        qr.n_bins_array.unsafe_ptr()
-        .unsafe_origin_cast[MutUntrackedOrigin](),
-    )
-
-    # DEVIATION 314 -- the dataset is BINNED once, right here, where
-    # their quantiles are computed once (`:317-325`). The histogram
-    # kernel re-derives `lower_bound(quantiles[col], value)` per element
-    # per LEVEL per TREE (`builder_kernels_impl.cuh:341`); that index is
-    # a pure function of (row, col) once the quantiles exist, so storing
-    # it as one uint8 per element makes every later lookup a 1-byte read
-    # of the SAME index -- bit-identical by construction, and the launch
-    # -log attribution measured that kernel at 85.3% of device time at
-    # 500k x 50. uint8 caps the index at 255, so `max_n_bins > 256`
-    # keeps the searching path; the buffer is a 1-byte dummy then.
     var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
     # RF_BINS_ROW_MAJOR (Apple): row-major bins when a row's bins fit one
     # 64-byte line, or (FAST only, RF_BINS_ROW_MAJOR_WIDE) the trees
@@ -2642,17 +2666,87 @@ def fit_forest[
                     rf_params.tree_params.max_features, n_cols
                 ) >= n_cols
             )
-    var d_bins = ctx.enqueue_create_buffer[DType.uint8](
-        n_rows * n_cols if use_bins else 1
+    var prep_kept = False
+    if keep_prep and len(prep) == 1:
+        if (
+            prep[0].max_n_bins != Int(rf_params.tree_params.max_n_bins)
+            or prep[0].n_rows != n_rows
+            or prep[0].n_cols != n_cols
+            or prep[0].use_bins != use_bins
+            or prep[0].bins_row_major != bins_row_major
+        ):
+            raise Error(
+                "fit_forest: the kept quantile table was built for another"
+                " shape or bin count"
+            )
+        prep_kept = True
+    else:
+        prep.clear()
+        var qr_new = compute_quantiles(
+            ctx,
+            x,
+            Int(rf_params.tree_params.max_n_bins),
+            n_rows,
+            n_cols,
+            4,
+            rf_params.seed,
+            row_major,
+        )
+        var d_bins_new = ctx.enqueue_create_buffer[DType.uint8](
+            n_rows * n_cols if use_bins else 1
+        )
+        prep.append(
+            ForestPrep(
+                qr_new^, d_bins_new^,
+                Int(rf_params.tree_params.max_n_bins), n_rows, n_cols,
+                use_bins, bins_row_major,
+            )
+        )
+    instr.times.stop(ctx, "quantiles", t_stage)
+    # DEVIATION 401 -- the forest's ONE quantile table. `nbins` is the
+    # per-feature bin count, which is where the subnormal-flush divergence
+    # (DEVIATION 123) lands FIRST on a cross-backend diff; `values` is the
+    # full col-major table, whose tail past `nbins[col]` is the unique
+    # pass's leftover -- a pure function of the input data, deterministic
+    # per backend, so hashing the whole logical allocation is sound.
+    if instr.trace.enabled:
+        instr.trace.record_device(
+            ctx, "forest.quantiles.nbins", prep[0].qr.n_bins_array
+        )
+        instr.trace.record_device(
+            ctx, "forest.quantiles.values", prep[0].qr.quantiles_array
+        )
+    # `rebind` because `O.DataT` and `DType.float32` are EQUAL by this
+    # function's `where` clause but not syntactically the same expression,
+    # so the pointer types do not unify on their own. This is rebind's
+    # documented job and it reinterprets nothing at runtime.
+    var quantiles = Quantiles[O.DataT](
+        rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
+            prep[0].qr.quantiles_array.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        ),
+        prep[0].qr.n_bins_array.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin](),
     )
-    if use_bins:
+
+    # DEVIATION 314 -- the dataset is BINNED once, right here, where
+    # their quantiles are computed once (`:317-325`). The histogram
+    # kernel re-derives `lower_bound(quantiles[col], value)` per element
+    # per LEVEL per TREE (`builder_kernels_impl.cuh:341`); that index is
+    # a pure function of (row, col) once the quantiles exist, so storing
+    # it as one uint8 per element makes every later lookup a 1-byte read
+    # of the SAME index -- bit-identical by construction, and the launch
+    # -log attribution measured that kernel at 85.3% of device time at
+    # 500k x 50. uint8 caps the index at 255, so `max_n_bins > 256`
+    # keeps the searching path; the buffer is a 1-byte dummy then.
+    if use_bins and not prep_kept:
         t_stage = instr.times.start()
         launch_bin_dataset(
             ctx,
             rebind[MutPointer[Scalar[O.DataT], MutUntrackedOrigin]](
                 x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
             ),
-            d_bins,
+            prep[0].d_bins,
             quantiles.quantiles_array,
             quantiles.n_bins_array,
             Int(rf_params.tree_params.max_n_bins),
@@ -2668,7 +2762,7 @@ def fit_forest[
         # Every level of every tree reads THIS; a divergence here explains
         # every histogram downstream of it.
         if instr.trace.enabled:
-            instr.trace.record_device(ctx, "forest.binned", d_bins)
+            instr.trace.record_device(ctx, "forest.binned", prep[0].d_bins)
 
     var has_sw = len(sample_weight_host) > 0
     # DEVIATION 2510 -- "host_setup": sampler, K builders, the shared
@@ -2864,7 +2958,7 @@ def fit_forest[
                 Int32(n_unique_labels),
                 objective_sees_weights,
                 # DEVIATION 314 -- shared read-only across all K slots.
-                d_bins.unsafe_ptr().unsafe_origin_cast[
+                prep[0].d_bins.unsafe_ptr().unsafe_origin_cast[
                     MutUntrackedOrigin
                 ](),
                 use_bins,
@@ -3007,7 +3101,7 @@ def fit_forest[
                     Int32(n_unique_labels),
                     objective_sees_weights,
                     # DEVIATION 314.
-                    d_bins.unsafe_ptr().unsafe_origin_cast[
+                    prep[0].d_bins.unsafe_ptr().unsafe_origin_cast[
                         MutUntrackedOrigin
                     ](),
                     use_bins,
@@ -3056,9 +3150,9 @@ def fit_forest[
     # Mojo frees a value at its LAST USE, and every buffer above reached a
     # kernel as a raw pointer. These uses keep them alive past the final
     # synchronize. Measured hazard, not a precaution.
-    _ = qr^
     _ = sampler^
-    _ = d_bins^
+    if not keep_prep:
+        prep.clear()
     # DEVIATION 402 -- the stage table, printed only under
     # MOJOLEARN_STAGE_TIMES=1. `stop_host` because everything above has
     # drained.
