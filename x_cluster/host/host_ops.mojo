@@ -20,7 +20,7 @@ numeric row."""
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_div
+from checks.numerics import ftz, identical_div, identical_mul
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
 
 from x_cluster.bodies import (
@@ -51,6 +51,12 @@ comptime X_CLUSTER_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: Cells per vector in the host moments.
 comptime MOMENTS_W = 8
+#: Covariance rows per host task.
+comptime COV_AB = 4
+#: Rows per vector in the host Mahalanobis squares.
+comptime GAUSS_W = 8
+#: Columns per vector in the host availability update.
+comptime AP_W = 8
 
 
 
@@ -223,10 +229,46 @@ struct HostOps(ClusterOps):
         var pr = self._fp(r)
         var pa = self._fp(a)
 
-        def body(t: Int) {imm pr, imm pa, imm n, imm damping}:
-            ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
+        comptime if X_CLUSTER_HOST_SABOTAGE:
+            def body(t: Int) {imm pr, imm pa, imm n, imm damping}:
+                ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
 
-        host_cells(body, n, 6 * n)
+            host_cells(body, n, 6 * n)
+            return
+
+        # EIGHT COLUMNS PER VECTOR: lane l is column k0 + l, its own chains
+        # (`bodies.ap_availability_col`: colsum over i ascending, then each
+        # cell's update), read along contiguous rows instead of one strided
+        # walk per column. A ragged last group runs the body.
+        var n_groups = n // AP_W
+
+        def group(g: Int) {imm pr, imm pa, imm n, imm damping}:
+            var k0 = g * AP_W
+            var one_minus = ftz(Float32(1) - damping)
+            var dv = SIMD[DType.float32, AP_W](damping)
+            var om = SIMD[DType.float32, AP_W](one_minus)
+            var zero = SIMD[DType.float32, AP_W](0)
+            var kidx = SIMD[DType.int64, AP_W](0)
+            comptime for l in range(AP_W):
+                kidx[l] = Int64(k0 + l)
+            var colsum = SIMD[DType.float32, AP_W](0)
+            for i in range(n):
+                var v = (pr + i * n + k0).load[width=AP_W]()
+                var diag = kidx.eq(SIMD[DType.int64, AP_W](Int64(i)))
+                var rp = (diag | v.gt(zero)).select(v, zero)
+                colsum = ftz_v[AP_W](colsum + rp)
+            for i in range(n):
+                var v = (pr + i * n + k0).load[width=AP_W]()
+                var diag = kidx.eq(SIMD[DType.int64, AP_W](Int64(i)))
+                var rp = (diag | v.gt(zero)).select(v, zero)
+                var nw = ftz_v[AP_W](colsum - rp)
+                nw = ((~diag) & nw.gt(zero)).select(zero, nw)
+                var old = (pa + i * n + k0).load[width=AP_W]()
+                (pa + i * n + k0).store(ftz_v[AP_W](ftz_v[AP_W](mul_v[AP_W](old, dv)) + ftz_v[AP_W](mul_v[AP_W](nw, om))))
+
+        host_cells(group, n_groups, 12 * n * AP_W)
+        for t in range(n_groups * AP_W, n):
+            ap_availability_col[X_CLUSTER_HOST_SABOTAGE](pr, pa, n, damping, t)
 
     def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
         var pa = self._fp(a)
@@ -271,10 +313,41 @@ struct HostOps(ClusterOps):
         var pp = self._fp(pchol)
         var pd = self._fp(dst)
 
-        def body(t: Int) {imm px, imm pm, imm pp, imm pd, imm d, imm kc}:
-            gauss_q_cell[X_CLUSTER_HOST_SABOTAGE](px, d, pm, pp, kc, pd, t)
+        comptime if X_CLUSTER_HOST_SABOTAGE:
+            def body(t: Int) {imm px, imm pm, imm pp, imm pd, imm d, imm kc}:
+                gauss_q_cell[X_CLUSTER_HOST_SABOTAGE](px, d, pm, pp, kc, pd, t)
 
-        host_cells(body, n * kc, 2 * d * d)
+            host_cells(body, n * kc, 2 * d * d)
+            return
+
+        # EIGHT ROWS PER VECTOR: lane l is cell (i0 + l, k), its own chains
+        # (`bodies.gauss_q_cell`: y_j over a ascending, then the sum of y_j^2
+        # over j ascending, the same flushes and pinned products). A block's
+        # differences are formed once per component and reused across j.
+        var n_blocks = n // GAUSS_W
+
+        def block(bi: Int) {imm px, imm pm, imm pp, imm pd, imm d, imm kc}:
+            var i0 = bi * GAUSS_W
+            var diff = List[SIMD[DType.float32, GAUSS_W]](length=d, fill=SIMD[DType.float32, GAUSS_W](0))
+            for k in range(kc):
+                for a in range(d):
+                    var xv = SIMD[DType.float32, GAUSS_W](0)
+                    comptime for l in range(GAUSS_W):
+                        xv[l] = px[(i0 + l) * d + a]
+                    diff[a] = ftz_v[GAUSS_W](ftz_v[GAUSS_W](xv) - SIMD[DType.float32, GAUSS_W](ftz(pm[k * d + a])))
+                var acc = SIMD[DType.float32, GAUSS_W](0)
+                for j in range(d):
+                    var y = SIMD[DType.float32, GAUSS_W](0)
+                    for a in range(j + 1):
+                        var pv = SIMD[DType.float32, GAUSS_W](pp[k * d * d + a * d + j])
+                        y = ftz_v[GAUSS_W](y + ftz_v[GAUSS_W](mul_v[GAUSS_W](diff[a], pv)))
+                    acc = ftz_v[GAUSS_W](acc + ftz_v[GAUSS_W](mul_v[GAUSS_W](y, y)))
+                comptime for l in range(GAUSS_W):
+                    pd[(i0 + l) * kc + k] = acc[l]
+
+        host_cells(block, n_blocks, kc * d * d * 2)
+        for t in range(n_blocks * GAUSS_W * kc, n * kc):
+            gauss_q_cell[X_CLUSTER_HOST_SABOTAGE](px, d, pm, pp, kc, pd, t)
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
         var pq = self._fp(q)
@@ -330,30 +403,55 @@ struct HostOps(ClusterOps):
 
         host_cells(xk_task, kc, 4 * n * d)
 
-        def cov_task(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg}:
-            var k = t // d
-            var a = t - k * d
-            var ma = pm[k * d + a]
-            var b0 = 0
-            while b0 + MOMENTS_W <= d:
-                var mb = (pm + k * d + b0).load[width=MOMENTS_W]()
-                var acc = SIMD[DType.float32, MOMENTS_W](0)
-                for i in range(n):
-                    var r = SIMD[DType.float32, MOMENTS_W](pr[i * kc + k])
-                    var da = SIMD[DType.float32, MOMENTS_W](ftz(ftz(px[i * d + a]) - ma))
-                    var db = ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((px + i * d + b0).load[width=MOMENTS_W]()) - mb)
-                    var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](da, db))
-                    acc = ftz_v[MOMENTS_W](acc + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](r, prod)))
-                comptime for l in range(MOMENTS_W):
-                    var v = ftz(identical_div(acc[l], pn[k]))
-                    if a == b0 + l:
-                        v = ftz(v + reg)
-                    pc[k * d * d + a * d + b0 + l] = v
-                b0 += MOMENTS_W
-            for b in range(b0, d):
-                cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, k * d * d + a * d + b)
+        # A task is one component and COV_AB rows a of the covariance: every
+        # row i is read once for COV_AB x d cells (each its own chain,
+        # `bodies.cov_cell`), the column differences formed once per row.
+        var a_blocks = (d + COV_AB - 1) // COV_AB
+        var n_vec = d // MOMENTS_W
 
-        host_cells(cov_task, kc * d, 7 * n * d)
+        def cov_task(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg, imm a_blocks, imm n_vec}:
+            var k = t // a_blocks
+            var a0 = (t - k * a_blocks) * COV_AB
+            var a1 = min(a0 + COV_AB, d)
+            var na = a1 - a0
+            var accv = List[SIMD[DType.float32, MOMENTS_W]](length=na * n_vec if na * n_vec > 0 else 1, fill=SIMD[DType.float32, MOMENTS_W](0))
+            var tail = d - n_vec * MOMENTS_W
+            var accs = List[Float32](length=na * tail if na * tail > 0 else 1, fill=Float32(0))
+            var dbv = List[SIMD[DType.float32, MOMENTS_W]](length=n_vec if n_vec > 0 else 1, fill=SIMD[DType.float32, MOMENTS_W](0))
+            var dbs = List[Float32](length=tail if tail > 0 else 1, fill=Float32(0))
+            for i in range(n):
+                var r = pr[i * kc + k]
+                var rv = SIMD[DType.float32, MOMENTS_W](r)
+                var xrow = px + i * d
+                for q in range(n_vec):
+                    var b0 = q * MOMENTS_W
+                    dbv[q] = ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((xrow + b0).load[width=MOMENTS_W]()) - (pm + k * d + b0).load[width=MOMENTS_W]())
+                for q in range(tail):
+                    var b = n_vec * MOMENTS_W + q
+                    dbs[q] = ftz(ftz(xrow[b]) - pm[k * d + b])
+                for aa in range(na):
+                    var a = a0 + aa
+                    var da = ftz(ftz(xrow[a]) - pm[k * d + a])
+                    var dav = SIMD[DType.float32, MOMENTS_W](da)
+                    for q in range(n_vec):
+                        var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, dbv[q]))
+                        accv[aa * n_vec + q] = ftz_v[MOMENTS_W](accv[aa * n_vec + q] + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod)))
+                    for q in range(tail):
+                        accs[aa * tail + q] = ftz(accs[aa * tail + q] + ftz(identical_mul(r, ftz(identical_mul(da, dbs[q])))))
+            for aa in range(na):
+                var a = a0 + aa
+                for b in range(d):
+                    var acc: Float32
+                    if b < n_vec * MOMENTS_W:
+                        acc = accv[aa * n_vec + b // MOMENTS_W][b % MOMENTS_W]
+                    else:
+                        acc = accs[aa * tail + b - n_vec * MOMENTS_W]
+                    var v = ftz(identical_div(acc, pn[k]))
+                    if a == b:
+                        v = ftz(v + reg)
+                    pc[k * d * d + a * d + b] = v
+
+        host_cells(cov_task, kc * a_blocks, 7 * n * d * COV_AB)
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
