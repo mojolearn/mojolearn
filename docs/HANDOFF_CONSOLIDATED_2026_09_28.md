@@ -3,6 +3,36 @@
 Written before conversation compaction, approximately 19:56 UTC. This is a
 snapshot, not a live job status. Read the queue before drawing timing conclusions.
 
+Latest operational update, approximately 21:28 UTC:
+
+- Numerical candidate and packaging inputs remain frozen at `b8dfa7710`;
+  subsequent handoff edits do not change that candidate. All five CUDA prebuilds
+  passed. Jobs `nvc1-0016` (445 lanes) and `nvc1-0019` (physical par-gmm) remain
+  queued; no numerical results from either yet. Runner owns monitoring.
+- AMD packaging preparation completed: 75 witnessed copies plus 35 new lower-tier
+  builds, preserving copied binding/math bytes. All 110 native files and build
+  provenance are archived locally under the durable evidence root at
+  `packaging-preparation/amd-b8dfa7710-build-inputs.tar.gz`; SHA-256
+  `f5091a33a69413137ea8fd5f4f279bf39e1971296af13003f8613388cf31d227`.
+  These are build inputs, not a staged or qualified wheel. AMD's observed
+  shutdown deadline is 23:01:42 UTC; the archive is already local.
+- M4's scheduled retirement at 21:16:30 UTC interrupted packaging preparation.
+  Last preserved receipt: 34/45 builds; new binaries were not recovered. M3 Ultra
+  also retired. M2 Pro remains running but busy with another owner's checks;
+  no idle Apple host or reusable copies of the M4 outputs have been confirmed.
+- User now authorizes additional NVIDIA/AMD capacity if needed. Another AMD box
+  is unnecessary. A second shared NVIDIA pod is already being provisioned by
+  another workflow; our idempotent request deferred to its fleet lock. Four-GPU
+  stock attempts failed and two-GPU attempts are pending. No new pod is ready.
+  Do not start a competing provisioner or claim a quote reserves capacity.
+- Migration archive is prepared locally in `/tmp/mojolearn-cuda-migration/`.
+  Runner must validate actual architecture/toolchain/source closures before reuse.
+  If job 0016 starts first, leave it running and migrate only queued 0019. Cancel
+  only our old queued entries after replacement readiness, never duplicate runs.
+- Live durable state: `cuda-runner-state.json`, `packaging-preparation/state.json`,
+  and `cuda-comparison-plan.json` in the evidence root listed below. The final
+  comparison command is prepared but has not run. NumPy policy remains pending.
+
 Post-compaction update, 20:07 UTC: main is `c46f77614`. The parallel candidate
 table gap described below is fixed and pushed (48 focused tests passed); use
 `docs/PAR_GMM_CANDIDATE_WORKFLOW.md` for the prepared qualification recipe.

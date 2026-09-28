@@ -89,20 +89,6 @@ _PT_EVALS = 50
 _PT_STATE = 10
 
 
-def _binding_has(binding, name):
-    """Whether `binding` exports `name`. On a CPU install the binding is the
-    host stub, whose missing attributes raise ImportError (the no-CPU-
-    implementation message), not AttributeError, so `hasattr` would raise
-    instead of answering. lane/apple2-merged (2026-09-28): prep-apple2's
-    device-only entries (x_prep_run_out, x_prep_run_scratch and the native
-    fold entries) broke every x_prep lane's CPU column (m4pro-b)."""
-    try:
-        getattr(binding, name)
-    except (AttributeError, ImportError):
-        return False
-    return True
-
-
 def _prep_binding(mode):
     return _backend.binding("_mojolearn_x_prep", mode)
 
