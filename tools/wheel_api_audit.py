@@ -141,7 +141,7 @@ def split_audit(wheels):
     runtime; every plugin requires exactly `mojolearn==<its version>`; the
     core requires EVERY plugin at its own version exactly and nothing else of
     them (2026-09-26, `pip install mojolearn` works for everyone:
-    gpu_plugins.core_requirements); only the verify extra is optional; the .dist-info markers agree
+    gpu_plugins.core_requirements); numpy and verify extras are optional; the .dist-info markers agree
     with the payload; all wheels share one version and one tag; and no member
     is in two wheels. File inspection only. Returns {'wheels': [...],
     'problems': [...]}, and an empty `problems` is the pass."""
@@ -174,10 +174,10 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
             # `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26):
             # the core requires BOTH plugins at its own version exactly, no
-            # marker or GPU extra. The verify extra only adds harness dependencies.
+            # marker or GPU extra. NumPy remains optional for APIs and verification.
             extras = sorted(metadata.get_all('Provides-Extra', []))
-            if set(extras) - {'verify'}:
-                problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; only verify is allowed')
+            if set(extras) - {'verify', 'numpy'}:
+                problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; only numpy and verify are allowed')
             on_plugin = [r for r in requires
                          if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0].strip().lower().replace('_', '-') in by_distribution]
             want = plugins.core_requirements(version)

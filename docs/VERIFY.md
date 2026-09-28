@@ -10,8 +10,12 @@ is already installed and satisfies the requirement, pip reuses it. Releases
 through 0.8.24 do not declare this extra: use `python -m pip install numpy`
 with those releases. The extra and the expanded `--all` scope below take effect
 in the next published release.
-Some optional sequence estimators also use NumPy; their implementations load
-when accessed, without making it a prerequisite for importing the core library.
+Optional ANN filtering and TSNE, CNN and sequence APIs, NumPy-global random-state
+adapters, and array-protocol resampling also use NumPy. Install their support with
+`python -m pip install "mojolearn[numpy]"`; `[verify]` supplies the same dependency.
+Their implementations load when accessed, without making NumPy a prerequisite
+for importing the core library. Missing support gives the installation command.
+These extras do not change numerical implementations or create a different wheel.
 
 Under the IDENTICAL tier, verification compares fixed fixtures with recorded
 hashes and checks applicable local contracts, including batch invariance:

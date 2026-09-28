@@ -25,7 +25,8 @@ _BINDING = "_mojolearn_x_cnn"
 
 
 def _np():
-    import numpy as np
+    from ._optional_numpy import require_numpy
+    np = require_numpy('_expansion_cnn')
     return np
 
 

@@ -28,7 +28,8 @@ def _ann_mask(owner, filter, n):
     it); None keeps every row (one all-ones array per row count, made once
     and only read: the host bindings take it where a GPU handle keeps its
     own, lane/py-dn-ann)."""
-    import numpy as np
+    from ._optional_numpy import require_numpy
+    np = require_numpy('_expansion_ann')
     if filter is None:
         ones = _ONES.get(n)
         if ones is None:
@@ -341,7 +342,8 @@ class TSNE(NumericModeMixin):
     def _init(self, x, n, seed):
         """The start y0 (n, 2) float32: 'pca', 'random' or the caller's array."""
         import math
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_ann')
         init = self.init
         if isinstance(init, str) and init == "random":
             return ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
@@ -366,7 +368,8 @@ class TSNE(NumericModeMixin):
         return y0
 
     def fit(self, X, y=None):
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_ann')
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)
         if self.n_components != 2:
@@ -520,7 +523,8 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
     def _search_filtered(self, queries, filter):
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_ann')
         keep = _ann_mask("CagraIndex", filter, self.n_rows_) != 0
         k = self._p("n_neighbors")
         bd, bi = self._search_k(queries, self._p("itopk_size"))
@@ -752,7 +756,8 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     of each of the k selected distances, taken on the host in float32
     (numpy's sqrt, IEEE correctly rounded on every platform), where cuVS
     takes it at the store. The ids and their order are the squared metric's."""
-    import numpy as np
+    from ._optional_numpy import require_numpy
+    np = require_numpy('_expansion_ann')
     if metric not in ("sqeuclidean", "euclidean"):
         raise ValueError(f"mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
                          f"(inner product is not implemented), got {metric!r}")

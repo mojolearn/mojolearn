@@ -1,5 +1,24 @@
 # NumPy policy audit of consolidated Apple sources
 
+## Resolution for the next wheel
+
+The next wheel keeps NumPy optional: `mojolearn[numpy]` supports the optional
+runtime APIs below, and `mojolearn[verify]` supplies the same dependency for
+verification. The base install does not require or bundle NumPy. This explicitly
+replaces the earlier promise that every runtime API is NumPy-free; it does not
+classify estimator code as verification code.
+
+Runtime imports now pass through `_optional_numpy.require_numpy`, which returns
+the actual NumPy module and provides an installation command when NumPy is absent.
+The audit permits that one lazy runtime guard separately from verifier imports;
+unconditional NumPy metadata and other direct runtime imports remain rejected.
+All non-import syntax trees of the 19 affected feature modules are unchanged,
+preserving the existing numerical operations and random generators. Fresh-wheel
+checks must still demonstrate the core without NumPy and optional APIs with it.
+
+The original findings below explain why a verifier-only extra was insufficient.
+They describe the pre-resolution source, not the current dependency policy.
+
 The consolidated source at `3cc07eabf` still fails the strict shipped-Python
 NumPy audit: **23 import sites in 19 files**. This is a release blocker under
 the current policy that runtime estimators do not require NumPy. A successful

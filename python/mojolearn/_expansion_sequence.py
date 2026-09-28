@@ -76,7 +76,7 @@ def __getattr__(name):
             raise
         raise ModuleNotFoundError(
             f"mojolearn.{name} requires NumPy. Install it with: "
-            "python -m pip install numpy", name="numpy") from exc
+                'python -m pip install "mojolearn[numpy]"', name="numpy") from exc
     globals()[name] = value
     return value
 

@@ -16,7 +16,8 @@ Refused by name (sequence/NOT_IMPLEMENTED.tsv): bidirectional, dropout
 between layers, proj_size, initial hidden state, packed / variable-length
 sequences, float64.
 """
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_rnn')
 
 from . import _backend
 

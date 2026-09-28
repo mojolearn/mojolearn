@@ -11,7 +11,8 @@ objective minimised by statsforecast's Nelder-Mead, and the point forecast.
 Refused by name (sequence/NOT_IMPLEMENTED.tsv): prediction intervals
 (`level`), fitted values / in-sample residual output, non-normal error
 distributions, exogenous regressors, float64 input."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_theta')
 
 from . import _backend
 

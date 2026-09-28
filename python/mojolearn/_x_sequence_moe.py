@@ -11,7 +11,8 @@ weights keep HF's layout: `router` (E, D), `gate_up_proj` (E, 2F, D),
 Refused (sequence/NOT_IMPLEMENTED.tsv): the backward pass, router jitter
 noise, activations other than SiLU, the auxiliary load-balancing loss,
 float64."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_moe')
 
 from . import _backend
 

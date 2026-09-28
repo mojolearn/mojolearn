@@ -12,7 +12,8 @@ reference's sample order.
 Refused by name (sequence/NOT_IMPLEMENTED.tsv): solver='lbfgs',
 early_stopping=True, warm_start, partial_fit, multilabel targets, verbose,
 float64 input."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_mlp')
 
 from . import _backend
 

@@ -5,7 +5,8 @@
 (`sequence/croston.mojo`). `fit(y)` takes one series or a batch
 `(batch_size, n_obs)`; `predict(h)` returns {"mean": ...}, the flat forecast
 repeated h times. Refused: prediction intervals, fitted values, float64."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_croston')
 
 from . import _backend
 

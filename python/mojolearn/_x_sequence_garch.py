@@ -12,7 +12,8 @@ beta[1..q]), `loglikelihood_`, `conditional_volatility_`. `forecast(h)`
 returns the analytic variance forecasts. Refused by name: distributions
 other than normal, other mean models (AR, HAR, LS), power != 2
 (TARCH/APARCH), rescaling, float64 input."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_garch')
 
 from . import _backend
 

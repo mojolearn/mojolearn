@@ -811,7 +811,8 @@ def _random_state(seed):
     if isinstance(seed, int) and not isinstance(seed, bool):
         return _LegacyRandomState(seed)
     if seed is None:
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_expansion_neighbors')
         return _NumpyRandomState(np.random.mtrand._rand)
     if hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform"):
         return _NumpyRandomState(seed)

@@ -18,7 +18,8 @@ season_length is fitted without a season, as there.
 
 Refused by name: multiplicative trend, 'Z' (automatic) letters,
 prediction intervals, fitted values, float64."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_ets')
 
 from . import _backend
 

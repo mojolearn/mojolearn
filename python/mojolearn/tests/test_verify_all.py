@@ -1368,7 +1368,7 @@ else:
 try:
     mojolearn.AutoARIMA
 except ModuleNotFoundError as exc:
-    assert exc.name == "numpy" and "pip install numpy" in str(exc)
+    assert exc.name == "numpy" and "mojolearn[numpy]" in str(exc)
 else:
     raise AssertionError("NumPy-dependent estimator unexpectedly loaded")
 '''

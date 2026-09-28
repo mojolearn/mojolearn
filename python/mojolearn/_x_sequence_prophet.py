@@ -22,7 +22,8 @@ intervals and sampling (mcmc_samples, interval_width), extra regressors
 beyond holiday indicator columns, conditional seasonalities, float64 y."""
 import math
 
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_prophet')
 
 from . import _backend
 

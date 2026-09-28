@@ -126,13 +126,13 @@ classifiers = [
 # 0.8.0 uses the shared Array/buffer layer and compiled host helpers.
 # NumPy inputs remain accepted through PEP 3118; returned Array objects expose
 # a zero-copy __array_interface__ for callers that choose to use NumPy.
-# NumPy is an optional test/diagnostic oracle, not a runtime requirement.
+# Core operations do not require NumPy; optional APIs and verification use extras.
 dependencies = []
 
 [project.optional-dependencies]
-# The library stays NumPy-free; verification uses NumPy for fixtures and
-# array inspection. This extra installs the same wheel with its test harness
-# dependency, not a separate edition of MojoLearn.
+# Extras install the same wheel. Some ANN/CNN/sequence APIs use NumPy arrays,
+# initialization or adapters; verification uses it for fixtures and inspection.
+numpy = ["numpy>=1.26.4"]
 verify = ["numpy>=1.26.4"]
 
 [project.urls]

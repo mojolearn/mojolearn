@@ -10,7 +10,8 @@ equations in float32, where statsmodels calls lstsq in float64).
 
 Refused by name: ic-based order selection (`ic=`), trend 'ct' and 'ctt',
 exog, float64 input, a rank-deficient design (the solve reports it)."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_var')
 
 from . import _backend
 

@@ -11,7 +11,8 @@ sets `lr` before every step.
 
 Refused (sequence/NOT_IMPLEMENTED.tsv): parameter groups, maximize,
 foreach/fused/capturable/differentiable, sparse gradients, float64."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_optim')
 
 from . import _backend
 from ._x_sequence_rnn import OPTIMIZERS, optimizer_arguments

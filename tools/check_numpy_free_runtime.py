@@ -8,7 +8,7 @@ current native bindings. This is deliberately not a performance benchmark.
 import argparse, importlib.abc, importlib.metadata, pathlib, sys, json, re
 
 def metadata_errors(required, extras, plugins=()):
- """Allow the verify extra and exact split-core plugin pins, never base NumPy.
+ """Allow optional NumPy extras and exact split-core pins, never base NumPy.
 
  This audit runs in a clean environment, so it uses only the standard library.
  The wheel audit independently validates the split marker and its version.
@@ -23,8 +23,9 @@ def metadata_errors(required, extras, plugins=()):
  for dependency in remaining:
   name, separator, marker = dependency.partition(';')
   optional_numpy = (re.fullmatch(r"numpy(?:\s*[<>=!~].*)?", name.strip(), re.I)
-                    and separator and 'verify' in extras
-                    and re.fullmatch(r"\s*extra\s*==\s*[\"']verify[\"']\s*", marker))
+                    and separator and any(extra in extras
+                    and re.fullmatch(r"\s*extra\s*==\s*[\"']" + extra + r"[\"']\s*", marker)
+                    for extra in ('numpy', 'verify')))
   if not optional_numpy:
    errors.append('unexpected runtime requirement: ' + dependency)
  return errors

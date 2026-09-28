@@ -62,10 +62,28 @@ def test_numpy_policy_rejects_runtime_and_payload_dependencies(tmp_path, name, c
     assert audit.numpy_errors(path, name)
 
 
-def test_numpy_verification_extra_is_optional_metadata(tmp_path):
+@pytest.mark.parametrize('extra', ['numpy', 'verify'])
+def test_numpy_verification_extra_is_optional_metadata(tmp_path, extra):
     path = tmp_path / 'METADATA'
-    path.write_text('Provides-Extra: verify\nRequires-Dist: numpy>=1.26.4; extra == "verify"\n')
+    path.write_text(f'Provides-Extra: {extra}\nRequires-Dist: numpy>=1.26.4; extra == "{extra}"\n')
     assert not audit.numpy_errors(path, 'mojolearn.dist-info/METADATA')
+
+
+def test_numpy_runtime_guard_is_narrow_and_lazy(tmp_path):
+    path = tmp_path / '_optional_numpy.py'
+    path.write_text('def require_numpy(feature):\n    import numpy\n    return numpy\n')
+    assert not audit.numpy_errors(path, 'mojolearn/_optional_numpy.py')
+    assert audit.numpy_errors(path, 'mojolearn/other.py')
+    path.write_text('import numpy\n')
+    assert audit.numpy_errors(path, 'mojolearn/_optional_numpy.py')
+
+
+def test_shipped_runtime_numpy_imports_use_only_the_guard():
+    root = HERE.parents[1] / 'python'
+    errors = [error for path in (root / 'mojolearn').rglob('*.py')
+              if 'tests' not in path.relative_to(root).parts
+              for error in audit.numpy_errors(path, path.relative_to(root).as_posix())]
+    assert not errors
 
 
 @pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])

@@ -13,7 +13,8 @@ pass it), float64 input, degrees other than 0 and 1 (the reference's own
 bound)."""
 import math
 
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_stl')
 
 from . import _backend
 

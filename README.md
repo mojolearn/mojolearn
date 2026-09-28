@@ -147,6 +147,9 @@ CPU, and a verifier that checks your machine against them.
 Install NumPy for verification (`python -m pip install numpy` on the published
 0.8.24 release). The next release provides `python -m pip install "mojolearn[verify]"`:
 the same library plus its optional verification dependency.
+Optional ANN, CNN and sequence APIs that use NumPy are supported by
+`mojolearn[numpy]`; the verification extra includes that same dependency.
+The base install does not require NumPy. See [verification support](docs/VERIFY.md).
 
 ```sh
 python -m mojolearn verify --quick   # one lane per family

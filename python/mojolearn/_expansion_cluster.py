@@ -63,7 +63,8 @@ def _callable_init(init, X, k, random_state):
     from its own stream; this hands it every row."""
     rs = random_state
     try:
-        import numpy as _np
+        from ._optional_numpy import require_numpy
+        _np = require_numpy('_expansion_cluster')
         X = _np.asarray(X)
         rs = _np.random.RandomState(random_state)
     except ImportError:

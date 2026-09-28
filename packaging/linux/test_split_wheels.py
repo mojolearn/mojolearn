@@ -167,7 +167,7 @@ class SplitWheels(unittest.TestCase):
         self.assertEqual(core.get("Name"), "mojolearn")
         # `pip install mojolearn` WORKS FOR EVERYONE: no extras, and the core
         # requires BOTH plugins at its own version exactly
-        self.assertEqual(core.get_all("Provides-Extra"), ["verify"])
+        self.assertEqual(core.get_all("Provides-Extra"), ["numpy", "verify"])
         self.assertIn('numpy>=1.26.4; extra == "verify"', core.get_all("Requires-Dist"))
         self.assertNotIn('numpy>=1.26.4', core.get_all("Requires-Dist"))
         self.assertEqual([r for r in core.get_all("Requires-Dist") or [] if r.startswith("mojolearn")],
@@ -182,7 +182,7 @@ class SplitWheels(unittest.TestCase):
         # the split core's METADATA is the combined wheel's plus EXACTLY the
         # two plugin requirements, nothing else added, removed or reordered
         single = meta(self.single)
-        self.assertEqual(single.get_all("Provides-Extra"), ["verify"])
+        self.assertEqual(single.get_all("Provides-Extra"), ["numpy", "verify"])
         ours = members(self.split["mojolearn"])[f"{dist_info(self.split['mojolearn'])}/METADATA"].decode()
         theirs = members(self.single)[f"{dist_info(self.single)}/METADATA"].decode()
         self.assertNotIn("Requires-Dist: mojolearn-", theirs)
@@ -327,7 +327,7 @@ class SplitWheels(unittest.TestCase):
                 nvidia, amd],
             "core lost its marker": [self.rewrite(core, drop={f"{dist_info(core)}/gpu_plugins.json"}), nvidia, amd],
         }
-        why = {"core declares a GPU extra": "declares Provides-Extra ['nvidia', 'verify']",
+        why = {"core declares a GPU extra": "declares Provides-Extra ['numpy', 'nvidia', 'verify']",
                "core lacks the amd plugin": "it must require exactly",
                "core pins a plugin loosely": "it must require exactly",
                "core requires a plugin twice": "it must require exactly"}

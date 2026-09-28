@@ -250,7 +250,8 @@ class IVFIndex(NumericModeMixin):
     def _search_filter(filter, n):
         if filter is None:
             return None
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('_ivf_impl')
         f = np.asarray(filter)
         if f.shape != (n,) or f.dtype != np.bool_:
             raise ValueError(f"mojolearn IVFIndex: filter must be a boolean array of shape ({n},), "

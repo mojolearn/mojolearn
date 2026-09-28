@@ -328,7 +328,8 @@ def resample_indices(n, n_samples=None, replace=True, random_state=0, numeric_mo
 
 def _take(a, idx):
     if hasattr(a, "__array__") and hasattr(a, "shape"):
-        import numpy as np
+        from ._optional_numpy import require_numpy
+        np = require_numpy('resample')
         return np.asarray(a)[np.asarray(idx, dtype=np.intp)]
     return [a[int(i)] for i in idx]
 

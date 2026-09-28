@@ -7,7 +7,8 @@ affine), forward and backward, on the GPU (`sequence/layernorm.mojo`).
 `layer_norm_forward` / `layer_norm_backward` are the functional pair beside
 `rms_norm_forward` / `rms_norm_backward`; `LayerNorm` holds the weight and
 bias and keeps their gradients after `backward`."""
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_norm')
 
 from . import _backend
 

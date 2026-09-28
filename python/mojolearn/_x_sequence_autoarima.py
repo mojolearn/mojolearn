@@ -27,7 +27,8 @@ ARIMA fits by `ml`), a `d` option list that is not 0..d_max, `truncate`,
 `h` other than the default, prediction intervals (`level`)."""
 import itertools
 
-import numpy as np
+from ._optional_numpy import require_numpy
+np = require_numpy('_x_sequence_autoarima')
 
 from . import _portable_math as _pm
 from ._arima_impl import ARIMA

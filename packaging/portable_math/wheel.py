@@ -54,12 +54,21 @@ def numpy_errors(path, relative):
         from email.parser import Parser
         metadata = Parser().parsestr(path.read_text())
         if any(re.match(r"numpy(?:$|[\s<>=!~;\[])", dep, re.I)
-               and not ("verify" in metadata.get_all("Provides-Extra", [])
-                        and re.fullmatch(r'''\s*extra\s*==\s*["']verify["']\s*''', dep.partition(';')[2]))
+               and not any(extra in metadata.get_all("Provides-Extra", [])
+                           and re.fullmatch(r"\s*extra\s*==\s*[\"']" + extra + r"[\"']\s*", dep.partition(';')[2])
+                           for extra in ("numpy", "verify"))
                for dep in metadata.get_all("Requires-Dist", [])):
             errors.append(relative + ": NumPy dependency metadata")
     if path.suffix == ".py" and relative not in NUMPY_ORACLES:
-        for node in ast.walk(ast.parse(path.read_bytes(), filename=relative)):
+        tree = ast.parse(path.read_bytes(), filename=relative)
+        optional_imports = set()
+        # Optional runtime support is separate from the independent verifier.
+        # Only this lazy, actionable dependency guard may import NumPy for APIs.
+        if relative == "mojolearn/_optional_numpy.py":
+            for fn in tree.body:
+                if isinstance(fn, ast.FunctionDef) and fn.name == "require_numpy":
+                    optional_imports.update(id(n) for n in ast.walk(fn) if isinstance(n, ast.Import))
+        for node in ast.walk(tree):
             names = ([a.name for a in node.names] if isinstance(node, ast.Import)
                      else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
             if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
@@ -67,8 +76,8 @@ def numpy_errors(path, relative):
                 if (isinstance(func, ast.Name) and func.id == "__import__"
                         or isinstance(func, ast.Attribute) and func.attr == "import_module"):
                     names.append(str(node.args[0].value))
-            if any(name.split(".")[0] == "numpy" for name in names):
-                errors.append(relative + ": NumPy import outside independent verification")
+            if any(name.split(".")[0] == "numpy" for name in names) and id(node) not in optional_imports:
+                errors.append(relative + ": NumPy import outside verification or optional runtime guard")
     return errors
 
 

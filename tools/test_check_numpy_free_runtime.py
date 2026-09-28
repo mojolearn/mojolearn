@@ -12,6 +12,8 @@ spec.loader.exec_module(check)
 @pytest.mark.parametrize("requires,extras,plugins", [
     ([], [], []),
     (['numpy>=1.26.4; extra == "verify"'], ["verify"], []),
+    (['numpy>=1.26.4; extra == "numpy"'], ["numpy"], []),
+    (['numpy>=1.26.4; extra == "numpy"', 'numpy>=1.26.4; extra == "verify"'], ["numpy", "verify"], []),
     (["mojolearn-amd==1.2.3", "mojolearn-nvidia==1.2.3", "numpy>=1.26.4; extra == 'verify'"],
      ["verify"], ["mojolearn-amd==1.2.3", "mojolearn-nvidia==1.2.3"]),
 ])
@@ -22,6 +24,8 @@ def test_only_optional_verifier_and_exact_split_plugins_are_allowed(requires, ex
 @pytest.mark.parametrize("requires,extras,plugins", [
     (["numpy>=1.26.4"], ["verify"], []),
     (['numpy>=1.26.4; extra == "verify"'], [], []),
+    (['numpy>=1.26.4; extra == "numpy"'], ["verify"], []),
+    (['numpy>=1.26.4; extra == "numpy" or python_version >= "3"'], ["numpy"], []),
     (['numpy>=1.26.4; extra == "verify" or python_version >= "3"'], ["verify"], []),
     (['scipy; extra == "verify"'], ["verify"], []),
     (['numpy>=1.26.4; extra == "other"'], ["verify"], []),
