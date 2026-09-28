@@ -59,6 +59,8 @@ from sequence.ops import (
     OP_MOE_ROUTE,
     OP_MOE_HIDDEN,
     OP_MOE_OUT,
+    OP_ETS_LIK,
+    OP_ETS_INIT,
     op_gemm,
     op_bias,
     op_colsum,
@@ -81,7 +83,7 @@ from sequence.mlp import op_act, op_act_bwd, op_divs, op_l2grad, op_mlp_bloss, o
 from sequence.stl import op_stl
 from sequence.theta import op_theta
 from sequence.croston import op_croston
-from sequence.ets import op_ets
+from sequence.ets import op_ets, op_ets_init, op_ets_lik
 from sequence.garch import op_garch
 from sequence.moe import op_moe_hidden, op_moe_out, op_moe_route
 from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict
@@ -186,6 +188,10 @@ def apply[OP: Int](t: Int, a: Args):
         op_croston(t, a)
     elif OP == OP_ETS:
         op_ets(t, a)
+    elif OP == OP_ETS_LIK:
+        op_ets_lik(t, a)
+    elif OP == OP_ETS_INIT:
+        op_ets_init(t, a)
     elif OP == OP_GARCH:
         op_garch(t, a)
     elif OP == OP_PROPHET_FEATURES:
