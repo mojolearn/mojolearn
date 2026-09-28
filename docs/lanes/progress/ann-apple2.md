@@ -29,9 +29,10 @@ on ONE Mac and alternates the arms, then prints a stage split
 | b9cc59dcf | x_ann/io.mojo: uploads without a private copy, downloads by memcpy | both | on |
 | 7b51e91e5 | tiled k-NN fold width = d rounded up to a multiple of 4 (28, was 32) | both | on |
 | e0d2ff366 | CAGRA device prune: neighbor rows staged in threadgroup memory | both | SUPERSEDED by 7c195b32c (measured +160 ms on m4-a) |
-| 3dca15c1a, fbe131bd8 | IVF-SQ / RaBitQ score inputs staged; PQ code-sum nonneg flush | both | pending A/B 6 (no gain alone in A/B 5) |
-| 7c195b32c | CAGRA device prune: binary search + threadgroup integer atomics | both | pending A/B 6 |
-| 78b605c31 | IVF scan: codes/mask/norms/factors gathered into list order per search | both | pending A/B 6 |
+| 3dca15c1a, fbe131bd8 | IVF-SQ / RaBitQ score inputs staged; PQ code-sum nonneg flush | both | on (A/B 6: score 114 -> 95 ms on the M4 Pro; flat on the M4) |
+| 7c195b32c | CAGRA device prune: binary search + threadgroup integer atomics | both | on (A/B 6: equal to the unstaged scan, 80 ms better than e0d2ff366) |
+| 78b605c31 | IVF scan: codes/mask/norms/factors gathered into list order per search | both | on (A/B 6: score 95 -> 55 ms) |
+| c347aeae7 | CAGRA reverse-edge merge split over host tasks | both | on (host code; timing in the final run) |
 
 ## Measurements
 
@@ -146,3 +147,21 @@ The width-28 fold is a gain (kept); staging the prune's neighbor rows lost
 ~160 ms (replaced by 7c195b32c); staging the SQ/RaBitQ score arithmetic
 moved nothing, so the score is bound by its scattered code reads (78b605c31
 gathers them into list order). IVF fits and t-SNE unchanged (as expected).
+
+### A/B 6: m4pro-a, steward 1790609801944, job at 78b605c31
+
+Arms 7b51e91e5, fbe131bd8 (score staging, staged prune), 7c195b32c (atomic
+prune), 78b605c31 (list-order gather). Digests equal across every arm,
+cell and tier. Raw: `ab6_m4pro-a_1790609801944.txt`.
+
+| cell (s) | 7b51e91e5 | fbe131bd8 | 7c195b32c | 78b605c31 |
+|---|---|---|---|---|
+| IDENTICAL IVF-PQ search | 0.056/0.056/0.059 | 0.092/0.055/0.059 | 0.055/0.057/0.059 | 0.084/0.047/0.051 |
+| IDENTICAL IVF-SQ search | 0.073/0.066/0.071 | 0.074/0.068/0.069 | 0.070/0.066/0.068 | 0.055/0.055/0.059 |
+| IDENTICAL IVF-RaBitQ search | 0.072/0.057/0.059 | 0.053/0.039/0.042 | 0.039/0.039/0.042 | 0.044/0.029/0.032 |
+| IDENTICAL CAGRA fit | 0.495/0.473/0.471 | 0.550/0.550/0.551 | 0.486/0.484/0.484 | 0.481/0.482/0.475 |
+| FAST CAGRA fit | 0.396/0.377/0.377 | 0.457/0.456/0.454 | 0.388/0.387/0.388 | 0.388/0.388/0.389 |
+| IVF scan score, 3 searches (ms, IDENTICAL) | 114.2 | 95.5 | 94.2 | 54.9 |
+
+(The first search in a process carries a warmup: the 0.08-0.09 s first
+values.) IVF fits unchanged across these arms, as expected.
