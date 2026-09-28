@@ -13,14 +13,15 @@ or at max_iter. Every sum ascends the index; the objective is a comptime
 function parameter, so each caller compiles its own copy.
 
 Objective contract:
-    f = obj(x, y, n, d, ip, fp, theta, toff, grad, goff) and grad written.
+    f = obj(x, y, n, d, ip, fp, theta, toff, grad, goff, sc) and grad written;
+    sc is the caller's per-row scratch (the objective's map, then fold).
 Work layout at fw[woff:]: tn P | g P | gn P | dir P | S m*P | Y m*P | rho m | al m.
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, copy, fill
 
 comptime LBFGS_M = 10
 
-comptime Objective = def(FP, FP, Int, Int, IP, FP, FP, Int, FP, Int) thin -> Float32
+comptime Objective = def(FP, FP, Int, Int, IP, FP, FP, Int, FP, Int, FP) thin -> Float32
 
 
 def lbfgs_work(p: Int) -> Int:
@@ -36,7 +37,7 @@ def _dot(a: FP, ia: Int, b: FP, ib: Int, p: Int) -> Float32:
 
 def lbfgs[obj: Objective](
     x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
-    theta: FP, toff: Int, p: Int, max_iter: Int, tol: Float32, fw: FP, woff: Int,
+    theta: FP, toff: Int, p: Int, max_iter: Int, tol: Float32, fw: FP, woff: Int, sc: FP,
 ) -> Int:
     """Minimizes obj over theta[toff:toff+p] in place. Returns iterations
     run (negative when it stopped on max_iter without meeting tol)."""
@@ -48,7 +49,7 @@ def lbfgs[obj: Objective](
     var sY = sS + LBFGS_M * p
     var rho = sY + LBFGS_M * p
     var al = rho + LBFGS_M
-    var f = obj(x, y, n, d, ip, fp, theta, toff, fw, g)
+    var f = obj(x, y, n, d, ip, fp, theta, toff, fw, g, sc)
     var count = 0
     var head = 0
     var it = 0
@@ -98,7 +99,7 @@ def lbfgs[obj: Objective](
         for _ in range(40):
             for j in range(p):
                 st(fw, tn + j, fmad(t, ld(fw, dr + j), ld(theta, toff + j)))
-            fnew = obj(x, y, n, d, ip, fp, fw, tn, fw, gn)
+            fnew = obj(x, y, n, d, ip, fp, fw, tn, fw, gn, sc)
             if fnew == fnew and fnew <= fa(f, fm(fm(Float32(1e-4), t), slope)):
                 accepted = True
                 break

@@ -493,7 +493,7 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         p = d + 2 if self.fit_intercept else d + 1
         yw, has_sw = _with_weights(yv, sample_weight, n)
         vals = _run(self, ALGO_HUBER, a, n, d, yw, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
-                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p), 1)
+                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p) + n, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.scale_ = float(vals[d + 1])

@@ -10,11 +10,12 @@ n*sigma + sum_inliers r^2/sigma + sum_outliers (2 eps |r| - sigma eps^2)
 sigma >= 10 * float64 eps; here sigma = exp(s) and s is free, minimized by
 x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows
 from x_linear.lbfgs import lbfgs, lbfgs_work
 
 
-def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
+def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
+    """Map (each row's residual into `sc`), then fold rows ascending."""
     var fi = ldi(ip, 1) != 0
     var eps = ld(fp, 0)
     var alpha = ld(fp, 1)
@@ -32,8 +33,14 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
     var thr = fm(eps, sigma)
     var two_over_sigma = fd(Float32(2), sigma)
     var two_eps = fm(Float32(2), eps)
+
+    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm d, imm th, imm toff, imm b, imm sc}:
+        for i in range(lo, hi):
+            st(sc, i, fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b))
+
+    par_rows(rows_map, n)
     for i in range(n):
-        var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
+        var r = ld(sc, i)
         var ar = fabs(r)
         var coefv: Float32
         if sw:
@@ -54,8 +61,7 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
         else:
             sq = fmad(r, r, sq)
             coefv = fm(-two_over_sigma, r)
-        for j in range(d):
-            st(g, goff + j, fmad(coefv, ld(x, i * d + j), ld(g, goff + j)))
+        axpy_acc(g, goff, coefv, x, i * d, d)
         if fi:
             st(g, goff + d, fa(ld(g, goff + d), coefv))
     var wn = Float32(0)
@@ -77,12 +83,12 @@ def huber_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [epsilon, alpha, tol].
     With sample_weight, y = targets n | weights n (their weighted objective).
     res: coef d, intercept 1, scale 1, n_iter 1 | theta scratch (P).
-    fw: lbfgs_work(P)."""
+    fw: lbfgs_work(P) | objective scratch n."""
     var fi = ldi(ip, 1) != 0
     var p = d + 2 if fi else d + 1
     var th = d + 4
     fill(res, th, p, Float32(0))
-    var it = lbfgs[huber_objective](x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0)
+    var it = lbfgs[huber_objective](x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
     for j in range(d):
         st(res, j, ld(res, th + j))
     st(res, d, ld(res, th + d) if fi else Float32(0))

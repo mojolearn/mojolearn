@@ -26,9 +26,9 @@ from x_linear.lbfgs import lbfgs, lbfgs_work
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 
 
-def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
+def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
     """Map, then fold (x_linear/ops.mojo, lane linear-cpu): each training
-    row's loss term and gradient coefficients go to the scratch at fp + 1
+    row's loss term and gradient coefficients go to the scratch `sc`
     (L: n | R: n * K'), then one pass folds them in ascending row order,
     the order the one-pass loop used."""
     var kp = ldi(ip, 0)
@@ -38,7 +38,7 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
     var sw = ldi(ip, 3) != 0
     var stride = d + 1
     var p = kp * stride
-    var sl = fp + 1
+    var sl = sc
     var sr = sl + n
 
     def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm th, imm toff, imm kp, imm fi,
@@ -158,7 +158,7 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
         fill(fw, th, p, Float32(0))
         for ci in range(nc):
             st(fw, cslot, ld(fp, 1 + ci))
-            _ = lbfgs[logistic_objective](x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work)
+            _ = lbfgs[logistic_objective](x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
             var hit = 0
             var cnt = 0
             for i in range(n):
@@ -192,7 +192,7 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     sti(iw, 2, -1)
     st(fw, cslot, ld(fp, 1 + best))
     fill(fw, th, p, Float32(0))
-    var it = lbfgs[logistic_objective](x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work)
+    var it = lbfgs[logistic_objective](x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
     for k in range(kp):
         for j in range(d):
             st(res, k * d + j, ld(fw, th + k * stride + j))
