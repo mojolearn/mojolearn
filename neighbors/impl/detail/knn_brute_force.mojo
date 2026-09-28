@@ -194,6 +194,21 @@ comptime KNN_APPLE_MMA_DIST = (
 )
 
 
+#: lane/neighbors-apple (2026-09-28): Apple IDENTICAL expanded-L2 k-NN
+#: takes its candidates from the simdgroup-matrix arm and its answer from
+#: the pinned chain under a per-query certificate; an uncertified query is
+#: answered by the tiled arm (`neighbors/impl/detail/certified_mma_knn.mojo`).
+#: Same keys, same bits. `-D MOJOLEARN_KNN_CERTIFIED_MMA_OFF` keeps the
+#: tiled arm for every query.
+comptime KNN_CERTIFIED_MMA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_KNN_CERTIFIED_MMA_OFF"]()
+)
+comptime CERT_MAX_K = 24
+comptime CERT_MAX_D = 32
+
+
 def identical_index_tile(n_index: Int) -> Int:
     """How many index columns one distance tile holds on this build.
 
@@ -226,6 +241,14 @@ from neighbors.impl.detail.fast_mma_knn import (
     fast_mma_knn,
     fast_mma_knn_applies,
 )
+from neighbors.impl.detail.certified_mma_knn import (
+    CERT_TPB,
+    certified_rescore_kernel,
+    gather_rows_kernel,
+    scatter_rows_f32_kernel,
+    scatter_rows_u32_kernel,
+)
+from checks.kernel_matrix import COLUMN_APPLE
 from neighbors.impl.detail.fast_topk_knn import (
     FAST_TOPK_KNN_ENABLED,
     fast_topk_knn,
@@ -1776,6 +1799,28 @@ def brute_force_knn_impl(
     # is in; see DEVIATION 36 above the constants for the measurements.
     var mtr = resolve_metric(metric, is_sqrt)
 
+    comptime if KNN_CERTIFIED_MMA:
+        if (
+            (mtr == DIST_L2_EXPANDED or mtr == DIST_L2_SQRT_EXPANDED)
+            and row_major_query
+            and row_major_index
+            and knn_method == KNN_METHOD_AUTO
+            and k >= 1
+            and k <= CERT_MAX_K
+            and n_features >= 1
+            and n_features <= CERT_MAX_D
+            and n_index >= 64
+            and n_queries >= 1
+        ):
+            certified_mma_knn(
+                ctx, queries, query_norm, index, index_norm, dist_tile,
+                buf_val, buf_idx, out_dist, out_idx, out_idx32, n_queries,
+                n_index, n_features, k, query_tile, buf_len, is_sqrt,
+                use_vendor_topk, mtr == DIST_L2_SQRT_EXPANDED, metric,
+                metric_arg, cache,
+            )
+            return
+
     # THEIR FOURTH CONDITION, `:444-447`, as a value test.
     # FAST on Apple, k <= 32: the simdgroup-matrix arm
     # (neighbors/impl/detail/fast_mma_knn.mojo).
@@ -2011,3 +2056,121 @@ def brute_force_knn_impl(
             metric_arg,
             cache,
         )
+
+
+def certified_mma_knn(
+    ctx: DeviceContext,
+    mut queries: DeviceBuffer[DType.float32],
+    mut query_norm: DeviceBuffer[DType.float32],
+    mut index: DeviceBuffer[DType.float32],
+    mut index_norm: DeviceBuffer[DType.float32],
+    mut dist_tile: DeviceBuffer[DType.float32],
+    mut buf_val: DeviceBuffer[DType.float32],
+    mut buf_idx: DeviceBuffer[DType.uint32],
+    mut out_dist: DeviceBuffer[DType.float32],
+    mut out_idx: DeviceBuffer[DType.uint32],
+    mut out_idx32: DeviceBuffer[DType.int32],
+    n_queries: Int,
+    n_index: Int,
+    n_features: Int,
+    k: Int,
+    query_tile: Int,
+    buf_len: Int,
+    is_sqrt: Bool,
+    use_vendor_topk: Bool,
+    root: Bool,
+    metric: Int,
+    metric_arg: Float32,
+    cache: KnnIndexCachePointer,
+) raises:
+    """KNN_CERTIFIED_MMA's driver: candidates, pinned values and the
+    certificate for every query, then the tiled arm (`KNN_METHOD_TILED`,
+    the IDENTICAL arm AUTO pins) for the queries whose certificate failed,
+    scattered into their rows. Same keys as the tiled arm for every query
+    (`certified_mma_knn.mojo`)."""
+    var kc = 16 if k <= 12 else 32
+    var cand_d = ctx.enqueue_create_buffer[DType.float32](n_queries * kc)
+    var cand_i = ctx.enqueue_create_buffer[DType.uint32](n_queries * kc)
+    var flags = ctx.enqueue_create_buffer[DType.int32](n_queries)
+    fast_mma_knn(
+        ctx, queries, index, cand_d, cand_i, n_queries, n_index, n_features,
+        kc, False,
+    )
+    var grid = (n_queries + CERT_TPB - 1) // CERT_TPB
+    var root_arg = Int32(1) if root else Int32(0)
+    if kc == 16:
+        ctx.enqueue_function[certified_rescore_kernel[16, 16]](
+            queries.unsafe_ptr(), index.unsafe_ptr(), query_norm.unsafe_ptr(),
+            index_norm.unsafe_ptr(), cand_d.unsafe_ptr(), cand_i.unsafe_ptr(),
+            out_dist.unsafe_ptr(), out_idx.unsafe_ptr(), flags.unsafe_ptr(),
+            Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+            root_arg, grid_dim=(grid, 1, 1), block_dim=(CERT_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[certified_rescore_kernel[32, 32]](
+            queries.unsafe_ptr(), index.unsafe_ptr(), query_norm.unsafe_ptr(),
+            index_norm.unsafe_ptr(), cand_d.unsafe_ptr(), cand_i.unsafe_ptr(),
+            out_dist.unsafe_ptr(), out_idx.unsafe_ptr(), flags.unsafe_ptr(),
+            Int32(n_queries), Int32(n_index), Int32(n_features), Int32(k),
+            root_arg, grid_dim=(grid, 1, 1), block_dim=(CERT_TPB, 1, 1),
+        )
+    var hf = ctx.enqueue_create_host_buffer[DType.int32](n_queries)
+    ctx.enqueue_copy(dst_ptr=hf.unsafe_ptr(), src_buf=flags)
+    ctx.synchronize()
+    var failed = List[Int32]()
+    for i in range(n_queries):
+        if hf.unsafe_ptr().unsafe_load(i) == Int32(0):
+            failed.append(Int32(i))
+    if getenv("MOJOLEARN_STAGE_TIMES") == "1":
+        print("CERT_KNN queries=" + String(n_queries) + " kc=" + String(kc)
+              + " tiled_fallback=" + String(len(failed)))
+    _ = hf^
+    _ = cand_d^
+    _ = cand_i^
+    _ = flags^
+    var nf = len(failed)
+    if nf == 0:
+        return
+    var hrows = ctx.enqueue_create_host_buffer[DType.int32](nf)
+    for i in range(nf):
+        hrows.unsafe_ptr().unsafe_store(i, failed[i])
+    var rows = ctx.enqueue_create_buffer[DType.int32](nf)
+    ctx.enqueue_copy(dst_buf=rows, src_ptr=hrows.unsafe_ptr())
+    var sub_q = ctx.enqueue_create_buffer[DType.float32](nf * n_features)
+    var sub_qn = ctx.enqueue_create_buffer[DType.float32](nf)
+    var sub_d = ctx.enqueue_create_buffer[DType.float32](nf * k)
+    var sub_i = ctx.enqueue_create_buffer[DType.uint32](nf * k)
+    ctx.enqueue_function[gather_rows_kernel](
+        sub_q.unsafe_ptr(), queries.unsafe_ptr(), rows.unsafe_ptr(),
+        Int32(nf), Int32(n_features),
+        grid_dim=((nf * n_features + CERT_TPB - 1) // CERT_TPB, 1, 1), block_dim=(CERT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[gather_rows_kernel](
+        sub_qn.unsafe_ptr(), query_norm.unsafe_ptr(), rows.unsafe_ptr(),
+        Int32(nf), Int32(1),
+        grid_dim=((nf + CERT_TPB - 1) // CERT_TPB, 1, 1), block_dim=(CERT_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    brute_force_knn_impl(
+        ctx, sub_q, sub_qn, index, index_norm, dist_tile, buf_val, buf_idx,
+        sub_d, sub_i, out_idx32, nf, n_index, n_features, k, query_tile,
+        buf_len, is_sqrt, use_vendor_topk, True, True, KNN_METHOD_TILED,
+        metric, metric_arg, cache,
+    )
+    ctx.enqueue_function[scatter_rows_f32_kernel](
+        out_dist.unsafe_ptr(), sub_d.unsafe_ptr(), rows.unsafe_ptr(),
+        Int32(nf), Int32(k),
+        grid_dim=((nf * k + CERT_TPB - 1) // CERT_TPB, 1, 1), block_dim=(CERT_TPB, 1, 1),
+    )
+    ctx.enqueue_function[scatter_rows_u32_kernel](
+        out_idx.unsafe_ptr(), sub_i.unsafe_ptr(), rows.unsafe_ptr(),
+        Int32(nf), Int32(k),
+        grid_dim=((nf * k + CERT_TPB - 1) // CERT_TPB, 1, 1), block_dim=(CERT_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = hrows^
+    _ = rows^
+    _ = sub_q^
+    _ = sub_qn^
+    _ = sub_d^
+    _ = sub_i^

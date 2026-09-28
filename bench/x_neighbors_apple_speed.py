@@ -120,13 +120,15 @@ CASES = [
     ("knnc", 200_000, 10_000),
     ("knnr", 200_000, 10_000),
     ("radius", 100_000, 5_000),
+    ("nn-ties", 100_000, 5_000),
+    ("nn-k20", 200_000, 10_000),
     ("kde", 100_000, 2_000),
     ("svc", 10_000, 10_000),
     ("svr", 10_000, 10_000),
     ("krr", 10_000, 10_000),
     ("gpr", 3_000, 3_000),
     ("gpc", 3_000, 3_000),
-    ("nystroem", 100_000, 100_000),
+    ("nystroem", 4_000, 100_000),
     ("rbf", 1_000_000, 1_000_000),
 ]
 K = 10
@@ -143,6 +145,24 @@ def run_case(ml, name, x, yc, yr, xq, ycq, yrq):
         def pred():
             return st["m"].kneighbors(xq)
         return fit, pred, lambda o: _knn_recall(x, xq, _np(o[1]), K)
+    if name == "nn-ties":
+        # coarse grid values: many exactly tied distances and duplicate rows
+        xt = np.ascontiguousarray(np.round(x * 2.0) / 2.0, dtype=np.float32)
+        qt = np.ascontiguousarray(np.round(xq * 2.0) / 2.0, dtype=np.float32)
+
+        def fit():
+            st["m"] = ml.NearestNeighbors(n_neighbors=K).fit(xt)
+
+        def pred():
+            return st["m"].kneighbors(qt)
+        return fit, pred, lambda o: _knn_recall(xt, qt, _np(o[1]), K)
+    if name == "nn-k20":
+        def fit():
+            st["m"] = ml.NearestNeighbors(n_neighbors=20).fit(x)
+
+        def pred():
+            return st["m"].kneighbors(xq)
+        return fit, pred, lambda o: _knn_recall(x, xq, _np(o[1]), 20)
     if name == "knnc":
         def fit():
             st["m"] = ml.KNeighborsClassifier(n_neighbors=K).fit(x, yc)

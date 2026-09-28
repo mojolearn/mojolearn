@@ -69,6 +69,7 @@ that ran them, and no cross-vendor card has been diffed for this header.
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE as _CTX_MODE, NUMERIC_IDENTICAL as _CTX_IDENTICAL
 from core.neural_context import neural_ctx
+from std.sys.compile import is_defined
 # ONE PROCESS-LIFETIME DeviceContext per binding and tier (CURRENT DIRECTIVES;
 # lane/neighbors-apple 2026-09-28): a new context per entry is a new Metal
 # queue and a pipeline load per call. Same kernels, same launches, same order
@@ -76,6 +77,14 @@ from core.neural_context import neural_ctx
 # bit moves. This module is compiled into ONE GPU binding, so the slot name
 # (per module and tier) is that binding's own.
 comptime _FAMILY_CTX = "MojoSvmContextIdentical" if _CTX_MODE == _CTX_IDENTICAL else "MojoSvmContextOther"
+
+
+def _family_ctx() raises -> DeviceContext:
+    """The binding's process-lifetime context; `-D MOJOLEARN_FAMILY_CTX_PER_CALL`
+    restores a new context per entry (the A/B arm)."""
+    comptime if is_defined["MOJOLEARN_FAMILY_CTX_PER_CALL"]():
+        return DeviceContext()
+    return neural_ctx[_FAMILY_CTX]()
 
 from core.identity_trace import IdentityTrace
 from svm.impl.smosolver import SmoTrace
@@ -205,7 +214,7 @@ def svc_fit_host(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = neural_ctx[_FAMILY_CTX]()
+    var ctx = _family_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -281,7 +290,7 @@ def svc_fit_host_borrowed(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = neural_ctx[_FAMILY_CTX]()
+    var ctx = _family_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -384,7 +393,7 @@ def svc_predict_host(
     model.unique_labels.append(label1)
     model.n_iter = 0
 
-    var ctx = neural_ctx[_FAMILY_CTX]()
+    var ctx = _family_ctx()
     var card = IdentityTrace()
     card.header(
         "svc_predict_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -526,7 +535,7 @@ def svr_fit_host(
     param.verbosity = 0
     check_rung1_scope(param, kp, False)
 
-    var ctx = neural_ctx[_FAMILY_CTX]()
+    var ctx = _family_ctx()
     var card = IdentityTrace()
     card.header(
         "svr_fit_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
@@ -632,7 +641,7 @@ def svr_predict_host(
     model.unique_labels = dummy_labels^
     model.n_iter = 0
 
-    var ctx = neural_ctx[_FAMILY_CTX]()
+    var ctx = _family_ctx()
     var card = IdentityTrace()
     card.header(
         "svr_predict_host: n_rows=" + String(n_rows) + " n_cols=" + String(n_cols)
