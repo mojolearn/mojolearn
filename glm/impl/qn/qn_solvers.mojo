@@ -56,11 +56,12 @@ from glm.impl.qn.qn_util import (
     OPT_NUMERIC_ERROR,
     OPT_SUCCESS,
     check_convergence,
-    lbfgs_search_dir,
+    lbfgs_search_dir_enqueue,
+    lbfgs_search_dir_resolve,
     project_direction,
     update_pseudo,
 )
-from glm.impl.qn.simple_mat.dense import ax, axpy, copy_vec, nrm2
+from glm.impl.qn.simple_mat.dense import ax, axpy, copy_vec, nrm2, read_scalars
 
 
 def _iter_tag(k: Int) -> String:
@@ -192,6 +193,10 @@ def min_lbfgs(
     k = 1
     var end = 0
     var n_vec = 0
+    # lane/linear-apple: the search direction's verdict (skip, ys) is read
+    # home with the next line search's dg_init; `end`/`n_vec` are settled
+    # then, before anything uses them.
+    var dir_pending = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
@@ -202,9 +207,16 @@ def min_lbfgs(
         fxp = fx
 
         # Line search to update x, fx and gradient
+        var fresh = False
         lsret = ls_backtrack(
-            ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters
+            ctx, param, f, fx, x, grad, step, drt, xp, n, scalar, ls_iters,
+            stage, fresh,
         )
+        if dir_pending:
+            if not fresh:
+                read_scalars(ctx, scalar, stage, 4)
+            end = lbfgs_search_dir_resolve(param, n_vec, end, ys, stage)
+            dir_pending = False
         gnorm = f.grad_norm(ctx, grad)
 
         var stop = update_and_check(
@@ -231,10 +243,10 @@ def min_lbfgs(
         axpy(ctx, S[end], Float32(-1.0), xp, x, n)
         axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
         # drt <- -H * g
-        end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, s_all, y_all, hist, grad, drt, ys,
-            alpha, n, scalar, stage,
+        lbfgs_search_dir_enqueue(
+            ctx, param, n_vec, end, s_all, y_all, hist, grad, drt, n, scalar
         )
+        dir_pending = True
         # step = 1.0 as initial guess
         step = Float32(1.0)
         k += 1
@@ -409,6 +421,10 @@ def min_owlqn(
     k = 1
     var end = 0
     var n_vec = 0
+    # lane/linear-apple: the search direction's verdict (skip, ys) is read
+    # home with the next line search's dg_init; `end`/`n_vec` are settled
+    # then, before anything uses them.
+    var dir_pending = False
     var retcode = OPT_MAX_ITERS_REACHED
     var lsret = LS_SUCCESS
     var ls_iters = 0
@@ -419,10 +435,16 @@ def min_owlqn(
         fxp = fx
 
         # OWL-QN: the PROJECTED line search (`:357-358`).
+        var fresh = False
         lsret = ls_backtrack_projected(
             ctx, param, f, fx, x, grad, pseudo, step, drt, xp, l1_penalty,
-            pg_limit, n, scalar, ls_iters,
+            pg_limit, n, scalar, ls_iters, stage, fresh,
         )
+        if dir_pending:
+            if not fresh:
+                read_scalars(ctx, scalar, stage, 4)
+            end = lbfgs_search_dir_resolve(param, n_vec, end, ys, stage)
+            dir_pending = False
         gnorm = f.grad_norm(ctx, grad)
 
         var stop = update_and_check(
@@ -455,10 +477,10 @@ def min_owlqn(
         axpy(ctx, S[end], Float32(-1.0), xp, x, n)
         axpy(ctx, Y[end], Float32(-1.0), gradp, grad, n)
         # OWL-QN: `drt <- -H * pseudo`, the PSEUDO gradient (`:388-390`).
-        end = lbfgs_search_dir(
-            ctx, param, n_vec, end, S, Y, s_all, y_all, hist, pseudo, drt, ys,
-            alpha, n, scalar, stage,
+        lbfgs_search_dir_enqueue(
+            ctx, param, n_vec, end, s_all, y_all, hist, pseudo, drt, n, scalar
         )
+        dir_pending = True
         # OWL-QN: project the direction onto the orthant of -pseudo (`:393`).
         project_direction(ctx, drt, pseudo, n)
 

@@ -41,6 +41,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.memory import bitcast
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_sum
@@ -221,48 +222,103 @@ def _block_dot_bcast(
     return r
 
 
-def lbfgs_two_loop_kernel(
+def host_le_eps_times(ys: Float32, yy: Float32) -> Bool:
+    """The host's `ys <= FLOAT_EPSILON * yy` (FLOAT_EPSILON = 2^-23) on any
+    target, BY BITS. The product is formed as the host rounds it (an
+    exponent shift while it stays normal; below that, `yy`'s value in
+    2^-149 quanta shifted right by 23 and rounded to nearest even), and the
+    comparison is the IEEE one on the two words (NaN compares false, -0 ==
+    +0). `ys` is an ftz'd reduction, never subnormal; `yy` a squared norm."""
+    var bs = bitcast[DType.uint32](ys)
+    var by = bitcast[DType.uint32](yy)
+    if (bs & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000) or (by & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+        return False
+    var sign = by & UInt32(0x80000000)
+    var ey = Int((by >> 23) & UInt32(0xFF))
+    var mag: UInt32
+    if ey == 0xFF:
+        mag = UInt32(0x7F800000)
+    elif ey > 23:
+        mag = (by & UInt32(0x7FFFFFFF)) - (UInt32(23) << 23)
+    else:
+        var q: UInt64
+        var f = (by & UInt32(0x7FFFFF)).cast[DType.uint64]()
+        if ey == 0:
+            q = f
+        else:
+            q = (f | UInt64(0x800000)) << UInt64(ey - 1)
+        var m = q >> 23
+        var rem = q & UInt64(0x7FFFFF)
+        if rem > UInt64(0x400000) or (rem == UInt64(0x400000) and (m & UInt64(1)) == UInt64(1)):
+            m += 1
+        mag = m.cast[DType.uint32]()
+    var bp = sign | mag
+    if (bs & UInt32(0x7FFFFFFF)) == UInt32(0):
+        bs = UInt32(0)
+    if (bp & UInt32(0x7FFFFFFF)) == UInt32(0):
+        bp = UInt32(0)
+    # IEEE order on non-NaN words: the usual sign-flip key
+    var ks = (bs ^ UInt32(0x80000000)) if (bs & UInt32(0x80000000)) == UInt32(0) else ~bs
+    var kp = (bp ^ UInt32(0x80000000)) if (bp & UInt32(0x80000000)) == UInt32(0) else ~bp
+    return ks <= kp
+
+
+def lbfgs_dir_kernel(
     drt: MutPointer[Float32, MutAnyOrigin],
     g: MutPointer[Float32, MutAnyOrigin],
     s_all: MutPointer[Float32, MutAnyOrigin],
     y_all: MutPointer[Float32, MutAnyOrigin],
     yhist: MutPointer[Float32, MutAnyOrigin],
     alpha: MutPointer[Float32, MutAnyOrigin],
+    verdict: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     m_in: Int32,
-    bound_in: Int32,
+    n_vec_in: Int32,
     end_in: Int32,
-    set_at: Int32,
-    set_val: Float32,
     neg_one: Float32,
-    scale: Float32,
 ):
-    """lane/linear-apple: `lbfgs_search_dir`'s two-loop recursion in ONE
-    launch of ONE block of STATS_TPB threads (grid 1).
+    """lane/linear-apple: ALL of `lbfgs_search_dir` in ONE launch of ONE
+    block of STATS_TPB threads (grid 1), with no synchronize.
 
-    Every stored word is the word the host-driven sequence stored:
-    `drt = neg_one * g` is `ax_kernel`; each dot is `_block_dot_bcast` (=
-    `dot_kernel`); each update is `axpy_inplace_kernel`'s
-    `ftz(identical_mul_add(a, x, drt))`; `drt *= scale` is
-    `ax_inplace_kernel` with the host's `ys / yy`. The host scalars
-    `alpha[j] = dot / yhist[j]`, `-alpha[j]`, `beta = dot / yhist[j]`
-    and `alpha[j] - beta` are computed here by `ieee_div_f32` /
-    `ieee_sub_f32` / negation, which return the host's IEEE words. A
-    barrier separates every write of `drt` from the next read of it by
-    another thread. `yhist[set_at] = set_val` is the host's `yhist[end] =
-    ys`, done by thread 0 before the first barrier."""
+    `ys = dot(S[end], Y[end])` and `yy = squaredNorm(Y[end])` are
+    `dot_kernel` / `dot_self_kernel`'s values (`_block_dot_bcast`); the
+    skipping test is `host_le_eps_times`, the host's comparison by bits;
+    `verdict[0]` gets 1.0 (skipped: `drt` untouched, as the host returned
+    before touching it) or 0.0, and `verdict[1]` gets `ys`, for the host's
+    bookkeeping (`lbfgs_search_dir_resolve`). Then the two loops:
+    `drt = neg_one * g` is `ax_kernel`; each dot is `dot_kernel`; each
+    update is `axpy_inplace_kernel`'s `ftz(identical_mul_add(a, x, drt))`;
+    `drt *= ys / yy` is `ax_inplace_kernel`. The host scalars `ys / yy`,
+    `alpha[j] = dot / yhist[j]`, `-alpha[j]`, `beta = dot / yhist[j]` and
+    `alpha[j] - beta` are `ieee_div_f32` / `ieee_sub_f32` / negation, the
+    host's IEEE words. A barrier separates every write of `drt` from the
+    next read of it by another thread. The skip decision is uniform (every
+    thread holds the same `ys`, `yy`), so every barrier is reached by all."""
     var n = Int(n_in)
     var m = Int(m_in)
     var tid = Int(thread_idx.x)
+    var end_prev = Int(end_in)
+    var ys = _block_dot_bcast(s_all + end_prev * n, y_all + end_prev * n, n, tid)
+    var yv = y_all + end_prev * n
+    var yy = _block_dot_bcast(yv, yv, n, tid)
+    if host_le_eps_times(ys, yy):
+        if tid == 0:
+            verdict.unsafe_store(0, Float32(1.0))
+            verdict.unsafe_store(1, ys)
+        return
     if tid == 0:
-        yhist.unsafe_store(Int(set_at), set_val)
+        verdict.unsafe_store(0, Float32(0.0))
+        verdict.unsafe_store(1, ys)
+        yhist.unsafe_store(end_prev, ys)
+    var bound = min(m, Int(n_vec_in) + 1)
+    var scale = ieee_div_f32(ys, yy)
     var i = tid
     while i < n:
         drt.unsafe_store(i, ftz(neg_one * g.unsafe_load(i)))
         i += STATS_TPB
     barrier()
-    var j = Int(end_in)
-    for _ in range(Int(bound_in)):
+    var j = (end_prev + 1) % m
+    for _ in range(bound):
         j = (j + m - 1) % m
         var d = _block_dot_bcast(s_all + j * n, drt, n, tid)
         var a = ieee_div_f32(d, yhist.unsafe_load(j))
@@ -282,7 +338,7 @@ def lbfgs_two_loop_kernel(
         drt.unsafe_store(i, ftz(scale * drt.unsafe_load(i)))
         i += STATS_TPB
     barrier()
-    for _ in range(Int(bound_in)):
+    for _ in range(bound):
         var d = _block_dot_bcast(y_all + j * n, drt, n, tid)
         var beta = ieee_div_f32(d, yhist.unsafe_load(j))
         var c = ieee_sub_f32(alpha.unsafe_load(j), beta)
@@ -297,71 +353,56 @@ def lbfgs_two_loop_kernel(
         j = (j + 1) % m
 
 
-def lbfgs_search_dir(
+def lbfgs_search_dir_enqueue(
     ctx: DeviceContext,
     param: LBFGSParam,
-    mut n_vec: Int,
+    n_vec: Int,
     end_prev: Int,
-    mut S: List[DeviceBuffer[DType.float32]],
-    mut Y: List[DeviceBuffer[DType.float32]],
     mut s_all: DeviceBuffer[DType.float32],
     mut y_all: DeviceBuffer[DType.float32],
     mut hist: DeviceBuffer[DType.float32],
     mut g: DeviceBuffer[DType.float32],
     mut drt: DeviceBuffer[DType.float32],
-    mut yhist: List[Float32],
-    mut alpha: List[Float32],
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
-    mut stage: HostBuffer[DType.float32],
-) raises -> Int:
-    """`lbfgs_search_dir`, `qn_util.cuh:176-241`: `drt = -H g` by the
-    two-loop recursion over the `S`, `Y` history. `svec`/`yvec` are
-    `S[end_prev]`/`Y[end_prev]`, which the caller just wrote
-    (`col_ref(S, svec, end)`). Returns the new `end`.
-
-    lane/linear-apple (2026-09-28): `S`/`Y` are views of the contiguous
-    `s_all`/`y_all` (m x n), `hist` holds the device copies of `yhist`
-    (words 0..m-1) and `alpha` (m..2m-1). `ys` and `yy` come home behind
-    one synchronize (scalar words 0 and 1); the two loops are
-    `lbfgs_two_loop_kernel`, one launch and no synchronize. Before this,
-    the function synchronized 2 + 2 * min(m, n_vec) times per iteration.
-    The host lists `yhist`/`alpha` keep the host's copy of `yhist`; the
-    device `alpha` is the only one read."""
-    var end = end_prev
-    ctx.enqueue_function[dot_kernel](
-        scalar.unsafe_ptr(), S[end].unsafe_ptr(), Y[end].unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
-    var scalar1 = scalar.create_sub_buffer[DType.float32](1, 1)
-    ctx.enqueue_function[dot_self_kernel](
-        scalar1.unsafe_ptr(), Y[end].unsafe_ptr(), Int32(n),
-        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
-    read_scalars(ctx, scalar, stage, 2)
-    _ = scalar1^
-    var ys = stage.unsafe_ptr().unsafe_load(0)
-    var yy = stage.unsafe_ptr().unsafe_load(1)
-    # Skipping test (`:190-206`): the Hessian is ~0, keep the direction.
-    if ys <= FLOAT_EPSILON * yy:
-        return end
-    n_vec += 1
-    yhist[end] = ys
-    var set_at = end
-
-    var bound = min(param.m, n_vec)
-    end = (end + 1) % param.m
+) raises:
+    """`lbfgs_search_dir`, `qn_util.cuh:176-241` (`drt = -H g` by the
+    two-loop recursion over the `S`, `Y` history), enqueued as ONE launch
+    with no synchronize (lane/linear-apple, 2026-09-28). The host learns
+    whether the pair was skipped, and `ys`, from `scalar` words 2 and 3,
+    which come home with the next read of `scalar` (the line search's
+    `dg_init`); `lbfgs_search_dir_resolve` then does the host's bookkeeping.
+    Before this the function synchronized 2 + 2 * min(m, n_vec) times per
+    iteration. `S[j]`/`Y[j]` are rows j of `s_all`/`y_all` (m x n); `hist`
+    holds the device yhist (words 0..m-1) and alpha (m..2m-1)."""
     var hist_alpha = hist.create_sub_buffer[DType.float32](param.m, param.m)
-    ctx.enqueue_function[lbfgs_two_loop_kernel](
+    var verdict = scalar.create_sub_buffer[DType.float32](2, 2)
+    ctx.enqueue_function[lbfgs_dir_kernel](
         drt.unsafe_ptr(), g.unsafe_ptr(), s_all.unsafe_ptr(), y_all.unsafe_ptr(),
-        hist.unsafe_ptr(), hist_alpha.unsafe_ptr(),
-        Int32(n), Int32(param.m), Int32(bound), Int32(end),
-        Int32(set_at), ys, Float32(-1.0), ys / yy,
+        hist.unsafe_ptr(), hist_alpha.unsafe_ptr(), verdict.unsafe_ptr(),
+        Int32(n), Int32(param.m), Int32(n_vec), Int32(end_prev), Float32(-1.0),
         grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
     )
     _ = hist_alpha^
-    _ = len(alpha)
-    return end
+    _ = verdict^
+
+
+def lbfgs_search_dir_resolve(
+    param: LBFGSParam,
+    mut n_vec: Int,
+    end_prev: Int,
+    mut yhist: List[Float32],
+    stage: HostBuffer[DType.float32],
+) -> Int:
+    """The host half of `lbfgs_search_dir` after `stage` holds `scalar`'s
+    words 0..3: on a skip `end` stays; otherwise `n_vec += 1`,
+    `yhist[end] = ys` and `end` advances. Returns the new `end`."""
+    var skipped = stage.unsafe_ptr().unsafe_load(2) != Float32(0.0)
+    if skipped:
+        return end_prev
+    n_vec += 1
+    yhist[end_prev] = stage.unsafe_ptr().unsafe_load(3)
+    return (end_prev + 1) % param.m
 
 
 # ===========================================================================

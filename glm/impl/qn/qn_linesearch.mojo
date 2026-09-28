@@ -26,7 +26,7 @@ Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from glm.impl.qn.glm_base import GLMWithData
 from glm.impl.qn.glm_linear import nrm1
@@ -42,8 +42,31 @@ from glm.impl.qn.qn_util import (
     LS_SUCCESS,
     project_orth,
 )
-from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, dot
+from glm.impl.qn.simple_mat.dense import VEC_ELEM_TPB, axpy, dot, dot_kernel, read_scalars
+from core.column_stats import STATS_TPB
 from checks.numerics import ftz, identical_mul_add
+
+
+def _dg_init(
+    ctx: DeviceContext,
+    mut u: DeviceBuffer[DType.float32],
+    mut drt: DeviceBuffer[DType.float32],
+    n: Int,
+    mut scalar: DeviceBuffer[DType.float32],
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
+) raises -> Float32:
+    """`dot(u, drt)` (`dense.dot`'s launch and value) into `scalar` word 0,
+    read home with words 1..3 behind the same ONE synchronize
+    (lane/linear-apple): words 2 and 3 carry the search direction's verdict
+    (`qn_util.lbfgs_search_dir_enqueue`); `fresh` says `stage` holds them."""
+    ctx.enqueue_function[dot_kernel](
+        scalar.unsafe_ptr(), u.unsafe_ptr(), drt.unsafe_ptr(), Int32(n),
+        grid_dim=(1, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    read_scalars(ctx, scalar, stage, 4)
+    fresh = True
+    return stage.unsafe_ptr().unsafe_load(0)
 
 
 def ls_success(
@@ -95,13 +118,15 @@ def ls_backtrack(
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
     mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
 ) raises -> Int:
     """`ls_backtrack`, `qn_linesearch.cuh:109-146`. `ls_iters` reports how
     many candidates were evaluated (for the card)."""
     if step <= Float32(0.0):
         return LS_INVALID_STEP
     var fx_init = fx
-    var dg_init = dot(ctx, grad, drt, n, scalar)
+    var dg_init = _dg_init(ctx, grad, drt, n, scalar, stage, fresh)
     if dg_init > Float32(0.0):
         return LS_INVALID_DIR
     var dg_test = param.ftol * dg_init
@@ -247,6 +272,8 @@ def ls_backtrack_projected(
     n: Int,
     mut scalar: DeviceBuffer[DType.float32],
     mut ls_iters: Int,
+    mut stage: HostBuffer[DType.float32],
+    mut fresh: Bool,
 ) raises -> Int:
     """`ls_backtrack_projected`, `qn_linesearch.cuh:148-197`. `ls_iters`
     reports how many candidates were evaluated (for the card), as
@@ -255,7 +282,7 @@ def ls_backtrack_projected(
         return LS_INVALID_STEP
     var fx_init = fx
     # `dot(pseudo_grad, drt)`, NOT `dot(grad, drt)`. See the banner.
-    var dg_init = dot(ctx, pseudo_grad, drt, n, scalar)
+    var dg_init = _dg_init(ctx, pseudo_grad, drt, n, scalar, stage, fresh)
     if dg_init > Float32(0.0):
         return LS_INVALID_DIR
     var dg_test = param.ftol * dg_init

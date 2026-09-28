@@ -24,6 +24,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from glm.impl.qn.simple_mat.dense import ieee_div_f32, ieee_sub_f32
+from glm.impl.qn.qn_util import FLOAT_EPSILON, host_le_eps_times
 
 
 def scalar_kernel(
@@ -32,15 +33,16 @@ def scalar_kernel(
     res: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
 ):
-    """Res[4i..4i+3] = ieee_div, ieee_sub, raw a/b, raw a-b."""
+    """Res[5i..5i+4] = ieee_div, ieee_sub, raw a/b, raw a-b, the skip test."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(n_in):
         var x = a.unsafe_load(i)
         var y = b.unsafe_load(i)
-        res.unsafe_store(4 * i, ieee_div_f32(x, y))
-        res.unsafe_store(4 * i + 1, ieee_sub_f32(x, y))
-        res.unsafe_store(4 * i + 2, x / y)
-        res.unsafe_store(4 * i + 3, x - y)
+        res.unsafe_store(5 * i, ieee_div_f32(x, y))
+        res.unsafe_store(5 * i + 1, ieee_sub_f32(x, y))
+        res.unsafe_store(5 * i + 2, x / y)
+        res.unsafe_store(5 * i + 3, x - y)
+        res.unsafe_store(5 * i + 4, Float32(1.0) if host_le_eps_times(x, abs(y)) else Float32(0.0))
 
 
 struct Rng:
@@ -101,24 +103,36 @@ def main() raises:
         A.append(_f(r.next(), 25 + r.next() % 16, r.next()))
         B.append(_f(r.next(), 0, r.next() % 3 * (r.next() & 0x7FFFFF)))
         div_ok.append(False)
+    # 6. the skip test near its boundary: y ~ x * 2^23, x down to the subnormal range
+    for _ in range(40000):
+        var ex = 1 + r.next() % 200
+        var fr = r.next()
+        A.append(_f(UInt64(1) if r.next() % 8 == 0 else UInt64(0), ex, fr))
+        B.append(_f(0, ex + 23 if ex + 23 < 255 else 254, fr + r.next() % 5 - 2))
+        div_ok.append(False)
+    for _ in range(20000):
+        A.append(_f(0, r.next() % 3, r.next()))
+        B.append(_f(0, r.next() % 30, r.next()))
+        div_ok.append(False)
     var n = len(A)
     var ctx = DeviceContext()
     var da = ctx.enqueue_create_buffer[DType.float32](n)
     var db = ctx.enqueue_create_buffer[DType.float32](n)
-    var dout = ctx.enqueue_create_buffer[DType.float32](4 * n)
+    var dout = ctx.enqueue_create_buffer[DType.float32](5 * n)
     ctx.enqueue_copy(dst_buf=da, src_ptr=A.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=db, src_ptr=B.unsafe_ptr())
     ctx.enqueue_function[scalar_kernel](
         da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(n),
         grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
-    var h = List[Float32](length=4 * n, fill=Float32(0.0))
+    var h = List[Float32](length=5 * n, fill=Float32(0.0))
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=dout)
     ctx.synchronize()
     var bad_div = 0
     var bad_sub = 0
     var raw_div = 0
     var raw_sub = 0
+    var bad_le = 0
     var sub_results = 0
     var checked_div = 0
     for i in range(n):
@@ -132,18 +146,25 @@ def main() raises:
             sub_results += 1
         if div_ok[i] and not _is_sub(x) and not _is_sub(y) and y != Float32(0.0):
             checked_div += 1
-            if bitcast[DType.uint32](h[4 * i]) != bq:
+            if bitcast[DType.uint32](h[5 * i]) != bq:
                 if bad_div < 5:
-                    print("  div", x, "/", y, "host", q, "device", h[4 * i])
+                    print("  div", x, "/", y, "host", q, "device", h[5 * i])
                 bad_div += 1
-            if bitcast[DType.uint32](h[4 * i + 2]) != bq:
+            if bitcast[DType.uint32](h[5 * i + 2]) != bq:
                 raw_div += 1
-        if bitcast[DType.uint32](h[4 * i + 1]) != bd:
+        if bitcast[DType.uint32](h[5 * i + 1]) != bd:
             if bad_sub < 5:
-                print("  sub", x, "-", y, "host", d, "device", h[4 * i + 1])
+                print("  sub", x, "-", y, "host", d, "device", h[5 * i + 1])
             bad_sub += 1
-        if bitcast[DType.uint32](h[4 * i + 3]) != bd:
+        if bitcast[DType.uint32](h[5 * i + 3]) != bd:
             raw_sub += 1
+        # ys = a: an ftz'd reduction is never subnormal
+        if not _is_sub(x):
+            var le = x <= FLOAT_EPSILON * abs(y)
+            if le != (h[5 * i + 4] != Float32(0.0)):
+                if bad_le < 5:
+                    print("  le", x, "<= eps *", abs(y), "host", le)
+                bad_le += 1
     print(
         "pairs", n, "div checked", checked_div, "subnormal host results", sub_results,
         "| raw hardware words != host: div", raw_div, "sub", raw_sub,
@@ -151,7 +172,7 @@ def main() raises:
     _ = da^
     _ = db^
     _ = dout^
-    if bad_div != 0 or bad_sub != 0:
-        print("FAIL qn scalar ieee: div", bad_div, "sub", bad_sub, "words differ from the host")
+    if bad_div != 0 or bad_sub != 0 or bad_le != 0:
+        print("FAIL qn scalar ieee: div", bad_div, "sub", bad_sub, "skip test", bad_le, "differ from the host")
         raise Error("qn scalar ieee check failed")
-    print("PASS qn scalar ieee: every ieee_div_f32 / ieee_sub_f32 word equals the host's")
+    print("PASS qn scalar ieee: every ieee_div_f32 / ieee_sub_f32 word and every host_le_eps_times verdict equals the host's")
