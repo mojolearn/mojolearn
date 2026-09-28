@@ -8,6 +8,9 @@ lives here is what an ensemble does between two fits -- draw rows, gather
 them, reweight them, vote -- as HOST code with one fixed order:
 
   * every reduction is sequential in index order (no tree, no threads);
+    the only threaded bodies are the pure moves `transpose_f32` and
+    `gather_f32` (DEVIATION 5606: one load and one store per cell, tasks own
+    disjoint destination rows, no arithmetic, so no order can move a bit);
   * every product that meets an add is `identical_mul64` (the builds contract
     `a * b + c` into an FMA otherwise; checks/numerics.mojo);
   * exp / log / pow are the pinned binary64 polynomials (`identical_exp64`,
@@ -31,7 +34,11 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
+from ensemble.host_layout import (
+    HOST_LAYOUT_BLOCK_ROWS, HOST_LAYOUT_SERIAL_CELLS, colmajor_from_rowmajor_f32,
+)
 
 #: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
 #: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
@@ -130,16 +137,46 @@ def gather_f32(
     cols: MutPointer[Int32, MutUntrackedOrigin], n_cols: Int,
     dst: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """dst[r, c] = src[rows[r], cols[c]], both row-major. A copy, no arithmetic."""
+    """dst[r, c] = src[rows[r], cols[c]], both row-major. A copy, no arithmetic.
+
+    DEVIATION 5606: every index is range-checked first, in the calling
+    thread, then the rows are copied across the host pool in blocks (each
+    task owns its destination rows). The destination bytes are the serial
+    loop's; a bad index still raises before any cell is written."""
     for r in range(n_rows):
         var i = Int(rows[unsafe_offset=r])
         if i < 0 or i >= n_src_rows:
             raise Error("x_trees gather: row index out of range")
-        for c in range(n_cols):
-            var j = Int(cols[unsafe_offset=c])
-            if j < 0 or j >= n_src_cols:
-                raise Error("x_trees gather: column index out of range")
-            dst[unsafe_offset=r * n_cols + c] = src[unsafe_offset=i * n_src_cols + j]
+    var all_cols = n_cols == n_src_cols
+    for c in range(n_cols):
+        var j = Int(cols[unsafe_offset=c])
+        if j < 0 or j >= n_src_cols:
+            raise Error("x_trees gather: column index out of range")
+        if j != c:
+            all_cols = False
+    var sp = src
+    var dp = dst
+    var rp = rows
+    var cp = cols
+
+    def _block(b: Int) {imm sp, imm dp, imm rp, imm cp, imm n_rows, imm n_cols, imm n_src_cols, imm all_cols}:
+        var r0 = b * HOST_LAYOUT_BLOCK_ROWS
+        var r1 = min(r0 + HOST_LAYOUT_BLOCK_ROWS, n_rows)
+        for r in range(r0, r1):
+            var i = Int(rp[unsafe_offset=r])
+            if all_cols:
+                for c in range(n_cols):
+                    dp.unsafe_store(r * n_cols + c, sp.unsafe_load(i * n_src_cols + c))
+            else:
+                for c in range(n_cols):
+                    dp.unsafe_store(r * n_cols + c, sp.unsafe_load(i * n_src_cols + Int(cp[unsafe_offset=c])))
+
+    var n_blocks = (n_rows + HOST_LAYOUT_BLOCK_ROWS - 1) // HOST_LAYOUT_BLOCK_ROWS
+    if n_rows * n_cols < HOST_LAYOUT_SERIAL_CELLS or n_blocks == 1:
+        for b in range(n_blocks):
+            _block(b)
+        return
+    sync_parallelize(_block, n_blocks)
 
 
 def gather_i32(
@@ -257,6 +294,32 @@ def put_f32(
     """dst[offset + i] = src[i]: a copy."""
     for i in range(n):
         dst[unsafe_offset=offset + i] = src[unsafe_offset=i]
+
+
+def check_weights_f32(w: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Int:
+    """A sample-weight vector's status: 1 if an entry is not finite or is
+    negative (NaN fails both tests), 2 if none is positive, else 0. Reads
+    only; the refusals the Python loop raised, in one native pass."""
+    var any_pos = False
+    for i in range(n):
+        var v = w[unsafe_offset=i]
+        if not (v >= Float32(0) and v <= Float32(3.4028234663852886e38)):
+            return 1
+        if v > Float32(0):
+            any_pos = True
+    return 0 if any_pos else 2
+
+
+def mul_f32(
+    a: MutPointer[Float32, MutUntrackedOrigin], b: MutPointer[Float32, MutUntrackedOrigin], n: Int,
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+):
+    """dst[i] = a[i] * b[i] in float32: ONE correctly rounded product, the
+    same bits as the exact binary64 product rounded once to float32 (a
+    product of two float32 values is exact in binary64). No add meets it, so
+    nothing can contract it into an FMA."""
+    for i in range(n):
+        dst[unsafe_offset=i] = a[unsafe_offset=i] * b[unsafe_offset=i]
 
 
 def softmax_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):
@@ -597,10 +660,10 @@ def onehot_leaves(
 def transpose_f32(
     src: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, dst: MutPointer[Float32, MutUntrackedOrigin],
 ):
-    """dst[j, i] = src[i, j]: a row-major n x d copied to column-major."""
-    for i in range(n):
-        for j in range(d):
-            dst[unsafe_offset=j * n + i] = src[unsafe_offset=i * d + j]
+    """dst[j, i] = src[i, j]: a row-major n x d copied to column-major,
+    across the host pool above a million cells (DEVIATION 5606, the forest
+    boundary's `colmajor_from_rowmajor_f32`, DEVIATION 2637)."""
+    colmajor_from_rowmajor_f32(src, dst, n, d)
 
 
 # ------------------------------------------------------ wrappers' helpers

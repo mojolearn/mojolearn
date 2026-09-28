@@ -399,3 +399,44 @@ vgv1hkkbm9comp; AMD `trees-amd` Hot Aisle MI300X kept to ~01:10Z Sep 29).
   the CPU grows depth 6. So the fault is in the split search on 128-border
   (one-byte) features on Apple8 (M2) only; M3/M4 agree. Kernel checks
   queued: m2pro 1790558473013, control m4pro-a 1790558481928.
+
+SESSION E, 2026-09-28 ~04:50Z (RunPod out of money again: NO NVIDIA pod;
+AMD `trees-amd` MI300X up; STOPPED at this checkpoint by the coordinator).
+- Owed item 1 (tensor-CTR NVIDIA gate + merge): already DONE in session D
+  (merged). Owed item 3 (trees-oob-cv-link M3 re-run): DONE in session D.
+- M2 GBDT ROOT CAUSE, narrowed (probe 1790561718113 on m2pro, hist2_check
+  with its raises turned into prints): on the M2 Pro the hist_2 one-byte
+  DISPATCH arm (IDENTICAL: `HIST_SMEM_SHARED2_I32`, block 512, 8192 Int32
+  threadgroup slots = the full 32 KB) writes NOTHING (every cell 0.0; the
+  only "right" cells are the ones that want 0); the PASS one-byte family is
+  exact. M3/M4 run the same kernel correctly. That is the empty-tree
+  (`depth 1`, `split 0 0 0 0`) the lanes saw. The resource probe
+  (1790564229379) cannot read pipeline attributes on Metal ("Attributes not
+  supported in Metal").
+  QUEUED (commit 0222c457a): m2pro 1790571345780, control m4pro-a
+  1790571348026, cmd saved in ~/mojolearn-evidence/trees/diag/m2_probe2.cmd:
+  (a) a synthetic launch probe (diag/zz_tg_probe.mojo; blocks 256..1024 x
+  16/32 KB Int32 threadgroup, all OK on the MI300X), (b) hist2_check under
+  MTL_DEBUG_LAYER=1 (does Metal reject the dispatch: threads per
+  threadgroup above the pipeline's max, or threadgroup memory over the
+  limit), (c) hist2_check with the SHARED2_I32 block capped at 256
+  (checks/kernel_matrix.mojo `hist2_block_size_for`, 16 KB). If (c) passes
+  on the M2 the fix is that cap on COLUMN_APPLE (Int32 sums are exact, so
+  the histogram bits do not depend on the block; prove it: every gbdt lane
+  AGREE on m2pro/m3/m4 + do-amd and CUDA cells unchanged). m2pro is released
+  at ~12:40Z Sep 28: after that the M2 column cannot be re-checked.
+- Unmerged speed work on the branch (d8b0469cc threaded x_trees
+  transpose/gather + AdaBoost single X scan; 3b781c10b ET search publish
+  RELAXED on AMD + 64 rows per search thread on NVIDIA/AMD; 585be99a7 /
+  0222c457a the rows-per-thread sabotage et_rpt_tail_drop.patch). MI300X:
+  the 37 trees/rf/et lanes AGREE HIP == CPU (RESULT PASS, /root/a2/new.log).
+  AMD IDENTICAL 1M-row times after (fit_s, taxi / istella): et 0.29 / 2.39,
+  et-clf 0.19 / 0.57, ada 3.56 / 18.5, ada-reg 6.95 / 13.4, bag 1.18 / 10.7,
+  dt 0.047 / 0.52 (/root/a2/prof_*.log).
+  OWED ON AN NVIDIA POD before merge (the gate): `algos_lane_check.sh` on
+  the same 37 lanes AGREE; `--pass 2 --sabotage
+  xtrees/checks/sabotage/et_rpt_tail_drop.patch` on et-reg/et-clf bites;
+  CUDA cells of every rf/et/trees lane unchanged vs main (identity_break
+  --diff); test_host_surface; test_trees_repeat; test_lane_select (inputs
+  changed: _expansion_trees.py, xtrees/ops.mojo, the ET builder).
+- NOT STARTED this session: step 0 coverage audit; GPU speed phases.
