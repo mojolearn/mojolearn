@@ -143,7 +143,7 @@ def sort_scratch_words(n: Int, cols: Int) -> Int:
     return max(cols, 0) * big_n
 
 
-def sort_cols_device(ctx: DeviceContext, df: DeviceBuffer[DType.float32], dw: DeviceBuffer[DType.uint32],
+def sort_cols_device(ctx: DeviceContext, mut df: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.uint32],
                      cols: Int, X: Int, n: Int, d: Int, S: Int, cn: Int) raises:
     """Enqueue the sort of columns 0 .. cols-1 of X[n, d] into S[c*n : c*n+n]
     (the unit's layout; `cols` is the stage's unit count) on the device arena
