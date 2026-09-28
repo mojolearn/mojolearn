@@ -341,3 +341,49 @@ Read owner handoffs together with this file:
 
 No final445 was submitted before compaction. Do not confuse this deliberate
 checkpoint with a failed or running final campaign. Existing older jobs continue.
+
+## Resumed September 28, approximately 23:33 UTC
+
+The user said to continue. Remote main was confirmed at `944fc2520`; runtime
+source remains `3dded3bd47b9db2928ed3b7919f502b20c576e9c`. The statements above
+that final AMD qualification is held/not submitted are now superseded:
+
+- AMD scheduler job `1790638156713-speed-final-combined-base-3dded3bd47` started
+  numerical execution at 23:30:12 UTC. First agglomerative and ARIMA cases AGREE.
+  Exact-source plan: 504 inventory, 445 selected, 59 structural exclusions,
+  zero unavailable, 75 dependencies. All 101 artifact closures passed again.
+  Output `/root/combined-amd-final-3dded3bd4/qualification-base`; local launch
+  receipt/plan under `E/packaging-preparation/amd-final-3dded3bd4/qualification-base`.
+  Serial GPU/CPU, one visible GPU, CPU threads1, 120 seconds per arm remain.
+  Existing external allocator extended host deletion deadline to epoch1790645017,
+  approximately September29 01:23 UTC. Refresh both deadlines before relying on it.
+- NVIDIA original run reached 307/445, zero ERROR/DISAGREE, before another SSH
+  outage around23:32. No restart/cancellation. Local deletion watcher remains
+  suspended; runner owns preservation and provider-health monitoring.
+- NVIDIA inherited Python job continues on healthy nvc2, with physical work
+  still queued. Its old invalid LM accumulation refusal is not successful proof.
+- Metal original campaign reached77/101. FAST estimators adds another occurrence
+  of the known barrier failure, covered by the prepared nine-output repair.
+  Original campaign and final repair ownership remain with integration_audit.
+- M2 inherited benchmark still running; no queue changes. AWS reports retained
+  M3 host `h-04545dd0c2d7a2870` available after scrub, no instance, no ReleaseTime.
+  Do not start an instance or release the host.
+
+Packaging inventory now distinguishes the101 numerical-campaign artifacts from
+the110 native artifacts required for the complete wheel. Nine missing outputs:
+FAST arima, embedding, mamba, metrics, preprocessing, resample, trees, tsa;
+DETERMINISTIC trees. Exact inventory is
+`E/packaging-preparation/final-3dded-wheel-inventory.json`.
+Runner started only these nine on nvc2 with masked GPUs, at most two compilers,
+600 seconds/output, receipts `/root/combined-3dded3bd47b9/packaging9`.
+AMD packaging builds wait for numerical work; Metal has a separate prepared
+missing-nine plan after original101 and targeted repair. Do not repeat101.
+CUDA release packaging also needs the Hopper architecture slot; historical
+artifacts are being assessed for exact reuse, with no new pod provisioned.
+
+The current source still has23 direct runtime NumPy import sites across19 files,
+recorded in `E/packaging-preparation/final-3dded-numpy-imports.json`. An asynchronous
+user question asks whether to document an optional NumPy runtime extra or remove
+NumPy from all runtime APIs before release. No answer yet; no policy relaxation
+or numerical refactor made. This question does not block running validation.
+Mutable resumed status is `E/takeover/resume-2026-09-28.json`.
