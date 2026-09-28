@@ -20,9 +20,13 @@ THE CONFIGURATION THIS COVERS, by name (tools/identity_break.py
 `learning_rate=0.03`, `l2_leaf_reg=3.0`, on `_coded(X)`). The binding refuses
 by name: `sample_weight` (the weighted arm is not measured), a feature whose
 histogram policy is BinaryFeatures (a numeric column whose Uniform-3 grid
-collapses to one border; the symmetric oracle does not restate that policy),
-and a tree whose level winner is the FeatureFreq tensor column itself (the
-registry, its canonical tensor hash and the tensor apply are not restated).
+collapses to one border; the symmetric oracle does not restate that policy).
+A level whose winner is the FeatureFreq tensor column itself (the
+gbdt-tensor-ctr-tables lane) is covered: its table is registered at a stable
+model column with its canonical tensor hash (restated below, because
+`gbdt/methods/batch_feature_tensor_builder.mojo` imports the device CTR bin
+builder), and the model text carries the `tensor_ctr_registry` and
+`feature_freq_tensor` records and the `type tensor_ctr` column.
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
 
@@ -67,9 +71,17 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
   5. The leaves: `two_level_weighted_leaf_value` (`doc_parallel_boosting.
      mojo:424-440`), the Float32 fold in final row order, then
      `learning_rate * total / (total_weight + l2)`.
-  6. `model_text` (`gbdt/models/model_text.mojo:374-670`) for the one
-     oblivious tree: `features n n`, `type cat` for the sources, the
-     trailing `split_type take_bin` on a one-hot split, no losses, no bias.
+  6. `persist_synchronized_mixed_path` (`tensor_ctr_value_table.mojo`) for
+     a tensor-column winner: the level's table at model column
+     `n_features + k`, a split history naming an earlier tensor winner's
+     slot remapped to that winner's stable column, the canonical hash
+     (`TFeatureTensor.get_hash`, `batch_feature_tensor_builder.mojo`), the
+     candidate's borders appended to the stable grid.
+  7. `model_text` (`gbdt/models/model_text.mojo:374-670`) for the one
+     oblivious tree: `features m m` (m = n + registered tensors), the
+     `tensor_ctr_registry` and `feature_freq_tensor` records, `type cat` for
+     the sources, `type tensor_ctr` for a registered tensor, the trailing
+     `split_type take_bin` on a one-hot split, no losses, no bias.
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 (`GBDT_ORACLE_HOST_SABOTAGE`) adds 1.0 to the l2 regularizer of the leaf
@@ -80,6 +92,7 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-feature-freq lane is the measurement.
 """
 from std.math import isfinite
+from std.memory import bitcast
 
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz
@@ -109,6 +122,7 @@ from gbdt.host.gbdt_oracle import (
     _partition_stat,
     gbdt_f32_token,
 )
+from gbdt.digest.city import city_hash_64
 from gbdt.models.ctr_value_table import dense_category_code
 
 
@@ -126,9 +140,9 @@ def _refuse_ff(what: String) raises:
     raise Error(
         "no CPU implementation of"
         " _mojolearn_gbdt.gbdt_fit_two_level_feature_freq for " + what
-        + "; the gbdt host binding trains the gbdt-feature-freq lane only"
-        " (unit weights, half-byte and one-byte policies, an ordinary-feature"
-        " winner at both levels), see gbdt/host/gbdt_oracle_feature_freq.mojo"
+        + "; the gbdt host binding trains the gbdt-feature-freq"
+        " and gbdt-tensor-ctr-tables lanes (unit weights, half-byte and one-byte"
+        " policies), see gbdt/host/gbdt_oracle_feature_freq.mojo"
     )
 
 
@@ -138,7 +152,7 @@ def _refuse_ff(what: String) raises:
 
 
 @fieldwise_init
-struct _FFTable(Movable):
+struct _FFTable(Copyable, Movable):
     """`TFeatureFreqTensorTable` for FeatureFreq (no target classes, prior
     0 / 1): the sorted sources, their cardinalities, the canonical split
     history (feature, bin, type) and the counts."""
@@ -322,6 +336,151 @@ def _ff_stage(
     if compressed.layout.features[feature_id].one_hot_feature:
         raise Error("a tensor CTR was registered as a one-hot feature")
     return _FFStaged(borders^, bins^, compressed^)
+
+
+# ===========================================================================
+# THE CANONICAL TENSOR HASH AND THE REGISTRY RECORD
+# (`gbdt/methods/batch_feature_tensor_builder.mojo`, host restated: that
+# module imports the device CTR bin builder)
+# ===========================================================================
+
+
+def _ff_widen(v: UInt32) -> UInt64:
+    """`_widen_u32`: a ZERO extension, masked (the module's HAZARD block:
+    a same-width cast feeding `UInt64` may sign-extend)."""
+    var w = UInt64(v)
+    return w & UInt64(0xFFFFFFFF)
+
+
+def _ff_int_hash_u32(key_in: UInt32) -> UInt32:
+    """`int_hash_impl_u32`, Thomas Wang's 32-bit mixer (`numeric.h:39-48`)."""
+    var key = key_in
+    key += ~(key << 15)
+    key ^= key >> 10
+    key += key << 3
+    key ^= key >> 6
+    key += ~(key << 11)
+    key ^= key >> 16
+    return key
+
+
+def _ff_int_hash_u64(key_in: UInt64) -> UInt64:
+    """`int_hash_impl_u64` (`numeric.h:50-62`)."""
+    var key = key_in
+    key += ~(key << 32)
+    key ^= key >> 22
+    key += ~(key << 13)
+    key ^= key >> 8
+    key += key << 3
+    key ^= key >> 15
+    key += ~(key << 27)
+    key ^= key >> 31
+    return key
+
+
+def _ff_split_hash(feature: Int, bin: Int, split_type: Int) -> UInt64:
+    """`binary_split_hash`: `MultiHash(FeatureId, BinIdx, SplitType)`, folded
+    from the tail, the split type through the 32-bit mixer."""
+    var h = _ff_widen(_ff_int_hash_u32(UInt32(split_type)))
+    h = _ff_int_hash_u64(h) ^ _ff_widen(UInt32(bin))
+    h = _ff_int_hash_u64(h) ^ _ff_widen(UInt32(feature))
+    return h
+
+
+def _ff_tensor_hash(
+    sources: List[Int], split_feature: List[Int], split_bin: List[Int],
+    split_type: List[Int],
+) -> UInt64:
+    """`TFeatureTensor.get_hash` over CANONICAL vectors (sorted, unique; the
+    caller's): `MultiHash(TVecHash(splits), VecCityHash(cat_features))`, the
+    `ui32` split accumulator sign-extended from `int`."""
+    var bytes = List[UInt8]()
+    for i in range(len(sources)):
+        var v = UInt32(sources[i])
+        bytes.append((v & UInt32(0xFF)).cast[DType.uint8]())
+        bytes.append(((v >> 8) & UInt32(0xFF)).cast[DType.uint8]())
+        bytes.append(((v >> 16) & UInt32(0xFF)).cast[DType.uint8]())
+        bytes.append(((v >> 24) & UInt32(0xFF)).cast[DType.uint8]())
+    var cat = city_hash_64(Span(bytes))
+    var res = UInt32(1988712)
+    for i in range(len(split_feature)):
+        var sh = _ff_split_hash(split_feature[i], split_bin[i], split_type[i])
+        res = UInt32(984121) * res + (sh & UInt64(0xFFFFFFFF)).cast[DType.uint32]()
+    var ext = _ff_widen(res)
+    if (res & UInt32(0x80000000)) != UInt32(0):
+        ext = ext | UInt64(0xFFFFFFFF00000000)
+    return _ff_int_hash_u64(cat) ^ ext
+
+
+def _ff_canonical_splits(
+    mut feature: List[Int], mut bin: List[Int], mut split_type: List[Int]
+):
+    """`TFeatureTensor.sort_unique_splits`: the unsigned (feature, bin, type)
+    order, then consecutive duplicates dropped."""
+    var n = len(feature)
+    for i in range(1, n):
+        var j = i
+        while j > 0 and (
+            feature[j] < feature[j - 1]
+            or (feature[j] == feature[j - 1] and (
+                bin[j] < bin[j - 1]
+                or (bin[j] == bin[j - 1] and split_type[j] < split_type[j - 1])
+            ))
+        ):
+            var tf = feature[j]
+            feature[j] = feature[j - 1]
+            feature[j - 1] = tf
+            var tb = bin[j]
+            bin[j] = bin[j - 1]
+            bin[j - 1] = tb
+            var tt = split_type[j]
+            split_type[j] = split_type[j - 1]
+            split_type[j - 1] = tt
+            j -= 1
+    var of = List[Int]()
+    var ob = List[Int]()
+    var ot = List[Int]()
+    for i in range(n):
+        if i == 0 or not (
+            feature[i] == feature[i - 1] and bin[i] == bin[i - 1]
+            and split_type[i] == split_type[i - 1]
+        ):
+            of.append(feature[i])
+            ob.append(bin[i])
+            ot.append(split_type[i])
+    feature = of^
+    bin = ob^
+    split_type = ot^
+
+
+def _ff_record(t: _FFTable, n_rows: Int) -> String:
+    """`TFeatureFreqTensorTable.to_text` (`tensor_ctr_value_table.mojo:
+    141-165`) for FeatureFreq: no target classes (`classes 0`,
+    `target_border -1`), prior 0 / 1, denominator the learn row count."""
+    var hash = _ff_tensor_hash(t.sources, t.split_feature, t.split_bin, t.split_type)
+    var out = String("feature_freq_tensor 2 hash_hi ") + String(
+        (hash >> 32).cast[DType.uint32]()
+    )
+    out += " hash_lo " + String(hash.cast[DType.uint32]())
+    out += " sources " + String(len(t.sources))
+    for i in range(len(t.sources)):
+        out += " " + String(t.sources[i])
+    out += " cardinalities " + String(len(t.cards))
+    for i in range(len(t.cards)):
+        out += " " + String(t.cards[i])
+    out += " splits " + String(len(t.split_feature))
+    for i in range(len(t.split_feature)):
+        out += " " + String(t.split_feature[i])
+        out += " " + String(t.split_bin[i])
+        out += " " + String(t.split_type[i])
+    out += " classes 0 target_border -1"
+    out += " prior_bits " + String(bitcast[DType.uint32](Float32(0.0)))
+    out += " " + String(bitcast[DType.uint32](Float32(1.0)))
+    out += " denominator " + String(n_rows)
+    out += " counts " + String(len(t.counts))
+    for i in range(len(t.counts)):
+        out += " " + String(t.counts[i])
+    return out^
 
 
 # ===========================================================================
@@ -635,8 +794,6 @@ def gbdt_feature_freq_host_fit(
         layout, staged.compressed.words, n_rows, 0, row_index, stats, p_off,
         p_sz, fixed_scale, l2_leaf_reg, splits,
     )
-    if splits[0].feature == tensor_feature:
-        _refuse_ff("a level-one winner on the FeatureFreq tensor column")
 
     # `stage_next_feature_freq_after_winner`: the flat columns extended by
     # the level-one candidate's bins, the one-split history table
@@ -661,8 +818,46 @@ def gbdt_feature_freq_host_fit(
         staged2.compressed.layout, staged2.compressed.words, n_rows, 1,
         row_index, stats, p_off, p_sz, fixed_scale, l2_leaf_reg, splits,
     )
-    if splits[1].feature == tensor_feature:
-        _refuse_ff("a level-two winner on the FeatureFreq tensor column")
+
+    # `persist_synchronized_mixed_path` (`tensor_ctr_value_table.mojo`):
+    # a level whose winner is the tensor slot registers ITS table at the
+    # next stable model column (from `n_features`), its split history
+    # remapped from an earlier tensor winner's slot to that winner's stable
+    # column, its canonical hash recomputed; the split then names the
+    # stable column. Exact-table dedup cannot fire here: the level-two
+    # table carries one split and the level-one table none.
+    var level_tables = List[_FFTable]()
+    level_tables.append(table^)
+    level_tables.append(table2^)
+    var level_borders = List[List[Float32]]()
+    level_borders.append(staged.borders.copy())
+    level_borders.append(staged2.borders.copy())
+    var original = splits.copy()
+    var registry = List[_FFTable]()
+    var tensor_borders = List[List[Float32]]()
+    var tensor_columns = List[Int]()
+    for level in range(2):
+        if original[level].feature != tensor_feature:
+            tensor_columns.append(-1)
+            continue
+        var t = level_tables[level].copy()
+        for s in range(len(t.split_feature)):
+            for prior in range(level):
+                if tensor_columns[prior] < 0:
+                    continue
+                if (
+                    t.split_feature[s] == original[prior].feature
+                    and t.split_bin[s] == original[prior].bin
+                    and t.split_type[s] == original[prior].split_type
+                ):
+                    t.split_feature[s] = splits[prior].feature
+                    break
+        _ff_canonical_splits(t.split_feature, t.split_bin, t.split_type)
+        var column = n_features + len(registry)
+        registry.append(t^)
+        tensor_borders.append(level_borders[level].copy())
+        splits[level].feature = column
+        tensor_columns.append(column)
 
     # ---- 5. the leaves (`two_level_weighted_leaf_value`) ----
     var l2 = l2_leaf_reg
@@ -690,9 +885,17 @@ def gbdt_feature_freq_host_fit(
     out += "# loses one ULP on ~0.46% of float32 values (measured).\n"
     out += "# Format and CTR seam: gbdt/models/model_text.mojo.\n"
     out += String("format ") + String("mojolearn-model") + " " + String(2) + "\n"
-    out += String("features ") + String(n_features) + " " + String(n_features) + "\n"
+    var n_model = n_features + len(registry)
+    out += String("features ") + String(n_model) + " " + String(n_model) + "\n"
     out += String("trees ") + String(1) + "\n"
     out += String("losses ") + String(0) + "\n"
+    if len(registry) != 0:
+        out += (
+            String("tensor_ctr_registry ") + String(n_features) + " "
+            + String(len(registry)) + "\n"
+        )
+        for i in range(len(registry)):
+            out += _ff_record(registry[i], n_rows) + "\n"
     for f in range(n_features):
         var kind = String("cat") if one_hot[f] else String("float")
         var line = (
@@ -702,6 +905,16 @@ def gbdt_feature_freq_host_fit(
         )
         for b in range(len(borders[f])):
             line += " " + gbdt_f32_token(borders[f][b])
+        out += line + "\n"
+    for i in range(len(registry)):
+        var line = (
+            String("feature ") + String(n_features + i) + " folds "
+            + String(len(tensor_borders[i]))
+            + " one_hot 0 type tensor_ctr nan as_is borders "
+            + String(len(tensor_borders[i]))
+        )
+        for b in range(len(tensor_borders[i])):
+            line += " " + gbdt_f32_token(tensor_borders[i][b])
         out += line + "\n"
     out += String("tree 0 depth 2 dim 1 weights 0\n")
     for level in range(2):

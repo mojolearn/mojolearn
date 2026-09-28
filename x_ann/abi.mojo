@@ -5,6 +5,7 @@ and `bindings/_mojolearn_x_ann_host.mojo`: plain copies, no arithmetic."""
 
 from std.python import PythonObject
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
+from x_ann.ivf_pq_core import F32P, I32P
 
 
 def p_int(params: PythonObject, i: Int) raises -> Int:
@@ -21,6 +22,16 @@ def in_f32(addrs: PythonObject, i: Int, n: Int) raises -> List[Float32]:
 
 def in_i32(addrs: PythonObject, i: Int, n: Int) raises -> List[Int32]:
     return read_i32(a_int(addrs, i), n)
+
+
+def ptr_f32(addrs: PythonObject, i: Int) raises -> F32P:
+    """The caller's float32 array itself (no copy): the host binding reads
+    and writes it in place, under the GIL-released call that owns it."""
+    return rebind[F32P](f32_ptr(a_int(addrs, i)))
+
+
+def ptr_i32(addrs: PythonObject, i: Int) raises -> I32P:
+    return rebind[I32P](i32_ptr(a_int(addrs, i)))
 
 
 def out_f32(values: List[Float32], addrs: PythonObject, i: Int) raises:

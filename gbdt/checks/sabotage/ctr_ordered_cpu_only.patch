@@ -1,0 +1,20 @@
+Sabotage for gbdt-categorical-ctr-tables (CPU column only): the host ordered
+Borders statistic counts the row's OWN target (an inclusive scan), a target
+leak the device's exclusive scan never has. The lane must DISAGREE.
+
+diff --git a/gbdt/host/gbdt_oracle_ctr.mojo b/gbdt/host/gbdt_oracle_ctr.mojo
+index c786eba23..2e9962d06 100644
+--- a/gbdt/host/gbdt_oracle_ctr.mojo
++++ b/gbdt/host/gbdt_oracle_ctr.mojo
+@@ -293,10 +293,10 @@ def _ordered_target_columns(
+         for i in range(n):
+             var row = Int(order[i])
+             var k = Int(codes[row])
+-            column[row] = (hits[k] + num) / (before[k] + denom)
+             before[k] += Float32(1.0)
+             if UInt32(binarized_target[row]) > param:
+                 hits[k] += Float32(1.0)
++            column[row] = (hits[k] + num) / (before[k] + denom)
+         out.append(column^)
+     return out^
+ 

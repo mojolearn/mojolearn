@@ -1,0 +1,12 @@
+diff --git a/x_cluster/spectral_assign.mojo b/x_cluster/spectral_assign.mojo
+--- a/x_cluster/spectral_assign.mojo
++++ b/x_cluster/spectral_assign.mojo
+@@ -40,6 +40,6 @@
+     rows in order."""
+     var s = Float64(0)
+-    for r in range(m):
+-        s += identical_mul64(w[r * m + p], w[r * m + q])
++    for rr in range(m):
++        s += identical_mul64(w[(m - 1 - rr) * m + p], w[(m - 1 - rr) * m + q])
+     return s
+ 
