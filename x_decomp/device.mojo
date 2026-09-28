@@ -14,7 +14,7 @@ from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
 from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
     div0,
     sqrt0,
@@ -74,7 +74,18 @@ from x_decomp.cells import (
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+from x_decomp.host import HostExec
 from x_decomp.jacobi2 import J2_TPB, jacobi_eigh2_kernel, one_sided_svd2_kernel
+from x_decomp.jacobi_par import (
+    PJ_TPB,
+    eigh_par_cs_kernel,
+    eigh_par_off_kernel,
+    eigh_par_update_kernel,
+    pj_identity_kernel,
+    pj_transpose_kernel,
+    svd_par_norm_kernel,
+    svd_par_round_kernel,
+)
 from std.os import getenv
 from core.device_zero import enqueue_fill
 from decomposition.checks.jacobi_eigh_device import JACOBI_INFO_UNWRITTEN, JACOBI_SWEEPS, JACOBI_TOL
@@ -92,16 +103,74 @@ def lu_serial_max() -> Int:
         return 16
 
 
-def jacobi2_eigh_on() -> Bool:
-    """Metal uses the established eigensolver until jacobi2 is qualified.
+#: Sweep budgets of the round-robin solvers (FAST on Metal). A solve that
+#: does not converge inside its budget is handed to the cyclic solver.
+comptime PJ_EIGH_SWEEPS = 30
+comptime PJ_SVD_SWEEPS = X_DECOMP_SVD_SWEEPS
+#: rounds enqueued between two synchronize() calls
+comptime PJ_SYNC_ROUNDS = 512
 
-    The 2026-09-28 M4 consolidated check crashed MTLCompilerService in five
-    eigh callers: METAL SIGABRT, "cannot select: 113 7, 1" in agc.main.
-    The optimized kernel's device-memory fence must not simply be removed.
-    MOJOLEARN_XD_JACOBI=2 explicitly opts into that unqualified Metal path;
-    CUDA/HIP keep their current default. The separate SVD default is unchanged.
-    """
+
+def pj_eigh_min() -> Int:
+    """Smallest n whose eigh takes the round-robin solver of
+    x_decomp/jacobi_par.mojo (FAST builds for Metal only; 0 = never).
+    MOJOLEARN_XD_PJ_EIGH_MIN overrides it."""
+    var v = String(getenv("MOJOLEARN_XD_PJ_EIGH_MIN", "0"))
+    try:
+        return Int(v)
+    except:
+        return 0
+
+
+def host_eigh_max() -> Int:
+    """Largest n whose eigh runs on the host executor inside the GPU binding
+    (FAST builds for Metal only; 0 = never): the same cyclic Jacobi, without
+    the upload, launch, readback and sync a device solve of a few hundred
+    values is made of (`Kit[E, S]`'s rule for the native drivers).
+    MOJOLEARN_XD_HOST_EIGH_MAX overrides it."""
+    var v = String(getenv("MOJOLEARN_XD_HOST_EIGH_MAX", "0"))
+    try:
+        return Int(v)
+    except:
+        return 0
+
+
+def pj_svd_min() -> Int:
+    """`pj_eigh_min` for the one-sided SVD (MOJOLEARN_XD_PJ_SVD_MIN)."""
+    var v = String(getenv("MOJOLEARN_XD_PJ_SVD_MIN", "0"))
+    try:
+        return Int(v)
+    except:
+        return 0
+
+
+def jacobi2_eigh_on() -> Bool:
+    """Whether the kit's eigh runs `jacobi_eigh2_kernel` (x_decomp/jacobi2.mojo)
+    in place of `device_eigh`. MOJOLEARN_XD_JACOBI_EIGH=1 / =2 names the
+    kernel outright (the eigh only; timing A/B).
+
+    Metal, IDENTICAL: `device_eigh`, main's choice after the 2026-09-28 M4
+    consolidated check crashed MTLCompilerService in five eigh callers
+    (METAL SIGABRT, "cannot select: 113 7, 1" in agc.main). That build held
+    the FENCED jacobi2 (5c144678d: an atomic fence, then barrier()); the
+    kernel in this tree orders device memory with `llvm.air.wg.barrier(3, 1)`
+    (bd6af0c4b) and builds and runs on M4 (m4-a 1790626766529, every digest
+    equal to `device_eigh`'s). MOJOLEARN_XD_JACOBI=2 opts in; the default
+    stays until the consolidated check qualifies it.
+
+    Metal, FAST: jacobi2 (lane/decomp-apple3, m4-a 1790626766529: eigh 800
+    8.88 -> 5.36 s, Isomap 1000 rows 20.2 -> 10.5 s, ClassicalMDS 11.1 ->
+    5.66 s, the same output bytes as `device_eigh`).
+
+    CUDA/HIP keep their default. The SVD default is `jacobi2_on`'s."""
+    var e = String(getenv("MOJOLEARN_XD_JACOBI_EIGH", "0"))
+    if e == "1":
+        return False
+    if e == "2":
+        return True
     comptime if COMPILED_VENDOR == "metal":
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            return jacobi2_on()
         return String(getenv("MOJOLEARN_XD_JACOBI", "1")) != "1"
     else:
         return jacobi2_on()
@@ -721,6 +790,93 @@ def _svd2_of_r(
     _ = vt^
 
 
+def _pj_blocks(count: Int) -> Int:
+    return (count + PJ_TPB - 1) // PJ_TPB if count > 0 else 1
+
+
+def _svd_par_of_r(
+    ctx: DeviceContext,
+    mut r: DeviceBuffer[DType.float32],
+    mut v: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.float32],
+    n: Int,
+) raises -> Bool:
+    """The one-sided Jacobi SVD of R in the round-robin ordering
+    (x_decomp/jacobi_par.mojo; FAST on Metal): `v` and `s` as `svd_of_r`
+    leaves them. `r` is NOT written, so on False (no convergence in
+    PJ_SVD_SWEEPS sweeps) the caller runs the cyclic solver on it."""
+    var m = n + (n % 2)
+    var h = m // 2
+    var rt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var vt = ctx.enqueue_create_buffer[DType.float32](n * n)
+    var flags = ctx.enqueue_create_buffer[DType.float32](2 * h)
+    var hflags = ctx.enqueue_create_host_buffer[DType.float32](2 * h)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n)
+    ctx.enqueue_function[pj_transpose_kernel](
+        r.unsafe_ptr(), rt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+    )
+    ctx.enqueue_function[pj_identity_kernel](vt.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+    # ||R||_F^2 before the sweeps (the rotations keep it): the column norms
+    ctx.enqueue_function[svd_par_norm_kernel](
+        rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
+    )
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
+    ctx.synchronize()
+    var fro_in = Float64(0.0)
+    for i in range(n):
+        var x = Float64(hs.unsafe_ptr().unsafe_load(i))
+        fro_in += x * x
+    var converged = False
+    var ran = True
+    for _sweep in range(PJ_SVD_SWEEPS):
+        enqueue_fill(ctx, flags, Float32(0.0))
+        for rd in range(m - 1):
+            ctx.enqueue_function[svd_par_round_kernel](
+                rt.unsafe_ptr(), vt.unsafe_ptr(), flags.unsafe_ptr(), Int32(n), Int32(m), Int32(rd), X_DECOMP_SVD_TOL,
+                grid_dim=(h, 1, 1), block_dim=(PJ_TPB, 1, 1),
+            )
+            if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=hflags.unsafe_ptr(), src_buf=flags)
+        ctx.synchronize()
+        var rots = 0
+        for i in range(h):
+            if hflags.unsafe_ptr().unsafe_load(i) != Float32(0.0):
+                rots += 1
+            # every block of the sweep's last round wrote its round number
+            if hflags.unsafe_ptr().unsafe_load(h + i) != Float32(m - 1):
+                ran = False
+        if not ran:
+            break
+        if rots == 0:
+            converged = True
+            break
+    if converged:
+        ctx.enqueue_function[svd_par_norm_kernel](
+            rt.unsafe_ptr(), s.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(PJ_TPB, 1, 1)
+        )
+        ctx.enqueue_function[pj_transpose_kernel](
+            vt.unsafe_ptr(), v.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB
+        )
+        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=s)
+        ctx.synchronize()
+        # the rotations are orthogonal: sum of s^2 is ||R||_F^2, or the
+        # solve is not an answer (a dropped dispatch, a wrong launch)
+        var fro_out = Float64(0.0)
+        for i in range(n):
+            var x = Float64(hs.unsafe_ptr().unsafe_load(i))
+            fro_out += x * x
+        if not (abs(fro_out - fro_in) <= 1.0e-3 * fro_in):
+            converged = False
+    ctx.synchronize()
+    _ = rt^
+    _ = vt^
+    _ = flags^
+    _ = hflags^
+    _ = hs^
+    return converged
+
+
 def gemm_scratch(m: Int, k: Int, n: Int) -> Int:
     """Floats of partial-sum scratch `launch_gemm` needs (0: none)."""
     var nb = (k + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -1041,6 +1197,14 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
+            if n <= host_eigh_max():
+                HostExec.eigh(a, w, v, n)
+                return
+            var lo = pj_eigh_min()
+            if lo > 0 and n >= lo:
+                if DevExec._eigh_par(a, w, v, n):
+                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
@@ -1052,6 +1216,101 @@ struct DevExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def _eigh_par(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises -> Bool:
+        """The two-sided Jacobi in the round-robin ordering
+        (x_decomp/jacobi_par.mojo; FAST on Metal), then `device_eigh`'s own
+        tail (`sign_flip_kernel`, the ascending permutation). The cyclic
+        kernel's convergence test, taken on the host before every sweep.
+        `a` is not written; False = not converged in PJ_EIGH_SWEEPS sweeps
+        (nothing stored), and the caller runs the cyclic solver."""
+        var ctx = xd_ctx()
+        var m = n + (n % 2)
+        var h = m // 2
+        var da = _up(ctx, a, n * n)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
+        var dcs = ctx.enqueue_create_buffer[DType.float32](2 * h)
+        var doff = ctx.enqueue_create_buffer[DType.float32](3 * n)
+        var hoff = ctx.enqueue_create_host_buffer[DType.float32](3 * n)
+        ctx.enqueue_function[pj_identity_kernel](dv.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n * n), block_dim=PJ_TPB)
+        var tol2 = Float64(JACOBI_TOL) * Float64(JACOBI_TOL)
+        var converged = False
+        var executed = 0
+        var fro_in = Float64(-1.0)
+        var fro_now = Float64(0.0)
+        for sweep in range(PJ_EIGH_SWEEPS + 1):
+            # a sum of squares is never negative: -1 left in the readback is
+            # a dispatch that did not run
+            enqueue_fill(ctx, doff, Float32(-1.0))
+            ctx.enqueue_function[eigh_par_off_kernel](
+                da.unsafe_ptr(), doff.unsafe_ptr(), Int32(n), grid_dim=_pj_blocks(n), block_dim=PJ_TPB
+            )
+            ctx.enqueue_copy(dst_ptr=hoff.unsafe_ptr(), src_buf=doff)
+            ctx.synchronize()
+            var off = Float64(0.0)
+            var dg = Float64(0.0)
+            var ran = True
+            for i in range(n):
+                var o = Float64(hoff.unsafe_ptr().unsafe_load(i))
+                var d2 = Float64(hoff.unsafe_ptr().unsafe_load(n + i))
+                if o < 0.0 or d2 < 0.0:
+                    ran = False
+                off += o
+                dg += d2
+            if not ran:
+                break
+            fro_now = off + dg
+            if fro_in < 0.0:
+                fro_in = fro_now
+            if off <= tol2 * fro_now:
+                converged = True
+                break
+            if sweep == PJ_EIGH_SWEEPS:
+                break
+            executed += 1
+            for rd in range(m - 1):
+                ctx.enqueue_function[eigh_par_cs_kernel](
+                    da.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                    grid_dim=_pj_blocks(h), block_dim=PJ_TPB,
+                )
+                ctx.enqueue_function[eigh_par_update_kernel](
+                    da.unsafe_ptr(), dv.unsafe_ptr(), dcs.unsafe_ptr(), Int32(n), Int32(m), Int32(rd),
+                    grid_dim=_pj_blocks(h * h + n * h), block_dim=PJ_TPB,
+                )
+                if rd % PJ_SYNC_ROUNDS == PJ_SYNC_ROUNDS - 1:
+                    ctx.synchronize()
+        # J^T A J keeps ||A||_F: a solve that moved it is not an answer
+        if converged and not (abs(fro_now - fro_in) <= 1.0e-3 * fro_in):
+            converged = False
+        if converged:
+            ctx.enqueue_function[sign_flip_kernel](
+                dv.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
+            )
+            var hv = ctx.enqueue_create_host_buffer[DType.float32](n * n)
+            ctx.enqueue_copy(dst_ptr=hv.unsafe_ptr(), src_buf=dv)
+            ctx.synchronize()
+            # the last test's readback holds the diagonal of the converged A
+            var diag = List[Float32](capacity=n)
+            for i in range(n):
+                diag.append(hoff.unsafe_ptr().unsafe_load(2 * n + i))
+            var vecs = List[Float32](capacity=n * n)
+            for i in range(n * n):
+                vecs.append(hv.unsafe_ptr().unsafe_load(i))
+            var got = eigh_ascending(diag, vecs, n, True, executed)
+            for i in range(n):
+                w.unsafe_store(i, got.w[i])
+            for i in range(n * n):
+                v.unsafe_store(i, got.v[i])
+            _ = hv^
+        _ = da^
+        _ = dv^
+        _ = dcs^
+        _ = doff^
+        _ = hoff^
+        ctx.synchronize()
+        _ = ctx^
+        return converged
 
     @staticmethod
     def _eigh2(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
@@ -1175,7 +1434,14 @@ struct DevExec(Exec):
         var s_buf = ctx.enqueue_create_buffer[DType.float32](n)
         ctx.synchronize()
         _ = qr_factor(ctx, da, scratch, r_buf, m, n)
-        if jacobi2_on() and n >= 256:
+        var done = False
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
+            var lo = pj_svd_min()
+            if lo > 0 and n >= lo:
+                done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
+        if done:
+            pass
+        elif jacobi2_on() and n >= 256:
             # measured (m4pro-b 1790606245923): 0.45x at n = 28, 1.07x at
             # 256, 1.21x at 800; the old kernel below 256
             _svd2_of_r(ctx, r_buf, v_buf, s_buf, n)
