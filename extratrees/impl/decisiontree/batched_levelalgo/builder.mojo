@@ -3307,14 +3307,14 @@ comptime ET_SCORE_TILED = (
 (`node_feature_score_reg_tiled_kernel`)."""
 
 comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
+"""FAST experiment: a row-major copy of X feeds the range and score passes,
+whose grids put the feature slot on the fast axis so the blocks reading
+one row chunk's features run together and share its cache lines."""
 
 comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]()
 """Trial arm (trees-apple2): `ensure_row_major` also builds the row-major
 copy when one row's floats fit a 64-byte line (`n_cols <= 16`), so a
 classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel."""
-"""FAST experiment: a row-major copy of X feeds the range and score passes,
-whose grids put the feature slot on the fast axis so the blocks reading
-one row chunk's features run together and share its cache lines."""
 
 
 @always_inline
