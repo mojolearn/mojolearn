@@ -31,7 +31,7 @@ import time
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
+_ROOT = os.environ.get("TAP_REPO") or os.path.abspath(os.path.join(_HERE, "..", ".."))
 for _p in (os.path.join(_ROOT, "tools"), os.path.join(_ROOT, "python")):
     if _p not in sys.path:
         sys.path.insert(0, _p)

@@ -23,6 +23,10 @@ TREES="${TAP_GBDT_TREES:-10,100}"
 OUT="${TAP_OUT:-/tmp/tap.$$}"
 mkdir -p "$OUT"
 PY="pixi run -e default python"
+# TAP_PROFILE: the xtrees timing script, for a checkout that predates it
+# (a copy from a later commit; it finds the checkout through TAP_REPO).
+PROFILE="${TAP_PROFILE:-bench/speed/trees_apple_profile.py}"
+export TAP_REPO="$PWD"
 export PYTHONPATH="$PWD/python${PYTHONPATH:+:$PYTHONPATH}"
 echo "TAPRUN commit=$(git rev-parse --short HEAD) mode=${MOJOLEARN_NUMERIC_MODE:-unset} rows=$ROWS rounds=$ROUNDS cells=${TAP_CELLS:-}"
 for cell in ${TAP_CELLS:-}; do
@@ -44,12 +48,12 @@ for cell in ${TAP_CELLS:-}; do
                 | grep -E '^FTRAIN|Error|error|Traceback' ;;
         xt)
             e=${rest%%:*}; d=${rest#*:}
-            $PY bench/speed/trees_apple_profile.py --est "$e" --dataset "$d" --rows "$ROWS" \
+            $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
                 --rounds "$ROUNDS" 2>&1 | grep -E '^TAP|Error|error|Traceback' ;;
         xtprof)
             # xtprof:<est>:<dataset>:<n_estimators>  cProfile of one fit
             e=${rest%%:*}; r2=${rest#*:}; d=${r2%%:*}; n=${r2#*:}
-            $PY bench/speed/trees_apple_profile.py --est "$e" --dataset "$d" --rows "$ROWS" \
+            $PY "$PROFILE" --est "$e" --dataset "$d" --rows "$ROWS" \
                 --rounds 1 --n-estimators "$n" --profile 2>&1 | grep -v -E '^\s*$' | head -n 120 ;;
         rfclock)
             # rfclock:<lane>:<dataset>  RF_LAUNCH_LOG launch clock of one fit (a SPLIT)
