@@ -70,6 +70,23 @@ def _g(p: IP, k: Int) -> Int:
     return Int(p.unsafe_load(k))
 
 
+# DEVIATION 5720 (lane/cnn-apple, 2026-09-28): the index decoding of the hot
+# element functions divides in 32 bits. Mojo's Int is 64 bits and no GPU
+# divides 64-bit integers in hardware (Apple emulates it in a long software
+# routine); every operand here is a non-negative element index or dimension
+# below 2^31 (the device launch passes the element count as Int32), so the
+# unsigned 32-bit quotient and remainder equal the Int ones. Index arithmetic
+# only: the same words are read and written, no float value changes.
+@always_inline
+def _ud(a: Int, b: Int) -> Int:
+    return Int(UInt32(a) // UInt32(b))
+
+
+@always_inline
+def _um(a: Int, b: Int) -> Int:
+    return Int(UInt32(a) % UInt32(b))
+
+
 def conv_params(raw: List[Int]) raises -> List[Int32]:
     """Validate the Python-side block and fill OH, OW."""
     if len(raw) < CP_BIAS + 1:
@@ -102,15 +119,15 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
     var KH = _g(p, CP_KH); var KW = _g(p, CP_KW)
     var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
     var ckk = C * KH * KW
-    var r = i // ckk
+    var r = _ud(i, ckk)
     var qq = i - r * ckk
-    var n = r // (OH * OW)
+    var n = _ud(r, (OH * OW))
     var rem = r - n * OH * OW
-    var oh = rem // OW
+    var oh = _ud(rem, OW)
     var ow = rem - oh * OW
-    var c = qq // (KH * KW)
+    var c = _ud(qq, (KH * KW))
     var t = qq - c * KH * KW
-    var kh = t // KW
+    var kh = _ud(t, KW)
     var kw = t - kh * KW
     var h = oh * _g(p, CP_SH) - _g(p, CP_PH) + kh * _g(p, CP_DH)
     var w = ow * _g(p, CP_SW) - _g(p, CP_PW) + kw * _g(p, CP_DW)
@@ -124,12 +141,12 @@ def im2col_at(i: Int, x: FP, cols: FP, f2: FP, f3: FP, q: IP, p: IP):
 def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
     """out[n, oc, oh, ow] (NCHW) = y2[r, oc] (+ bias[oc]); one add."""
     var OC = _g(p, CP_OC); var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
-    var ow = i % OW
-    var t = i // OW
-    var oh = t % OH
-    t = t // OH
-    var oc = t % OC
-    var n = t // OC
+    var ow = _um(i, OW)
+    var t = _ud(i, OW)
+    var oh = _um(t, OH)
+    t = _ud(t, OH)
+    var oc = _um(t, OC)
+    var n = _ud(t, OC)
     var r = (n * OH + oh) * OW + ow
     var v = ftz(y2.unsafe_load(r * OC + oc))
     if _g(p, CP_BIAS) != 0:
@@ -141,9 +158,9 @@ def conv_out_at(i: Int, y2: FP, bias: FP, dst: FP, f3: FP, q: IP, p: IP):
 def dout_rows_at(i: Int, dout: FP, g: FP, f2: FP, f3: FP, q: IP, p: IP):
     """g[r, oc] = dout[n, oc, oh, ow]: NCHW to the GEMM's row layout. A copy."""
     var OC = _g(p, CP_OC); var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
-    var r = i // OC
+    var r = _ud(i, OC)
     var oc = i - r * OC
-    var n = r // (OH * OW)
+    var n = _ud(r, (OH * OW))
     var rem = r - n * OH * OW
     g.unsafe_store(i, ftz(dout.unsafe_load(((n * OC + oc) * OH * OW) + rem)))
 
@@ -159,27 +176,27 @@ def col2im_at(i: Int, dcols: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
     var SH = _g(p, CP_SH); var SW = _g(p, CP_SW)
     var PH = _g(p, CP_PH); var PW = _g(p, CP_PW)
     var DH = _g(p, CP_DH); var DW = _g(p, CP_DW)
-    var w = i % W
-    var t = i // W
-    var h = t % H
-    t = t // H
-    var c = t % C
-    var n = t // C
+    var w = _um(i, W)
+    var t = _ud(i, W)
+    var h = _um(t, H)
+    t = _ud(t, H)
+    var c = _um(t, C)
+    var n = _ud(t, C)
     var ckk = C * KH * KW
     var acc = Float32(0)
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, CP_REV) != 0 else a
         var th = h + PH - kh * DH
-        if th < 0 or th % SH != 0:
+        if th < 0 or _um(th, SH) != 0:
             continue
-        var oh = th // SH
+        var oh = _ud(th, SH)
         if oh >= OH:
             continue
         for kw in range(KW):
             var tw = w + PW - kw * DW
-            if tw < 0 or tw % SW != 0:
+            if tw < 0 or _um(tw, SW) != 0:
                 continue
-            var ow = tw // SW
+            var ow = _ud(tw, SW)
             if ow >= OW:
                 continue
             var r = (n * OH + oh) * OW + ow
@@ -197,7 +214,7 @@ def gather_rows_at(i: Int, src: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
     """dst[i] = src[q[i // row] * row + i % row], row = p[0]: a 4-byte word
     copy (no float arithmetic touches it), the batch rows of a resident X."""
     var row = Int(p.unsafe_load(0))
-    var r = i // row
+    var r = _ud(i, row)
     var j = Int(q.unsafe_load(r)) * row + (i - r * row)
     dst.bitcast[Int32]().unsafe_store(i, src.bitcast[Int32]().unsafe_load(j))
 
@@ -278,10 +295,10 @@ def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
     var H = _g(p, PP_H); var W = _g(p, PP_W)
     var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
     var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
-    var ow = i % OW
-    var t = i // OW
-    var oh = t % OH
-    var nc = t // OH
+    var ow = _um(i, OW)
+    var t = _ud(i, OW)
+    var oh = _um(t, OH)
+    var nc = _ud(t, OH)
     var base = nc * H * W
     var best = Float32(0)
     var bi = -1
@@ -311,25 +328,25 @@ def maxpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, idx: IP, p: IP):
     var SH = _g(p, PP_SH); var SW = _g(p, PP_SW)
     var PH = _g(p, PP_PH); var PW = _g(p, PP_PW)
     var DH = _g(p, PP_DH); var DW = _g(p, PP_DW)
-    var w = i % W
-    var t = i // W
-    var h = t % H
-    var nc = t // H
+    var w = _um(i, W)
+    var t = _ud(i, W)
+    var h = _um(t, H)
+    var nc = _ud(t, H)
     var me = Int32(h * W + w)
     var acc = Float32(0)
     for a in range(KH):
         var kh = KH - 1 - a if _g(p, PP_REV) != 0 else a
         var th = h + PH - kh * DH
-        if th < 0 or th % SH != 0:
+        if th < 0 or _um(th, SH) != 0:
             continue
-        var oh = th // SH
+        var oh = _ud(th, SH)
         if oh >= OH:
             continue
         for kw in range(KW):
             var tw = w + PW - kw * DW
-            if tw < 0 or tw % SW != 0:
+            if tw < 0 or _um(tw, SW) != 0:
                 continue
-            var ow = tw // SW
+            var ow = _ud(tw, SW)
             if ow >= OW:
                 continue
             var o = (nc * OH + oh) * OW + ow

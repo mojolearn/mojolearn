@@ -16,7 +16,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, apple_mma_applies,
 )
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
@@ -111,6 +113,20 @@ def device_gemm(
     # every column too.
     if op == OP_TN and m * n <= 65536:
         var plan = PLAN_SPLIT_64_4X4 if (m >= 64 and n >= 64) else PLAN_SPLIT_32_2X2
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+            # DEVIATION 5720 (lane/cnn-apple, M4 forced-plan sweep, every plan
+            # bit-equal, tools/apple_speed_cnn/gemm_plans.mojo): on Apple the
+            # split plans above lose to the simdgroup matrix plan wherever the
+            # weight gradient is wide (64 x 288 x 65536: 24.0 -> 14.0 ms;
+            # 64 x 576 x 262144: 130.6 -> 52.4 ms; 10 x 4096 x 256: 0.54 ->
+            # 0.19 ms), and the bias gradient (n == 1) runs best on SPLIT
+            # 16x16 (32 x 1 x 262144: 3.26 -> 1.80 ms). A narrow gradient
+            # (n < 64, e.g. 32 x 27 x 262144) keeps its split plan: the
+            # matrix plan is 16x slower there. Execution plan only.
+            if n == 1:
+                plan = PLAN_SPLIT_16_1X1
+            elif n >= 64 and apple_mma_applies(m, n, k):
+                plan = PLAN_APPLE_MMA
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
         identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
         _ = wp^
