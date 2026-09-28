@@ -98,7 +98,6 @@ comptime OP_ETS_LIK = 56
 comptime OP_ETS_INIT = 57
 comptime OP_CELL_FWD_H = 58
 comptime OP_CELL_BWD_H = 59
-comptime OP_TRANSPOSE = 60
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
@@ -465,15 +464,14 @@ def op_cell_fwd_h(t: Int, a: Args):
     fold (`gemm_dot`, k ascending from 0) and the same bias add, stores them
     where the GEMM did, then runs `op_cell_fwd` verbatim, which reads only
     those G columns. Same arithmetic in the same order: the same bits.
-    Args as `op_cell_fwd`, plus p7 W_hh^T [H, G*H] (`op_transpose` of W_hh:
-    coalesced loads, the same words), p8 b_hh [G*H]."""
+    Args as `op_cell_fwd`, plus p7 W_hh [G*H, H], p8 b_hh [G*H]."""
     var H = a.i2
     var GH = gates_of(a.i0) * H
     var b = t // H
     var u = t - b * H
     for g in range(gates_of(a.i0)):
         var n = g * H + u
-        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n, GH, H, Float32(0.0))
+        var acc = gemm_dot(a.p3, b * H, 1, a.p7, n * H, 1, H, Float32(0.0))
         st(a.p1, b * GH + n, add(ftz(acc), ld(a.p8, n)))
     op_cell_fwd(t, a)
 
@@ -723,16 +721,6 @@ def op_fill(t: Int, a: Args):
 
 def op_copy(t: Int, a: Args):
     a.p1.unsafe_store(t, a.p0.unsafe_load(t))
-
-
-def op_transpose(t: Int, a: Args):
-    """out[c, r] = in[r, c] for in [R, C] (i0 R, i1 C), element t = c*R + r:
-    the words copied as they are. The recurrent forward reads its weights
-    through it so neighbouring threads (neighbouring output columns) read
-    neighbouring words; the values and the fold are unchanged."""
-    var c = t // a.i0
-    var r = t - c * a.i0
-    a.p1.unsafe_store(t, a.p0.unsafe_load(r * a.i1 + c))
 
 
 def op_seq_out(t: Int, a: Args):
