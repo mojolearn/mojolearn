@@ -24,7 +24,9 @@ on ONE Mac and alternates the arms, then prints a stage split
 | b7f433a89 | t-SNE FAST: repulsion over candidate spans, partials joined in span order | FAST | OPT-IN since 19e0aabac (`-D MOJOLEARN_TSNE_FAST_SPLIT`): no gain measured |
 | 95101d105 | t-SNE symmetrize (host): counting-pass CSR + per-row merge (host-checked SAME on 4 random graphs) | both | on |
 | 782ad9a09 | CAGRA detour prune on the device (integer counts, rank placement) | both | on; `-D MOJOLEARN_CAGRA_HOST_PRUNE` reverts |
-| 513a3006e | IVF-PQ codebooks: subspace k-means side by side on pooled contexts | both | opt-in trial, `MOJOLEARN_ANN_PQ_CB_STREAMS=k` |
+| 513a3006e | IVF-PQ codebooks: subspace k-means side by side on pooled contexts | both | REVERTED (6f817e0ed): the process died in the codebook stage |
+| 399de4811 | IVF-PQ encode: subspace codebook staged in threadgroup memory | both | on; `-D MOJOLEARN_PQ_ASSIGN_UNSTAGED` reverts |
+| b9cc59dcf | x_ann/io.mojo: uploads without a private copy, downloads by memcpy | both | on |
 
 ## Measurements
 
@@ -67,3 +69,30 @@ skip in c3841ce42 made CAGRA slower in both tiers (FAST 0.405 -> 0.55) and
 was removed; the FAST t-SNE span split gained nothing and is opt-in now.
 (The stage split and the FAST quality pass of this job did not run: a
 script bug, fixed in 19e0aabac.)
+
+### A/B 2: m4pro-a (Apple M4 Pro), steward 1790605523624, job at 19e0aabac
+
+Arms f4545110c (base), bc3c22c03 (scan + ftz), 19e0aabac (all to date,
+padded-group skip removed, FAST split opt-in). Three runs per cell (two
+reps + the stage pass). Digests equal across the arms in every cell and
+tier. Raw: `~/mojolearn-evidence/ann-apple2/ab2_m4pro-a_1790605523624.txt`.
+
+| cell (s) | base | scan + ftz | 19e0aabac | digests |
+|---|---|---|---|---|
+| IDENTICAL CAGRA fit | 0.687/0.684/0.685 | 0.635/0.591/0.591 | 0.572/0.510/0.505 | 54d696296c9c7c8a / 45e435db03654b4e |
+| IDENTICAL IVF-PQ fit | 7.996/7.982/8.011 | 7.519/7.209/7.229 | 7.198/7.223/7.183 | 6bb7a6c5fc753846 |
+| IDENTICAL IVF-PQ search | 0.328/0.348/0.329 | 0.103/0.058/0.061 | 0.057/0.061/0.061 | 3b1e0c1ae73444eb |
+| IDENTICAL t-SNE fit | 1.013/1.023/1.022 | 1.051/0.911/0.913 | 0.829/0.814/0.816 | 2bb1d3d75ffa1885 |
+| FAST CAGRA fit | 0.467/0.446/0.441 | 0.449/0.447/0.447 | 0.404/0.399/0.401 | same |
+| FAST IVF-PQ search | 0.375/0.357/0.334 | 0.108/0.057/0.060 | 0.060/0.057/0.060 | 4ace8e5f668db63d |
+| FAST t-SNE fit | 0.733/0.692/0.698 | 0.697/0.696/0.692 | 0.632/0.652/0.644 | ca01838ecfb9306d |
+
+Stage split (ms, IDENTICAL; base -> 19e0aabac): IVF scan select 264 -> 9.7,
+probe 18 -> 4.9 (score 35 is now the largest); t-SNE iterations 854 -> 704,
+symmetrize 112 -> 66; CAGRA k-NN + download + host prune 526 + 16 + 112 ->
+k-NN + device prune 467; IVF-PQ build coarse 2850 -> 2540 and codebooks
+4760 -> 4254 (cluster/ k-means, moved by the Apple ftz spelling only),
+residuals 190, encode 184 (targets of 399de4811 and b9cc59dcf).
+
+The MOJOLEARN_ANN_PQ_CB_STREAMS=4 arm died after the residual stage in both
+tiers (no traceback); the trial is reverted.
