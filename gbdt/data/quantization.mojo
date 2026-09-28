@@ -139,6 +139,7 @@ def substitute_nans(mut values: List[Float32], treatment: Int):
 def calc_quantization(
     var values: List[Float32], border_count: Int, nan_mode_option: Int,
     border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
+    flush_subnormals: Bool = False,
 ) raises -> Tuple[List[Float32], Int]:
     """`CalcQuantization` (`quantization.cpp:300-346`).
 
@@ -166,7 +167,9 @@ def calc_quantization(
     if non_nan_border_count > 0:
         # `BestSplit` already drops NaNs -- their `filterNans`
         if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
-            borders = best_split(values^, non_nan_border_count)
+            borders = best_split(
+                values^, non_nan_border_count, flush_subnormals
+            )
         else:
             borders = select_borders(
                 values^, non_nan_border_count, border_type

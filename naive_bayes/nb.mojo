@@ -189,13 +189,18 @@ def log_unit(t: Int, f: FP, q: IP):
 
 
 def gnb_merge_unit(t: Int, f: FP, q: IP):
-    """q = [OCNT, OMEAN, OVAR, NCNT, NMEAN, NVAR, K, d, CNT, MEAN, VAR];
+    """q = [OCNT, OMEAN, OVAR, NCNT, NMEAN, NVAR, K, d, CNT, MEAN, VAR, KEEP];
     t = k*d + c (GaussianNB.partial_fit, sklearn `_update_mean_variance`):
     the running class count, mean and variance (no epsilon) merged with a
     batch's. n = n_past + n_new; mean = (n_new*mu_new + n_past*mu) / n;
     ssd = n_past*var + n_new*var_new + (n_new*n_past / n) * (mu - mu_new)^2;
     var = ssd / n. A class the batch lacks keeps its values; a class not seen
-    before takes the batch's."""
+    before takes the batch's. KEEP != 0 (StandardScaler.partial_fit; the
+    naive Bayes callers pass 0): two exactly constant parts with the same
+    value (both variances zero, equal means) keep that value and variance
+    zero, the exact answer the float32 weighted mean can miss by an ulp,
+    which a later merge would read as a nonzero variance (STD-1's exact-
+    constant rule carried across batches)."""
     var d = p(q, 7)
     var k = t // d
     var c = t % d
@@ -211,6 +216,8 @@ def gnb_merge_unit(t: Int, f: FP, q: IP):
         if np_ == Float32(0):
             m = nmu
             v = nva
+        elif p(q, 11) != 0 and va == Float32(0) and nva == Float32(0) and mu == nmu:
+            v = Float32(0)
         else:
             var tot = add(np_, nn)
             m = div(add(mul(nn, nmu), mul(np_, mu)), tot)
