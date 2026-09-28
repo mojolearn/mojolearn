@@ -91,11 +91,53 @@ decomp_speed, synth N=200k (N2 20k, N3 1500, N4 20k), seconds:
 | SpectralEmbedding(rbf, 5k) | 3.19 | Python 3.04 |
 | UMAP default / c5 manhattan (20k) | 0.236 / 0.611 | |
 
-## Requests in flight
+## FINAL (2026-09-28 ~12:05Z): branch head 1a6b43a1b, nothing in flight
 
-| request | what |
-|---|---|
-| 1790588268075-speed-decomp-654518666a (m4pro-a) | the resident threshold swept (MOJOLEARN_XD_RES_MIN 1 / 1024 / 16384) on the call-heavy algorithms |
+Resident threshold swept on m4pro-a (1790588268075, MOJOLEARN_XD_RES_MIN
+1 / 1024 / 16384; the code of 1a6b43a1b is the RES_MIN=1 column):
+
+| algorithm | before s | FINAL s (RES_MIN 1) | 1024 | 16384 | before/FINAL |
+|---|---|---|---|---|---|
+| TruncatedSVD(randomized,5) | 0.320 | 0.197 | 0.201 | 0.203 | 1.62x |
+| IncrementalPCA | 0.077 | 0.044 | 0.050 | 0.048 | 1.75x |
+| NMF mu | 0.467 | 0.195 | 0.222 | 0.220 | 2.39x |
+| NMF cd | 0.429 | 0.331 | 0.365 | 0.359 | 1.30x |
+| FastICA | 0.323 | 0.089 | 0.129 | 0.124 | 3.63x |
+| FactorAnalysis | 0.312 | 0.193 | 0.206 | 0.214 | 1.62x |
+| lstsq | 0.131 | 0.076 | 0.075 | 0.085 | 1.72x |
+| randomized_svd | 0.260 | 0.145 | 0.144 | 0.148 | 1.79x |
+| PLSRegression | 0.481 | 0.145 | 0.147 | 0.145 | 3.32x |
+| CCA | 0.572 | 0.210 | 0.222 | 0.221 | 2.72x |
+| MinCovDet | 46.98 | 48.43 | 55.01 | 51.06 | 0.97x |
+| solve(512) | 0.146 | 0.151 | 0.163 | 0.166 | 0.97x |
+| SparsePCA | 0.363 | 0.129 | 0.136 | 0.139 | 2.81x |
+| DictionaryLearning | 0.375 | 0.262 | 0.339 | 0.346 | 1.43x |
+| MiniBatchDictionaryLearning | 1.668 | 0.657 | 1.560 | 1.761 | 2.54x |
+| LatentDirichletAllocation | 0.503 | 0.299 | 0.301 | 0.302 | 1.68x |
+
+Not in the sweep (from E, whose code for them is the same): PCA randomized
+0.264 -> 0.154 (1.71x), GaussianRandomProjection 0.036 -> 0.011 (3.3x),
+SparseRandomProjection 0.035 -> 0.012 (2.9x), MDS 0.207 -> 0.052 (4.0x),
+linalg.qr 8.855 -> 1.664 (5.3x), linalg.svd 8.911 -> 1.824 (4.9x), Isomap's
+shortest paths at 1500 rows 3.70 -> 0.115 s (32x; the fit is its eigh).
+Unchanged: ALS / ALS cg (row cells), LocallyLinearEmbedding, ClassicalMDS,
+Isomap fit (n x n Jacobi). FAST: same binding, same numbers, same bits.
+
+Bits: digests (bench/decomp_out_digest.py, 27 algorithms) equal on Metal
+and CPU at C (always resident) and at E (threshold 2^14), and Metal C == E;
+the threshold only picks between two launch paths of the same kernels
+(proven on the host at thresholds 1 and 2^14 with the fake resident binding).
+
+## NEXT (a later session, if any)
+
+- The n x n cyclic Jacobi (eigh) and one-sided Jacobi (x_decomp svd) are the
+  walls for ClassicalMDS / Isomap / LocallyLinearEmbedding past ~1000 rows;
+  IDENTICAL pins the rotation order, so only per-rotation latency can move
+  (the 1024-wide launch did not help). A FAST route (a different algorithm)
+  would need the paired quality check.
+- ALS als_rows: one thread per user folding all items.
+- SpectralEmbedding(knn) at 20k rows refuses in select_radix (k > 1024), not
+  x_decomp code: the neighbors lane's.
 
 ## Before -> after, CURRENT (m4pro-a, IDENTICAL, synth 200k x 28; E = 1790586709302 at 712cdc7d4)
 
