@@ -792,18 +792,18 @@ def _leaf_records(
 def _stats_through_index_kernel(
     stats: MutPointer[Float32, MutAnyOrigin],
     row_index: MutPointer[UInt32, MutAnyOrigin],
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     n_rows: Int32,
     stat_count: Int32,
 ):
-    """`out[s * n + p] = stats[s * n + row_index[p]]`: the permuted plane a
+    """`dst[s * n + p] = stats[s * n + row_index[p]]`: the permuted plane a
     ridx-only build does not keep, for the identity trace only."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_rows)
     if i < n * Int(stat_count):
         var s = i // n
         var p = i - s * n
-        out[unsafe_offset=i] = stats[
+        dst[unsafe_offset=i] = stats[
             unsafe_offset = s * n + Int(row_index[unsafe_offset=p])
         ]
 
