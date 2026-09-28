@@ -1,14 +1,7 @@
+diff --git a/x_linear/logcv.mojo b/x_linear/logcv.mojo
 --- a/x_linear/logcv.mojo
 +++ b/x_linear/logcv.mojo
-@@ -21,6 +21,7 @@
- from x_linear.ops import (
-     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
- )
-+from std.sys.info import is_gpu
- from x_linear.lbfgs import lbfgs, lbfgs_work
- from x_linear.team import Team
- from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix
-@@ -65,7 +66,7 @@
+@@ -67,7 +67,7 @@
          var i = Int(ix.unsafe_load(q)) if fold >= 0 else q
          var wi = Float32(1)
          if sw:

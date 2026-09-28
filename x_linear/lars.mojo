@@ -21,8 +21,9 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
-    fill, copy, cholesky, chol_solve, centered_gram,
+    fill, copy, cholesky, chol_solve, centered_gram, centered_xty, add_acc,
 )
+from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import t_col_means, t_mean, t_centered_gram, t_centered_xty
 
@@ -55,15 +56,32 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     # Team form: the row passes (means, Gram, X'y) across the team
     # (x_linear/tops.mojo); the path itself (d x d) on the lead.
     var ym = Float32(0)
-    if fi:
-        t_col_means(t, x, n, d, fw, xm)
-        ym = t_mean(t, y, n, 1)
+    comptime if is_gpu():
+        if fi:
+            t_col_means(t, x, n, d, fw, xm)
+            ym = t_mean(t, y, n, 1)
+        else:
+            if t.lead():
+                fill(fw, xm, d, Float32(0))
+            t.sync()
+        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
-        if t.lead():
+        # the host: one row pass per statistic, vector accumulators (lane linear-cpu)
+        if fi:
             fill(fw, xm, d, Float32(0))
-        t.sync()
-    t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-    t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+            for i in range(n):
+                add_acc(fw, xm, x, i * d, d)
+            for j in range(d):
+                st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
+            var acc = Float32(0)
+            for i in range(n):
+                acc = fa(acc, ld(y, i))
+            ym = fd(acc, i2f(n))
+        else:
+            fill(fw, xm, d, Float32(0))
+        centered_gram(x, n, d, fw, xm, fw, gg)
+        centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     if not t.lead():
         return
     fill(res, 0, d, Float32(0))

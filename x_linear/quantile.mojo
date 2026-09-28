@@ -21,8 +21,9 @@ vertex, so coefficients agree with theirs to a tolerance, not exactly.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
-    cholesky, chol_solve, row_dot, mean_of,
+    cholesky, chol_solve, row_dot, mean_of, axpy_acc, par_rows, row_dots,
 )
+from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import t_sum, fold_sq, chain_fmad, fold_one_fmad
 
@@ -35,8 +36,9 @@ def _soft(a: Float32, t: Float32) -> Float32:
     return Float32(0)
 
 
-def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
+def _quantile_fit_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """The team schedule (see quantile_fit).
+    ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
     With sample_weight, y = targets n | weights n and the loss is
     (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
     res: coef d, intercept, n_iter, converged.
@@ -223,3 +225,209 @@ def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP,
     st(res, d, ld(fw, beta + d) if fi else Float32(0))
     st(res, d + 1, i2f(iters))
     st(res, d + 2, Float32(1) if converged else Float32(0))
+def _quantile_fit_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """The host schedule (lane linear-cpu): A'A in one row pass, the
+    r-update mapped, then ONE fold pass per iteration for every row
+    accumulator (next iteration's A'(y - r - u) folded with it unless u is
+    rescaled).
+    ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
+    With sample_weight, y = targets n | weights n and the loss is
+    (1/sum w) sum w_i rho_q(r_i) (theirs: sum w rho + alpha sum(w) |w|_1).
+    res: coef d, intercept, n_iter, converged.
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m."""
+    var max_iter = ldi(ip, 0)
+    var fi = ldi(ip, 1) != 0
+    var q = ld(fp, 0)
+    var alpha = ld(fp, 1)
+    var eps_abs = ld(fp, 2)
+    var eps_rel = ld(fp, 3)
+    var sw = ldi(ip, 2) != 0
+    var den = i2f(n)
+    if sw:
+        den = Float32(0)
+        for i in range(n):
+            den = fa(den, ld(y, n + i))
+    var m = d + 1 if fi else d
+    var mm = 0
+    var beta = m * m
+    var rhs = beta + m
+    var r = rhs + m
+    var u = r + n
+    var ab = u + n
+    var tmp = ab + n
+    var z = tmp + n
+    var v = z + d
+    var nrhs = v + d
+    var rhs_ready = False
+    # M = A'A + E, rows ascending: each entry of the lower triangle is its
+    # own accumulator (lane linear-cpu: one pass over the rows, not one per entry)
+    fill(fw, mm, m * m, Float32(0))
+    for i in range(n):
+        for j in range(d):
+            axpy_acc(fw, mm + j * m, ld(x, i * d + j), x, i * d, j + 1)
+        if fi:
+            axpy_acc(fw, mm + d * m, Float32(1), x, i * d, d)
+            st(fw, mm + d * m + d, fmad(Float32(1), Float32(1), ld(fw, mm + d * m + d)))
+    for j in range(m):
+        for k in range(j + 1):
+            var acc = ld(fw, mm + j * m + k)
+            if j == k and j < d:
+                acc = fa(acc, Float32(1))
+            st(fw, mm + j * m + k, acc)
+            st(fw, mm + k * m + j, acc)
+    _ = cholesky(fw, mm, m)
+    fill(fw, beta, m, Float32(0))
+    fill(fw, r, n, Float32(0))
+    fill(fw, u, n, Float32(0))
+    fill(fw, z, d, Float32(0))
+    fill(fw, v, d, Float32(0))
+    var ym = mean_of(y, n)
+    var spread = Float32(0)
+    for i in range(n):
+        spread = fa(spread, fabs(fs(ld(y, i), ym)))
+    spread = fmax(fd(spread, i2f(n)), Float32(1e-6))
+    var rho = fd(Float32(1), fm(i2f(n), spread))
+    var ynorm = Float32(0)
+    for i in range(n):
+        ynorm = fmad(ld(y, i), ld(y, i), ynorm)
+    ynorm = fsqrt(ynorm)
+    var iters = 0
+    var converged = False
+    for it in range(max_iter):
+        iters = it + 1
+        # beta-update: the m sums of A'(y - r - u), rows ascending, one pass
+        # (already folded by the previous iteration's pass unless u was rescaled)
+        if rhs_ready:
+            copy(fw, rhs, fw, nrhs, m)
+        else:
+            fill(fw, rhs, m, Float32(0))
+            for i in range(n):
+                var t = fs(fs(ld(y, i), ld(fw, r + i)), ld(fw, u + i))
+                axpy_acc(fw, rhs, t, x, i * d, d)
+                if fi:
+                    st(fw, rhs + d, fmad(Float32(1), t, ld(fw, rhs + d)))
+        for j in range(d):
+            st(fw, rhs + j, fa(ld(fw, rhs + j), fs(ld(fw, z + j), ld(fw, v + j))))
+        chol_solve(fw, mm, m, fw, rhs)
+        copy(fw, beta, fw, rhs, m)
+        var b = ld(fw, beta + d) if fi else Float32(0)
+        # r-update (keep the old r in tmp for the dual residual)
+        var kq = fd(Float32(1), fm(den, rho))
+        var up = fm(q, kq)
+        var lo_ = fm(fs(Float32(1), q), kq)
+        var abn = Float32(0)
+        var rn = Float32(0)
+        var fwp = fw
+
+        def rows_map(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm fwp, imm beta, imm b, imm ab,
+                                         imm u, imm r, imm tmp, imm sw, imm q, imm kq, imm up, imm lo_}:
+            row_dots(x, lo, hi, d, fwp, beta, fwp + ab)
+            for i in range(lo, hi):
+                var abi = fa(ld(fwp, ab + i), b)
+                st(fwp, ab + i, abi)
+                var vv = fs(fs(ld(y, i), abi), ld(fwp, u + i))
+                var upi = up
+                var loi = lo_
+                if sw:
+                    var ki = fm(ld(y, n + i), kq)
+                    upi = fm(q, ki)
+                    loi = fm(fs(Float32(1), q), ki)
+                var nr: Float32
+                if vv > upi:
+                    nr = fs(vv, upi)
+                elif vv < -loi:
+                    nr = fa(vv, loi)
+                else:
+                    nr = Float32(0)
+                st(fwp, tmp + i, fs(nr, ld(fwp, r + i)))
+                st(fwp, r + i, nr)
+
+        par_rows(rows_map, n)
+        # ONE fold pass (lane linear-cpu): every accumulator below is its own,
+        # rows ascending, as the separate passes had them: |A beta|^2, |r|^2,
+        # the primal residual's row part and the dual update u, |u|^2's row
+        # part, A' dr (into rhs, free now) and next iteration's A'(y - r - u)
+        var prim = Float32(0)
+        var un = Float32(0)
+        fill(fw, rhs, m, Float32(0))
+        fill(fw, nrhs, m, Float32(0))
+        for i in range(n):
+            var abi = ld(fw, ab + i)
+            abn = fmad(abi, abi, abn)
+            var nr = ld(fw, r + i)
+            rn = fmad(nr, nr, rn)
+            var yi = ld(y, i)
+            var pr = fs(fa(abi, nr), yi)
+            prim = fmad(pr, pr, prim)
+            var ui = fa(ld(fw, u + i), pr)
+            st(fw, u + i, ui)
+            un = fmad(ui, ui, un)
+            var ti = ld(fw, tmp + i)
+            axpy_acc(fw, rhs, ti, x, i * d, d)
+            var t2 = fs(fs(yi, nr), ui)
+            axpy_acc(fw, nrhs, t2, x, i * d, d)
+            if fi:
+                st(fw, rhs + d, fmad(Float32(1), ti, ld(fw, rhs + d)))
+                st(fw, nrhs + d, fmad(Float32(1), t2, ld(fw, nrhs + d)))
+        rhs_ready = True
+        # z-update
+        var zdiff = Float32(0)
+        var wn = Float32(0)
+        var zn = Float32(0)
+        var t = fd(alpha, rho)
+        for j in range(d):
+            var wj = ld(fw, beta + j)
+            wn = fmad(wj, wj, wn)
+            var nz = _soft(fa(wj, ld(fw, v + j)), t)
+            var dz = fs(nz, ld(fw, z + j))
+            zdiff = fmad(dz, dz, zdiff)
+            st(fw, z + j, nz)
+            zn = fmad(nz, nz, zn)
+        # dual updates and the primal residual (the row parts folded above)
+        for j in range(d):
+            var pr = fs(ld(fw, beta + j), ld(fw, z + j))
+            prim = fmad(pr, pr, prim)
+            st(fw, v + j, fa(ld(fw, v + j), pr))
+        # dual residual rho * || [A' dr ; dz] ||
+        var dual = zdiff
+        # the m sums of A' dr were folded above into rhs
+        for j in range(m):
+            var acc = ld(fw, rhs + j)
+            dual = fmad(acc, acc, dual)
+        var prim_n = fsqrt(prim)
+        var dual_n = fm(rho, fsqrt(dual))
+        var scale_p = fmax(fmax(fsqrt(abn), fsqrt(rn)), fmax(ynorm, fmax(fsqrt(wn), fsqrt(zn))))
+        var eps_p = fa(fm(eps_abs, fsqrt(i2f(n + d))), fm(eps_rel, scale_p))
+        for j in range(d):
+            un = fmad(ld(fw, v + j), ld(fw, v + j), un)
+        var eps_d = fa(fm(eps_abs, fsqrt(i2f(m))), fm(fm(eps_rel, rho), fsqrt(un)))
+        if prim_n <= eps_p and dual_n <= eps_d:
+            converged = True
+            break
+        if (it + 1) % 10 == 0:
+            var factor = Float32(0)
+            if prim_n > fm(Float32(10), dual_n):
+                factor = Float32(2)
+            elif dual_n > fm(Float32(10), prim_n):
+                factor = Float32(0.5)
+            if factor != 0:
+                rho = fm(rho, factor)
+                var inv = fd(Float32(1), factor)
+                for i in range(n):
+                    st(fw, u + i, fm(ld(fw, u + i), inv))
+                rhs_ready = False
+                for j in range(d):
+                    st(fw, v + j, fm(ld(fw, v + j), inv))
+    copy(res, 0, fw, z, d)
+    st(res, d, ld(fw, beta + d) if fi else Float32(0))
+    st(res, d + 1, i2f(iters))
+    st(res, d + 2, Float32(1) if converged else Float32(0))
+def quantile_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
+    """ip: [max_iter, fit_intercept, sample_weight]; fp: [quantile, alpha, eps_abs, eps_rel].
+    fw: M m*m | beta m | rhs m | r n | u n | ab n | tmp n | z d | v d | next rhs m
+    (next rhs: the host schedule's). The device runs the team schedule, the
+    host the map-then-fold schedule; the same bits either way."""
+    comptime if is_gpu():
+        _quantile_fit_team(t, x, y, n, d, ip, fp, res, fw, iw)
+    else:
+        _quantile_fit_host(x, y, n, d, ip, fp, res, fw, iw)

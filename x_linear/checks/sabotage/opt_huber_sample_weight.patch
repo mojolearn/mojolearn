@@ -1,14 +1,7 @@
+diff --git a/x_linear/huber.mojo b/x_linear/huber.mojo
 --- a/x_linear/huber.mojo
 +++ b/x_linear/huber.mojo
-@@ -10,6 +10,7 @@
- sigma >= 10 * float64 eps; here sigma = exp(s) and s is free, minimized by
- x_linear/lbfgs.mojo (the same minimizer; a different path).
- """
-+from std.sys.info import is_gpu
- from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot
- from x_linear.lbfgs import lbfgs, lbfgs_work
- from x_linear.team import Team
-@@ -37,7 +38,7 @@
+@@ -39,7 +39,7 @@
          var ar = fabs(r)
          var coefv: Float32
          if sw:
@@ -17,7 +10,7 @@
              if ar > thr:
                  coefv = fm(wi, -two_eps if r > 0 else two_eps)
              else:
-@@ -72,7 +73,7 @@
+@@ -72,7 +72,7 @@
              var ar = fabs(r)
              if sw:
                  # their weighted form: each term times w_i, n becomes sum w

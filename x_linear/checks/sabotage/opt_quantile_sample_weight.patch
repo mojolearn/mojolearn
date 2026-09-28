@@ -1,14 +1,7 @@
+diff --git a/x_linear/quantile.mojo b/x_linear/quantile.mojo
 --- a/x_linear/quantile.mojo
 +++ b/x_linear/quantile.mojo
-@@ -19,6 +19,7 @@
- and b from beta. It reaches the LP's optimum to ADMM precision, not to a
- vertex, so coefficients agree with theirs to a tolerance, not exactly.
- """
-+from std.sys.info import is_gpu
- from x_linear.ops import (
-     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
-     cholesky, chol_solve, row_dot, mean_of,
-@@ -134,7 +135,7 @@
+@@ -138,7 +138,7 @@
              var vv = fs(fs(ld(y, i), abi), ld(fw, u + i))
              var nr: Float32
              if sw:

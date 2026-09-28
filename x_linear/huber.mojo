@@ -10,13 +10,14 @@ n*sigma + sum_inliers r^2/sigma + sum_outliers (2 eps |r| - sigma eps^2)
 sigma >= 10 * float64 eps; here sigma = exp(s) and s is free, minimized by
 x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
-from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot
+from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
+from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
 from x_linear.tops import chain_fmad, fold_fa
 
 
-def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
+def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int) -> Float32:
     """Team form: each row's residual and gradient coefficient across the
     team; the lead folds the loss sums in ascending row order; one thread
     per gradient cell folds its rows ascending. The one-thread sequence."""
@@ -99,18 +100,93 @@ def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: F
     return t.bcast(out)
 
 
+def _huber_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
+    """Map (each row's residual into `sc`), then fold rows ascending."""
+    var fi = ldi(ip, 1) != 0
+    var eps = ld(fp, 0)
+    var alpha = ld(fp, 1)
+    var p = d + 2 if fi else d + 1
+    var s = ld(th, toff + p - 1)
+    var sigma = fexp(s)
+    var b = ld(th, toff + d) if fi else Float32(0)
+    fill(g, goff, p, Float32(0))
+    var sq = Float32(0)
+    var out_abs = Float32(0)
+    var n_out = 0
+    var sw = ldi(ip, 2) != 0
+    var w_out = Float32(0)
+    var w_all = Float32(0)
+    var thr = fm(eps, sigma)
+    var two_over_sigma = fd(Float32(2), sigma)
+    var two_eps = fm(Float32(2), eps)
+
+    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm d, imm th, imm toff, imm b, imm sc}:
+        row_dots(x, lo, hi, d, th, toff, sc)
+        for i in range(lo, hi):
+            st(sc, i, fs(fs(ld(y, i), ld(sc, i)), b))
+
+    par_rows(rows_map, n)
+    for i in range(n):
+        var r = ld(sc, i)
+        var ar = fabs(r)
+        var coefv: Float32
+        if sw:
+            # their weighted form: each term times w_i, n becomes sum w
+            var wi = ld(y, n + i)
+            w_all = fa(w_all, wi)
+            if ar > thr:
+                w_out = fa(w_out, wi)
+                out_abs = fmad(wi, ar, out_abs)
+                coefv = fm(wi, -two_eps if r > 0 else two_eps)
+            else:
+                sq = fmad(fm(wi, r), r, sq)
+                coefv = fm(-two_over_sigma, fm(wi, r))
+        elif ar > thr:
+            n_out += 1
+            out_abs = fa(out_abs, ar)
+            coefv = -two_eps if r > 0 else two_eps
+        else:
+            sq = fmad(r, r, sq)
+            coefv = fm(-two_over_sigma, r)
+        axpy_acc(g, goff, coefv, x, i * d, d)
+        if fi:
+            st(g, goff + d, fa(ld(g, goff + d), coefv))
+    var wn = Float32(0)
+    for j in range(d):
+        var w = ld(th, toff + j)
+        wn = fmad(w, w, wn)
+        st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
+    var squared_loss = fd(sq, sigma)
+    var eps2 = fm(eps, eps)
+    var cnt_out = w_out if sw else i2f(n_out)
+    var cnt = w_all if sw else i2f(n)
+    var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
+    var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
+    st(g, goff + p - 1, fm(gsigma, sigma))
+    return fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
+
+
+def huber_objective(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
+    """The device runs the team schedule, the host the map-then-fold
+    schedule over `sc` (lane linear-cpu). The same bits either way."""
+    comptime if is_gpu():
+        return _huber_objective_team(t, x, y, n, d, ip, fp, th, toff, g, goff)
+    else:
+        return _huber_objective_host(x, y, n, d, ip, fp, th, toff, g, goff, sc)
+
+
 def huber_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, sample_weight]; fp: [epsilon, alpha, tol].
     With sample_weight, y = targets n | weights n (their weighted objective).
     res: coef d, intercept 1, scale 1, n_iter 1 | theta scratch (P).
-    fw: lbfgs_work(P)."""
+    fw: lbfgs_work(P) | objective scratch n (the host's map)."""
     var fi = ldi(ip, 1) != 0
     var p = d + 2 if fi else d + 1
     var th = d + 4
     if t.lead():
         fill(res, th, p, Float32(0))
     t.sync()
-    var it = lbfgs[huber_objective](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0)
+    var it = lbfgs[huber_objective](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
     if not t.lead():
         return
     for j in range(d):

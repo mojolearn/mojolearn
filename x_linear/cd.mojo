@@ -25,7 +25,9 @@ precompute=False for the refit; the same minimizer). float32 throughout.
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
+    add_acc, axpy_centered,
 )
+from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import upper_cell, fold_fa_ix, fold_sq_ix, chain_cfmad_ix
 
@@ -113,7 +115,7 @@ def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, 
     return fs(primal, dual)
 
 
-def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
+def _prep_team(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
           fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
     """Centers the rows whose fold id != `fold` (all rows when fold < 0):
     x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows).
@@ -166,12 +168,65 @@ def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
     t.sync()
 
 
+def _prep_host(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
+          fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
+    """Centers the rows whose fold id != `fold` (all rows when fold < 0):
+    x means, Gram, X'y; fw[sc:sc+3] = (y mean, |yc|^2, rows). Each mean,
+    Gram entry and X'y entry is its own accumulator folded rows ascending,
+    walked as one row pass per stage (lane linear-cpu)."""
+    var rows = 0
+    var ym = Float32(0)
+    var yacc = Float32(0)
+    fill(fw, xm, d, Float32(0))
+    for i in range(n):
+        if fold < 0 or Int(ld(fid, i)) != fold:
+            rows += 1
+            if fi:
+                add_acc(fw, xm, x, i * d, d)
+                yacc = fa(yacc, ld(y, i))
+    if fi:
+        for j in range(d):
+            st(fw, xm + j, fd(ld(fw, xm + j), i2f(rows)))
+        ym = fd(yacc, i2f(rows))
+    var yn = Float32(0)
+    for i in range(n):
+        if fold < 0 or Int(ld(fid, i)) != fold:
+            var r = fs(ld(y, i), ym)
+            yn = fmad(r, r, yn)
+    for j in range(d):
+        fill(fw, gg + j * d + j, d - j, Float32(0))
+    fill(fw, q, d, Float32(0))
+    for i in range(n):
+        if fold < 0 or Int(ld(fid, i)) != fold:
+            for j in range(d):
+                var a = fs(ld(x, i * d + j), ld(fw, xm + j))
+                axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+            axpy_centered(fw, q, fs(ld(y, i), ym), x, i * d, fw, xm, d)
+    for j in range(d):
+        for k in range(j + 1, d):
+            st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
+    st(fw, sc, ym)
+    st(fw, sc + 1, yn)
+    st(fw, sc + 2, i2f(rows))
+
+
+def _prep(t: Team, x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
+          fw: FP, xm: Int, gg: Int, q: Int, sc: Int):
+    """The device runs the team schedule (which also lists the fold's rows in
+    team rows 1 and 2), the host one row pass per stage (lane linear-cpu)."""
+    comptime if is_gpu():
+        _prep_team(t, x, y, n, d, fid, fold, fi, fw, xm, gg, q, sc)
+    else:
+        _prep_host(x, y, n, d, fid, fold, fi, fw, xm, gg, q, sc)
+
+
 def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [max_iter, fit_intercept, n_alphas A, n_folds F, n_l1 L, explicit_alphas, positive].
     fp: [eps, tol, l1_ratios (L), explicit alphas (A, descending) if given].
     y: targets n | fold ids n (as float32).
     res: coef d | intercept | alpha_ | l1_ratio_ | n_iter | alphas L*A | mse L*A*F.
-    fw: xm d | G d*d | q d | Qw d | w d | scalars 3.
+    fw: xm d | G d*d | q d | Qw d | w d | scalars 3 | path A*(d+1) | path errors A
+    (the path words: the host schedule's, lane linear-cpu).
     Team form: the row passes (`_prep`, the held-out residuals) across the
     team; the coordinate descent (d x d) and every fold of the scores on the lead."""
     var max_iter = ldi(ip, 0)
@@ -190,6 +245,8 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
     var qw = q + d
     var w = qw + d
     var sc = w + d
+    var pb = sc + 3
+    var pacc = pb + a_n * (d + 1)
     var alphas = d + 4
     var mse = alphas + l_n * a_n
     var rr = t.row(0)
@@ -222,30 +279,58 @@ def enetcv_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, f
         var n_te = n - rows
         for l in range(l_n):
             var l1r = ld(fp, 2 + l)
-            if t.lead():
-                fill(fw, w, d, Float32(0))
-            for k in range(a_n):
-                var b = ym
+            comptime if is_gpu():
                 if t.lead():
+                    fill(fw, w, d, Float32(0))
+                for k in range(a_n):
+                    var b = ym
+                    if t.lead():
+                        var alpha = ld(res, alphas + l * a_n + k)
+                        var l1 = fm(fm(alpha, l1r), i2f(rows))
+                        var l2 = fm(fm(alpha, fs(Float32(1), l1r)), i2f(rows))
+                        _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol, positive)
+                        for j in range(d):
+                            b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
+                    b = t.bcast(b, 4)
+                    var te = t.row(2).bitcast[Int32]()
+                    for qq in range(t.tid, n_te, t.nt):
+                        var i = Int(te.unsafe_load(qq))
+                        var p = b
+                        for j in range(d):
+                            p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
+                        st(rr, i, fs(p, ld(y, i)))
+                    t.sync()
+                    if t.lead():
+                        var acc = fold_sq_ix(rr, te, n_te)
+                        st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
+                    t.sync()
+            else:
+                # the host: the whole path, then one pass over the held-out rows
+                fill(fw, w, d, Float32(0))
+                for k in range(a_n):
                     var alpha = ld(res, alphas + l * a_n + k)
                     var l1 = fm(fm(alpha, l1r), i2f(rows))
                     var l2 = fm(fm(alpha, fs(Float32(1), l1r)), i2f(rows))
                     _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol, positive)
+                    var b = ym
                     for j in range(d):
                         b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
-                b = t.bcast(b, 4)
-                var te = t.row(2).bitcast[Int32]()
-                for qq in range(t.tid, n_te, t.nt):
-                    var i = Int(te.unsafe_load(qq))
-                    var p = b
-                    for j in range(d):
-                        p = fmad(ld(x, i * d + j), ld(fw, w + j), p)
-                    st(rr, i, fs(p, ld(y, i)))
-                t.sync()
-                if t.lead():
-                    var acc = fold_sq_ix(rr, te, n_te)
-                    st(res, mse + (l * a_n + k) * f_n + f, fd(acc, i2f(n_te)) if n_te > 0 else Float32(0))
-                t.sync()
+                    copy(fw, pb + k * (d + 1), fw, w, d)
+                    st(fw, pb + k * (d + 1) + d, b)
+                # the held-out squared errors of the whole path, one row pass:
+                # alpha k's sum is its own accumulator, rows ascending
+                fill(fw, pacc, a_n, Float32(0))
+                for i in range(n):
+                    if Int(ld(fid, i)) == f:
+                        for k in range(a_n):
+                            var o = pb + k * (d + 1)
+                            var p = ld(fw, o + d)
+                            for j in range(d):
+                                p = fmad(ld(x, i * d + j), ld(fw, o + j), p)
+                            var r = fs(p, ld(y, i))
+                            st(fw, pacc + k, fmad(r, r, ld(fw, pacc + k)))
+                for k in range(a_n):
+                    st(res, mse + (l * a_n + k) * f_n + f, fd(ld(fw, pacc + k), i2f(n_te)) if n_te > 0 else Float32(0))
     if t.lead():
         # the choice: the smallest mean over folds, first on a tie
         var best_l = 0

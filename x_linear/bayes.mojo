@@ -20,30 +20,44 @@ target mean, rows ascending. float32 throughout.
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, ld, st, ldi, sti, i2f, fill, copy,
     cholesky, chol_solve, jacobi_eig, centered_gram, centered_xty, mean_of,
+    add_acc, axpy_acc, axpy_centered, par_rows,
 )
+from std.sys.info import is_gpu
 from x_linear.team import Team
 from x_linear.tops import upper_cell, t_col_means, t_centered_gram, t_centered_xty, t_sum, t_mean, fold_sq, chain_cfmad
 
 
 def _center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, iw: IP) -> Float32:
     if fi:
+        fill(fw, xm, d, Float32(0))
+        for i in range(n):
+            add_acc(fw, xm, x, i * d, d)
         for j in range(d):
-            var acc = Float32(0)
-            for i in range(n):
-                acc = fa(acc, ld(x, i * d + j))
-            st(fw, xm + j, fd(acc, i2f(n)))
+            st(fw, xm + j, fd(ld(fw, xm + j), i2f(n)))
         return mean_of(y, n)
     fill(fw, xm, d, Float32(0))
     return Float32(0)
 
 
-def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+def _resid_rows(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP):
+    """sc[i] = (y_i - ym) - sum_j (x_ij - xm_j) coef_j, j ascending: the map
+    half of the sse (lane linear-cpu)."""
+
+    def rows_map(lo: Int, hi: Int) {imm x, imm y, imm d, imm fw, imm xm, imm ym, imm coef, imm coff, imm sc}:
+        for i in range(lo, hi):
+            var p = Float32(0)
+            for j in range(d):
+                p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
+            st(sc, i, fs(fs(ld(y, i), ym), p))
+
+    par_rows(rows_map, n)
+
+
+def _sse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
+    _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
     var acc = Float32(0)
     for i in range(n):
-        var p = Float32(0)
-        for j in range(d):
-            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
-        var r = fs(fs(ld(y, i), ym), p)
+        var r = ld(sc, i)
         acc = fmad(r, r, acc)
     return acc
 
@@ -60,33 +74,34 @@ def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum:
     if not fi:
         fill(fw, xm, d, Float32(0))
         return Float32(0)
+    fill(fw, xm, d, Float32(0))
+    for i in range(n):
+        axpy_acc(fw, xm, ld(y, n + i), x, i * d, d)
     for j in range(d):
-        var acc = Float32(0)
-        for i in range(n):
-            acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
-        st(fw, xm + j, fd(acc, wsum))
+        st(fw, xm + j, fd(ld(fw, xm + j), wsum))
     var acc = Float32(0)
     for i in range(n):
         acc = fmad(ld(y, n + i), ld(y, i), acc)
     return fd(acc, wsum)
 
 
-def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int, sc: FP) -> Float32:
     """sum_i w_i r_i^2: their sse on the sqrt(w)-rescaled data."""
+    _resid_rows(x, y, n, d, fw, xm, ym, coef, coff, sc)
     var acc = Float32(0)
     for i in range(n):
-        var p = Float32(0)
-        for j in range(d):
-            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
-        var r = fs(fs(ld(y, i), ym), p)
+        var r = ld(sc, i)
         acc = fmad(fm(ld(y, n + i), r), r, acc)
     return acc
 
 
 def _t_sse(t: Team, x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int,
-           sw: Bool) -> Float32:
+           sw: Bool, sc: FP) -> Float32:
     """`_sse` (or `_wsse` with sw) on the team: each row's residual across the
-    team (row buffer 0), the lead's fold in ascending row order, broadcast."""
+    team (row buffer 0), the lead's fold in ascending row order, broadcast.
+    The host maps the residuals into `sc` and folds them (lane linear-cpu)."""
+    comptime if not is_gpu():
+        return _wsse(x, y, n, d, fw, xm, ym, coef, coff, sc) if sw else _sse(x, y, n, d, fw, xm, ym, coef, coff, sc)
     var rb = t.row(0)
     for i in range(t.tid, n, t.nt):
         var p = Float32(0)
@@ -121,7 +136,8 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     sqrt(w)-rescaled Gram, X'y and sse, the weighted variance and sum(w) in
     the alpha update (theirs, sw_sum).
     res: coef d, intercept, alpha_, lambda_, n_iter.
-    fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d.
+    fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d, then at
+    3d^2 + 5d the host's sse scratch n (lane linear-cpu).
     Team form: the row passes (means, Gram, X'y, sse) across the team
     (x_linear/tops.mojo), the d x d algebra and the scalar updates on the lead."""
     var max_iter = ldi(ip, 0)
@@ -141,59 +157,89 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
     var sw = ldi(ip, 2) != 0
     var wsum = i2f(n)
     var ym = Float32(0)
-    if sw:
-        wsum = t_sum(t, y + n, n)
-        # weighted means (their _preprocess_data with sample_weight)
-        if fi:
-            for j in range(t.tid, d, t.nt):
+    comptime if is_gpu():
+        if sw:
+            wsum = t_sum(t, y + n, n)
+            # weighted means (their _preprocess_data with sample_weight)
+            if fi:
+                for j in range(t.tid, d, t.nt):
+                    var acc = Float32(0)
+                    for i in range(n):
+                        acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
+                    st(fw, xm + j, fd(acc, wsum))
+                if t.lead():
+                    var acc = Float32(0)
+                    for i in range(n):
+                        acc = fmad(ld(y, n + i), ld(y, i), acc)
+                    ym = fd(acc, wsum)
+                ym = t.bcast(ym, 1)
+            else:
+                if t.lead():
+                    fill(fw, xm, d, Float32(0))
+                t.sync()
+            var cells = d * (d + 1) // 2
+            for c in range(t.tid, cells, t.nt):
+                var jk = upper_cell(c, d)
+                var j = jk[0]
+                var k = jk[1]
                 var acc = Float32(0)
                 for i in range(n):
-                    acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
-                st(fw, xm + j, fd(acc, wsum))
-            if t.lead():
-                var acc = Float32(0)
-                for i in range(n):
-                    acc = fmad(ld(y, n + i), ld(y, i), acc)
-                ym = fd(acc, wsum)
-            ym = t.bcast(ym, 1)
-        else:
-            if t.lead():
-                fill(fw, xm, d, Float32(0))
+                    acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), ld(fw, xm + j))), fs(ld(x, i * d + k), ld(fw, xm + k)), acc)
+                st(fw, gg + j * d + k, acc)
+                st(fw, gg + k * d + j, acc)
             t.sync()
-        var cells = d * (d + 1) // 2
-        for c in range(t.tid, cells, t.nt):
-            var jk = upper_cell(c, d)
-            var j = jk[0]
-            var k = jk[1]
+        else:
+            if fi:
+                t_col_means(t, x, n, d, fw, xm)
+                ym = t_mean(t, y, n, 1)
+            else:
+                if t.lead():
+                    fill(fw, xm, d, Float32(0))
+                t.sync()
+            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        var yc = ym
+        # X'y on centered data
+        for j in range(t.tid, d, t.nt):
             var acc = Float32(0)
-            for i in range(n):
-                acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), ld(fw, xm + j))), fs(ld(x, i * d + k), ld(fw, xm + k)), acc)
-            st(fw, gg + j * d + k, acc)
-            st(fw, gg + k * d + j, acc)
+            var mj = ld(fw, xm + j)
+            if sw:
+                for i in range(n):
+                    var xc = fs(ld(x, i * d + j), mj)
+                    xc = fm(ld(y, n + i), xc)
+                    acc = fmad(xc, fs(ld(y, i), yc), acc)
+            else:
+                acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
+            st(fw, xty + j, acc)
         t.sync()
     else:
-        if fi:
-            t_col_means(t, x, n, d, fw, xm)
-            ym = t_mean(t, y, n, 1)
-        else:
-            if t.lead():
-                fill(fw, xm, d, Float32(0))
-            t.sync()
-        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-    var yc = ym
-    # X'y on centered data
-    for j in range(t.tid, d, t.nt):
-        var acc = Float32(0)
-        var mj = ld(fw, xm + j)
+        # the host's row passes: one pass per statistic, vector accumulators
         if sw:
+            wsum = Float32(0)
             for i in range(n):
-                var xc = fs(ld(x, i * d + j), mj)
-                xc = fm(ld(y, n + i), xc)
-                acc = fmad(xc, fs(ld(y, i), yc), acc)
+                wsum = fa(wsum, ld(y, n + i))
+            ym = _wmean_center(x, y, n, d, fi, fw, xm, wsum)
+            for j in range(d):
+                fill(fw, gg + j * d + j, d - j, Float32(0))
+            for i in range(n):
+                var wi = ld(y, n + i)
+                for j in range(d):
+                    var a = fm(wi, fs(ld(x, i * d + j), ld(fw, xm + j)))
+                    axpy_centered(fw, gg + j * d + j, a, x, i * d + j, fw, xm + j, d - j)
+            for j in range(d):
+                for k in range(j + 1, d):
+                    st(fw, gg + k * d + j, ld(fw, gg + j * d + k))
         else:
-            acc = chain_cfmad(x, j, d, mj, y, 0, 1, yc, n)
-        st(fw, xty + j, acc)
-    t.sync()
+            ym = _center(x, y, n, d, fi, fw, xm, iw)
+            centered_gram(x, n, d, fw, xm, fw, gg)
+        var yc = ym
+        # X'y on centered data
+        fill(fw, xty, d, Float32(0))
+        for i in range(n):
+            var b = fs(ld(y, i), yc)
+            if sw:
+                axpy_centered[True](fw, xty, b, x, i * d, fw, xm, d, ld(y, n + i))
+            else:
+                axpy_centered(fw, xty, b, x, i * d, fw, xm, d)
     var alpha = ld(fp, 5)
     if t.lead():
         jacobi_eig(fw, gg, fw, vv, d, 60)
@@ -236,7 +282,7 @@ def bayes_ridge_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: 
         if it == max_iter:
             break  # the last update after the loop
         iters = it + 1
-        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw)
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
         var stop = 0
         if t.lead():
             var gamma = Float32(0)
@@ -310,7 +356,7 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
     lambda_2, threshold_lambda].
     res: coef d, intercept, alpha_, lambda_ d, n_iter.
-    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d.
+    fw: xm d | G d*d | xty d | A d*d | sigma d*d | lambda d | old d | sse scratch n (the host's).
     iw: keep d | kept index d.
     Team form: the row passes across the team, sigma, the coefficients and
     the pruning on the lead."""
@@ -331,15 +377,20 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var old = lamo + d
     var keep = 0
     var ym = Float32(0)
-    if fi:
-        t_col_means(t, x, n, d, fw, xm)
-        ym = t_mean(t, y, n, 1)
+    comptime if is_gpu():
+        if fi:
+            t_col_means(t, x, n, d, fw, xm)
+            ym = t_mean(t, y, n, 1)
+        else:
+            if t.lead():
+                fill(fw, xm, d, Float32(0))
+            t.sync()
+        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
-        if t.lead():
-            fill(fw, xm, d, Float32(0))
-        t.sync()
-    t_centered_gram(t, x, n, d, fw, xm, fw, gg)
-    t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
+        ym = _center(x, y, n, d, fi, fw, xm, iw)
+        centered_gram(x, n, d, fw, xm, fw, gg)
+        centered_xty(x, y, n, d, fw, xm, ym, fw, xty)
     var alpha = Float32(0)
     if t.lead():
         alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
@@ -357,7 +408,7 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
             _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
         t.sync()
-        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False)
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
         var stop = 0
         if t.lead():
             var gsum = Float32(0)

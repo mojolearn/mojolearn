@@ -219,7 +219,7 @@ def cd_fit_binding(
         # THE ONE CALL THAT COMPUTES ANYTHING. `coef` starts at zero inside
         # the oracle, as `cd_fit_host` zeroes it on the device.
         var out = cd_oracle_fit(
-            x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True
+            x, y, n_rows, n_cols, fit_intercept, epochs, alpha, l1_ratio, tol, True, False
         )
         if len(out.coef) != n_cols:
             raise Error("cd_fit: the host oracle returned coef of an unexpected length; nothing written")

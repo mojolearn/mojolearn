@@ -1,14 +1,8 @@
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index 7e3d33a66..87491aff5 100644
 --- a/x_linear/sgd.mojo
 +++ b/x_linear/sgd.mojo
-@@ -21,6 +21,7 @@
- )
- from x_linear.team import Team
- from checks.numerics import identical_pow
-+from std.sys.info import is_gpu
- 
- comptime L_HINGE = 0
- comptime L_LOG = 1
-@@ -219,7 +220,8 @@
+@@ -219,7 +219,8 @@ def sgd_one(
                  if has_cw:
                      cw = wpos if y > 0 else wneg
                  var swi = ld(swp, i) if has_sw else Float32(1)
@@ -17,4 +11,4 @@
 +                    update = fm(update, fm(cw, swi))
              if penalty == P_L2 or penalty == P_EN:
                  var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
-                 for j in range(d):
+                 scale_acc(w, woff, scale, d)

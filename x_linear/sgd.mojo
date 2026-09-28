@@ -17,8 +17,9 @@ by five) and the loss classes at the top of that file. Differences, named:
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
-    ld, st, ldi, sti, i2f, fill, row_dot, shuffle,
+    ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows,
 )
+from std.sys.info import is_gpu
 from x_linear.team import Team
 from checks.numerics import identical_pow
 
@@ -222,11 +223,9 @@ def sgd_one(
                 update = fm(update, fm(cw, swi))
             if penalty == P_L2 or penalty == P_EN:
                 var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
-                for j in range(d):
-                    st(w, woff + j, fm(ld(w, woff + j), scale))
+                scale_acc(w, woff, scale, d)
             if update != 0:
-                for j in range(d):
-                    st(w, woff + j, fmad(update, ld(x, i * d + j), ld(w, woff + j)))
+                axpy_acc(w, woff, update, x, i * d, d)
             if fit_intercept:
                 var iu = update
                 if one_class:
@@ -235,15 +234,7 @@ def sgd_one(
                     intercept = fa(intercept, iu)
             if penalty == P_L1 or penalty == P_EN:
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
-                for j in range(d):
-                    var z = ld(w, woff + j)
-                    var nz = z
-                    if z > 0:
-                        nz = fmax(Float32(0), fs(z, fa(u, ld(q, j))))
-                    elif z < 0:
-                        nz = fmin(Float32(0), fa(z, fs(u, ld(q, j))))
-                    st(w, woff + j, nz)
-                    st(q, j, fa(ld(q, j), fs(nz, z)))
+                _l1_clip(w, woff, q, u, d)
             t += 1
         # their floating-point under-/overflow check
         var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
@@ -284,7 +275,10 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     Team form: the P one-vs-rest problems are independent; thread c runs
     problem c (targets in team row 2c, order in team row 2c + 1, q in its
     own d words, epochs in team row 2P), then the lead folds the epochs.
-    Each problem is the one-thread sequence."""
+    Each problem is the one-thread sequence.
+    Host form (lane linear-cpu): fw: per problem n (targets) + d (q), then P
+    (epochs run); iw: per problem n (order); the problems run as independent
+    units (par_rows)."""
     var k = ldi(ip, 0)
     var loss = ldi(ip, 1)
     var penalty = ldi(ip, 2)
@@ -304,31 +298,66 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var has_cw = ldi(ip, 11) != 0
     var swp = y + n
     var problems = k if k > 2 else 1
-    var q = t.own()
-    var epr = t.row(2 * problems)
-    for c in range(t.tid, problems, t.nt):
-        var ys = t.row(2 * c)
-        var order = t.row(2 * c + 1).bitcast[Int32]()
-        for i in range(n):
-            var v = ld(y, i)
-            if k == 0:
-                st(ys, i, v)
-            elif k == 1:
-                st(ys, i, Float32(1))
-            elif k == 2:
-                st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
-            else:
-                st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
-        var ep = sgd_one(
-            x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
-            fit_intercept, max_iter, tol, nic, do_shuffle,
-            seed + UInt64(1000003) * UInt64(c), k == 1,
-            res, c * d, res, problems * d + c, q, order,
-            swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
-            ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
-        )
-        st(epr, c, i2f(ep))
-    t.sync()
+    var epr = fw + problems * (n + d)  # the host's epochs run per problem
+    comptime if is_gpu():
+        var q = t.own()
+        epr = t.row(2 * problems)
+        for c in range(t.tid, problems, t.nt):
+            var ys = t.row(2 * c)
+            var order = t.row(2 * c + 1).bitcast[Int32]()
+            for i in range(n):
+                var v = ld(y, i)
+                if k == 0:
+                    st(ys, i, v)
+                elif k == 1:
+                    st(ys, i, Float32(1))
+                elif k == 2:
+                    st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
+                else:
+                    st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
+            var ep = sgd_one(
+                x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                fit_intercept, max_iter, tol, nic, do_shuffle,
+                seed + UInt64(1000003) * UInt64(c), k == 1,
+                res, c * d, res, problems * d + c, q, order,
+                swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
+                ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+            )
+            st(epr, c, i2f(ep))
+        t.sync()
+    else:
+        # one-vs-rest problems are independent (their own targets, q, order and
+        # result slots): the host may run them at once (lane linear-cpu)
+
+        def run_problems(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm k, imm fw, imm iw, imm res, imm problems,
+                                            imm loss, imm penalty, imm alpha, imm l1r, imm lr, imm eta0, imm power_t,
+                                            imm eps, imm fit_intercept, imm max_iter, imm tol, imm nic, imm do_shuffle,
+                                            imm seed, imm swp, imm has_sw, imm has_cw, imm fp, imm epr}:
+            for c in range(lo, hi):
+                var ys = fw + c * (n + d)
+                var q = ys + n
+                var idx = iw + c * n
+                for i in range(n):
+                    var v = ld(y, i)
+                    if k == 0:
+                        st(ys, i, v)
+                    elif k == 1:
+                        st(ys, i, Float32(1))
+                    elif k == 2:
+                        st(ys, i, Float32(1) if v == Float32(1) else Float32(-1))
+                    else:
+                        st(ys, i, Float32(1) if v == i2f(c) else Float32(-1))
+                var ep = sgd_one(
+                    x, ys, n, d, loss, penalty, alpha, l1r, lr, eta0, power_t, eps,
+                    fit_intercept, max_iter, tol, nic, do_shuffle,
+                    seed + UInt64(1000003) * UInt64(c), k == 1,
+                    res, c * d, res, problems * d + c, q, idx,
+                    swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
+                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+                )
+                st(epr, c, i2f(ep))
+
+        par_rows(run_problems, problems, 1)
     if not t.lead():
         return
     var max_epochs = 0
@@ -341,6 +370,51 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
             max_epochs = ep
     st(res, problems * d + problems, i2f(max_epochs))
     st(res, problems * d + problems + 1, i2f(status))
+
+
+@always_inline
+def _clip_one(z: Float32, uq_pos: Float32, uq_neg: Float32) -> Float32:
+    """Tsuruoka's cumulative clip of one weight (fa(u, q) and fs(u, q) given)."""
+    if z > 0:
+        return fmax(Float32(0), fs(z, uq_pos))
+    if z < 0:
+        return fmin(Float32(0), fa(z, uq_neg))
+    return z
+
+
+def _l1_clip(w: FP, woff: Int, q: FP, u: Float32, d: Int):
+    """The cumulative L1 penalty over every weight (their `l1penalty`); each
+    weight and its q entry are updated on their own, so lanes are
+    independent and the vector form is the scalar loop bit for bit."""
+    comptime if is_gpu():
+        for j in range(d):
+            var z = ld(w, woff + j)
+            var nz = _clip_one(z, fa(u, ld(q, j)), fs(u, ld(q, j)))
+            st(w, woff + j, nz)
+            st(q, j, fa(ld(q, j), fs(nz, z)))
+    else:
+        comptime V = 8
+        var uv = ftzv[V](SIMD[DType.float32, V](u))
+        var zero = SIMD[DType.float32, V](0)
+        var j = 0
+        while j + V <= d:
+            var z = w.unsafe_load[width=V](woff + j)
+            var qv = ftzv[V](q.unsafe_load[width=V](j))
+            var zf = ftzv[V](z)
+            var pos = ftzv[V](zf - ftzv[V](uv + qv))   # fs(z, fa(u, q))
+            var neg = ftzv[V](zf + ftzv[V](uv - qv))   # fa(z, fs(u, q))
+            var pmax = zero.ge(pos).select(zero, pos)  # fmax(0, pos)
+            var nmin = zero.le(neg).select(zero, neg)  # fmin(0, neg)
+            var nz = z.gt(zero).select(pmax, z.lt(zero).select(nmin, z))
+            w.unsafe_store[width=V](woff + j, nz)
+            q.unsafe_store[width=V](j, ftzv[V](qv + ftzv[V](ftzv[V](nz) - zf)))
+            j += V
+        while j < d:
+            var z = ld(w, woff + j)
+            var nz = _clip_one(z, fa(u, ld(q, j)), fs(u, ld(q, j)))
+            st(w, woff + j, nz)
+            st(q, j, fa(ld(q, j), fs(nz, z)))
+            j += 1
 
 
 def sgd_team_rows(ip: IP) -> Int:

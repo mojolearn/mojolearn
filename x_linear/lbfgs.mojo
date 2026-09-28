@@ -13,8 +13,10 @@ or at max_iter. Every sum ascends the index; the objective is a comptime
 function parameter, so each caller compiles its own copy.
 
 Objective contract (a team call, x_linear/team.mojo):
-    f = obj(t, x, y, n, d, ip, fp, theta, toff, grad, goff): every thread
-    gets f, and grad is written and visible to every thread on return.
+    f = obj(t, x, y, n, d, ip, fp, theta, toff, grad, goff, sc): every thread
+    gets f, and grad is written and visible to every thread on return; sc is
+    the caller's per-row scratch (the host objective's map, then fold; lane
+    linear-cpu). The device objective runs the team schedule and ignores sc.
 The P-vector algebra below runs on the lead thread; the other threads take
 part in the objective calls and in the lead's broadcast decisions.
 Work layout at fw[woff:]: tn P | g P | gn P | dir P | S m*P | Y m*P | rho m | al m.
@@ -24,7 +26,7 @@ from x_linear.team import Team
 
 comptime LBFGS_M = 10
 
-comptime Objective = def(Team, FP, FP, Int, Int, IP, FP, FP, Int, FP, Int) thin -> Float32
+comptime Objective = def(Team, FP, FP, Int, Int, IP, FP, FP, Int, FP, Int, FP) thin -> Float32
 
 
 def lbfgs_work(p: Int) -> Int:
@@ -40,7 +42,7 @@ def _dot(a: FP, ia: Int, b: FP, ib: Int, p: Int) -> Float32:
 
 def lbfgs[obj: Objective](
     t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
-    theta: FP, toff: Int, p: Int, max_iter: Int, tol: Float32, fw: FP, woff: Int,
+    theta: FP, toff: Int, p: Int, max_iter: Int, tol: Float32, fw: FP, woff: Int, sc: FP,
 ) -> Int:
     """Minimizes obj over theta[toff:toff+p] in place. Returns iterations
     run (negative when it stopped on max_iter without meeting tol)."""
@@ -52,7 +54,7 @@ def lbfgs[obj: Objective](
     var sY = sS + LBFGS_M * p
     var rho = sY + LBFGS_M * p
     var al = rho + LBFGS_M
-    var f = obj(t, x, y, n, d, ip, fp, theta, toff, fw, g)
+    var f = obj(t, x, y, n, d, ip, fp, theta, toff, fw, g, sc)
     # the pair ring lives on the lead thread only (it is read nowhere else)
     var count = 0
     var head = 0
@@ -111,7 +113,7 @@ def lbfgs[obj: Objective](
                 for j in range(p):
                     st(fw, tn + j, fmad(tt, ld(fw, dr + j), ld(theta, toff + j)))
             t.sync()
-            fnew = obj(t, x, y, n, d, ip, fp, fw, tn, fw, gn)
+            fnew = obj(t, x, y, n, d, ip, fp, fw, tn, fw, gn, sc)
             var ok = 0
             if t.lead():
                 if fnew == fnew and fnew <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
