@@ -18,14 +18,14 @@ def load_runs():
     lanes = [lane for run in runs for lane in run['lanes']]
     if len(lanes) != 445 or len(set(lanes)) != 445:
         raise ValueError('pinned continuation must cover 445 unique lanes exactly once')
-    if [len(run['lanes']) for run in runs] != [337, 4, 2, 99, 3]:
+    if [len(run['lanes']) for run in runs] != [337, 4, 2, 98, 3, 1]:
         raise ValueError('unexpected pinned lane groups')
     return runs
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--repo', type=Path, required=True, help='existing Git clone containing all three commits')
+    ap.add_argument('--repo', type=Path, required=True, help='existing Git clone containing all four commits')
     ap.add_argument('--workspace', type=Path, required=True, help='dedicated worktree/cache/evidence directory')
     ap.add_argument('--gpu-arch', required=True, help='CUDA architecture, e.g. sm_90')
     ap.add_argument('--execute', action='store_true', help='run locally on the already provided CUDA host')

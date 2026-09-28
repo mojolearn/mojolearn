@@ -369,7 +369,7 @@
       "radix": false
     },
     {
-      "name": "repaired99",
+      "name": "repaired98",
       "commit": "9d64cb98b284afb3f0af94ffaf39aa127e19bbb6",
       "fixtures": "base",
       "lanes": [
@@ -385,7 +385,6 @@
         "sequence-garch",
         "sequence-gru",
         "sequence-lamb",
-        "sequence-layernorm",
         "sequence-lion",
         "sequence-lr-schedulers",
         "sequence-lstm",
@@ -483,6 +482,15 @@
         "resample-bca",
         "resample-unpaired",
         "x-decomp-nmf"
+      ],
+      "radix": false
+    },
+    {
+      "name": "layernorm1",
+      "commit": "64f7d941396df9e3c4aeb2b16964acc85d0d597a",
+      "fixtures": "all",
+      "lanes": [
+        "sequence-layernorm"
       ],
       "radix": false
     }
