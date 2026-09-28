@@ -323,3 +323,40 @@ M3 Ultra (queued, see FINAL), NVIDIA, AMD, the identity lanes, the sabotage arms
 | 4387772c3 | AutoARIMA batched `select_d` | the 2-D route goes through the base binding's transpose (a host without `_mojolearn` built refuses) |
 | 068959af0 .. 584d32ae8 | tools: A/B conductor, quality script, harness cases | tools only |
 
+## FINAL (2026-09-28)
+
+State: lane/sequence-apple2 at the commit that adds this section (sequence sources =
+602351663 = the job 8 "after"; later commits only reverted two trials, added and
+reverted the Theta opt-in, and merged lane/apple-merged 7483efa40, which touches no
+sequence file). Nothing merged to main or apple-merged.
+
+Headline (THE FINAL TABLE, job 8, Apple M4, best of two alternating runs, IDENTICAL
+bits unchanged everywhere):
+- IDENTICAL: layernorm 2.43x, the five elementwise optimizers ~2.0x (1.5-1.7x on the
+  M4 Pro), LAMB 1.33x, Adafactor 1.31x, VAR 1.25x, MoE 1.11x, MLP 1.02x, AutoARIMA
+  1.74x (batched select_d; 2.5x in job 6). Everything else unchanged.
+- FAST (each with a paired quality check that matches or beats FAST before):
+  Prophet 78x at 32768 points (0.35 s at 1M points; the IDENTICAL 1M fit is one GPU
+  thread, 25 min), Adafactor 4.9x, LAMB 4.1x, layernorm 3.2x, the optimizers ~2.0x,
+  GARCH 1.56x, VAR 1.36x, AutoARIMA 1.82x, MoE 1.13x.
+
+Left for later (largest remaining Apple costs, M4):
+- ETS (IDENTICAL 1.59 s, FAST 1.73 s): every series still runs the 1000-iteration
+  cap. The FAST stall stop was swept (50 to 300 iterations, 1e-5 to 1e-7): no
+  setting ends any series early enough to save time, so ETS FAST is unchanged and
+  the stop is an opt-in (`ETS._fast_stall`). A faster ETS needs a better optimizer
+  (the reference's Nelder-Mead in 17 dimensions is far from converged at 1000), or
+  speculative evaluation of reflection / expansion / contraction together.
+- IDENTICAL Prophet: one GPU thread per series by construction (39 s at 32768
+  points); blocking the gradient folds did not help (compute bound).
+- LSTM / GRU (1.7 / 1.36 s): unchanged this round.
+- ARIMA (1.3 s) and AutoARIMA's 14 ARIMA fits (4.5 s): the batched L-BFGS in arima/.
+- Holt-Winters IDENTICAL 1.43 s vs FAST 0.59 s: the gap is the IDENTICAL flush of
+  every stored intermediate (`checks/numerics.mojo::ftz`, an integer test and select
+  per op). If Apple's ALU already flushes every arithmetic result, an Apple spelling
+  of `ftz` after arithmetic ops (not after loads) could close much of that gap for
+  EVERY family; it needs its own proof on every Apple generation and is not this
+  lane's to change.
+- m3ultra-b was blocked from 13:30 by an apple-merged speed job and a deep queue,
+  so this lane measured on m4-a and m4pro-b; the final Ultra table is below if its
+  job ran in time.
