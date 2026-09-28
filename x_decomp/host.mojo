@@ -17,6 +17,7 @@ from std.sys.compile import is_defined
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
 from decomposition.host.linalg_public import eigh_ascending, host_eigh, host_qr_r
 from decomposition.host.pca_oracle import host_sign_flip
+from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
     F32Ptr,
@@ -37,7 +38,6 @@ from x_decomp.cells import (
     gamma_cell,
     lasso_row,
     lda_doc_row,
-    lu_serial,
     omp_row,
     lu_solve_serial,
     orth_rank_guard,
@@ -63,6 +63,7 @@ from x_decomp.host_simd import (
     sqdist_task,
     sqdist_task_count,
     colsum_rows,
+    lu_rows,
 )
 
 comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -70,6 +71,7 @@ comptime X_DECOMP_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: elements per elementwise task, rows per row-fold task: shape-only cuts
 comptime EW_CHUNK = 32768
 comptime ROW_CHUNK = 1024
+comptime LU_ROWS = 32
 
 
 def xd_parallel[FuncType: def(Int) -> None](ref func: FuncType, n: Int):
@@ -248,7 +250,34 @@ struct HostExec(Exec):
 
     @staticmethod
     def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
-        lu_serial(a, piv, n, info)
+        # lu_serial's statements; each step's row eliminations are tasks of
+        # LU_ROWS rows, SIMD across the row (x_decomp/host_simd.mojo lu_rows)
+        info.unsafe_store(0, Float32(0))
+        for k in range(n):
+            var p = k
+            var best = abs(ftz(a.unsafe_load(k * n + k)))
+            for i in range(k + 1, n):
+                var v = abs(ftz(a.unsafe_load(i * n + k)))
+                if v > best:
+                    best = v
+                    p = i
+            piv.unsafe_store(k, Int32(p))
+            if p != k:
+                for j in range(n):
+                    var t = a.unsafe_load(k * n + j)
+                    a.unsafe_store(k * n + j, a.unsafe_load(p * n + j))
+                    a.unsafe_store(p * n + j, t)
+            var d = ftz(a.unsafe_load(k * n + k))
+            if d == Float32(0):
+                if info.unsafe_load(0) == Float32(0):
+                    info.unsafe_store(0, Float32(k + 1))
+                continue
+            var rows = n - k - 1
+
+            def elim(t: Int) {imm a, imm n, imm k, imm d, imm rows}:
+                lu_rows(a, n, k, d, k + 1 + t * LU_ROWS, k + 1 + min(rows, (t + 1) * LU_ROWS))
+
+            xd_parallel(elim, (rows + LU_ROWS - 1) // LU_ROWS)
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:

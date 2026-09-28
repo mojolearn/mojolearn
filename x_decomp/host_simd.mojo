@@ -32,7 +32,7 @@ from std.memory import bitcast
 from std.sys.info import simd_width_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_decomp.cells import F32Ptr, FOLD_BLOCK, add, fold_cell
+from x_decomp.cells import F32Ptr, FOLD_BLOCK, add, div0, fold_cell
 
 comptime W = simd_width_of[DType.float32]()
 comptime V = SIMD[DType.float32, W]
@@ -317,3 +317,25 @@ def colsum_rows(a: F32Ptr, dst: F32Ptr, d: Int, r0: Int, r1: Int):
             acc1 = add(acc1, a.unsafe_load(i * d + j))
         dst.unsafe_store(j, acc1)
         j += 1
+
+
+# -------------------------------------------------------------------- LU
+def lu_rows(a: F32Ptr, n: Int, k: Int, d: Float32, i0: Int, i1: Int):
+    """`lu_serial`'s elimination of rows [i0, i1) (all > k) at step k: the
+    multiplier `div0(a[i, k], d)`, then each trailing element's one fused
+    multiply-add, SIMD across j (each element is its own statement)."""
+    for i in range(i0, i1):
+        var l = div0(a.unsafe_load(i * n + k), d)
+        a.unsafe_store(i * n + k, l)
+        var nl = V(-l)
+        var rk = a.unsafe_offset(k * n)
+        var ri = a.unsafe_offset(i * n)
+        var j = k + 1
+        while j + W <= n:
+            var x = ftz_v[W](rk.unsafe_load[width=W](j))
+            var y = ftz_v[W](ri.unsafe_load[width=W](j))
+            ri.unsafe_store(j, ftz_v[W](mul_add_v[W](nl, x, y)))
+            j += W
+        while j < n:
+            ri.unsafe_store(j, _ftz1(mul_add_v[1](-l, _ftz1(rk.unsafe_load(j)), _ftz1(ri.unsafe_load(j)))))
+            j += 1

@@ -112,6 +112,19 @@ def main() raises:
         same("host Jacobi eigh vectors n " + String(en), count_diff_f32(ge.vectors, we.vectors))
         if ge.executed != we.executed or ge.converged != we.converged:
             raise Error("host Jacobi eigh sweep count differs at n " + String(en))
+    # ---- the host LU's SIMD row eliminations (x_decomp/host_simd.mojo) at a
+    # size past the vector width, against the oracle
+    var ln = 100
+    var la = seam_fixture(ln, ln, UInt64(90))
+    for i in range(ln):
+        la[i * ln + i] = la[i * ln + i] + Float32(3)
+    var lw = oracle_lu(la, ln)
+    var lh = la.copy()
+    var lp = List[Int32](length=ln, fill=Int32(0))
+    var linfo = zeros(1)
+    HostExec.lu(ptr(lh), iptr(lp), ptr(linfo), ln)
+    same("host LU factor n 100", count_diff_f32(lh, lw[0]))
+    same("host LU pivots n 100", count_diff_i32(lp, lw[1]))
     # ---- 5307 the pivot
     var n = 9
     var a = tie_matrix(n)
