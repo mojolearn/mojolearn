@@ -274,9 +274,9 @@ def chol_host_potrf(a_in: List[Float32], n: Int, jitter: Float32) raises -> Chol
 #: sabotage arms, the balanced fold), then `ftz(ftz(cur) - ftz(upd))`. The
 #: j operands come from a flushed feature-major copy of the panel. Cells
 #: above the diagonal of a straddling block are computed and discarded.
-#: `-D MOJOLEARN_CHOL_HOST_SCALAR_TRAILING` builds the per-cell loop instead
-#: (the before arm of the speed record).
-comptime CHOL_HOST_SCALAR_TRAILING = is_defined["MOJOLEARN_CHOL_HOST_SCALAR_TRAILING"]()
+#: `-D MOJOLEARN_CHOL_HOST_SCALAR` builds the per-cell loops instead (here
+#: and in the two triangular solves; the before arm of the speed record).
+comptime CHOL_HOST_SCALAR = is_defined["MOJOLEARN_CHOL_HOST_SCALAR"]()
 comptime CHOL_W = 8
 comptime CholV = SIMD[DType.float32, CHOL_W]
 comptime CholU = SIMD[DType.uint32, CHOL_W]
@@ -427,7 +427,7 @@ def chol_host_factor_lower(
                 for c in range(w):
                     packed.append(a[(j0 + w + i) * n + j0 + c])
             var leaf = contract_leaf_size(w)
-            comptime if CHOL_HOST_SCALAR_TRAILING:
+            comptime if CHOL_HOST_SCALAR:
                 for i in range(n_trail):
                     for j in range(i + 1):
                         var upd = ftz(
@@ -458,12 +458,60 @@ def chol_host_factor_lower(
     return CholHostFactor(a^, n, info, logdet, nb, jitter)
 
 
+#: The right-hand sides a vector solve takes at once: CHOL_TB vectors of
+#: CHOL_W columns, so a block's rows of `b` stay in cache while k walks.
+comptime CHOL_TB = 8
+
+
+def _chol_trsm_cols_v(
+    l: List[Float32], mut b: List[Float32], n: Int, nrhs: Int, upper: Bool,
+) -> Int:
+    """`chol_host_trsm_lower` (or `_upper`) for the leading whole CHOL_W
+    column groups of `b`, CHOL_W right-hand sides per register: lane `l` of
+    a register is column j of the scalar solve, statement for statement
+    (the rows in the scalar order, `t = ftz(fma(-ftz(L), ftz(b_k), t))` over
+    k in the scalar order, then `identical_div` = `ftz(ftz(t) / ftz(L_ii))`
+    lane-wise). Columns never read each other, so solving them side by side
+    moves no bit. Returns the first column left to the scalar loop."""
+    var whole = (nrhs // CHOL_W) * CHOL_W
+    if whole == 0:
+        return 0
+    var lp = rebind[CholPtr](l.unsafe_ptr())
+    var bp = rebind[CholPtr](b.unsafe_ptr())
+    var jb = 0
+    while jb < whole:
+        var nv = min(CHOL_TB, (whole - jb) // CHOL_W)
+        for ii in range(n):
+            var i = n - 1 - ii if upper else ii
+            var lii = ftz(lp.unsafe_load(i * n + i))
+            for v in range(nv):
+                var col = jb + v * CHOL_W
+                var t = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](i * nrhs + col))
+                if upper:
+                    for k in range(i + 1, n):
+                        var lki = ftz(lp.unsafe_load(k * n + i))
+                        var bk = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](k * nrhs + col))
+                        t = ftz_v[CHOL_W](identical_mul_add_simd[CHOL_W](CholV(-lki), bk, t))
+                else:
+                    for k in range(i):
+                        var lik = ftz(lp.unsafe_load(i * n + k))
+                        var bk = ftz_v[CHOL_W](bp.unsafe_load[width=CHOL_W](k * nrhs + col))
+                        t = ftz_v[CHOL_W](identical_mul_add_simd[CHOL_W](CholV(-lik), bk, t))
+                var q = ftz_v[CHOL_W](ftz_v[CHOL_W](t) / CholV(ftz(lii)))
+                bp.unsafe_store(i * nrhs + col, q)
+        jb += nv * CHOL_W
+    return whole
+
+
 def chol_host_trsm_lower(
     l: List[Float32], mut b: List[Float32], n: Int, nrhs: Int
 ):
     """`trsm_lower_kernel` at `ld == n`, in place over `b` (`n x nrhs`
     row-major). One right-hand side at a time; `k` ascending."""
-    for j in range(nrhs):
+    var j0 = 0
+    comptime if not CHOL_HOST_SCALAR:
+        j0 = _chol_trsm_cols_v(l, b, n, nrhs, False)
+    for j in range(j0, nrhs):
         for i in range(n):
             var t = ftz(b[i * nrhs + j])
             for k in range(i):
@@ -479,7 +527,10 @@ def chol_host_trsm_upper(
 ):
     """`trsm_upper_kernel` at `ld == n`: rows descending, the inner sum
     ascending over the rows below."""
-    for j in range(nrhs):
+    var j0 = 0
+    comptime if not CHOL_HOST_SCALAR:
+        j0 = _chol_trsm_cols_v(l, b, n, nrhs, True)
+    for j in range(j0, nrhs):
         for ii in range(n):
             var i = n - 1 - ii
             var t = ftz(b[i * nrhs + j])
