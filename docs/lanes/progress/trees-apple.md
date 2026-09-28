@@ -76,12 +76,31 @@ Where the time goes (profiles on the M3 Ultra):
   (score read, split sizes): ~0.9 ms per split on Metal. Keeping the loop on
   the device is a driver restructure, not a small change; not attempted.
 
+## Baseline, IDENTICAL, M4 Pro m4pro-a (the before/after Mac; commit a54fadbe3)
+
+| algorithm | dataset | fit |
+|---|---|---|
+| RandomForest | taxi / istellareg | 3295 / 60792 ms |
+| AdaBoostClassifier | taxi | 2994 ms (the algos-trees weight check is in) |
+| AdaBoostRegressor | taxireg | 3274 ms |
+| DART | taxi / taxireg | 6647 / 6229 ms |
+| Bagging | taxi | 672 ms |
+| DecisionTree | istellareg | 848 ms |
+
 ## IDENTICAL changes (all bit-inert by construction; proofs pending)
 
 | commit | change |
 |---|---|
 | df6abd315 | RF N_BLKS_FOR_COLS 40 on Apple IDENTICAL (split merge is `Split.update`'s total order); AdaBoost.R2 weighted draws across the host pool (DEVIATION 5607); DART init exact native float32 sum (bit-equal to `_portable_math.fsum` on random, extreme, subnormal, signed-zero cases, host build) |
 | f635ed48a | ET search rows per thread 16 on Apple IDENTICAL; RF row-major bins and SIMD-group histogram aggregation on Apple IDENTICAL |
+
+| 8a61b296e | AdaBoostClassifier two-class decision_function / predict / predict_proba: the SAMME margin in one native pass (`x_trees_margin2`), bit-equal to the Python (host build) |
+| f49cc154f | origin/lane/merged merged in (Andrew 2026-09-28); d83def7b6: weighted_sample on `host_parallelize` (lane/merged's pinned-FP split) |
+
+Per Andrew 2026-09-28 this lane runs NO verification (no identity or
+sabotage requests); the orchestrator checks all Apple branches once on
+lane/apple-merged. The identity requests queued earlier were withdrawn.
+IDENTICAL changes are shown bit-inert by the before/after digests.
 
 Pending on the stewards: before/after on m4pro-a (before a54fadbe3, after
 df6abd315 and f635ed48a; the same Mac); identity request 1790581995433
