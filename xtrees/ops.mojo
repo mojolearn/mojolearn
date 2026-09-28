@@ -148,7 +148,7 @@ def weighted_sample(
         for b in range(n_blocks):
             _block(b)
     else:
-        sync_parallelize(_block, n_blocks)
+        host_parallelize(_block, n_blocks)
     _ = cdf^
 
 
