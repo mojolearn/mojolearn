@@ -490,7 +490,9 @@ def _et_device_batch() -> Int:
     # model hash in every arm (2026-09-25): taxi 16384 -> 32768 0.952,
     # 32768 -> 65536 1.046, 16384 -> 4096 1.239; Istella-S 16384 -> 32768
     # 0.953. `_16384=1` restores the previous width for an A/B.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+    # IDENTICAL on Apple too since 2026-09-28: the width is bit-inert by the
+    # argument above (keyed draws, integer cells, per-node reduction).
+    comptime if has_apple_gpu_accelerator():
         return 32768
     return 16384
 

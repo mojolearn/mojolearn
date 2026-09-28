@@ -24,7 +24,30 @@ for _p in (os.path.join(_ROOT, "tools"), os.path.join(_ROOT, "python")):
         sys.path.insert(0, _p)
 
 
+def seeds_main():
+    """TAP_SEEDS="7,11,13,17,19" TAP_DATASETS="taxireg,istellareg": the paired
+    quality table (one ADSEED line per dataset and seed: members, test RMSE)."""
+    import speed_gbdt_arm as spec
+    import mojolearn as m
+    rows = int(os.environ.get("TAP_ROWS", "1000000"))
+    for ds in os.environ.get("TAP_DATASETS", "taxireg").split(","):
+        data = spec.load_dataset(ds, "shipped", rows)
+        x = np.ascontiguousarray(data.X_train, dtype=np.float32)
+        y = np.ascontiguousarray(data.y_train, dtype=np.float32)
+        xt = np.ascontiguousarray(data.X_test[:200000], dtype=np.float32)
+        yt = np.asarray(data.y_test[:200000], dtype=np.float64)
+        for seed in [int(v) for v in os.environ["TAP_SEEDS"].split(",")]:
+            model = m.AdaBoostRegressor(m.DecisionTreeRegressor(max_depth=3), n_estimators=50,
+                                        random_state=seed).fit(x, y)
+            rmse = float(np.sqrt(np.mean((np.asarray(model.predict(xt), dtype=np.float64) - yt) ** 2)))
+            print("ADSEED " + json.dumps(dict(mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset"),
+                                              dataset=ds, seed=seed, members=len(model.estimators_),
+                                              rmse=round(rmse, 5))), flush=True)
+
+
 def main():
+    if os.environ.get("TAP_SEEDS"):
+        return seeds_main()
     import speed_gbdt_arm as spec
     import mojolearn as m
     rows = int(os.environ.get("TAP_ROWS", "1000000"))
