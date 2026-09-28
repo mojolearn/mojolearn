@@ -41,5 +41,36 @@ for rep in $(seq 1 "${AB_REPS:-3}"); do
         done
     done
 done
+# AB_STEP_SHAPE (lane/neural-apple2): the byte LM step at this shape
+# (B L DM H KV HD FF LAYERS VOCAB) in every variant, alternating AB_STEP_REPS
+# times, each its own binding built in the variant's tree; steady median and
+# the final witness / loss digests.
+if [ -n "${AB_STEP_SHAPE:-}" ]; then
+    for label in $labels; do
+        rm -f "$OUT/wt-$label/python/mojolearn/identical/_mojolearn_byte_lm.so"
+        (cd "$OUT/wt-$label" && MOJOLEARN_NUMERIC_MODE=identical pixi run -e default sh bindings/build_byte_lm.sh) > "$OUT/bytelm-$label.log" 2>&1 || echo "AB $label BYTE-LM BUILD FAILED"
+    done
+    for rep in $(seq 1 "${AB_STEP_REPS:-2}"); do
+        for label in $labels; do
+            d="$OUT/step-$label-$rep"
+            # shellcheck disable=SC2086
+            (cd "$OUT/wt-$label" && PYTHONPATH="$OUT/wt-$label/python" pixi run -e default python tools/lm_step_memory_probe.py --out "$d" \
+                --shape $AB_STEP_SHAPE --steps "${AB_STEP_STEPS:-4}" --resident-lean --budget-seconds 3000) > "$d.log" 2>&1
+            pixi run -e default python - "$d/result.json" "$label" "$rep" <<'PY'
+import json, sys
+try:
+    r = json.load(open(sys.argv[1]))
+except Exception as e:
+    print("AB-STEP", sys.argv[2], sys.argv[3], "NO RESULT", e); sys.exit(0)
+fw = (r.get("final_witness") or {}).get("sha256") or {}
+lw = [(s.get("sha256") or {}).get("loss", "")[:8] for s in r.get("step_witnesses") or []]
+print("AB-STEP rep=%s variant=%s median=%s steady=%s gate=%s grad=%s param=%s m=%s v=%s losses=%s" % (
+    sys.argv[3], sys.argv[2], r.get("steady_median_seconds"),
+    [round(x, 4) for x in r.get("steady_step_seconds") or []], r.get("attention_estash_gate"),
+    fw.get("gradients", "")[:16], fw.get("parameters", "")[:16], fw.get("m", "")[:16], fw.get("v", "")[:16], lw))
+PY
+        done
+    done
+fi
 for v in $AB_VARIANTS; do git worktree remove --force "$OUT/wt-${v%%=*}" > /dev/null 2>&1; done
 exit 0

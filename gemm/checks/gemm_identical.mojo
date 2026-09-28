@@ -3482,6 +3482,18 @@ comptime APPLE_MMA_SMALL_TILE = not is_defined["MOJOLEARN_APPLE_MMA_SMALL_OFF"](
 comptime APPLE_MMA_SMALL_FM = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FM", 2]()
 comptime APPLE_MMA_SMALL_FN = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_FN", 2]()
 comptime APPLE_MMA_SMALL_BLOCKS = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_BLOCKS", 2048]()
+#: lane/neural-apple2 (2026-09-28): the small tile's window when the leaf is a
+#: whole number of them (else APPLE_MMA_KB). M3 Ultra (m3ultra-b, steward job
+#: 1790603073363), the T3 shard calls, ordinary operands, ms, KB 16 -> KB 32
+#: on every call, every hash equal:
+#:   small tile:  proj_fwd 2.31 -> 1.96, proj_dA 2.30 -> 1.93,
+#:     proj_dB 3.03 -> 2.27, gateup_dA 6.25 -> 4.77, gateup_dB 7.11 -> 5.10,
+#:     down_fwd 5.92 -> 4.78, down_dB 7.07 -> 4.94, head_dA 179.3 -> 128.0
+#:   default tile (NOT taken): head_fwd 102.4 -> 116.7, head_dB 115.6 ->
+#:     137.5, gateup_fwd 4.36 -> 5.27, down_dA 4.53 -> 5.42
+#: so only the small tile takes it. `-D MOJOLEARN_APPLE_MMA_SMALL_KB=16`
+#: reverts.
+comptime APPLE_MMA_SMALL_KB = get_defined_int["MOJOLEARN_APPLE_MMA_SMALL_KB", 32]()
 comptime APPLE_MMA_BM = 8 * APPLE_MMA_FM * APPLE_MMA_SGM
 comptime APPLE_MMA_BN = 8 * APPLE_MMA_FN * APPLE_MMA_SGN
 comptime _AMMA_M64 = SIMD[DType.float32, 64]
@@ -3872,6 +3884,36 @@ def _launch_apple_mma(
     _launch_apple_mma_kb[APPLE_MMA_KB](ctx, c, a, b, ws, m, n, k, leaf, p_count, st)
 
 
+def _launch_apple_mma_small[KBW: Int](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    leaf: Int,
+    p_count: Int,
+    st: Tuple[Int, Int, Int, Int],
+) raises:
+    """The small tile (APPLE_MMA_SMALL_FM x APPLE_MMA_SMALL_FN) at window
+    `KBW`, one block per tile (scheduling only)."""
+    comptime ks = identical_gemm_apple_mma_kernel[
+        APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, KBW, TUNED_FOLD_SLOTS
+    ]
+    comptime SBM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
+    comptime SBN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
+    var sblocks = ((m + SBM - 1) // SBM) * ((n + SBN - 1) // SBN)
+    step_count_launch()
+    ctx.enqueue_function[ks](
+        c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+        Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+        Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Int32(0),
+        grid_dim=(sblocks, 1, 1),
+        block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
+    )
+
+
 def _launch_apple_mma_kb[KBW: Int](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -3916,20 +3958,14 @@ def _launch_apple_mma_kb[KBW: Int](
         # quarter of the tile, four times the blocks. The tile is a
         # schedule: every cell's leaf chains and leaf fold are the same.
         if blocks < APPLE_MMA_SMALL_BLOCKS:
-            comptime ks = identical_gemm_apple_mma_kernel[
-                APPLE_MMA_SGM, APPLE_MMA_SGN, APPLE_MMA_SMALL_FM, APPLE_MMA_SMALL_FN, KBW, TUNED_FOLD_SLOTS
-            ]
-            comptime SBM = 8 * APPLE_MMA_SMALL_FM * APPLE_MMA_SGM
-            comptime SBN = 8 * APPLE_MMA_SMALL_FN * APPLE_MMA_SGN
-            var sblocks = ((m + SBM - 1) // SBM) * ((n + SBN - 1) // SBN)
-            step_count_launch()
-            ctx.enqueue_function[ks](
-                c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
-                Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
-                Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Int32(0),
-                grid_dim=(sblocks, 1, 1),
-                block_dim=(APPLE_MMA_SGM * APPLE_MMA_SGN * 32, 1, 1),
-            )
+            # lane/neural-apple2: the small tile walks its long k in
+            # APPLE_MMA_SMALL_KB-step windows when the leaf is a whole number
+            # of them (half the barriers and admission reductions per step).
+            comptime if APPLE_MMA_SMALL_KB > KBW:
+                if leaf % APPLE_MMA_SMALL_KB == 0:
+                    _launch_apple_mma_small[APPLE_MMA_SMALL_KB](ctx, c, a, b, m, n, k, leaf, p_count, st)
+                    return
+            _launch_apple_mma_small[KBW](ctx, c, a, b, m, n, k, leaf, p_count, st)
             return
     step_count_launch()
     ctx.enqueue_function[kern](
