@@ -268,6 +268,52 @@ def device_class(vendor, filename):
     return None
 
 
+
+def record_device_class(record, filename):
+    """(device class, rejection reason), preserving the raw record bytes.
+
+    Modern harness records may label GPUs only with platform.machine().
+    Before any fit, _run_reference enforces --require-backend against
+    ml.vendor(). Its bound resume options can identify those columns, but
+    only when the signature agrees with the complete record's provenance.
+    This is provenance validation, not authentication of an untrusted file.
+    """
+    vendor = record.get("vendor")
+    legacy = device_class(vendor, filename)
+    signature = record.get("resume_signature")
+    if not isinstance(signature, dict):
+        return legacy, None
+    options = signature.get("options")
+    if not isinstance(options, dict) or not options.get("require_backend"):
+        return legacy, None
+    backend = options["require_backend"]
+    cls = VENDOR_CLASS.get(backend) if isinstance(backend, str) else None
+    if cls is None:
+        return None, "backend witness names an unsupported backend"
+    if signature.get("schema") != 1 or record.get("complete") is not True:
+        return None, "backend witness requires a complete schema-1 record"
+    for field in ("source_sha256", "environment_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", str(signature.get(field, ""))):
+            return None, f"backend witness has invalid {field}"
+    provenance = signature.get("provenance")
+    if not isinstance(provenance, dict):
+        return None, "backend witness lacks bound provenance"
+    for field in ("commit", "mode", "vendor", "fixtures", "heldout"):
+        if field not in record or provenance.get(field) != record[field]:
+            return None, f"backend witness disagrees with record {field}"
+    if options.get("require_cpu") and backend != "cpu":
+        return None, "backend witness contradicts require_cpu"
+    if record.get("host") and backend != "cpu":
+        return None, "backend witness contradicts CPU host metadata"
+    if options.get("vendor") is not None and options["vendor"] != vendor:
+        return None, "backend witness contradicts the explicit vendor label"
+    declared = legacy or VENDOR_CLASS.get(vendor)
+    if declared is not None and declared != cls:
+        return None, "backend witness contradicts vendor or filename device class"
+    if declared is None and vendor not in ("arm64", "aarch64", "x86_64", "amd64"):
+        return None, "backend witness cannot resolve an unknown vendor label"
+    return cls, None
+
 def _commit_time(root, commit, cache):
     if commit in cache:
         return cache[commit]
@@ -418,6 +464,9 @@ def admit(j, path, par_axis=False):
             return "a host binding reads back sabotage"
     if not par_axis and str(j.get("vendor", "")).endswith("-two"):
         return "two-device part"
+    _, backend_error = record_device_class(j, path)
+    if backend_error:
+        return backend_error
     if j.get("heldout_seed") not in (None, 1):
         return f"heldout_seed {j.get('heldout_seed')}"
     return None
@@ -499,7 +548,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         if why:
             log(f"skip {path}: {why}")
             continue
-        cls = device_class(j.get("vendor"), path)
+        cls, _ = record_device_class(j, path)
         if cls is None:
             log(f"skip {path}: no device class for vendor {j.get('vendor')!r}")
             continue

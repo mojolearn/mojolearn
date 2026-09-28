@@ -419,6 +419,7 @@ def _mamba1_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
 
     var gradients = mamba1_prefill_backward(
         w, _read_f32(a[0], b * l * dm), _read_f32(a[11], b * l * dm), b, l,
+        neural_ctx[_NEURAL_CTX](),
     )
     _write_f32(a[12], gradients.x)
     _write_f32(a[13], gradients.norm_weight)
@@ -1873,6 +1874,7 @@ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, 
     w.w_out = _read_f32(a[9], dm * di)
     var gradients = mamba2_prefill_backward(
         w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l, dt_lo, dt_hi,
+        neural_ctx[_NEURAL_CTX](),
     )
     _write_f32(a[11], gradients.x)
     _write_f32(a[12], gradients.block_norm_weight)
@@ -1928,6 +1930,7 @@ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
     w.w_out = _read_f32(a[9], dm * di)
     var gradients = mamba3_prefill_backward(
         w, _read_f32(a[0], b*l*dm), _read_f32(a[10], b*l*dm), b, l,
+        neural_ctx[_NEURAL_CTX](),
     )
     _write_f32(a[11], gradients.x)
     _write_f32(a[12], gradients.block_norm_weight)

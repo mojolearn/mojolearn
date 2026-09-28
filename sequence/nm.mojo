@@ -18,7 +18,7 @@ conforming to `Objective`."""
 from std.memory import bitcast
 
 from sequence.ops import FP, add, fma3, ld, mul, st, sub
-from checks.numerics import ftz, identical_div, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_sqrt
 
 
 trait Objective:
@@ -47,6 +47,7 @@ def nelder_mead[O: Objective, CAP: Int = 9](
     mut obj: O, x0: FP, lower: FP, upper: FP, n: Int, scratch: FP,
     init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,
     snap: FP = FP(unsafe_from_address=64),
+    stall_iters: Int = 0, stall_rel: Float32 = Float32(0.0),
 ) -> Int:
     """Minimises obj over n <= CAP - 1 coordinates from x0; the best point is
     written back to x0. scratch holds (n + 1) n + (n + 1) + 4 n floats.
@@ -60,7 +61,13 @@ def nelder_mead[O: Objective, CAP: Int = 9](
     the (max_iter - it) mod p iterations that remain of the last lap (a full
     lap when that is 0, so the last sort is the one the full run ends on)
     and stops: the same final state, best vertex, last evaluations and
-    iteration count as running every iteration."""
+    iteration count as running every iteration.
+
+    FAST STALL STOP (apple2, 2026-09-28; FAST builds only, stall_iters > 0):
+    stop once the best value has not dropped by more than
+    stall_rel |best| for stall_iters iterations. Not the reference's rule
+    (it changes where a capped run ends), so an IDENTICAL build compiles it
+    out; tools/sequence_quality.py holds its paired quality check."""
     var nf = Float32(n)
     var gamma = add(Float32(1.0), ftz(identical_div(Float32(2.0), nf)))
     var rho = sub(Float32(0.75), ftz(identical_div(Float32(1.0), mul(Float32(2.0), nf))))
@@ -101,6 +108,8 @@ def nelder_mead[O: Objective, CAP: Int = 9](
     var stop_at = -1
     var it = 0
     var best = 0
+    var stall_ref = Float32(0.0)
+    var stall_at = 0
     while it < max_iter:
         if it == stop_at:
             it = max_iter
@@ -129,6 +138,14 @@ def nelder_mead[O: Objective, CAP: Int = 9](
             ss = fma3(d, d, ss)
         if ftz(identical_sqrt(ftz(identical_div(ss, Float32(n + 1))))) < tol_std:
             break
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            if stall_iters > 0:
+                var fb = ld(fs, best)
+                if it == 0 or stall_ref - fb > stall_rel * abs(stall_ref):
+                    stall_ref = fb
+                    stall_at = it
+                elif it - stall_at >= stall_iters:
+                    break
         if not changed:
             it = max_iter
             break

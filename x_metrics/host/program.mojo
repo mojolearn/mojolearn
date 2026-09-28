@@ -29,9 +29,10 @@ from core.host_predict_threads import host_predict_task_count, host_predict_chun
 from x_metrics.common import FP, IP, STAGE_INTS, LEAF
 from x_metrics.units import N_OPS, run_unit
 from x_metrics.plan import (
-    plan_program, N_USER_OPS, OP_SORT_MERGE, OP_CS_HIST, OP_CS_SCAN_ROWS, OP_CS_PLACE,
+    plan_program, N_USER_OPS, is_user_op, OP_SORT_MERGE, OP_CS_HIST, OP_CS_SCAN_ROWS, OP_CS_PLACE,
     OP_FOLD_LEAF, OP_SORT_RUNS, OP_WPCT_SELECT, CS_CHUNK, OP_CM_CHUNK, CM_CHUNK,
-    OP_CURVE_CNT, OP_CURVE_FILL, CURVE_CHUNK,
+    OP_CURVE_CNT, OP_CURVE_FILL, CURVE_CHUNK, OP_FR_CNT, OP_FR_FILL, FR_CHUNK,
+    OP_CK_CNT, OP_CK_FILL, CK_CHUNK,
 )
 from x_metrics.par import sort_merge_span_unit, merge_span_units, MERGE_SPAN, RUN
 
@@ -51,7 +52,7 @@ def run_program_host_ptr(f: FP, arena_len: Int, qbase: IP, stages: Int, legacy: 
     MOJOLEARN_CPU_THREADS (`core/host_predict_threads.mojo`)."""
     for s in range(stages):
         var op = Int(qbase.unsafe_load(s * STAGE_INTS))
-        if op < 0 or op >= N_USER_OPS:
+        if not is_user_op(op):
             raise Error(String("x_metrics: unknown op ", op))
     if legacy:
         _run(f, qbase, stages, 1)
@@ -92,6 +93,10 @@ def _unit_work(op: Int) -> Int:
         return CM_CHUNK
     if op == OP_CURVE_CNT or op == OP_CURVE_FILL:
         return CURVE_CHUNK
+    if op == OP_FR_CNT or op == OP_FR_FILL:
+        return FR_CHUNK
+    if op == OP_CK_CNT or op == OP_CK_FILL:
+        return CK_CHUNK
     if op < N_USER_OPS and op != 2 and op != 3 and op != 8 and op != 9:
         return HOST_TASK_WORK      # a caller's whole-column unit
     return 1

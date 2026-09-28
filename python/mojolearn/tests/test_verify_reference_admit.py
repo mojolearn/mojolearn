@@ -345,3 +345,53 @@ def test_scoped_admission_accepts_the_two_witness_policy():
     candidate['admission_policy'] = dict(vref.ADMISSION_POLICY)
     merged = vref.merge_reference_lanes(base, candidate, ['new'])
     assert merged['lane_admission']['new']['policy'] == vref.ADMISSION_POLICY
+
+
+def backend_witness_column(backend='hip', vendor='x86_64'):
+    j = clean_column()
+    j.pop('host')
+    j.update(vendor=vendor, complete=True, fixtures={'base': {'X': 'x'}}, heldout={'base': {'X': 'h'}})
+    j['resume_signature'] = dict(schema=1, source_sha256='a'*64, environment_sha256='b'*64,
+        options=dict(require_backend=backend, require_cpu=backend == 'cpu', vendor=None),
+        provenance={k:j[k] for k in ('commit', 'mode', 'vendor', 'fixtures', 'heldout')})
+    return j
+
+
+@pytest.mark.parametrize('backend,vendor,expected', [('metal','arm64','apple'),
+    ('hip','x86_64','amd'), ('cuda','x86_64','nvidia'), ('cpu','cpu-amd-epyc','cpu')])
+def test_enforced_backend_witness_recovers_architecture_labels_without_mutation(backend, vendor, expected):
+    import copy
+    j = backend_witness_column(backend, vendor)
+    before = copy.deepcopy(j)
+    assert vref.record_device_class(j, 'gmm.gpu.json') == (expected, None)
+    assert vref.admit(j, 'gmm.gpu.json') is None
+    assert j == before
+
+
+@pytest.mark.parametrize('broken', ['cpu_label','cpu_flag','host','vendor_option','commit',
+    'fixtures','digest','schema','incomplete','unknown_backend','unknown_label'])
+def test_backend_witness_refuses_contradictory_or_unbound_metadata(broken):
+    j = backend_witness_column()
+    sig = j['resume_signature']
+    if broken == 'cpu_label':
+        j['vendor'] = sig['provenance']['vendor'] = 'cpu-amd-epyc'
+    elif broken == 'cpu_flag': sig['options']['require_cpu'] = True
+    elif broken == 'host': j['host'] = {'families': {'example': {}}}
+    elif broken == 'vendor_option': sig['options']['vendor'] = 'nvidia-h100'
+    elif broken == 'commit': sig['provenance']['commit'] = '0'*40
+    elif broken == 'fixtures': sig['provenance']['fixtures'] = {}
+    elif broken == 'digest': sig['source_sha256'] = ''
+    elif broken == 'schema': sig['schema'] = 2
+    elif broken == 'incomplete': j['complete'] = False
+    elif broken == 'unknown_backend': sig['options']['require_backend'] = 'mystery'
+    elif broken == 'unknown_label': j['vendor'] = sig['provenance']['vendor'] = 'mystery'
+    cls, why = vref.record_device_class(j, 'gmm.gpu.json')
+    assert cls is None and why
+    assert vref.admit(j, 'gmm.gpu.json') is not None
+
+
+def test_architecture_without_backend_witness_remains_unclassified():
+    j = backend_witness_column()
+    del j['resume_signature']
+    assert vref.record_device_class(j, 'gmm.gpu.json') == (None, None)
+    assert vref.record_device_class(clean_column(), 'cpu.json') == ('cpu', None)

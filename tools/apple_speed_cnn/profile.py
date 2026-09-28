@@ -23,6 +23,10 @@ from mojolearn import _expansion_cnn as xc  # noqa: E402
 
 mode = sys.argv[1]
 only = set(a for a in sys.argv[3:])
+if "legacy" in only:  # lane/cnn-apple2: the before arm's Python side
+    xc._LEGACY_STEP = True
+    only.discard("legacy")
+print(f"XCNN-ARM legacy_step={xc._LEGACY_STEP} predict_rows={xc._PREDICT_ROWS}", flush=True)
 
 
 def t(f, reps):
@@ -66,6 +70,44 @@ if not only or "speed" in only:
         print(f"XCNN-SPEED {mode} CNNClassifier predict_proba {rows}: {tp:.1f} ms", flush=True)
         print(f"XCNN-DIGEST fit {rows} weights {digest(*clf.weights())} losses "
               f"{digest(np.asarray(clf.losses_, np.float64))} proba {digest(clf.predict_proba(X))}", flush=True)
+
+if "family" in only:
+    # lane/cnn-apple2: the rest of the family at sizes past the launch floor
+    x = rng.standard_normal((64, 64, 32, 32)).astype(np.float32)
+    blk = ml.BasicBlock(64, 64, numeric_mode=mode)
+    y = blk.forward(x)
+    g = rng.standard_normal(y.shape).astype(np.float32)
+    tf = t(lambda: blk.forward(x), 5)
+    tb = t(lambda: (blk.forward(x), blk.backward(g)), 5)
+    print(f"XCNN-SPEED {mode} BasicBlock 64 N64 H32: fwd {tf:.1f} ms  fwd+bwd {tb:.1f} ms", flush=True)
+    blk.forward(x)
+    print(f"XCNN-DIGEST BasicBlock y {digest(blk.forward(x))} dx {digest(blk.backward(g))}", flush=True)
+    bn = ml.BatchNorm2d(64, numeric_mode=mode)
+    tf = t(lambda: bn.forward(x), 5)
+    tb = t(lambda: bn.backward(x), 5)
+    print(f"XCNN-SPEED {mode} BatchNorm2d 64 N64 H32: fwd {tf:.1f} ms  bwd {tb:.1f} ms", flush=True)
+    bn2 = ml.BatchNorm2d(64, numeric_mode=mode)
+    yb = bn2.forward(x)
+    print(f"XCNN-DIGEST BatchNorm2d y {digest(yb)} dx {digest(bn2.backward(x))} "
+          f"dgamma {digest(bn2.grad_weight_)} dbeta {digest(bn2.grad_bias_)}", flush=True)
+    xp = rng.standard_normal((256, 64, 32, 32)).astype(np.float32)
+    mp = ml.MaxPool2d(2, numeric_mode=mode)
+    yp = mp.forward(xp)
+    gp = rng.standard_normal(yp.shape).astype(np.float32)
+    tf = t(lambda: mp.forward(xp), 5)
+    tb = t(lambda: mp.backward(gp), 5)
+    print(f"XCNN-SPEED {mode} MaxPool2d 2 N256 C64 H32: fwd {tf:.1f} ms  bwd {tb:.1f} ms", flush=True)
+    nn_, f_ = 100000, 64
+    xg = rng.standard_normal((nn_, f_)).astype(np.float32)
+    ei = rng.integers(0, nn_, (2, 10 * nn_))
+    for name, layer in (("GCNConv", ml.GCNConv(f_, f_, numeric_mode=mode)),
+                        ("SAGEConv", ml.SAGEConv(f_, f_, numeric_mode=mode))):
+        yg = layer.forward(xg, ei)
+        gg = rng.standard_normal(yg.shape).astype(np.float32)
+        tf = t(lambda: layer.forward(xg, ei), 3)
+        tb = t(lambda: layer.backward(gg), 3)
+        print(f"XCNN-SPEED {mode} {name} n{nn_} e{10 * nn_} f{f_}: fwd {tf:.1f} ms  bwd {tb:.1f} ms", flush=True)
+        print(f"XCNN-DIGEST {name} y {digest(layer.forward(xg, ei))} dx {digest(layer.backward(gg))}", flush=True)
 
 if not only or "entries" in only:
     # per-entry walls in one fit

@@ -30,6 +30,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--caps", default="1,2,4,8,16")
+    ap.add_argument("--cases", default="lasso,logistic,linear-svr")
     a = ap.parse_args()
     d = _load(a.rows)
     import mojolearn as ML
@@ -41,7 +42,10 @@ def main():
         ("logistic", lambda k: LM.LogisticRegression(max_iter=k, tol=1e-12), d["hx"], d["hy"]),
         ("linear-svr", lambda k: SV.LinearSVR(max_iter=k, tol=1e-12), d["tx"], d["fare"]),
     ]
+    want = set(a.cases.split(","))
     for name, make, X, y in cases:
+        if name not in want:
+            continue
         # one warm fit (loads the binding, compiles nothing new)
         make(1).fit(X, y)
         ts = []

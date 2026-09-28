@@ -406,6 +406,95 @@ def check_dbscan_batching_agrees() raises:
     )
 
 
+comptime _SB_N = 40
+comptime _SB_XY: InlineArray[Int, 80] = [
+    7, 2, 2, 5, 2, 9, 8, 6, 5, 4, 7, 8, 6, 5, 4, 0, 8, 5, 1, 9,
+    2, 9, 5, 9, 1, 4, 6, 9, 5, 4, 6, 7, 0, 6, 5, 0, 8, 7, 1, 9,
+    5, 7, 1, 1, 6, 4, 7, 0, 7, 8, 2, 7, 5, 1, 4, 0, 5, 5, 1, 9,
+    4, 8, 7, 3, 9, 2, 4, 1, 0, 5, 8, 6, 9, 4, 2, 6, 8, 4, 8, 4,
+]
+
+
+def check_dbscan_batching_shared_border() raises:
+    """DEVIATION 5130: border points shared by two clusters, batched.
+
+    `check_dbscan_batching_agrees` has blobs 40 apart, so no border point
+    touches two clusters and the merge's border rule never decides anything.
+    This fixture (40 integer points on a 10 x 10 grid, eps 1.5, min_pts 5,
+    found by a search over a model of weak_cc + merge_labels) has border
+    points whose per-batch raw minimum names a component whose resolved label
+    is not the smallest: before the border pass, 30 of the 38 batch sizes
+    2..39 gave labels the one-batch fit does not. Every batch size, both
+    neighbourhood arms, must now give the one-batch labels exactly.
+    """
+    var ctx = DeviceContext()
+    var n = _SB_N
+    var d = 2
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    ctx.synchronize()
+    var xy = materialize[_SB_XY]()
+    for i in range(n * d):
+        hx.unsafe_ptr().unsafe_store(i, Float32(xy[i]))
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    var labels = ctx.enqueue_create_buffer[DType.int32](n)
+    var labels_temp = ctx.enqueue_create_buffer[DType.int32](n)
+    var work_buffer = ctx.enqueue_create_buffer[DType.int32](n)
+    var core = ctx.enqueue_create_buffer[DType.uint8](n)
+    var block_sums = ctx.enqueue_create_buffer[DType.int32](
+        scan_blocks_needed(n) + 1
+    )
+    var adj = ctx.enqueue_create_buffer[DType.uint8](n * n)
+    var vd = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var ex = ctx.enqueue_create_buffer[DType.int32](n + 1)
+    var base = ctx.enqueue_create_host_buffer[DType.int32](n)
+    var got = ctx.enqueue_create_host_buffer[DType.int32](n)
+    ctx.synchronize()
+    var bad = 0
+    var runs = 0
+    for arm in range(2):
+        var method = EPS_NN_RBC if arm == 0 else EPS_NN_BRUTE_FORCE
+        var nw0 = _no_weights(ctx)
+        var ws0 = _no_weights(ctx)
+        _ = dbscan_fit(
+            ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
+            block_sums, nw0, ws0, n, d, 1.5, 5, 0, 200, method,
+        )
+        ctx.enqueue_copy(dst_ptr=base.unsafe_ptr(), src_buf=labels)
+        ctx.synchronize()
+        for bs in range(2, n):
+            var nw = _no_weights(ctx)
+            var ws = _no_weights(ctx)
+            _ = dbscan_fit(
+                ctx, x, adj, vd, core, ex, labels, labels_temp, work_buffer,
+                block_sums, nw, ws, n, d, 1.5, 5, bs, 200, method,
+            )
+            ctx.enqueue_copy(dst_ptr=got.unsafe_ptr(), src_buf=labels)
+            ctx.synchronize()
+            runs += 1
+            var differ = 0
+            for i in range(n):
+                if got.unsafe_ptr().unsafe_load(i) != base.unsafe_ptr().unsafe_load(i):
+                    differ += 1
+            if differ != 0:
+                bad += 1
+                print(
+                    "  shared border: arm " + ("rbc" if arm == 0 else "brute")
+                    + " batch " + String(bs) + ": " + String(differ)
+                    + " labels differ from one batch"
+                )
+    if bad != 0:
+        raise Error(
+            String(bad) + " of " + String(runs) + " batched fits of the"
+            " shared-border fixture differ from one batch. Batching changes"
+            " the memory, not the answer (DEVIATION 5130)."
+        )
+    print(
+        "check_dbscan_batching_shared_border OK: " + String(runs)
+        + " batched fits (batch 2..39, rbc and brute) equal one batch"
+    )
+
+
 def check_fused_eps_agrees_with_materialized() raises:
     """The FUSED neighborhood against the materialized one, CELL BY CELL.
 

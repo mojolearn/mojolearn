@@ -7,7 +7,7 @@ from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import has_apple_gpu_accelerator, size_of
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
@@ -92,11 +92,39 @@ comptime TPB_DEFAULT = 128
 # NOT IDENTICAL (measured 2026-09-28, trees-apple): the same 40 under
 # IDENTICAL kept the forest bytes (hash 3a5e8c09dd0d5fc7) but made
 # RandomForestRegressor Istella-S SLOWER on the M4 Pro, 60.8 s -> 91.0 s.
+# APPLE IDENTICAL TOO since trees-apple2 (2026-09-28): at the current tree
+# (row-major narrow bins, zero-after-read, SIMD aggregation, sorted rows)
+# the M4 Pro measures RandomForestRegressor Istella-S 49.53 s at 10, 47.84
+# s at 20, 47.14 s at 40, the same hash 3a5e8c09dd0d5fc7 (steward
+# 1790612032193); the 91 s above was an older tree.
 comptime N_BLKS_FOR_COLS = 40 if (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    )
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_COLS10"]()
-) else 10
+) else (
+    # trial arms (trees-apple2): the columns per pass under IDENTICAL
+    20 if is_defined["MOJOLEARN_RF_TRIAL_COLS20"]() else (
+        40 if is_defined["MOJOLEARN_RF_TRIAL_COLS40"]() else 10
+    )
+)
+
+@always_inline
+def blk_cols_for(n_sampled_cols: Int) -> Int:
+    """The column blocks one pass can hold for THIS forest: never more than
+    it samples (trees-apple2). Every pass launches `min(N_BLKS_FOR_COLS,
+    n_sampled_cols - col)` blocks per node, so a 16-column forest never
+    touched the rest of a 40-block workspace -- but it allocated and, under
+    zero-after-read, zeroed all of it once per fit (M4 Pro, 40 blocks:
+    DART taxireg 5839 -> 6422 ms, steward 1790614070834). Offsets are keyed
+    on `gridDim.y`, not on the workspace size, so no value moves."""
+    var n = n_sampled_cols
+    if n < 1:
+        n = 1
+    return min(N_BLKS_FOR_COLS, n)
+
 
 comptime SMALL_NODE_SLOTS = 2048
 """Shared bins `small_node_split_kernel` holds per block."""
@@ -685,7 +713,10 @@ def workspace_layout(
     """
     var max_batch = Int(max_batch_size)
     var max_len_histograms = (
-        max_batch * Int(max_n_bins) * N_BLKS_FOR_COLS * Int(num_outputs)
+        max_batch
+        * Int(max_n_bins)
+        * blk_cols_for(n_sampled_cols)
+        * Int(num_outputs)
     )
     var max_blocks = max_blocks_dimx_for(max_batch_size, n_sampled_rows)
 
@@ -1140,10 +1171,14 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var splits_d_view: _DevPrefixView
     var splits_h_view: _HostPrefixView
     var hist_view: _DevPrefixView
-    var hist_clean: Bool
-    """HIST_ZERO_AFTER_READ_DEFAULT: the whole histogram workspace is
-    known zero (zeroed once, then every consumer hands its cells back
-    zeroed), so a round needs no `hist_zero` launch."""
+    var hist_zeroed: Int
+    """HIST_ZERO_AFTER_READ_DEFAULT: the histogram workspace's first
+    `hist_zeroed` bytes are known zero (zeroed once, then every consumer
+    hands its cells back zeroed), so a round inside them needs no
+    `hist_zero` launch. trees-apple2: grown on demand to the largest round
+    this builder runs, instead of the whole workspace at the first round
+    (a one-tree fit -- DART, AdaBoost, DecisionTree -- zeroed a workspace
+    sized for the widest pass and the batch cap on every fit)."""
     var split_cand: DeviceBuffer[DType.uint8]
     """HIST_SPLIT_CANDIDATES_DEFAULT: one `Split` slot per (node, column
     block) of a round; one byte otherwise."""
@@ -1279,7 +1314,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var max_len_histograms = (
             max_batch
             * Int(params.max_n_bins)
-            * N_BLKS_FOR_COLS
+            * blk_cols_for(self.original_n_sampled_cols)
             * Int(num_outputs)
         )
 
@@ -1373,10 +1408,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.hist_view = _DevPrefixView(
             self.histograms, size_of[Self.O.BinT]() * max_len_histograms
         )
-        self.hist_clean = False
+        self.hist_zeroed = 0
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
             self.split_cand = ctx.enqueue_create_buffer[DType.uint8](
-                size_of[Split[Self.O.DataT]]() * max_batch * N_BLKS_FOR_COLS
+                size_of[Split[Self.O.DataT]]()
+                * max_batch
+                * blk_cols_for(self.original_n_sampled_cols)
             )
         else:
             self.split_cand = ctx.enqueue_create_buffer[DType.uint8](1)
@@ -1883,16 +1920,21 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # the launch costs 10 us and writes the same zeros.
         var t_h = instr.times.start()
         comptime if HIST_ZERO_AFTER_READ_DEFAULT:
-            if not self.hist_clean:
-                # Once per builder: the WHOLE workspace, so every cell a
-                # later round's (node, column) block can touch starts zero.
+            # Every cell this round's (node, column) blocks can touch lies
+            # in its first `len_histograms` bins; the part below the
+            # high-water mark is zero already, so only the new tail is
+            # zeroed, once.
+            var need = size_of[Self.O.BinT]() * len_histograms
+            if need > self.hist_zeroed:
                 log_launch_ctx(ctx, "hist_zero")
                 enqueue_zero_bytes(
                     ctx,
-                    self._hist_ptr().unsafe_bitcast[UInt8](),
-                    len(self.histograms),
+                    self._hist_ptr()
+                    .unsafe_bitcast[UInt8]()
+                    .unsafe_offset(self.hist_zeroed),
+                    need - self.hist_zeroed,
                 )
-                self.hist_clean = True
+                self.hist_zeroed = need
         else:
             log_launch_ctx(ctx, "hist_zero")
             enqueue_zero_bytes(

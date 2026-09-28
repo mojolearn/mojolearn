@@ -71,6 +71,8 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.os import getenv
+from std.time import perf_counter_ns
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -179,6 +181,18 @@ struct HostRng(Copyable, Movable):
 struct FitResult(Copyable, ImplicitlyCopyable, Movable):
     var inertia: Float64
     var n_iter: Int
+
+
+def _km_stage(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
+    """MOJOLEARN_KMEANS_STAGES=1 (a diagnostic, lane cluster-apple2): drain
+    and print the wall time since the last stage. Off, it does nothing, so
+    the default program is unchanged."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print("KMSTAGE " + name + " " + String(Float64(now - t) / 1.0e6))
+    t = now
 
 
 def _sum_device(
@@ -854,6 +868,8 @@ def init_scalable_kmeans_plus_plus(
 
     var k = params.n_clusters
     var d = n_features
+    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1"
+    var km_t = Int(perf_counter_ns())
 
     # <<< Step-1 >>> (`:585-609`): one uniform point, flagged so no round
     # can re-draw it.
@@ -1048,6 +1064,7 @@ def init_scalable_kmeans_plus_plus(
             cand_buf = grown^
             cand_count += n_selected
 
+    _km_stage(ctx, km_on, km_t, "init.rounds n=" + String(niter) + " cand=" + String(cand_count))
     if cand_count > k:
         # <<< Step-7 >>> (`:730-733`): w_x = points nearest each candidate.
         # `countSamplesInCluster`'s own assignment is the same fused pass,
@@ -1100,6 +1117,7 @@ def init_scalable_kmeans_plus_plus(
         )
         ctx.synchronize()
 
+        _km_stage(ctx, km_on, km_t, "init.step7")
         ctx.enqueue_function[row_norm_kernel](
             cand_norm_rows.unsafe_ptr(),
             cand_buf.unsafe_ptr(),
@@ -1125,6 +1143,7 @@ def init_scalable_kmeans_plus_plus(
             rng,
         )
 
+        _km_stage(ctx, km_on, km_t, "init.kpp k=" + String(k))
         # The step-8 Lloyd scales: sum over candidates of |value| * weight
         # per feature bounds every fixed-point cell, and the weights sum to
         # n_samples exactly. O(candidates) readback.
@@ -1151,7 +1170,7 @@ def init_scalable_kmeans_plus_plus(
         var inner = KMeansParams.default()
         inner.n_clusters = k
         inner.init = INIT_ARRAY
-        _ = kmeans_fit_main_traced(
+        var inner_res = kmeans_fit_main_traced(
             ctx,
             cand_buf,
             weight,
@@ -1165,6 +1184,7 @@ def init_scalable_kmeans_plus_plus(
             trace,
             tag_prefix + "init.par.",
         )
+        _km_stage(ctx, km_on, km_t, "init.lloyd iters=" + String(inner_res.n_iter))
     elif cand_count < k:
         # `:755-777`: supplement with random into the FIRST `k - |C|` rows,
         # candidates after them. Their warning log is a debug line; the
@@ -1351,6 +1371,9 @@ def kmeans_fit_main_traced(
     if params.init == INIT_ARRAY:
         n_init = 1
 
+    var km_on = getenv("MOJOLEARN_KMEANS_STAGES") == "1" and not tag_prefix.endswith("init.par.")
+    var km_t = Int(perf_counter_ns())
+    _km_stage(ctx, km_on, km_t, "fit.setup")
     for _seed_iter in range(n_init):
         var restart_tag = tag_prefix + "restart" + _pad2(_seed_iter) + "."
         if params.init == INIT_ARRAY:
@@ -1407,6 +1430,7 @@ def kmeans_fit_main_traced(
             trace.record_device(
                 ctx, restart_tag + "init.centroids", cur_centroids, cd
             )
+        _km_stage(ctx, km_on, km_t, "fit.init")
 
         # `for (n_iter[0] = 1; n_iter[0] <= params.max_iter; ++n_iter[0])`,
         # `detail/kmeans.cuh:407`. On a break `n_current_iter` is the
@@ -1614,6 +1638,7 @@ def kmeans_fit_main_traced(
                 n_current_iter = it
                 break
             it += 1
+        _km_stage(ctx, km_on, km_t, "fit.lloyd iters=" + String(min(it, params.max_iter)))
 
         # `:500-537`. The fit's inertia is ONE fresh assignment against the
         # FINAL centroids, weighted, after the loop -- not the last

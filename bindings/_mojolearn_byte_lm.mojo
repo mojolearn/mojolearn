@@ -129,7 +129,7 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
 
 def byte_lm_attention_estash_gate_binding() raises -> PythonObject:
     """lane/neural-apple (2026-09-28): [gated, granted, denied, need_bytes,
-    free_bytes] of the Apple estash memory grant (all 0 on a build that is
+    free_bytes, recompute (lane/neural-apple2)] of the Apple estash memory grant (all 0 on a build that is
     not gated). Host state only; no GPU operation."""
     var st = attention_estash_gate_state()
     var out = Python.list()

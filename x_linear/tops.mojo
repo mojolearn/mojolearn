@@ -105,7 +105,10 @@ def t_sumsq(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
 # move.
 # ----------------------------------------------------------------------------
 
-comptime CHAIN_U_DEVICE = 32
+comptime CHAIN_U_DEVICE = CHAIN_U_APPLE if is_apple_gpu() else 32
+#: Apple (lane/linear-apple2): the block of loads a chain issues before its
+#: arithmetic. SCHEDULING only; set from the A/B on the M4 Pro.
+comptime CHAIN_U_APPLE = 32
 
 
 @always_inline

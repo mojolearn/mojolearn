@@ -300,6 +300,9 @@ def build_parser():
     v.add_argument("--repeats", type=int, default=1,
                    help="with --all: fits per cell; two or more also catch a "
                         "cell that moves on this box (default %(default)s)")
+    v.add_argument("--cell-timeout", type=float, default=120.0,
+                   help="with --all: seconds allowed for each isolated cell, self-test, "
+                        "or portable-model worker; timeout stops the sweep (default %(default)s)")
     v.add_argument("--no-models", dest="no_models", action="store_true",
                    help="with --all: skip the portable models")
     v.add_argument("--self-test", dest="self_test", action="store_true",

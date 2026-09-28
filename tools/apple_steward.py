@@ -407,15 +407,18 @@ def _coalesce_take(lane, commit, patch_bytes):
 def submit(a):
     if not all(c in "0123456789abcdef" for c in a.commit) or len(a.commit) < 7:
         sys.exit(f"--commit must be a hex sha pushed to origin, not {a.commit!r}")
+    # GitHub cannot fetch an abbreviated object ID. Push and request must
+    # name the same immutable, full commit on both speed and identity jobs.
+    full = subprocess.run(["git", "-C", str(TOOLS.parent), "rev-parse", "--verify", f"{a.commit}^{{commit}}"],
+                          capture_output=True, text=True)
+    if full.returncode:
+        sys.exit(f"{a.commit} is not a commit in {TOOLS.parent} (fetch the lane's branch first)")
+    a.commit = full.stdout.strip()
     name = f"{int(time.time() * 1000)}-{'speed-' if a.kind == 'speed' else ''}{a.lane}-{a.commit[:10]}"
     taken = {}
     if a.kind == "identity" and not a.no_coalesce:
-        full = subprocess.run(["git", "-C", str(TOOLS.parent), "rev-parse", "--verify", f"{a.commit}^{{commit}}"],
-                              capture_output=True, text=True)
-        if full.returncode:
-            sys.exit(f"{a.commit} is not a commit in {TOOLS.parent} (fetch the lane's branch first)")
         patch_bytes = Path(a.sabotage).resolve().read_bytes() if a.sabotage and Path(a.sabotage).is_file() else None
-        taken, old_lanes, stamps = _coalesce_take(a.lane, full.stdout.strip(), patch_bytes)
+        taken, old_lanes, stamps = _coalesce_take(a.lane, a.commit, patch_bytes)
         if taken:
             new_lanes = [x for x in (a.verify_lanes or "").split(",") if x]
             added = [x for x in old_lanes if x not in new_lanes]

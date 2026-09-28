@@ -113,6 +113,7 @@ from std.sys.info import has_apple_gpu_accelerator, size_of
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul,
@@ -2594,7 +2595,14 @@ struct DeviceDataset(Movable):
         classification at k = 15 of 220 slower, 1.81)."""
         comptime if not ET_RM_DATA:
             return
-        if self.has_rm or 2 * k < Int(self.n_cols):
+        if self.has_rm:
+            return
+        # ET_RM_NARROW (trial arm): a row whose floats fit one 64-byte line
+        # also takes the row-major copy, whatever k is.
+        var narrow = False
+        comptime if ET_RM_NARROW:
+            narrow = Int(self.n_cols) * 4 <= 64 and 4 * k >= Int(self.n_cols)
+        if 2 * k < Int(self.n_cols) and not narrow:
             return
         var nr = Int(self.n_rows)
         var nc = Int(self.n_cols)
@@ -3247,9 +3255,28 @@ rows, 100 trees, alternating processes, model hashes unchanged: taxireg
 original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
 `-D MOJOLEARN_ET_TILED_SEARCH_OFF` turns both off on Apple."""
 
-comptime ET_RANGE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
-    is_defined["MOJOLEARN_ET_RANGE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
+comptime ET_TILED_SEARCH_APPLE_IDENTICAL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and ET_TILED_SEARCH_APPLE_DEFAULT
+    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF"]()
 )
+"""Apple IDENTICAL (trees-apple2, 2026-09-28): the two tiled search kernels
+under IDENTICAL too, bit-inert by construction. The range kernel folds in
+range_key space under IDENTICAL (the one-feature kernel's IDENTICAL arm),
+so the same min, max and NaN count; the regression score kernel publishes
+the same integer counts and label sums (integers, any order). Same
+`2k >= n_cols` gate (`ensure_row_major`), so only fits that sample at least
+half the features (the regressors at max_features 1.0) take them. Never
+binned codes: `ET_BINNED_REG` stays FAST. `-D
+MOJOLEARN_ET_TILED_SEARCH_IDENTICAL_OFF` keeps the one-feature kernels."""
+
+comptime ET_RANGE_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_ET_RANGE_TILED"]()
+        or ET_TILED_SEARCH_APPLE_DEFAULT
+    )
+) or ET_TILED_SEARCH_APPLE_IDENTICAL
 """FAST experiment: the range pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_range_tiled_kernel`)."""
@@ -3268,9 +3295,13 @@ order (exact key, then DEVIATION 463's keyed tie), so one block's grid-stride
 fold picks the node's split that any arrival order of a correct merge picks:
 the same bits on every other column. FAST keeps `ceildiv(k, TPB)` blocks."""
 
-comptime ET_SCORE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
-    is_defined["MOJOLEARN_ET_SCORE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
-)
+comptime ET_SCORE_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and (
+        is_defined["MOJOLEARN_ET_SCORE_TILED"]()
+        or ET_TILED_SEARCH_APPLE_DEFAULT
+    )
+) or ET_TILED_SEARCH_APPLE_IDENTICAL
 """FAST experiment: the REGRESSION score pass reads a row-major X with up to
 `ET_FEATURE_TILE` sampled features per block
 (`node_feature_score_reg_tiled_kernel`)."""
@@ -3279,6 +3310,19 @@ comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
 """FAST experiment: a row-major copy of X feeds the range and score passes,
 whose grids put the feature slot on the fast axis so the blocks reading
 one row chunk's features run together and share its cache lines."""
+
+comptime ET_RM_NARROW = is_defined["MOJOLEARN_ET_RM_NARROW"]() or (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ET_RM_NARROW_OFF"]()
+)
+"""Apple, both modes (trees-apple2, 2026-09-28): `ensure_row_major` also
+builds the row-major copy when one row's floats fit a 64-byte line
+(`n_cols <= 16`) and the fit samples at least a quarter of the features,
+so a classifier sampling k = 4 of 16 (taxi) takes the tiled range kernel.
+The range kernel's cells are the same min/max/NaN counts either way.
+M4 IDENTICAL (steward 1790610860810, always-on arm): ExtraTreesClassifier
+taxi 3904 -> 3745 ms, same hash; RandomTreesEmbedding (k = 1) 469 -> 1086
+ms, hence the quarter gate. `-D MOJOLEARN_ET_RM_NARROW_OFF` turns it off."""
 
 
 @always_inline

@@ -19,6 +19,13 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoEstimatorsContextFast"
+
 
 from core.labeled_reference_predict import labeled_reference_predict
 from dbscan.estimator import dbscan_fit
@@ -158,11 +165,12 @@ def labeled_reference_predict_binding(
     var eps = Float64(py=params[4])
     var has_thresh = Int(py=params[5]) != 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         labeled_reference_predict(
             ctx, rp, n_refs, kp, lp, qp, n_queries, n_features, metric, eps,
             has_thresh, olp, orp,
         )
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -191,11 +199,12 @@ def _dbscan_fit_run(
     var metric = Int(py=params[7])
     var passes = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         passes = dbscan_fit(
             ctx, xp, nr, nf, eps, min_samples, lp, budget, max_iter,
             eps_nn_method, metric, wa, core_address,
         )
+        ctx.synchronize()
     return PythonObject(passes)
 
 
@@ -222,10 +231,11 @@ def pca_fit_binding(
     var nc = Int(py=params[2])
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         noise = pca_fit_host(
             ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc
         )
+        ctx.synchronize()
     return PythonObject(noise)
 
 
@@ -257,8 +267,9 @@ def pca_fit_full_binding(
     var sp = _f32_ptr(Int(py=singular_addr))
     var noise = Float64(0.0)
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         noise = pca_fit_full_host(ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc)
+        ctx.synchronize()
     return PythonObject(noise)
 
 
@@ -279,8 +290,9 @@ def pca_transform_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         pca_transform_host(ctx, xp, mp, cp, op, nr, nf, nc)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -358,11 +370,12 @@ def _pca_whiten_apply(
         if sp.unsafe_load(i) < Float32(0):
             raise Error("PCA whitening singular values must be nonnegative")
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         if inverse:
             pca_whiten_inverse_transform_host(ctx, xp, cp, sp, mp, op, nr, nf, nc, nfit)
         else:
             pca_whiten_transform_host(ctx, xp, mp, cp, sp, op, nr, nf, nc, nfit)
+        ctx.synchronize()
     _pca_whiten_finite(op, output_count)
     return PythonObject(0)
 
@@ -401,8 +414,9 @@ def tsvd_fit_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         tsvd_fit_host(ctx, xp, cp, sp, nr, nf, nc)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -425,8 +439,9 @@ def tsvd_explained_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         tsvd_explained_host(ctx, xp, cp, ep, rp, nr, nf, nc)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -445,8 +460,9 @@ def tsvd_transform_binding(
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         tsvd_transform_host(ctx, xp, cp, op, nr, nf, nc)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -472,8 +488,9 @@ def inverse_transform_binding(
     var nc = Int(py=params[2])
     var add_mean = Int(py=params[3]) != 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         inverse_transform_host(ctx, zp, cp, mp, op, nr, nf, nc, add_mean)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -491,8 +508,9 @@ def ols_fit_binding(
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         ols_fit_host(ctx, xp, yp, wp, nr, nf)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -512,8 +530,9 @@ def ols_predict_binding(
     var nf = Int(py=params[1])
     var intercept = Float32(Float64(py=params[2]))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         ols_predict_host(ctx, xp, cp, op, nr, nf, intercept)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -534,8 +553,9 @@ def ridge_fit_binding(
     var nf = Int(py=params[1])
     var alpha = Float32(Float64(py=params[2]))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         ridge_fit_host(ctx, xp, yp, wp, nr, nf, alpha)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -582,12 +602,13 @@ def qn_fit_binding(
     var svr_eps = Float64(py=params[14]) if len(params) == 15 else 0.0
     var iters = 0
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
             max_iter, ls_max, mem, fit_intercept, normalized, has_sw, loss,
             svr_eps,
         )
+        ctx.synchronize()
     return PythonObject(iters)
 
 
@@ -612,8 +633,9 @@ def qn_decision_function_binding(
     var fi = Int(py=params[2]) != 0
     var nc = Int(py=params[3]) if len(params) == 4 else 1
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
+        ctx.synchronize()
     return PythonObject(0)
 
 
@@ -636,8 +658,9 @@ def qn_predict_binary_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi)
+        ctx.synchronize()
     return PythonObject(0)
 
 

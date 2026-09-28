@@ -38,6 +38,13 @@ from std.math import ceildiv
 from std.os import getenv
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoResampleContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoResampleContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from core.segmented_sort import SORT_BLOCK, segmented_sort_keys_f32
@@ -1064,7 +1071,7 @@ def bootstrap_host(
                     + String(q_or_prop)
                 )
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "resample bootstrap: n="
@@ -1274,7 +1281,7 @@ def bootstrap_unpaired_host(
     _unpaired_validate(x, n_x, y, n_y, n_resamples, method, confidence_level, r_first)
     var kx = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
     var ky = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP_SECOND)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dxb = _upload(ctx, x)
     var dyb = _upload(ctx, y)
     var tx = ctx.enqueue_create_buffer[DType.float32](n_resamples)
@@ -1418,7 +1425,7 @@ def permutation_test_host(
                 " bootstrap_host for the row-39 reason)."
             )
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "resample permutation_test: n_x="
@@ -1561,7 +1568,7 @@ def permutation_samples_host(
     perm_samples_validate(x, y, two, n_resamples, r_first)
     var n = len(x)
     var key = resample_key(seed, RESAMPLE_KIND_PERM_SAMPLES)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = _upload(ctx, x)
     var dy = _upload(ctx, x)
     if two:
@@ -1709,7 +1716,7 @@ def monte_carlo_integrate_host[
         span.append(ftz(upper[d] - lower[d]))
     var volume = mc_box_volume(lower, upper)
 
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var trace = IdentityTrace()
     trace.header(
         "resample monte_carlo_integrate: n_samples="
@@ -1812,7 +1819,7 @@ def resample_indices_host(
         seed, RESAMPLE_KIND_UTILS_REPLACE if replace else RESAMPLE_KIND_UTILS_PERMUTE
     )
     var m = count if replace else n
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var rows = ctx.enqueue_create_buffer[DType.int32](m if replace else 1)
     var keys = ctx.enqueue_create_buffer[DType.uint64](1 if replace else m)
     ctx.enqueue_function[utils_draw_kernel](

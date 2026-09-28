@@ -6,7 +6,8 @@
 # schedule, never a result). Each arm builds its own byte LM copy into a
 # private package copy, so the worktree's binding is untouched.
 #   ARMS_DEFINES  space separated knob names (default: the Apple default, then
-#                 R3/KVGRID/ESTASH/BSWZ every-column words); "-" = no define
+#                 R3/KVGRID/ESTASH/BSWZ every-column words); "-" = no define;
+#                 "A+B" = both knobs in one arm
 #   ARMS_SHAPE    B L DM H KV HD FF LAYERS VOCAB (default 1 x 2048, 12 layers)
 #   ARMS_STEPS    steps per arm (default 5: one setup + four steady)
 set -u
@@ -23,7 +24,8 @@ for arm in ${ARMS_DEFINES:-- MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN MOJOLEAR
     d="$OUT/$arm"; rm -rf "$d"; mkdir -p "$d/pkg"
     cp -R python/mojolearn "$d/pkg/mojolearn"
     rm -f "$d/pkg/mojolearn/identical/_mojolearn_byte_lm.so"
-    defs=""; [ "$arm" != "-" ] && defs="-D $arm=1"
+    # "A+B" builds one arm under both knobs (lane/neural-apple2)
+    defs=""; [ "$arm" != "-" ] && for kn in $(echo "$arm" | tr '+' ' '); do defs="$defs -D $kn=1"; done
     MOJOLEARN_BYTE_LM_OUTDIR="$d/pkg/mojolearn/identical" MOJOLEARN_BUILD_EXTRA_DEFINES="$defs" \
         pixi run -e default sh bindings/build_byte_lm.sh > "$d/build.log" 2>&1 || { echo "ARM $arm BUILD FAILED"; rc=1; continue; }
     # shellcheck disable=SC2086
@@ -35,12 +37,13 @@ try:
     r = json.load(open(sys.argv[1]))
 except Exception as e:
     print("ARM", sys.argv[2], "NO RESULT", e); sys.exit(0)
-fw = json.dumps(r.get("final_witness"), sort_keys=True)
+fw = json.dumps((r.get("final_witness") or {}).get("sha256"), sort_keys=True)  # not export_seconds
 sw = json.dumps([s.get("sha256") for s in r.get("step_witnesses") or []], sort_keys=True)
-print("ARM %s attn=%s steady=%s median=%s first=%s peak_rss=%s final_witness=%s step_witnesses=%s" % (
+print("ARM %s attn=%s steady=%s median=%s first=%s peak_rss=%s final_witness=%s step_witnesses=%s gate=%s" % (
     sys.argv[2], r.get("attention_arm"), [round(x, 4) for x in r.get("steady_step_seconds") or []],
     r.get("steady_median_seconds"), r.get("first_call_seconds"), r.get("process_ru_maxrss_bytes"),
-    hashlib.sha256(fw.encode()).hexdigest()[:16], hashlib.sha256(sw.encode()).hexdigest()[:16]))
+    hashlib.sha256(fw.encode()).hexdigest()[:16], hashlib.sha256(sw.encode()).hexdigest()[:16],
+    r.get("attention_estash_gate")))
 PY
     grep -iE "refus|error|infinity" "$d/step.log" | head -3
 done

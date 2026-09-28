@@ -241,6 +241,10 @@ def resp_exp_kernel(
 #: Operands of this many `nk_kernel` steps are loaded before the steps run
 #: (execution only). `-D MOJOLEARN_GMM_NK_AHEAD_OFF` = 1.
 comptime GMM_NK_AHEAD = 1 if is_defined["MOJOLEARN_GMM_NK_AHEAD_OFF"]() else 32
+#: lane cluster-apple2 (2026-09-28): the one-thread chains (nk here,
+#: the mean log-likelihood in estep.mojo) load block b + 1 before adding
+#: block b. `-D MOJOLEARN_GMM_CHAIN_PIPE_OFF=1` reverts.
+comptime GMM_CHAIN_PIPE = not is_defined["MOJOLEARN_GMM_CHAIN_PIPE_OFF"]()
 
 
 def nk_kernel(
@@ -281,13 +285,35 @@ def nk_kernel(
         # are loaded first so the chain waits on the add, not on each load.
         comptime U = GMM_NK_AHEAD
         var i = 0
-        while i + U <= n:
-            var v = SIMD[DType.float32, U](0.0)
-            comptime for u in range(U):
-                v[u] = resp.unsafe_load((i + u) * ncomp + k)
-            comptime for u in range(U):
-                acc = ftz(acc + ftz(v[u]))
-            i += U
+        comptime if GMM_CHAIN_PIPE:
+            # lane cluster-apple2: the NEXT block's operands are loaded
+            # before this block's adds, so a block's loads are in flight
+            # while the previous block's chain runs. Same adds, same order.
+            var have = i + U <= n
+            var cur = SIMD[DType.float32, U](0.0)
+            if have:
+                comptime for u in range(U):
+                    cur[u] = resp.unsafe_load((i + u) * ncomp + k)
+            while have:
+                var ni = i + U
+                var nhave = ni + U <= n
+                var nxt = SIMD[DType.float32, U](0.0)
+                if nhave:
+                    comptime for u in range(U):
+                        nxt[u] = resp.unsafe_load((ni + u) * ncomp + k)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(cur[u]))
+                cur = nxt
+                i = ni
+                have = nhave
+        else:
+            while i + U <= n:
+                var v = SIMD[DType.float32, U](0.0)
+                comptime for u in range(U):
+                    v[u] = resp.unsafe_load((i + u) * ncomp + k)
+                comptime for u in range(U):
+                    acc = ftz(acc + ftz(v[u]))
+                i += U
         while i < n:
             acc = ftz(acc + ftz(resp.unsafe_load(i * ncomp + k)))
             i += 1
@@ -1381,6 +1407,11 @@ def gmm_m_step(
             block_dim=(comp_tpb, 1, 1),
         )
     trace.record_device(ctx, tag + ".nk", nk, ncomp)
+    if ph_on:
+        ctx.synchronize()
+        var now_nk = Int(perf_counter_ns())
+        print("GMM_MSTEP nk_us=" + String((now_nk - ph_t) // 1000))
+        ph_t = now_nk
 
     # THE DIVISOR. `_initialize:864` uses n_samples; `_m_step:898` uses
     # sum(nk). One kernel, one spelling, two sources.

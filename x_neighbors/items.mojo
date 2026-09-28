@@ -261,6 +261,44 @@ def knn_select_item(t: Int, dmat: FP, dist: FP, idx: IP, n: Int, m: Int, k: Int,
         idx.unsafe_store(t * k + s, Int32(j))
 
 
+# DEVIATION 5206 + 5207 (rows 120, 121)
+def knn_sq_item(
+    t: Int, x: FP, y: FP, dist: FP, idx: IP,
+    n: Int, m: Int, d: Int, k: Int, exclude_self: Int,
+):
+    """`sqdist_item` fused into `knn_select_item` for x row t: the k smallest
+    squared euclidean distances to the rows of y, ascending by (value,
+    column). Each candidate's value is `sqdist_item`'s statements for cell
+    (t, j) (features ascending, the pinned fma, ftz), and the columns are
+    offered in ascending order to `knn_select_item`'s strict `<` insertion, so
+    the answer is the one the two ops return through an n x m matrix, bit for
+    bit; the matrix is never written. `worst` holds the last slot's value
+    (the one the insertion test reads) in a register."""
+    var inf = bitcast[DType.float32](UInt32(0x7F800000))
+    for s in range(k):
+        dist.unsafe_store(t * k + s, inf)
+        idx.unsafe_store(t * k + s, Int32(-1))
+    var worst = inf
+    for j in range(m):
+        if exclude_self != 0 and j == t:
+            continue
+        var acc = Float32(0)
+        for f in range(d):
+            var df = _sub(x.unsafe_load(t * d + f), y.unsafe_load(j * d + f))
+            acc = ftz(identical_mul_add(df, df, acc))
+        var v = acc
+        if not (v < worst):
+            continue
+        var s = k - 1
+        while s > 0 and v < dist.unsafe_load(t * k + s - 1):
+            dist.unsafe_store(t * k + s, dist.unsafe_load(t * k + s - 1))
+            idx.unsafe_store(t * k + s, idx.unsafe_load(t * k + s - 1))
+            s -= 1
+        dist.unsafe_store(t * k + s, v)
+        idx.unsafe_store(t * k + s, Int32(j))
+        worst = dist.unsafe_load(t * k + k - 1)
+
+
 # DEVIATION 5209 (row 123)
 def group_mean_item(t: Int, x: FP, labels: IP, res: FP, n: Int, d: Int, n_groups: Int):
     """Mean of the rows labelled g, feature f, t = g*d + f: rows in ascending
@@ -284,6 +322,101 @@ comptime SMO_TAU = Float32(1e-12)
 
 
 # DEVIATION 5200 (row 125)
+@always_inline
+def ocsvm_g0(q: FP, alpha: FP, n: Int, i: Int) -> Float32:
+    """The initial gradient of sample i: sum_j Q[i, j] alpha_j over the
+    nonzero alpha, j ascending."""
+    var acc = Float32(0)
+    for j in range(n):
+        var a = alpha.unsafe_load(j)
+        if a != Float32(0):
+            acc = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + j)), a, acc))
+    return acc
+
+
+@always_inline
+def ocsvm_obj(gmax: Float32, gjv: Float32, qdi: Float32, qjj: Float32, qij: Float32) -> Float32:
+    """WSS3's second-order objective of pair (i, j), for grad_diff > 0."""
+    var grad_diff = _add(gmax, gjv)
+    var two_q = ftz(identical_mul(Float32(2), qij))
+    var quad = _sub(_add(qdi, qjj), two_q)
+    var num = ftz(identical_mul(grad_diff, grad_diff))
+    if quad > Float32(0):
+        return -ftz(identical_div(num, quad))
+    return -ftz(identical_div(num, SMO_TAU))
+
+
+@always_inline
+def ocsvm_update(q: FP, cv: FP, alpha: FP, g: FP, n: Int, i: Int, j: Int) -> Tuple[Float32, Float32]:
+    """The two-variable step on (i, j): stores alpha_i, alpha_j and returns
+    their changes (dai, daj)."""
+    var old_ai = alpha.unsafe_load(i)
+    var old_aj = alpha.unsafe_load(j)
+    var quad = _sub(_add(q.unsafe_load(i * n + i), q.unsafe_load(j * n + j)), ftz(identical_mul(Float32(2), q.unsafe_load(i * n + j))))
+    if quad <= Float32(0):
+        quad = SMO_TAU
+    var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+    var ci = cv.unsafe_load(i)
+    var cj = cv.unsafe_load(j)
+    var total = _add(old_ai, old_aj)
+    var ai = _sub(old_ai, delta)
+    var aj = _add(old_aj, delta)
+    if total > ci:
+        if ai > ci:
+            ai = ci
+            aj = _sub(total, ci)
+    else:
+        if aj < Float32(0):
+            aj = Float32(0)
+            ai = total
+    if total > cj:
+        if aj > cj:
+            aj = cj
+            ai = _sub(total, cj)
+    else:
+        if ai < Float32(0):
+            ai = Float32(0)
+            aj = total
+    alpha.unsafe_store(i, ai)
+    alpha.unsafe_store(j, aj)
+    return (_sub(ai, old_ai), _sub(aj, old_aj))
+
+
+@always_inline
+def ocsvm_g_step(q: FP, g: FP, n: Int, i: Int, j: Int, dai: Float32, daj: Float32, k: Int):
+    """Gradient entry k after the step: Q[i, k] dai, then Q[j, k] daj."""
+    var gk = g.unsafe_load(k)
+    gk = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + k)), dai, gk))
+    gk = ftz(identical_mul_add(ftz(q.unsafe_load(j * n + k)), daj, gk))
+    g.unsafe_store(k, gk)
+
+
+@always_inline
+def ocsvm_rho(g: FP, alpha: FP, cv: FP, n: Int) -> Float32:
+    """libsvm's calculate_rho, y = +1 throughout; samples ascending."""
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
+    var ub = pos_inf
+    var lb = neg_inf
+    var nr_free = 0
+    var sum_free = Float32(0)
+    for i in range(n):
+        var yg = g.unsafe_load(i)
+        var a = alpha.unsafe_load(i)
+        if a >= cv.unsafe_load(i):
+            if yg > lb:
+                lb = yg
+        elif a <= Float32(0):
+            if yg < ub:
+                ub = yg
+        else:
+            nr_free += 1
+            sum_free = _add(sum_free, yg)
+    if nr_free > 0:
+        return ftz(identical_div(sum_free, Float32(nr_free)))
+    return ftz(identical_mul(_add(ub, lb), Float32(0.5)))
+
+
 def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
     """libsvm's `Solver::Solve` for the one-class problem (sklearn
     `svm/src/libsvm/svm.cpp`: `solve_one_class`, `Solver::Solve`,
@@ -294,16 +427,13 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
     lasts, then the remainder); `q` is the n x n kernel matrix. Float32 with
     the pinned spellings where libsvm computes in double (DEVIATION 5200).
     Ties in the working-set scans resolve as libsvm's `>=` / `<=` dres: the
-    LAST index of equal gradient wins. info[0] = rho."""
+    LAST index of equal gradient wins. info[0] = rho. The GPU column runs the
+    same helpers with the scans spread over a threadgroup
+    (`x_neighbors/block_ops.mojo::ocsvm_smo_block`)."""
     var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
     var pos_inf = bitcast[DType.float32](UInt32(0x7F800000))
     for i in range(n):
-        var acc = Float32(0)
-        for j in range(n):
-            var a = alpha.unsafe_load(j)
-            if a != Float32(0):
-                acc = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + j)), a, acc))
-        g.unsafe_store(i, acc)
+        g.unsafe_store(i, ocsvm_g0(q, alpha, n, i))
     var it = 0
     while it < max_iter:
         var gmax = neg_inf
@@ -326,81 +456,17 @@ def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP,
                     if gjv >= gmax2:
                         gmax2 = gjv
                     if grad_diff > Float32(0):
-                        var two_q = ftz(identical_mul(Float32(2), q.unsafe_load(gi * n + j)))
-                        var quad = _sub(_add(qdi, q.unsafe_load(j * n + j)), two_q)
-                        var num = ftz(identical_mul(grad_diff, grad_diff))
-                        var obj: Float32
-                        if quad > Float32(0):
-                            obj = -ftz(identical_div(num, quad))
-                        else:
-                            obj = -ftz(identical_div(num, SMO_TAU))
+                        var obj = ocsvm_obj(gmax, gjv, qdi, q.unsafe_load(j * n + j), q.unsafe_load(gi * n + j))
                         if obj <= obj_min:
                             gj = j
                             obj_min = obj
         if gi < 0 or gj < 0 or _add(gmax, gmax2) < eps:
             break
         it += 1
-        var i = gi
-        var j = gj
-        var old_ai = alpha.unsafe_load(i)
-        var old_aj = alpha.unsafe_load(j)
-        var quad = _sub(_add(q.unsafe_load(i * n + i), q.unsafe_load(j * n + j)), ftz(identical_mul(Float32(2), q.unsafe_load(i * n + j))))
-        if quad <= Float32(0):
-            quad = SMO_TAU
-        var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
-        var ci = cv.unsafe_load(i)
-        var cj = cv.unsafe_load(j)
-        var total = _add(old_ai, old_aj)
-        var ai = _sub(old_ai, delta)
-        var aj = _add(old_aj, delta)
-        if total > ci:
-            if ai > ci:
-                ai = ci
-                aj = _sub(total, ci)
-        else:
-            if aj < Float32(0):
-                aj = Float32(0)
-                ai = total
-        if total > cj:
-            if aj > cj:
-                aj = cj
-                ai = _sub(total, cj)
-        else:
-            if ai < Float32(0):
-                ai = Float32(0)
-                aj = total
-        alpha.unsafe_store(i, ai)
-        alpha.unsafe_store(j, aj)
-        var dai = _sub(ai, old_ai)
-        var daj = _sub(aj, old_aj)
+        var d = ocsvm_update(q, cv, alpha, g, n, gi, gj)
         for k in range(n):
-            var gk = g.unsafe_load(k)
-            gk = ftz(identical_mul_add(ftz(q.unsafe_load(i * n + k)), dai, gk))
-            gk = ftz(identical_mul_add(ftz(q.unsafe_load(j * n + k)), daj, gk))
-            g.unsafe_store(k, gk)
-    # calculate_rho, y = +1 throughout
-    var ub = pos_inf
-    var lb = neg_inf
-    var nr_free = 0
-    var sum_free = Float32(0)
-    for i in range(n):
-        var yg = g.unsafe_load(i)
-        var a = alpha.unsafe_load(i)
-        if a >= cv.unsafe_load(i):
-            if yg > lb:
-                lb = yg
-        elif a <= Float32(0):
-            if yg < ub:
-                ub = yg
-        else:
-            nr_free += 1
-            sum_free = _add(sum_free, yg)
-    var rho: Float32
-    if nr_free > 0:
-        rho = ftz(identical_div(sum_free, Float32(nr_free)))
-    else:
-        rho = ftz(identical_mul(_add(ub, lb), Float32(0.5)))
-    info.unsafe_store(0, rho)
+            ocsvm_g_step(q, g, n, gi, gj, d[0], d[1], k)
+    info.unsafe_store(0, ocsvm_rho(g, alpha, cv, n))
     iters.unsafe_store(0, Int32(it))
 
 
@@ -685,6 +751,55 @@ def pcs_item(
         res.unsafe_store(t * nc + h, acc_row.unsafe_load(h))
 
 
+def pcs_sketch_item(
+    t: Int, x: FP, hidx: IP, hbit: IP, sk: FP,
+    n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32,
+):
+    """`pcs_item`'s count sketch of degree p = t % degree for row t // degree,
+    into sk[t * nc ..]: the same statements, features ascending."""
+    var r = t // degree
+    var p = t - r * degree
+    var sg = ftz(identical_sqrt(gamma))
+    var sc = ftz(identical_sqrt(coef0))
+    var o = sk + t * nc
+    for h in range(nc):
+        o.unsafe_store(h, Float32(0))
+    for j in range(nf):
+        var v: Float32
+        if j < d_in:
+            v = ftz(identical_mul(sg, ftz(x.unsafe_load(r * d_in + j))))
+        else:
+            v = sc
+        if Int(hbit.unsafe_load(p * nf + j)) < 0:
+            v = -v
+        var h = Int(hidx.unsafe_load(p * nf + j))
+        o.unsafe_store(h, _add(o.unsafe_load(h), v))
+
+
+def pcs_conv_item(t: Int, acc: FP, sk: FP, res: FP, n: Int, nc: Int, degree: Int, p: Int):
+    """One cell (row t // nc, component t % nc) of `pcs_item`'s circular
+    convolution of the running product `acc` (n x nc) with the row's degree-p
+    sketch (sk, rows of degree * nc): the same fold, a ascending."""
+    var r = t // nc
+    var h = t - r * nc
+    var ar = acc + r * nc
+    var sr = sk + (r * degree + p) * nc
+    var s = Float32(0)
+    for a in range(nc):
+        var b = h - a
+        if b < 0:
+            b += nc
+        s = ftz(identical_mul_add(ar.unsafe_load(a), sr.unsafe_load(b), s))
+    res.unsafe_store(t, s)
+
+
+def pcs_copy0_item(t: Int, sk: FP, res: FP, n: Int, nc: Int, degree: Int):
+    """res row r = the row's degree-0 sketch (`pcs_item`'s p == 0 copy)."""
+    var r = t // nc
+    var h = t - r * nc
+    res.unsafe_store(t, sk.unsafe_load(r * degree * nc + h))
+
+
 comptime PI_F32 = Float32(3.14159265358979323846)
 
 
@@ -802,6 +917,46 @@ def ls_laplacian_item(t: Int, a: FP, res: FP, n: Int):
     res.unsafe_store(t, ftz(identical_div(v, wi)))
 
 
+def col_degree_item(t: Int, a: FP, res: FP, n: Int):
+    """`ls_laplacian_item`'s in-degree of node t: column t of A summed over
+    the rows k != t, ascending, the same `_add` chain."""
+    var dt = Float32(0)
+    for k in range(n):
+        if k != t:
+            dt = _add(dt, a.unsafe_load(k * n + t))
+    res.unsafe_store(t, dt)
+
+
+def ls_laplacian_deg_item(t: Int, a: FP, deg: FP, res: FP, n: Int):
+    """`ls_laplacian_item` with the two degrees read from `col_degree_item`'s
+    output instead of refolded per cell (O(n^2) instead of O(n^3); every
+    stored value the same)."""
+    var i = t // n
+    var j = t - i * n
+    if i == j:
+        res.unsafe_store(t, Float32(0))
+        return
+    var di = deg.unsafe_load(i)
+    var dj = deg.unsafe_load(j)
+    var wi = ftz(identical_sqrt(di)) if di != Float32(0) else Float32(1)
+    var wj = ftz(identical_sqrt(dj)) if dj != Float32(0) else Float32(1)
+    var v = ftz(identical_div(ftz(a.unsafe_load(t)), wj))
+    res.unsafe_store(t, ftz(identical_div(v, wi)))
+
+
+def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
+    """1 when every entry of row t of the float32 matrix (read as its bit
+    patterns) is +0.0 or -0.0, i.e. Python's `all(v == 0 for v in row)`
+    (a NaN is not zero), else 0."""
+    var z = 1
+    for j in range(m):
+        var b = bitcast[DType.uint32](a.unsafe_load(t * m + j)) & UInt32(0x7FFFFFFF)
+        if b != UInt32(0):
+            z = 0
+            break
+    res.unsafe_store(t, Int32(z))
+
+
 def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
     """Row t of the connectivity graph: 1 at each of the row's k neighbors."""
     for j in range(m):
@@ -814,6 +969,47 @@ def knn_graph_item(t: Int, idx: IP, res: FP, n: Int, m: Int, k: Int):
 
 # ------------------------------------------------------------------ KNNImputer
 # DEVIATION 5215 (row 121)
+@always_inline
+def knn_impute_finish(
+    t: Int, fx: FP, bd: FP, bi: IP, res: FP, m: Int, d: Int, k: Int, weights: Int, n_donors: Int,
+):
+    """`knn_impute_item`'s tail after the donor scan: the fallback column
+    mean or the (weighted) donor mean, stored at cell t."""
+    var c = t - (t // d) * d
+    var kk = k if k < n_donors else n_donors
+    var found = 0
+    for s in range(kk):
+        if Int(bi.unsafe_load(s)) >= 0:
+            found += 1
+    if found == 0:
+        var acc = Float32(0)
+        var cnt = 0
+        for j in range(m):
+            var dv = fx.unsafe_load(j * d + c)
+            if dv == dv:
+                acc = _add(acc, dv)
+                cnt += 1
+        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))) if cnt > 0 else Float32(0))
+        return
+    var any_zero = False
+    for s in range(found):
+        if bd.unsafe_load(s) == Float32(0):
+            any_zero = True
+    var num = Float32(0)
+    var den = Float32(0)
+    for s in range(found):
+        var w = Float32(1)
+        if weights == 1:
+            if any_zero:
+                w = Float32(1) if bd.unsafe_load(s) == Float32(0) else Float32(0)
+            else:
+                w = ftz(identical_div(Float32(1), bd.unsafe_load(s)))
+        var val = fx.unsafe_load(Int(bi.unsafe_load(s)) * d + c)
+        num = ftz(identical_mul_add(ftz(val), w, num))
+        den = _add(den, w)
+    res.unsafe_store(t, ftz(identical_div(num, den)))
+
+
 def knn_impute_item(
     t: Int, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
     n: Int, m: Int, d: Int, k: Int, weights: Int,
@@ -867,38 +1063,19 @@ def knn_impute_item(
             s -= 1
         bd.unsafe_store(s, dist)
         bi.unsafe_store(s, Int32(j))
-    var kk = k if k < n_donors else n_donors
-    var found = 0
-    for s in range(kk):
-        if Int(bi.unsafe_load(s)) >= 0:
-            found += 1
-    if found == 0:
-        var acc = Float32(0)
-        var cnt = 0
-        for j in range(m):
-            var dv = fx.unsafe_load(j * d + c)
-            if dv == dv:
-                acc = _add(acc, dv)
-                cnt += 1
-        res.unsafe_store(t, ftz(identical_div(acc, Float32(cnt))) if cnt > 0 else Float32(0))
-        return
-    var any_zero = False
-    for s in range(found):
-        if bd.unsafe_load(s) == Float32(0):
-            any_zero = True
-    var num = Float32(0)
-    var den = Float32(0)
-    for s in range(found):
-        var w = Float32(1)
-        if weights == 1:
-            if any_zero:
-                w = Float32(1) if bd.unsafe_load(s) == Float32(0) else Float32(0)
-            else:
-                w = ftz(identical_div(Float32(1), bd.unsafe_load(s)))
-        var val = fx.unsafe_load(Int(bi.unsafe_load(s)) * d + c)
-        num = ftz(identical_mul_add(ftz(val), w, num))
-        den = _add(den, w)
-    res.unsafe_store(t, ftz(identical_div(num, den)))
+    knn_impute_finish(t, fx, bd, bi, res, m, d, k, weights, n_donors)
+
+
+def knn_impute_cell_item(
+    t: Int, cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP,
+    n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int,
+):
+    """`knn_impute_item` for the t-th MISSING cell of a compact list (cell
+    ids ascending): the same statements for that cell, so a GPU thread per
+    missing cell instead of one per cell, most of which return at once. The
+    caller seeds `res` with x, which is what the item stores for a present
+    cell."""
+    knn_impute_item(Int(cells.unsafe_load(t)), x, fx, best_d, best_i, res, n, m, d, k, weights)
 
 
 # ------------------------------------------------------------------ graphs

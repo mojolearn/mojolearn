@@ -42,6 +42,13 @@ as certified across vendors.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoTsaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoTsaContextFast"
+
 
 from tsa.impl.timeSeries.stationarity import KPSS_ELEM_TPB, download_results
 from tsa.impl.auto_arima import select_d
@@ -104,7 +111,7 @@ def kpss_test_host(
     to their `pvalue = 0.10` and therefore to their decision.
     """
     _refuse_empty_shape(batch_size, n_obs, "kpss_test")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var res = kpss_test(
         ctx, y, batch_size, n_obs, d, D, s, pval_threshold, KPSS_ELEM_TPB
@@ -140,7 +147,7 @@ def select_d_host(
     STL on the host and is not implemented (`tsa/NOT_IMPLEMENTED.tsv`).
     """
     _refuse_empty_shape(batch_size, n_obs, "select_d")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
     var chosen = select_d(ctx, y, batch_size, n_obs, D, s, d_max, pval_threshold)
     for b in range(batch_size):

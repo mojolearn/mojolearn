@@ -474,13 +474,14 @@ class NearestNeighbors(NumericModeMixin):
 
         n_neighbors   honored   k. Refused above n_samples_fit (the
                                 reference's short-index fill is not implemented:
-                                knn_brute_force.mojo) and, UNDER
-                                IDENTICAL/DETERMINISTIC, above 1024 -- the
-                                pinned selector's strided rank pass bounds
-                                its shared staging and quadratic work (
+                                knn_brute_force.mojo). UNDER
+                                IDENTICAL/DETERMINISTIC a k above 1024
+                                selects in rounds of 1024 and merges index
+                                tiles by binary search (DEVIATION 6300,
                                 neighbors/checks/select_radix_identical
-                                .mojo). FAST runs k > 256 through the
-                                radix select (reference: RAFT).
+                                .mojo); the answer is the same ascending
+                                (distance, index) list. FAST runs k > 256
+                                through the radix select (reference: RAFT).
         query_tile    honored   a MEMORY number; the answer does not depend
                                 on it (`check_knn_tiled_is_query_tile_
                                 invariant`), only the workspace does

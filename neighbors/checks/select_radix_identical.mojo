@@ -53,13 +53,17 @@ comparison is a total order so no two ranks collide, and it needs no
 network, no shared scratch beyond the staged pairs, and no second barrier
 pattern to get wrong. `ball_cover.mojo` already uses the same argument.
 
-WHAT IS STILL REFUSED HERE
----------------------------
-`k > IDENTICAL_MAX_K` (1024). Threads stage and rank slots in strides of
-SELECT_BLOCK (256), with one barrier after all inputs are staged. The
-bounded extension uses 8 KiB of pair staging and O(k*k) integer comparisons
-per query. It is authored, not yet remotely qualified. The launcher refuses
-larger k explicitly; this is not an unbounded workload promise.
+WIDER THAN IDENTICAL_MAX_K (DEVIATION 6300, 2026-09-28)
+------------------------------------------------------
+One launch stages and ranks at most `IDENTICAL_MAX_K` (1024) winners:
+threads stage and rank slots in strides of SELECT_BLOCK (256), 8 KiB of
+pair staging and O(k*k) integer comparisons per query. A wider k used to be
+refused, which failed SpectralEmbedding's knn affinity at 20,000 rows (its
+default n_neighbors is n // 10). It now runs in ROUNDS
+(`select_radix_identical_rounds_launch`): round r selects the next 1024 keys
+above the last key round r - 1 wrote, so the rounds concatenate to the one
+ascending answer. Index tiles merge by binary search
+(`wide_topk_merge_launch`). Both are compares of the composite key only.
 
 THIS SELECTOR IS NOT THE WHOLE TILED ARM. Its distances arrive from
 `core/gemm.mojo::gemm_nt`, which is MAX's `linalg.matmul` -- a closed vendor
@@ -72,7 +76,9 @@ distances are two separate closures and row 11 needed both.
 
 from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
+from std.sys.info import is_apple_gpu
 from std.memory import bitcast, stack_allocation
+from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.sync import barrier
@@ -144,6 +150,58 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
     buf_len_in: Int32,
     select_min_in: Int32,
 ):
+    """One block per row: the row's `k` smallest composite keys, ascending."""
+    _radix_topk_identical_body[RANK_CAPACITY](
+        in_val, out_val, out_idx, buf_val, buf_idx,
+        Int(len_in), Int(k_in), Int(buf_len_in), select_min_in != 0,
+        Int(k_in), 0,
+    )
+
+
+def radix_topk_identical_round_kernel[RANK_CAPACITY: Int](
+    in_val: MutPointer[Float32, MutAnyOrigin],
+    out_val: MutPointer[Float32, MutAnyOrigin],
+    out_idx: MutPointer[UInt32, MutAnyOrigin],
+    buf_val: MutPointer[Float32, MutAnyOrigin],
+    buf_idx: MutPointer[UInt32, MutAnyOrigin],
+    len_in: Int32,
+    k_in: Int32,
+    buf_len_in: Int32,
+    select_min_in: Int32,
+    out_stride_in: Int32,
+    out_offset_in: Int32,
+):
+    """One ROUND of a selection wider than `RANK_CAPACITY` (DEVIATION 6300):
+    the next `k_in` composite keys of each row, ascending, into slots
+    `[out_offset, out_offset + k_in)` of an output row `out_stride` wide.
+
+    Round r > 0 admits only keys ABOVE the key its previous round left in
+    slot `out_offset - 1`. The composite key is a total order, so the rounds
+    partition the row's smallest `out_offset + k_in` keys exactly and the
+    concatenated rows are the one ascending answer a single selection of
+    that width would return: same set, same order, every slot written once.
+    `select_radix_identical_rounds_launch` runs the rounds in stream order."""
+    _radix_topk_identical_body[RANK_CAPACITY](
+        in_val, out_val, out_idx, buf_val, buf_idx,
+        Int(len_in), Int(k_in), Int(buf_len_in), select_min_in != 0,
+        Int(out_stride_in), Int(out_offset_in),
+    )
+
+
+@always_inline
+def _radix_topk_identical_body[RANK_CAPACITY: Int](
+    in_val: MutPointer[Float32, MutAnyOrigin],
+    out_val: MutPointer[Float32, MutAnyOrigin],
+    out_idx: MutPointer[UInt32, MutAnyOrigin],
+    buf_val: MutPointer[Float32, MutAnyOrigin],
+    buf_idx: MutPointer[UInt32, MutAnyOrigin],
+    length: Int,
+    k: Int,
+    buf_len: Int,
+    select_min: Bool,
+    out_stride: Int,
+    out_offset: Int,
+):
     """One block per row, eight passes over the composite key, ranked output.
 
     The structure is the implemented kernel's: a per-pass histogram over one byte
@@ -155,18 +213,25 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
     `2 * buf_len` pairs per row and the survivors ping-pong between the two
     halves. Pass 0 and pass 1 read the original row; from pass 2 the
     survivors carry their ORIGINAL indices with them, which is what makes
-    the composite key computable at every pass.
+    the composite key computable at every pass. Apple instead scans the
+    immutable original row each pass, because its block barrier does not
+    order device-memory survivor writes. Apple also keeps winners in
+    threadgroup memory until ranked and published.
     """
-    var length = Int(len_in)
-    var k = Int(k_in)
-    var buf_len = Int(buf_len_in)
-    var select_min = select_min_in != 0
     var tid = Int(thread_idx.x)
     var batch = Int(block_idx.x)
 
     var in_base = in_val.unsafe_offset(batch * length)
-    var o_val = out_val.unsafe_offset(batch * k)
-    var o_idx = out_idx.unsafe_offset(batch * k)
+    var o_val = out_val.unsafe_offset(batch * out_stride + out_offset)
+    var o_idx = out_idx.unsafe_offset(batch * out_stride + out_offset)
+    # DEVIATION 6300: a later round admits only keys above the last key the
+    # previous round wrote (stream order: that launch finished before this).
+    var has_lo = out_offset > 0
+    var lo_key = UInt64(0)
+    if has_lo:
+        lo_key = composite_key(
+            o_val.unsafe_load(-1), o_idx.unsafe_load(-1), select_min
+        )
     var b_val = buf_val.unsafe_offset(batch * 2 * buf_len)
     var b_idx = buf_idx.unsafe_offset(batch * 2 * buf_len)
 
@@ -238,6 +303,15 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
             read_from_input = True
             previous_len = length
         var writes_buffer = current_len <= buf_len and pass_id > 0
+        comptime if is_apple_gpu():
+            # Metal barrier() orders threadgroup memory, not the device
+            # survivor buffers. Re-scan immutable input instead of reading
+            # another thread's device stores in this launch. Prefix tests
+            # below select the same survivors without changing any key.
+            in_ptr = in_base
+            read_from_input = True
+            previous_len = length
+            writes_buffer = False
 
         hist[tid] = Int32(0)
         if tid == 0:
@@ -256,6 +330,9 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
             if not read_from_input:
                 src = in_ip.unsafe_load(i)
             var key = composite_key(value, src, select_min)
+            if has_lo and key <= lo_key:
+                i += SELECT_BLOCK
+                continue
             if pass_id == 0:
                 var bucket = Int((key >> UInt64(start_bit)) & mask)
                 _ = Atomic.fetch_add(hist.unsafe_offset(bucket), Int32(1))
@@ -285,8 +362,12 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
                         )
                     )
                     if pos < k:
-                        o_val.unsafe_store(pos, value)
-                        o_idx.unsafe_store(pos, src)
+                        comptime if is_apple_gpu():
+                            s_val[pos] = value
+                            s_idx[pos] = src
+                        else:
+                            o_val.unsafe_store(pos, value)
+                            o_idx.unsafe_store(pos, src)
             i += SELECT_BLOCK
         barrier()
 
@@ -334,32 +415,35 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
                 var src = UInt32(j)
                 if lf_has_idx:
                     src = lf_ip.unsafe_load(j)
-                var bits = (
-                    composite_key(value, src, select_min) >> UInt64(lf_start)
-                ) << UInt64(lf_start)
-                if bits <= lf_kth:
+                var lf_key = composite_key(value, src, select_min)
+                var bits = (lf_key >> UInt64(lf_start)) << UInt64(lf_start)
+                if bits <= lf_kth and not (has_lo and lf_key <= lo_key):
                     var pos = Int(
                         Atomic.fetch_add(
                             ctr.unsafe_offset(CTR_OUT_CNT), Int32(1)
                         )
                     )
                     if pos < k:
-                        o_val.unsafe_store(pos, value)
-                        o_idx.unsafe_store(pos, src)
+                        comptime if is_apple_gpu():
+                            s_val[pos] = value
+                            s_idx[pos] = src
+                        else:
+                            o_val.unsafe_store(pos, value)
+                            o_idx.unsafe_store(pos, src)
                 j += SELECT_BLOCK
             barrier()
             break
 
     # ---- DEVIATION 501: the rank pass -----------------------------------
-    # The k winners are in `o_val` / `o_idx` in an order no one chose. Stage
-    # them, rank each against the others under the same total order, and
-    # write each to its rank. Distinct keys means distinct ranks, so the
-    # permutation is exact and every slot is written exactly once.
+    # Apple wrote winners directly into threadgroup staging; its barrier
+    # cannot order device-memory stores between threads. Other backends
+    # retain their original device-output staging path.
     var slot = tid
-    while slot < k:
-        s_val[slot] = o_val.unsafe_load(slot)
-        s_idx[slot] = o_idx.unsafe_load(slot)
-        slot += SELECT_BLOCK
+    comptime if not is_apple_gpu():
+        while slot < k:
+            s_val[slot] = o_val.unsafe_load(slot)
+            s_idx[slot] = o_idx.unsafe_load(slot)
+            slot += SELECT_BLOCK
     barrier()
     slot = tid
     while slot < k:
@@ -372,3 +456,173 @@ def radix_topk_identical_kernel[RANK_CAPACITY: Int](
         o_idx.unsafe_store(rank, s_idx[slot])
         slot += SELECT_BLOCK
     barrier()
+
+
+# ---- DEVIATION 6300: selections wider than IDENTICAL_MAX_K ---------------
+#
+# The bounded rank profile above stages at most IDENTICAL_MAX_K winners in
+# threadgroup memory. A wider k (SpectralEmbedding's default n_neighbors is
+# n // 10, 2,000 at 20,000 rows) runs the same kernel in ROUNDS of at most
+# IDENTICAL_MAX_K slots, each round above the last key of the one before, and
+# merges column tiles by binary search instead of the staged rank. Neither
+# does arithmetic on a distance: every move is a compare of the composite
+# (distance, index) key, a total order, so the answer is THE ascending k
+# smallest keys, the one the bounded path returns wherever both can run.
+
+comptime WIDE_MERGE_BLOCK = 256
+
+
+def select_radix_identical_rounds_launch(
+    ctx: DeviceContext,
+    in_val: MutPointer[Float32, MutAnyOrigin],
+    out_val: MutPointer[Float32, MutAnyOrigin],
+    out_idx: MutPointer[UInt32, MutAnyOrigin],
+    buf_val: MutPointer[Float32, MutAnyOrigin],
+    buf_idx: MutPointer[UInt32, MutAnyOrigin],
+    rows: Int,
+    length: Int,
+    k: Int,
+    buf_len: Int,
+    select_min: Bool,
+) raises:
+    """Each of `rows` rows of `length` values: its `k` smallest composite
+    keys, ascending, into an output row `k` wide, in rounds of at most
+    `IDENTICAL_MAX_K` (stream order carries each round's last key)."""
+    if k < 1 or k > length:
+        raise Error(
+            "select_radix (rounds): k must satisfy 1 <= k <= row length, got k="
+            + String(k) + " length=" + String(length)
+        )
+    if length > 2147483647 or k > 2147483647:
+        raise Error("select_radix (rounds): row length must fit Int32")
+    var off = 0
+    while off < k:
+        var kr = min(IDENTICAL_MAX_K, k - off)
+        ctx.enqueue_function[radix_topk_identical_round_kernel[IDENTICAL_MAX_K]](
+            in_val, out_val, out_idx, buf_val, buf_idx,
+            Int32(length), Int32(kr), Int32(buf_len),
+            Int32(1 if select_min else 0), Int32(k), Int32(off),
+            grid_dim=(rows, 1, 1),
+            block_dim=(SELECT_BLOCK, 1, 1),
+        )
+        off += kr
+
+
+@always_inline
+def _count_below(
+    vals: MutPointer[Float32, MutAnyOrigin],
+    idxs: MutPointer[UInt32, MutAnyOrigin],
+    n: Int, base: UInt32, key: UInt64, select_min: Bool,
+) -> Int:
+    """How many of the ascending keys `(vals[j], idxs[j] + base)`, j < n, are
+    below `key`. A slot whose index is 0xFFFFFFFF is absent (DEVIATION 3062)
+    and sorts above everything."""
+    var lo = 0
+    var hi = n
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var ix = idxs.unsafe_load(mid)
+        var below = False
+        if ix != UInt32(4294967295):
+            below = composite_key(vals.unsafe_load(mid), ix + base, select_min) < key
+        if below:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def wide_merge_rank_kernel(
+    running_values: MutPointer[Float32, MutAnyOrigin],
+    running_indices: MutPointer[UInt32, MutAnyOrigin],
+    partial_values: MutPointer[Float32, MutAnyOrigin],
+    partial_indices: MutPointer[UInt32, MutAnyOrigin],
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    out_indices: MutPointer[UInt32, MutAnyOrigin],
+    k_in: Int32, base_in: Int32, out_stride_in: Int32, select_min_in: Int32,
+):
+    """Merge rank of one of the 2k keys of row `block_idx.y`: its position in
+    its own ascending list plus the count of the other list's keys below it.
+    Keys are distinct (a partial index is offset by `base`), so the ranks are
+    a permutation; the `k` smallest are written to the row of `out_*`."""
+    var k = Int(k_in)
+    var base = UInt32(Int(base_in))
+    var select_min = select_min_in != 0
+    var row = Int(block_idx.y)
+    var slot = Int(block_idx.x) * WIDE_MERGE_BLOCK + Int(thread_idx.x)
+    if slot >= 2 * k:
+        return
+    var rv = running_values.unsafe_offset(row * k)
+    var ri = running_indices.unsafe_offset(row * k)
+    var pv = partial_values.unsafe_offset(row * k)
+    var pi = partial_indices.unsafe_offset(row * k)
+    var ov = out_values.unsafe_offset(row * Int(out_stride_in))
+    var oi = out_indices.unsafe_offset(row * Int(out_stride_in))
+    if slot < k:
+        var v = rv.unsafe_load(slot)
+        var ix = ri.unsafe_load(slot)
+        var rank = slot + _count_below(pv, pi, k, base, composite_key(v, ix, select_min), select_min)
+        if rank < k:
+            ov.unsafe_store(rank, v)
+            oi.unsafe_store(rank, ix)
+    else:
+        var s = slot - k
+        var ix = pi.unsafe_load(s)
+        if ix == UInt32(4294967295):
+            return
+        var v = pv.unsafe_load(s)
+        var rank = s + _count_below(rv, ri, k, UInt32(0), composite_key(v, ix + base, select_min), select_min)
+        if rank < k:
+            ov.unsafe_store(rank, v)
+            oi.unsafe_store(rank, ix + base)
+
+
+def wide_merge_copy_kernel(
+    src_values: MutPointer[Float32, MutAnyOrigin],
+    src_indices: MutPointer[UInt32, MutAnyOrigin],
+    running_values: MutPointer[Float32, MutAnyOrigin],
+    running_indices: MutPointer[UInt32, MutAnyOrigin],
+    k_in: Int32, src_stride_in: Int32,
+):
+    var k = Int(k_in)
+    var row = Int(block_idx.y)
+    var slot = Int(block_idx.x) * WIDE_MERGE_BLOCK + Int(thread_idx.x)
+    if slot >= k:
+        return
+    var s = row * Int(src_stride_in) + slot
+    running_values.unsafe_store(row * k + slot, src_values.unsafe_load(s))
+    running_indices.unsafe_store(row * k + slot, src_indices.unsafe_load(s))
+
+
+def wide_topk_merge_launch(
+    ctx: DeviceContext,
+    running_values: MutPointer[Float32, MutAnyOrigin],
+    running_indices: MutPointer[UInt32, MutAnyOrigin],
+    partial_values: MutPointer[Float32, MutAnyOrigin],
+    partial_indices: MutPointer[UInt32, MutAnyOrigin],
+    scratch_values: MutPointer[Float32, MutAnyOrigin],
+    scratch_indices: MutPointer[UInt32, MutAnyOrigin],
+    scratch_stride: Int,
+    rows: Int, k: Int, base: Int, select_min: Bool = True,
+) raises:
+    """`partial_topk_merge_launch` for any k: one column tile's ascending
+    partial top-k merged into the running ascending top-k, per row, through
+    `scratch` (rows x `scratch_stride`, at least k wide), then copied back.
+    Two launches in stream order; no threadgroup memory, no barrier."""
+    if rows <= 0 or rows > 65535 or base < 0 or base > 2147483647:
+        raise Error("wide top-k merge: rows must be in [1, 65535] and base an Int32")
+    if k < 1 or scratch_stride < k:
+        raise Error("wide top-k merge: k must be positive and the scratch at least k wide")
+    var gx = (2 * k + WIDE_MERGE_BLOCK - 1) // WIDE_MERGE_BLOCK
+    ctx.enqueue_function[wide_merge_rank_kernel](
+        running_values, running_indices, partial_values, partial_indices,
+        scratch_values, scratch_indices,
+        Int32(k), Int32(base), Int32(scratch_stride), Int32(1 if select_min else 0),
+        grid_dim=(gx, rows, 1), block_dim=(WIDE_MERGE_BLOCK, 1, 1),
+    )
+    ctx.enqueue_function[wide_merge_copy_kernel](
+        scratch_values, scratch_indices, running_values, running_indices,
+        Int32(k), Int32(scratch_stride),
+        grid_dim=((k + WIDE_MERGE_BLOCK - 1) // WIDE_MERGE_BLOCK, rows, 1),
+        block_dim=(WIDE_MERGE_BLOCK, 1, 1),
+    )

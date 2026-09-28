@@ -8,14 +8,17 @@ nothing is retained after the call."""
 from std.python import PythonObject
 
 from std.math import sqrt
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_CHUNK_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_PROPHET_FEATURES, OP_PROPHET_FIT, OP_PROPHET_PREDICT, OP_PROPHET_FG_PART, OP_PROPHET_FG_SUM, OP_MOE_ROUTE, OP_MOE_HIDDEN, OP_MOE_OUT, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 from sequence.ets import ets_scratch
 from sequence.garch import GARCH_SNAP
+from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
+from sequence.prophet import div as _pdiv
+from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -166,11 +169,12 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
     var s2 = ex.bind(h2, n)
     var s3 = ex.bind(h3, n)
     opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
+    # the four copies share one wait (apple2)
+    ex.download_async(hp, P, n)
+    ex.download_async(h1, s1, n)
+    ex.download_async(h2, s2, n)
+    ex.download_async(h3, s3, n)
     ex.sync()
-    ex.download(hp, P, n)
-    ex.download(h1, s1, n)
-    ex.download(h2, s2, n)
-    ex.download(h3, s3, n)
     return PythonObject(n)
 
 
@@ -405,6 +409,31 @@ def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     return PythonObject(N * O)
 
 
+#: FAST's two-pass norms (sequence/adafactor.mojo, op_chunk_sumsq) start at
+#: this many elements; below it the one-thread fold is as quick.
+comptime FAST_NORM_MIN = 65536
+comptime _PARTS = 4096      # = sequence.adafactor.SUMSQ_THREADS
+
+
+def _fast_norms() -> Bool:
+    return GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+
+
+def _chunk_sumsq[E: Exec](mut ex: E, src: FP, start: Int, n: Int, parts: FP, slot: Int) raises -> Int:
+    """FAST: min(_PARTS, n) strided partial sums of squares of src[start:start+n]
+    into parts[slot:]; returns how many."""
+    var T = min(_PARTS, n)
+    var c = Args()
+    c.p0 = src
+    c.p1 = parts
+    c.i0 = n
+    c.i1 = T
+    c.i2 = slot
+    c.i3 = start
+    ex.launch[OP_CHUNK_SUMSQ](c, T)
+    return T
+
+
 def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """One Adafactor step of ONE tensor, in place (`sequence/adafactor.mojo`).
     addrs = [param, grad, row_var (R) or variance (n), col_var (C; ignored for
@@ -437,12 +466,17 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     ex.upload(S1, h1, n if C == 0 else R)
     if C > 0:
         ex.upload(S2, fptr(addrs[3], "col_var"), C)
+    var fast = _fast_norms() and n >= FAST_NORM_MIN
+    var parts = ex.alloc(_PARTS if fast else 1)
     var a = Args()
     a.p0 = P
     a.p1 = sc
     a.i0 = n
     a.f0 = fval(fp, 3)
     a.f1 = rho
+    if fast:
+        a.p2 = parts
+        a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
     ex.launch[OP_AF_ALPHA](a, 1)
     if wd != Float32(0.0):
         var s = Args()
@@ -491,17 +525,20 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
     d.p1 = sc
     d.i0 = n
     d.f0 = fval(fp, 4)
+    if fast:
+        d.p2 = parts
+        d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
     ex.launch[OP_AF_DENOM](d, 1)
     var ap = Args()
     ap.p0 = P
     ap.p1 = U
     ap.p2 = sc
     ex.launch[OP_AF_APPLY](ap, n)
-    ex.sync()
-    ex.download(hp, P, n)
-    ex.download(h1, S1, n if C == 0 else R)
+    ex.download_async(hp, P, n)
+    ex.download_async(h1, S1, n if C == 0 else R)
     if C > 0:
-        ex.download(fptr(addrs[3], "col_var"), S2, C)
+        ex.download_async(fptr(addrs[3], "col_var"), S2, C)
+    ex.sync()
     return PythonObject(n)
 
 
@@ -545,11 +582,19 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     ex.upload(M, hm, n)
     ex.upload(V, hv, n)
     ex.upload(O, FP(unsafe_from_address=Int(offs.unsafe_ptr())), nt + 1)
+    var fast = _fast_norms() and n >= FAST_NORM_MIN
+    var partsA = ex.alloc(nt * _PARTS if fast else 1)
+    var partsB = ex.alloc(nt * _PARTS if fast else 1)
     if (flags & 16) != 0:
         var q = Args()
         q.p0 = G
         q.p1 = O
         q.p2 = nrm
+        if fast:
+            for k in range(nt):
+                _ = _chunk_sumsq(ex, G, Int(offs[k]), Int(offs[k + 1]) - Int(offs[k]), partsA, k * _PARTS)
+            q.p3 = partsA
+            q.i0 = 1
         ex.launch[OP_SEG_SUMSQ](q, nt)
         ex.sync()
         var h = List[Float32](length=nt, fill=Float32(0.0))
@@ -596,6 +641,15 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     r.p3 = ratio
     r.i0 = flags & 1
     if wd != Float32(0.0) or (flags & 2) != 0:
+        if fast:
+            for k in range(nt):
+                var s = Int(offs[k])
+                var e = Int(offs[k + 1])
+                _ = _chunk_sumsq(ex, P, s, e - s, partsA, k * _PARTS)
+                _ = _chunk_sumsq(ex, U, s, e - s, partsB, k * _PARTS)
+            r.p4 = partsA
+            r.p5 = partsB
+            r.i1 = 1
         ex.launch[OP_LAMB_RATIO](r, nt)
     else:
         var f = Args()
@@ -612,10 +666,10 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
         ap.i0 = k
         ap.f0 = lr
         ex.launch[OP_LAMB_APPLY](ap, e - s)
+    ex.download_async(hp, P, n)
+    ex.download_async(hm, M, n)
+    ex.download_async(hv, V, n)
     ex.sync()
-    ex.download(hp, P, n)
-    ex.download(hm, M, n)
-    ex.download(hv, V, n)
     _ = offs^
     return PythonObject(n)
 
@@ -682,15 +736,30 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
         c.p5 = rstd
         c.i0 = D
         c.i1 = M
-        ex.launch[OP_LN_BWD_W](c, D)
-        ex.sync()
-        ex.download(fptr(addrs[5], "dx"), DX, M * D)
+        # FAST: the column folds split over row blocks (about 8192 threads,
+        # at least 1024 rows each), then one ordered sum of the S partials
+        var S = min(max(8192 // D, 1), M // 1024) if _fast_norms() else 0
+        if S > 1:
+            var RS = (M + S - 1) // S
+            S = (M + RS - 1) // RS
+            var PW = ex.alloc(S * D)
+            var PB = ex.alloc(S * D)
+            c.p6 = PW
+            c.p7 = PB
+            c.i2 = S
+            c.i3 = RS
+            ex.launch[OP_LN_BWD_W](c, S * D)
+            c.i4 = 1
+            ex.launch[OP_LN_BWD_W](c, D)
+        else:
+            ex.launch[OP_LN_BWD_W](c, D)
+        ex.download_async(fptr(addrs[5], "dx"), DX, M * D)
         if hw:
-            ex.download(fptr(addrs[6], "dweight"), DW, D)
+            ex.download_async(fptr(addrs[6], "dweight"), DW, D)
         if hb:
-            ex.download(fptr(addrs[7], "dbias"), DB, D)
+            ex.download_async(fptr(addrs[7], "dbias"), DB, D)
+    ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
-    ex.download(fptr(addrs[3], "y"), Y, M * D)
     return PythonObject(M * D)
 
 
@@ -763,13 +832,25 @@ def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises
     return PythonObject(B)
 
 
+#: ETS's FAST Nelder-Mead stall stop (sequence/nm.mojo): the fit ends once
+#: its best value has not dropped by more than ETS_FAST_STALL_REL |best| for
+#: ETS_FAST_STALL_ITERS iterations. FAST only; chosen by the paired quality
+#: sweep in tools/sequence_quality.py (docs/lanes/progress/sequence-apple2.md):
+#: ETS's simplex still gains more than 1e-6 |best| every 50 to 300 iterations
+#: at the 1000 cap, so no stall stop ends it early; the stop stays opt-in.
+comptime ETS_FAST_STALL_ITERS = 0   # off: the sweep found no stop that saves time (below)
+comptime ETS_FAST_STALL_REL = Float32(1e-6)
+
+
 def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """ETS over a batch of series (`sequence/ets.mojo`).
     addrs = [y (B, n), forecast (B, h) out, info (B, 10) out, seasonal states (B, m) out];
     ip = [B, n, h, error (0 A, 1 M), trend (0 N, 1 A), damped, fixed mask, season (0 N, 1 A, 2 M), m];
-    fp = [alpha, beta, phi, gamma] (read where fixed)."""
-    if len(addrs) != 4 or len(ip) != 9 or len(fp) != 4:
-        raise Error("ets: requires 4 addresses, 9 integer and 4 float parameters")
+    fp = [alpha, beta, phi, gamma] (read where fixed). FAST: an optional
+    10th integer and 5th float override the Nelder-Mead stall stop
+    (ETS_FAST_STALL_ITERS / ETS_FAST_STALL_REL; 0 iterations: off)."""
+    if len(addrs) != 4 or (len(ip) != 9 and len(ip) != 10) or (len(fp) != 4 and len(fp) != 5):
+        raise Error("ets: requires 4 addresses, 9 (or 10) integer and 4 (or 5) float parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
     var h = ival(ip, 2)
@@ -805,6 +886,8 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
     a.f1 = fval(fp, 1)
     a.f2 = fval(fp, 2)
     a.f3 = fval(fp, 3)
+    a.i9 = ival(ip, 9) if len(ip) == 10 else ETS_FAST_STALL_ITERS
+    a.f4 = fval(fp, 4) if len(fp) == 5 else ETS_FAST_STALL_REL
     ex.launch[OP_ETS](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "forecast"), F, B * h)
@@ -814,13 +897,23 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
     return PythonObject(B * h)
 
 
+#: GARCH's FAST Nelder-Mead stall stop (as ETS_FAST_STALL_*): float32 never
+#: meets the reference's tol_std 1e-6 at -loglik ~ 100, so a capped simplex
+#: ran both 2000-iteration runs; FAST ends a run whose best value has stopped
+#: moving. Chosen by the paired quality sweep (tools/sequence_quality.py).
+comptime GARCH_FAST_STALL_ITERS = 50
+comptime GARCH_FAST_STALL_REL = Float32(1e-5)
+
+
 def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """GARCH(p, o, q) over a batch of series (`sequence/garch.mojo`).
     addrs = [y (B, n), params (B, 1 + 1 + p + o + q) out, info (B, 4) out,
     sigma (B, n) out, variance forecast (B, h) out];
-    ip = [B, n, h, p, o, q, constant mean]."""
-    if len(addrs) != 5 or len(ip) != 7:
-        raise Error("garch: requires 5 addresses and 7 integer parameters")
+    ip = [B, n, h, p, o, q, constant mean]. FAST: an optional 8th and 9th
+    override the Nelder-Mead stall stop (iterations, relative drop in units
+    of 1e-9; GARCH_FAST_STALL_*; 0 iterations: off)."""
+    if len(addrs) != 5 or (len(ip) != 7 and len(ip) != 9):
+        raise Error("garch: requires 5 addresses and 7 (or 9) integer parameters")
     var B = ival(ip, 0)
     var n = ival(ip, 1)
     var h = ival(ip, 2)
@@ -853,6 +946,8 @@ def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -
     a.i4 = q
     a.i5 = cm
     a.i6 = stride
+    a.i7 = ival(ip, 7) if len(ip) == 9 else GARCH_FAST_STALL_ITERS
+    a.f0 = Float32(Float64(ival(ip, 8)) * 1e-9) if len(ip) == 9 else GARCH_FAST_STALL_REL
     ex.launch[OP_GARCH](a, B)
     ex.sync()
     ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))
@@ -886,6 +981,148 @@ def _prophet_X[E: Exec](mut ex: E, frac_addr: PythonObject, orders_addr: PythonO
     return X
 
 
+#: FAST's prophet fit runs its likelihood over point chunks on the device
+#: (apple2) from this many points; a smaller series keeps a thread each.
+comptime PROPHET_FAST_MIN_N = 16384
+
+
+def _prophet_fg_dev[E: Exec](mut ex: E, pa: Args, C: Int, thd: FP, outd: FP, d: ProphetData,
+                             th: FP, g: FP) raises -> Float32:
+    """prophet_fg at host th into host g: the likelihood's C chunks and their
+    ordered sums on the device (op_prophet_fg_part / _sum), the priors here."""
+    var P = 3 + d.S + d.K
+    ex.upload(thd, th, P)
+    ex.launch[OP_PROPHET_FG_PART](pa, C)
+    var s = Args()
+    s.p6 = pa.p6
+    s.p7 = outd
+    s.i4 = C
+    s.i5 = P + 1
+    ex.launch[OP_PROPHET_FG_SUM](s, P + 1)
+    var sse = List[Float32](length=1, fill=Float32(0.0))
+    ex.download_async(g, outd, P)
+    ex.download_async(FP(unsafe_from_address=Int(sse.unsafe_ptr())), outd + P, 1)
+    ex.sync()
+    var r = _fg_prior(d, th, g, sse[0])
+    _ = sse^
+    return r
+
+
+def lbfgs_prophet_host[E: Exec](mut ex: E, pa: Args, C: Int, thd: FP, outd: FP,
+                                d: ProphetData, th: FP, w: FP, max_iter: Int) raises -> Tuple[Float32, Int]:
+    """FAST (apple2): sequence/prophet.mojo::lbfgs_prophet line for line, on
+    the host, each objective the device's chunked likelihood
+    (`_prophet_fg_dev`). th and w are host memory."""
+    var P = 3 + d.S + d.K
+    var g = w
+    var dvec = g + P
+    var thn = dvec + P
+    var gn = thn + P
+    var q = gn + P
+    var sm = q + P
+    var ym = sm + MEM * P
+    var rho = ym + MEM * P
+    var al = rho + MEM
+    var f = _prophet_fg_dev(ex, pa, C, thd, outd, d, th, g)
+    var npairs = 0
+    var head = 0
+    var small = 0
+    var it = 0
+    while it < max_iter:
+        # two-loop recursion: q = g; newest to oldest, then oldest to newest
+        for i in range(P):
+            p_st(q, i, p_ld(g, i))
+        var idx = head
+        for _ in range(npairs):
+            idx = (idx - 1 + MEM) % MEM
+            var aa = p_mul(p_ld(rho, idx), _dot(sm + idx * P, q, P))
+            p_st(al, idx, aa)
+            for i in range(P):
+                p_st(q, i, p_sub(p_ld(q, i), p_mul(aa, p_ld(ym + idx * P, i))))
+        var gamma = Float32(1.0)
+        if npairs > 0:
+            var last = (head - 1 + MEM) % MEM
+            var yy = _dot(ym + last * P, ym + last * P, P)
+            if yy > Float32(0.0):
+                gamma = _pdiv(_dot(sm + last * P, ym + last * P, P), yy)
+        else:
+            var gg = ftz(identical_sqrt(_dot(g, g, P)))
+            if gg > Float32(1.0):
+                gamma = _pdiv(Float32(1.0), gg)
+        for i in range(P):
+            p_st(q, i, p_mul(gamma, p_ld(q, i)))
+        var start = (head - npairs + MEM) % MEM
+        idx = start
+        for _ in range(npairs):
+            var bb = p_mul(p_ld(rho, idx), _dot(ym + idx * P, q, P))
+            var coef = p_sub(p_ld(al, idx), bb)
+            for i in range(P):
+                p_st(q, i, p_fma3(coef, p_ld(sm + idx * P, i), p_ld(q, i)))
+            idx = (idx + 1) % MEM
+        for i in range(P):
+            p_st(dvec, i, -p_ld(q, i))
+        var gd = _dot(g, dvec, P)
+        if not (gd < Float32(0.0)):
+            for i in range(P):
+                p_st(dvec, i, -p_ld(g, i))
+            gd = -_dot(g, g, P)
+            npairs = 0
+        # backtracking Armijo
+        var step = Float32(1.0)
+        var fnew = Float32(0.0)
+        var ok = False
+        for _ in range(40):
+            for i in range(P):
+                p_st(thn, i, p_fma3(step, p_ld(dvec, i), p_ld(th, i)))
+            fnew = _prophet_fg_dev(ex, pa, C, thd, outd, d, thn, gn)
+            if fnew <= p_fma3(p_mul(Float32(1e-4), step), gd, f):
+                ok = True
+                break
+            step = p_mul(step, Float32(0.5))
+        it += 1
+        if not ok:
+            break
+        # the new pair, kept only with positive curvature (q and dvec are
+        # free here; the slot is written only when the pair is kept)
+        for i in range(P):
+            p_st(q, i, p_sub(p_ld(thn, i), p_ld(th, i)))
+            p_st(dvec, i, p_sub(p_ld(gn, i), p_ld(g, i)))
+        var sy = _dot(q, dvec, P)
+        if sy > Float32(1e-12):
+            var slot = head
+            for i in range(P):
+                p_st(sm + slot * P, i, p_ld(q, i))
+                p_st(ym + slot * P, i, p_ld(dvec, i))
+            p_st(rho, slot, _pdiv(Float32(1.0), sy))
+            head = (head + 1) % MEM
+            if npairs < MEM:
+                npairs += 1
+        var fscale = abs(f)
+        if abs(fnew) > fscale:
+            fscale = abs(fnew)
+        if fscale < Float32(1.0):
+            fscale = Float32(1.0)
+        var df = p_sub(f, fnew)
+        for i in range(P):
+            p_st(th, i, p_ld(thn, i))
+            p_st(g, i, p_ld(gn, i))
+        f = fnew
+        var gmax = Float32(0.0)
+        for i in range(P):
+            var v = abs(p_ld(g, i))
+            if v > gmax:
+                gmax = v
+        if gmax < Float32(1e-5):
+            break
+        if df <= p_mul(Float32(1e-7), fscale):
+            small += 1
+            if small >= 3:
+                break
+        else:
+            small = 0
+    return (f, it)
+
+
 def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """The Prophet-style fit over a batch of series sharing t
     (`sequence/prophet.mojo`). addrs = [y (B, N), t (N, scaled), frac (N, ns),
@@ -909,12 +1146,77 @@ def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp
     ex.upload(Y, fptr(addrs[0], "y"), B * N)
     var T = ex.alloc(N)
     ex.upload(T, fptr(addrs[1], "t"), N)
-    var C = ex.alloc(max(S, 1))
+    var C_ = ex.alloc(max(S, 1))
     if S > 0:
-        ex.upload(C, fptr(addrs[5], "changepoints"), S)
+        ex.upload(C_, fptr(addrs[5], "changepoints"), S)
     var Sg = ex.alloc(max(K, 1))
     if K > 0:
         ex.upload(Sg, fptr(addrs[6], "prior scales"), K)
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        if N >= PROPHET_FAST_MIN_N:
+            # FAST (apple2): one series at a time, its likelihood over point
+            # chunks on the device; L-BFGS and the priors on the host
+            var C = min(4096, (N + 255) // 256)
+            var parts = ex.alloc(C * (P + 1))
+            var thd = ex.alloc(P)
+            var outd = ex.alloc(P + 1)
+            var ysd = ex.alloc(N)
+            var hy = fptr(addrs[0], "y")
+            var hpar = fptr(addrs[7], "params")
+            var hinf = fptr(addrs[8], "info")
+            var dh = ProphetData(FP(unsafe_from_address=64), FP(unsafe_from_address=64),
+                                 fptr(addrs[5], "changepoints") if S > 0 else FP(unsafe_from_address=64),
+                                 fptr(addrs[6], "prior scales") if K > 0 else FP(unsafe_from_address=64),
+                                 N, K, S, fval(fp, 0), ival(ip, 6) != 0)
+            var ht = fptr(addrs[1], "t")
+            var ys = List[Float32](length=N, fill=Float32(0.0))
+            var ws = List[Float32](length=(6 + 2 * 5) * P + 2 * 5 + P, fill=Float32(0.0))
+            var pys = FP(unsafe_from_address=Int(ys.unsafe_ptr()))
+            var pw = FP(unsafe_from_address=Int(ws.unsafe_ptr()))
+            var th = pw + (6 + 2 * 5) * P + 2 * 5
+            var pa = Args()
+            pa.p0 = ysd
+            pa.p1 = T
+            pa.p2 = X
+            pa.p3 = C_
+            pa.p4 = Sg
+            pa.p5 = thd
+            pa.p6 = parts
+            pa.i0 = N
+            pa.i1 = K
+            pa.i2 = S
+            pa.i3 = ival(ip, 6)
+            pa.i4 = C
+            pa.f0 = fval(fp, 0)
+            for b in range(B):
+                var y = hy + b * N
+                var scale = Float32(0.0)
+                for i in range(N):
+                    var v = abs(y[i])
+                    if v > scale:
+                        scale = v
+                if scale == Float32(0.0):
+                    scale = Float32(1.0)
+                for i in range(N):
+                    pys[i] = ftz(identical_div(y[i], scale))
+                ex.upload(ysd, pys, N)
+                var t0 = ht[0]
+                var t1 = ht[N - 1]
+                var k = ftz(identical_div(pys[N - 1] - pys[0], t1 - t0)) if t1 != t0 else Float32(0.0)
+                th[0] = k
+                th[1] = pys[0] - ftz(identical_mul(k, t0))
+                for j in range(S + 1 + K):
+                    th[2 + j] = Float32(0.0)
+                var r = lbfgs_prophet_host(ex, pa, C, thd, outd, dh, th, pw, ival(ip, 7))
+                for j in range(P):
+                    hpar[b * P + j] = th[j]
+                hinf[b * 4] = scale
+                hinf[b * 4 + 1] = r[0]
+                hinf[b * 4 + 2] = Float32(r[1])
+                hinf[b * 4 + 3] = Float32(0.0)
+            _ = ys^
+            _ = ws^
+            return PythonObject(B)
     var Pm = ex.alloc(B * P)
     var I = ex.alloc(B * 4)
     var W = ex.alloc(B * stride)
@@ -922,7 +1224,7 @@ def prophet_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp
     a.p0 = Y
     a.p1 = T
     a.p2 = X
-    a.p3 = C
+    a.p3 = C_
     a.p4 = Sg
     a.p5 = Pm
     a.p6 = I

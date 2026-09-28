@@ -31,7 +31,9 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "python"))
+# SEQ_SPEED_PYTHON: another checkout's python/ (tools/sequence_apple_ab.sh
+# times every variant with this one harness)
+sys.path.insert(0, os.environ.get("SEQ_SPEED_PYTHON") or str(ROOT / "python"))
 
 
 def digest(*arrays):
@@ -182,6 +184,16 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
     elif name == "garch":
         m = ml.GARCH(1, 0, 1).fit(Y - np.float32(10.0), horizon=5)
         outs = (m.params_ if hasattr(m, "params_") else m.params, m.forecast(5))
+    elif name == "arima":
+        m = ml.ARIMA((1, 1, 1)).fit(Y)
+        outs = (np.asarray(m.params) if hasattr(m, "params") else m.params_, m.forecast(12))
+    elif name == "hw":
+        m = ml.ExponentialSmoothing(Y, seasonal_periods=12, ts_num=B)
+        m.fit()
+        outs = (m.forecast(12),)
+    elif name == "kpss":
+        r = ml.kpss_test(np.ascontiguousarray(Y.T), return_statistic=True)
+        outs = tuple(np.asarray(v) for v in (r if isinstance(r, tuple) else (r,)))
     elif name == "autoarima":
         m = ml.AutoARIMA(Y).search(d=range(2), p=range(2), q=range(2))
         m.fit()
@@ -192,7 +204,9 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
         outs = (r.params, r.sigma_u)
         B, n_len = Yv.shape[1], Yv.shape[0]
     elif name == "prophet":
-        n = min(len(X), 1_000_000) if big else 2000
+        # SEQ_PROPHET_N: the A/B's shape (the 1M-point IDENTICAL fit is one
+        # GPU thread, ~25 minutes on an M4 Pro)
+        n = min(len(X), int(os.environ.get("SEQ_PROPHET_N", 1_000_000))) if big else 2000
         tt = np.arange(n, dtype=np.float64) / 24.0
         yy = np.ascontiguousarray(X[:n, 0] + np.float32(10.0))
         m = ml.ProphetForecaster().fit(tt, yy)
@@ -224,7 +238,9 @@ def case_ts(ml, X, y, name, big, B_big, n_len):
 
 
 TS = dict(stl=(10000, 100), theta=(10000, 100), croston=(10000, 100), ets=(10000, 100),
-          garch=(10000, 100), autoarima=(2000, 100), var=(0, 0), prophet=(0, 0))
+          garch=(10000, 100), arima=(10000, 100), hw=(10000, 100), kpss=(10000, 100),
+          autoarima=(2000, 100), var=(0, 0), prophet=(0, 0))
+#: every case; ALL is the default --algos
 NEURAL = ["lstm", "gru", "rnn", "mlp", "moe", "layernorm"]
 OPTIM = ["rmsprop", "adagrad", "lion", "adamax", "nadam", "lamb", "adafactor"]
 ALL = NEURAL + OPTIM + list(TS)
@@ -270,7 +286,9 @@ def compare(a, b):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", default="~/data/higgs_speed.npz")
+    ap.add_argument("--data", default=next((p for p in ("~/data/higgs_speed.npz",
+                    "~/datasets/gbm-bench/higgs/higgs_speed.npz") if os.path.exists(os.path.expanduser(p))),
+                    "~/data/higgs_speed.npz"))
     ap.add_argument("--rows", type=int, default=1_000_000)
     ap.add_argument("--algos", default=",".join(ALL))
     ap.add_argument("--out", default="")
@@ -286,6 +304,16 @@ def main():
         rec = dict(algo=name)
         try:
             run_case(ml, X, y, name, False)          # warm-up: binding load, context, kernels
+            if name in os.environ.get("SEQ_PROFILE", "").split(","):
+                # a SPLIT, never a timing: where the host time goes (cProfile)
+                import cProfile, io, pstats
+                pr = cProfile.Profile()
+                pr.enable()
+                run_case(ml, X, y, name, True)
+                pr.disable()
+                s = io.StringIO()
+                pstats.Stats(pr, stream=s).sort_stats("tottime").print_stats(18)
+                print("\n".join("PROF " + name + " " + l for l in s.getvalue().splitlines() if l.strip()), flush=True)
             rec.update(run_case(ml, X, y, name, True))
         except Exception as e:                       # recorded, never hidden
             rec["error"] = f"{type(e).__name__}: {e}"

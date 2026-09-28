@@ -4,6 +4,7 @@
 
 from gbdt.options.child_hessian import child_hessian_threshold
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.gpu import block_dim, block_idx, thread_idx
 from core.device_zero import enqueue_fill
 
 from checks.fixed_point import choose_scale
@@ -46,7 +47,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_resolve import (
     WINNER_STATUS_DEFINED,
     leaf_winner_fold_kernel,
 )
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.builtin.sort import sort
@@ -128,6 +129,21 @@ from gbdt.options.catboost_options import (
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
+comptime DEFER_HIST_COPY_1903 = not SPLIT_COST_IDENTICAL or (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY"]()
+)
+"""DEVIATION 1903's schedule (the parent-histogram copy deferred to the
+plan-time pairs that need it, the zero pass over dirty slots only): FAST
+everywhere, and Apple IDENTICAL since trees-apple2 (2026-09-28). Its bit
+argument is schedule-only -- every slot holds the same bytes at every
+read (a deferred copy copies the same untouched parent; an elided zero
+leaves the tree memset's +0.0 where the kernel would write +0.0) -- so it
+holds under IDENTICAL too. The other SPLIT_COST_IDENTICAL arms (1901's
+propagated partition stats, which re-associate; 1904's device fold) stay
+as they were. `-D MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY` restores the
+split-time copy and the full zero pass on Apple IDENTICAL."""
+
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
 # in TSplitPointsKernel (split_properties_helper.cpp:918-936); this implementation keeps
@@ -178,6 +194,9 @@ comptime NONSYM_GROUP_WIDTH_2661 = is_defined[
 # column; the readers' gather arms are bound where this constant is
 # spelled (hist build, split apply, end-of-tree sweep) and default to the
 # old body everywhere else.
+comptime RIDX_IDENTICAL_MAX_FEATURES = 64
+"""See `use_ridx` in `fit_non_symmetric_tree`."""
+
 comptime RIDX_ONLY_SPLITS = ridx_only_splits_for[
     TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 ]()
@@ -264,6 +283,79 @@ struct TBinFeatureTable(Copyable, Movable):
                 BIN_SPLIT_TAKE_BIN
             ) if self.one_hot[bin_feature] else Int32(BIN_SPLIT_TAKE_GREATER),
         )
+
+
+# trees-apple2: the id-list arena's slots, grouped so each phase's lists sit
+# in one run: plan time (copy pairs, zero, build, all, visit, subtract pair)
+# and split time (split pair, winning cells).
+comptime IDS_SLOT_COPY_SRC = 0
+comptime IDS_SLOT_COPY_DST = 1
+comptime IDS_SLOT_ZERO = 2
+comptime IDS_SLOT_IDS = 3
+comptime IDS_SLOT_ALL = 4
+comptime IDS_SLOT_VISIT = 5
+comptime IDS_SLOT_SUB_LEFT = 6
+comptime IDS_SLOT_SUB_RIGHT = 7
+# the split features (`CFeature` records, their `splitsFeatures`) take
+# `IDS_FEAT_SLOTS` slots: one record per splitting leaf is
+# `CFEATURE_BYTES / 4` words
+comptime IDS_FEAT_SLOTS = CFEATURE_BYTES // 4
+comptime IDS_SLOT_SP_FEATS = 8
+comptime IDS_SLOT_SP_BINS = IDS_SLOT_SP_FEATS + IDS_FEAT_SLOTS
+comptime IDS_SLOT_LEFT = IDS_SLOT_SP_BINS + 1
+comptime IDS_SLOT_RIGHT = IDS_SLOT_SP_BINS + 2
+comptime IDS_SLOT_WIN = IDS_SLOT_SP_BINS + 3
+comptime IDS_SLOTS = IDS_SLOT_SP_BINS + 4
+
+comptime ID_UPLOAD_COALESCE = not is_defined[
+    "MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE"
+]()
+"""trees-apple2 (2026-09-28): a phase's small id lists (Depthwise/Lossguide)
+go to the device in ONE copy per run of adjacent arena slots instead of one
+copy each. Each Metal enqueue costs ~20 us of host time (M4,
+`bench/speed/metal_enqueue_cost_main.mojo`) and a Lossguide leaf split
+staged six plan-time lists and four split-time ones. Same words land in
+the same device buffers before the same kernels, so no bit can move.
+`-D MOJOLEARN_GBDT_ID_UPLOADS_SEPARATE` copies each slot on its own (the
+old count, same code otherwise)."""
+
+
+def _upload_id_slots(
+    ctx: DeviceContext,
+    d_arena: DeviceBuffer[DType.uint32],
+    h_arena: MutPointer[UInt32, MutUntrackedOrigin],
+    host: List[MutPointer[UInt32, MutUntrackedOrigin]],
+    max_leaves: Int,
+    var slots: List[Int],
+) raises:
+    """Stage the named slots' host lists (`host[slot]`, `max_leaves` words
+    each, the whole buffer as every former per-list copy moved) into the
+    arena's staging buffer and copy each run of adjacent slots in one
+    `enqueue_copy`. Only the named slots are written on the device."""
+    if len(slots) == 0:
+        return
+    sort(slots)
+    for slot in slots:
+        memcpy(
+            dest=h_arena.unsafe_offset(slot * max_leaves),
+            src=host[slot],
+            count=max_leaves,
+        )
+    var i = 0
+    while i < len(slots):
+        var j = i
+        comptime if ID_UPLOAD_COALESCE:
+            while j + 1 < len(slots) and slots[j + 1] == slots[j] + 1:
+                j += 1
+        var first = slots[i]
+        var n = slots[j] - first + 1
+        ctx.enqueue_copy(
+            dst_buf=d_arena.create_sub_buffer[DType.uint32](
+                first * max_leaves, n * max_leaves
+            ),
+            src_ptr=h_arena.unsafe_offset(first * max_leaves),
+        )
+        i = j + 1
 
 
 struct TDepthwiseWorkspace(Movable):
@@ -355,6 +447,25 @@ struct TDepthwiseWorkspace(Movable):
     var h_copy_src: HostBuffer[DType.uint32]
     var d_copy_dst: DeviceBuffer[DType.uint32]
     var h_copy_dst: HostBuffer[DType.uint32]
+    # trees-apple2 (ID_UPLOAD_COALESCE): every small id list above lives in
+    # ONE device arena (`d_ids_arena`, slot `IDS_SLOT_*` of `max_leaves`
+    # words each), and a phase's lists reach it through ONE staging copy
+    # (`h_ids_arena`) per run of adjacent slots. The subtract pair has its
+    # own slots (`d_sub_left`/`d_sub_right`), apart from the split pair, so
+    # the plan-time and split-time stagings never share a host word.
+    var d_ids_arena: DeviceBuffer[DType.uint32]
+    var h_ids_arena: HostBuffer[DType.uint32]
+    var d_sub_left: DeviceBuffer[DType.uint32]
+    var d_sub_right: DeviceBuffer[DType.uint32]
+    # the split's bin per splitting leaf (their `splitBins`), this
+    # driver's own arena slot beside the split pair; the symmetric pool's
+    # `sp_bins` is not used here
+    var d_sp_bins: DeviceBuffer[DType.uint32]
+    var h_sp_bins: HostBuffer[DType.uint32]
+    # the split features, likewise (`IDS_FEAT_SLOTS` slots, read by the
+    # kernels through a `CFeature` bitcast)
+    var d_sp_feats: DeviceBuffer[DType.uint32]
+    var h_sp_feats: HostBuffer[DType.uint32]
     # DEVIATION 1904 (wired): the device-resident winner fold's planes.
     # The four `TBinFeatureTable` columns (feature, clamp-raw bin, one-hot
     # flag, fold count -- each `hist_cells` long, their own staging pairs
@@ -443,38 +554,83 @@ struct TDepthwiseWorkspace(Movable):
         self.h_region_bin = ctx.enqueue_create_host_buffer[DType.uint32](
             records
         )
-        self.d_visit = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        comptime assert (
+            CFEATURE_BYTES % 4 == 0
+        ), "the id arena holds CFeature records as whole 32-bit words"
+        var arena = ctx.enqueue_create_buffer[DType.uint32](
+            IDS_SLOTS * max_leaves
+        )
+        self.h_ids_arena = ctx.enqueue_create_host_buffer[DType.uint32](
+            IDS_SLOTS * max_leaves
+        )
+        self.d_sub_left = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SUB_LEFT * max_leaves, max_leaves
+        )
+        self.d_sub_right = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SUB_RIGHT * max_leaves, max_leaves
+        )
+        self.d_visit = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_VISIT * max_leaves, max_leaves
+        )
+        self.d_sp_bins = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SP_BINS * max_leaves, max_leaves
+        )
+        self.h_sp_bins = ctx.enqueue_create_host_buffer[DType.uint32](
+            max_leaves
+        )
+        self.d_sp_feats = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_SP_FEATS * max_leaves, IDS_FEAT_SLOTS * max_leaves
+        )
+        self.h_sp_feats = ctx.enqueue_create_host_buffer[DType.uint32](
+            IDS_FEAT_SLOTS * max_leaves
+        )
         self.h_visit = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
-        self.d_left = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_left = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_LEFT * max_leaves, max_leaves
+        )
         self.h_left = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-        self.d_right = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_right = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_RIGHT * max_leaves, max_leaves
+        )
         self.h_right = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
-        self.d_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_ids = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_IDS * max_leaves, max_leaves
+        )
         self.h_ids = ctx.enqueue_create_host_buffer[DType.uint32](max_leaves)
-        self.d_zero_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_zero_ids = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_ZERO * max_leaves, max_leaves
+        )
         self.h_zero_ids = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
-        self.d_all_ids = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_all_ids = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_ALL * max_leaves, max_leaves
+        )
         self.h_all_ids = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
         self.h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
             max_leaves * stat_count
         )
-        self.d_win_cells = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_win_cells = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_WIN * max_leaves, max_leaves
+        )
         self.h_win_cells = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
-        self.d_copy_src = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_copy_src = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_COPY_SRC * max_leaves, max_leaves
+        )
         self.h_copy_src = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
-        self.d_copy_dst = ctx.enqueue_create_buffer[DType.uint32](max_leaves)
+        self.d_copy_dst = arena.create_sub_buffer[DType.uint32](
+            IDS_SLOT_COPY_DST * max_leaves, max_leaves
+        )
         self.h_copy_dst = ctx.enqueue_create_host_buffer[DType.uint32](
             max_leaves
         )
@@ -501,6 +657,7 @@ struct TDepthwiseWorkspace(Movable):
         self.h_winner = ctx.enqueue_create_host_buffer[DType.uint32](
             WINNER_RECORD_WORDS * max_leaves
         )
+        self.d_ids_arena = arena^
 
 
 def is_terminal_leaf(
@@ -788,6 +945,25 @@ def _leaf_records(
     return out^
 
 
+def _stats_through_index_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    stat_count: Int32,
+):
+    """`dst[s * n + p] = stats[s * n + row_index[p]]`: the permuted plane a
+    ridx-only build does not keep, for the identity trace only."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_rows)
+    if i < n * Int(stat_count):
+        var s = i // n
+        var p = i - s * n
+        dst[unsafe_offset=i] = stats[
+            unsafe_offset = s * n + Int(row_index[unsafe_offset=p])
+        ]
+
+
 def fit_non_symmetric_tree[
     hist2_smem_mode: Int = 0
 ](
@@ -890,6 +1066,16 @@ def fit_non_symmetric_tree[
     row 7); neither substitutes histogram-derived sums.
     ===============================================
     """
+    # DEVIATION 1902's schedule is a comptime row (RIDX_ONLY_SPLITS); under
+    # IDENTICAL (Apple, trees-apple2) it is taken only on layouts of at most
+    # RIDX_IDENTICAL_MAX_FEATURES features, where its gathered stat loads
+    # cost less than the reorder they save (M4 Pro, steward 1790608373786:
+    # depthwise taxi 0.969, Istella 1.024). FAST keeps it at every width.
+    # One decision per tree, so a tree never mixes the two schedules.
+    var use_ridx = RIDX_ONLY_SPLITS and (
+        not SPLIT_COST_IDENTICAL
+        or len(fold_counts) <= RIDX_IDENTICAL_MAX_FEATURES
+    )
     if options.policy != GROW_DEPTHWISE and options.policy != GROW_LOSSGUIDE:
         raise Error(
             "fit_non_symmetric_tree is EGrowPolicy::Depthwise or Lossguide;"
@@ -1019,10 +1205,10 @@ def fit_non_symmetric_tree[
     ref flat_first = ws[0].flat_first
     ref flat_folds = ws[0].flat_folds
     ref flat_one_hot = ws[0].flat_one_hot
-    ref sp_feats = ws[0].sp_feats
-    ref sp_feats_h = ws[0].sp_feats_h
-    ref sp_bins = ws[0].sp_bins
-    ref sp_bins_h = ws[0].sp_bins_h
+    ref sp_feats = dws[0].d_sp_feats
+    ref sp_feats_h = dws[0].h_sp_feats
+    ref sp_bins = dws[0].d_sp_bins
+    ref sp_bins_h = dws[0].h_sp_bins
     ref dense_ids = ws[0].dense_ids
 
     ref region_score = dws[0].region_score
@@ -1048,6 +1234,34 @@ def fit_non_symmetric_tree[
     ref h_copy_src = dws[0].h_copy_src
     ref d_copy_dst = dws[0].d_copy_dst
     ref h_copy_dst = dws[0].h_copy_dst
+    ref d_ids_arena = dws[0].d_ids_arena
+    ref d_sub_left = dws[0].d_sub_left
+    ref d_sub_right = dws[0].d_sub_right
+    var h_ids_arena_p = dws[0].h_ids_arena.unsafe_ptr().unsafe_origin_cast[
+        MutUntrackedOrigin
+    ]()
+    # host list of every arena slot, in `IDS_SLOT_*` order (the subtract and
+    # split pairs both stage from `h_left`/`h_right`: the arena copy is taken
+    # at upload time, into separate slots)
+    var ids_host = List[MutPointer[UInt32, MutUntrackedOrigin]]()
+    ids_host.append(h_copy_src.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_copy_dst.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_zero_ids.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_ids.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_all_ids.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_visit.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    for fs in range(IDS_FEAT_SLOTS):
+        ids_host.append(
+            sp_feats_h.unsafe_ptr()
+            .unsafe_offset(fs * max_leaves)
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+        )
+    ids_host.append(sp_bins_h.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_left.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_right.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
+    ids_host.append(h_win_cells.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]())
     ref d_bf_feature = dws[0].d_bf_feature
     ref h_bf_feature = dws[0].h_bf_feature
     ref d_bf_bin = dws[0].d_bf_bin
@@ -1340,6 +1554,113 @@ def fit_non_symmetric_tree[
             d_tag + "plan.nonzero", _u32_as_i32(non_zero)
         )
 
+        # ============ trees-apple2: THE PLAN-TIME ID LISTS, STAGED ONCE ============
+        # Every list below is a pure function of host state known here (the
+        # plan, `hist_slot_dirty`, the leaves after their BestSplit reset,
+        # `part_stats_dirty`), so it is built now, in the order the kernels
+        # below consume it, and reaches the device in ONE copy per run of
+        # adjacent arena slots (`_upload_id_slots`, ID_UPLOAD_COALESCE) instead
+        # of one copy per list at each consumer. The kernels are unchanged
+        # and read the same words; nothing on the device runs between the
+        # old copy sites and the new one except kernels that do not read
+        # these lists.
+        var plan_slots = List[Int]()
+        # DEVIATION 1903's deferred copy pairs (FAST arm)
+        var n_copy = 0
+        comptime if DEFER_HIST_COPY_1903:
+            if len(plan.subtract_from) > 0:
+                for i in range(len(plan.subtract_from)):
+                    if Int(plan.subtract_from[i]) > Int(
+                        plan.subtract_what[i]
+                    ):
+                        h_copy_src.unsafe_ptr().unsafe_store(
+                            n_copy, plan.subtract_what[i]
+                        )
+                        h_copy_dst.unsafe_ptr().unsafe_store(
+                            n_copy, plan.subtract_from[i]
+                        )
+                        n_copy += 1
+                if n_copy > 0:
+                    plan_slots.append(IDS_SLOT_COPY_SRC)
+                    plan_slots.append(IDS_SLOT_COPY_DST)
+        # the ZERO set (DEVIATION 1903: dirty slots only on the FAST arm)
+        var zero_count = 0
+        if len(plan.compute_ids) > 0:
+            comptime if not DEFER_HIST_COPY_1903:
+                for i in range(len(plan.compute_ids)):
+                    h_zero_ids.unsafe_ptr().unsafe_store(
+                        i, plan.compute_ids[i]
+                    )
+                zero_count = len(plan.compute_ids)
+            else:
+                for i in range(len(plan.compute_ids)):
+                    if hist_slot_dirty[Int(plan.compute_ids[i])]:
+                        h_zero_ids.unsafe_ptr().unsafe_store(
+                            zero_count, plan.compute_ids[i]
+                        )
+                        zero_count += 1
+            if zero_count > 0:
+                plan_slots.append(IDS_SLOT_ZERO)
+        # the BUILD set
+        if len(non_zero) > 0:
+            for i in range(len(non_zero)):
+                h_ids.unsafe_ptr().unsafe_store(i, non_zero[i])
+            plan_slots.append(IDS_SLOT_IDS)
+        # the SUBTRACT pairs, `from - what`
+        if len(plan.subtract_from) > 0:
+            for i in range(len(plan.subtract_from)):
+                h_left.unsafe_ptr().unsafe_store(i, plan.subtract_from[i])
+                h_right.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
+            plan_slots.append(IDS_SLOT_SUB_LEFT)
+            plan_slots.append(IDS_SLOT_SUB_RIGHT)
+
+        # their `allUpdatedLeaves` loop (`:1359-1367`): computed leaves plus
+        # derived big leaves become `CurrentPath`, AND THEIR BestSplit IS
+        # RESET. The reset is what makes `SelectLeavesToVisit` re-score
+        # exactly the leaves whose histogram moved. (Host state only; it
+        # used to sit after the subtract launch, which does not read it.)
+        var updated = plan.updated_ids()
+        for i in range(len(updated)):
+            var id = Int(updated[i])
+            leaves[id].histograms_type = EHistogramsType.CurrentPath
+            leaves[id].best_split = TBestSplitProperties()
+            # DEVIATION 1903: every updated slot was written (zeroed,
+            # built, copied into or derived), so it can no longer skip the
+            # zero pass. Marked conservatively -- a slot that was only
+            # zeroed is marked too. (After the ZERO set above, as before.)
+            comptime if DEFER_HIST_COPY_1903:
+                hist_slot_dirty[id] = True
+
+        # `SelectLeavesToVisit` and, when there is something to visit, the
+        # ALL set of the partition-stats sweep and the VISIT list (see the
+        # order block below: both are after the early return).
+        var visit = select_leaves_to_visit(leaves)
+        var run_part_sweep = True
+        comptime if not SPLIT_COST_IDENTICAL:
+            run_part_sweep = iteration == 1
+        var reduce_count = 0
+        if len(visit) > 0:
+            if run_part_sweep:
+                for i in range(len(leaves)):
+                    comptime if INCREMENTAL_PART_STATS:
+                        if not part_stats_dirty[i]:
+                            continue
+                        part_stats_dirty[i] = False
+                    h_all_ids.unsafe_ptr().unsafe_store(reduce_count, UInt32(i))
+                    reduce_count += 1
+                    comptime if REPORT_PART_STATS_WORK:
+                        part_stats_rows_reduced += Int64(leaves[i].size)
+                        part_stats_leaves_reduced += 1
+                if reduce_count > 0:
+                    plan_slots.append(IDS_SLOT_ALL)
+            for i in range(len(visit)):
+                h_visit.unsafe_ptr().unsafe_store(i, UInt32(visit[i]))
+            plan_slots.append(IDS_SLOT_VISIT)
+        _upload_id_slots(
+            ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
+            plan_slots^,
+        )
+
         # ============================ DEVIATION 1903 ============================
         # THE PARENT-HISTOGRAM COPY MOVES FROM EVERY SPLIT TO THE PAIRS THAT
         # NEED IT, AND THE ZERO PASS TO THE SLOTS THAT NEED IT. LightGBM's
@@ -1383,29 +1704,12 @@ def fit_non_symmetric_tree[
         # tree. IDENTICAL keeps the split-time copy and the full zero pass
         # byte for byte.
         # =======================================================================
-        comptime if not SPLIT_COST_IDENTICAL:
+        comptime if DEFER_HIST_COPY_1903:
             if len(plan.subtract_from) > 0:
-                var n_copy = 0
-                for i in range(len(plan.subtract_from)):
-                    if Int(plan.subtract_from[i]) > Int(
-                        plan.subtract_what[i]
-                    ):
-                        h_copy_src.unsafe_ptr().unsafe_store(
-                            n_copy, plan.subtract_what[i]
-                        )
-                        h_copy_dst.unsafe_ptr().unsafe_store(
-                            n_copy, plan.subtract_from[i]
-                        )
-                        n_copy += 1
                 if n_copy > 0:
                     stage_times.begin(ctx)
-                    # DEVIATION 1903 / 261: their own staging pairs
-                    ctx.enqueue_copy(
-                        dst_buf=d_copy_src, src_ptr=h_copy_src.unsafe_ptr()
-                    )
-                    ctx.enqueue_copy(
-                        dst_buf=d_copy_dst, src_ptr=h_copy_dst.unsafe_ptr()
-                    )
+                    # DEVIATION 1903 / 261: their own staging pairs, staged
+                    # with the plan-time lists above
                     # WIDTH DISPATCH, the same kernels the split-time copy
                     # ran, over the reduced pair list.
                     if (hist_cells_per_leaf * stat_count) % 4 == 0:
@@ -1453,26 +1757,9 @@ def fit_non_symmetric_tree[
             # provably still hold the tree memset's zeros (`hist_slot_dirty`
             # False) -- writing zeros over zeros is the one launch in this
             # step that can be deleted without an argument about the build.
-            var zero_count = 0
-            comptime if SPLIT_COST_IDENTICAL:
-                for i in range(len(plan.compute_ids)):
-                    h_zero_ids.unsafe_ptr().unsafe_store(
-                        i, plan.compute_ids[i]
-                    )
-                zero_count = len(plan.compute_ids)
-            else:
-                for i in range(len(plan.compute_ids)):
-                    if hist_slot_dirty[Int(plan.compute_ids[i])]:
-                        h_zero_ids.unsafe_ptr().unsafe_store(
-                            zero_count, plan.compute_ids[i]
-                        )
-                        zero_count += 1
+            # (the ZERO set and its count were staged above)
             if zero_count > 0:
                 stage_times.begin(ctx)
-                # DEVIATION 261: its own staging pair
-                ctx.enqueue_copy(
-                    dst_buf=d_zero_ids, src_ptr=h_zero_ids.unsafe_ptr()
-                )
                 ctx.enqueue_function[zero_histograms_kernel](
                     d_zero_ids.unsafe_ptr(),
                     Int32(hist_cells_per_leaf),
@@ -1493,9 +1780,7 @@ def fit_non_symmetric_tree[
             # call must not happen at all when it is empty -- their
             # `if (leavesToCompute.size() == 0) { return; }` (`:1089`).
             stage_times.begin(ctx)
-            for i in range(len(non_zero)):
-                h_ids.unsafe_ptr().unsafe_store(i, non_zero[i])
-            ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
+            # (the BUILD set was staged above)
             # ============================ DEVIATION 1911/1912 ============================
             # THE QUANTIZED SHARED-HISTOGRAM ROUTE (the recons' borrow:
             # XGBoost's one-shared-copy-per-block integer histogram +
@@ -1514,12 +1799,20 @@ def fit_non_symmetric_tree[
             var quantized_built = False
             comptime if QUANTIZED_HIST_LIVE:
                 if qh_ok:
-                    launch_quantized_histograms[RIDX_ONLY_SPLITS](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        d_qstats, d_qacc, hist, hist_cells_per_leaf,
-                    )
+                    if use_ridx:
+                        launch_quantized_histograms[True](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                        )
+                    else:
+                        launch_quantized_histograms[False](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            d_qstats, d_qacc, hist, hist_cells_per_leaf,
+                        )
                     quantized_built = True
             if not quantized_built:
                 # DEVIATION 2661 (see `NONSYM_GROUP_WIDTH_2661`): the same
@@ -1527,26 +1820,49 @@ def fit_non_symmetric_tree[
                 # `level_quant` stays False, so no Int32 level plane is
                 # needed and none is passed.
                 comptime if NONSYM_GROUP_WIDTH_2661:
-                    launch_histograms_for_blocks[
-                        hist2_smem_mode, RIDX_ONLY_SPLITS, False, True
-                    ](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, max_leaves, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        dense_ids, hist, acc_i32, block_hist,
-                        hist_cells_per_leaf,
-                        width_plans=ws[0].width_plans,
-                    )
+                    if use_ridx:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, True, False, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                            width_plans=ws[0].width_plans,
+                        )
+                    else:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, False, False, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                            width_plans=ws[0].width_plans,
+                        )
                 else:
-                    launch_histograms_for_blocks[
-                        hist2_smem_mode, RIDX_ONLY_SPLITS
-                    ](
-                        ctx, dblocks, iteration - 1, len(non_zero), n_rows,
-                        stat_count, max_leaves, sm_count, fixed_scale,
-                        cindex, row_index, stats, p_off, p_sz, d_ids,
-                        dense_ids, hist, acc_i32, block_hist,
-                        hist_cells_per_leaf,
-                    )
+                    if use_ridx:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, True
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                        )
+                    else:
+                        launch_histograms_for_blocks[
+                            hist2_smem_mode, False
+                        ](
+                            ctx, dblocks, iteration - 1, len(non_zero), n_rows,
+                            stat_count, max_leaves, sm_count, fixed_scale,
+                            cindex, row_index, stats, p_off, p_sz, d_ids,
+                            dense_ids, hist, acc_i32, block_hist,
+                            hist_cells_per_leaf,
+                        )
             mgr.stream_kernel()
             stage_times.end(ctx, "hist.build")
 
@@ -1580,11 +1896,7 @@ def fit_non_symmetric_tree[
             # their `SubstractHistograms(bigLeaves, smallLeaves, subsets)`
             # (`:1354`): `from - what`, in place, one launch for all pairs.
             stage_times.begin(ctx)
-            for i in range(len(plan.subtract_from)):
-                h_left.unsafe_ptr().unsafe_store(i, plan.subtract_from[i])
-                h_right.unsafe_ptr().unsafe_store(i, plan.subtract_what[i])
-            ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_right, src_ptr=h_right.unsafe_ptr())
+            # (the pairs were staged above, into their own arena slots)
             # WIDTH DISPATCH, the symmetric lane's, which this driver was
             # missing until 2026-08-22. The vec4 arms are not a symmetric
             # optimization -- they are a property of the BUFFER, whose
@@ -1596,8 +1908,8 @@ def fit_non_symmetric_tree[
             # argument for there being one driver.
             if hist_cells_per_leaf % 4 == 0:
                 ctx.enqueue_function[substract_histograms_vec4_kernel](
-                    d_left.unsafe_ptr(),
-                    d_right.unsafe_ptr(),
+                    d_sub_left.unsafe_ptr(),
+                    d_sub_right.unsafe_ptr(),
                     Int32(hist_cells_per_leaf),
                     hist.unsafe_ptr(),
                     grid_dim=(
@@ -1609,8 +1921,8 @@ def fit_non_symmetric_tree[
                 )
             else:
                 ctx.enqueue_function[substract_histograms_kernel](
-                    d_left.unsafe_ptr(),
-                    d_right.unsafe_ptr(),
+                    d_sub_left.unsafe_ptr(),
+                    d_sub_right.unsafe_ptr(),
                     Int32(hist_cells_per_leaf),
                     hist.unsafe_ptr(),
                     grid_dim=(
@@ -1627,21 +1939,8 @@ def fit_non_symmetric_tree[
                 len(leaves) * hist_live_stride,
             )
 
-        # their `allUpdatedLeaves` loop (`:1359-1367`): computed leaves plus
-        # derived big leaves become `CurrentPath`, AND THEIR BestSplit IS
-        # RESET. The reset is what makes `SelectLeavesToVisit` re-score
-        # exactly the leaves whose histogram moved.
-        var updated = plan.updated_ids()
-        for i in range(len(updated)):
-            var id = Int(updated[i])
-            leaves[id].histograms_type = EHistogramsType.CurrentPath
-            leaves[id].best_split = TBestSplitProperties()
-            # DEVIATION 1903: every updated slot was written (zeroed,
-            # built, copied into or derived), so it can no longer skip the
-            # zero pass. Marked conservatively -- a slot that was only
-            # zeroed is marked too.
-            comptime if not SPLIT_COST_IDENTICAL:
-                hist_slot_dirty[id] = True
+        # (the `allUpdatedLeaves` BestSplit reset now runs above, with the
+        # plan-time staging)
 
         # THEIR ORDER, AND IT IS NOT COSMETIC (`greedy_search_helper.cpp`):
         #
@@ -1661,7 +1960,7 @@ def fit_non_symmetric_tree[
         # launch); the DRAW IS NOT, because it advances a stream that every
         # later level reads. Corrected 2026-08-22 from an audit against
         # their file.
-        var visit = select_leaves_to_visit(leaves)
+        # (`visit` was selected above)
         if len(visit) > 0:
             # ============================ DEVIATION 1901 ============================
             # IDENTICAL keeps the pinned reduction, now caching unchanged
@@ -1686,36 +1985,31 @@ def fit_non_symmetric_tree[
             # in BOTH modes: leaf values always come from the exact
             # reduction.
             # =======================================================================
-            var run_part_sweep = True
-            comptime if not SPLIT_COST_IDENTICAL:
-                run_part_sweep = iteration == 1
+            # (`run_part_sweep` and the ALL set were staged above)
             if run_part_sweep:
                 # their `AllReduceThroughMaster(subsets->CurrentPartStats(),
                 # ...)` (`:443`) over leaves `[0, leafCount)`. See DEVIATION
                 # 352.
                 stage_times.begin(ctx)
-                var reduce_count = 0
-                for i in range(len(leaves)):
-                    comptime if INCREMENTAL_PART_STATS:
-                        if not part_stats_dirty[i]:
-                            continue
-                        part_stats_dirty[i] = False
-                    h_all_ids.unsafe_ptr().unsafe_store(reduce_count, UInt32(i))
-                    reduce_count += 1
-                    comptime if REPORT_PART_STATS_WORK:
-                        part_stats_rows_reduced += Int64(leaves[i].size)
-                        part_stats_leaves_reduced += 1
                 # DEVIATION 261: its own staging pair. Preserve each leaf's
                 # x-stripe and reduction; only the list/grid.y gets smaller.
                 if reduce_count > 0:
-                    ctx.enqueue_copy(
-                        dst_buf=d_all_ids, src_ptr=h_all_ids.unsafe_ptr()
-                    )
-                    compute_partition_stats(
-                        ctx, reduce_count, n_rows, stat_count, n_rows,
-                        d_all_ids, p_off, p_sz, stats, stat_partials, part_stats,
-                        sm_count=sm_count,
-                    )
+                    if use_ridx:
+                        # the stat plane is stationary (DEVIATION 1902);
+                        # the FAST arm runs this sweep only at iteration 1,
+                        # where the index is the identity, the IDENTICAL
+                        # arm (Apple) at every iteration
+                        compute_partition_stats_gather(
+                            ctx, reduce_count, n_rows, stat_count, n_rows,
+                            d_all_ids, p_off, p_sz, stats, row_index,
+                            stat_partials, part_stats, sm_count=sm_count,
+                        )
+                    else:
+                        compute_partition_stats(
+                            ctx, reduce_count, n_rows, stat_count, n_rows,
+                            d_all_ids, p_off, p_sz, stats, stat_partials,
+                            part_stats, sm_count=sm_count,
+                        )
                     mgr.stream_kernel()
                 stage_times.end(ctx, "partstats")
             trace.record_device(
@@ -1730,9 +2024,7 @@ def fit_non_symmetric_tree[
             # `numScoreBlocks = leavesToVisit.size()` (`:428-432`), and the
             # kernel is `TComputeOptimalSplitsLeafwiseKernel` (`:470-488`).
             stage_times.begin(ctx)
-            for i in range(len(visit)):
-                h_visit.unsafe_ptr().unsafe_store(i, UInt32(visit[i]))
-            ctx.enqueue_copy(dst_buf=d_visit, src_ptr=h_visit.unsafe_ptr())
+            # (the VISIT list was staged above)
 
             # ==================== POLICY BRANCH 2 OF 4 ====================
             # `greedy_search_helper.cpp:465-533`. The three policies take
@@ -2276,15 +2568,20 @@ def fit_non_symmetric_tree[
                 hist_slot_dirty.append(False)
 
             var n_split = len(to_split)
-            ctx.enqueue_copy(dst_buf=sp_feats, src_ptr=sp_feats_h.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=sp_bins, src_ptr=sp_bins_h.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_left, src_ptr=h_left.unsafe_ptr())
-            ctx.enqueue_copy(dst_buf=d_right, src_ptr=h_right.unsafe_ptr())
+            # the split bins, the split pair (and, FAST, DEVIATION 1901's
+            # winning cells) in one arena copy (ID_UPLOAD_COALESCE)
+            var split_slots = List[Int]()
+            for fs in range(IDS_FEAT_SLOTS):
+                split_slots.append(IDS_SLOT_SP_FEATS + fs)
+            split_slots.append(IDS_SLOT_SP_BINS)
+            split_slots.append(IDS_SLOT_LEFT)
+            split_slots.append(IDS_SLOT_RIGHT)
             comptime if not SPLIT_COST_IDENTICAL:
-                # DEVIATION 1901 / 261: its own staging pair
-                ctx.enqueue_copy(
-                    dst_buf=d_win_cells, src_ptr=h_win_cells.unsafe_ptr()
-                )
+                split_slots.append(IDS_SLOT_WIN)
+            _upload_id_slots(
+                ctx, d_ids_arena, h_ids_arena_p, ids_host, max_leaves,
+                split_slots^,
+            )
             stage_times.end(ctx, "split.host")
             stage_times.begin(ctx)
 
@@ -2352,7 +2649,7 @@ def fit_non_symmetric_tree[
 
             var reorder_launches = 0
 
-            comptime if RIDX_ONLY_SPLITS:
+            if use_ridx:
                 # DEVIATION 1902: the stat planes are stationary; the
                 # split's gather_map permutes the 4 B/row index alone.
                 reorder_launches = launch_reorder_index_only(
@@ -2382,7 +2679,7 @@ def fit_non_symmetric_tree[
             # happens at PLAN time, and only for the pairs whose derived
             # sibling is the right child -- see the block above the zero
             # pass. Same kernels, same bytes, fewer launches.
-            comptime if SPLIT_COST_IDENTICAL:
+            comptime if not DEFER_HIST_COPY_1903:
                 if (hist_cells_per_leaf * stat_count) % 4 == 0:
                     ctx.enqueue_function[copy_histograms_vec4_kernel](
                         d_left.unsafe_ptr(),
@@ -2474,9 +2771,27 @@ def fit_non_symmetric_tree[
             # did, so nothing is lost by dropping the two scratch planes --
             # and the ladder stops lying.
             trace.record_device(ctx, d_tag + "rowindex", row_index, n_rows)
-            trace.record_device(
-                ctx, d_tag + "stats", stats, stat_count * n_rows
-            )
+            if use_ridx and SPLIT_COST_IDENTICAL:
+                # the plane the permuting arm would hold, gathered through
+                # the index into the unused reorder scratch, so the ladder
+                # records the same bytes on every column
+                if trace.enabled:
+                    ctx.enqueue_function[_stats_through_index_kernel](
+                        stats.unsafe_ptr(),
+                        row_index.unsafe_ptr(),
+                        new_stats.unsafe_ptr(),
+                        Int32(n_rows),
+                        Int32(stat_count),
+                        grid_dim=((stat_count * n_rows + 255) // 256, 1, 1),
+                        block_dim=(256, 1, 1),
+                    )
+                trace.record_device(
+                    ctx, d_tag + "stats", new_stats, stat_count * n_rows
+                )
+            else:
+                trace.record_device(
+                    ctx, d_tag + "stats", stats, stat_count * n_rows
+                )
             trace.record_device(
                 ctx, d_tag + "parts.off", p_off, len(leaves)
             )
@@ -2510,7 +2825,7 @@ def fit_non_symmetric_tree[
             for i in range(len(leaves)):
                 h_ids.unsafe_ptr().unsafe_store(i, UInt32(i))
             ctx.enqueue_copy(dst_buf=d_ids, src_ptr=h_ids.unsafe_ptr())
-            comptime if RIDX_ONLY_SPLITS:
+            if use_ridx:
                 # DEVIATION 1902: phase 1 gathers the stationary plane
                 # through the row index; phase 2 and the chunk formula are
                 # the shared kernels unchanged.

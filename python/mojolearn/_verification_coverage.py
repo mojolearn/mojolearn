@@ -84,14 +84,16 @@ def inventory(harness, table, vendor_class):
             # A fresh CPU recording can repair the revision before independent
             # GPU qualification closes the explicit hold in host_surface.
             reason = "reference qualification pending"
+        default_execution = (status != "not_applicable" and name not in stale
+                             and (vendor_class != "cpu" or row["comparable"]))
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
-            properties[part]["run_by_default"] = True
+            properties[part]["run_by_default"] = default_execution
             properties[part]["command"] = "verify --all"
-        properties["batch"]["run_by_default"] = True
+        properties["batch"]["run_by_default"] = default_execution
         properties["rlpair"] = declaration(getattr(harness, "RLPAIR", {}).get(name, "n/a:no-sampler-trainer-pair"))
-        properties["rlpair"].update(run_by_default=True, command="verify --all")
+        properties["rlpair"].update(run_by_default=default_execution, command="verify --all")
         refs = {}
         for part in dict.fromkeys((*vref.PARTS, *properties)):
             refs[part] = sum(bool((entry := vref.entry(table, name, fixture, part))
@@ -99,6 +101,7 @@ def inventory(harness, table, vendor_class):
                              for fixture in harness.FIXTURES)
         lanes[name] = dict(status=status, reason=reason, properties=properties,
                            execution=dict(
+                               run_by_default=default_execution,
                                cpu_route_declared=name in covered,
                                cpu_logical_shards=name in parallel_cpu,
                                command=(f"verify --include-pending --lanes {name}" if name in covered and

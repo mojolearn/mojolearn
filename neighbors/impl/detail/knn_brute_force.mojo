@@ -132,6 +132,8 @@ comptime KNN_EXACT_CHAIN = knn_distance_exact_chain_for[
 ]()
 from neighbors.checks.select_radix_identical import (
     radix_topk_identical_kernel,
+    select_radix_identical_rounds_launch,
+    wide_topk_merge_launch,
     IDENTICAL_MAX_K,
 )
 from neighbors.checks.select_smallk_identical_candidate import (
@@ -1438,15 +1440,30 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # Both pinned tiers share the bounded rank staging. The
                     # strided pass extends it beyond the 256-thread block; the
                     # cap still bounds shared storage and quadratic rank work.
-                    if k > IDENTICAL_MAX_K:
+                    # DEVIATION 6300: k above the bounded rank profile's
+                    # IDENTICAL_MAX_K selects in rounds of that width and
+                    # merges column tiles by binary search (both in
+                    # `select_radix_identical.mojo`); k <= IDENTICAL_MAX_K
+                    # takes the launches below, unchanged.
+                    var wide_k = k > IDENTICAL_MAX_K
+                    if wide_k and cols < k:
                         raise Error(
                             "select_radix ("
                             + numeric_mode_name()
-                            + "): k > "
-                            + String(IDENTICAL_MAX_K)
-                            + " is refused by the bounded pinned rank profile."
+                            + "): k = " + String(k)
+                            + " exceeds the index column tile ("
+                            + String(cols) + " columns)"
                         )
-                    var selected_smallk = False
+                    var selected_smallk = wide_k
+                    if wide_k:
+                        select_radix_identical_rounds_launch(
+                            ctx,
+                            dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            sel_dist, sel_idx,
+                            buf_val.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            buf_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            rows, cols, k, buf_len, True,
+                        )
                     comptime if EXPERIMENTAL_SMALLK_IDENTICAL:
                         # Kernel-matrix row `knn_smallk_select_for`: for
                         # k <= 64 the per-thread composite-key selector,
@@ -1514,7 +1531,26 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             ns_select += perf_counter_ns() - t_class
                             n_select += 1
                             t_class = perf_counter_ns()
-                    if not first:
+                    if not first and wide_k:
+                        wide_topk_merge_launch(
+                            ctx,
+                            out_dist.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            out_idx.unsafe_ptr().unsafe_offset(
+                                q * k
+                            ).unsafe_origin_cast[MutAnyOrigin](),
+                            part_dist.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            part_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            buf_val.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            buf_idx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            2 * buf_len, rows, k, c, True,
+                        )
+                        comptime if KNN_PHASE_TIMERS:
+                            ctx.synchronize()
+                            ns_merge += perf_counter_ns() - t_class
+                            n_merge += 1
+                    elif not first:
                         partial_topk_merge_launch(
                             ctx,
                             out_dist.unsafe_ptr().unsafe_offset(

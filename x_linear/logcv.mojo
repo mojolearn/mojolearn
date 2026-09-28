@@ -25,6 +25,7 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
+from std.gpu import WARP_SIZE
 from x_linear.tops import fold_fa, fold_fa_ix, chain_fmad, chain_fmad_ix
 from checks.numerics import identical_sigmoid, identical_softplus, ftz
 
@@ -103,6 +104,13 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
                     r = fm(wi, r)
                 st(t.row(k), i, r)
     t.sync()
+    # lane/linear-apple2: the lead's two row folds (the loss terms, the
+    # weight total) run beside the gradient cells, on threads p and p + 1,
+    # each the same one-thread fold; team slots 8 and 9 carry them.
+    var sl = t.slot_at.unsafe_origin_cast[MutAnyOrigin]()
+    # each fold thread leads a warp of its own (see huber.mojo)
+    var base = ((p + WARP_SIZE - 1) // WARP_SIZE) * WARP_SIZE
+    var roles = t.nt >= base + 2 * WARP_SIZE
     for o in range(t.tid, p, t.nt):
         var k = o // stride
         var j = o - k * stride
@@ -119,12 +127,20 @@ def _logistic_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: 
             else:
                 acc = fold_fa(rk, 0, 1, n)
         st(g, goff + o, acc)
+    if roles and t.tid == base:
+        st(sl, 8, fold_fa_ix(lt, ix, cnt) if fold >= 0 else fold_fa(lt, 0, 1, n))
+    if roles and sw and t.tid == base + WARP_SIZE:
+        st(sl, 9, fold_fa_ix(y, ix, cnt, 2 * n) if fold >= 0 else fold_fa(y, 2 * n, 1, n))
     t.sync()
     var out = Float32(0)
     if t.lead():
         var wrows = Float32(0)
         var acc: Float32
-        if fold >= 0:
+        if roles:
+            if sw:
+                wrows = ld(sl, 9)
+            acc = ld(sl, 8)
+        elif fold >= 0:
             if sw:
                 wrows = fold_fa_ix(y, ix, cnt, 2 * n)
             acc = fold_fa_ix(lt, ix, cnt)

@@ -1,3 +1,5 @@
+diff --git a/x_ann/cagra_core.mojo b/x_ann/cagra_core.mojo
+index 5c1409001..94cc8ce46 100644
 --- a/x_ann/cagra_core.mojo
 +++ b/x_ann/cagra_core.mojo
 @@ -97,7 +97,7 @@ def cagra_prune(n: Int, kdeg: Int, knn: List[Int32], deg: Int) raises -> List[In
@@ -9,3 +11,16 @@
                          best = k
                  if best < 0:
                      sp[a] = Int32(1)
+diff --git a/x_ann/cagra_device.mojo b/x_ann/cagra_device.mojo
+index 2a89b9764..6d32e4cea 100644
+--- a/x_ann/cagra_device.mojo
++++ b/x_ann/cagra_device.mojo
+@@ -118,7 +118,7 @@ def prune_kernel(n: Int32, kdeg: Int32, deg: Int32, knn: I32P, pruned: I32P, bad
+         var rank = 0
+         for u in range(k):
+             var o = cnt[u]
+-            if o < mine or (o == mine and u < t):
++            if o < mine or (o == mine and u > t):
+                 rank += 1
+         if rank < Int(deg):
+             pruned.unsafe_store(a * Int(deg) + rank, ids[t])

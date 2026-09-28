@@ -15,6 +15,10 @@
 #   NEURAL_CENSUS  1 also builds a byte LM copy under
 #                  -D MOJOLEARN_STEP_PHASE_TIMERS=1 (a copy of the package in
 #                  $OUT/census) and prints its per-step launch/sync counts
+#   NEURAL_CENSUS_DEFINES  the census copy's defines (default
+#                  "-D MOJOLEARN_STEP_PHASE_TIMERS=1"; add
+#                  "-D MOJOLEARN_ATTN_PHASE_TIMERS=1" for per-kernel attention
+#                  timers, printed as COMP attn.<kernel>)
 set -u
 OUT=${NEURAL_OUT:-$HOME/mojolearn-evidence/neural-apple-speed/$(git rev-parse --short HEAD)-$(date -u +%H%M%S)}
 LANES=${NEURAL_LANES:-"lm-train-step lm-forward gemm transformer-forward mamba1-forward mamba2-forward mamba3-forward samba-train-step samba-forward mlp-train-step"}
@@ -55,7 +59,7 @@ print("STEP estash_gate", r.get("attention_estash_gate"))
 print("STEP first", r.get("first_call_seconds"), "steady", r.get("steady_step_seconds"), "median", r.get("steady_median_seconds"), "tok/s", r.get("steady_median_tokens_per_second"), "attn", r.get("attention_arm"), "gemm", r.get("gemm_plan"), "glue", r.get("step_glue_arm"))
 ct = r.get("component_timing_ms") or {}
 print("STEP component total ms", r.get("component_timing_total_ms"), "step_seconds", r.get("step_seconds"), "covered", r.get("component_timing_covered_fraction"), "timed walls", r.get("component_timing_step_seconds_all"))
-for k, v in sorted(ct.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:60]:
+for k, v in sorted(ct.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:110]:
     print("COMP %-48s %s" % (k, v))
 cc = r.get("component_counts") or {}
 for k, v in sorted(cc.items(), key=lambda kv: -(kv[1] if isinstance(kv[1], (int, float)) else 0))[:60]:
@@ -70,7 +74,7 @@ if [ "${NEURAL_CENSUS:-0}" = 1 ]; then
     cp -R python/mojolearn "$OUT/census/mojolearn"
     rm -f "$OUT/census/mojolearn/identical/_mojolearn_byte_lm.so"
     MOJOLEARN_BYTE_LM_OUTDIR="$OUT/census/mojolearn/identical" \
-        MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_STEP_PHASE_TIMERS=1" \
+        MOJOLEARN_BUILD_EXTRA_DEFINES="${NEURAL_CENSUS_DEFINES:--D MOJOLEARN_STEP_PHASE_TIMERS=1}" \
         pixi run -e default sh bindings/build_byte_lm.sh > "$OUT/census.build.log" 2>&1 || echo "CENSUS-BUILD FAILED"
     # shellcheck disable=SC2086
     set -- ${NEURAL_STEP_SHAPE:-4 2048 768 12 12 64 2048 12 50257}

@@ -184,6 +184,7 @@ MEASUREMENT_TOOLING_PREFIXES = (
     # 2026-09-28): they time and compare builds of the same source on a Mac.
     os.path.join("tools", "apple_speed_cnn") + os.sep,
     os.path.join("tools", "apple_speed_neural") + os.sep,
+    os.path.join("tools", "apple_speed_metrics") + os.sep,
 )
 
 #: Tools whose text is not evidence that a lane reaches a path.

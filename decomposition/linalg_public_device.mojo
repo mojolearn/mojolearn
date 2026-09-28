@@ -60,6 +60,13 @@ turn a divergence into a pass.
 
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
+
 
 from core.device_zero import enqueue_fill
 from core.householder_qr import qr_factor, qr_slice_count
@@ -125,7 +132,7 @@ def device_qr_r(
     a scratch sized for one slice arm and a dispatch that took the other is
     an out-of-bounds write a small shape does not show you.
     """
-    return device_qr_r(DeviceContext(), a, n_rows, n_cols)
+    return device_qr_r(process_ctx[_DEVCTX_SLOT](), a, n_rows, n_cols)
 
 
 def device_qr_r(
@@ -170,7 +177,7 @@ def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     build (`glm/impl/linalg/detail/lstsq.mojo` carries the same guard and
     the same argument).
     """
-    return device_eigh(DeviceContext(), a, n)
+    return device_eigh(process_ctx[_DEVCTX_SLOT](), a, n)
 
 
 def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHostResult:
@@ -248,7 +255,7 @@ def device_svdvals(
     second wording of it.
     """
     _validate_shape(n_rows, n_cols, "svdvals")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var da = _upload(ctx, a)
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         qr_slice_count(n_rows, n_cols) * n_cols * n_cols

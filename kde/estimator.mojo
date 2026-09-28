@@ -43,6 +43,13 @@ CPU host binding use.
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoEstimatorsContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from kde.impl.kde import score_samples
@@ -108,7 +115,7 @@ def kde_score_samples_host(
     # refused by name BEFORE any upload; the length check is inside.
     kde_validate_data(train, n_train, n_features, m, "train")
     kde_validate_data(query, n_query, n_features, m, "query")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dtrain = _upload(ctx, train)
     var dquery = _upload(ctx, query)
     var dweights: DeviceBuffer[DType.float32]
@@ -200,7 +207,7 @@ def kde_score_samples_host_ptr(
         raise Error("kde: X must have at least one row (n_query)")
     kde_validate_data_ptr(train, n_train, n_features, m, "train")
     kde_validate_data_ptr(query, n_query, n_features, m, "query")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dtrain = _upload_ptr(ctx, train, n_train * n_features)
     var dquery = _upload_ptr(ctx, query, n_query * n_features)
     var dweights: DeviceBuffer[DType.float32]

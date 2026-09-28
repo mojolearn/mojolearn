@@ -2,6 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 from std.math import isfinite
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoPreprocessingContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoPreprocessingContextFast"
+
 from metrics.checks.device_io import upload_f32
 from core.device_scan import device_first_nonfinite
 from preprocessing.minmax import minmax_fit, minmax_transform, minmax_transform_into
@@ -26,7 +33,7 @@ def minmax_fit_host(x: List[Float32], n: Int, d: Int, lower: Float32, upper: Flo
     if len(x) < n*d:
         raise Error("MinMaxScaler: short input")
     finite_values(x)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var result = minmax_fit(ctx,dx,n,d,lower,upper)
     _ = dx^
@@ -51,7 +58,7 @@ def minmax_transform_host(
     for c in range(d):
         if scale[c] <= 0:
             raise Error("MinMaxScaler: scale must be positive")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var ds = upload_f32(ctx,scale)
     var dm = upload_f32(ctx,offset)
@@ -82,7 +89,7 @@ def standard_fit_host(x: List[Float32], n: Int, d: Int, with_mean: Int, with_std
     if len(x) < n*d:
         raise Error("StandardScaler: short input")
     standard_finite(x)
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var result = standard_fit(ctx,dx,n,d,with_mean,with_std)
     _ = dx^
@@ -109,7 +116,7 @@ def standard_transform_host(
         for c in range(d):
             if scale[c] <= 0:
                 raise Error("StandardScaler: scale must be positive")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var dm = upload_f32(ctx,mean)
     var ds = upload_f32(ctx,scale)
@@ -138,7 +145,7 @@ def standard_transform_host_into[out_origin: MutOrigin, //](
         for c in range(d):
             if scale[c] <= 0:
                 raise Error("StandardScaler: scale must be positive")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var dm = upload_f32(ctx,mean)
     var ds = upload_f32(ctx,scale)
@@ -163,7 +170,7 @@ def minmax_transform_host_into[out_origin: MutOrigin, //](
     for c in range(d):
         if scale[c] <= 0:
             raise Error("MinMaxScaler: scale must be positive")
-    var ctx = DeviceContext()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
     var dx = upload_f32(ctx,x)
     var ds = upload_f32(ctx,scale)
     var dm = upload_f32(ctx,offset)

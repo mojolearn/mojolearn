@@ -65,6 +65,13 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoLinalgContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoLinalgContextFast"
+
 
 from decomposition.linalg_public_device import (
     device_eigh,
@@ -177,7 +184,7 @@ def gemm_binding(
     var k = Int(py=params[2])
     var op = Int(py=params[3])
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         identical_gemm_host(ctx, cp, ap, bp, m, n, k, op)
         # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
         # enqueued before this block's end destroys the context. Without it
@@ -297,7 +304,7 @@ def gemm_bf16_binding(
     var a_bf16 = Int(py=params[4]) != 0
     _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var db = _dev_u16(ctx, b_address, n * k)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
         var work = LowbitWorkspace(ctx)
@@ -355,7 +362,7 @@ def gemm_int8_binding(
     if k > INT8_MAX_K:
         raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var dqa = _dev_i8(ctx, qa_address, m * k)
         var dea = _dev_i32(ctx, ea_address, m)
         var dqb = _dev_i8(ctx, qb_address, n * k)
@@ -399,7 +406,7 @@ def quantize_int8_binding(
     if rows <= 0 or cols <= 0:
         raise Error("quantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var dx = _dev_f32(ctx, x_address, rows * cols)
         var dq = ctx.enqueue_create_buffer[DType.int8](rows * cols)
         var de = ctx.enqueue_create_buffer[DType.int32](rows)
@@ -439,7 +446,7 @@ def dequantize_int8_binding(
     if rows <= 0 or cols <= 0:
         raise Error("dequantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var dq = _dev_i8(ctx, q_address, rows * cols)
         var de = _dev_i32(ctx, e_address, rows)
         var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
@@ -473,7 +480,7 @@ def to_bf16_binding(
     if count <= 0:
         raise Error("to_bf16: count must be positive, got " + String(count))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var dsrc = _dev_f32(ctx, src_address, count)
         var ddst = ctx.enqueue_create_buffer[DType.uint16](count)
         bf16_narrow(ctx, ddst, dsrc, count)
@@ -505,7 +512,7 @@ def from_bf16_binding(
     if count <= 0:
         raise Error("from_bf16: count must be positive, got " + String(count))
     with GILReleased(Python()):
-        var ctx = DeviceContext()
+        var ctx = process_ctx[_DEVCTX_SLOT]()
         var dsrc = _dev_u16(ctx, src_address, count)
         var ddst = ctx.enqueue_create_buffer[DType.float32](count)
         bf16_widen(ctx, ddst, dsrc, count)

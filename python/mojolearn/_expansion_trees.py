@@ -20,6 +20,7 @@ identical contract on the GPU and on their CPU host bindings; the numeric glue
 between fits (weights, votes, drops) is host arithmetic in fixed order.
 """
 import numbers
+import os
 
 from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
@@ -223,14 +224,16 @@ class DecisionTreeClassifier(RandomForestClassifier):
             return self._fit_with_tree_start(X, y)
         return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
 
-    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False):
+    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False, encoded=None):
         """The weighted fit on a column-major float32 X. AdaBoost calls it
         with ONE transposed, once-checked X for all of its members
         (`x_finite=True` skips the per-member finite scan of the same
-        bytes); every input the fit entry sees is what `fit` hands it."""
+        bytes) and, trees-apple2, ONE `encode_labels(y)` of the same codes
+        (`encoded`, the pair this call would compute); every input the fit
+        entry sees is what `fit` hands it."""
         self._refresh_config()
         self._capture_fit_mode()
-        self.classes_, y32 = encode_labels(y)
+        self.classes_, y32 = encoded if encoded is not None else encode_labels(y)
         self.n_classes_ = int(len(self.classes_))
         if self.n_classes_ < 2:
             raise ValueError("y has fewer than 2 classes")
@@ -784,14 +787,20 @@ class AdaBoostClassifier(_AdaBoostBase):
         # with weights: transpose and finite-scan X ONCE for every member
         # (the member's own `fit` did both per member on the same bytes).
         Xcm = None
+        member_enc = None
         if type(base) is DecisionTreeClassifier and base.splitter == "best":
             Xcm = _trees_colmajor(Xa, self)
             if not all_finite(Xcm):
                 raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
+            # every member encodes the SAME codes: once, for all of them
+            # (`MOJOLEARN_ADABOOST_REENCODE=1` re-encodes per member, the
+            # A/B arm)
+            if os.environ.get("MOJOLEARN_ADABOOST_REENCODE") != "1":
+                member_enc = encode_labels(codes)
         for it in range(m):
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
             if Xcm is not None:
-                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True)
+                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True, encoded=member_enc)
             else:
                 est.fit(Xa, codes, sample_weight=self._w32(w, n))
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]

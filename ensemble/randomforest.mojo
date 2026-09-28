@@ -32,6 +32,7 @@ from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
 from ensemble.decisiontree.batched_levelalgo.dataset import (
     DatasetView,
     RF_BINS_ROW_MAJOR,
+    RF_BINS_ROW_MAJOR_WIDE,
 )
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     compute_quantiles,
@@ -2628,16 +2629,19 @@ def fit_forest[
     # 500k x 50. uint8 caps the index at 255, so `max_n_bins > 256`
     # keeps the searching path; the buffer is a 1-byte dummy then.
     var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
-    # RF_BINS_ROW_MAJOR (FAST): row-major bins when a row's bins fit one
-    # 64-byte line or the trees sample at least half the features.
+    # RF_BINS_ROW_MAJOR (Apple): row-major bins when a row's bins fit one
+    # 64-byte line, or (FAST only, RF_BINS_ROW_MAJOR_WIDE) the trees
+    # sample at least half the features.
     var bins_row_major = False
     comptime if RF_BINS_ROW_MAJOR:
-        bins_row_major = use_bins and (
-            n_cols <= 64
-            or 2 * n_sampled_cols_for(
-                rf_params.tree_params.max_features, n_cols
-            ) >= n_cols
-        )
+        bins_row_major = use_bins and n_cols <= 64
+        comptime if RF_BINS_ROW_MAJOR_WIDE:
+            bins_row_major = use_bins and (
+                n_cols <= 64
+                or 2 * n_sampled_cols_for(
+                    rf_params.tree_params.max_features, n_cols
+                ) >= n_cols
+            )
     var d_bins = ctx.enqueue_create_buffer[DType.uint8](
         n_rows * n_cols if use_bins else 1
     )

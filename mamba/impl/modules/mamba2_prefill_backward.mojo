@@ -9,6 +9,13 @@ No incoming cache or final-state cotangent is accepted.
 from std.memory import bitcast
 
 from max.gpu.host import DeviceContext
+from core.neural_context import process_ctx
+from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+
+#: This binding's ONE process-lifetime DeviceContext (core/neural_context.mojo,
+#: lane/devctx-lifetime): a context per call exhausts Metal command queues.
+comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"
+
 
 from core.identity_trace import IdentityTrace
 from mamba.checks.mamba2_fixture import (
@@ -88,6 +95,7 @@ def mamba2_prefill_backward(
     l: Int,
     dt_lo: Float32,
     dt_hi: Float32,
+    var ctx_in: Optional[DeviceContext] = None,
 ) raises -> Mamba2PrefillGradients:
     comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         raise Error("mamba2 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
@@ -101,7 +109,15 @@ def mamba2_prefill_backward(
             raise Error("mamba2 backward: non-finite grad_output at flat index " + String(i))
     var dims = weights.dims.copy()
     var m = b * l
-    var ctx = DeviceContext()
+    # lane/neural-apple2 (2026-09-28): the binding passes its process-lifetime
+    # context (core/neural_context.mojo); a fresh context per call meant a
+    # new Metal queue and a pipeline compile of every kernel on every call.
+    # Direct callers also reuse that context when none is supplied.
+    var ctx: DeviceContext
+    if ctx_in:
+        ctx = ctx_in.take()
+    else:
+        ctx = process_ctx[_DEVCTX_SLOT]()
     var dweights = Mamba2DeviceWeights(ctx, weights)
     var state = allocate_inference_cache(ctx, b, dims)
     var stages = Mamba2DeviceStages(ctx, b, l, 0, dims)

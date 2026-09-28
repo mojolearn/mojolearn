@@ -15,7 +15,7 @@ from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
 )
-from x_prep.dmi import mi_cd_device, mi_big_n, mi_scratch_words
+from x_prep.dmi import mi_cd_device, mi_w_words, mi_scratch_words
 
 #: op 69 (`mi_cd`) runs as the sorted neighbour search of x_prep/dmi.mojo
 #: (the host's argument, x_prep/host/mutual_info.mojo: the same words)
@@ -68,13 +68,24 @@ def prep_kernel[OP: Int](f: FP, q: IP, total: Int32):
         run_unit[OP](t, f, q)
 
 
-def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int) raises:
+def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: Int, scratch_len: Int = 0,
+                       out_addr: Int = 0, out_len: Int = 0) raises:
     run_program_device_ptr(
-        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages
+        FP(unsafe_from_address=arena_addr), arena_len, IP(unsafe_from_address=prog_addr), stages, scratch_len,
+        out_addr, out_len,
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) raises:
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, scratch_len: Int = 0,
+                           out_addr: Int = 0, out_len: Int = 0) raises:
+    """scratch_len (lane prep-apple2): words of DEVICE-ONLY arena after the
+    host's arena_len words (offsets arena_len ..); they never cross to or
+    from the host and start undefined, so a program writes each scratch word
+    before it reads it. out_len words after those (offsets arena_len +
+    scratch_len ..) are the program's OUTPUT: zeroed on the device (as the
+    host arena's words arrive zeroed), never uploaded, and copied back into
+    the host buffer at out_addr, not into the arena. Where a word lives moves
+    no bit."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
         if op < 0 or op >= N_OPS:
@@ -88,21 +99,30 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
     var mi_sorted = getenv("MOJOLEARN_XPREP_MI_SORTED", "1") != "0"
+    var mi_ties = getenv("MOJOLEARN_XPREP_MI_TIES", "1") != "0"
     var mi_w = 1
     var mi_u = 1
     for s in range(stages):
         if Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_MI_CD:
             var mq = host_q + (s * STAGE_INTS + 2)
-            mi_w = max(mi_w, Int(mq[2]) * mi_big_n(Int(mq[1])))
+            mi_w = max(mi_w, mi_w_words(Int(mq[1]), Int(mq[2])))
             mi_u = max(mi_u, mi_scratch_words(Int(mq[1]), Int(mq[2])))
     var ctx = x_prep_ctx()
     var dmw = ctx.enqueue_create_buffer[DType.uint64](mi_w if mi_sorted else 1)
     var dmu = ctx.enqueue_create_buffer[DType.uint32](mi_u if mi_sorted else 1)
-    var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
+    var out_n = out_len if out_addr != 0 and out_len > 0 else 0
+    var out_at = arena_len + max(scratch_len, 0)
+    var dev_len = out_at + out_n
+    var df = ctx.enqueue_create_buffer[DType.float32](dev_len if dev_len > 0 else 1)
     var dw = ctx.enqueue_create_buffer[DType.uint32](scratch)
     var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
     if arena_len > 0:
-        ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
+        if dev_len > arena_len:
+            ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
+        else:
+            ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
+    if out_n > 0:
+        ctx.enqueue_memset(df.create_sub_buffer[DType.float32](out_at, out_n), Float32(0))
     if stages > 0:
         ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
     for s in range(stages):
@@ -113,7 +133,8 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
         if mi_sorted and op == OP_MI_CD:
             var hq = host_q + (s * STAGE_INTS + 2)
-            mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]))
+            mi_cd_device(ctx, df, dmw, dmu, dq, s * STAGE_INTS + 2, total, Int(hq[1]), Int(hq[2]), Int(hq[0]),
+                         Int(hq[7]), mi_ties)
             continue
         if op == OP_SORT_COLS:
             var hq = host_q + (s * STAGE_INTS + 2)
@@ -146,7 +167,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
     if arena_len > 0:
-        ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
+        if dev_len > arena_len:
+            ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
+        else:
+            ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
+    if out_n > 0:
+        ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=out_addr), src_buf=df.create_sub_buffer[DType.float32](out_at, out_n))
     ctx.synchronize()
     _ = dw^
     _ = dmw^
