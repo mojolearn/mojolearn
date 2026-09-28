@@ -275,10 +275,79 @@ eaf6c2a3f IDENTICAL (digests equal to every IDENTICAL column).
 FAST after is at or above the reference on all 10 pairs (+0.0006 to +0.0019): quality
 not lower. Speed 3.5x (taxi) / 3.7x (HIGGS) on the M3 Ultra.
 
-## 4928e9c4f AffinityPropagation: 16 iterations per host read (measurement pending on m4pro-a)
+## 4928e9c4f AffinityPropagation: 16 iterations per host read -> REVERTED (f05cd66ad)
 
-`ops.ap_iterate`: R, A, the exemplar flags and the convergence window (`_ap_conv_kernel`,
-integer sums) enqueued per iteration, one read of the stop state per 16 iterations; the
-converging iteration writes st = [1, it] and every later kernel returns at once, so it,
-e, A and R equal the one-read-per-iteration loop's. m4pro-a request 1790595068119 (full
-IDENTICAL board at 4928e9c4f) is the after for everything since eaf6c2a3f.
+`ops.ap_iterate` enqueued R, A, the exemplar flags and the convergence window per
+iteration with one stop-state read per 16 iterations. m4pro-a 1790595068119 (4928e9c4f)
+vs 1790584496338 (eaf6c2a3f): affinity-prop 5k taxi 1.7870 -> 1.7781 s, HIGGS
+0.8653 -> 0.8641 s, digests equal. No gain, so reverted (as the DBSCAN pass batching
+was); x_cluster at the tip is byte-equal to 954a28db0.
+
+## Results: M4 Pro (m4pro-a), IDENTICAL, before 5b622763d (1790579942404) -> 4928e9c4f (1790595068119)
+
+4928e9c4f = every lane change incl. the late ones (+ the AP batching, since reverted,
+which moved nothing). Every digest equals the before (dbscan taxi keeps the M4 two-batch
+digest 2c9624c0d0cf42d4, see the FINDING above).
+
+| case | rows | taxi before -> after (s) | higgs before -> after (s) |
+|---|---|---|---|
+| kmeans | 1M | 0.0925 -> 0.0911 | 0.1721 -> 0.1707 |
+| minibatch-kmeans | 1M | 0.2212 -> 0.2079 | 0.2908 -> 0.2710 |
+| bisecting-kmeans | 1M | 0.3841 -> 0.3850 | 0.4054 -> 0.4012 |
+| gmm | 1M | 3.1468 -> 3.2351 | 3.0335 -> 3.1030 |
+| bayesian-gmm | 100k | 1.9616 -> 1.5997 | 2.7436 -> 2.1191 |
+| dbscan | 100k | 0.4746 -> 0.3218 | 0.2366 -> 0.0953 |
+| hdbscan | 40k | 5.4032 -> 4.0859 | 5.3290 -> 4.0845 |
+| agglomerative (single) | 10k | 0.1452 -> 0.0824 | 0.1440 -> 0.0813 |
+| agglomerative-ward | 10k | 1.3563 -> 0.9941 | 1.4522 -> 1.0363 |
+| spectral | 10k | 0.3366 -> 0.3412 | 0.0751 -> 0.0769 |
+| meanshift | 10k | 0.2876 -> 0.2895 | 0.2710 -> 0.2683 |
+| optics | 10k | 0.3893 -> 0.3934 | 0.3860 -> 0.3914 |
+| affinity-prop | 5k | 2.6157 -> 1.7781 | 1.3479 -> 0.8641 |
+
+## FINAL (wind-down 2026-09-28): state for lane/apple-merged
+
+No verification ran in this lane (policy above). Every code commit below is UNPROVEN
+for identity and needs the integration check (identity lanes + `--pass 2` sabotage arms
+of tools/identity_lanes/cluster.checks, on NVIDIA, AMD, CPU and the Apple columns).
+Board digests (labels + centers) equal the before on m4pro-a and m3ultra for every case,
+which is evidence, not proof.
+
+Default path (on, IDENTICAL bits unchanged by design):
+- d5c6541f0 DeviceOps enqueue without synchronize, batched reads (scheduling only).
+- b97028944 AP responsibilities one block per row (DEVIATION 5105; arm 5105_ap_rmax_tie).
+- 6c7a51fbd dense graph index math (self-loop pass per row, 32-bit row/col).
+- eb1299ed7 + 1d1d99be0 HDBSCAN DENSE MST solver, e % m columns, in-place mutual
+  reachability (arm e2e_hdbscan_dense_dst).
+- 0ea0b944e Agglomerative single linkage on the DENSE solver.
+- 381f85584 merge of origin/lane/merged (+ the `_ap_noise_kernel` Int32 fix).
+- 6ab7a64e0 DENSE MST without the per-edge flag array.
+- 8cab8284c Agglomerative contiguous dead-column mask (fixes the merge's ward regression).
+- 9ae0985b6 GMM IDENTICAL precision Cholesky without drains.
+- 4e1606253 DBSCAN sparse RBC arm's unused dense adjacency one byte.
+- b99650ef3, dc5a20a43 build-gate smoke fixes (mixture diag, hdbscan probabilities_).
+- bench: 55e7d44ba, 9c2b017c3 (`--column cpu`).
+
+FAST only (moves FAST bits, IDENTICAL untouched): 30c6e9638 moments row slices
+(BGMM FAST 3.5x/3.7x on M3 Ultra; paired quality at or above the reference, 10/10).
+
+Reverted (net zero in the tree): 28ab726b3 + d744c7cb5 + 819df01ee speculative chain
+(eaf6c2a3f), 8b9f64402 moments prefetch (7d003801f), daa070955 DBSCAN pass batching
+(ee0fd240f), 4928e9c4f AP iteration batching (f05cd66ad). Nothing is behind an opt-in
+define; there is no half-done change.
+
+lane/cluster-apple-prof: three DIAGNOSTIC ONLY commits (d3f9c8d69 HDBSCAN stage
+timings, f5fea624e BGMM/GMM stage timings, 6a34eb370 DBSCAN M4 probe) plus merges of
+this branch. Nothing on it goes into lane/cluster-apple or main.
+
+Known issues:
+- DBSCAN taxi 100k on the 48 GB M4 Pro: two RBC batches give labels 2c9624c0d0cf42d4
+  vs one-batch 9c8ea257cb04e118 everywhere else (present on origin/main 5b622763d, not
+  introduced here). Likely a batch-invariance defect in loop 2 / merge_labels; forcing
+  two batches (max_mbytes_per_batch) on any column should reproduce. Not fixed.
+- GMM 1M on m4pro-a reads +3% after (3.147 -> 3.235 taxi) while the M3 Ultra A/B of
+  9ae0985b6 read -5%; single min-of-2 runs, not A/B'd on the M4 Pro.
+- HDBSCAN on Apple is dominated by the neighbors kNN core distances (~890 ms on M3
+  Ultra), outside this family.
+- m2pro failed x-cluster-hdbscan-epsilon's gpu arm in earlier steward identity runs
+  (1790538504301, 1790538519972) that predate this lane's changes; not investigated.
