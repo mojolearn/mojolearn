@@ -311,3 +311,26 @@ NEXT (option parity continues; this phase is not finished):
    checks/multilogit_check.mojo.
 2. the xtrees `not yet` rows above.
 Then phase (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed.
+
+SESSION D, 2026-09-28 ~01:05Z (RunPod funded; NVIDIA pod `trees` H100
+vgv1hkkbm9comp; AMD `trees-amd` Hot Aisle MI300X kept to ~01:10Z Sep 29).
+- GATE DONE, MERGED: gbdt-tensor-ctr-tables CPU training. H100: `--pass 2
+  --sabotage gbdt/checks/sabotage/tensor_ctr_count_cpu_only.patch` AGREE
+  (batch/infer/model/train 9), DISAGREE (model DIVERGENT 9/9), AGREE after
+  reversal: PASS. Every other lane lane_select names (34, par-* excluded)
+  AGREE on CUDA == CPU; gbdt-categorical-ctr-tables reads NOTHING COMPARED
+  (the CPU column refuses CTR categoricals: item 2 of the CTR list) and reads
+  the same on the merge base with the lane patch reversed, so it is not this
+  change. test_host_surface 200 passed; test_lane_select OK (0 failures).
+  MI300X: the same lane set incl. gbdt-tensor-ctr-tables AGREE (RC 0).
+- trees-oob-cv-link M3 RE-RUN: 1790558067096 m3ultra-b PASS, m4pro-a PASS
+  (at aefdd7f9f, after the 5611 fix). OWED ITEM 3 CLOSED.
+- M2 DIAGNOSTIC (1790553780797) READ: NOT MultiRMSE. On the M2 Pro Metal
+  column EVERY gbdt lane checked DISAGREES (gbdt-symmetric, gbdt-rmse,
+  gbdt-multiclass, gbdt-onevsall, trees-gbdt-multirmse) on the non-integer
+  fixtures; `ties` (6 distinct values, <= 5 borders) is IDENTICAL. The model
+  header (borders) is identical; the Metal tree is `depth 1`, `split 0 0 0
+  0` (feature 0, bin 0: the first candidate, i.e. every score equal) where
+  the CPU grows depth 6. So the fault is in the split search on 128-border
+  (one-byte) features on Apple8 (M2) only; M3/M4 agree. Kernel checks
+  queued: m2pro 1790558473013, control m4pro-a 1790558481928.
