@@ -326,6 +326,28 @@ def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], addr: Int, count
     if count < XN_STAGED_MIN:
         ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=addr), src_buf=buf)
         return
+    comptime if is_defined["MOJOLEARN_XN_MAPPED_DOWN"]():
+        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
+        # host (Apple's memory is unified) and copied once, over the host
+        # cores, instead of once into the staging buffer and once out of it.
+        ctx.synchronize()
+        with buf.map_to_host() as hm:
+            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
+            var mdst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addr)
+            var mtasks = host_predict_task_count(count)
+            var mpart = host_predict_chunk(count, mtasks)
+
+            def _mpart(task: Int) {imm msrc, imm mdst, imm count, imm mpart}:
+                var lo = task * mpart
+                var hi = min(lo + mpart, count)
+                if hi > lo:
+                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
+
+            if mtasks == 1:
+                _mpart(0)
+            else:
+                host_parallelize(_mpart, mtasks)
+        return
     var c = min(count, XN_OUT_CHUNK)
     var h = ctx.enqueue_create_host_buffer[DType.float32](c)
     var off = 0

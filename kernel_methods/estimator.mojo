@@ -190,6 +190,30 @@ def _download_into[out_origin: MutOrigin, //](
         return
     if n <= 0:
         return
+    comptime if is_defined["MOJOLEARN_KM_MAPPED_OUT"]():
+        # lane neighbors-apple3, OPT-IN: the device buffer mapped into the
+        # host (Apple's memory is unified) and copied once, over the host
+        # cores, instead of once into the staging buffer and once out of it.
+        ctx.synchronize()
+        with src.map_to_host() as hm:
+            var msrc = rebind[MutPointer[Float32, MutUntrackedOrigin]](hm.unsafe_ptr())
+            var mdst = rebind[MutPointer[Float32, MutUntrackedOrigin]](output)
+            var mtasks = host_predict_task_count(n)
+            if n < 262144:
+                mtasks = 1
+            var mpart = host_predict_chunk(n, mtasks)
+
+            def _mpart(task: Int) {imm msrc, imm mdst, imm n, imm mpart}:
+                var lo = task * mpart
+                var hi = min(lo + mpart, n)
+                if hi > lo:
+                    copy_f32(msrc.unsafe_offset(lo), mdst.unsafe_offset(lo), hi - lo)
+
+            if mtasks == 1:
+                _mpart(0)
+            else:
+                host_parallelize(_mpart, mtasks)
+        return
     var c = min(n, KM_OUT_CHUNK)
     var h = ctx.enqueue_create_host_buffer[DType.float32](c)
     var off = 0
