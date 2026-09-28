@@ -21,6 +21,9 @@ from x_linear.ops import (
 )
 
 comptime GLM_LINK_IDENTITY = 0
+#: rows per block of the gradient/Hessian fold (a block of X stays in cache
+#: while every unit folds it)
+comptime GLM_ROW_BLOCK = 8192
 comptime GLM_LINK_LOG = 1
 
 
@@ -142,17 +145,38 @@ def glm_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
                 st(s2, i, hi_)
 
         par_rows(rows_gh, n)
-        # every entry of g and of H's lower triangle is its own accumulator
-        for i in range(n):
-            var gi = ld(s1, i)
-            var hi = ld(s2, i)
-            axpy_acc(gp, 0, gi, x, i * d, d)
-            for j in range(d):
-                axpy_acc(hp, j * m, fm(hi, ld(x, i * d + j)), x, i * d, j + 1)
-            if fi:
-                st(g, d, fa(ld(g, d), gi))
-                axpy_acc(hp, d * m, hi, x, i * d, d)
-                st(h, d * m + d, fa(ld(h, d * m + d), hi))
+        # every entry of g and of H's lower triangle is its own accumulator.
+        # Units: 0..d-1 the Hessian rows, d the intercept's row, d+1 the
+        # gradient; a unit owns its accumulators and folds rows ascending,
+        # so units may run at once, one row block at a time (lane linear-cpu)
+        var units = d + 2
+        var b0 = 0
+        while b0 < n:
+            var b1 = b0 + GLM_ROW_BLOCK
+            if b1 > n:
+                b1 = n
+
+            def units_fold(lo: Int, hi: Int) {imm x, imm d, imm m, imm fi, imm gp, imm hp, imm s1, imm s2,
+                                              imm b0, imm b1}:
+                for u in range(lo, hi):
+                    if u < d:
+                        for i in range(b0, b1):
+                            axpy_acc(hp, u * m, fm(ld(s2, i), ld(x, i * d + u)), x, i * d, u + 1)
+                    elif u == d:
+                        if fi:
+                            for i in range(b0, b1):
+                                var hi_ = ld(s2, i)
+                                axpy_acc(hp, d * m, hi_, x, i * d, d)
+                                st(hp, d * m + d, fa(ld(hp, d * m + d), hi_))
+                    else:
+                        for i in range(b0, b1):
+                            var gi = ld(s1, i)
+                            axpy_acc(gp, 0, gi, x, i * d, d)
+                            if fi:
+                                st(gp, d, fa(ld(gp, d), gi))
+
+            par_rows(units_fold, units, 1)
+            b0 = b1
         var inv_n = fd(Float32(1), den)
         var gmax = Float32(0)
         for j in range(m):
