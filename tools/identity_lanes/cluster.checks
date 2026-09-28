@@ -16,3 +16,4 @@ x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch
 x_cluster/checks/spectral_assign_check.mojo	x_cluster/checks/sabotage/5119_svd_fold.patch
 x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_tile.patch
+x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_round.patch

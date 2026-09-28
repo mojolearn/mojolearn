@@ -1,0 +1,13 @@
+diff --git a/hdbscan/impl/detail/reachability.mojo b/hdbscan/impl/detail/reachability.mojo
+index 37dd054ce..aab524bcc 100644
+--- a/hdbscan/impl/detail/reachability.mojo
++++ b/hdbscan/impl/detail/reachability.mojo
+@@ -143,7 +143,7 @@ def core_distances_kernel(
+     var slot = Int(min_samples_in) - 1
+     if sabotage == HDB_SAB_CORE_KTH_PLUS_ONE:
+         slot = Int(min_samples_in)
+-    out_core.unsafe_store(row, knn_dists.unsafe_load(row * n_neighbors + slot))
++    out_core.unsafe_store(row, knn_dists.unsafe_load(row * n_neighbors + slot) * Float32(1.0000001))  # SABOTAGE: device core distances one ulp up
+ 
+ 
+ def core_distances(
