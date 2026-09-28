@@ -7,7 +7,9 @@ lanes, 2026-09-14).
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or
 any module under `arima/`. The only library imports are the
 `checks/numerics.mojo` seams (`ftz`, `identical_mul_add`, `identical_exp`,
-`identical_log`, `identical_sqrt`). Every construct the device path reaches
+`identical_log`, `identical_sqrt`) and the host thread split
+(`core/host_parallel.mojo`, `core/host_predict_threads.mojo`: the Kalman
+passes run series ranges on threads, which moves no bit). Every construct the device path reaches
 is RESTATED below with the file and line of the routine it MIRRORS, so a
 disagreement between the two is a finding and not a shared bug. The
 existing oracles under `arima/checks/` are not imported either: they share
@@ -112,6 +114,8 @@ from std.math import isfinite, isinf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_list_ptr, host_predict_chunk, host_predict_task_count
 from checks.numerics import (
     ftz,
     identical_exp,
@@ -297,6 +301,31 @@ def arima_host_refuse_unrestated(order: ArimaHostOrder, who: String) raises:
 
 def _zeros(n: Int) -> List[Float32]:
     return List[Float32](length=n, fill=Float32(0.0))
+
+
+#: The least per-task work (series x observations x state cells) before the
+#: Kalman passes split their series across threads (lane sequence-cpu).
+comptime AH_HOST_GRAIN = 1 << 15
+
+
+def _series_tasks(batch_size: Int, work_per_series: Int) -> Int:
+    """How many contiguous series ranges a per-series host loop splits into:
+    `core/host_predict_threads.mojo`'s ceiling (MOJOLEARN_CPU_THREADS, else
+    one per physical core), at most one per series, and few enough that a
+    task keeps AH_HOST_GRAIN of work. It decides WHICH THREAD runs a series,
+    never what the series computes."""
+    var t = host_predict_task_count(batch_size)
+    var by_work = (batch_size * max(work_per_series, 1)) // AH_HOST_GRAIN
+    if by_work < t:
+        t = by_work
+    return max(t, 1)
+
+
+@always_inline
+def _i32_ptr(x: List[Int32]) -> MutPointer[Int32, MutUntrackedOrigin]:
+    """A List's storage as an untracked pointer, the `host_list_ptr` rebind
+    for the per-series status words; the List outlives the join."""
+    return rebind[MutPointer[Int32, MutUntrackedOrigin]](x.unsafe_ptr())
 
 
 @fieldwise_init
@@ -797,108 +826,128 @@ def _kalman(
         if fc_steps > 0:
             obs_fut = _obs_intercept(exog_fut, t.beta, batch_size, fc_steps, order.n_exog)
 
-    for bid in range(batch_size):
-        # -- init_batched_kalman_matrices_kernel (:149-235), n_diff = 0
-        var R = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        R[n_diff] = Float32(1.0)
-        for i in range(n_theta):
-            var idx = i + 1
-            var idx1 = idx // s if s != 0 else 0
-            var idx0 = idx - s * idx1
-            var c0 = _param_to_poly(False, t.ma[bid * q + idx0 - 1] if (idx0 != 0 and idx0 <= q) else Float32(0.0), idx0, q)
-            var c1 = _param_to_poly(False, t.sma[bid * Q + idx1 - 1] if (idx1 != 0 and idx1 <= Q) else Float32(0.0), idx1, Q)
-            R[n_diff + i + 1] = _reduced_polynomial(False, c0, c1)
-        for i in range(n_phi):
-            var idx = i + 1
-            var idx1 = idx // s if s != 0 else 0
-            var idx0 = idx - s * idx1
-            var c0 = _param_to_poly(True, t.ar[bid * p + idx0 - 1] if (idx0 != 0 and idx0 <= p) else Float32(0.0), idx0, p)
-            var c1 = _param_to_poly(True, t.sar[bid * P + idx1 - 1] if (idx1 != 0 and idx1 <= P) else Float32(0.0), idx1, P)
-            T[n_diff * (rd + 1) + i] = _reduced_polynomial(True, c0, c1)
-        for i in range(r - 1):
-            T[(n_diff + i + 1) * rd + n_diff + i] = Float32(1.0)
-        if rd == 2 and p == 2:
-            var t1 = ftz(T[1])
-            if abs(ftz(t1 + Float32(1.0))) < Float32(0.01):
-                T[1] = Float32(-0.99)
+    # THE SERIES SPLIT (lane sequence-cpu, 2026-09-28): both per-series
+    # loops below are the device's one-thread-per-series kernels; a series
+    # reads its own parameters and writes its own slots, so contiguous
+    # series ranges run on `host_parallelize` (the caller's FP environment,
+    # DEVIATION 5900) and every bit is the serial walk's at any thread
+    # count. `_series_tasks` keeps small batches on the calling thread.
+    var tasks = _series_tasks(batch_size, nobs * rd2)
+    var chunk = host_predict_chunk(batch_size, tasks)
+    var T_all_p = host_list_ptr(T_all)
+    var RQR_all_p = host_list_ptr(RQR_all)
+    var P_all_p = host_list_ptr(P_all)
+    var alpha_all_p = host_list_ptr(alpha_all)
+    var info0_p = _i32_ptr(info0)
 
-        # -- kalman_init_state_kernel (:243-373)
-        var info = Int32(0)
-        var RQ = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var Pm = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var sigma2 = ftz(t.sigma2[bid])
-        for i in range(rd):
-            RQ[i] = ftz(ftz(R[i]) * sigma2)
-        for j in range(rd):
-            var rj = ftz(R[j])
+    def _init_series(c: Int) {imm}:
+        for bid in range(c * chunk, min((c + 1) * chunk, batch_size)):
+            # -- init_batched_kalman_matrices_kernel (:149-235), n_diff = 0
+            var R = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            R[n_diff] = Float32(1.0)
+            for i in range(n_theta):
+                var idx = i + 1
+                var idx1 = idx // s if s != 0 else 0
+                var idx0 = idx - s * idx1
+                var c0 = _param_to_poly(False, t.ma[bid * q + idx0 - 1] if (idx0 != 0 and idx0 <= q) else Float32(0.0), idx0, q)
+                var c1 = _param_to_poly(False, t.sma[bid * Q + idx1 - 1] if (idx1 != 0 and idx1 <= Q) else Float32(0.0), idx1, Q)
+                R[n_diff + i + 1] = _reduced_polynomial(False, c0, c1)
+            for i in range(n_phi):
+                var idx = i + 1
+                var idx1 = idx // s if s != 0 else 0
+                var idx0 = idx - s * idx1
+                var c0 = _param_to_poly(True, t.ar[bid * p + idx0 - 1] if (idx0 != 0 and idx0 <= p) else Float32(0.0), idx0, p)
+                var c1 = _param_to_poly(True, t.sar[bid * P + idx1 - 1] if (idx1 != 0 and idx1 <= P) else Float32(0.0), idx1, P)
+                T[n_diff * (rd + 1) + i] = _reduced_polynomial(True, c0, c1)
+            for i in range(r - 1):
+                T[(n_diff + i + 1) * rd + n_diff + i] = Float32(1.0)
+            if rd == 2 and p == 2:
+                var t1 = ftz(T[1])
+                if abs(ftz(t1 + Float32(1.0))) < Float32(0.01):
+                    T[1] = Float32(-0.99)
+
+            # -- kalman_init_state_kernel (:243-373)
+            var info = Int32(0)
+            var RQ = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var Pm = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var sigma2 = ftz(t.sigma2[bid])
             for i in range(rd):
-                RQR[i + j * rd] = ftz(ftz(RQ[i]) * rj)
-        # `kron_minus_identity` (matrix.mojo:152-180): I - A (x) A, two
-        # roundings per cell with the exact -1.
-        var imaa = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-        var imaa_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-        for ia in range(r):
-            for ja in range(r):
-                var a_ia_ja = -ftz(T[(ia + n_diff) + (ja + n_diff) * rd])
-                for ib in range(r):
-                    for jb in range(r):
-                        var i_ab = ia * r + ib
-                        var j_ab = ja * r + jb
-                        var b_val = ftz(T[(ib + n_diff) + (jb + n_diff) * rd])
-                        var v = ftz(a_ia_ja * b_val)
-                        if i_ab == j_ab:
-                            v = ftz(v + Float32(1.0))
-                        imaa[i_ab + j_ab * r2] = v
-        var inf1 = _lu_inverse(imaa, imaa_inv, r2)
-        if inf1 != Int32(0):
-            info = inf1
-        else:
-            var vecq = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
-            for j in range(r):
-                for i in range(r):
-                    vecq[i + j * r] = ftz(RQR[(i + n_diff) + (j + n_diff) * rd])
-            var xloc = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
-            for i in range(r2):
-                var acc = Float32(0.0)
-                for k in range(r2):
-                    var av = ftz(imaa_inv[i + k * r2])
-                    var xv = ftz(vecq[k])
-                    acc = ftz(identical_mul_add(av, xv, acc))
-                xloc[i] = acc
-            for j in range(r):
-                for i in range(r):
-                    Pm[(i + n_diff) + (j + n_diff) * rd] = xloc[i + j * r]
-        if order.k != 0:
-            var imt = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-            var imt_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-            for j in range(r):
-                for i in range(r):
-                    var delta = Float32(1.0) if i == j else Float32(0.0)
-                    var tij = ftz(T[(i + n_diff) + (j + n_diff) * rd])
-                    imt[i + j * r] = ftz(delta - tij)
-            if r == 1:
-                var v = imt[0]
-                if abs(v) < Float32(1e-3):
-                    # raft::signPrim: signbit(x) ? -1 : +1
-                    var neg = (bitcast[DType.uint32](v) >> 31) != 0
-                    imt[0] = Float32(-1e-3) if neg else Float32(1e-3)
-            var inf2 = _lu_inverse(imt, imt_inv, r)
-            if inf2 != Int32(0) and info == Int32(0):
-                info = inf2
-            var mu = ftz(t.mu[bid])
-            if inf2 == Int32(0):
-                for i in range(r):
-                    alpha[i + n_diff] = ftz(ftz(imt_inv[i]) * mu)
-        info0[bid] = info
-        for i in range(rd2):
-            T_all[bid * rd2 + i] = T[i]
-            RQR_all[bid * rd2 + i] = RQR[i]
-            P_all[bid * rd2 + i] = Pm[i]
-        for i in range(rd):
-            alpha_all[bid * rd + i] = alpha[i]
+                RQ[i] = ftz(ftz(R[i]) * sigma2)
+            for j in range(rd):
+                var rj = ftz(R[j])
+                for i in range(rd):
+                    RQR[i + j * rd] = ftz(ftz(RQ[i]) * rj)
+            # `kron_minus_identity` (matrix.mojo:152-180): I - A (x) A, two
+            # roundings per cell with the exact -1.
+            var imaa = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            var imaa_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            for ia in range(r):
+                for ja in range(r):
+                    var a_ia_ja = -ftz(T[(ia + n_diff) + (ja + n_diff) * rd])
+                    for ib in range(r):
+                        for jb in range(r):
+                            var i_ab = ia * r + ib
+                            var j_ab = ja * r + jb
+                            var b_val = ftz(T[(ib + n_diff) + (jb + n_diff) * rd])
+                            var v = ftz(a_ia_ja * b_val)
+                            if i_ab == j_ab:
+                                v = ftz(v + Float32(1.0))
+                            imaa[i_ab + j_ab * r2] = v
+            var inf1 = _lu_inverse(imaa, imaa_inv, r2)
+            if inf1 != Int32(0):
+                info = inf1
+            else:
+                var vecq = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+                for j in range(r):
+                    for i in range(r):
+                        vecq[i + j * r] = ftz(RQR[(i + n_diff) + (j + n_diff) * rd])
+                var xloc = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+                for i in range(r2):
+                    var acc = Float32(0.0)
+                    for k in range(r2):
+                        var av = ftz(imaa_inv[i + k * r2])
+                        var xv = ftz(vecq[k])
+                        acc = ftz(identical_mul_add(av, xv, acc))
+                    xloc[i] = acc
+                for j in range(r):
+                    for i in range(r):
+                        Pm[(i + n_diff) + (j + n_diff) * rd] = xloc[i + j * r]
+            if order.k != 0:
+                var imt = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+                var imt_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+                for j in range(r):
+                    for i in range(r):
+                        var delta = Float32(1.0) if i == j else Float32(0.0)
+                        var tij = ftz(T[(i + n_diff) + (j + n_diff) * rd])
+                        imt[i + j * r] = ftz(delta - tij)
+                if r == 1:
+                    var v = imt[0]
+                    if abs(v) < Float32(1e-3):
+                        # raft::signPrim: signbit(x) ? -1 : +1
+                        var neg = (bitcast[DType.uint32](v) >> 31) != 0
+                        imt[0] = Float32(-1e-3) if neg else Float32(1e-3)
+                var inf2 = _lu_inverse(imt, imt_inv, r)
+                if inf2 != Int32(0) and info == Int32(0):
+                    info = inf2
+                var mu = ftz(t.mu[bid])
+                if inf2 == Int32(0):
+                    for i in range(r):
+                        alpha[i + n_diff] = ftz(ftz(imt_inv[i]) * mu)
+            info0_p[bid] = info
+            for i in range(rd2):
+                T_all_p[bid * rd2 + i] = T[i]
+                RQR_all_p[bid * rd2 + i] = RQR[i]
+                P_all_p[bid * rd2 + i] = Pm[i]
+            for i in range(rd):
+                alpha_all_p[bid * rd + i] = alpha[i]
+
+    if tasks <= 1:
+        _init_series(0)
+    else:
+        host_parallelize(_init_series, tasks)
 
     for b in range(batch_size):
         if info0[b] != Int32(0):
@@ -911,86 +960,97 @@ def _kalman(
     var fc = _zeros(max(1, fc_steps * batch_size))
     var pred_all = _zeros(max(1, nobs * batch_size))
     var info1 = List[Int32](length=batch_size, fill=Int32(0))
-    for bid in range(batch_size):
-        # -- batched_kalman_loop_kernel (:425-604), n_diff = 0
-        var l_RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_P = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var l_K = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var l_tmp = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_TP = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_v = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var b_rd = bid * rd
-        var b_rd2 = bid * rd2
-        for i in range(rd2):
-            l_RQR[i] = ftz(RQR_all[b_rd2 + i])
-            l_T[i] = ftz(T_all[b_rd2 + i])
-            l_P[i] = ftz(P_all[b_rd2 + i])
-        for i in range(rd):
-            l_alpha[i] = ftz(alpha_all[b_rd + i])
-        var b_sum_logFs = Float32(0.0)
-        var b_ll_s2 = Float32(0.0)
-        var n_obs_ll = 0
-        var info = Int32(0)
-        var b_ys = bid * nobs
-        var mu = ftz(t.mu[bid]) if order.k != 0 else Float32(0.0)
-        for it in range(nobs):
-            # 1. v = y - Z*alpha
-            var pred = Float32(0.0)
-            if has_exog:
-                pred = ftz(pred + ftz(obs[b_ys + it]))
-            pred = ftz(pred + l_alpha[0])
-            pred_all[b_ys + it] = pred
-            var yt = ftz(ys[b_ys + it])
-            var vs_it = ftz(yt - pred)
-            # 2. F = Z*P*Z'
-            var _Fs = l_P[0]
-            if _Fs <= Float32(0.0) and info == Int32(0):
-                info = Int32(it + 1) if it >= n_diff else Int32(-(it + 1))
-            if it >= n_diff:
-                if _Fs > Float32(0.0):
-                    b_sum_logFs = ftz(b_sum_logFs + ftz(identical_log(_Fs)))
-                    var v2 = ftz(vs_it * vs_it)
-                    b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
-                n_obs_ll += 1
-            # 3. K = 1/Fs * T*P*Z'
-            _mm(rd, l_T, l_P, False, l_TP)
-            var _1_Fs = ftz(Float32(1.0) / _Fs)
-            for i in range(rd):
-                l_K[i] = ftz(_1_Fs * l_TP[i])
-            # 4. alpha = T*alpha + K*vs + c
-            _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
-            for i in range(rd):
-                l_alpha[i] = ftz(identical_mul_add(l_K[i], vs_it, l_v[i]))
-            l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
-            # 5. L = T - K*Z
+    var loglike_p = host_list_ptr(loglike)
+    var fc_p = host_list_ptr(fc)
+    var pred_p = host_list_ptr(pred_all)
+    var info1_p = _i32_ptr(info1)
+
+    def _loop_series(c: Int) {imm}:
+        for bid in range(c * chunk, min((c + 1) * chunk, batch_size)):
+            # -- batched_kalman_loop_kernel (:425-604), n_diff = 0
+            var l_RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_P = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var l_K = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var l_tmp = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_TP = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+            var l_v = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+            var b_rd = bid * rd
+            var b_rd2 = bid * rd2
             for i in range(rd2):
-                l_tmp[i] = l_T[i]
+                l_RQR[i] = ftz(RQR_all_p[b_rd2 + i])
+                l_T[i] = ftz(T_all_p[b_rd2 + i])
+                l_P[i] = ftz(P_all_p[b_rd2 + i])
             for i in range(rd):
-                l_tmp[i] = ftz(l_tmp[i] - l_K[i])
-            # 6. P = T*P*L' + R*Q*R'
-            _mm(rd, l_TP, l_tmp, True, l_P)
-            for i in range(rd2):
-                l_P[i] = ftz(l_P[i] + l_RQR[i])
-            _numerical_stability(rd, l_P)
-        var n_obs_ll_f = Float32(n_obs_ll)
-        b_ll_s2 = ftz(b_ll_s2 / n_obs_ll_f)
-        var inner = ftz(b_ll_s2 + AH_LOG_2PI)
-        var tot = ftz(identical_mul_add(n_obs_ll_f, inner, b_sum_logFs))
-        loglike[bid] = ftz(Float32(-0.5) * tot)
-        info1[bid] = info
-        var b_fc = bid * fc_steps
-        for it in range(fc_steps):
-            var pred = Float32(0.0)
-            if has_exog:
-                pred = ftz(pred + ftz(obs_fut[b_fc + it]))
-            pred = ftz(pred + l_alpha[0])
-            fc[b_fc + it] = pred
-            _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
-            for i in range(rd):
-                l_alpha[i] = l_v[i]
-            l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+                l_alpha[i] = ftz(alpha_all_p[b_rd + i])
+            var b_sum_logFs = Float32(0.0)
+            var b_ll_s2 = Float32(0.0)
+            var n_obs_ll = 0
+            var info = Int32(0)
+            var b_ys = bid * nobs
+            var mu = ftz(t.mu[bid]) if order.k != 0 else Float32(0.0)
+            for it in range(nobs):
+                # 1. v = y - Z*alpha
+                var pred = Float32(0.0)
+                if has_exog:
+                    pred = ftz(pred + ftz(obs[b_ys + it]))
+                pred = ftz(pred + l_alpha[0])
+                pred_p[b_ys + it] = pred
+                var yt = ftz(ys[b_ys + it])
+                var vs_it = ftz(yt - pred)
+                # 2. F = Z*P*Z'
+                var _Fs = l_P[0]
+                if _Fs <= Float32(0.0) and info == Int32(0):
+                    info = Int32(it + 1) if it >= n_diff else Int32(-(it + 1))
+                if it >= n_diff:
+                    if _Fs > Float32(0.0):
+                        b_sum_logFs = ftz(b_sum_logFs + ftz(identical_log(_Fs)))
+                        var v2 = ftz(vs_it * vs_it)
+                        b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
+                    n_obs_ll += 1
+                # 3. K = 1/Fs * T*P*Z'
+                _mm(rd, l_T, l_P, False, l_TP)
+                var _1_Fs = ftz(Float32(1.0) / _Fs)
+                for i in range(rd):
+                    l_K[i] = ftz(_1_Fs * l_TP[i])
+                # 4. alpha = T*alpha + K*vs + c
+                _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
+                for i in range(rd):
+                    l_alpha[i] = ftz(identical_mul_add(l_K[i], vs_it, l_v[i]))
+                l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+                # 5. L = T - K*Z
+                for i in range(rd2):
+                    l_tmp[i] = l_T[i]
+                for i in range(rd):
+                    l_tmp[i] = ftz(l_tmp[i] - l_K[i])
+                # 6. P = T*P*L' + R*Q*R'
+                _mm(rd, l_TP, l_tmp, True, l_P)
+                for i in range(rd2):
+                    l_P[i] = ftz(l_P[i] + l_RQR[i])
+                _numerical_stability(rd, l_P)
+            var n_obs_ll_f = Float32(n_obs_ll)
+            b_ll_s2 = ftz(b_ll_s2 / n_obs_ll_f)
+            var inner = ftz(b_ll_s2 + AH_LOG_2PI)
+            var tot = ftz(identical_mul_add(n_obs_ll_f, inner, b_sum_logFs))
+            loglike_p[bid] = ftz(Float32(-0.5) * tot)
+            info1_p[bid] = info
+            var b_fc = bid * fc_steps
+            for it in range(fc_steps):
+                var pred = Float32(0.0)
+                if has_exog:
+                    pred = ftz(pred + ftz(obs_fut[b_fc + it]))
+                pred = ftz(pred + l_alpha[0])
+                fc_p[b_fc + it] = pred
+                _mv(rd, Float32(1.0), l_T, l_alpha, l_v)
+                for i in range(rd):
+                    l_alpha[i] = l_v[i]
+                l_alpha[n_diff] = ftz(l_alpha[n_diff] + mu)
+
+    if tasks <= 1:
+        _loop_series(0)
+    else:
+        host_parallelize(_loop_series, tasks)
 
     for b in range(batch_size):
         if info1[b] > Int32(0):
