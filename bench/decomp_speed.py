@@ -54,6 +54,7 @@ def run(name, fn, warm=None):
         print(f"{name:34s} FAILED {type(e).__name__}: {str(e)[:200]}", flush=True)
 s = lambda n: X[:n]
 w = lambda n: (lambda f: (lambda: f(n)))
+n2 = int(os.environ.get("N2", "100000"))
 # ---- linear in n (1M rows)
 run("PCA(full,5)", lambda: ml.PCA(n_components=5).fit(X))
 run("PCA(randomized,5)", lambda: ml.PCA(n_components=5, svd_solver="randomized").fit(X))
@@ -70,12 +71,11 @@ run("lstsq", lambda: ml.lstsq(X[:, :-1], X[:, -1]))
 run("randomized_svd(5)", lambda: ml.randomized_svd(X, 5, random_state=0))
 run("PLSRegression(3)", lambda: ml.PLSRegression(n_components=3).fit(X[:, :-2], X[:, -2:]))
 run("CCA(2)", lambda: ml.CCA(n_components=2).fit(X[:, :-2], X[:, -2:]))
-run("MinCovDet", lambda: ml.MinCovDet(random_state=0).fit(X[:, :8]))
+run("MinCovDet", lambda: ml.MinCovDet(random_state=0).fit(X[:n2, :8]))   # sklearn fast_mcd: n // 300 subsets
 run("linalg.qr(reduced)", lambda: ml.linalg.qr(X))
 run("linalg.svd", lambda: ml.linalg.svd(X, full_matrices=False))
 run("solve(512)", lambda: ml.solve(X[:512, :1].repeat(512, 1) + np.eye(512, dtype=np.float32) * 10, X[:512, :4]))
 # ---- heavier per row
-n2 = int(os.environ.get("N2", "100000"))
 run("SparsePCA(5,10it)", lambda: ml.SparsePCA(n_components=5, max_iter=10, random_state=0).fit(X[:n2]))
 run("DictionaryLearning(8,10it)", lambda: ml.DictionaryLearning(n_components=8, max_iter=10, random_state=0).fit(X[:n2]))
 run("MiniBatchDictionaryLearning(8)", lambda: ml.MiniBatchDictionaryLearning(n_components=8, max_iter=3, random_state=0).fit(X[:n2]))
