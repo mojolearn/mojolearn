@@ -5,6 +5,7 @@ symmetrization is the shared host function (`tsne_symmetrize`)."""
 
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
+from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -13,7 +14,11 @@ from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
-from checks.numerics import ftz, identical_log
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log
+from std.sys.info import has_apple_gpu_accelerator
+from x_ann.switches import ANN3_TSNE_RB32, ANN3_TSNE_RB64, ANN3_TSNE_STEP_ROWS, ANN3_TSNE_ZSUM
+from checks.numerics import identical_div, identical_mul
+from x_ann.tsne_core import ts_q
 from x_ann.tsne_core import (
     F32P, I32P, ts_kl_cell, ts_perplexity_cell, ts_repulse_fold, ts_repulse_pair, ts_repulse_terms, ts_step_cell,
     ts_sum_cell, tsne_nn, tsne_symmetrize, tsne_validate,
@@ -36,8 +41,11 @@ def perplexity_kernel(n: Int32, nn_d: F32P, nn: Int32, log_perp: Float32, p: F32
         ts_perplexity_cell(i, nn_d, Int(nn), log_perp, p)
 
 
+comptime _FAST_APPLE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
 #: rows per threadgroup and staged candidate rows per tile of the repulsion
-comptime RTB = 128
+#: (lane ann-apple3, OPT-IN trials under FAST on Apple: 32 or 64 rows per
+#: threadgroup, x_ann/switches.mojo)
+comptime RTB = 32 if (_FAST_APPLE and ANN3_TSNE_RB32) else (64 if (_FAST_APPLE and ANN3_TSNE_RB64) else 128)
 comptime RTJ = 256
 
 
@@ -107,6 +115,84 @@ def sum_kernel(n: Int32, row_z: F32P, z: F32P):
         ts_sum_cell(row_z, Int(n), z)
 
 
+#: threads of the FAST Z sum
+comptime ZT = 128
+comptime TS_ZSUM = _FAST_APPLE and ANN3_TSNE_ZSUM
+comptime TS_STEP_ROWS = _FAST_APPLE and ANN3_TSNE_STEP_ROWS
+
+
+def sum_team_kernel(n: Int32, row_z: F32P, z: F32P):
+    """FAST on Apple, OPT-IN (lane ann-apple3): Z from ONE threadgroup of ZT
+    threads. Thread t adds rows t, t + ZT, ...; the ZT sums are joined by a
+    halving tree in threadgroup memory; thread 0 stores Z."""
+    var t = Int(thread_idx.x)
+    var part = stack_allocation[ZT, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var acc = Float32(0.0)
+    for i in range(t, Int(n), ZT):
+        acc = acc + row_z.unsafe_load(i)
+    part[t] = acc
+    barrier()
+    var step = ZT // 2
+    while step > 0:
+        var v = Float32(0.0)
+        if t < step:
+            v = part[t] + part[t + step]
+        barrier()
+        if t < step:
+            part[t] = v
+        barrier()
+        step = step // 2
+    if t == 0:
+        z.unsafe_store(0, part[0])
+
+
+@always_inline
+def _step_tail(
+    e: Int, yi: Float32, attr: Float32, y_new: F32P, rep: F32P, z: F32P, update: F32P, gains: F32P,
+    exaggeration: Float32, momentum: Float32, learning_rate: Float32,
+):
+    """`ts_step_cell` after its attraction sum, statement for statement."""
+    var neg = ftz(identical_div(rep.unsafe_load(e), z.unsafe_load(0)))
+    var grad = ftz(identical_mul(Float32(4.0), ftz(ftz(identical_mul(exaggeration, attr)) - neg)))
+    var upd = update.unsafe_load(e)
+    var gain = gains.unsafe_load(e)
+    if ftz(identical_mul(upd, grad)) < Float32(0.0):
+        gain = ftz(gain + Float32(0.2))
+    else:
+        gain = ftz(identical_mul(gain, Float32(0.8)))
+    if gain < Float32(0.01):
+        gain = Float32(0.01)
+    grad = ftz(identical_mul(grad, gain))
+    upd = ftz(ftz(identical_mul(momentum, upd)) - ftz(identical_mul(learning_rate, grad)))
+    gains.unsafe_store(e, gain)
+    update.unsafe_store(e, upd)
+    y_new.unsafe_store(e, ftz(yi + upd))
+
+
+def step_rows_kernel(
+    n: Int32, y: F32P, y_new: F32P, indptr: I32P, indices: I32P, values: F32P, rep: F32P,
+    z: F32P, update: F32P, gains: F32P, exaggeration: Float32, momentum: Float32, lr: Float32,
+):
+    """FAST on Apple, OPT-IN (lane ann-apple3): `ts_step_cell` for both
+    coordinates of row i in one thread. The attraction walks the row's CSR
+    entries once and forms each neighbor's `ts_q` once (the cell forms it once
+    per coordinate); each coordinate's sum and update are the cell's
+    statements in the cell's order."""
+    var i = _tid()
+    if i < Int(n):
+        var y0 = ftz(y.unsafe_load(2 * i))
+        var y1 = ftz(y.unsafe_load(2 * i + 1))
+        var a0 = Float32(0.0)
+        var a1 = Float32(0.0)
+        for s in range(Int(indptr.unsafe_load(i)), Int(indptr.unsafe_load(i + 1))):
+            var j = Int(indices.unsafe_load(s))
+            var pq = ftz(identical_mul(ftz(values.unsafe_load(s)), ts_q(y, i, j)))
+            a0 = ftz(a0 + ftz(identical_mul(pq, ftz(y0 - ftz(y.unsafe_load(2 * j))))))
+            a1 = ftz(a1 + ftz(identical_mul(pq, ftz(y1 - ftz(y.unsafe_load(2 * j + 1))))))
+        _step_tail(2 * i, y0, a0, y_new, rep, z, update, gains, exaggeration, momentum, lr)
+        _step_tail(2 * i + 1, y1, a1, y_new, rep, z, update, gains, exaggeration, momentum, lr)
+
+
 def step_kernel(
     count: Int32, y: F32P, y_new: F32P, indptr: I32P, indices: I32P, values: F32P, rep: F32P,
     z: F32P, update: F32P, gains: F32P, exaggeration: Float32, momentum: Float32, lr: Float32,
@@ -131,12 +217,62 @@ def _ts_iter(
 ) raises:
     ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
                                                grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
-    ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
-    ctx.enqueue_function[step_kernel](
-        Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
-        dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
-        mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
-    )
+    comptime if TS_ZSUM:
+        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
+    else:
+        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    comptime if TS_STEP_ROWS:
+        ctx.enqueue_function[step_rows_kernel](
+            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[step_kernel](
+            Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
+        )
+
+
+def _ts_iter_timed(
+    ctx: DeviceContext, mut ycur: DeviceBuffer[DType.float32], mut ynext: DeviceBuffer[DType.float32], n: Int,
+    mut dptr: DeviceBuffer[DType.int32], mut dind: DeviceBuffer[DType.int32], mut dval: DeviceBuffer[DType.float32],
+    mut drz: DeviceBuffer[DType.float32], mut drep: DeviceBuffer[DType.float32], mut dz: DeviceBuffer[DType.float32],
+    mut dupd: DeviceBuffer[DType.float32], mut dgain: DeviceBuffer[DType.float32], ex: Float32, mom: Float32,
+    lr: Float32, mut t_rep: Int, mut t_sum: Int, mut t_step: Int,
+) raises:
+    """`_ts_iter` for the stage pass only (MOJOLEARN_ANN_STAGES, lane
+    ann-apple3): the same three launches, drained one by one, their wall
+    times added to t_rep / t_sum / t_step (ns)."""
+    var t0 = Int(perf_counter_ns())
+    ctx.enqueue_function[repulse_tiled_kernel](Int32(n), ycur.unsafe_ptr(), drz.unsafe_ptr(), drep.unsafe_ptr(),
+                                               grid_dim=(n + RTB - 1) // RTB, block_dim=RTB)
+    ctx.synchronize()
+    var t1 = Int(perf_counter_ns())
+    comptime if TS_ZSUM:
+        ctx.enqueue_function[sum_team_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=ZT)
+    else:
+        ctx.enqueue_function[sum_kernel](Int32(n), drz.unsafe_ptr(), dz.unsafe_ptr(), grid_dim=1, block_dim=1)
+    ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
+    comptime if TS_STEP_ROWS:
+        ctx.enqueue_function[step_rows_kernel](
+            Int32(n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[step_kernel](
+            Int32(2 * n), ycur.unsafe_ptr(), ynext.unsafe_ptr(), dptr.unsafe_ptr(), dind.unsafe_ptr(),
+            dval.unsafe_ptr(), drep.unsafe_ptr(), dz.unsafe_ptr(), dupd.unsafe_ptr(), dgain.unsafe_ptr(), ex,
+            mom, lr, grid_dim=_grid(2 * n), block_dim=TPB,
+        )
+    ctx.synchronize()
+    var t3 = Int(perf_counter_ns())
+    t_rep += t1 - t0
+    t_sum += t2 - t1
+    t_step += t3 - t2
 
 
 def _ts_kl(
@@ -190,14 +326,29 @@ def tsne_fit_device(
     var dz = ctx.enqueue_create_buffer[DType.float32](1)
     var dkl = ctx.enqueue_create_buffer[DType.float32](n)
     st.mark(ctx, "upload_graph")
+    var t_rep = 0
+    var t_sum = 0
+    var t_step = 0
     for it in range(max_iter):
         var ex = exaggeration if it < exploration else Float32(1.0)
         var mom = Float32(0.5) if it < exploration else Float32(0.8)
-        if it % 2 == 0:
+        if st.on:
+            # the stage pass: each launch drained and timed (ann-apple3)
+            if it % 2 == 0:
+                _ts_iter_timed(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
+                               learning_rate, t_rep, t_sum, t_step)
+            else:
+                _ts_iter_timed(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom,
+                               learning_rate, t_rep, t_sum, t_step)
+        elif it % 2 == 0:
             _ts_iter(ctx, dy, dy2, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
         else:
             _ts_iter(ctx, dy2, dy, n, dptr, dind, dval, drz, drep, dz, dupd, dgain, ex, mom, learning_rate)
     st.mark(ctx, "iterations")
+    if st.on:
+        print("ANN-STAGE tsne_iter repulse", Float64(t_rep) / 1.0e6)
+        print("ANN-STAGE tsne_iter sum", Float64(t_sum) / 1.0e6)
+        print("ANN-STAGE tsne_iter step", Float64(t_step) / 1.0e6)
     if max_iter % 2 == 0:
         _ts_kl(ctx, dy, n, dptr, dind, dval, drz, drep, dz, dkl)
     else:

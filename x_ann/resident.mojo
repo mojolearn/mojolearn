@@ -40,6 +40,7 @@ THE ADDRESSES (mirrored in python/mojolearn/_expansion_ann.py):
 """
 from std.ffi import _Global
 from std.python import Python, PythonObject
+from x_ann.switches import ANN3_PREPARE
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -49,6 +50,7 @@ from x_ann.io import upload_f32, upload_i32
 from x_ann.ivf_pq_core import F32P, I32P, pq_len_of
 from x_ann.ivf_rabitq_core import rq_pow2
 from x_ann.ivf_pq_device import ivf_pq_search_on, ivf_sq_search_on, ivf_rabitq_search_on
+from x_ann.ivf_scan_device import scan_gather_f32, scan_gather_i32
 from x_ann.cagra_device import cagra_search_on
 
 comptime KIND_PQ = 0
@@ -78,6 +80,15 @@ struct AnnResident(Movable):
     var i2: DeviceBuffer[DType.int32]
     var ones: DeviceBuffer[DType.int32]
     var offsets: List[Int32]
+    # lane ann-apple3, behind `ANN3_PREPARE` (x_ann/switches.mojo): the codes
+    # (and RaBitQ's norms and factors) in list order, gathered ONCE here by
+    # the launches every search makes otherwise (`ivf_scan_search`); `pre`
+    # says they are there (an index whose lists hold every row once: the
+    # all-ones filter is then its own list-order copy).
+    var pre: Bool
+    var g_codes: DeviceBuffer[DType.int32]
+    var g_a: DeviceBuffer[DType.float32]
+    var g_b: DeviceBuffer[DType.float32]
 
     def __init__(out self, kind: Int, addrs: PythonObject, params: PythonObject) raises:
         var ctx = x_ann_ctx()
@@ -106,6 +117,10 @@ struct AnnResident(Movable):
             self.i2 = upload_i32(ctx, empty_i)
             self.ones = upload_i32(ctx, empty_i)
             self.offsets = List[Int32]()
+            self.pre = False
+            self.g_codes = upload_i32(ctx, empty_i)
+            self.g_a = upload_f32(ctx, empty_f)
+            self.g_b = upload_f32(ctx, empty_f)
             return
         self.n_lists = p_int(params, 2)
         var n = self.n
@@ -116,7 +131,15 @@ struct AnnResident(Movable):
         self.offsets = in_i32(addrs, 1, n_lists + 1)
         self.f0 = upload_f32(ctx, in_f32(addrs, 0, n_lists * dim))
         self.i0 = upload_i32(ctx, self.offsets)
-        self.i1 = upload_i32(ctx, in_i32(addrs, 2, n))
+        # lane ann-apple3: the ids and the codes are held in locals until the
+        # list-order gathers are enqueued, then moved into the entry
+        var ids = upload_i32(ctx, in_i32(addrs, 2, n))
+        var n_slots = Int(self.offsets[n_lists])
+        var pre = n_slots == n
+        comptime if not ANN3_PREPARE:
+            pre = False
+        var gs = n_slots if pre else 0
+        self.pre = pre
         if kind == KIND_PQ:
             var pq_dim = p_int(params, 3)
             var pq_bits = p_int(params, 4)
@@ -125,17 +148,34 @@ struct AnnResident(Movable):
             var pq_len = pq_len_of(dim, pq_dim)
             self.f1 = upload_f32(ctx, in_f32(addrs, 3, pq_dim * (1 << pq_bits) * pq_len))
             self.f2 = upload_f32(ctx, empty_f)
-            self.i2 = upload_i32(ctx, in_i32(addrs, 4, n * pq_dim))
+            var codes = upload_i32(ctx, in_i32(addrs, 4, n * pq_dim))
+            self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, pq_dim)
+            self.g_a = upload_f32(ctx, empty_f)
+            self.g_b = upload_f32(ctx, empty_f)
+            self.i2 = codes^
+            self.i1 = ids^
         elif kind == KIND_SQ:
             self.f1 = upload_f32(ctx, in_f32(addrs, 3, dim))
             self.f2 = upload_f32(ctx, in_f32(addrs, 4, dim))
-            self.i2 = upload_i32(ctx, in_i32(addrs, 5, n * dim))
+            var codes = upload_i32(ctx, in_i32(addrs, 5, n * dim))
+            self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, dim)
+            self.g_a = upload_f32(ctx, empty_f)
+            self.g_b = upload_f32(ctx, empty_f)
+            self.i2 = codes^
+            self.i1 = ids^
         elif kind == KIND_RABITQ:
             self.a = p_int(params, 3)
             var words = (rq_pow2(dim) + 31) // 32
-            self.i2 = upload_i32(ctx, in_i32(addrs, 3, n * words))
-            self.f1 = upload_f32(ctx, in_f32(addrs, 4, n))
-            self.f2 = upload_f32(ctx, in_f32(addrs, 5, n))
+            var codes = upload_i32(ctx, in_i32(addrs, 3, n * words))
+            var norms = upload_f32(ctx, in_f32(addrs, 4, n))
+            var ips = upload_f32(ctx, in_f32(addrs, 5, n))
+            self.g_codes = scan_gather_i32(ctx, _p(codes), _p(ids), gs, words)
+            self.g_a = scan_gather_f32(ctx, _p(norms), _p(ids), gs)
+            self.g_b = scan_gather_f32(ctx, _p(ips), _p(ids), gs)
+            self.i2 = codes^
+            self.i1 = ids^
+            self.f1 = norms^
+            self.f2 = ips^
         else:
             raise Error("x_ann_index_prepare: unknown index kind " + String(kind))
         # the no-filter filter, once: one int32 1 per row, what
@@ -215,15 +255,21 @@ def x_ann_index_search_binding(handle: PythonObject, addrs: PythonObject, params
     var filtered = len(addrs) > 4
     var dmask = upload_i32(ctx, in_i32(addrs, 4, e.n) if filtered else List[Int32]())
     var mask = _p(dmask) if filtered else _p(e.ones)
+    # the prepared list-order arrays; an unfiltered search's mask is the
+    # all-ones filter, which is its own list-order copy
+    var mask_pre = e.pre and not filtered
     if e.kind == KIND_PQ:
         ivf_pq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.f1), _p(e.i2), mask, e.offsets, e.n_lists,
-                         e.dim, e.a, e.b, q, m, k, n_probes, od, oi, on)
+                         e.dim, e.a, e.b, q, m, k, n_probes, od, oi, on,
+                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
     elif e.kind == KIND_SQ:
         ivf_sq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.f1), _p(e.f2), _p(e.i2), mask, e.offsets,
-                         e.n_lists, e.dim, q, m, k, n_probes, od, oi, on)
+                         e.n_lists, e.dim, q, m, k, n_probes, od, oi, on,
+                         e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
     else:
         ivf_rabitq_search_on(ctx, _p(e.f0), _p(e.i0), _p(e.i1), _p(e.i2), _p(e.f1), _p(e.f2), mask, e.offsets,
-                             e.n_lists, e.dim, e.a, q, m, k, n_probes, od, oi, on)
+                             e.n_lists, e.dim, e.a, q, m, k, n_probes, od, oi, on,
+                             e.pre, _p(e.g_codes), _p(e.g_a), _p(e.g_b), mask_pre)
     out_f32(od, addrs, 1)
     out_i32(oi, addrs, 2)
     out_i32(on, addrs, 3)

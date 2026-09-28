@@ -11,10 +11,15 @@ from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 from x_ann.device_ctx import x_ann_ctx
 from x_ann.stage_timer import AnnStages
+from x_ann.switches import (
+    ANN3_DIRECT_OUT, ANN3_HOST_PASSES, ANN3_PQ_HOST_RESIDUALS, ANN3_PQ_SEED, ANN3_ROW_THREADS,
+)
+from x_ann.kpp_seed import kpp_seed
+from std.sys.info import has_apple_gpu_accelerator
 from x_ann.ivf_scan_device import ivf_scan_search
 
 from cluster.estimator import kmeans_fit
-from cluster.impl.kmeans_params import INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
+from cluster.impl.kmeans_params import INIT_ARRAY, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED
 from ivf.estimator import ivf_flat_build_host
 from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_trainset_rows
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
@@ -41,6 +46,13 @@ row. Quality: bench/speed/ann_fast_quality.py, recorded in
 docs/lanes/progress/ann-apple.md."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
+comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_PQ_SEED`): each
+subspace codebook is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over a
+stride sample of its training rows, its own stream per subspace) and
+cluster/'s k-means starts from those seeds (`INIT_ARRAY`), so it runs its
+Lloyd iterations without its own seeding rounds."""
+
 
 def _tid() -> Int:
     return Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
@@ -50,6 +62,34 @@ def residual_kernel(count: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int
     var e = _tid()
     if e < Int(count):
         pq_residual_cell(e, x, centers, labels, Int(dim), Int(rot_dim), dst)
+
+
+def residual_rows_kernel(n: Int32, x: F32P, centers: F32P, labels: I32P, dim: Int32, rot_dim: Int32, dst: F32P):
+    """`residual_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): thread i runs `pq_residual_cell` for its row's
+    rot_dim cells in order. A cell reads its own inputs and writes its own
+    word, so the words are the ones one thread per cell writes."""
+    var i = _tid()
+    if i < Int(n):
+        var rd = Int(rot_dim)
+        for c in range(rd):
+            pq_residual_cell(i * rd + c, x, centers, labels, Int(dim), rd, dst)
+
+
+def _enqueue_residual(
+    ctx: DeviceContext, n: Int, dim: Int, rot_dim: Int, x: F32P, centers: F32P, labels: I32P, dst: F32P,
+) raises:
+    """The residual launch: one thread per row under `ANN3_ROW_THREADS`, one
+    per cell otherwise."""
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[residual_rows_kernel](
+            Int32(n), x, centers, labels, Int32(dim), Int32(rot_dim), dst, grid_dim=_grid(n), block_dim=TPB,
+        )
+    else:
+        ctx.enqueue_function[residual_kernel](
+            Int32(n * rot_dim), x, centers, labels, Int32(dim), Int32(rot_dim), dst,
+            grid_dim=_grid(n * rot_dim), block_dim=TPB,
+        )
 
 
 def assign_kernel(count: Int32, r: F32P, cb: F32P, pq_dim: Int32, rot_dim: Int32, pq_len: Int32, n_codes: Int32, codes: I32P):
@@ -138,17 +178,36 @@ def _coarse(
     """The coarse quantizer IS IVF-Flat's build (`ivf/estimator.mojo::
     ivf_flat_build_host`: cluster/'s k-means, L2Expanded, its CSR lists);
     the host twin is `ivf/host/ivf_host.mojo::host_ivf_build`."""
+    var cst = AnnStages("ivf_coarse")
     var ctx = x_ann_ctx()
-    var flat = ivf_flat_build_host(ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed))
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: the build without the
+    # permuted vectors (no x_ann index reads them; `with_list_data` is read
+    # only under the switch); the centres and the offsets move out of it;
+    # the labels are the build's own assignment, the one its lists were laid
+    # out from, so `pq_labels_from_lists` over those lists returns these words
+    var flat = ivf_flat_build_host(
+        ctx, x, n, dim, n_lists, kmeans_n_iters, METRIC_L2_EXPANDED, UInt64(seed), with_list_data=False
+    )
     ctx.synchronize()
-    centers = flat.centers.copy()
-    offsets = flat.list_offsets.copy()
-    list_indices = List[Int32](capacity=n)
-    for s in range(n):
-        list_indices.append(Int32(Int(flat.list_indices[s])))
-    labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
+    cst.host("flat_build")
+    comptime if ANN3_HOST_PASSES:
+        swap(centers, flat.centers)
+        swap(offsets, flat.list_offsets)
+        list_indices = List[Int32](length=n, fill=Int32(0))
+        labels = List[Int32](length=n, fill=Int32(0))
+        for s in range(n):
+            list_indices[s] = Int32(Int(flat.list_indices[s]))
+            labels[s] = Int32(Int(flat.labels[s]))
+    else:
+        centers = flat.centers.copy()
+        offsets = flat.list_offsets.copy()
+        list_indices = List[Int32](capacity=n)
+        for s in range(n):
+            list_indices.append(Int32(Int(flat.list_indices[s])))
+        labels = pq_labels_from_lists(offsets, list_indices, n_lists, n)
     _ = flat^
     _ = ctx^
+    cst.host("convert")
 
 
 def _codebooks(
@@ -169,6 +228,8 @@ def _codebooks(
     else:
         for i in range(n):
             rows.append(i)
+    var cbs = AnnStages("ivf_pq_codebooks")
+    cbs.host("rows")
     for j in range(pq_dim):
         var sub = List[Float32](capacity=n_train * pq_len)
         for i in range(n_train):
@@ -176,14 +237,25 @@ def _codebooks(
                 sub.append(r[rows[i] * rot_dim + j * pq_len + t])
         var cb = List[Float32](length=n_codes * pq_len, fill=Float32(0.0))
         var lab = List[UInt32](length=n_train, fill=UInt32(0))
+        cbs.host("gather")
+        var init_kind: Int = INIT_KMEANS_PLUS_PLUS
+        comptime if PQ_FAST_SEED:
+            if n_train >= n_codes:
+                kpp_seed(
+                    sub, n_train, pq_len, n_codes,
+                    UInt64(seed) ^ (UInt64(j + 1) * UInt64(0x9E3779B97F4A7C15)), 16, cb,
+                )
+                init_kind = INIT_ARRAY
+                cbs.host("seed")
         _ = kmeans_fit(
             ctx, sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n_train, pq_len, n_codes,
             cb.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             sub.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
-            pq_iters, Float64(1e-4), UInt64(seed), 1, INIT_KMEANS_PLUS_PLUS, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
+            pq_iters, Float64(1e-4), UInt64(seed), 1, init_kind, METRIC_L2_EXPANDED, 0.0, Float64(2.0),
         )
         ctx.synchronize()
+        cbs.host("kmeans_fit")
         for e in range(n_codes * pq_len):
             codebooks.append(cb[e])
         _ = sub^
@@ -194,8 +266,12 @@ def _codebooks(
 
 def ivf_pq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
-    pq_dim: Int, pq_bits: Int, pq_iters: Int,
+    pq_dim: Int, pq_bits: Int, pq_iters: Int, codes_addr: Int = 0,
 ) raises -> IvfPqIndex:
+    """`codes_addr` (lane ann-apple3, read under `ANN3_DIRECT_OUT` only): the
+    address of the caller's n x pq_dim int32 array; the codes are downloaded
+    straight into it and the returned index's `codes` is EMPTY. 0: the codes
+    come back in the index, as before."""
     pq_validate(n, dim, n_lists, pq_dim, pq_bits, pq_iters)
     var pq_len = pq_len_of(dim, pq_dim)
     var rot_dim = pq_len * pq_dim
@@ -212,20 +288,46 @@ def ivf_pq_build_device(
     var dc = upload_f32(ctx, centers)
     var dl = upload_i32(ctx, labels)
     var dr = ctx.enqueue_create_buffer[DType.float32](n * rot_dim)
-    ctx.enqueue_function[residual_kernel](
-        Int32(n * rot_dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
-        Int32(rot_dim), dr.unsafe_ptr(), grid_dim=_grid(n * rot_dim), block_dim=TPB,
-    )
+    _enqueue_residual(ctx, n, dim, rot_dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     ctx.synchronize()
-    var r = download_f32(ctx, dr, n * rot_dim)
-    st.host("residuals")
-    var codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    # FAST, OPT-IN (lane ann-apple3, `ANN3_PQ_HOST_RESIDUALS`): when the
+    # codebooks train on a sample, the sampled rows' residuals are formed
+    # here (FAST's `pq_residual_cell` is one subtraction) in the sample's
+    # row order, which is what `_codebooks` gathers from the whole matrix
+    # otherwise; the matrix stays on the device for the encode.
+    var host_sample = False
+    comptime if PQ_FAST_TRAINSET and ANN3_PQ_HOST_RESIDUALS:
+        host_sample = n > PQ_FAST_ROWS_PER_CODE * n_codes
+    var codebooks = List[Float32]()
+    if host_sample:
+        var n_train = PQ_FAST_ROWS_PER_CODE * n_codes
+        var rows = ivf_trainset_rows(n, n_train, UInt64(seed))
+        var rs = List[Float32](length=n_train * rot_dim, fill=Float32(0.0))
+        for i in range(n_train):
+            var row = rows[i]
+            var l = Int(labels[row])
+            for c in range(dim):
+                rs[i * rot_dim + c] = x[row * dim + c] - centers[l * dim + c]
+        st.host("residuals")
+        codebooks = _codebooks(rs, n_train, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
+    else:
+        var r = download_f32(ctx, dr, n * rot_dim)
+        st.host("residuals")
+        codebooks = _codebooks(r, n, rot_dim, pq_dim, pq_len, n_codes, pq_iters, seed)
     st.host("codebooks")
     var dcb = upload_f32(ctx, codebooks)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * pq_dim)
     _enqueue_assign(ctx, n, _dp(dr), _dp(dcb), pq_dim, rot_dim, pq_len, n_codes, _dp(dcodes))
     ctx.synchronize()
-    var codes = download_i32(ctx, dcodes, n * pq_dim)
+    var codes = List[Int32]()
+    var direct = False
+    comptime if ANN3_DIRECT_OUT:
+        direct = codes_addr != 0
+    if direct:
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.synchronize()
+    else:
+        codes = download_i32(ctx, dcodes, n * pq_dim)
     st.host("encode")
     _ = dcodes^
     _ = dcb^
@@ -255,6 +357,7 @@ def ivf_pq_search_device(
     ivf_pq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcb), _dp(dcodes), _dp(dmask), offsets, n_lists, dim,
         pq_dim, pq_bits, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False,
     )
     _ = dmask^
     _ = dcb^
@@ -270,10 +373,13 @@ def ivf_pq_search_on(
     offsets: List[Int32], n_lists: Int, dim: Int, pq_dim: Int, pq_bits: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """The search over an index already on the device (`ivf_pq_search_device`
     uploads it first; `x_ann/resident.mojo` holds it): the queries up, the
-    scan, the three outputs down."""
+    scan, the three outputs down. `have_pre` ... `mask_pre`: the resident
+    index's list-order arrays (`ivf_scan_search`); `mask_pre` says dmask is
+    the all-ones filter, which is its own list-order copy."""
     var pq_len = pq_len_of(dim, pq_dim)
     var n_codes = 1 << pq_bits
     var dq = upload_f32(ctx, queries)
@@ -285,6 +391,7 @@ def ivf_pq_search_on(
     ivf_scan_search[0](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dcb, dcb,
         offsets, n_lists, dim, m, k, n_probes, pq_dim, pq_len, n_codes, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -393,11 +500,23 @@ def sq_encode_kernel(count: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P,
         sq_encode_cell(e, r, Int(dim), vmin, delta, codes)
 
 
+def sq_encode_rows_kernel(n: Int32, r: F32P, dim: Int32, vmin: F32P, delta: F32P, codes: I32P):
+    """`sq_encode_kernel` with one thread per ROW (lane ann-apple3, OPT-IN
+    `ANN3_ROW_THREADS`): the row's dim cells in order, each `sq_encode_cell`."""
+    var i = _tid()
+    if i < Int(n):
+        var d = Int(dim)
+        for c in range(d):
+            sq_encode_cell(i * d + c, r, d, vmin, delta, codes)
+
+
 def ivf_sq_build_device(
     x: List[Float32], n: Int, dim: Int, n_lists: Int, kmeans_n_iters: Int, seed: Int,
     mut centers: List[Float32], mut offsets: List[Int32], mut list_indices: List[Int32],
-    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32],
+    mut vmin: List[Float32], mut delta: List[Float32], mut codes: List[Int32], codes_addr: Int = 0,
 ) raises:
+    """`codes_addr`: `ivf_pq_build_device`'s, for the n x dim int32 codes
+    (`codes` is then left EMPTY)."""
     pq_validate(n, dim, n_lists, 1, 1, 1)
     var labels = List[Int32]()
     var st = AnnStages("ivf_sq_build")
@@ -411,20 +530,30 @@ def ivf_sq_build_device(
     var dvmin = ctx.enqueue_create_buffer[DType.float32](dim)
     var ddelta = ctx.enqueue_create_buffer[DType.float32](dim)
     var dcodes = ctx.enqueue_create_buffer[DType.int32](n * dim)
-    ctx.enqueue_function[residual_kernel](
-        Int32(n * dim), dx.unsafe_ptr(), dc.unsafe_ptr(), dl.unsafe_ptr(), Int32(dim),
-        Int32(dim), dr.unsafe_ptr(), grid_dim=_grid(n * dim), block_dim=TPB,
-    )
+    _enqueue_residual(ctx, n, dim, dim, _dp(dx), _dp(dc), _dp(dl), _dp(dr))
     st.mark(ctx, "upload_residuals")
     _sq_range_enqueue(ctx, dr, n, dim, dvmin, ddelta)
     st.mark(ctx, "range")
-    ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
-                                           ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
-                                           block_dim=TPB)
+    comptime if ANN3_ROW_THREADS:
+        ctx.enqueue_function[sq_encode_rows_kernel](Int32(n), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                                    ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n),
+                                                    block_dim=TPB)
+    else:
+        ctx.enqueue_function[sq_encode_kernel](Int32(n * dim), dr.unsafe_ptr(), Int32(dim), dvmin.unsafe_ptr(),
+                                               ddelta.unsafe_ptr(), dcodes.unsafe_ptr(), grid_dim=_grid(n * dim),
+                                               block_dim=TPB)
     ctx.synchronize()
     vmin = download_f32(ctx, dvmin, dim)
     delta = download_f32(ctx, ddelta, dim)
-    codes = download_i32(ctx, dcodes, n * dim)
+    var direct = False
+    comptime if ANN3_DIRECT_OUT:
+        direct = codes_addr != 0
+    if direct:
+        codes = List[Int32]()
+        ctx.enqueue_copy(dst_ptr=I32P(unsafe_from_address=codes_addr), src_buf=dcodes)
+        ctx.synchronize()
+    else:
+        codes = download_i32(ctx, dcodes, n * dim)
     st.host("encode")
     _ = dcodes^
     _ = ddelta^
@@ -455,6 +584,7 @@ def ivf_sq_search_device(
     ivf_sq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dvmin), _dp(ddelta), _dp(dcodes), _dp(dmask), offsets,
         n_lists, dim, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dc), _dp(dc), False,
     )
     _ = dmask^
     _ = ddelta^
@@ -471,6 +601,7 @@ def ivf_sq_search_on(
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """`ivf_pq_search_on`'s SQ twin: the index already on the device."""
     var dq = upload_f32(ctx, queries)
@@ -480,6 +611,7 @@ def ivf_sq_search_on(
     ivf_scan_search[1](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dvmin, ddelta,
         offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, 1, 1, 0, Float32(1.0), _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)
@@ -590,6 +722,7 @@ def ivf_rabitq_search_device(
     ivf_rabitq_search_on(
         ctx, _dp(dc), _dp(doff), _dp(dli), _dp(dcodes), _dp(dnorm), _dp(dip), _dp(dmask), offsets,
         n_lists, dim, seed, queries, m, k, n_probes, out_d, out_i, out_n,
+        False, _dp(dcodes), _dp(dnorm), _dp(dip), False,
     )
     _ = dmask^
     _ = dip^
@@ -606,6 +739,7 @@ def ivf_rabitq_search_on(
     dmask: I32P, offsets: List[Int32], n_lists: Int, dim: Int, seed: Int,
     queries: List[Float32], m: Int, k: Int, n_probes: Int,
     mut out_d: List[Float32], mut out_i: List[Int32], mut out_n: List[Int32],
+    have_pre: Bool, pre_codes: I32P, pre_a: F32P, pre_b: F32P, mask_pre: Bool,
 ) raises:
     """`ivf_pq_search_on`'s RaBitQ twin: the index already on the device."""
     var D = rq_pow2(dim)
@@ -618,6 +752,7 @@ def ivf_rabitq_search_on(
     ivf_scan_search[2](
         ctx, _dp(dq), dc, doff, dli, dcodes, dmask, dnorm, dip,
         offsets, n_lists, dim, m, k, n_probes, 1, 1, 1, D, words, seed, scale, _dp(dd), _dp(di), _dp(dn),
+        have_pre, pre_codes, pre_a, pre_b, mask_pre, dmask,
     )
     out_d = download_f32(ctx, dd, m * k)
     out_i = download_i32(ctx, di, m * k)

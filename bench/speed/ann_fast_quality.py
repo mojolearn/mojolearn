@@ -5,8 +5,9 @@ seed, the quality of each ann algorithm under the binding the environment
 selects (MOJOLEARN_NUMERIC_MODE), so a before commit and an after commit run
 at the same seeds give the paired numbers:
 
-  * IVF-PQ / IVF-SQ / IVF-RaBitQ / CAGRA: recall@k against the exact k-NN
-    (numpy, float64), the index fitted with random_state = seed;
+  * IVF-Flat (`ivf`, lane ann-apple3) / IVF-PQ / IVF-SQ / IVF-RaBitQ / CAGRA:
+    recall@k against the exact k-NN (numpy, float64), the index fitted with
+    random_state = seed;
   * t-SNE: trustworthiness@10 (scikit-learn's formula) and the final KL, the
     initial embedding drawn with random_state = seed.
 
@@ -65,7 +66,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="comma separated .npz paths")
     ap.add_argument("--seeds", default="0,1,2,3,4")
-    ap.add_argument("--algos", default="ivf_pq,ivf_sq,ivf_rabitq,cagra,tsne")
+    ap.add_argument("--algos", default="ivf,ivf_pq,ivf_sq,ivf_rabitq,cagra,tsne")
     ap.add_argument("--n", type=int, default=200_000)
     ap.add_argument("--m", type=int, default=500)
     ap.add_argument("--n-small", type=int, default=3000)
@@ -90,23 +91,28 @@ def main():
                 t = time.perf_counter()
                 row = dict(data=name, algo=a, seed=seed)
                 common = dict(n_lists=args.n_lists, n_probes=args.n_probes, n_neighbors=args.k, random_state=seed)
-                if a == "ivf_pq":
+                if a == "ivf":
+                    est = ml.IVFIndex(**common).fit(x)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
+                elif a == "ivf_pq":
                     est = ml.IVFPQIndex(pq_dim=min(14, x.shape[1]), pq_bits=8, **common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "ivf_sq":
                     est = ml.IVFSQIndex(**common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "ivf_rabitq":
                     est = ml.IVFRaBitQIndex(**common).fit(x)
-                    row["recall"] = recall(est.search(q)[1], truth)
+                    row["recall"] = recall(np.asarray(est.search(q)[1]), truth)
                 elif a == "cagra":
                     if seed != seeds[0]:
                         continue  # CAGRA has no seed: one row per dataset
                     est = ml.CagraIndex(n_neighbors=args.k).fit(xs)
-                    row["recall"] = recall(est.search(qs)[1], truth_s)
+                    row["recall"] = recall(np.asarray(est.search(qs)[1]), truth_s)
                 elif a == "tsne":
                     est = ml.TSNE(init="random", random_state=seed, max_iter=500)
-                    y = est.fit_transform(xs[:1500])
+                    # lane ann-apple3: the estimator returns mojolearn's own array type, which
+                    # refuses `y[:, None, :]`; the metric below is numpy's
+                    y = np.asarray(est.fit_transform(xs[:1500]))
                     row["trust10"] = trustworthiness(xs[:1500], y)
                     row["kl"] = float(est.kl_divergence_)
                 row["s"] = round(time.perf_counter() - t, 2)

@@ -43,10 +43,12 @@ The centres and their norms do not change under extend and are not written.
 The index arrays are refused by name unless `ivf_validate_index_arrays`
 admits them, before any search or extend statement runs.
 """
+from std.memory import memcpy
 from std.python import Python, PythonObject
 
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
+from x_ann.switches import ANN3_HOST_PASSES
 
 #: Extents far from any Int edge: rows and lists below 2^31 (the ids cross
 #: as int32), `n * dim` and `m * k` below 2^40.
@@ -235,8 +237,15 @@ def ivf_write_index_arrays(
         op.unsafe_store(i, offsets[i])
     for i in range(n_rows):
         ip.unsafe_store(i, Int32(Int(list_indices[i])))
-    for i in range(n_rows * dim):
-        lp.unsafe_store(i, list_data[i])
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: the n_rows x dim vectors
+    # in one memcpy (the same words)
+    if len(list_data) != n_rows * dim:
+        raise Error("ivf_flat_build: the built index holds no list data")
+    comptime if ANN3_HOST_PASSES:
+        memcpy(dest=lp, src=list_data.unsafe_ptr(), count=n_rows * dim)
+    else:
+        for i in range(n_rows * dim):
+            lp.unsafe_store(i, list_data[i])
 
 
 def ivf_extend_count(params: PythonObject, n_rows: Int, dim: Int) raises -> Int:

@@ -16,7 +16,10 @@ from x_ann.stage_timer import AnnStages
 from x_ann.knn_device import knn_enqueue
 
 from x_ann.io import upload_f32, upload_i32, download_f32, download_i32
-from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_search_cell
+from x_ann.cagra_core import F32P, I32P, cagra_prune, cagra_reverse_merge, cg_dist, cg_search_cell
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
+from x_ann.switches import ANN3_CAGRA_TEAM
 
 comptime TPB = 64
 
@@ -38,6 +41,149 @@ def cg_search_kernel(
     if q < Int(m):
         cg_search_cell(q, queries, x, Int(n), Int(d), graph, Int(deg), Int(k), Int(L), Int(width),
                        Int(max_iter), Int(n_seeds), bd, bi, bx, visited, Int(words), out_d, out_i)
+
+
+#: the team search (lane ann-apple3): threads per query, the longest itopk
+#: list and the most candidates of one step held in threadgroup memory
+comptime CG_T = 32
+comptime CG_LMAX = 128
+comptime CG_CMAX = 128
+comptime CAGRA_TEAM = ANN3_CAGRA_TEAM and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()
+
+
+def cg_search_team_kernel(
+    queries: F32P, x: F32P, n: Int32, d: Int32, graph: I32P, deg: Int32, k: Int32, L: Int32, width: Int32,
+    max_iter: Int32, n_seeds: Int32, visited: I32P, words: Int32, out_d: F32P, out_i: I32P,
+):
+    """FAST on Apple, OPT-IN (lane ann-apple3): `cg_search_row` for query
+    block_idx.x by a threadgroup of CG_T threads. THREAD 0 WALKS, as the cell
+    does: the seeds in order, then per iteration the `search_width` best
+    unexpanded entries front to back, every candidate through the visited
+    bitset and the sorted insertion under (distance, id), in the cell's
+    order. THE OTHER THREADS ONLY FORM DISTANCES: for each step (a chunk of
+    seeds or one parent's graph row) thread t computes `cg_dist` of
+    candidates t, t + CG_T, ... into threadgroup memory before thread 0
+    inserts them. A distance is a function of the query and the row alone,
+    so the list is the cell's list. The itopk list, the step's candidates
+    and the step's control words live in threadgroup memory (`barrier()`
+    orders it); the visited bitset is device memory that thread 0 alone
+    reads and writes. Needs L <= CG_LMAX and deg <= CG_CMAX (the caller
+    checks)."""
+    var qi = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var nn = Int(n)
+    var dd = Int(d)
+    var dg = Int(deg)
+    var ll = Int(L)
+    var ns = Int(n_seeds)
+    var kk = Int(k)
+    var sbd = stack_allocation[CG_LMAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sbi = stack_allocation[CG_LMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var sbx = stack_allocation[CG_LMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var cd = stack_allocation[CG_CMAX, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var cv = stack_allocation[CG_CMAX, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var ctl = stack_allocation[2, Scalar[DType.int32], address_space=AddressSpace.SHARED]()
+    var q_off = qi * dd
+    var vbase = qi * Int(words)
+    if t == 0:
+        for s in range(ll):
+            sbd[s] = Float32(0.0)
+            sbi[s] = Int32(-1)
+            sbx[s] = Int32(0)
+        for w in range(Int(words)):
+            visited.unsafe_store(vbase + w, Int32(0))
+    # thread 0's walk state
+    var seed_at = 0
+    var it = 0
+    var scan = 0
+    var taken = 0
+    while True:
+        if t == 0:
+            # the next step: a chunk of seeds (-2 - its first seed), or the
+            # next parent of the cell's scan, or the end
+            var pick = -1
+            var fin = 0
+            if seed_at < ns:
+                pick = -2 - seed_at
+                seed_at += CG_CMAX
+            else:
+                while True:
+                    if it >= Int(max_iter):
+                        fin = 1
+                        break
+                    while scan < ll and taken < Int(width):
+                        var cand = Int(sbi[scan])
+                        if cand >= 0 and sbx[scan] == 0:
+                            sbx[scan] = Int32(1)
+                            taken += 1
+                            pick = cand
+                            scan += 1
+                            break
+                        scan += 1
+                    if pick >= 0:
+                        break
+                    if taken == 0:
+                        fin = 1
+                        break
+                    it += 1
+                    scan = 0
+                    taken = 0
+            ctl[0] = Int32(pick)
+            ctl[1] = Int32(fin)
+        barrier()
+        if ctl[1] != 0:
+            break
+        var code = Int(ctl[0])
+        var cnt = dg
+        var c0 = 0
+        if code < 0:
+            c0 = -2 - code
+            cnt = ns - c0
+            if cnt > CG_CMAX:
+                cnt = CG_CMAX
+        for e in range(t, cnt, CG_T):
+            var v = 0
+            if code >= 0:
+                v = Int(graph.unsafe_load(code * dg + e))
+            else:
+                v = ((c0 + e) * nn) // ns
+            cv[e] = Int32(v)
+            cd[e] = cg_dist(queries, q_off, x, v, dd)
+        barrier()
+        if t == 0:
+            for e in range(cnt):
+                var v = Int(cv[e])
+                var word = visited.unsafe_load(vbase + v // 32)
+                var bit = Int32(1) << Int32(v % 32)
+                if (word & bit) != 0:
+                    continue
+                visited.unsafe_store(vbase + v // 32, word | bit)
+                # `cg_insert` on the threadgroup list
+                var dist = cd[e]
+                var id = Int32(v)
+                var last_i = sbi[ll - 1]
+                if last_i >= 0:
+                    var last_d = sbd[ll - 1]
+                    if not (dist < last_d or (dist == last_d and id < last_i)):
+                        continue
+                var s = ll - 1
+                while s > 0:
+                    var pi = sbi[s - 1]
+                    var pd = sbd[s - 1]
+                    if pi < 0 or dist < pd or (dist == pd and id < pi):
+                        sbd[s] = pd
+                        sbi[s] = pi
+                        sbx[s] = sbx[s - 1]
+                        s -= 1
+                    else:
+                        break
+                sbd[s] = dist
+                sbi[s] = id
+                sbx[s] = Int32(0)
+    if t == 0:
+        for s in range(kk):
+            out_d.unsafe_store(qi * kk + s, sbd[s])
+            out_i.unsafe_store(qi * kk + s, sbi[s])
 
 
 #: the device prune's widest k-NN row (one thread per entry)
@@ -205,12 +351,23 @@ def cagra_search_on(
     var vis = ctx.enqueue_create_buffer[DType.int32](m * words)
     var od = ctx.enqueue_create_buffer[DType.float32](m * k)
     var oi = ctx.enqueue_create_buffer[DType.int32](m * k)
-    ctx.enqueue_function[cg_search_kernel](
-        Int32(m), dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k),
-        Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
-        bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
-        grid_dim=_grid(m), block_dim=TPB,
-    )
+    # lane ann-apple3, FAST on Apple, OPT-IN: a threadgroup per query
+    var team = False
+    comptime if CAGRA_TEAM:
+        if L <= CG_LMAX and deg <= CG_CMAX:
+            team = True
+            ctx.enqueue_function[cg_search_team_kernel](
+                dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k), Int32(L), Int32(width),
+                Int32(max_iter), Int32(n_seeds), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(),
+                oi.unsafe_ptr(), grid_dim=m, block_dim=CG_T,
+            )
+    if not team:
+        ctx.enqueue_function[cg_search_kernel](
+            Int32(m), dq.unsafe_ptr(), dx, Int32(n), Int32(d), dg, Int32(deg), Int32(k),
+            Int32(L), Int32(width), Int32(max_iter), Int32(n_seeds), bd.unsafe_ptr(), bi.unsafe_ptr(),
+            bx.unsafe_ptr(), vis.unsafe_ptr(), Int32(words), od.unsafe_ptr(), oi.unsafe_ptr(),
+            grid_dim=_grid(m), block_dim=TPB,
+        )
     ctx.synchronize()
     st.host("search")
     out_d = download_f32(ctx, od, m * k)

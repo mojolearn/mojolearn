@@ -43,6 +43,7 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 """
 
 from std.memory import bitcast
+from x_ann.switches import ANN3_HOST_PASSES
 
 from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
@@ -364,6 +365,21 @@ def ivf_validate_data(
             + " values, expected n_rows * dim = "
             + String(n_rows * dim)
         )
+    # lane ann-apple3: one pass without an exit first. By bits, |v| >= 2^63,
+    # an infinity and a NaN are exactly the words whose low 31 bits are at or
+    # above 2^63's (the order of nonnegative floats is the order of their
+    # words), so a count of zero here is the loop below finding nothing; the
+    # loop below still names the first offender when there is one.
+    # Behind `ANN3_HOST_PASSES` (x_ann/switches.mojo).
+    comptime if ANN3_HOST_PASSES:
+        var bound_bits = bitcast[DType.uint32](IVF_MAGNITUDE_BOUND)
+        var vp = values.unsafe_ptr()
+        var refused = 0
+        for i in range(n_rows * dim):
+            if (bitcast[DType.uint32](vp.unsafe_load(i)) & UInt32(0x7FFFFFFF)) >= bound_bits:
+                refused += 1
+        if refused == 0:
+            return
     for i in range(n_rows * dim):
         var v = values[i]
         if not ivf_is_finite(v):

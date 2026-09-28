@@ -24,14 +24,23 @@ arms=""
 wts=""
 cleanup() { cd "$after_wt"; for w in $wts; do git worktree remove --force "$w" 2>/dev/null || true; done; }
 trap cleanup EXIT INT TERM
-for rev in $(echo "$befores" | tr ',' ' '); do
-    bw=$HOME/ann-apple2-arm-$rev
+# An arm is <commit> or (lane ann-apple3) <commit>+<DEFINE>[+<DEFINE>...]: the
+# commit built with -D <DEFINE> ..., through MOJOLEARN_MOJO_BUILD_FLAGS (every
+# bindings/build_*.sh passes it to `mojo build`). The same commit may appear
+# in several arms with different defines; the steward's own worktree is the
+# arm "after", built with no define.
+for tok in $(echo "$befores" | tr ',' ' '); do
+    rev=${tok%%+*}
+    defs=""
+    case "$tok" in *+*) for d in $(echo "${tok#*+}" | tr '+' ' '); do defs="$defs -D $d"; done ;; esac
+    bw=$HOME/ann-apple2-arm-$(echo "$tok" | tr -c 'A-Za-z0-9_\n' '-')
     git worktree remove --force "$bw" 2>/dev/null || rm -rf "$bw"
     git worktree prune
     git worktree add -q --detach "$bw" "$rev"
     ln -s "$after_wt/.pixi" "$bw/.pixi"
+    echo "$defs" > "$bw/.ann_ab_defs"
     wts="$wts $bw"
-    arms="$arms $rev=$bw"
+    arms="$arms $tok=$bw"
 done
 arms="$arms after=$after_wt"
 # ANN_AB_AFTER_ENV: one more arm, the after build run with these VAR=value words
@@ -45,28 +54,44 @@ for mode in $modes; do
         echo "BUILD FAIL base $mode" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
     echo "BUILT after $mode build.sh $(( $(date +%s) - t0 ))s"
 done
+# lane ann-apple3: an arm that does not build is reported (the compiler's
+# last lines, on stdout) and left out; the other arms still run. The job
+# fails at the end if any arm was left out.
+built=""
+dropped=""
 for a in $arms; do
     wt=${a#*=}
-    [ "${a%%=*}" != afterenv ] || continue
+    [ "${a%%=*}" != afterenv ] || { built="$built $a"; continue; }
     if [ "$wt" != "$after_wt" ]; then
         mkdir -p "$wt/python/mojolearn/identical"
         cp -p python/mojolearn/_mojolearn.so "$wt/python/mojolearn/" 2>/dev/null || true
         cp -p python/mojolearn/identical/_mojolearn.so "$wt/python/mojolearn/identical/" 2>/dev/null || true
     fi
+    ok=1
     for mode in $modes; do
         for b in build_x_ann.sh build_estimators.sh build_ivf.sh; do
+            [ "$ok" = 1 ] || continue
             t0=$(date +%s)
-            (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode pixi run -e default sh "bindings/$b" > /dev/null 2>"$HOME/ann-apple2-build.err") || {
-                echo "BUILD FAIL $wt $mode $b" >&2; tail -40 "$HOME/ann-apple2-build.err" >&2; exit 1; }
-            echo "BUILT ${a%%=*} $mode $b $(( $(date +%s) - t0 ))s"
+            defs=$(cat "$wt/.ann_ab_defs" 2>/dev/null || true)
+            if (cd "$wt" && MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_MOJO_BUILD_FLAGS="$defs" pixi run -e default sh "bindings/$b" > /dev/null 2>"$HOME/ann-apple2-build.err"); then
+                echo "BUILT ${a%%=*} $mode $b$defs $(( $(date +%s) - t0 ))s"
+            else
+                echo "BUILD FAIL ${a%%=*} $mode $b$defs"
+                grep -v '^\s*$' "$HOME/ann-apple2-build.err" | tail -60 | sed "s/^/[build ${a%%=*}] /"
+                ok=0
+            fi
         done
     done
+    if [ "$ok" = 1 ]; then built="$built $a"; else dropped="$dropped ${a%%=*}"; fi
 done
+arms=$built
+[ -n "$arms" ] || { echo "ann_apple2_ab: no arm built" >&2; exit 1; }
 run() {  # arm wt mode [stages]
     echo "== $1 $3${4:+ stages}"
     xenv=""
     [ "$1" != afterenv ] || xenv=${ANN_AB_AFTER_ENV:-}
-    [ -z "${4:-}" ] || xenv="$xenv MOJOLEARN_ANN_STAGES=1"
+    # the stage pass: the ann drivers' marks and (lane ann-apple3) cluster/'s k-means marks
+    [ -z "${4:-}" ] || xenv="$xenv MOJOLEARN_ANN_STAGES=1 MOJOLEARN_KMEANS_STAGES=1"
     (cd "$2" && env $xenv PYTHONPATH="$2/python" MOJOLEARN_NUMERIC_MODE=$3 \
         pixi run -e default python -u bench/speed/ann_cpu_speed.py --data "$data" --algos "$algos" \
         ${ANN_AB_BENCH_ARGS:-} 2>&1 | grep -v '^\s*$' | sed "s/^/[$1 $3] /")
@@ -83,13 +108,15 @@ if [ "${ANN_AB_STAGES:-1}" = 1 ]; then
         for a in $arms; do run "${a%%=*}" "${a#*=}" "$mode" 1; done
     done
 fi
-# ANN_AB_QUALITY: ann_fast_quality.py flags; run FAST on the first and the last arm
+# ANN_AB_QUALITY: ann_fast_quality.py flags; run FAST on every arm (lane
+# ann-apple3; the first and the last arm before)
 if [ -n "${ANN_AB_QUALITY:-}" ]; then
-    first=$(echo $arms | cut -d' ' -f1)
-    for a in $first after=$after_wt; do
+    for a in $arms; do
+        [ "${a%%=*}" != afterenv ] || continue
         echo "== quality ${a%%=*}"
         (cd "${a#*=}" && PYTHONPATH="${a#*=}/python" MOJOLEARN_NUMERIC_MODE=fast \
             pixi run -e default python -u bench/speed/ann_fast_quality.py $ANN_AB_QUALITY 2>&1 \
             | grep -E "ANN-QUALITY|Error|Traceback" | sed "s/^/[${a%%=*} fast] /")
     done
 fi
+[ -z "$dropped" ] || { echo "ARMS NOT BUILT:$dropped"; exit 3; }

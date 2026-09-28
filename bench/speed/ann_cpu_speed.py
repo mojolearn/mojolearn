@@ -119,7 +119,11 @@ def main():
             else:
                 _, tf = timed(lambda: est.fit(x))
             (d, i), ts = timed(lambda: est.search(q))
-            cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), out=digest(d, i))
+            # lane ann-apple3: the second search of the same queries (the index is resident and the
+            # kernels are warm); its digest must equal the first's
+            (d2, i2), ts2 = timed(lambda: est.search(q))
+            cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), search2_s=round(ts2, 4), out=digest(d, i),
+                 out2=digest(d2, i2))
         elif a in ("ivf_pq", "ivf_sq", "ivf_rabitq", "refine"):
             cls = {"ivf_pq": ml.IVFPQIndex, "ivf_sq": ml.IVFSQIndex, "ivf_rabitq": ml.IVFRaBitQIndex,
                    "refine": ml.IVFPQIndex}[a]
@@ -140,19 +144,24 @@ def main():
             else:
                 _, tf = timed(lambda: est.fit(x))
             (d, i), ts = timed(lambda: est.search(q))
+            (d2, i2), ts2 = timed(lambda: est.search(q))
             if a == "refine":
                 (rd, ri), tr = timed(lambda: ml.refine(x, q, i, k))
-                cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), refine_s=round(tr, 3), out=digest(rd, ri))
+                (rd2, ri2), tr2 = timed(lambda: ml.refine(x, q, i2, k))
+                cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), search2_s=round(ts2, 4), refine_s=round(tr, 3),
+                     refine2_s=round(tr2, 4), out=digest(rd, ri), out2=digest(rd2, ri2))
             else:
                 parts = [est.centers_, est.codes_] if hasattr(est, "codes_") else [est.centers_]
-                cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), model=digest(*parts), out=digest(d, i))
+                cell(a, fit_s=round(tf, 3), search_s=round(ts, 3), search2_s=round(ts2, 4), model=digest(*parts),
+                     out=digest(d, i), out2=digest(d2, i2))
         elif a == "cagra":
             xg = x[: args.n_graph]
             est = ml.CagraIndex()
             _, tf = timed(lambda: est.fit(xg))
             (d, i), ts = timed(lambda: est.search(q))
-            cell(a, n=args.n_graph, fit_s=round(tf, 3), search_s=round(ts, 3), model=digest(est.graph_),
-                 out=digest(d, i))
+            (d2, i2), ts2 = timed(lambda: est.search(q))
+            cell(a, n=args.n_graph, fit_s=round(tf, 3), search_s=round(ts, 3), search2_s=round(ts2, 4),
+                 model=digest(est.graph_), out=digest(d, i), out2=digest(d2, i2))
         elif a == "tsne":
             xt = x[: args.n_tsne]
             est = ml.TSNE(max_iter=args.tsne_iter)

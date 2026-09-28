@@ -68,6 +68,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from cluster.impl.detail.kmeans import kmeans_fit_main_traced
 from cluster.impl.kmeans import predict
 from cluster.impl.kmeans_params import (
+    INIT_ARRAY,
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
 )
@@ -85,6 +86,10 @@ from checks.fixed_point import choose_scale
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
+from std.memory import memcpy
+from x_ann.stage_timer import AnnStages
+from x_ann.switches import ANN3_COARSE_SEED, ANN3_HOST_PASSES, ANN3_TRAINSET_COPY
+from x_ann.kpp_seed import kpp_seed
 
 comptime IVF_FAST_TRAINSET = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -96,6 +101,16 @@ comptime IVF_FAST_TRAINSET = (
 rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
 still assigned to the trained centroids."""
 comptime IVF_FAST_ROWS_PER_LIST = 256
+
+comptime IVF_FAST_SEED = (
+    ANN3_COARSE_SEED
+    and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+)
+"""FAST on Apple, OPT-IN (lane ann-apple3, `-D MOJOLEARN_ANN3_COARSE_SEED`):
+the coarse quantizer is seeded by `x_ann/kpp_seed.mojo` (host k-means++ over
+a stride sample of its training rows) and cluster/'s k-means starts from
+those seeds (`INIT_ARRAY`). An untraced build only."""
 
 
 def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
@@ -136,11 +151,19 @@ def upload_f32(
     if n == 0:
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
-    ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
+    comptime if ANN3_HOST_PASSES and has_apple_gpu_accelerator():
+        # lane ann-apple3, Apple only, behind `ANN3_HOST_PASSES`: the copy
+        # reads the caller's list (the same words, one host pass fewer;
+        # `x_ann/io.mojo` has uploaded this way since lane ann-apple2). The
+        # copy is drained before the return, while the list is alive.
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=values.unsafe_ptr())
+        ctx.synchronize()
+    else:
+        var host = ctx.enqueue_create_host_buffer[DType.float32](n)
+        copy_f32(values.unsafe_ptr(), host.unsafe_ptr(), n)
+        ctx.enqueue_copy(dst_buf=buf, src_ptr=host.unsafe_ptr())
+        ctx.synchronize()
+        _ = host^
     return buf^
 
 
@@ -150,6 +173,14 @@ def download_f32(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one memcpy of the staged
+    # words (one append each otherwise)
+    comptime if ANN3_HOST_PASSES:
+        var moved = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        _ = host^
+        return moved^
     var out = List[Float32]()
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
@@ -163,6 +194,12 @@ def download_u32(
     var host = ctx.enqueue_create_host_buffer[DType.uint32](n)
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
     ctx.synchronize()
+    comptime if ANN3_HOST_PASSES:
+        var moved = List[UInt32](length=n, fill=UInt32(0))
+        if n > 0:
+            memcpy(dest=moved.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        _ = host^
+        return moved^
     var out = List[UInt32]()
     for i in range(n):
         out.append(host.unsafe_ptr().unsafe_load(i))
@@ -234,6 +271,22 @@ def plan_quantizer_scale(
     would delete this function; that file is another lane's, so it is named
     in `ivf/README.md`'s WHAT IS OWED rather than edited.
     """
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: one pass over the rows
+    # with one running sum per column. Each column still adds its rows in
+    # ascending order, so every column sum, and the largest of them, is the
+    # same Float64.
+    comptime if ANN3_HOST_PASSES:
+        var columns = List[Float64](length=dim, fill=Float64(0.0))
+        var xp = x.unsafe_ptr()
+        for r in range(n_rows):
+            var b = r * dim
+            for f in range(dim):
+                columns[f] += Float64(abs(xp.unsafe_load(b + f)))
+        var largest = Float64(0.0)
+        for f in range(dim):
+            if columns[f] > largest:
+                largest = columns[f]
+        return choose_scale(largest, n_rows)
     var worst = Float64(0.0)
     for f in range(dim):
         var column = Float64(0.0)
@@ -251,6 +304,7 @@ def ivf_flat_build(
     x: List[Float32],
     n_rows: Int,
     dim: Int,
+    with_list_data: Bool = True,
 ) raises -> IvfFlatIndex:
     """`ivf_flat::build`, `ivf_flat_build.cuh:390-444`.
 
@@ -269,6 +323,11 @@ def ivf_flat_build(
         ivf.list_indices    the carried ORIGINAL row ids, [n_rows]
         ivf.list_data       the permuted vectors, [n_rows, dim]
 
+    `with_list_data = False` (lane ann-apple3; the x_ann indexes, which
+    never read the permuted vectors) returns, under `ANN3_HOST_PASSES`, an
+    index whose `list_data` is EMPTY; every other field is the same. A
+    traced build always lays the vectors out, so the card does not change.
+
     `ivf.list_indices` and `ivf.list_data` are recorded as SEPARATE stages
     on purpose, and the separation is the diagnosis exactly the way
     `knn.out_dist` / `knn.out_idx` is: two runs whose `list_data` agrees and
@@ -276,8 +335,12 @@ def ivf_flat_build(
     the carry, which is the shape of the classic IVF bug, and it is
     invisible in any comparison of the vectors alone.
     """
+    # lane ann-apple3: MOJOLEARN_ANN_STAGES=1 prints this build's phases
+    # (off: no sync, no print)
+    var st = AnnStages("ivf_flat_build")
     ivf_index_params_validate(params, n_rows, dim)
     ivf_validate_data(x, n_rows, dim, "dataset")
+    st.host("validate")
 
     var n_lists = params.n_lists
 
@@ -307,11 +370,17 @@ def ivf_flat_build(
     var xt = List[Float32]()
     if n_train < n_rows:
         var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
-        xt = List[Float32](capacity=n_train * dim)
-        for r in range(n_train):
-            var b = rows[r] * dim
-            for c in range(dim):
-                xt.append(x[b + c])
+        comptime if ANN3_TRAINSET_COPY:
+            # lane ann-apple3, OPT-IN: one memcpy per sampled row
+            xt = List[Float32](length=n_train * dim, fill=Float32(0.0))
+            for r in range(n_train):
+                memcpy(dest=xt.unsafe_ptr() + r * dim, src=x.unsafe_ptr() + rows[r] * dim, count=dim)
+        else:
+            xt = List[Float32](capacity=n_train * dim)
+            for r in range(n_train):
+                var b = rows[r] * dim
+                for c in range(dim):
+                    xt.append(x[b + c])
 
     var sum_scale: Float64
     if n_train < n_rows:
@@ -322,6 +391,7 @@ def ivf_flat_build(
     # (`cluster/estimator.mojo`'s note on why the supplied case is summed
     # instead). IVF has no per-row weight: their `build` passes none.
     var weight_scale = choose_scale(Float64(n_train), n_train)
+    st.host("trainset_scale")
 
     var dx = upload_f32(ctx, x)
     if n_train == n_rows:
@@ -335,6 +405,7 @@ def ivf_flat_build(
     var min_dist = ctx.enqueue_create_buffer[DType.float32](n_rows)
     var center_norm = ctx.enqueue_create_buffer[DType.float32](n_lists)
     ctx.synchronize()
+    st.host("upload")
 
     # `x_norm` MUST EXIST BEFORE `predict`, and `predict` does not compute
     # it -- `cluster/estimator.mojo` records that passing it uninitialized
@@ -342,6 +413,7 @@ def ivf_flat_build(
     # `check_kmeans_fit_recovers_planted`.
     compute_row_norms(ctx, dx, x_norm, n_rows, dim)
     ctx.synchronize()
+    st.host("row_norms")
 
     # `kmeans_n_iters` IS THEIR `max_iter`, `ivf_flat_build.cuh:433`, and
     # `n_init = 1` is cuVS's own default (`kmeans.hpp:28-121`). The
@@ -355,6 +427,19 @@ def ivf_flat_build(
     kp.max_iter = params.kmeans_n_iters
     kp.seed = params.seed
     kp.n_init = 1
+
+    comptime if IVF_FAST_SEED:
+        if not trace.enabled and n_train >= n_lists:
+            var seeds = List[Float32](length=n_lists * dim, fill=Float32(0.0))
+            if n_train < n_rows:
+                kpp_seed(xt, n_train, dim, n_lists, params.seed, 8, seeds)
+            else:
+                kpp_seed(x, n_rows, dim, n_lists, params.seed, 8, seeds)
+            ctx.enqueue_copy(dst_buf=centroids, src_ptr=seeds.unsafe_ptr())
+            ctx.synchronize()
+            _ = seeds^
+            kp.init = INIT_ARRAY
+            st.host("seed")
 
     if n_train < n_rows:
         _ = kmeans_fit_main_traced(
@@ -387,6 +472,7 @@ def ivf_flat_build(
             String("ivf.quantizer."),
         )
 
+    st.mark(ctx, "kmeans")
     if trace.enabled:
         trace.record_device(ctx, "ivf.centers", centroids, n_lists * dim)
 
@@ -412,14 +498,20 @@ def ivf_flat_build(
         ctx, dx, x_norm, centroids, labels, min_dist, kp, n_rows, dim
     )
     ctx.synchronize()
+    st.host("predict")
     if trace.enabled:
         trace.record_device(ctx, "ivf.assign", labels, n_rows)
 
     var host_centers = download_f32(ctx, centroids, n_lists * dim)
     var host_center_norms = download_f32(ctx, center_norm, n_lists)
     var host_labels = download_u32(ctx, labels, n_rows)
+    st.host("download")
 
-    var layout = build_list_layout(host_labels, x, n_rows, dim, n_lists)
+    var lay_data = True
+    comptime if ANN3_HOST_PASSES:
+        lay_data = with_list_data or trace.enabled
+    var layout = build_list_layout(host_labels, x, n_rows, dim, n_lists, with_data=lay_data)
+    st.host("layout")
 
     if trace.enabled:
         trace.record_list_i32("ivf.list_offsets", layout.offsets)
@@ -438,6 +530,23 @@ def ivf_flat_build(
     _ = min_dist^
     _ = center_norm^
 
+    # lane ann-apple3, behind `ANN3_HOST_PASSES`: the layout's three lists
+    # move into the index (copied otherwise, the n_rows x dim vectors among
+    # them)
+    var out_offsets = List[Int32]()
+    var out_indices = List[UInt32]()
+    var out_data = List[Float32]()
+    comptime if ANN3_HOST_PASSES:
+        swap(out_offsets, layout.offsets)
+        swap(out_indices, layout.list_indices)
+        swap(out_data, layout.list_data)
+    else:
+        out_offsets = layout.offsets.copy()
+        out_indices = layout.list_indices.copy()
+        out_data = layout.list_data.copy()
+    _ = layout^
+    st.host("index")
+
     return IvfFlatIndex(
         n_lists,
         dim,
@@ -445,9 +554,9 @@ def ivf_flat_build(
         params.metric,
         host_centers^,
         host_center_norms^,
-        layout.offsets.copy(),
-        layout.list_indices.copy(),
-        layout.list_data.copy(),
+        out_offsets^,
+        out_indices^,
+        out_data^,
         host_labels^,
     )
 
