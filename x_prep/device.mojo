@@ -13,6 +13,11 @@ from x_prep.common import FP, IP, STAGE_INTS
 from x_prep.units import N_OPS, run_unit
 from x_prep.dsort import sort_cols_device, sort_scratch_words
 from x_prep.dradix import RADIX_SORT, RADIX_MIN_ROWS, radix_sort_cols_device, radix_scratch_words
+from x_prep.fastexact import (
+    FAST_EXACT, XTG, XBS, EXACT_MIN_ROWS, exact_chunks, cat_table_words, count_neg_fast_kernel,
+    uniq_count_kernel, uniq_prefix_kernel, uniq_write_kernel, cat_hist_kernel, cat_sum_kernel,
+    te_global_fast_kernel, ii_gram_sym_fast_kernel,
+)
 from x_prep.fastred import (
     TGR, col_stats_fast_kernel, pt_fold_fast_kernel, class_stats_fast_kernel, ii_mean_fast_kernel,
     ii_gram_fast_kernel,
@@ -37,7 +42,18 @@ comptime OP_PT_FOLD = 106
 #: order has one answer), at every thread of the GPU.
 comptime OP_SORT_COLS = 0
 
+#: FAST on Apple (x_prep/fastexact.mojo): counts and moves in parallel (the same words), and the
+#: TargetEncoder target fold by a tree (a FAST fold)
+comptime OP_UNIQUE_COLS = 5
+comptime OP_COUNT_NEG = 8
+comptime OP_TE_GLOBAL = 20
+comptime OP_CAT_COUNTS = 92
+
 comptime BLOCK = 128
+
+
+def _xblocks(total: Int) -> Int:
+    return (total + XBS - 1) // XBS
 
 
 struct _PrepContext(Defaultable, Movable):
@@ -138,6 +154,18 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
     comptime if RADIX_SORT:
         radix = getenv("MOJOLEARN_XPREP_SORT_RADIX", "1") != "0"
         radix_rows = max(1, _env_int("MOJOLEARN_XPREP_SORT_CHUNK", 1024))
+    # FAST on Apple (lane prep-apple3), OPT-IN until their A/B is recorded:
+    # MOJOLEARN_XPREP_EXACT=1 runs count_neg, unique_cols and the unweighted cat_counts in parallel
+    # (x_prep/fastexact.mojo, the same words); MOJOLEARN_XPREP_TE_FAST=1 folds te_global by a tree
+    # (a FAST fold: the bits may change; MOJOLEARN_XPREP_FAST_FOLDS=0 turns it off with the others);
+    # MOJOLEARN_XPREP_II_SYM=1 folds ii_gram over the pairs a <= b only (the same FAST words)
+    var exact = False
+    var te_fast = False
+    var ii_sym = False
+    comptime if FAST_EXACT:
+        exact = getenv("MOJOLEARN_XPREP_EXACT", "0") == "1"
+        te_fast = getenv("MOJOLEARN_XPREP_TE_FAST", "0") == "1"
+        ii_sym = getenv("MOJOLEARN_XPREP_II_SYM", "0") == "1"
     # MOJOLEARN_XPREP_PROFILE=1: XPPHASE lines (a wait after every phase; timing only)
     var prof = getenv("MOJOLEARN_XPREP_PROFILE", "0") == "1"
     var t_last = perf_counter_ns()
@@ -149,6 +177,12 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
             scratch = max(scratch, sort_scratch_words(Int(sq[1]), units))
             if radix and Int(sq[1]) >= RADIX_MIN_ROWS:
                 scratch = max(scratch, radix_scratch_words(Int(sq[1]), units, radix_rows))
+        if exact and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_UNIQUE_COLS:
+            var uq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, Int(host_q.unsafe_load(s * STAGE_INTS + 1)) * exact_chunks(Int(uq[1])))
+        if exact and Int(host_q.unsafe_load(s * STAGE_INTS)) == OP_CAT_COUNTS:
+            var cq = host_q + (s * STAGE_INTS + 2)
+            scratch = max(scratch, cat_table_words(Int(cq[1]), Int(cq[2]), Int(cq[4]), Int(cq[6])))
     # FAST: MOJOLEARN_XPREP_FAST_FOLDS=0 keeps the row-order units (the A/B arm of
     # bench/x_prep_quality.py and bench/x_prep_speed.py); unset or 1 folds by threadgroup
     var fast_folds = getenv("MOJOLEARN_XPREP_FAST_FOLDS", "1") != "0"
@@ -220,6 +254,47 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, 
                 sort_cols_device(ctx, df, dw, total, Int(hq[0]), Int(hq[1]), Int(hq[2]),
                                  Int(hq[3]), Int(hq[4]))
             continue
+        comptime if FAST_EXACT:
+            var hx = host_q + (s * STAGE_INTS + 2)
+            var rows = Int(hx[1])
+            if exact and rows >= EXACT_MIN_ROWS and op == OP_COUNT_NEG:
+                ctx.enqueue_function[count_neg_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
+                continue
+            if exact and rows >= EXACT_MIN_ROWS and op == OP_UNIQUE_COLS:
+                var chn = exact_chunks(rows)
+                var units = total * chn
+                ctx.enqueue_function[uniq_count_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(chn), Int32(units),
+                    grid_dim=_xblocks(units), block_dim=XBS,
+                )
+                ctx.enqueue_function[uniq_prefix_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(chn), Int32(total),
+                    grid_dim=_xblocks(total), block_dim=XBS,
+                )
+                ctx.enqueue_function[uniq_write_kernel](
+                    df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(chn), Int32(units),
+                    grid_dim=_xblocks(units), block_dim=XBS,
+                )
+                continue
+            if exact and rows >= EXACT_MIN_ROWS and op == OP_CAT_COUNTS and Int(hx[7]) < 0:
+                if cat_table_words(rows, Int(hx[2]), Int(hx[4]), Int(hx[6])) > 0:
+                    var chn = exact_chunks(rows)
+                    var units = Int(hx[2]) * chn
+                    ctx.enqueue_function[cat_hist_kernel](
+                        df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(chn), Int32(units),
+                        grid_dim=_xblocks(units), block_dim=XBS,
+                    )
+                    ctx.enqueue_function[cat_sum_kernel](
+                        df.unsafe_ptr(), qp, dw.unsafe_ptr(), Int32(chn), Int32(total),
+                        grid_dim=_xblocks(total), block_dim=XBS,
+                    )
+                    continue
+            if ii_sym and fast_folds and op == OP_II_GRAM:
+                ctx.enqueue_function[ii_gram_sym_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
+                continue
+            if te_fast and fast_folds and rows >= EXACT_MIN_ROWS and op == OP_TE_GLOBAL:
+                ctx.enqueue_function[te_global_fast_kernel](df.unsafe_ptr(), qp, grid_dim=total, block_dim=XTG)
+                continue
         comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
             if fast_folds and op == OP_COL_STATS:
                 var hq = host_q + (s * STAGE_INTS + 2)
