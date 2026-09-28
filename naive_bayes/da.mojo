@@ -14,7 +14,7 @@ the data-dependent ranks, so every stage has a size known when the program is
 built.
 """
 from checks.numerics import ftz
-from x_prep.common import FP, IP, p, ld, st
+from x_prep.common import FP, IP, p, ld, st, RUN, run_block
 from x_prep.prims import add, sub, mul, div, logf, sqrtf
 
 
@@ -162,12 +162,24 @@ def qda_cov_unit(t: Int, f: FP, q: IP):
     var b = t % d
     var a = (t // d) % d
     var k = t // (d * d)
+    var X = p(q, 0)
+    var Y = p(q, 3)
+    var mka = ld(f, p(q, 4) + k * d + a)
+    var mkb = ld(f, p(q, 4) + k * d + b)
     var s = Float32(0)
-    for i in range(n):
-        if Int(ld(f, p(q, 3) + i)) != k:
+    var full = n - n % RUN
+    for i0 in range(0, full, RUN):
+        var by = run_block[RUN](f, Y + i0, 1)
+        var ba = run_block[RUN](f, X + i0 * d + a, d)
+        var bb = run_block[RUN](f, X + i0 * d + b, d)
+        comptime for u in range(RUN):
+            if Int(ftz(by[u])) == k:
+                s = add(s, mul(sub(ftz(ba[u]), mka), sub(ftz(bb[u]), mkb)))
+    for i in range(full, n):
+        if Int(ld(f, Y + i)) != k:
             continue
-        var ea = sub(ld(f, p(q, 0) + i * d + a), ld(f, p(q, 4) + k * d + a))
-        var eb = sub(ld(f, p(q, 0) + i * d + b), ld(f, p(q, 4) + k * d + b))
+        var ea = sub(ld(f, X + i * d + a), mka)
+        var eb = sub(ld(f, X + i * d + b), mkb)
         s = add(s, mul(ea, eb))
     st(f, p(q, 6) + t, div(s, ld(f, p(q, 5) + k)))
 

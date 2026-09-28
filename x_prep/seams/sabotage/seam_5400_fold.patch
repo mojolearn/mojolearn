@@ -1,8 +1,11 @@
 --- a/x_prep/prims.mojo
 +++ b/x_prep/prims.mojo
-@@ -133,7 +133,7 @@
+@@ -131,9 +131,9 @@
+     for i0 in range(0, full, RUN):
+         var blk = run_block[RUN](f, X + i0 * d + c, d)
          comptime for u in range(RUN):
-             _cs_take(ftz(blk[u]), cnt, s, lo, hi, ma)
+-            _cs_take(ftz(blk[u]), cnt, s, lo, hi, ma)
++            _cs_take(ftz(blk[RUN - 1 - u]), cnt, s, lo, hi, ma)  # SABOTAGE 5400
      for i in range(full, n):
 -        _cs_take(ld(f, X + i * d + c), cnt, s, lo, hi, ma)
 +        _cs_take(ld(f, X + (full + n - 1 - i) * d + c), cnt, s, lo, hi, ma)  # SABOTAGE 5400

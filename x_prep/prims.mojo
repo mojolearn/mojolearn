@@ -349,17 +349,36 @@ def binarize_unit(t: Int, f: FP, q: IP):
 
 
 # ---------------------------------------------------------------- dense
+@always_inline
+def mm_step(acc: Float32, a: Float32, b: Float32) -> Float32:
+    """One term of matmul's contraction: the product rounded, then added
+    (DEVIATION 5401: never contracted into an FMA)."""
+    return add(acc, mul(a, b))
+
+
 def matmul_unit(t: Int, f: FP, q: IP):
     """q = [A, sa0, sa1, B, sb0, sb1, C, ncols, K, BIAS, ALPHA]; t = i*ncols + j.
     C[t] = ALPHA * sum_l A[i*sa0 + l*sa1] * B[l*sb0 + j*sb1] (+ BIAS[j]),
     l ascending (ALPHA < 0: no scale). DEVIATION 5401: each product rounded
-    (`identical_mul`) before its add, never contracted into an FMA."""
+    (`identical_mul`) before its add, never contracted into an FMA. The
+    operands are loaded RUN terms at a time (`run_block`), folded ascending."""
     var nc = p(q, 7)
     var i = t // nc
     var j = t % nc
+    var a0 = p(q, 0) + i * p(q, 1)
+    var sa = p(q, 2)
+    var b0 = p(q, 3) + j * p(q, 5)
+    var sb = p(q, 4)
+    var kk = p(q, 8)
     var acc = Float32(0)
-    for l in range(p(q, 8)):
-        acc = add(acc, mul(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5))))
+    var full = kk - kk % RUN
+    for l0 in range(0, full, RUN):
+        var ba = run_block[RUN](f, a0 + l0 * sa, sa)
+        var bb = run_block[RUN](f, b0 + l0 * sb, sb)
+        comptime for u in range(RUN):
+            acc = mm_step(acc, ftz(ba[u]), ftz(bb[u]))
+    for l in range(full, kk):
+        acc = mm_step(acc, ld(f, a0 + l * sa), ld(f, b0 + l * sb))
     if p(q, 10) >= 0:
         acc = mul(acc, ld(f, p(q, 10)))
     if p(q, 9) >= 0:
