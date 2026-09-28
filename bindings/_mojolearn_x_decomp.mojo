@@ -10,7 +10,7 @@ from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
     cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
-    geqrf_py, orgqr_py, als_cg_rows_py, mcd_py,
+    geqrf_py, orgqr_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.device import DevExec
@@ -53,6 +53,12 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         # MinCovDet's fast_mcd: calls of at least `dev` elements on the GPU,
         # smaller ones on the host executor (the same cells, the same bits)
         m.def_function[mcd_py[DevExec, HostExec]]("x_decomp_mcd")
+        m.def_function[lda_online_py[DevExec, HostExec]]("x_decomp_lda_online")
+        m.def_function[gather_py]("x_decomp_gather")
+        m.def_function[scatter_py]("x_decomp_scatter")
+        m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
+        m.def_function[argsort_f32_py]("x_decomp_argsort_f32")
+        m.def_function[iso_order_py]("x_decomp_iso_order")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")

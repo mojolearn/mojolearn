@@ -2707,6 +2707,29 @@ class LatentDirichletAllocation(_Base):
         self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
         self.n_batch_iter_ += 1
 
+    def _online_pass(self, k, M, total_samples):
+        """`for a in range(0, n, batch_size): self._em_step(k, M.rows(a, b),
+        total_samples, False)` in ONE binding call (x_decomp/lda_online.mojo,
+        lane/py-decomp-nbrs): the same cells, draws and float32 scalars per
+        mini-batch. MOJOLEARN_XD_LDA_PYTHON=1 runs the Python loop (the
+        reference arm, timing and A/B only)."""
+        bs = self.batch_size
+        if _os.environ.get("MOJOLEARN_XD_LDA_PYTHON") == "1":
+            for a in range(0, M.r, bs):
+                self._em_step(k, M.rows(a, min(a + bs, M.r)), total_samples, False)
+            return
+        if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
+            raise ValueError("batch_size must be a positive integer")
+        C, E = self.components_m_, self._exp_dir
+        nc, v = C.r, C.c
+        self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_online(
+            M.addr, C.addr, E.addr,
+            [M.r, v, nc, bs, int(self.max_doc_update_iter), int(self._seed) & 0xFFFFFFFF, self._draw,
+             self.n_batch_iter_],
+            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
+             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)],
+            int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
+
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
         if self.learning_method not in ("batch", "online"):
@@ -2719,9 +2742,7 @@ class LatentDirichletAllocation(_Base):
         it = 0
         for it in range(1, self.max_iter + 1):
             if self.learning_method == "online":
-                bs = self.batch_size
-                for a in range(0, n, bs):
-                    self._em_step(k, M.rows(a, min(a + bs, n)), n, False)
+                self._online_pass(k, M, n)
             else:
                 self._em_step(k, M, n, True)
             if self.evaluate_every > 0 and it % self.evaluate_every == 0:
@@ -2745,8 +2766,7 @@ class LatentDirichletAllocation(_Base):
         M = self._check_X(X, "LatentDirichletAllocation.partial_fit")
         if not hasattr(self, "components_m_"):
             self._init(k, M.c)
-        for a in range(0, M.r, self.batch_size):
-            self._em_step(k, M.rows(a, min(a + self.batch_size, M.r)), self.total_samples, False)
+        self._online_pass(k, M, self.total_samples)
         self.components_ = self.components_m_.out()
         self.exp_dirichlet_component_ = self._exp_dir.out()
         self.n_features_in_ = M.c
@@ -3240,9 +3260,77 @@ class MDS(_Base):
             P.s[j * n + i] = P.s[q]
         return P
 
+    def _nm_native(self, k, Dis, n):
+        """The non-metric SMACOF bookkeeping in native calls (lane/py-decomp-nbrs):
+        Python gathered n (n - 1) / 2 pairs, fed them to IsotonicRegression as
+        lists (a lambda sort of every pair) and scattered and mirrored them back
+        one element at a time, every iteration (about 1 s per iteration at
+        n = 3000). The same positions, the same stable (x, y) order, the same
+        x_linear isotonic fit and predict calls and the same scatter, as
+        buffers. Returns the per-iteration disparity function."""
+        from . import _expansion_linear as _xlin
+        b = k.b
+        cap = max(n * (n - 1) // 2, 1)
+        pos, mir = array.array("i", [0]) * cap, array.array("i", [0]) * cap
+        m = int(b.x_decomp_triu_nonzero(Dis.addr, n, pos.buffer_info()[0], mir.buffer_info()[0]))
+        pa, ma = pos.buffer_info()[0], mir.buffer_info()[0]
+        dis_w = array.array("f", [0.0]) * max(m, 1)
+        b.x_decomp_gather(Dis.addr, pa, m, dis_w.buffer_info()[0])
+        xorder = array.array("i", [0]) * max(m, 1)
+        b.x_decomp_argsort_f32(dis_w.buffer_info()[0], m, xorder.buffer_info()[0])
+        ir = _xlin.IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
+        lin = ir._bind(_xlin._BINDING)
+        ones = array.array("f", [1.0]) * m
+
+        def call(algo, X, Y, rows, ip, fp, n_out, n_fw, n_iw):
+            # _expansion_linear._run's one x_linear_fit call, its parameter
+            # list verbatim, the output kept as a buffer (no Python list)
+            out = array.array("f", [0.0]) * max(n_out, 1)
+            lin.x_linear_fit(int(algo), X.buffer_info()[0], Y.buffer_info()[0],
+                             [rows, 1, rows, len(Y), n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
+                             [int(v) for v in ip], [float(v) for v in fp], out.buffer_info()[0])
+            return out
+
+        def disparities(d, first):
+            if first:
+                flat = dis_w
+            else:
+                ds = array.array("f", [0.0]) * max(m, 1)
+                b.x_decomp_gather(d.addr, pa, m, ds.buffer_info()[0])
+                order = array.array("i", [0]) * max(m, 1)
+                b.x_decomp_iso_order(dis_w.buffer_info()[0], ds.buffer_info()[0], xorder.buffer_info()[0], m,
+                                     order.buffer_info()[0])
+                ob = order.buffer_info()[0]
+                xa = array.array("f", [0.0]) * max(m, 1)
+                b.x_decomp_gather(dis_w.buffer_info()[0], ob, m, xa.buffer_info()[0])
+                yy = array.array("f", [0.0]) * m
+                b.x_decomp_gather(ds.buffer_info()[0], ob, m, yy.buffer_info()[0])
+                yy.extend(ones)
+                # IsotonicRegression(out_of_bounds='clip').fit(dis_w, ds): increasing, no bounds
+                vals = call(_xlin.ALGO_ISOTONIC, xa, yy, m, [1, 0, 0], [0.0, 0.0], 3 + 2 * m, 3 * m, m)
+                kk = int(vals[0])
+                thr = vals[3:3 + kk] + vals[3 + m:3 + m + kk]
+                # .transform(dis_w): clip, the thresholds and bounds above
+                flat = call(_xlin.ALGO_ISOTONIC_PREDICT, dis_w, thr, m, [kk, 1],
+                            [float(vals[1]), float(vals[2])], m, 1, 1)
+            P = _M.zeros(n, n)
+            b.x_decomp_scatter(P.addr, pa, m, flat.buffer_info()[0])
+            ss = k.total(k.ew("sq", P)).s[0]
+            P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
+            tmp = array.array("f", [0.0]) * max(m, 1)
+            b.x_decomp_gather(P.addr, pa, m, tmp.buffer_info()[0])
+            b.x_decomp_scatter(P.addr, ma, m, tmp.buffer_info()[0])
+            return P
+
+        return disparities
+
     def _single(self, k, Dis, Y, run):
         n = Dis.r
         nonmetric = not self.metric_mds
+        native = (nonmetric and n * n <= 2147483647 and _os.environ.get("MOJOLEARN_XD_MDS_PYTHON") != "1")
+        if native:
+            nm = self._nm_native(k, Dis, n)
+            nonmetric = False
         if nonmetric:
             # sklearn `_smacof_single` with metric=False: a zero dissimilarity
             # is a missing value; the first iteration uses the dissimilarities
@@ -3259,7 +3347,9 @@ class MDS(_Base):
         old = None
         it = 0
         for it in range(1, self.max_iter + 1):
-            if nonmetric:
+            if native:
+                disp = nm(d, it == 1)
+            elif nonmetric:
                 flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
                 disp = self._disparities(k, n, pos, flat)
             dz = k.ew("select", d, d, k.const(1e-5), s=0.0)
@@ -3722,7 +3812,7 @@ class MinCovDet(_Base):
         sup = array.array("i", [0]) * n
         k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
                          [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan,
-                         int(_os.environ.get("MOJOLEARN_XD_MCD_DEV_MIN", "65536")))
+                         int(_os.environ.get("MOJOLEARN_XD_RES_DEV_MIN", "65536")))
         return loc, cov, [v != 0 for v in sup], dist
 
     def _fast_mcd(self, k, X):

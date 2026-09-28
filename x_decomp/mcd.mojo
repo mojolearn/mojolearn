@@ -24,26 +24,17 @@ control flow and data movement only:
   `(wmax * n) * eps` in double then rounded once to float32, exactly as
   `_f32` and the binding boundary round them.
 
-TWO EXECUTORS. `Mcd[E, S]` sends a call whose largest operand has at least
-`dev` elements to `E` and every smaller one to `S`. The GPU binding
-instantiates `[DevExec, HostExec]` (a subset C-step on 300 rows costs more
-in launches than in arithmetic), the CPU binding `[HostExec, HostExec]`.
-The two executors run the same cells to the same bits (every x-decomp lane's
-GPU == CPU claim); `dev` (MOJOLEARN_XD_MCD_DEV_MIN, default 65536 elements)
-is timing only, and `dev = 1` sends every call to `E`.
+The executors (a GPU call for an operand of at least `dev` elements, the
+host executor below that; the same bits either way) are
+`x_decomp/kit.mojo`'s; `dev` is MOJOLEARN_XD_RES_DEV_MIN (default 65536).
 """
 from std.memory import bitcast
 from std.builtin.sort import sort
 
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
+from x_decomp.kit import Kit, Mat, OP_ABS, OP_LOGS, OP_MUL, OP_RECIP, OP_SCALE, OP_SUB, take_rows
 
-comptime _SUB = 1
-comptime _MUL = 2
-comptime _LOGS = 10
-comptime _ABS = 13
-comptime _SCALE = 14
-comptime _RECIP = 16
 #: `_expansion_decomp._F32_EPS` and the `logs` floor `_slogdet` passes
 comptime _F32_EPS: Float64 = 1.1920928955078125e-07
 comptime _FLT_MIN: Float64 = 1.1754943508222875e-38
@@ -55,43 +46,6 @@ def _neg_inf() -> Float64:
 
 def _pos_inf() -> Float64:
     return bitcast[DType.float64](UInt64(0x7FF0000000000000))
-
-
-struct Mat(Copyable, Movable):
-    """A row-major float32 matrix (`_M`'s store). Never empty in memory: a
-    0-element matrix keeps one slot so its address is valid."""
-    var d: List[Float32]
-    var r: Int
-    var c: Int
-
-    def __init__(out self, r: Int, c: Int):
-        self.d = List[Float32](length=max(r * c, 1), fill=Float32(0))
-        self.r = r
-        self.c = c
-
-    def p(self) -> F32Ptr:
-        return F32Ptr(unsafe_from_address=Int(self.d.unsafe_ptr()))
-
-    def n(self) -> Int:
-        return self.r * self.c
-
-
-def mat_from(ptr: F32Ptr, r: Int, c: Int) -> Mat:
-    var m = Mat(r, c)
-    for i in range(r * c):
-        m.d[i] = ptr.unsafe_load(i)
-    return m^
-
-
-def take_rows(X: Mat, sel: List[Int]) -> Mat:
-    """`_M.take_rows`: the rows of X in the order of `sel` (exact copies)."""
-    var out = Mat(len(sel), X.c)
-    var c = X.c
-    for a in range(len(sel)):
-        var src = sel[a] * c
-        for j in range(c):
-            out.d[a * c + j] = X.d[src + j]
-    return out^
 
 
 def _key(v: Float32, i: Int) raises -> UInt64:
@@ -215,124 +169,34 @@ def _order_by_det(est: List[Est], keep: Int) raises -> List[Int]:
 
 
 struct Mcd[E: Exec, S: Exec]:
-    var one: Mat
-    var dev: Int
-    var seed: UInt32
+    var k: Kit[Self.E, Self.S]
+    var seed: Int
     var draws: Int
 
-    def __init__(out self, dev: Int, seed: UInt32):
-        self.one = Mat(1, 1)
-        self.dev = dev
+    def __init__(out self, dev: Int, seed: Int):
+        self.k = Kit[Self.E, Self.S](dev)
         self.seed = seed
         self.draws = 0
 
-    def big(self, count: Int) -> Bool:
-        return self.dev > 0 and count >= self.dev
-
-    # ---- the kit calls, as `_Kit` makes them
-    @staticmethod
-    def _mode(X: Mat, A: Mat) raises -> Int:
-        if X.r == A.r and X.c == A.c:
-            return 0
-        if X.r == 1 and X.c == A.c:
-            return 1
-        if X.c == 1 and X.r == A.r:
-            return 2
-        if X.r == 1 and X.c == 1:
-            return 3
-        raise Error("x_decomp MinCovDet: cannot broadcast")
-
-    def ew1(self, op: Int, A: Mat, s: Float64) raises -> Mat:
-        """`ew(op, A, s=s)`: B and C the unused 0 broadcast operand."""
-        var out = Mat(A.r, A.c)
-        if A.n() == 0:
-            return out^
-        if self.big(A.n()):
-            Self.E.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
-        else:
-            Self.S.ew(op, A.p(), self.one.p(), 1, 3, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(s))
-        return out^
-
-    def ew2(self, op: Int, A: Mat, B: Mat) raises -> Mat:
-        """`ew(op, A, B)`."""
-        var bm = Self._mode(B, A)
-        var out = Mat(A.r, A.c)
-        if A.n() == 0:
-            return out^
-        if self.big(max(A.n(), B.n())):
-            Self.E.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
-        else:
-            Self.S.ew(op, A.p(), B.p(), B.n(), bm, self.one.p(), 1, 3, out.p(), A.n(), A.c, Float32(0))
-        return out^
-
-    def mm(self, A: Mat, B: Mat, ta: Bool, tb: Bool) raises -> Mat:
-        var m = A.c if ta else A.r
-        var k = A.r if ta else A.c
-        var k2 = B.c if tb else B.r
-        var n = B.r if tb else B.c
-        if k != k2:
-            raise Error("x_decomp MinCovDet: gemm inner dimensions differ")
-        var out = Mat(m, n)
-        if m * n == 0:
-            return out^
-        if self.big(max(A.n(), B.n(), m * n)):
-            Self.E.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
-        else:
-            Self.S.gemm(A.p(), B.p(), out.p(), m, k, n, ta, tb)
-        return out^
-
-    def colsum(self, A: Mat) raises -> Mat:
-        var out = Mat(1, A.c)
-        if self.big(A.n()):
-            Self.E.colsum(A.p(), out.p(), A.r, A.c)
-        else:
-            Self.S.colsum(A.p(), out.p(), A.r, A.c)
-        return out^
-
-    def rowsum(self, A: Mat) raises -> Mat:
-        var out = Mat(A.r, 1)
-        if self.big(A.n()):
-            Self.E.rowsum(A.p(), out.p(), A.r, A.c)
-        else:
-            Self.S.rowsum(A.p(), out.p(), A.r, A.c)
-        return out^
-
-    def eigh(self, A: Mat, mut w: Mat, mut v: Mat) raises:
-        if self.big(A.n()):
-            Self.E.eigh(A.p(), w.p(), v.p(), A.r)
-        else:
-            Self.S.eigh(A.p(), w.p(), v.p(), A.r)
-
-    def rand(self, n: Int, stream: Int) raises -> Mat:
-        var out = Mat(1, n)
-        if n == 0:
-            return out^
-        var st = UInt32(stream & 0xFFFFFFFF)
-        if self.big(n):
-            Self.E.rand(out.p(), n, self.seed, st, 0)
-        else:
-            Self.S.rand(out.p(), n, self.seed, st, 0)
-        return out^
-
     # ---- the composites of _expansion_decomp.py
     def colmean(self, A: Mat) raises -> Mat:
-        return self.ew1(_SCALE, self.colsum(A), 1.0 / Float64(A.r))
+        return self.k.colmean(A)
 
     def emp_cov(self, Xs: Mat) raises -> Mat:
         """`_emp_cov(k, Xs)` (assume_centered=False)."""
-        var Xc = self.ew2(_SUB, Xs, self.colmean(Xs))
-        return self.ew1(_SCALE, self.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
+        var Xc = self.k.ew2(OP_SUB, Xs, self.colmean(Xs))
+        return self.k.ew1(OP_SCALE, self.k.mm(Xc, Xc, True, False), 1.0 / Float64(Xs.r))
 
     def mahal(self, X: Mat, loc: Mat, P: Mat) raises -> Mat:
-        var Xc = self.ew2(_SUB, X, loc)
-        return self.rowsum(self.ew2(_MUL, self.mm(Xc, P, False, False), Xc))
+        var Xc = self.k.ew2(OP_SUB, X, loc)
+        return self.k.rowsum(self.k.ew2(OP_MUL, self.k.mm(Xc, P, False, False), Xc))
 
     def pinvh(self, A: Mat) raises -> Mat:
         """`_pinvh`: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
         var n = A.r
         var w = Mat(1, n)
         var V = Mat(n, n)
-        self.eigh(A, w, V)
+        self.k.eigh(A, w, V)
         var wmax: Float64 = 0.0
         if n > 0:
             wmax = abs(Float64(w.d[0]))
@@ -341,11 +205,11 @@ struct Mcd[E: Exec, S: Exec]:
                 if a > wmax:                  # Python max(): replace on >
                     wmax = a
         var cut = Float64(Float32((wmax * Float64(n)) * _F32_EPS))
-        var keep = self.ew1(_RECIP, w, 0.0)
+        var keep = self.k.ew1(OP_RECIP, w, 0.0)
         var inv = Mat(1, n)
         for j in range(n):
             inv.d[j] = keep.d[j] if abs(Float64(w.d[j])) > cut else Float32(0)
-        return self.mm(self.ew2(_MUL, V, inv), V, False, True)
+        return self.k.mm(self.k.ew2(OP_MUL, V, inv), V, False, True)
 
     def fast_logdet(self, A: Mat) raises -> Float64:
         """`_fast_logdet` over `_slogdet` (getrf; logs summed as `total`)."""
@@ -353,11 +217,7 @@ struct Mcd[E: Exec, S: Exec]:
         var lu = A.copy()
         var piv = List[Int32](length=max(n, 1), fill=Int32(0))
         var info = Mat(1, 1)
-        var pp = I32Ptr(unsafe_from_address=Int(piv.unsafe_ptr()))
-        if self.big(A.n()):
-            Self.E.lu(lu.p(), pp, info.p(), n)
-        else:
-            Self.S.lu(lu.p(), pp, info.p(), n)
+        self.k.lu(lu, piv, info)
         var diag = Mat(1, n)
         for i in range(n):
             diag.d[i] = lu.d[i * n + i]
@@ -371,7 +231,7 @@ struct Mcd[E: Exec, S: Exec]:
         for i in range(n):
             if Int(piv[i]) != i:
                 neg += 1
-        var t = self.colsum(self.rowsum(self.ew1(_LOGS, self.ew1(_ABS, diag, 0.0), _FLT_MIN)))
+        var t = self.k.total((self.k.ew1(OP_LOGS, self.k.ew1(OP_ABS, diag, 0.0), _FLT_MIN)))
         if neg % 2 != 0:
             return _neg_inf()
         return Float64(t.d[0])
@@ -380,12 +240,12 @@ struct Mcd[E: Exec, S: Exec]:
     def perm(mut self, n: Int) raises -> List[Int]:
         """`MinCovDet._perm`: a sort of the next Philox stream's draws."""
         self.draws += 1
-        return argsort_values(self.rand(n, 1000 + self.draws))
+        return argsort_values(self.k.rand(1, n, self.seed, 1000 + self.draws, 0))
 
     def perm_head_sorted(mut self, n: Int, h: Int) raises -> List[Int]:
         """`sorted(self._perm(n)[:h])`."""
         self.draws += 1
-        return smallest_sorted(self.rand(n, 1000 + self.draws), h)
+        return smallest_sorted(self.k.rand(1, n, self.seed, 1000 + self.draws, 0), h)
 
     # ---- the C-step
     def c_step(
@@ -479,7 +339,7 @@ def fast_mcd[E: Exec, S: Exec](
     var n = p[0]
     var d = p[1]
     var h = p[2]
-    var run = Mcd[E, S](dev, UInt32(p[3] & 0xFFFFFFFF))
+    var run = Mcd[E, S](dev, p[3])
     var best: Est
     var support = List[Int32](length=n, fill=Int32(0))
     var dist = List[Float32](length=n, fill=Float32(0))

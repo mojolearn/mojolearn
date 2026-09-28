@@ -11,7 +11,10 @@ from std.python._cpython import GILReleased
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.mcd import fast_mcd, mat_from
+from x_decomp.kit import mat_from
+from x_decomp.mcd import fast_mcd
+from x_decomp.lda_online import lda_online_pass
+from x_decomp.moves import argsort_f32, gather, iso_order, scatter, triu_nonzero
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -426,6 +429,106 @@ def mcd_py[E: Exec, S: Exec](
     with GILReleased(Python()):
         var X = mat_from(px, n, d)
         fast_mcd[E, S](X, q, dv, pl, pc, ps, pd)
+    return PythonObject(n)
+
+
+def lda_online_py[E: Exec, S: Exec](
+    x: PythonObject, comps: PythonObject, exp_dir: PythonObject, p: PythonObject, f: PythonObject,
+    dev: PythonObject,
+) raises -> PythonObject:
+    """One online pass of LatentDirichletAllocation (x_decomp/lda_online.mojo)
+    over x (n x v): comps and exp_dir (nc x v) updated in place.
+    p = [n, v, nc, batch_size, max_doc_update_iter, seed, draw, n_batch_iter];
+    f = [doc_topic_prior, topic_word_prior, learning_offset, learning_decay,
+    mean_change_tol, total_samples]. Returns (draw, n_batch_iter)."""
+    var n = _n(p, 0)
+    var v = _n(p, 1)
+    var nc = _n(p, 2)
+    var bs = _n(p, 3)
+    var mdi = _n(p, 4)
+    var seed = Int(py=p[5])
+    var draw = Int(py=p[6])
+    var nbi = Int(py=p[7])
+    if bs < 1 or v < 1 or nc < 1 or n * v > 2147483647 or nc * v > 2147483647:
+        raise Error("x_decomp: lda_online shape out of range")
+    var fv = List[Float64]()
+    for i in range(6):
+        fv.append(Float64(py=f[i]))
+    var dv = Int(py=dev)
+    var px = _f(x)
+    var pc = _f(comps)
+    var pe = _f(exp_dir)
+    with GILReleased(Python()):
+        var X = mat_from(px, n, v)
+        var C = mat_from(pc, nc, v)
+        var ED = mat_from(pe, nc, v)
+        lda_online_pass[E, S](X, C, ED, bs, mdi, seed, draw, nbi, fv[0], fv[1], fv[2], fv[3], fv[4], fv[5], dv)
+        for i in range(nc * v):
+            pc.unsafe_store(i, C.d[i])
+            pe.unsafe_store(i, ED.d[i])
+    return Python.tuple(draw, nbi)
+
+
+def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
+    """dst[a] = src[idx[a]] for a < m (exact copies; x_decomp/moves.mojo)."""
+    var n = Int(py=m)
+    if n < 0:
+        raise Error("x_decomp: negative gather count")
+    var ps = _f(src)
+    var pi = _i(idx)
+    var pd = _f(dst)
+    with GILReleased(Python()):
+        gather(ps, pi, n, pd)
+    return PythonObject(n)
+
+
+def scatter_py(dst: PythonObject, idx: PythonObject, m: PythonObject, src: PythonObject) raises -> PythonObject:
+    """dst[idx[a]] = src[a] for a < m, in order (exact copies)."""
+    var n = Int(py=m)
+    if n < 0:
+        raise Error("x_decomp: negative scatter count")
+    var pd = _f(dst)
+    var pi = _i(idx)
+    var ps = _f(src)
+    with GILReleased(Python()):
+        scatter(pd, pi, n, ps)
+    return PythonObject(n)
+
+
+def triu_nonzero_py(dis: PythonObject, n: PythonObject, pos: PythonObject, mir: PythonObject) raises -> PythonObject:
+    """The row-major positions of the nonzero strict upper triangle of an
+    n x n matrix (and their mirrors); returns their count."""
+    var nn = Int(py=n)
+    if nn < 0 or nn * nn > 2147483647:
+        raise Error("x_decomp: triu_nonzero exceeds the Int32 index bound")
+    var pd = _f(dis)
+    var pp = _i(pos)
+    var pm = _i(mir)
+    var m = 0
+    with GILReleased(Python()):
+        m = triu_nonzero(pd, nn, pp, pm)
+    return PythonObject(m)
+
+
+def argsort_f32_py(x: PythonObject, m: PythonObject, out: PythonObject) raises -> PythonObject:
+    """The stable order of x (m float32 values); NaN refused."""
+    var n = Int(py=m)
+    var px = _f(x)
+    var po = _i(out)
+    argsort_f32(px, n, po)
+    return PythonObject(n)
+
+
+def iso_order_py(
+    x: PythonObject, y: PythonObject, xorder: PythonObject, m: PythonObject, out: PythonObject
+) raises -> PythonObject:
+    """The stable order by (x, y) given the stable order by x; NaN refused."""
+    var n = Int(py=m)
+    var px = _f(x)
+    var py_ = _f(y)
+    var pxo = _i(xorder)
+    var po = _i(out)
+    iso_order(px, py_, pxo, n, po)
     return PythonObject(n)
 
 
