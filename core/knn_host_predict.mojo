@@ -543,62 +543,113 @@ comptime KnnVF = SIMD[DType.float32, KNN_HOST_W]
 comptime KnnVU = SIMD[DType.uint32, KNN_HOST_W]
 
 
+#: The step kinds of the block engine, fixed at compile time per tile so
+#: the feature loop carries no metric test.
+comptime KNN_STEP_IP = 0
+comptime KNN_STEP_L1 = 1
+comptime KNN_STEP_LINF = 2
+comptime KNN_STEP_LP = 3
+comptime KNN_STEP_DIFF2 = 4
+
+
 @always_inline
-def _host_block_step(
-    acc: KnnVF, qv: Float32, y: KnnVF, metric: Int, metric_arg: Float32,
-    ip: Bool,
-) -> KnnVF:
-    """One feature step of W cells; `ip` is the inner-product family (the
-    L2 expanded pair and cosine)."""
+def _host_step_kind(metric: Int, ip: Bool) -> Int:
     if ip:
-        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(qv), y, acc))
+        return KNN_STEP_IP
     if metric == DIST_L1:
-        return ftz_v[KNN_HOST_W](acc + abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y)))
+        return KNN_STEP_L1
     if metric == DIST_LINF:
+        return KNN_STEP_LINF
+    if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
+        return KNN_STEP_DIFF2
+    return KNN_STEP_LP
+
+
+@always_inline
+def _host_block_step[K: Int](acc: KnnVF, qv: Float32, y: KnnVF, metric_arg: Float32) -> KnnVF:
+    """One feature step of W cells, lane-wise the scalar cores:
+    `inner_product_core`, `l1_core`, `linf_core`, `lp_unexp_core`, and the
+    ball cover's Euclidean `ftz(fma(diff, diff, acc))`."""
+    comptime if K == KNN_STEP_IP:
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](KnnVF(qv), y, acc))
+    elif K == KNN_STEP_L1:
+        return ftz_v[KNN_HOST_W](acc + abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y)))
+    elif K == KNN_STEP_LINF:
         var diff = abs(ftz_v[KNN_HOST_W](KnnVF(qv) - y))
         return diff.gt(acc).select(diff, acc)
-    var out = acc
-    comptime for l in range(KNN_HOST_W):
-        out[l] = lp_unexp_core(acc[l], qv, y[l], metric_arg)
-    return out
+    elif K == KNN_STEP_DIFF2:
+        var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
+        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
+    else:
+        var out = acc
+        comptime for l in range(KNN_HOST_W):
+            out[l] = lp_unexp_core(acc[l], qv, y[l], metric_arg)
+        return out
 
 
-def _host_block_tile(
-    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
-    metric: Int, metric_arg: Float32, ip: Bool,
+def _host_block_tile_k[K: Int, NQ: Int](
+    qf: HostF32Ptr, r0: Int, panel: HostF32Ptr, d: Int, metric_arg: Float32,
     tile: HostF32Ptr,
 ):
-    """The raw accumulators of KNN_HOST_QB x KNN_HOST_W cells into `tile`
-    (row r at `r * W`). Rows past `nq` repeat row `r0` and are ignored.
-    The sabotage arm walks the chain DESCENDING for every metric but
-    Chebyshev, as `host_l2_expanded_cell_ptr` / `host_metric_cell_ptr`."""
+    """NQ query rows x KNN_HOST_W cells, raw accumulators into `tile` (row r
+    at `r * W`). The sabotage arm walks the chain DESCENDING for every kind
+    but Chebyshev, as the scalar cells do."""
     var a0 = KnnVF(0.0)
     var a1 = KnnVF(0.0)
     var a2 = KnnVF(0.0)
     var a3 = KnnVF(0.0)
     var q0 = qf + r0 * d
-    var q1 = qf + (r0 + (1 if nq > 1 else 0)) * d
-    var q2 = qf + (r0 + (2 if nq > 2 else 0)) * d
-    var q3 = qf + (r0 + (3 if nq > 3 else 0)) * d
-    var descend = False
-    comptime if KNN_HOST_SABOTAGE:
-        descend = metric != DIST_LINF
+    var q1 = qf + (r0 + 1) * d
+    var q2 = qf + (r0 + 2) * d
+    var q3 = qf + (r0 + 3) * d
     for g in range(d):
         var f = g
-        if descend:
+        comptime if KNN_HOST_SABOTAGE and K != KNN_STEP_LINF:
             f = d - 1 - g
         var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
-        a0 = _host_block_step(a0, q0.unsafe_load(f), y, metric, metric_arg, ip)
-        if nq > 1:
-            a1 = _host_block_step(a1, q1.unsafe_load(f), y, metric, metric_arg, ip)
-        if nq > 2:
-            a2 = _host_block_step(a2, q2.unsafe_load(f), y, metric, metric_arg, ip)
-        if nq > 3:
-            a3 = _host_block_step(a3, q3.unsafe_load(f), y, metric, metric_arg, ip)
+        a0 = _host_block_step[K](a0, q0.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 1:
+            a1 = _host_block_step[K](a1, q1.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 2:
+            a2 = _host_block_step[K](a2, q2.unsafe_load(f), y, metric_arg)
+        comptime if NQ > 3:
+            a3 = _host_block_step[K](a3, q3.unsafe_load(f), y, metric_arg)
     tile.unsafe_store[width=KNN_HOST_W](0, a0)
     tile.unsafe_store[width=KNN_HOST_W](KNN_HOST_W, a1)
     tile.unsafe_store[width=KNN_HOST_W](2 * KNN_HOST_W, a2)
     tile.unsafe_store[width=KNN_HOST_W](3 * KNN_HOST_W, a3)
+
+
+def _host_block_tile_nq[K: Int](
+    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
+    metric_arg: Float32, tile: HostF32Ptr,
+):
+    if nq >= 4:
+        _host_block_tile_k[K, 4](qf, r0, panel, d, metric_arg, tile)
+    elif nq == 3:
+        _host_block_tile_k[K, 3](qf, r0, panel, d, metric_arg, tile)
+    elif nq == 2:
+        _host_block_tile_k[K, 2](qf, r0, panel, d, metric_arg, tile)
+    else:
+        _host_block_tile_k[K, 1](qf, r0, panel, d, metric_arg, tile)
+
+
+def _host_block_tile_kind(
+    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
+    kind: Int, metric_arg: Float32, tile: HostF32Ptr,
+):
+    """The raw accumulators of `nq` (<= KNN_HOST_QB) rows x KNN_HOST_W cells
+    into `tile`; the step kind picked once per tile."""
+    if kind == KNN_STEP_IP:
+        _host_block_tile_nq[KNN_STEP_IP](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_L1:
+        _host_block_tile_nq[KNN_STEP_L1](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_LINF:
+        _host_block_tile_nq[KNN_STEP_LINF](qf, r0, nq, panel, d, metric_arg, tile)
+    elif kind == KNN_STEP_DIFF2:
+        _host_block_tile_nq[KNN_STEP_DIFF2](qf, r0, nq, panel, d, metric_arg, tile)
+    else:
+        _host_block_tile_nq[KNN_STEP_LP](qf, r0, nq, panel, d, metric_arg, tile)
 
 
 @always_inline
@@ -739,7 +790,7 @@ def _host_knn_block_rows(
             var r0 = 0
             while r0 < rows:
                 var nq = min(KNN_HOST_QB, rows - r0)
-                _host_block_tile(qf, r0, nq, pp, d, mtr, metric_arg, ipf, tp)
+                _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(mtr, ipf), metric_arg, tp)
                 for r in range(nq):
                     var acc = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
                     var dist = _host_block_epilogue(
@@ -1131,47 +1182,6 @@ def host_rbc_cmp_dist(
 #: (and the same sabotage arms) as the scalar function; each row then
 #: consumes its W columns ascending, so counts, CSR fills and the k-NN
 #: insertion see the columns in the scalar order.
-def _rbc_tile(
-    qf: HostF32Ptr, r0: Int, nq: Int, panel: HostF32Ptr, d: Int,
-    metric: Int, metric_arg: Float32, tile: HostF32Ptr,
-):
-    var a0 = KnnVF(0.0)
-    var a1 = KnnVF(0.0)
-    var a2 = KnnVF(0.0)
-    var a3 = KnnVF(0.0)
-    var q0 = qf + r0 * d
-    var q1 = qf + (r0 + (1 if nq > 1 else 0)) * d
-    var q2 = qf + (r0 + (2 if nq > 2 else 0)) * d
-    var q3 = qf + (r0 + (3 if nq > 3 else 0)) * d
-    var descend = False
-    comptime if KNN_HOST_SABOTAGE:
-        descend = metric != DIST_LINF
-    for g in range(d):
-        var f = g
-        if descend:
-            f = d - 1 - g
-        var y = panel.unsafe_load[width=KNN_HOST_W](f * KNN_HOST_W)
-        a0 = _rbc_step(a0, q0.unsafe_load(f), y, metric, metric_arg)
-        if nq > 1:
-            a1 = _rbc_step(a1, q1.unsafe_load(f), y, metric, metric_arg)
-        if nq > 2:
-            a2 = _rbc_step(a2, q2.unsafe_load(f), y, metric, metric_arg)
-        if nq > 3:
-            a3 = _rbc_step(a3, q3.unsafe_load(f), y, metric, metric_arg)
-    tile.unsafe_store(0, _rbc_epilogue(a0, metric, metric_arg))
-    tile.unsafe_store(KNN_HOST_W, _rbc_epilogue(a1, metric, metric_arg))
-    tile.unsafe_store(2 * KNN_HOST_W, _rbc_epilogue(a2, metric, metric_arg))
-    tile.unsafe_store(3 * KNN_HOST_W, _rbc_epilogue(a3, metric, metric_arg))
-
-
-@always_inline
-def _rbc_step(acc: KnnVF, qv: Float32, y: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
-    if metric == KNN_HOST_DIST_L2_SQRT_UNEXPANDED:
-        var diff = ftz_v[KNN_HOST_W](KnnVF(qv) - y)
-        return ftz_v[KNN_HOST_W](identical_mul_add_simd[KNN_HOST_W](diff, diff, acc))
-    return _host_block_step(acc, qv, y, metric, metric_arg, False)
-
-
 @always_inline
 def _rbc_epilogue(acc: KnnVF, metric: Int, metric_arg: Float32) -> KnnVF:
     if metric == DIST_LINF:
@@ -1234,10 +1244,12 @@ def _rbc_scan_rows[
             var r0 = 0
             while r0 < rows:
                 var nq = min(KNN_HOST_QB, rows - r0)
-                _rbc_tile(qf, r0, nq, pp, d, metric, metric_arg, tp)
+                _host_block_tile_kind(qf, r0, nq, pp, d, _host_step_kind(metric, False), metric_arg, tp)
                 for r in range(nq):
                     var row = r0 + r
-                    var dist = tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W)
+                    var dist = _rbc_epilogue(
+                        tp.unsafe_load[width=KNN_HOST_W](r * KNN_HOST_W), metric, metric_arg
+                    )
                     comptime if mode == RBC_KNN:
                         var base = row * k
                         for l in range(wv):
