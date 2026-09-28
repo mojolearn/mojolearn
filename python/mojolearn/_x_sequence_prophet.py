@@ -90,8 +90,11 @@ class ProphetForecaster:
 
     def fit(self, t, y, holidays=None):
         days = _days(t)
-        order = np.argsort(days, kind="stable")
-        if not np.all(order == np.arange(len(days))):
+        # O(n), no sort (lane py-sequence); NaN refused by name (it used to
+        # pass the stable-argsort test when it sat at the end)
+        if np.isnan(days).any():
+            raise ValueError("ProphetForecaster: t must not hold NaN")
+        if not np.all(days[1:] >= days[:-1]):
             raise ValueError("ProphetForecaster: t must be sorted ascending")
         y = np.asarray(y)
         if y.dtype == np.float64:

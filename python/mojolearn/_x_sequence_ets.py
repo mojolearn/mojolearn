@@ -56,8 +56,9 @@ class ETS:
         if y.dtype == np.float64:
             raise TypeError("ETS: float64 is refused; pass float32")
         self._one = y.ndim == 1
-        self._y = np.ascontiguousarray(y, dtype=np.float32).reshape(1, -1) if self._one else \
-            np.ascontiguousarray(y, dtype=np.float32)
+        # a private copy: the fitted series cannot change under a stored forecast
+        self._y = np.array(y, dtype=np.float32, order="C", copy=True).reshape(1, -1) if self._one else \
+            np.array(y, dtype=np.float32, order="C", copy=True)
         if self._y.ndim != 2 or self._y.shape[1] < 4:
             raise ValueError("ETS: each series needs at least 4 observations")
         e, tr, s = self.model
@@ -76,6 +77,7 @@ class ETS:
         if n_par >= n - 1:
             raise ValueError(f"ETS: {n_par} parameters for {n} observations (the reference needs n > parameters + 1)")
         self._season = s
+        self._last = None
         return self
 
     def predict(self, h, X=None, level=None):
@@ -95,8 +97,16 @@ class ETS:
         stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
         if stall is not None:                          # quality sweep (tools/sequence_quality.py)
             ip, fp = ip + [int(stall[0])], fp + [float(stall[1])]
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).ets(
-            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data], ip, fp)
+        # the fit runs inside the forecast call; a repeat of the same call on
+        # the same fitted series returns the stored answer (lane py-sequence)
+        key = (tuple(ip), tuple(fp), self.numeric_mode)
+        last = getattr(self, "_last", None)
+        if last is not None and last[0] == key:
+            f, info, ss = (a.copy() for a in last[1:])
+        else:
+            _backend.binding("_mojolearn_x_sequence", self.numeric_mode).ets(
+                [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data], ip, fp)
+            self._last = (key, f.copy(), info.copy(), ss.copy())
         self.info_ = info
         if s != "N":
             self.seasonal_states_ = ss[0] if self._one else ss

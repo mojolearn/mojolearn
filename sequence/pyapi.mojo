@@ -146,44 +146,86 @@ def rnn_n_params_py(ip: PythonObject) raises -> PythonObject:
     return PythonObject(net_of(ip).n_params())
 
 
+def opt_slots(cfg: OptConfig) -> Tuple[Bool, Bool, Bool]:
+    """Which of state1, state2, state3 `sequence/ops.mojo::op_opt` reads or
+    writes for this configuration; the others are neither uploaded nor
+    downloaded (lane py-sequence)."""
+    var k = cfg.kind
+    if k == OPT_SGD:
+        return (cfg.f1 != Float32(0.0), False, False)
+    if k == OPT_RMSPROP:
+        return (cfg.f7 > Float32(0.0), True, (cfg.flags & 1) != 0)
+    if k == OPT_ADAGRAD:
+        return (False, True, False)
+    if k == OPT_LION:
+        return (True, False, False)
+    # Adam, AdamW, Adamax, NAdam
+    return (True, True, False)
+
+
 def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """One optimizer step over a flat float32 buffer, in place.
-    addrs = [params, grads, state1, state2, state3];
-    ip = [n, kind, flags, t]; fp = [lr, f1, f2, eps, weight_decay, f7]."""
-    if len(addrs) != 5 or len(ip) != 4 or len(fp) != 6:
-        raise Error("optimizer_step: requires 5 addresses, 4 integer and 6 float parameters")
+    addrs = [params, grads, state1, state2, state3 (, scalars)];
+    ip = [n, kind, flags, t (, t0)]; fp = [lr, f1, f2, eps, weight_decay, f7].
+    `scalars` (float32[3]: beta1^t0, beta2^t0, NAdam's mu product) is the
+    host scalars' running state after step t0 (t0 = 0: not yet run, the
+    buffer is ignored); the call advances it through step t and writes it
+    back, so a caller that passes it every step pays O(1) per step. Without
+    it, or with t0 < t - 1, the steps t0 + 1 .. t - 1 are replayed (the
+    state is a function of t alone, so both give the same bits). Only the
+    state slots the kind uses cross the host-device boundary."""
+    if len(addrs) < 5 or len(addrs) > 6 or len(ip) != len(addrs) - 1 or len(fp) != 6:
+        raise Error("optimizer_step: requires 5 (or 6) addresses, 4 (or 5) integer and 6 float parameters")
     var p_addr = addrs[0]
     var g_addr = addrs[1]
-    var s1_addr = addrs[2]
-    var s2_addr = addrs[3]
-    var s3_addr = addrs[4]
     var n = ival(ip, 0)
     var t = ival(ip, 3)
     if n < 1 or t < 1:
         raise Error("optimizer_step: n and the one-based step t must be >= 1")
     var cfg = opt_of(ip, 1, fp, 1)
     var st = OptState()
-    # the running state is a function of t alone: replay steps 1 .. t-1
-    for k in range(1, t):
+    var k0 = 1
+    var carry = len(addrs) == 6
+    var sc = fptr(addrs[5], "scalars") if carry else fptr(p_addr, "params")
+    if carry:
+        var t0 = ival(ip, 4)
+        if t0 < 0 or t0 >= t:
+            raise Error("optimizer_step: the scalars' step t0 must satisfy 0 <= t0 < t")
+        if t0 > 0:
+            st.pw1 = sc.unsafe_load(0)
+            st.pw2 = sc.unsafe_load(1)
+            st.mu_prod = sc.unsafe_load(2)
+            k0 = t0 + 1
+    for k in range(k0, t):
         _ = opt_scalars(cfg, st, k, fval(fp, 0))
+    var used = opt_slots(cfg)
     var hp = fptr(p_addr, "params")
-    var h1 = fptr(s1_addr, "state1")
-    var h2 = fptr(s2_addr, "state2")
-    var h3 = fptr(s3_addr, "state3")
     # `bind`: the host column updates the caller's arrays in place (OP_OPT
-    # never writes the gradient slot); the device uploads copies.
+    # never writes the gradient slot); the device uploads copies. A slot
+    # the kind never touches is not bound: the element body never
+    # dereferences it, so it is handed the params buffer.
     var P = ex.bind(hp, n)
     var G = ex.bind(fptr(g_addr, "grads"), n)
-    var s1 = ex.bind(h1, n)
-    var s2 = ex.bind(h2, n)
-    var s3 = ex.bind(h3, n)
+    var h1 = fptr(addrs[2], "state1") if used[0] else hp
+    var h2 = fptr(addrs[3], "state2") if used[1] else hp
+    var h3 = fptr(addrs[4], "state3") if used[2] else hp
+    var s1 = ex.bind(h1, n) if used[0] else P
+    var s2 = ex.bind(h2, n) if used[1] else P
+    var s3 = ex.bind(h3, n) if used[2] else P
     opt_step(ex, cfg, st, t, fval(fp, 0), P, G, s1, s2, s3, n)
-    # the four copies share one wait (apple2)
+    # the copies share one wait (apple2)
     ex.download_async(hp, P, n)
-    ex.download_async(h1, s1, n)
-    ex.download_async(h2, s2, n)
-    ex.download_async(h3, s3, n)
+    if used[0]:
+        ex.download_async(h1, s1, n)
+    if used[1]:
+        ex.download_async(h2, s2, n)
+    if used[2]:
+        ex.download_async(h3, s3, n)
     ex.sync()
+    if carry:
+        sc.unsafe_store(0, st.pw1)
+        sc.unsafe_store(1, st.pw2)
+        sc.unsafe_store(2, st.mu_prod)
     return PythonObject(n)
 
 
@@ -557,9 +599,13 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     ip = [n_tensors, t, flags, off_0, ..., off_n] with flags bit0 trust_clip,
     bit1 always_adapt, bit2 grad_averaging, bit3 bias_correction, bit4 the
     global gradient-norm clip; fp = [lr, beta1, beta2, eps, weight_decay,
-    max_grad_norm]."""
-    if len(addrs) != 4 or len(fp) != 6 or len(ip) < 5:
-        raise Error("lamb_step: requires 4 addresses, >= 5 integer and 6 float parameters")
+    max_grad_norm (, t0)]. An optional fifth address, float32[2], carries
+    (beta1^t0, beta2^t0) after step t0 = fp[6] (0: not yet run); the call
+    advances it through step t and writes it back, so the bias corrections
+    cost O(1) per step instead of a replay of t products (lane py-sequence;
+    the same products in the same order, so the same bits)."""
+    if len(addrs) < 4 or len(addrs) > 5 or len(fp) != len(addrs) + 2 or len(ip) < 5:
+        raise Error("lamb_step: requires 4 (or 5) addresses, >= 5 integer and 6 (or 7) float parameters")
     var nt = ival(ip, 0)
     var t = ival(ip, 1)
     var flags = ival(ip, 2)
@@ -620,10 +666,20 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
             ex.launch[OP_DIVS](d, n)
     var bc1 = Float32(1.0)
     var bc2 = Float32(1.0)
+    var pw1 = Float32(1.0)
+    var pw2 = Float32(1.0)
     if (flags & 8) != 0:
-        var pw1 = Float32(1.0)
-        var pw2 = Float32(1.0)
-        for _ in range(t):
+        var k0 = 0
+        if len(addrs) == 5:
+            var t0 = Int(Float64(py=fp[6]))
+            if t0 < 0 or t0 >= t or Float64(t0) != Float64(py=fp[6]):
+                raise Error("lamb_step: the scalars' step t0 must be an integer with 0 <= t0 < t")
+            if t0 > 0:
+                var sc = fptr(addrs[4], "scalars")
+                pw1 = sc.unsafe_load(0)
+                pw2 = sc.unsafe_load(1)
+                k0 = t0
+        for _ in range(k0, t):
             pw1 = ftz(identical_mul(pw1, b1))
             pw2 = ftz(identical_mul(pw2, b2))
         bc1 = Float32(1.0) - pw1
@@ -680,13 +736,17 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     ex.download_async(hv, V, n)
     ex.sync()
     _ = offs^
+    if len(addrs) == 5 and (flags & 8) != 0:
+        var sc = fptr(addrs[4], "scalars")
+        sc.unsafe_store(0, pw1)
+        sc.unsafe_store(1, pw2)
     return PythonObject(n)
 
 
 def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """LayerNorm forward and, with dy, backward (`sequence/layernorm.mojo`).
-    addrs = [x (M, D), weight (D) or 0, bias (D) or 0, y (M, D) out,
-    dy (M, D) or 0, dx out or 0, dweight out or 0, dbias out or 0];
+    addrs = [x (M, D), weight (D) or 0, bias (D) or 0, y (M, D) out (0 allowed
+    with backward), dy (M, D) or 0, dx out or 0, dweight out or 0, dbias out or 0];
     ip = [M, D, has_weight, has_bias, backward]; fp = [eps]."""
     if len(addrs) != 8 or len(ip) != 5 or len(fp) != 1:
         raise Error("layer_norm: requires 8 addresses, 5 integer and 1 float parameters")
@@ -767,7 +827,10 @@ def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp:
             ex.download_async(fptr(addrs[6], "dweight"), DW, D)
         if hb:
             ex.download_async(fptr(addrs[7], "dbias"), DB, D)
-    ex.download_async(fptr(addrs[3], "y"), Y, M * D)
+    # a backward call may pass y = 0: y is then recomputed on the device (for
+    # mean / rstd) but never crosses back (lane py-sequence)
+    if not bwd or Int(py=addrs[3]) != 0:
+        ex.download_async(fptr(addrs[3], "y"), Y, M * D)
     ex.sync()
     return PythonObject(M * D)
 

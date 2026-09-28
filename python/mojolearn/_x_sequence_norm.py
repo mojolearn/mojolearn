@@ -29,8 +29,9 @@ def _run(x, D, weight, bias, eps, dy, numeric_mode):
     for name, v in (("weight", w), ("bias", b)):
         if v is not None and v.size != D:
             raise ValueError(f"layer_norm: {name} must hold {D} values")
-    y = np.zeros(x.shape, dtype=np.float32)
     bwd = dy is not None
+    # backward never reads y: the binding skips its download (lane py-sequence)
+    y = None if bwd else np.zeros(x.shape, dtype=np.float32)
     dyv = _f32(dy, "dy") if bwd else None
     if bwd and dyv.shape != x.shape:
         raise ValueError("layer_norm_backward: dy must have x's shape")
@@ -39,7 +40,7 @@ def _run(x, D, weight, bias, eps, dy, numeric_mode):
     db = np.zeros(D, dtype=np.float32)
     addr = lambda a: 0 if a is None else a.ctypes.data   # noqa: E731
     _backend.binding("_mojolearn_x_sequence", numeric_mode).layer_norm(
-        [x.ctypes.data, addr(w), addr(b), y.ctypes.data, addr(dyv), dx.ctypes.data, dw.ctypes.data, db.ctypes.data],
+        [x.ctypes.data, addr(w), addr(b), addr(y), addr(dyv), dx.ctypes.data, dw.ctypes.data, db.ctypes.data],
         [M, D, int(w is not None), int(b is not None), int(bwd)], [float(eps)])
     return y, dx, dw, db
 
