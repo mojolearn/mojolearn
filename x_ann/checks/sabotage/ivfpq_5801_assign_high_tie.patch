@@ -1,8 +1,8 @@
 diff --git a/x_ann/ivf_pq_core.mojo b/x_ann/ivf_pq_core.mojo
-index 4d2ff9cee..35dfd1928 100644
+index b9155ab06..c038ae3b2 100644
 --- a/x_ann/ivf_pq_core.mojo
 +++ b/x_ann/ivf_pq_core.mojo
-@@ -100,7 +100,7 @@ def pq_assign_cell(
+@@ -85,7 +85,7 @@ def pq_assign_cell(
      var bd = pq_subdist(r, i * rot_dim + j * pq_len, cb, (j * n_codes) * pq_len, pq_len)
      for c in range(1, n_codes):
          var d = pq_subdist(r, i * rot_dim + j * pq_len, cb, (j * n_codes + c) * pq_len, pq_len)
@@ -11,3 +11,16 @@ index 4d2ff9cee..35dfd1928 100644
              bd = d
              best = c
      codes.unsafe_store(e, Int32(best))
+diff --git a/x_ann/ivf_pq_device.mojo b/x_ann/ivf_pq_device.mojo
+index 09667c725..0924ca2bd 100644
+--- a/x_ann/ivf_pq_device.mojo
++++ b/x_ann/ivf_pq_device.mojo
+@@ -96,7 +96,7 @@ def assign_staged_kernel(
+             acc = ftz(identical_mul_add(diff, diff, acc))
+         if c == 0:
+             bd = acc
+-        elif acc < bd:
++        elif acc <= bd:
+             bd = acc
+             best = c
+     codes.unsafe_store(i * Int(pq_dim) + j, Int32(best))

@@ -116,13 +116,6 @@ def _nan_bits(v: Float32) -> Bool:
 comptime PTPB = 256
 
 
-@always_inline
-def _probe_first(d: Float32, l: Int, bd: Float32, bl: Int) -> Bool:
-    """(d, l) is before (bd, bl) in the order (distance, list id); an empty
-    best (bl < 0) is last. `pq_probe_takes`'s second clause."""
-    return l >= 0 and (bl < 0 or d < bd or (d == bd and l < bl))
-
-
 def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P, probes: I32P, pstart: I32P):
     """`probe_kernel` with one threadgroup per query (lane ann-apple2). Each
     probe is the minimum under the TOTAL order (distance, list id) of the
@@ -179,7 +172,10 @@ def probe_group_kernel(cd: F32P, n_lists: Int32, n_probes: Int32, offsets: I32P,
             if t < s:
                 var od = sd[t + s]
                 var ol = Int(sl[t + s])
-                if _probe_first(od, ol, sd[t], Int(sl[t])):
+                # the cell's own comparison (the other entry is after the
+                # previous probe by construction), so a change to it reaches
+                # this path too (sabotage 5804)
+                if ol >= 0 and pq_probe_takes(od, ol, prev_d, prev_l, sd[t], Int(sl[t])):
                     sd[t] = od
                     sl[t] = Int32(ol)
             barrier()

@@ -1,13 +1,13 @@
 diff --git a/x_ann/ivf_rabitq_core.mojo b/x_ann/ivf_rabitq_core.mojo
-index 02a5db3d0..185c08b4a 100644
+index a7f26904f..7316da5a4 100644
 --- a/x_ann/ivf_rabitq_core.mojo
 +++ b/x_ann/ivf_rabitq_core.mojo
-@@ -133,7 +133,7 @@ def rq_candidate_est(
-             dot = ftz(dot + (v if bit != 0 else -v))
-         var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
-         var nn = ftz(identical_mul(norm, norm))
--        return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
-+        return ftz(ftz(nn - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq))))) + qn2)
-     return qn2
+@@ -141,7 +141,7 @@ def rq_est_tail(dot: Float32, qn2: Float32, norm: Float32, ip: Float32, scale: F
+     with the staged device score (lane ann-apple2)."""
+     var xq = ftz(identical_div(ftz(identical_mul(dot, scale)), ip))
+     var nn = ftz(identical_mul(norm, norm))
+-    return ftz(ftz(nn + qn2) - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq)))))
++    return ftz(ftz(nn - ftz(identical_mul(Float32(2.0), ftz(identical_mul(norm, xq))))) + qn2)
  
  
+ @always_inline
