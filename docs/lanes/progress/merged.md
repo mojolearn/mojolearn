@@ -309,3 +309,18 @@ The Apple/do-amd shards were withdrawn (70 queued copies, my own) and
 resubmitted at the lane/merged tip with the seam step skipped (lane verdicts
 only; seam arms are not part of the global check's lane comparison), one lane
 at a time so one failing arm cannot stop a shard.
+
+### kmeans CPU fix (merged from lane/merged-kmeans-fix, d57f6b123)
+
+Root cause: `cluster/host/kmeans_oracle.mojo::host_kmeans_transform` (the
+row-task form from lane/cluster-cpu) read `x_norm` / `c_norm` through
+untracked pointers after their last tracked use, so Mojo freed both lists
+before `host_cells(_row, ...)` ran and every transform cell read freed memory
+(labels_/predict were fine: host_assign holds its norms as arguments). Fix:
+`_ = x_norm^` and `_ = c_norm^` after the join (no arithmetic change). Evidence
+(nvc1 EPYC CPU arm): kmeans, kmeans-random, kmeans-sqrt, kmeans-array,
+kmeans-classic-pp, kmeans-weighted pass at MOJOLEARN_CPU_THREADS 1/3/default,
+and `--diff` against origin/main's CPU build is IDENTICAL on every cell;
+removing the two lines brings back the exact 59264/80000 refusal. Owner of the
+bug: cluster-cpu. Open: no kmeans host sabotage switch is wired into
+cluster.checks.
