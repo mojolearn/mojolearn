@@ -468,10 +468,46 @@ def select_part_kernel(
     part_n.unsafe_store(lq * SEL_T + t, Int32(-1) if has_nan else Int32(n_cand))
 
 
+def select_pair_kernel(count: Int32, pairs: Int32, k: Int32, ad: F32P, ai: I32P, bd: F32P, bi: I32P):
+    """Lane ann-apple2: one level of a tree join of the partial top-k lists:
+    thread (query lq, pair p) merges lists 2p and 2p + 1 of `a` (each
+    ascending under `pq_better`, empty slots (+inf, -1) last) into list p of
+    `b`, keeping the k first. Row ids are distinct, so `pq_better` is a
+    strict total order on the entries and the k first of the union are the
+    k least; the list after the last level is the k least of all
+    candidates, the list `pq_insert` keeps. (A query with a NaN candidate
+    does not use it: `select_merge_kernel` redoes that query sequentially.)"""
+    var e = _tid()
+    if e < Int(count):
+        var np2 = Int(pairs)
+        var kk = Int(k)
+        var lq = e // np2
+        var p = e % np2
+        var xa = (lq * SEL_T + 2 * p) * kk
+        var xb = xa + kk
+        var o = (lq * SEL_T + p) * kk
+        var u = 0
+        var v = 0
+        for s in range(kk):
+            var ud = ad.unsafe_load(xa + u)
+            var ui = ai.unsafe_load(xa + u)
+            var vd = ad.unsafe_load(xb + v)
+            var vi = ai.unsafe_load(xb + v)
+            # take u's entry when it is first (an empty slot is last)
+            if ui >= 0 and (vi < 0 or pq_better(ud, ui, vd, vi)):
+                bd.unsafe_store(o + s, ud)
+                bi.unsafe_store(o + s, ui)
+                u += 1
+            else:
+                bd.unsafe_store(o + s, vd)
+                bi.unsafe_store(o + s, vi)
+                v += 1
+
+
 def select_merge_kernel(
     mc: Int32, q0: Int32, n_probes: Int32, offsets: I32P, list_indices: I32P, mask: I32P, probes: I32P,
     pstart: I32P, stride: Int32, cand: F32P, k: Int32, part_d: F32P, part_i: I32P, part_n: I32P,
-    out_d: F32P, out_i: I32P, out_n: I32P,
+    out_d: F32P, out_i: I32P, out_n: I32P, lists: Int32,
 ):
     """Lane ann-apple2: one thread per query joins the SEL_T partial top-k
     lists with `pq_insert`. With no NaN candidate the order (distance, row
@@ -501,7 +537,7 @@ def select_merge_kernel(
         for s in range(kk):
             out_d.unsafe_store(base + s, pq_inf())
             out_i.unsafe_store(base + s, Int32(-1))
-        for u in range(SEL_T):
+        for u in range(Int(lists)):
             var pb = (lq * SEL_T + u) * kk
             for s in range(kk):
                 var id = part_i.unsafe_load(pb + s)
@@ -560,6 +596,8 @@ def ivf_scan_search[KIND: Int](
     var dpd = ctx.enqueue_create_buffer[DType.float32](1 if SERIAL else mc * SEL_T * k)
     var dpi = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T * k)
     var dpn = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T)
+    var dpd2 = ctx.enqueue_create_buffer[DType.float32](1 if SERIAL else mc * SEL_T * k)
+    var dpi2 = ctx.enqueue_create_buffer[DType.int32](1 if SERIAL else mc * SEL_T * k)
     var use_lut = 1 if pq_dim * n_codes <= LUT_MAX else 0
     var st = AnnStages("ivf_scan")
     # lane ann-apple2: codes, mask (and RaBitQ's norms and factors) gathered
@@ -639,10 +677,28 @@ def ivf_scan_search[KIND: Int](
                 dcand.unsafe_ptr(), Int32(k), dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(),
                 grid_dim=c, block_dim=SEL_T,
             )
+            # the tree join (lane ann-apple2): SEL_T lists -> 1, ping-pong
+            var ad = rebind[F32P](dpd.unsafe_ptr())
+            var ai = rebind[I32P](dpi.unsafe_ptr())
+            var bd = rebind[F32P](dpd2.unsafe_ptr())
+            var bi = rebind[I32P](dpi2.unsafe_ptr())
+            var lists = SEL_T
+            while lists > 1:
+                var pairs = lists // 2
+                ctx.enqueue_function[select_pair_kernel](
+                    Int32(c * pairs), Int32(pairs), Int32(k), ad, ai, bd, bi, grid_dim=_grid(c * pairs), block_dim=TPB,
+                )
+                var td = ad
+                var ti = ai
+                ad = bd
+                ai = bi
+                bd = td
+                bi = ti
+                lists = pairs
             ctx.enqueue_function[select_merge_kernel](
                 Int32(c), Int32(q0), Int32(np), doff, dli, dmask,
                 dprobes.unsafe_ptr(), dpstart.unsafe_ptr(), Int32(stride), dcand.unsafe_ptr(), Int32(k),
-                dpd.unsafe_ptr(), dpi.unsafe_ptr(), dpn.unsafe_ptr(), dd, di, dn, grid_dim=_grid(c), block_dim=TPB,
+                ad, ai, dpn.unsafe_ptr(), dd, di, dn, Int32(1), grid_dim=_grid(c), block_dim=TPB,
             )
         st.mark(ctx, "select")
         q0 += c
@@ -651,6 +707,8 @@ def ivf_scan_search[KIND: Int](
     _ = dpa^
     _ = dpmask^
     _ = dpcodes^
+    _ = dpi2^
+    _ = dpd2^
     _ = dpn^
     _ = dpi^
     _ = dpd^
