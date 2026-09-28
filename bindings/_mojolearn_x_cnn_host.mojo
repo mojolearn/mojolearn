@@ -138,22 +138,34 @@ def conv_block_forward_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
     conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
-    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block): the three host
-    layer entries in sequence, the GPU binding's fused entry's twin."""
+    return _block_forward(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm, 0, 0)
+
+
+def _block_forward(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject, kcols: Int, ky: Int,
+) raises -> PythonObject:
+    """kcols, ky: the fit's saved arrays (x's im2col matrix, the conv output
+    before the ReLU) or 0, 0."""
     var t = _block_prms(conv_prm, pool_prm)
     var cprm = t[0].copy()
     var pprm = t[1].copy()
     var pool = t[2]
     var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var no = _pool_counts(pprm)[1] if pool else ny
+    var keep = kcols != 0 and ky != 0
     var px = fp(x_addr)
     var pw = fp(w_addr)
     var pb = fp(b_addr)
     var po = fp(out_addr)
-    var pi = ip(idx_addr)
+    var noidx = List[Int32](length=1, fill=Int32(0))
+    var pi = ip(idx_addr) if pool else noidx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var pk = FP(unsafe_from_address=kcols) if keep else po
+    var py_ = FP(unsafe_from_address=ky) if keep else po
     with GILReleased(Python()):
-        conv_block_forward_into(px, pw, pb, po, pi, cprm, pprm, pool)
+        conv_block_forward_into(px, pw, pb, po, pi, cprm, pprm, pool, keep, pk, py_)
         out_f32(po, no)
+    _ = noidx^
     return PythonObject(0)
 
 
@@ -162,8 +174,15 @@ def conv_block_backward_binding(
     outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
     """The block's backward from its output gradient g: outs = [dx address
-    (0: not wanted, the first block's), dW address, db address]."""
+    (0: not wanted, the first block's), dW address, db address], or those
+    and the forward's two saved arrays [cols, conv output]."""
     var t = _block_prms(conv_prm, pool_prm)
+    var nouts = Int(py=len(outs))
+    if nouts != 3 and nouts != 5:
+        raise Error("x_cnn conv block backward: outs is [dx, dW, db] or [dx, dW, db, cols, conv output]")
+    var kcols = Int(py=outs[3]) if nouts == 5 else 0
+    var ky = Int(py=outs[4]) if nouts == 5 else 0
+    var keep = kcols != 0 and ky != 0
     var dx_addr = outs[0]
     var dw_addr = outs[1]
     var db_addr = outs[2]
@@ -183,8 +202,10 @@ def conv_block_backward_binding(
     var pdw = fp(dw_addr)
     var pdb = fp(db_addr)
     var pdx = fp(dx_addr) if need_dx else pdb
+    var pk = FP(unsafe_from_address=kcols) if keep else pdb
+    var py_ = FP(unsafe_from_address=ky) if keep else pdb
     with GILReleased(Python()):
-        conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx)
+        conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_)
         if need_dx:
             out_f32(pdx, nx)
         out_f32(pdw, OC * ckk)
@@ -705,16 +726,21 @@ def conv_block_forward_r_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
     conv_prm: PythonObject, pool_prm: PythonObject, saved: PythonObject,
 ) raises -> PythonObject:
-    """The GPU binding's resident block forward: `saved` only spares the
-    device a recomputation, so the CPU twin runs its ordinary entry."""
-    return conv_block_forward_binding(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm)
+    """The resident block forward; `saved` = [cols, conv output] (host
+    allocations here) that the backward reads, or []."""
+    var ns = Int(py=len(saved))
+    if ns != 0 and ns != 2:
+        raise Error("x_cnn conv block: saved is [] or [cols, conv output]")
+    var kcols = Int(py=saved[0]) if ns == 2 else 0
+    var ky = Int(py=saved[1]) if ns == 2 else 0
+    return _block_forward(x_addr, w_addr, b_addr, out_addr, idx_addr, conv_prm, pool_prm, kcols, ky)
 
 
 def conv_block_backward_r_binding(
     x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
     outs: PythonObject, conv_prm: PythonObject, pool_prm: PythonObject,
 ) raises -> PythonObject:
-    """outs may carry the GPU binding's two saved arrays after [dx, dW, db]; the CPU twin recomputes."""
+    """outs = [dx, dW, db] or [dx, dW, db, cols, conv output] with the forward's saved arrays."""
     return conv_block_backward_binding(x_addr, w_addr, b_addr, g_addr, idx_addr, outs, conv_prm, pool_prm)
 
 

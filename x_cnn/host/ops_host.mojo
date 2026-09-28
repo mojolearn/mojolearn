@@ -25,7 +25,7 @@ from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
     CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW, CP_BIAS,
     im2col_at, conv_out_at, dout_rows_at, col2im_at,
-    PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, PP_REV,
+    PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW, PP_REV, PP_KH, PP_KW, PP_SH, PP_SW, PP_PH, PP_PW, PP_DH, PP_DW,
     maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
@@ -306,16 +306,24 @@ def gemm_host(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: In
 def conv2d_forward_into(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32]) raises:
     """dst (N, OC, OH, OW) = conv(x) + bias: im2col, the pinned NT GEMM,
     the NCHW layout and bias (conv_out_at)."""
-    var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
-    var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var ps = prm.copy()
+    var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var cols = scratch(rows * ckk)
+    conv2d_forward_cols(x, w, bias, dst, prm, cols)
+    cols.free()
+
+
+def conv2d_forward_cols(x: FP, w: FP, bias: FP, dst: FP, prm: List[Int32], cols: FP) raises:
+    """conv2d_forward_into with the caller's im2col buffer, left holding
+    x's im2col matrix (the CPU twin's saved array, DEVIATION 5719)."""
+    var OC = Int(prm[CP_OC])
+    var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var ps = prm.copy()
     var y2 = scratch(rows * OC)
     im2col_host(x, cols, ps)
     gemm_host_into(cols, w, y2, OP_NT, rows, OC, ckk)
     conv_out_host(y2, bias, dst, ps)
-    cols.free()
     y2.free()
     _ = ps^
 
@@ -324,21 +332,29 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: Li
     """gx (when need_dx), gw [OC x ckk] and gb [OC] of a conv from its
     output gradient: dW = TN over the N*OH*OW rows (5701), db = TN against
     ones, dcols = NN, col2im as a gather (5700)."""
+    var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
+    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
+    var ps = prm.copy()
+    var cols = scratch(rows * ckk)
+    im2col_host(x, cols, ps)
+    conv2d_backward_cols(cols, w, dout, gx, gw, gb, prm, need_dx)
+    cols.free()
+    _ = ps^
+
+
+def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm: List[Int32], need_dx: Bool) raises:
+    """conv2d_backward_into from the input's im2col matrix `cols`."""
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
     var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
     var ps = prm.copy()
     comptime if X_CNN_HOST_SABOTAGE:
         ps[CP_REV] = Int32(1)
-    var cols = scratch(rows * ckk)
     var g = scratch(rows * OC)
-    im2col_host(x, cols, ps)
     dout_rows_host(dout, g, ps)
     var ones = List[Float32](length=rows, fill=Float32(1))
     gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
     gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
-    cols.free()
     if need_dx:
         var dcols = scratch(rows * ckk)
         gemm_host_into(g, w, dcols, OP_NN, rows, ckk, OC)
@@ -383,48 +399,69 @@ def conv2d_backward_host(
     return result^
 
 
-def conv_block_forward_into(x: FP, w: FP, bias: FP, dst: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool) raises:
+def conv_block_forward_into(
+    x: FP, w: FP, bias: FP, dst: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool,
+    keep: Bool, kcols: FP, ky: FP,
+) raises:
     """CNNClassifier's Conv2d -> ReLU -> MaxPool2d block (DEVIATION 5717's
     host twin): dst is the pooled output (idx its winners) or, without a
-    pool, the ReLU output."""
+    pool, the ReLU output. With `keep`, kcols receives x's im2col matrix and
+    ky the conv output (bias added, before the ReLU): the fit's saved
+    arrays, which its backward reads instead of recomputing them."""
     var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var zp: List[Int32] = [0, 0, 0]
+    var cols = kcols if keep else scratch(rows * ckk)
+    var y = ky if keep else (dst if not pool else scratch(ny))
+    conv2d_forward_cols(x, w, bias, y, cprm, cols)
+    if not keep:
+        cols.free()
     if not pool:
-        conv2d_forward_into(x, w, bias, dst, cprm)
-        run[relu_fwd_at](dst, dst, dst, dst, hi(zp), hi(zp), ny)
-        _ = zp^
-        return
-    var y = scratch(ny)
-    conv2d_forward_into(x, w, bias, y, cprm)
-    run[relu_fwd_at](y, y, y, y, hi(zp), hi(zp), ny)
-    var ps = pprm.copy()
-    var no = _pool_sizes(pprm)[1]
-    run[maxpool_fwd_at](y, dst, dst, dst, idx, hi(ps), no)
-    y.free()
-    _ = ps^
+        run[relu_fwd_at](y, y, dst, dst, hi(zp), hi(zp), ny)
+    elif keep:
+        var r = scratch(ny)
+        run[relu_fwd_at](y, y, r, r, hi(zp), hi(zp), ny)
+        maxpool_fwd_host(r, dst, idx, pprm)
+        r.free()
+    else:
+        run[relu_fwd_at](y, y, y, y, hi(zp), hi(zp), ny)
+        maxpool_fwd_host(y, dst, idx, pprm)
+        y.free()
     _ = zp^
 
 
 def conv_block_backward_into(
     x: FP, w: FP, bias: FP, g: FP, idx: IP, gx: FP, gw: FP, gb: FP,
     cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
+    keep: Bool, kcols: FP, ky: FP,
 ) raises:
-    """The block's backward from its output gradient g (the conv output is
-    recomputed from x: the forward's kernels on the forward's inputs)."""
+    """The block's backward from its output gradient g. The conv output and
+    x's im2col matrix are the forward's saved arrays (`keep`) or recomputed
+    from x: the forward's kernels on the forward's inputs, the same words."""
     var ny = Int(cprm[CP_N]) * Int(cprm[CP_OC]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var ckk = Int(cprm[CP_C]) * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var rows = Int(cprm[CP_N]) * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var zp: List[Int32] = [0, 0, 0]
-    var yconv = scratch(ny)
-    conv2d_forward_into(x, w, bias, yconv, cprm)
+    var cols = kcols
+    var yconv = ky
+    if not keep:
+        cols = scratch(rows * ckk)
+        yconv = scratch(ny)
+        conv2d_forward_cols(x, w, bias, yconv, cprm, cols)
     var gy = scratch(ny)
     if pool:
         var ps = _host_prm(pprm, PP_REV)
-        run[maxpool_bwd_at](g, gy, gy, gy, idx, hi(ps), ny)
+        maxpool_bwd_host(g, idx, gy, ps)
         run[relu_bwd_at](yconv, gy, gy, gy, hi(zp), hi(zp), ny)
         _ = ps^
     else:
         run[relu_bwd_at](yconv, g, gy, gy, hi(zp), hi(zp), ny)
-    yconv.free()
-    conv2d_backward_into(x, w, gy, gx, gw, gb, cprm, need_dx)
+    if not keep:
+        yconv.free()
+    conv2d_backward_cols(cols, w, gy, gx, gw, gb, cprm, need_dx)
+    if not keep:
+        cols.free()
     gy.free()
     _ = zp^
 
@@ -441,17 +478,131 @@ def _host_prm(prm: List[Int32], rev_slot: Int) -> List[Int32]:
     return ps^
 
 
-def maxpool2d_forward_into(x: FP, dst: FP, idx: IP, prm: List[Int32]):
-    var no = _pool_sizes(prm)[1]
+def _maxpool_fwd_planes(x: FP, dst: FP, idx: IP, p: IP, lo: Int, hi: Int):
+    """maxpool_fwd_at's words for planes [lo, hi): the taps in (kh, kw)
+    ascending order, strict > (the first maximum wins), a NaN wins."""
+    var H = Int(p[PP_H]); var W = Int(p[PP_W])
+    var KH = Int(p[PP_KH]); var KW = Int(p[PP_KW])
+    var OH = Int(p[PP_OH]); var OW = Int(p[PP_OW])
+    var SH = Int(p[PP_SH]); var SW = Int(p[PP_SW])
+    var PH = Int(p[PP_PH]); var PW = Int(p[PP_PW])
+    var DH = Int(p[PP_DH]); var DW = Int(p[PP_DW])
+    for nc in range(lo, hi):
+        var base = x + nc * H * W
+        var o = nc * OH * OW
+        for oh in range(OH):
+            for ow in range(OW):
+                var best = Float32(0)
+                var bi = -1
+                for kh in range(KH):
+                    var h = oh * SH - PH + kh * DH
+                    if h < 0 or h >= H:
+                        continue
+                    for kw in range(KW):
+                        var w = ow * SW - PW + kw * DW
+                        if w < 0 or w >= W:
+                            continue
+                        var v = ftz(base.unsafe_load(h * W + w))
+                        if bi < 0 or v > best or v != v:
+                            best = v
+                            bi = h * W + w
+                dst.unsafe_store(o, best)
+                idx.unsafe_store(o, Int32(bi))
+                o += 1
+
+
+def maxpool_fwd_host(x: FP, dst: FP, idx: IP, prm: List[Int32]):
     var ps = prm.copy()
-    run[maxpool_fwd_at](x, dst, dst, dst, idx, hi(ps), no)
+    var planes = Int(prm[PP_N]) * Int(prm[PP_C])
+    var tasks = _tasks_for(planes, Int(prm[PP_OH]) * Int(prm[PP_OW]) * Int(prm[PP_KH]) * Int(prm[PP_KW]))
+    var chunk = (planes + tasks - 1) // tasks
+    var p = hi(ps)
+
+    def _part(t: Int) {imm x, imm dst, imm idx, imm p, imm chunk, imm planes}:
+        _maxpool_fwd_planes(x, dst, idx, p, t * chunk, min(t * chunk + chunk, planes))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
     _ = ps^
 
 
+def _maxpool_bwd_planes(dout: FP, idx: IP, dx: FP, p: IP, po: IP, pw: IP, lo: Int, hi: Int):
+    """maxpool_bwd_at's words for planes [lo, hi)."""
+    var H = Int(p[PP_H]); var W = Int(p[PP_W])
+    var KH = Int(p[PP_KH]); var KW = Int(p[PP_KW])
+    var OH = Int(p[PP_OH]); var OW = Int(p[PP_OW])
+    for nc in range(lo, hi):
+        var out = dx + nc * H * W
+        for h in range(H):
+            for w in range(W):
+                var me = Int32(h * W + w)
+                var acc = Float32(0)
+                for a in range(KH):
+                    var oh = Int(po[a * H + h])
+                    if oh < 0:
+                        continue
+                    for kw in range(KW):
+                        var ow = Int(pw[kw * W + w])
+                        if ow < 0:
+                            continue
+                        var o = (nc * OH + oh) * OW + ow
+                        if idx.unsafe_load(o) == me:
+                            acc = ftz(acc + ftz(dout.unsafe_load(o)))
+                out.unsafe_store(h * W + w, acc)
+
+
+def maxpool_bwd_host(dout: FP, idx: IP, dx: FP, prm: List[Int32]):
+    """dx from the pooled gradient: maxpool_bwd_at's gather order (kh
+    descending under PP_REV), the stride and bounds tests tabulated."""
+    var H = Int(prm[PP_H]); var W = Int(prm[PP_W])
+    var KH = Int(prm[PP_KH]); var KW = Int(prm[PP_KW])
+    var OH = Int(prm[PP_OH]); var OW = Int(prm[PP_OW])
+    var SH = Int(prm[PP_SH]); var SW = Int(prm[PP_SW])
+    var PH = Int(prm[PP_PH]); var PW = Int(prm[PP_PW])
+    var DH = Int(prm[PP_DH]); var DW = Int(prm[PP_DW])
+    var rev = Int(prm[PP_REV]) != 0
+    var ohs = List[Int32](length=KH * H, fill=Int32(-1))
+    for a in range(KH):
+        var kh = KH - 1 - a if rev else a
+        for h in range(H):
+            var th = h + PH - kh * DH
+            if th >= 0 and th % SH == 0 and th // SH < OH:
+                ohs[a * H + h] = Int32(th // SH)
+    var ows = List[Int32](length=KW * W, fill=Int32(-1))
+    for kw in range(KW):
+        for w in range(W):
+            var tw = w + PW - kw * DW
+            if tw >= 0 and tw % SW == 0 and tw // SW < OW:
+                ows[kw * W + w] = Int32(tw // SW)
+    var ps = prm.copy()
+    var planes = Int(prm[PP_N]) * Int(prm[PP_C])
+    var tasks = _tasks_for(planes, H * W * KH * KW)
+    var chunk = (planes + tasks - 1) // tasks
+    var p = hi(ps)
+    var po = hi(ohs)
+    var pw = hi(ows)
+
+    def _part(t: Int) {imm dout, imm idx, imm dx, imm p, imm po, imm pw, imm chunk, imm planes}:
+        _maxpool_bwd_planes(dout, idx, dx, p, po, pw, t * chunk, min(t * chunk + chunk, planes))
+
+    if tasks <= 1:
+        _part(0)
+    else:
+        sync_parallelize(_part, tasks)
+    _ = ps^
+    _ = ohs^
+    _ = ows^
+
+
+def maxpool2d_forward_into(x: FP, dst: FP, idx: IP, prm: List[Int32]):
+    maxpool_fwd_host(x, dst, idx, prm)
+
+
 def maxpool2d_backward_into(dout: FP, idx: IP, gx: FP, prm: List[Int32]):
-    var nx = _pool_sizes(prm)[0]
     var ps = _host_prm(prm, PP_REV)
-    run[maxpool_bwd_at](dout, gx, gx, gx, idx, hi(ps), nx)
+    maxpool_bwd_host(dout, idx, gx, ps)
     _ = ps^
 
 

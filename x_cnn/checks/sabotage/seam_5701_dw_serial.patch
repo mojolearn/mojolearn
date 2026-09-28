@@ -8,8 +8,8 @@
  from x_cnn.ops import (
      canon,
      FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW, CP_REV,
-@@ -336,7 +337,13 @@
-     im2col_host(x, cols, ps)
+@@ -353,7 +354,13 @@
+     var g = scratch(rows * OC)
      dout_rows_host(dout, g, ps)
      var ones = List[Float32](length=rows, fill=Float32(1))
 -    gemm_host_into(g, cols, gw, OP_TN, OC, ckk, rows)
@@ -21,5 +21,5 @@
 +                acc = ftz(identical_mul_add(ftz(g.unsafe_load(r * OC + oc)), ftz(cols.unsafe_load(r * ckk + j)), acc))
 +            gw.unsafe_store(oc * ckk + j, acc)
      gemm_host_into(g, hp(ones), gb, OP_TN, OC, 1, rows)
-     cols.free()
      if need_dx:
+         var dcols = scratch(rows * ckk)
