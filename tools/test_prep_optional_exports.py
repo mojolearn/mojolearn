@@ -2,8 +2,12 @@
 import array
 import ast
 import ctypes
+import mmap
 import os
 from pathlib import Path
+import runpy
+import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,9 +16,14 @@ import pytest
 def program():
     path = Path(__file__).resolve().parents[1] / 'python/mojolearn/_expansion_prep.py'
     tree = ast.parse(path.read_text())
+    constants = {'_MAP_MIN_WORDS', '_R3_NAMES', '_R3_DEFAULT'}
     classes = [n for n in tree.body if (isinstance(n, ast.ClassDef) and n.name in ('_Prog', '_Scratch'))
-               or (isinstance(n, ast.FunctionDef) and n.name in ('_optional_prep_entry', '_native_folds'))]
-    scope = dict(array=array, ctypes=ctypes, os=os)
+               or (isinstance(n, ast.FunctionDef) and n.name in
+                   ('_optional_prep_entry', '_native_folds', '_zero_words', '_r3'))
+               or (isinstance(n, ast.Assign) and any(
+                   isinstance(t, ast.Name) and t.id in constants for t in n.targets))]
+    arena = SimpleNamespace(**runpy.run_path(str(path.with_name('_arena_io.py'))))
+    scope = dict(array=array, ctypes=ctypes, os=os, mmap=mmap, time=time, _arena_io=arena)
     exec(compile(ast.Module(body=classes, type_ignores=[]), str(path), 'exec'), scope)
     return scope
 
