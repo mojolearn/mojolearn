@@ -286,6 +286,19 @@ def pool_params(raw: List[Int]) raises -> List[Int32]:
 
 @always_inline
 def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
+    _maxpool_fwd[False](i, x, dst, idx, p)
+
+
+@always_inline
+def relu_maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
+    """maxpool(relu(x)) in one pass (DEVIATION 5720): each tap is the value
+    `relu_fwd_at` would have stored (`relu_val`), so the max, the winner and
+    the stored word are those of the two launches it replaces."""
+    _maxpool_fwd[True](i, x, dst, idx, p)
+
+
+@always_inline
+def _maxpool_fwd[RELU: Bool](i: Int, x: FP, dst: FP, idx: IP, p: IP):
     """out[n, c, oh, ow] = the max over the window, taps in (kh, kw)
     ascending order; the FIRST maximum wins a tie (strict >, so -0.0 and
     +0.0 keep whichever came first), a NaN wins (PyTorch's `val > max ||
@@ -311,6 +324,8 @@ def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
             if w < 0 or w >= W:
                 continue
             var v = ftz(x.unsafe_load(base + h * W + w))
+            comptime if RELU:
+                v = relu_val(v)
             if bi < 0 or v > best or v != v:
                 best = v
                 bi = h * W + w
@@ -320,6 +335,11 @@ def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
 
 @always_inline
 def maxpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, idx: IP, p: IP):
+    dx.unsafe_store(i, maxpool_bwd_val(i, dout, idx, p))
+
+
+@always_inline
+def maxpool_bwd_val(i: Int, dout: FP, idx: IP, p: IP) -> Float32:
     """dx[n, c, h, w] = the sum of dout over every window whose winner is
     this pixel, gathered in (kh, kw) ascending order from +0.0."""
     var H = _g(p, PP_H); var W = _g(p, PP_W)
@@ -352,7 +372,7 @@ def maxpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, idx: IP, p: IP):
             var o = (nc * OH + oh) * OW + ow
             if idx.unsafe_load(o) == me:
                 acc = ftz(acc + ftz(dout.unsafe_load(o)))
-    dx.unsafe_store(i, acc)
+    return acc
 
 
 @always_inline
@@ -439,16 +459,43 @@ def avgpool_bwd_at(i: Int, dout: FP, dx: FP, f2: FP, f3: FP, q: IP, p: IP):
 
 
 @always_inline
+def relu_val(v: Float32) -> Float32:
+    return v if v > Float32(0) else Float32(0)
+
+
+@always_inline
 def relu_fwd_at(i: Int, x: FP, f1: FP, dst: FP, f3: FP, q: IP, p: IP):
-    var v = ftz(x.unsafe_load(i))
-    dst.unsafe_store(i, v if v > Float32(0) else Float32(0))
+    dst.unsafe_store(i, relu_val(ftz(x.unsafe_load(i))))
+
+
+@always_inline
+def relu_bwd_val(x: Float32, g: Float32) -> Float32:
+    """dx = g where x > 0, else +0.0 (PyTorch's threshold_backward); both ftz'd."""
+    var v = ftz(x)
+    return ftz(g) if v > Float32(0) else Float32(0)
 
 
 @always_inline
 def relu_bwd_at(i: Int, x: FP, g: FP, dx: FP, f3: FP, q: IP, p: IP):
-    """dx = g where x > 0, else +0.0 (PyTorch's threshold_backward)."""
-    var v = ftz(x.unsafe_load(i))
-    dx.unsafe_store(i, ftz(g.unsafe_load(i)) if v > Float32(0) else Float32(0))
+    dx.unsafe_store(i, relu_bwd_val(x.unsafe_load(i), g.unsafe_load(i)))
+
+
+@always_inline
+def pool_relu_rows_bwd_at(i: Int, dpool: FP, yconv: FP, grow: FP, f3: FP, idx: IP, p: IP):
+    """The conv block's backward from the pool's output gradient to the
+    GEMM's rows in one pass (DEVIATION 5720): grow[r, oc] = dout_rows of
+    relu_bwd(yconv, maxpool_bwd(dpool)), each value the one the three
+    launches it replaces stored (`maxpool_bwd_val`, `relu_bwd_val`, and
+    dout_rows_at's ftz of it). `p` is the conv block (CP_LEN words) followed
+    by the pool block; the pool's input is the conv output (NCHW)."""
+    var OC = _g(p, CP_OC); var OH = _g(p, CP_OH); var OW = _g(p, CP_OW)
+    var r = _ud(i, OC)
+    var oc = i - r * OC
+    var n = _ud(r, (OH * OW))
+    var rem = r - n * OH * OW
+    var j = ((n * OC + oc) * OH * OW) + rem
+    var gr = maxpool_bwd_val(j, dpool, idx, p + CP_LEN)
+    grow.unsafe_store(i, ftz(relu_bwd_val(yconv.unsafe_load(j), gr)))
 
 
 @always_inline

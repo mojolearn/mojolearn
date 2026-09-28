@@ -18,7 +18,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import (
     choose_gemm_plan, gemm_plan_name, identical_gemm_into, identical_gemm_with_plan,
     identical_gemm_workspace_floats, identical_gemm_workspace_max_floats, apple_mma_applies,
-    PLAN_APPLE_MMA, PLAN_SPLIT_32_2X2, PLAN_SPLIT_16_1X1, PLAN_SPLIT_64_4X4, GEMM_PLAN_COUNT,
+    PLAN_APPLE_MMA, PLAN_SPLIT_32_2X2, PLAN_SPLIT_16_1X1, PLAN_TUNED_32_2X2, PLAN_SPLIT_64_4X4, GEMM_PLAN_COUNT,
 )
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, op_name
 
@@ -44,6 +44,8 @@ def cnn_pick(m: Int, n: Int, k: Int, op: Int) -> Int:
     if op == OP_TN and m * n <= 65536:
         if n == 1:
             return PLAN_SPLIT_16_1X1
+        if n >= 64 and m * n <= 32768 and k <= 131072:
+            return PLAN_TUNED_32_2X2
         if n >= 64 and apple_mma_applies(m, n, k):
             return PLAN_APPLE_MMA
         return PLAN_SPLIT_64_4X4 if (m >= 64 and n >= 64) else PLAN_SPLIT_32_2X2

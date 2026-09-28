@@ -16,7 +16,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_identical import (
     identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
-    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, apple_mma_applies,
+    PLAN_SPLIT_16_1X1, PLAN_APPLE_MMA, PLAN_TUNED_32_2X2, apple_mma_applies,
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
@@ -25,7 +25,7 @@ from x_cnn.ops import (
     FP, IP, ElemFn, CP_N, CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_OH, CP_OW,
     im2col_at, conv_out_at, dout_rows_at, col2im_at, fill_one_at,
     PP_N, PP_C, PP_H, PP_W, PP_OH, PP_OW,
-    maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at,
+    maxpool_fwd_at, maxpool_bwd_at, avgpool_fwd_at, avgpool_bwd_at, relu_maxpool_fwd_at, pool_relu_rows_bwd_at,
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
@@ -123,8 +123,13 @@ def device_gemm(
             # 16x16 (32 x 1 x 262144: 3.26 -> 1.80 ms). A narrow gradient
             # (n < 64, e.g. 32 x 27 x 262144) keeps its split plan: the
             # matrix plan is 16x slower there. Execution plan only.
+            # A small wide gradient (64 x 288 x 65536: 5 matrix tiles for
+            # the whole GPU) runs faster on the 32x32 register tile (14.0 ->
+            # 11.0 ms).
             if n == 1:
                 plan = PLAN_SPLIT_16_1X1
+            elif n >= 64 and m * n <= 32768 and k <= 131072:
+                plan = PLAN_TUNED_32_2X2
             elif n >= 64 and apple_mma_applies(m, n, k):
                 plan = PLAN_APPLE_MMA
         var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
@@ -309,7 +314,8 @@ def res_alloc(n: Int) raises -> Int:
     var ctx = cnn_ctx()
     var b = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
     b.enqueue_fill(Float32(0))
-    ctx.synchronize()
+    # No wait (lane/cnn-apple): the fill is ordered before every later use
+    # on the one in-order context, and every host read (res_download) waits.
     var addr = Int(b.unsafe_ptr())
     _slots()[].res.append(b^)
     _ = ctx^
@@ -317,6 +323,10 @@ def res_alloc(n: Int) raises -> Int:
 
 
 def res_free(addr: Int) raises:
+    # the array may still be read or written by enqueued work
+    var ctx = cnn_ctx()
+    ctx.synchronize()
+    _ = ctx^
     var s = _slots()
     for k in range(len(s[].res)):
         if Int(s[].res[k].unsafe_ptr()) == addr:
@@ -1092,15 +1102,13 @@ def conv_block_forward_into[resident: Bool = False](
     # the block's output: the pool's, or the ReLU's when there is no pool
     var pout = outb[resident](ctx, 7, dst, no)
     if pool:
-        var r = ws(ctx, 8, ny)
         var dpp = put_prm(ctx, 9, pprm)
         var di = outb_i[resident](ctx, 10, idx_out, no)
-        launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(r), fp(r), ip(dp), ip(dp), ny)
-        launch[maxpool_fwd_at](ctx, fp(r), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
+        # DEVIATION 5720: ReLU and the max pool in one launch (the same values)
+        launch[relu_maxpool_fwd_at](ctx, fp(yconv), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
         fetch[resident](ctx, pout, dst, no)
         fetch_i[resident](ctx, di, idx_out, no)
         ctx.synchronize()
-        _ = r^
         _ = dpp^
         _ = di^
     else:
@@ -1145,23 +1153,26 @@ def conv_block_backward_into[resident: Bool = False](
     var gy = ws(ctx, 11, ny)
     if not saved:
         _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
-    if pool:
-        var di = put_i[resident](ctx, 4, idx, no)
-        var dpp = put_prm(ctx, 6, pprm)
-        var gr = ws(ctx, 10, ny)
-        launch[maxpool_bwd_at](ctx, fp(dgo), fp(gr), fp(gr), fp(gr), ip(di), ip(dpp), ny)
-        launch[relu_bwd_at](ctx, fp(yconv), fp(gr), fp(gy), fp(gy), ip(dp), ip(dp), ny)
-        _ = di^
-        _ = dpp^
-        _ = gr^
-    else:
-        launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
     # conv2d_backward_into from here, on the device-resident gy and cols
     var grow = ws(ctx, 12, ny)
+    # the conv block followed by the pool block: a host array the upload
+    # reads, kept alive past the entry's synchronize
+    var both = cprm.copy()
+    both.extend(pprm.copy())
+    if pool:
+        # DEVIATION 5720: the max pool's backward, the ReLU's and the row
+        # layout in one launch (the same values)
+        var di = put_i[resident](ctx, 4, idx, no)
+        var dpb = put_prm(ctx, 6, both)
+        launch[pool_relu_rows_bwd_at](ctx, fp(dgo), fp(yconv), fp(grow), fp(grow), ip(di), ip(dpb), ny)
+        _ = di^
+        _ = dpb^
+    else:
+        launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+        launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
     var ones = ws(ctx, 13, rows)
     var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
     var gb = outb[resident](ctx, 15, gb_out, OC)
-    launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
@@ -1186,6 +1197,7 @@ def conv_block_backward_into[resident: Bool = False](
     _ = y2^
     _ = yconv^
     _ = gy^
+    _ = both^
     _ = grow^
     _ = ones^
     _ = gw^
