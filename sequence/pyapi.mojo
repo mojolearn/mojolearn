@@ -902,7 +902,7 @@ def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Python
 #: ran both 2000-iteration runs; FAST ends a run whose best value has stopped
 #: moving. Chosen by the paired quality sweep (tools/sequence_quality.py).
 comptime GARCH_FAST_STALL_ITERS = 50
-comptime GARCH_FAST_STALL_REL = Float32(1e-6)
+comptime GARCH_FAST_STALL_REL = Float32(1e-5)
 
 
 def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -983,7 +983,7 @@ def _prophet_X[E: Exec](mut ex: E, frac_addr: PythonObject, orders_addr: PythonO
 
 #: FAST's prophet fit runs its likelihood over point chunks on the device
 #: (apple2) from this many points; a smaller series keeps a thread each.
-comptime PROPHET_FAST_MIN_N = 65536
+comptime PROPHET_FAST_MIN_N = 16384
 
 
 def _prophet_fg_dev[E: Exec](mut ex: E, pa: Args, C: Int, thd: FP, outd: FP, d: ProphetData,

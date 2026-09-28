@@ -187,7 +187,7 @@ def main():
                     X, _ = load(a.data, 1_000_000)
                 if w in ("ets", "garch"):
                     fast = os.environ.get("MOJOLEARN_NUMERIC_MODE") == "fast"
-                    sweep = [None] + ([(0, 0.0), (20, 1e-6), (30, 1e-6), (50, 1e-6), (50, 1e-5), (30, 1e-5)]
+                    sweep = [None] + ([(0, 0.0), (50, 1e-6), (50, 1e-5), (40, 1e-5), (70, 1e-5)]
                                       if fast and os.environ.get("SEQ_QUALITY_ETS_SWEEP") else [])
                     for s in sweep:
                         try:
@@ -199,7 +199,13 @@ def main():
                     continue
                 if w == "prophet" and os.environ.get("MOJOLEARN_NUMERIC_MODE") != "fast":
                     continue                           # only FAST's fit changed
-                r = dict(layernorm=q_layernorm, var=q_var, prophet=q_prophet)[w](ml, X)
+                if w == "prophet":
+                    for n in [65536] + ([1_000_000] if os.environ.get("SAB_LABEL") != "before" else []):
+                        r = q_prophet(ml, X, n)        # the 1M fit of `before` is one GPU thread
+                        print("QUAL", json.dumps(dict(case=w, mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", ""), **r)),
+                              flush=True)
+                    continue
+                r = dict(layernorm=q_layernorm, var=q_var)[w](ml, X)
             else:
                 raise KeyError(w)
         except Exception as e:

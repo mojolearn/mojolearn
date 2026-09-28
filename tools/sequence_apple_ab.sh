@@ -57,7 +57,7 @@ done
 if [ -n "${SAB_QUALITY:-}" ]; then
     for mode in ${SAB_MODES:-identical fast}; do
         for label in $labels; do
-            SEQ_SPEED_PYTHON="$OUT/wt-$label/python" MOJOLEARN_NUMERIC_MODE=$mode \
+            SAB_LABEL=$label SEQ_SPEED_PYTHON="$OUT/wt-$label/python" MOJOLEARN_NUMERIC_MODE=$mode \
                 pixi run -e default python tools/sequence_quality.py --data "$DATA" --what "$SAB_QUALITY" \
                 > "$OUT/quality-$label-$mode.log" 2>&1
             grep -E '^QUAL' "$OUT/quality-$label-$mode.log" | sed "s/^/SAB mode=$mode variant=$label /"
