@@ -106,7 +106,7 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
-from gemm.host.gemm_host_rows import gemm_host_rows
+from gemm.host.gemm_host_rows import GHR_FW, GhrF, gemm_host_rows, ghr_ftz_lanes
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -117,6 +117,7 @@ from checks.numerics import (
     identical_gelu_tanh,
     identical_mul,
     identical_mul_add,
+    identical_mul_add_simd,
     identical_rsqrt,
     identical_silu,
     identical_sin,
@@ -1301,6 +1302,64 @@ def apply_rope_into(
                 out.append(ftz(ftz(pa) + ftz(pb)))
 
 
+def attn_value_sum_lanes(
+    weights: List[Float32],
+    wbase: Int,
+    values: List[Float32],
+    vbase: Int,
+    mut out: List[Float32],
+    obase: Int,
+    s: Int,
+    hd: Int,
+):
+    """S19 for one query row: `out[obase + d]` is the chain
+    `acc = ftz(identical_mul_add(ftz(w[wbase + j]), ftz(v[vbase + j*hd + d]), acc))`
+    over j ascending from `+0.0`, for every d. The `hd` chains advance
+    together, one SIMD lane per d (lane neural-cpu, 2026-09-28); every lane is
+    its own output's chain, so the bits are the scalar walk's."""
+    var wp = weights.unsafe_ptr()
+    var vp = values.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    comptime G = 4 * GHR_FW
+    var d = 0
+    while d + G <= hd:
+        var a0 = GhrF(0.0)
+        var a1 = GhrF(0.0)
+        var a2 = GhrF(0.0)
+        var a3 = GhrF(0.0)
+        for j in range(s):
+            var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
+            var row = vbase + j * hd + d
+            a0 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row)), a0))
+            a1 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + GHR_FW)), a1))
+            a2 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + 2 * GHR_FW)), a2))
+            a3 = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + 3 * GHR_FW)), a3))
+        op.unsafe_store(obase + d, a0)
+        op.unsafe_store(obase + d + GHR_FW, a1)
+        op.unsafe_store(obase + d + 2 * GHR_FW, a2)
+        op.unsafe_store(obase + d + 3 * GHR_FW, a3)
+        d += G
+    while d + GHR_FW <= hd:
+        var a = GhrF(0.0)
+        for j in range(s):
+            a = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                GhrF(ftz(wp.unsafe_load(wbase + j))),
+                ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](vbase + j * hd + d)), a))
+        op.unsafe_store(obase + d, a)
+        d += GHR_FW
+    while d < hd:
+        var acc = Float32(0.0)
+        for j in range(s):
+            acc = ftz(identical_mul_add(
+                ftz(wp.unsafe_load(wbase + j)), ftz(vp.unsafe_load(vbase + j * hd + d)), acc))
+        op.unsafe_store(obase + d, acc)
+        d += 1
+
+
 def _set_at(mut xs: List[Float32], i: Int, v: Float32, size: Int):
     """Write-by-index into a stage list, growing it to `size` zeros first.
 
@@ -1851,25 +1910,22 @@ def transformer_block_oracle(
     # FUSED, unlike S10. The reference's matmul contracts and the fold is
     # ours; there is no two-rounding reference spelling to mirror here the
     # way there is at `(q*cos) + (rotate_half(q)*sin)`.
+    #
+    # CPU SPEED (lane neural-cpu, 2026-09-28): the chains above, `head_dim` of
+    # them per query advanced together down the key axis, one SIMD lane per
+    # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
+    # same operands, j ascending from `+0.0`, one fused multiply-add and one
+    # flush per step. `actx` is sized once; every cell is written.
+    actx = List[Float32](length=m * qw, fill=Float32(0.0))
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
             for qi in range(l):
-                var base = ((bb * nh + h) * l + qi) * s
-                for d in range(hd):
-                    var acc = Float32(0.0)
-                    for j in range(s):
-                        var vv = ftz(
-                            st.kv_v_cache[((bb * nkv + kv) * s + j) * hd + d]
-                        )
-                        acc = ftz(
-                            identical_mul_add(
-                                ftz(aweights[base + j]), vv, acc
-                            )
-                        )
-                    _set_at(
-                        actx, (bb * l + qi) * qw + h * hd + d, acc, m * qw
-                    )
+                attn_value_sum_lanes(
+                    aweights, ((bb * nh + h) * l + qi) * s,
+                    st.kv_v_cache, (bb * nkv + kv) * s * hd,
+                    actx, (bb * l + qi) * qw + h * hd, s, hd,
+                )
 
     st.attn_scores = scores^
     st.attn_masked = masked^
