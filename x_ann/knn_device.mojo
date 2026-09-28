@@ -32,7 +32,7 @@ from x_ann.tsne_core import F32P, I32P, ts_ftz_nonneg, ts_knn_beats, ts_knn_cell
 
 #: rows per threadgroup (one thread each) and candidate rows per tile
 comptime KTB = 128
-comptime KTJ = 128
+comptime KTJ = 64
 comptime TPB = 64
 
 
