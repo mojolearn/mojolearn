@@ -90,7 +90,7 @@ from gemm.checks.gemm_identical import (
     step_count_device_alloc,
     step_count_sync,
 )
-from checks.kernel_matrix import TARGET_COLUMN, lib_int8_matrix_unit_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, lib_int8_matrix_unit_for
 from gemm.checks.gemm_int8_mma import (
     identical_gemm_int8_mma_into,
     int8_mma_admits,
@@ -130,6 +130,22 @@ def int8_plan_dispatch_name() -> String:
 #: Threads per block for every kernel in this file. SCHEDULING; no float
 #: crosses a thread boundary in any of them.
 comptime LOWBIT_TPB = 256
+
+#: A LAUNCH ON APPLE IS BOUNDED IN WORK (the rule of lane/lowbit-int15's
+#: DEVIATION 2979, here for the int8 flat plan): macOS aborts a Metal command
+#: buffer that holds the GPU for seconds, the cells after the abort keep
+#: what the buffer held, and the wait returns as if the launch had finished.
+#: Seen on the M2 Pro, 2026-09-29 (steward request 1790656250587): this
+#: plan at 512 x 4096 x 14336, one launch of 1.83 s, left cell 4352 (the
+#: first of block 17) unwritten in the cold run. So on the Apple column the
+#: flat plan launches its cells in slices of at most `LOWBIT_APPLE_SLICE_MAC`
+#: multiply-accumulates and waits between them. Which cells a launch covers
+#: is SCHEDULING: a cell is computed by one thread from its own two rows.
+#: `-D MOJOLEARN_INT8_ONE_LAUNCH=1` launches every cell at once, as before.
+comptime LOWBIT_BOUNDED_LAUNCHES = TARGET_COLUMN == COLUMN_APPLE and not is_defined[
+    "MOJOLEARN_INT8_ONE_LAUNCH"
+]()
+comptime LOWBIT_APPLE_SLICE_MAC = 1073741824
 
 #: DEVIATION 2906: the fused plan serves outputs of at most this many cells,
 #: the widen plan the rest. SCHEDULING (contract L-8): both plans are the
@@ -463,14 +479,17 @@ def identical_gemm_int8_flat_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    cell0_in: Int32,
+    cell1_in: Int32,
 ):
     """One thread per cell, OP_NT, Int32 accumulation, `p` ascending, then
-    the dequantization seam. Contract L-5 to L-7."""
+    the dequantization seam. Contract L-5 to L-7. The launch covers the
+    cells `[cell0, cell1)`."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * n:
+    var cell = Int(cell0_in) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(cell1_in):
         return
     var i = cell // n
     var j = cell - i * n
@@ -564,7 +583,8 @@ def identical_gemm_int8_flat_into(
 ) raises:
     """The FLAT plan, always: one thread per cell. The checks call this
     directly to compare it with the MMA plan; production goes through
-    `identical_gemm_int8_into`. Asynchronous."""
+    `identical_gemm_int8_into`. Asynchronous where it is one launch; on
+    Apple a product of more than one slice waits between slices."""
     if m <= 0 or n <= 0 or k <= 0:
         raise Error(
             "identical_gemm_int8: m, n and k must all be positive, got m="
@@ -576,18 +596,35 @@ def identical_gemm_int8_flat_into(
             + " so the Int32 accumulator cannot overflow (contract L-7), got "
             + String(k)
         )
-    ctx.enqueue_function[identical_gemm_int8_flat_kernel](
-        c.unsafe_ptr(),
-        qa.unsafe_ptr(),
-        ea.unsafe_ptr(),
-        qb.unsafe_ptr(),
-        eb.unsafe_ptr(),
-        Int32(m),
-        Int32(n),
-        Int32(k),
-        grid_dim=((m * n + LOWBIT_TPB - 1) // LOWBIT_TPB, 1, 1),
-        block_dim=(LOWBIT_TPB, 1, 1),
-    )
+    var total = m * n
+    var per = total
+    comptime if LOWBIT_BOUNDED_LAUNCHES:
+        per = ((LOWBIT_APPLE_SLICE_MAC // k) // LOWBIT_TPB) * LOWBIT_TPB
+        if per < LOWBIT_TPB:
+            per = LOWBIT_TPB
+    var cell0 = 0
+    while cell0 < total:
+        var cell1 = cell0 + per
+        if cell1 > total:
+            cell1 = total
+        ctx.enqueue_function[identical_gemm_int8_flat_kernel](
+            c.unsafe_ptr(),
+            qa.unsafe_ptr(),
+            ea.unsafe_ptr(),
+            qb.unsafe_ptr(),
+            eb.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(cell0),
+            Int32(cell1),
+            grid_dim=((cell1 - cell0 + LOWBIT_TPB - 1) // LOWBIT_TPB, 1, 1),
+            block_dim=(LOWBIT_TPB, 1, 1),
+        )
+        cell0 = cell1
+        if cell0 < total:
+            step_count_sync()
+            ctx.synchronize()
 
 
 def identical_gemm_int8_from_f32(
