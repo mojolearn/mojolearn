@@ -663,6 +663,9 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
         if r["lane"].startswith("mamba1-"):
             # the per-token reference scan is not a compile target (named in NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
+        if vendor == "nvidia" and r["lane"] in ("mamba1-forward", "mamba2-forward", "mamba3-forward"):
+            # mamba_ssm's fused kernels beside the torch references (NVIDIA only)
+            want = want + ["mamba-ssm-fp32", "mamba-ssm-tf32"]
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ["ours"] + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
@@ -675,7 +678,7 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 90, "amd": 90, "nvidia": 111}[vendor]
+    assert cells == {"apple": 90, "amd": 90, "nvidia": 117}[vendor]
     assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 20, "cells": cells}}
 
 
@@ -696,7 +699,7 @@ def test_fast_refused_for_neural_by_name(env):
 
 
 @pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 362, 134, 90),
-                                                      ("nvidia", 304, 94, 111),
+                                                      ("nvidia", 310, 94, 117),
                                                       ("amd", 292, 90, 90)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",

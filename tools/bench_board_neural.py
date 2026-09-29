@@ -1533,11 +1533,11 @@ class MambaSsmArm:
     arms' clock)."""
 
     def __init__(self, lane, shape, data, arm):
-        import numpy as np
-        self.np, self.lane = np, lane
         if lane not in MAMBA_SSM_LANES:
             raise RuntimeError("REFUSED: %s races the Mamba forward lanes only (%s), not %s"
                                % (arm, ", ".join(MAMBA_SSM_LANES), lane))
+        import numpy as np
+        self.np, self.lane = np, lane
         setting = mamba_ssm_setting(arm)
         # the Triton fp32 dot precision, set before any kernel compiles
         os.environ["TRITON_F32_DEFAULT"] = setting["triton_f32_default"]
