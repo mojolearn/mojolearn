@@ -88,3 +88,44 @@ information, and that loss is what the quality gate measures.
 benchmarks on the laptop; commit and push at every step; data from R2 only;
 no duration estimates; never claim we are faster; a speed number is ours
 over theirs at the same shape on the same box.
+
+## Before anything merges to main (2026-09-29)
+
+One candidate is left: `numeric_profile="fixed15_v1"`, the GEMM
+`mojolearn.identical.gemm.int15i64.v1`. int8, the int8-attention mix and
+native bf16 on the units are dropped. The merge is in TWO STAGES, and each
+stage merges only when every row of its table reads done.
+
+### Stage 1: inference, behind the flag
+
+| Gate | What closes it | State on 2026-09-29 |
+|---|---|---|
+| GEMM identity | same bits on H100, M3 Ultra, M2 Pro, MI325X, every plan, arms seen failing | DONE, 178 cases |
+| GEMM in the repo's verification harness | lane `gemm-int15`, the harness's own verdict on each box | in progress |
+| Blocks compute under the profile | projections and attention products run the GEMM on codes, no fp32 materialization | not started |
+| Whole-model identity | full logits of SmolLM2-360M equal on every box, a sabotage arm seen failing | not started |
+| CPU path | the host binding computes the profile, equal to the devices (a CPU-only install must run it) | host oracle exists, binding not started |
+| Quality, inference | whole configuration under 1 percent with margin on two texts | DONE, -0.0015% and +0.0055% |
+| Quality, a task evaluation | one task set, staged in R2 | owed |
+| Speed, complete operation | under fp32.v1 at the decode rows AND the training-size rows, H100 and M3 Ultra, two runs a box, conversions counted | provisional: 1.08 and 0.77 on the H100 with four int8 products |
+| Speed, AMD | one run of record before any sentence states a speed for AMD | owed |
+| The default does not move | every fp32.v1 card and digest on main unchanged; default checkpoints byte-equal | to be checked at the merge |
+| The repo's merge check | ONE consolidation branch, ONE light check of what changed: M2 Pro, CPU, one NVIDIA run; `test_host_surface`; bindings that import a changed module rebuilt | at the merge |
+| Words | contract section, CHANGELOG entry, the flag's docstring with the measured numbers | contract section written |
+
+### Stage 2: training, behind the same flag
+
+| Gate | What closes it | State |
+|---|---|---|
+| Backward products | the GEMM in the orientations the backward pass needs (the profile is OP_NT only today) | not started |
+| Training-step identity | a training step's weights equal on every box, and a resumed checkpoint continues to the same bits | not started |
+| Quality, training | five seeds, forward and backward, inside the baseline's spread and under 1 percent | running |
+| Gradients | the zero codes of the head's gradient (58.8% at 15 bits) shown harmless, or the pinned stochastic rounding added under a new profile name | running |
+| Speed, training | the complete step, weights and gradients converted every step | not started |
+| A checkpoint carries its profile | written and refused by name across profiles | flag side written |
+
+### What can merge earlier, because it moves no bit and no default
+
+The aligned load in the int8 unit kernel, the parallel quantizer, the timing
+harness and its results, and the `dev_pod` sync fallback. Each through the
+same one light check.
