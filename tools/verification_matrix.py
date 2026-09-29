@@ -118,9 +118,15 @@ SAB_NAME = re.compile(r"sabotage|(^|[-_.])g?sab([-_.]|$)")
 NOT_ALGORITHMS = frozenset({
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch",
     "gpu_arch_how", "Array",
+    # the numeric profile SELECTOR (lane/lowbit-flag, 2026-09-29): it names
+    # which arithmetic a model's products run and computes nothing itself;
+    # the arithmetic it names is covered by the lane gemm-int15
+    "numeric_profile", "set_numeric_profile", "numeric_profiles",
+    "numeric_profile_measured",
     "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
     "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
-    "linalg.PROFILE_BF16", "linalg.PROFILE_INT8", "lowbit.FORMATS",
+    "linalg.PROFILE_BF16", "linalg.PROFILE_INT8", "linalg.PROFILE_INT15",
+    "lowbit.FORMATS",
     "lowbit.BF16Weight", "lowbit.Int8Weight",
     # tokenizer.TrainedBpeVocabulary left this list 2026-09-18
     # (lane/tokenized-corpus): its render_* and write_* produce the two files a
