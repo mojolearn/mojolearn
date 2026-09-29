@@ -344,10 +344,14 @@ def int8_pieces_plan_name(plan: Int) -> String:
 
 def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_pieces_tuned_into` takes. Reads the
-    shape and may: every plan returns the same three integers."""
+    shape and may: every plan returns the same three integers. The H100's
+    measurement of 2026-09-29 (run 8, job nvc3-0030): TWO PAGES took the
+    least time of the eleven plans at all twelve rows, the 32 x 32 warps of
+    the 64 x 128 block at the four 512-token rows and the 32 x 32 block at
+    the eight decode rows."""
     if m <= INT8_TUNED_ROW_MAX_M:
-        return INT8_PIECES_PLAN_SMALL
-    return INT8_PIECES_PLAN_WARPS16
+        return INT8_PIECES_PLAN_PIPE_SMALL
+    return INT8_PIECES_PLAN_PIPE_FRAG2
 
 
 def int8_pieces_sabotage_name() -> String:
