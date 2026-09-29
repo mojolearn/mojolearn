@@ -109,7 +109,7 @@ against fp32_v1 per box.
 
 ## Verdicts
 
-### (b) and the block half of (c): GREEN on the 4090 (nvc2), job nvc2-0016, commit 2d8e7e3b2-era tree (patch-synced at the lane's head of 05:03Z)
+### (b) and the block half of (c): GREEN on the 4090 (nvc2), job nvc2-0016, tree synced at commit 013429062
 
 `pixi run check-transformer-int15` (`transformer/checks/transformer_int15_check.mojo`),
 logs in `bench/results/lowbit_blocks/2026-09-29/gate_4090/`:
