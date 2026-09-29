@@ -81,7 +81,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum
 
-from gbdt.gpu_util.copy import COPY_BLOCK, copy_f32_kernel, copy_u32_kernel
+from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
 from gbdt.gpu_util.kernel.reorder_one_bit import (
     REORDER_BLOCK,
     REORDER_UNROLL,
@@ -282,105 +282,6 @@ def launch_radix_sort_bins(
             values.unsafe_ptr(), temp_values.unsafe_ptr(), Int32(size),
             grid_dim=copy_blocks, block_dim=COPY_BLOCK,
         )
-
-
-def reorder_one_bit_carry_kernel(
-    temp_keys: MutPointer[UInt32, MutAnyOrigin],
-    temp_values: MutPointer[UInt32, MutAnyOrigin],
-    temp_w: MutPointer[Float32, MutAnyOrigin],
-    temp_t: MutPointer[Float32, MutAnyOrigin],
-    offsets: MutPointer[Int32, MutAnyOrigin],
-    bit_in: Int32,
-    keys: MutPointer[UInt32, MutAnyOrigin],
-    values: MutPointer[UInt32, MutAnyOrigin],
-    w: MutPointer[Float32, MutAnyOrigin],
-    t: MutPointer[Float32, MutAnyOrigin],
-    size_in: Int32,
-):
-    """`reorder_one_bit_u32_kernel` carrying two float columns to the same
-    destination as each key (lane/ordered-speed). The `temp_*` arrays are
-    the SOURCES, the unprefixed ones the destinations, as in that kernel."""
-    var size = Int(size_in)
-    var bit = Int(bit_in)
-    var last_flag = Int32((Int(temp_keys.unsafe_load(size - 1)) >> bit) & 1)
-    var total_ones = offsets.unsafe_load(size - 1) + last_flag
-    var total_zeros = Int32(size) - total_ones
-    var idx = Int(block_idx.x) * REORDER_BLOCK + Int(thread_idx.x)
-    if idx < size:
-        var ones_before = offsets.unsafe_load(idx)
-        var key = temp_keys.unsafe_load(idx)
-        var zeroes_before = Int32(idx) - ones_before
-        var is_zero = ((Int(key) >> bit) & 1) == 0
-        var dst = Int(zeroes_before if is_zero else (total_zeros + ones_before))
-        keys.unsafe_store(dst, key)
-        values.unsafe_store(dst, temp_values.unsafe_load(idx))
-        w.unsafe_store(dst, temp_w.unsafe_load(idx))
-        t.unsafe_store(dst, temp_t.unsafe_load(idx))
-
-
-def launch_radix_sort_bit_carry(
-    ctx: DeviceContext,
-    size: Int,
-    bit: Int,
-    mut keys: DeviceBuffer[DType.uint32],
-    mut values: DeviceBuffer[DType.uint32],
-    mut w: DeviceBuffer[DType.float32],
-    mut t: DeviceBuffer[DType.float32],
-    mut temp_keys: DeviceBuffer[DType.uint32],
-    mut temp_values: DeviceBuffer[DType.uint32],
-    mut temp_w: DeviceBuffer[DType.float32],
-    mut temp_t: DeviceBuffer[DType.float32],
-    mut offsets: DeviceBuffer[DType.int32],
-    mut block_sums: DeviceBuffer[DType.int32],
-) raises:
-    """`launch_radix_sort_bins` over ONE bit (`ReorderBins(..., offset, 1)`)
-    that moves `w` and `t` with the keys (lane/ordered-speed): the same
-    stable permutation, so a column that was `source[values[i]]` before is
-    `source[values[i]]` after, without the random gather that re-derived
-    it. The one pass lands in the temporaries and the four columns are
-    copied back, as `launch_radix_sort_bins` copies back its two."""
-    if size <= 0:
-        return
-    if bit < 0 or bit >= 32:
-        raise Error("radix sort bit out of a ui32: " + String(bit))
-    var n_blocks = (size + REORDER_BLOCK - 1) // REORDER_BLOCK
-    ctx.enqueue_function[scan_key_bit_kernel](
-        keys.unsafe_ptr(), Int32(bit), Int32(size),
-        offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
-        grid_dim=n_blocks, block_dim=REORDER_BLOCK,
-    )
-    ctx.enqueue_function[scan_block_sums_parallel_kernel](
-        block_sums.unsafe_ptr(), Int32(n_blocks),
-        grid_dim=1, block_dim=SCAN_SUMS_BLOCK,
-    )
-    ctx.enqueue_function[add_block_carry_kernel](
-        offsets.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),
-        grid_dim=n_blocks, block_dim=REORDER_BLOCK,
-    )
-    ctx.enqueue_function[reorder_one_bit_carry_kernel](
-        keys.unsafe_ptr(), values.unsafe_ptr(), w.unsafe_ptr(), t.unsafe_ptr(),
-        offsets.unsafe_ptr(), Int32(bit),
-        temp_keys.unsafe_ptr(), temp_values.unsafe_ptr(),
-        temp_w.unsafe_ptr(), temp_t.unsafe_ptr(), Int32(size),
-        grid_dim=n_blocks, block_dim=REORDER_BLOCK,
-    )
-    var copy_blocks = (size + COPY_BLOCK - 1) // COPY_BLOCK
-    ctx.enqueue_function[copy_u32_kernel](
-        keys.unsafe_ptr(), temp_keys.unsafe_ptr(), Int32(size),
-        grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-    )
-    ctx.enqueue_function[copy_u32_kernel](
-        values.unsafe_ptr(), temp_values.unsafe_ptr(), Int32(size),
-        grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-    )
-    ctx.enqueue_function[copy_f32_kernel](
-        w.unsafe_ptr(), temp_w.unsafe_ptr(), Int32(size),
-        grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-    )
-    ctx.enqueue_function[copy_f32_kernel](
-        t.unsafe_ptr(), temp_t.unsafe_ptr(), Int32(size),
-        grid_dim=copy_blocks, block_dim=COPY_BLOCK,
-    )
 
 
 struct DeviceFloatSorter(Movable):
