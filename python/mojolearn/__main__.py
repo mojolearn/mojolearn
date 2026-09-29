@@ -282,13 +282,11 @@ def build_parser():
     v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
                    help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
-                   help="implies --all: one lane per family on the base "
-                        "fixture")
+                   help="representative checks from the selected profile on the base fixture")
     v.add_argument("--full", action="store_true",
-                   help="implies --all: every lane and applicable property on every fixture; "
-                        "--all alone uses the base fixture")
+                   help="alias for --all: every applicable lane and property in the selected profile on all fixtures")
     v.add_argument("--lanes", default="",
-                   help="implies --all: only these comma separated lanes")
+                   help="only these comma separated lanes within the selected profile")
     v.add_argument("--fixtures", default="",
                    help="with --all: only these comma separated fixtures")
     v.add_argument("--repeats", type=int, default=1,
