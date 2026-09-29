@@ -50,7 +50,8 @@ def test_tables_are_complete_and_stdlib_only():
                 assert not any(a in A._NVIDIA_ONLY for a in opp), (v, lane)
         # two datasets of different kind, or its own named data
         tab = [d for d in s["datasets"] if d in A.TAB]
-        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "images"), lane
+        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "images",
+                                                          "corpus"), lane
         assert not tab or set(tab) == set(A.TAB), lane
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned
     assert alone == {"lion", "lamb"}
