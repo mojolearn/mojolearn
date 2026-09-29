@@ -1031,7 +1031,7 @@ def parse_tree_log(path):
     """{arms: {arm: rec}, verdict, verdict_line, shape, notes, bindings}."""
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
-    bindings, warm, notes, verdict_line, mem = {}, {}, [], None, {}
+    bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
     with open(path, errors="replace") as fh:
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
@@ -1046,6 +1046,12 @@ def parse_tree_log(path):
                     pass
             elif head == "FSPEED-NOTE":
                 notes.append(rest[:300])
+            elif head == "FSPEED-LIBRARY":
+                try:
+                    d = json.loads(rest)
+                    libs[d.get("arm")] = d
+                except ValueError:
+                    pass
             elif head == "FSPEED-FIT-VERDICT":
                 verdict_line = rest[:300]
             elif head == "FSPEED-MEM":
@@ -1065,7 +1071,8 @@ def parse_tree_log(path):
                 mem.setdefault(f.get("arm"), {})[r] = num
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
-            "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()}}
+            "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
+            "libraries": libs}
 
 
 def tree_cmd(ctx, race):
@@ -1144,6 +1151,9 @@ def tree_cells(ctx, race, parsed):
                                    "fit_verdict_line": parsed["verdict_line"]},
                     verdict=parsed["verdict"] or "UNKNOWN")
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
+        lib = (parsed.get("libraries") or {}).get(arm) or {}
+        cell["library_version"] = lib.get("version")
+        cell["device_name"] = lib.get("device_name")
         if mode:
             b = parsed["bindings"].get(arm) or {}
             cell["binding"] = b
@@ -1601,31 +1611,19 @@ def _machine(box):
             or (box.get("host") or {}).get("machine"))
 
 
-def _device_text(box, arm, vendor):
+def _device_text(box, arm, vendor, device_name=None):
+    """'gpu (NVIDIA H100 80GB HBM3)' / 'cpu (Apple M3 Ultra)': the arm's device and
+    the name its own worker reported (a CPU arm: the box's CPU model)."""
     dev = arm_device(arm, vendor)
-    name = (box.get("gpu") or {}).get("name") if dev == "gpu" else (box.get("host") or {}).get("cpu_model")
+    name = device_name if dev == "gpu" else (box.get("host") or {}).get("cpu_model")
     return "%s (%s)" % (dev, name) if name else None
-
-
-def library_version(box, lib):
-    """The installed version of an opponent library, from the box's package list
-    (a distribution named `lib` or `lib-<suffix>`: cuml-cu12, faiss-cpu, cupy-cuda12x)."""
-    pk = box.get("packages") or {}
-    lib = (lib or "").lower()
-    if lib in pk:
-        return pk[lib]
-    for name in sorted(pk):
-        if name.startswith(lib + "-"):
-            return pk[name]
-    return None
 
 
 _R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
 
 
 def race_data_files(ctx, race):
-    """[(name, path)] of the data files a race reads; [] for seeded data; None when
-    the race reads a file the board does not know how to name."""
+    """[(name, path)] of the data files a race reads; [] for seeded data."""
     fam, lane, ds = race["family"], race["lane"], race["dataset"]
     if fam == "neural":
         return []
@@ -1656,29 +1654,99 @@ def race_data_sha(ctx, race, box):
     shas = []
     for name, path in files:
         if name not in cache:
-            cache[name] = sha256_file(path) if os.path.isfile(path) else None
+            cache[name] = sha256_file(path) if path and os.path.isfile(path) else None
         if cache[name] is None:
             return None
         shas.append(cache[name])
     return shas[0] if len(shas) == 1 else STORE.sha256_json(shas)
 
 
-def opponent_key(box, race, arm, settings, data_sha, rounds):
+def opponent_key(box, race, arm, settings, data_sha, rounds, params=None, version=None,
+                 device_name=None):
+    """The store key of one opponent arm. `params` is its canonical read-back
+    (BOARD-PARAMS), `version` and `device_name` what its own worker reported."""
     vendor = (box.get("gpu") or {}).get("vendor")
-    lib = arm_library(arm)
     return {"box": (box.get("host") or {}).get("hostname"), "machine": _machine(box),
-            "vendor": vendor, "device": _device_text(box, arm, vendor),
+            "vendor": vendor, "device": _device_text(box, arm, vendor, device_name),
             "os": (box.get("os") or {}).get("platform"),
-            "library": lib, "library_version": library_version(box, lib),
+            "library": arm_library(arm), "library_version": version,
             "family": race["family"], "lane": race["lane"], "dataset": race["dataset"],
             "rows": race.get("rows"), "neural_shape": race.get("shape"), "arm": arm,
+            "params_sha256": STORE.sha256_json(params) if params is not None else None,
             "settings_sha256": STORE.sha256_json(settings) if settings else None,
             "data_sha256": data_sha, "rounds": rounds}
 
 
+_PARAMS_ONLY_CMD = {"classical": "classical_cmd", "classical2": "more_cmd", "algos": "algos_cmd",
+                    "neural": "neural_cmd"}
+
+
+def params_probe(ctx, race, arms):
+    """Construct `arms` (no fit, no timed round) through the race's own driver
+    (--params-only) and read back what each got: {arm: {"params": canonical
+    read-back, "version", "device_name"}}. An arm that did not construct is
+    absent (it then runs normally)."""
+    probe_dir = os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."))
+    os.makedirs(probe_dir, exist_ok=True)
+    sub = dict(race, arms=list(arms), opponents=list(arms))
+    log = os.path.join(probe_dir, "probe.log")
+    out = {}
+    if race["family"] == "trees":
+        cmd, extra = tree_cmd(ctx, sub)
+        cmd = cmd + ["--params-only"]
+        run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        try:
+            with open(log, errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            return {}
+        reps = _params_mod().parse_lines(text)
+        rep = reps[-1] if reps else {}
+        libs = {}
+        for line in text.splitlines():
+            if line.startswith("FSPEED-LIBRARY {"):
+                try:
+                    d = json.loads(line[len("FSPEED-LIBRARY "):])
+                    libs[d.get("arm")] = d
+                except ValueError:
+                    pass
+        for arm in arms:
+            a = (rep.get("arms") or {}).get(arm)
+            if a is None or arm not in libs:
+                continue
+            out[arm] = {"params": a.get("params"), "version": libs[arm].get("version"),
+                        "device_name": libs[arm].get("device_name")}
+        return out
+    cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
+    cmd = list(cmd)
+    cmd[cmd.index("--out") + 1] = probe_dir
+    cmd.append("--params-only")
+    for f in os.listdir(probe_dir):
+        if f.endswith(".params.json"):
+            os.remove(os.path.join(probe_dir, f))
+    run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
+    if not found:
+        return {}
+    r = load_result(os.path.join(probe_dir, found[0])) or {}
+    rep = r.get("params_check") or {}
+    for arm in arms:
+        a = (r.get("arms") or {}).get(arm) or {}
+        p = (rep.get("arms") or {}).get(arm)
+        if a.get("status") not in (None, "ok", "params_only") or p is None:
+            continue
+        info = a.get("info") or {}
+        out[arm] = {"params": p.get("params"), "version": info.get("version"),
+                    "device_name": info.get("device_name")}
+    return out
+
+
 def stored_opponents(ctx, race):
-    """{arm: stored record} for the race's opponents the store already holds
-    (none with --retime-opponents or without a store)."""
+    """{arm: stored record} for the race's opponents the store holds under the
+    same key, read-back included: a candidate (the fields known before
+    construction match) is constructed through its driver and reused only when
+    its read-back, library version and device equal the stored ones. None with
+    --retime-opponents or without a store."""
     if not ctx.get("store_path") or ctx.get("retime") or not ctx.get("box"):
         return {}
     store = STORE.load(ctx["store_path"])
@@ -1686,17 +1754,30 @@ def stored_opponents(ctx, race):
         return {}
     settings = race_settings(ctx, race)
     dsha = race_data_sha(ctx, race, ctx["box"])
+    cands = [a for a in race.get("opponents") or []
+             if STORE.candidates(store, opponent_key(ctx["box"], race, a, settings, dsha,
+                                                     ctx["rounds"]))]
+    if not cands:
+        return {}
+    probe = params_probe(ctx, race, cands)
     out = {}
-    for arm in race.get("opponents") or []:
-        hit = STORE.lookup(store, opponent_key(ctx["box"], race, arm, settings, dsha, ctx["rounds"]))
+    for arm in cands:
+        pr = probe.get(arm)
+        if pr is None:
+            continue
+        key = opponent_key(ctx["box"], race, arm, settings, dsha, ctx["rounds"],
+                           params=pr.get("params"), version=pr.get("version"),
+                           device_name=pr.get("device_name"))
+        hit = STORE.lookup(store, key)
         if hit is not None:
             out[arm] = hit
     return out
 
 
 def store_opponents(ctx, race, rec):
-    """Append every opponent cell measured in this race to the store; returns
-    how many were stored (a cell with a missing key field is not)."""
+    """Append every opponent cell measured in this race to the store, keyed by
+    the race's own read-back and each arm's reported version and device;
+    returns how many were stored."""
     if not ctx.get("store_path") or not ctx.get("box"):
         return 0
     settings = race_settings(ctx, race)
@@ -1706,7 +1787,9 @@ def store_opponents(ctx, race, rec):
     for c in rec.get("cells") or []:
         if c.get("library") == "mojolearn" or c.get("stored"):
             continue
-        key = opponent_key(ctx["box"], race, c["arm"], settings, dsha, ctx["rounds"])
+        key = opponent_key(ctx["box"], race, c["arm"], settings, dsha, ctx["rounds"],
+                           params=(params.get(c["arm"]) or {}).get("params"),
+                           version=c.get("library_version"), device_name=c.get("device_name"))
         if STORE.missing(key):
             c["store"] = "not stored (key fields missing: %s)" % ", ".join(STORE.missing(key))
             continue
@@ -1718,10 +1801,59 @@ def store_opponents(ctx, race, rec):
     return n
 
 
+def _manifest_pins():
+    """{R2 key: (bytes, sha256)} from bench/results/dataset_store/manifest.tsv."""
+    pins = {}
+    try:
+        with open(os.path.join(REPO, "bench", "results", "dataset_store", "manifest.tsv")) as fh:
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                if len(f) >= 3 and f[1].isdigit():
+                    pins[f[0]] = (int(f[1]), f[2])
+    except OSError:
+        pass
+    return pins
+
+
+def _venv_version(python, library, started):
+    """(version, why) of `library` in the board's recorded venv, read from its
+    dist-info, and only when that dist-info was last written before the board
+    started (the venv then still holds what the board imported)."""
+    import glob
+    import importlib.metadata as md
+    if not python:
+        return None, "no recorded venv"
+    venv = os.path.dirname(os.path.dirname(python))
+    sites = glob.glob(os.path.join(venv, "lib", "python*", "site-packages"))
+    if not sites:
+        return None, "the recorded venv %s is not on this box" % venv
+    name = PROBE.IMPORT_NAME.get(library, library)
+    try:
+        started_ts = datetime.datetime.strptime(started, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None, "the board's start time is unknown"
+    for site in sites:
+        for dist in md.distributions(path=[site]):
+            dname = (dist.metadata.get("Name") or "").lower()
+            top = (dist.read_text("top_level.txt") or "").split()
+            if dname != library.lower() and not dname.startswith(library.lower() + "-") \
+                    and name not in top:
+                continue
+            info = getattr(dist, "_path", None)
+            mtime = os.path.getmtime(str(info)) if info is not None else None
+            if mtime is None:
+                return None, "the dist-info of %s has no time" % dname
+            if mtime >= started_ts:
+                return None, "%s changed in the venv after the board started" % dname
+            return dist.version, None
+    return None, "%s is not in the recorded venv" % library
+
+
 def backfill_store(board_json, store_path):
     """Import the opponent cells of an existing board.json into the store, the
-    key and provenance from the board's box, config and each cell's settings.
-    Returns (imported, skipped)."""
+    key and provenance from the board's box, config and each cell's settings,
+    read-back and reported version. Returns (imported, {reason: skipped})."""
     res = load_result(board_json)
     if res is None:
         raise SystemExit("bench_board: cannot read %s" % board_json)
@@ -1732,28 +1864,58 @@ def backfill_store(board_json, store_path):
     for name, d in data.items():         # a pinned file whose size matched its pin
         if name not in shas and d.get("size_ok") and d.get("pinned_sha256"):
             shas[name] = d["pinned_sha256"]
+    pins = _manifest_pins()
     ctx = {"data_root": cfg.get("data_root") or "", "data_sha": shas}
-    imported = skipped = 0
+    started = res.get("created")
+    python = (box.get("python") or {}).get("executable")
+    imported, skipped = 0, {}
+
+    def skip(why):
+        skipped[why] = skipped.get(why, 0) + 1
+
     for rid, rr in sorted((res.get("races") or {}).items()):
         race = {"family": rr.get("family"), "lane": rr.get("lane"), "dataset": rr.get("dataset"),
                 "rows": rr.get("rows"), "shape": rr.get("shape")}
         if not race["family"]:
             continue
+        dsha, why_data = None, None
         try:
             files = race_data_files(ctx, race)
-            dsha = race_data_sha(ctx, race, box) if files is not None else None
-        except Exception:               # noqa: BLE001  (a file the backfill cannot name)
-            dsha = None
-        if files and any(n not in shas for n, _ in files):
-            dsha = None                 # never hash a file on a box it may not be on
+        except Exception as exc:        # noqa: BLE001
+            files, why_data = None, "the race's data files cannot be named (%s)" % exc
+        if files is not None:
+            for name, path in files:
+                if name in shas:
+                    continue
+                pin = pins.get(name)      # a corpus key: its pin, when the staged file matches
+                if pin and path and os.path.isfile(path) and os.path.getsize(path) == pin[0]:
+                    shas[name] = pin[1]
+            missing = [n for n, _ in files if n not in shas]
+            if missing:
+                why_data = "no sha256 for %s (not recorded, and no pinned file of the pinned size here)" \
+                    % ", ".join(missing)
+            else:
+                dsha = race_data_sha(ctx, race, box)
         params = ((rr.get("params") or {}).get("arms") or {})
         for c in rr.get("cells") or []:
             if c.get("library") == "mojolearn" or c.get("stored"):
                 continue
+            if why_data:
+                skip(why_data)
+                continue
+            version = c.get("library_version")
+            if not version:
+                version, why = _venv_version(python, c.get("library"), started)
+                if not version:
+                    skip("library version: " + why)
+                    continue
             key = opponent_key(box, race, c.get("arm"), c.get("settings"), dsha,
-                               (c.get("settings") or {}).get("rounds") or cfg.get("rounds"))
-            if STORE.missing(key):
-                skipped += 1
+                               (c.get("settings") or {}).get("rounds") or cfg.get("rounds"),
+                               params=(params.get(c.get("arm")) or {}).get("params"),
+                               version=version, device_name=c.get("device_name"))
+            miss = STORE.missing(key)
+            if miss:
+                skip("key fields missing: " + ", ".join(miss))
                 continue
             infer = [ic for ic in rr.get("infer_cells") or [] if ic.get("arm") == c.get("arm")]
             STORE.append(store_path, STORE.record(
@@ -2578,8 +2740,10 @@ def main(argv=None):
         store = args.opponent_store or os.path.join(os.path.dirname(os.path.dirname(board_json)),
                                                     "opponent-store.jsonl")
         imported, skipped = backfill_store(board_json, os.path.abspath(os.path.expanduser(store)))
-        print("bench_board: backfill %s -> %s: imported %d opponent cells, skipped %d (a key "
-              "field missing)" % (board_json, store, imported, skipped), flush=True)
+        print("bench_board: backfill %s -> %s: imported %d opponent cells, skipped %d"
+              % (board_json, store, imported, sum(skipped.values())), flush=True)
+        for why, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
+            print("bench_board:   skipped %d: %s" % (n, why), flush=True)
         return 0
 
     if args.render_only:
