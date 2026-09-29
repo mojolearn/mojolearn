@@ -1,0 +1,79 @@
+gpuq: job 0028 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T07:37:27Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/resident_job.sh sha256 at submit 9df787b6a52243a63a477693a3c578d29fcd2e896c8594b7d7f6b9b0417836e0, now 9df787b6a52243a63a477693a3c578d29fcd2e896c8594b7d7f6b9b0417836e0
+0, NVIDIA GeForce RTX 4090, 580.126.20
+1, NVIDIA GeForce RTX 4090, 580.126.20
+build build exit 0
+build build_linalg exit 0
+build build_training exit 0
+build build_transformer exit 0
+== resident gate (clean tree), MUST exit 0
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: HELD
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE GREEN
+resident gate clean exit 0
+== generate timing
+default model reports numeric_profile=fixed15_v1; named model fp32_v1; device gpu
+RESULT generate box=447c5c6d4d39 arm=default route=resident prompt=512 new=32 median 2333.0 ms (72.91 ms/token) runs 2485.2 2299.1 2333.0 ids AGREE 2077bb0591d060ce
+RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1818.7 ms (56.84 ms/token) runs 1984.0 1818.7 1588.1 ids AGREE 2077bb0591d060ce
+RESULT generate box=447c5c6d4d39 default/fp32_v1 = 1.283 (default SLOWER)
+wrote /root/mojolearn-lowbit-default/bench/results/lowbit_default/447c5c6d4d39/resident/default_gate_447c5c6d4d39.json
+DEFAULT GATE GREEN
+sabotage sites in blocks copy: 12
+sab blocks build exit 0
+== resident gate, sabotage arm blocks, MUST exit 1
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (4638f317e25dbd7f): BROKEN
+RESULT check fixed15_v1 resident decode prefix 1: 64 of 64 positions differ: BROKEN
+RESULT check fixed15_v1 resident decode prefix 7: 64 of 64 positions differ: BROKEN
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (a869747803f2b2ae): BROKEN
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: BROKEN
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE RED: fixed15_v1 resident prefill == per-layer (4638f317e25dbd7f); fixed15_v1 resident decode prefix 1: 64 of 64 positions differ; fixed15_v1 resident decode prefix 7: 64 of 64 positions differ; fixed15_v1 resident generate ids == per-layer (a869747803f2b2ae); fixed15_v1 resident last-pass logits == per-layer forward at position 542
+resident gate sabotage blocks exit 1
+sabotage sites in head copy: 12
+sab head build exit 0
+== resident gate, sabotage arm head, MUST exit 1
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (a29debb7c9c24280): BROKEN
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: BROKEN
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE RED: fixed15_v1 resident generate ids == per-layer (a29debb7c9c24280); fixed15_v1 resident last-pass logits == per-layer forward at position 542
+resident gate sabotage head exit 1
+out /root/mojolearn-lowbit-default/bench/results/lowbit_default/447c5c6d4d39/resident
+RESIDENT JOB GREEN
+gpuq: job 0028 done exit=0 at 2026-09-29T07:46:28Z after 541s
