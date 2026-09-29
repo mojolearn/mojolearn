@@ -37,9 +37,15 @@ def main():
     ap.add_argument("--model", required=True)
     ap.add_argument("--new", type=int, default=32)
     ap.add_argument("--box", default=os.uname().nodename)
+    ap.add_argument("--experimental-hip", action="store_true")
     args = ap.parse_args()
     from model_logits import token_ids, raw, sha, SEED
     from mojolearn.models import CausalLM
+    if args.experimental_hip:
+        original = CausalLM._generate_resident
+        def experimental(self, *a, **kw):
+            return original(self, *a, **kw, _experimental_int15_resident=True)
+        CausalLM._generate_resident = experimental
     from mojolearn._array import Array
     from mojolearn._linalg_impl import matmul_int15
     from mojolearn._transformer_impl import TransformerDecodeSession
@@ -50,7 +56,7 @@ def main():
         if not ok:
             bad.append(name)
 
-    for kw in ({}, {"numeric_profile": "fp32_v1"}):
+    for kw in ({}, {"numeric_profile": "fixed15_v1"}, {"numeric_profile": "fp32_v1"}):
         lm = CausalLM.load(args.model, **kw)
         prof = lm.numeric_profile
         v, d = lm.vocab_size, lm.d_model

@@ -608,7 +608,8 @@ class CausalLM:
             nxt = _argmax_last(lg, b, 1, self.vocab_size)
         return Array.from_list(rows, "<i4")
 
-    def _generate_resident(self, ids, n_new, total, last_logits=None):
+    def _generate_resident(self, ids, n_new, total, last_logits=None,
+                           _experimental_int15_resident=False):
         """`generate`'s greedy loop in ONE native call (lane/py-lm,
         2026-09-28), or None where it does not apply: a GPU transformer
         stack whose binding exports `causal_lm_session_*`, and
@@ -640,7 +641,10 @@ class CausalLM:
         # resident == per-layer bit for bit, two sabotage arms). AMD and Apple
         # keep the per-layer route under the profile, which their boxes
         # gated, until the resident session is run there.
-        if int15 and _backend.vendor() != "cuda":
+        # Experiment branch only: explicit private opt-in for the matched
+        # resident gate/benchmark. No public or default dispatch changes.
+        if int15 and _backend.vendor() != "cuda" and not (
+                _experimental_int15_resident and _backend.vendor() == "hip"):
             return None
         b, l = int(ids.shape[0]), int(ids.shape[1])
         state = self.allocate_state(b, total)
