@@ -296,7 +296,13 @@ _add("bayesian-gmm", xlane="cluster", ours="BayesianGaussianMixture", task="gmm"
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.mixture:BayesianGaussianMixture",
      params=dict(n_components=8, covariance_type="full", max_iter=100, tol=1e-3, reg_covar=1e-6,
                  init_params="kmeans", random_state=SEED),
-     notes=["constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
+     dataset_params={"istella": dict(reg_covar=3e-3)},
+     notes=["reg_covar 3e-3 on Istella-S (taxi keeps 1e-6), for every arm on every vendor: at 1e-6 "
+            "every arm refused on the constant-dropped Istella rows (ours and ours-fast on 0.8.29 "
+            "with the GEMM moments, and scikit-learn: ill-defined empirical covariance, "
+            "m3ultra-b 2026-09-29), and 3e-3 is the smallest value at which the arms fitted "
+            "(tools/gmm_istella_probe.py), the value classical2/gmm uses on Istella-S (GMM_REG_COVAR)",
+            "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
 
 # ---- lane neighbors + kernel ---------------------------------------------
 _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block="cls",
@@ -1370,6 +1376,8 @@ def lane_config(lane):
         cfg["cuml"] = s["cuml"]
     if s["sub"]:
         cfg["stride_subsets"] = dict(s["sub"])
+    if s.get("dataset_params"):
+        cfg["dataset_params"] = _jsonable(s["dataset_params"])
     return cfg
 
 
@@ -2078,6 +2086,9 @@ def _derived_params(lane, D, params):
     np = _np()
     s = LANES[lane]
     p = dict(params)
+    # a per-dataset value (s["dataset_params"]), the same for every arm: this
+    # process's dataset is the one _load_block read
+    p.update(s.get("dataset_params", {}).get(_DATASET, {}))
     X = D.get("X")
     d = X.shape[1] if X is not None and X.ndim == 2 else 1
     for k, v in list(p.items()):
@@ -4158,7 +4169,14 @@ def _build_svgp(lane, arm, D):
 # worker process
 # ---------------------------------------------------------------------------
 
+#: the dataset this process races (set by _load_block; each worker and
+#: conductor handles one), read by _derived_params for s["dataset_params"]
+_DATASET = None
+
+
 def _load_block(lane, dataset, data):
+    global _DATASET
+    _DATASET = dataset
     np = _np()
     name = block_file(lane, dataset)
     if name is None:
