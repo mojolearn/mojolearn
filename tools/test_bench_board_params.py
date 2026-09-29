@@ -89,16 +89,61 @@ def test_library_default_is_not_a_match():
         BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
 
 
-def test_missing_seed_parameter_is_refused_unless_excepted():
+def test_arm_without_seed_argument_is_recorded_deterministic():
     arms = _matched()
     arms["faiss-ivf"] = {"__library__": "faiss", "nlist": 1024}
     arms["ours"]._p["nlist"] = 1024
-    with pytest.raises(BP.ParamsRefused, match="no seed parameter"):
-        BP.enforce("ivf", arms, stream=io.StringIO())
-    rep = BP.enforce("ivf", arms, stream=io.StringIO(),
-                     extra_exceptions=[("seed", "faiss-ivf", "faiss IVF-Flat training takes no seed here")])
+    rep = BP.enforce("zz-no-row", arms, stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    assert rep["arms"]["faiss-ivf"]["params"]["seed"] == BP.NO_SEED_ARGUMENT
+    assert rep["seed_none_deterministic"] == ["faiss-ivf"]
+    # a third-party arm that draws without a seed argument: its row's reason is recorded
+    rep = BP.enforce("zz-no-row", arms, stream=io.StringIO(),
+                     extra_exceptions=[("seed", "faiss-ivf", "faiss IVF-Flat training draws; no seed")])
     assert rep["verdict"] == "MATCHED"
     assert rep["exceptions"][0]["reason"].startswith("faiss")
+    assert rep["arms"]["faiss-ivf"]["params"]["seed"] == BP.NO_SEED_DRAWS
+
+
+def test_seed_argument_lost_in_read_back_is_refused():
+    class Lost:
+        __module__ = "sklearn.fake"
+
+        def __init__(self, random_state=7):
+            pass
+
+        def get_params(self, deep=True):
+            return {"n_estimators": 100}
+    arms = {"ours": _matched()["ours"], "sk": Lost()}
+    with pytest.raises(BP.ParamsRefused, match="takes a seed but none was read back"):
+        BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
+
+
+def test_seed_argument_left_none_is_refused():
+    arms = _matched()
+    arms["sk"] = {"__library__": "sklearn", "random_state": None}
+    with pytest.raises(BP.ParamsRefused, match="seed is None"):
+        BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
+
+
+def test_lane_seed_is_the_harness_seed():
+    assert BP.seed_for("spectral") == 42 and BP.seed_for("kmeans") == 7
+    arms = {"ours": _est("mojolearn.cluster", "SpectralClustering", random_state=42),
+            "sk": _est("sklearn.cluster", "SpectralClustering", random_state=42)}
+    assert BP.enforce("spectral", arms, stream=io.StringIO())["verdict"] == "MATCHED"
+    arms["sk"]._p["random_state"] = 7
+    with pytest.raises(BP.ParamsRefused, match="seed is 7"):
+        BP.enforce("spectral", arms, stream=io.StringIO())
+
+
+def test_scale_pos_weight_matches_class_weights():
+    ours = _est("mojolearn.ensemble", "GradientBoosting", random_state=7, class_weights=[1.0, 4.0])
+    xgb = _est("xgboost.sklearn", "XGBClassifier", random_state=7, scale_pos_weight=4.0)
+    rep = BP.enforce("gbdt-depthwise", {"ours": ours, "xgboost-cpu": xgb}, stream=io.StringIO())
+    assert rep["arms"]["ours"]["params"]["scale_pos_weight"] == 4.0
+    xgb._p["scale_pos_weight"] = 2.0
+    with pytest.raises(BP.ParamsRefused, match="scale_pos_weight"):
+        BP.enforce("gbdt-depthwise", {"ours": ours, "xgboost-cpu": xgb}, stream=io.StringIO())
 
 
 def test_exception_table_names_lane_param_and_arm(monkeypatch):
