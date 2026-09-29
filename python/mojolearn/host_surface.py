@@ -1655,7 +1655,7 @@ FAMILIES = (
         exports=(
             "neural_host_numeric_mode", "neural_host_vendor", "neural_host_column",
             "neural_host_sabotage", "mlp_forward_logits", "transformer_forward_fresh",
-            "transformer_forward", "transformer_decode_step",
+            "transformer_forward", "transformer_decode_step", "transformer_forward_int15",
             "mamba1_forward_fresh", "mamba1_forward", "mamba1_decode_step",
             "mamba2_forward_fresh", "mamba2_forward", "mamba2_decode_step",
             "mamba3_forward_fresh", "mamba3_forward", "mamba3_decode_step",

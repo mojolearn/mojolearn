@@ -129,7 +129,7 @@ from gemm.checks.gemm_int15 import (
     INT15_QUANT_SABOTAGE,
     INT15_SABOTAGE,
 )
-from gemm.checks.gemm_int15_tuned import INT15_EPILOGUE_SABOTAGE
+from gemm.checks.gemm_int15_epilogue import INT15_EPILOGUE_SABOTAGE
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
