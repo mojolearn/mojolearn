@@ -238,6 +238,59 @@ def snap_weights_to_grid_kernel(
         pos += stride
 
 
+def snap_gradients_to_scale_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    stat_count_in: Int32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
+):
+    """lane/sym-quality (2026-09-29): every GRADIENT plane (stat planes 1 ..
+    stat_count - 1), in place, onto the tree's fixed-point grid:
+    `v <- dequant(hist2_quantize(v, scale, hist2_dither(row)))`, the rule,
+    key and dequantization (`Float32(Int(q)) / scale`) the histograms
+    already apply. NO CATBOOST COUNTERPART (their histograms add floats).
+
+    WHY. The fixed-point histograms quantize each row's gradient with a
+    dither that is a FIXED function of the row, while the partition totals
+    the score subtracts them from (`sumRight = partStat - sumLeft`) are
+    float sums of the unquantized gradients. Every leaf total therefore
+    carries sqrt(rows) units of dither mismatch, the SAME mismatch tree
+    after tree. It lands on the right side of every split, so a side with
+    a few rows gets a phantom gradient near one and scores `S^2 / (W +
+    l2)` from nothing. Once the real gains have shrunk, the searcher picks
+    those splits: on gbm-bench taxi at unit weights every tree from ~300
+    on was feature 13 at bins 219, 218, ..., 212 (its upper tail), the same
+    structure each time, so the Newton leaves went to 1e-10 and trees 300
+    to 1000 changed nothing (AUC 0.6275 at 1000 trees, CatBoost 0.6317).
+
+    After the snap every gradient is a multiple of `1 / scale`, so every
+    histogram arm (the per-row dithered one-byte arms and the block-partial
+    binary and half-byte arms alike) sums exactly the values the partition
+    totals sum, and `right = total - left` is consistent to float rounding.
+    The histogram already kept only this resolution, so the search loses
+    nothing it had; the dither is zero mean, so each gradient moves by less
+    than one grid unit, unbiased. Leaf VALUES are estimated from the target
+    and the cursor, not from these planes (`_estimate_and_apply`)."""
+    var n_rows = Int(n_rows_in)
+    var stat_count = Int(stat_count_in)
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    var pos = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while pos < n_rows:
+        var u = hist2_dither(pos)
+        comptime if is_defined["MOJOLEARN_SNAP_SABOTAGE"]():
+            u = hist2_dither(pos + 1)
+        for s in range(1, stat_count):
+            var q = hist2_quantize(
+                stats.unsafe_load(s * n_rows + pos), fixed_scale, u
+            )
+            var v = Float32(0.0)
+            if q != Int32(0):
+                v = ftz(Float32(Int(q)) / fixed_scale)
+            stats.unsafe_store(s * n_rows + pos, v)
+        pos += stride
+
+
 def hist2_smem_add[
     dt: DType
 ](
