@@ -80,3 +80,34 @@ PYTHONPATH=python pixi run -e test python tools/lowbit_e2e/model_probe.py \
 ```
 
 No profile default changed; no machine rented, extended, or released.
+
+## First result: AMD public API diagnostic
+
+The submitted AMD request finished PASS at 2026-09-29T05:04:32Z on the
+MI325X. Source 4c875f5ba. Raw request verdict, output and stderr are retained
+in `bench/results/lowbit_e2e/2026-09-29/amd-public-api/`.
+
+Five alternating timed samples per arm, one run, warmed operations. Ratios
+are fixed15 over fp32 medians on the same box and input, including public
+binding transfers and allocation. Input generation is synthetic; these are
+diagnostics, not publishable corpus/model speed claims.
+
+| Public call | fp32 ms | fixed15 ms | fixed15 / fp32 |
+|---|---:|---:|---:|
+| attention projection, 1 token | 0.481098 | 0.362490 | 0.7535 |
+| attention projection, 8 tokens | 0.476779 | 0.373940 | 0.7843 |
+| attention projection, 512 tokens | 1.011759 | 0.605749 | 0.5987 |
+| feed-forward down, 512 tokens | 1.430937 | 1.940777 | 1.3563 |
+| output head, 1 token | 3.861262 | 2.569705 | 0.6655 |
+
+Every diagnostic correctness assertion passed. The first one-time weight
+pack includes cold initialization (251.831432 ms); it must not be compared
+with later warm pack samples as if they used the same protocol. Warm call
+ratios exclude this one-time packing but include per-call activation
+conversion and uploading both weight planes.
+
+Readiness: inference BLOCKED_NOT_INTEGRATED, training BLOCKED_UNSUPPORTED.
+The H100 job was still queued at the final status read; its live log is
+available with `sh tools/nvidia_central.sh log nvc3-0031`.
+The model runner's syntax was also parsed successfully on the H100 host;
+actual model execution remains untested pending integration.
