@@ -171,7 +171,11 @@ LANES = ("lm-train-step", "lm-forward", "gemm",
          "mamba1-forward", "mamba1-infer", "mamba2-forward", "mamba2-infer",
          "mamba3-forward", "mamba3-infer",
          "samba-train-step", "samba-forward", "samba-infer",
-         "mlp-train-step", "mlp-infer")
+         "mlp-train-step", "mlp-infer",
+         # 2026-09-29: the byte LM's CPU inference and CPU training step, and the
+         # bf16 and int8 GEMM profiles (SmallByteLanguageModelTrainer IS
+         # LanguageModelTrainer, raced by lm-train-step and lm-forward)
+         "lm-infer", "lm-host-train-step", "gemm-bf16", "gemm-int8")
 #: The model each lane runs.
 MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "transformer-forward": "transformer", "transformer-infer": "transformer",
@@ -179,10 +183,12 @@ MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
             "mamba2-forward": "mamba2", "mamba2-infer": "mamba2",
             "mamba3-forward": "mamba3", "mamba3-infer": "mamba3",
             "samba-train-step": "samba", "samba-forward": "samba", "samba-infer": "samba",
-            "mlp-train-step": "mlp", "mlp-infer": "mlp"}
-TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step")
+            "mlp-train-step": "mlp", "mlp-infer": "mlp",
+            "lm-infer": "lm", "lm-host-train-step": "lm", "gemm-bf16": "gemm", "gemm-int8": "gemm"}
+TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
 #: Where OUR class runs: the *Inference classes are the host binding.
-DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") else "gpu") for lane in LANES}
+DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") or lane == "lm-host-train-step" else "gpu")
+             for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
 DATA_OF = {lane: ("bytes" if MODEL_OF[lane] in ("lm", "samba") else "gaussian") for lane in LANES}
 
@@ -203,7 +209,10 @@ NO_COMPILE = ("mamba1-forward", "mamba1-infer")
 VENDORS = ("apple", "nvidia", "amd")
 
 ARMS = ("ours", "ours-cpu") + tuple("torch-" + s for s in TORCH_SETTINGS) \
-    + tuple("torch-cpu-" + s for s in CPU_SETTINGS)
+    + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8")
+#: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
+INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
+                "compile_int8": dict(tf32=False, compile=True, autocast=None)}
 
 #: What is left off the plan per vendor, named (the board prints it).
 NOT_PLANNED = {
@@ -212,7 +221,10 @@ NOT_PLANNED = {
          % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
     + ["torch-compile-* on mamba1-forward and mamba1-infer: the only torch Mamba-1 twin is "
        "the pure-PyTorch reference scan, a per-token Python loop that torch.compile would "
-       "unroll L times; mamba1 races the eager arms only"]
+       "unroll L times; mamba1 races the eager arms only",
+       "gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)"]
+    + (["gemm-int8: torch._int_mm is a CUDA kernel; torch on %s has no int8 matmul, so ours "
+        "races alone" % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
@@ -291,6 +303,10 @@ MLP_DIMS = ((16, 8), (16,), (3, 16), (3,))
 
 def opponents(vendor, lane):
     """The torch arms planned for (vendor, lane), in COLUMNS order."""
+    if lane == "gemm-int8":
+        return ("torch-eager-int8", "torch-compile-int8") if vendor == "nvidia" else ()
+    if lane == "gemm-bf16":
+        return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
     if DEVICE_OF[lane] == "cpu":
         arms = ["torch-cpu-" + s for s in CPU_SETTINGS]
     else:
@@ -311,16 +327,25 @@ def arm_setting(arm):
 
 
 def precision_text(setting):
-    return {"fp32": "float32, TF32 off",
+    return {"int8": "int8 operands, int32 accumulate (torch._int_mm)",
+            "fp32": "float32, TF32 off",
             "tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
             "bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer "
                     "state float32)"}[setting.split("-")[1]]
 
 
+def lm_dims(lane, shape):
+    """LM_SHAPES[shape], the length capped at CPU_LENGTH_CAP on a CPU lane (full)."""
+    dims = list(LM_SHAPES[shape])
+    if DEVICE_OF[lane] == "cpu" and shape == "full":
+        dims[1] = min(dims[1], CPU_LENGTH_CAP)
+    return dims
+
+
 def _dims_of(lane, shape):
     model = MODEL_OF[lane]
     if model == "lm":
-        return dict(zip(LM_FIELDS, LM_SHAPES[shape]))
+        return dict(zip(LM_FIELDS, lm_dims(lane, shape)))
     if model == "gemm":
         m, n, k = GEMM_SHAPES[shape]
         return {"m": m, "n": n, "k": k}
@@ -341,7 +366,7 @@ def shape_record(lane, shape):
     model = MODEL_OF[lane]
     rec = dict(d, name=shape)
     if model == "lm":
-        rec["label"] = "B%d L%d DM%d H%d KV%d HD%d FF%d layers%d V%d" % tuple(LM_SHAPES[shape])
+        rec["label"] = "B%d L%d DM%d H%d KV%d HD%d FF%d layers%d V%d" % tuple(lm_dims(lane, shape))
     elif model == "gemm":
         rec["label"] = "%dx%dx%d" % (d["m"], d["n"], d["k"])
     elif model == "transformer":
@@ -372,6 +397,15 @@ LANE_TEXT = {
     "lm-forward": ("mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
                    "no_grad forward of the same twin to logits; logits.cpu()"),
     "gemm": ("mojolearn.linalg.matmul(a, b)", "a.to(dev) @ b.to(dev), .cpu()"),
+    "gemm-bf16": ("mojolearn.linalg.matmul_bf16(a_bf16, b_bf16) (bf16 bits made before the clock)",
+                  "a_bf16.to(dev) @ b_bf16.to(dev) under the setting, .float().cpu()"),
+    "gemm-int8": ("mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+                  "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()"),
+    "lm-infer": ("mojolearn.LanguageModelInference(parameters, shape=cfg).logits(ids) (CPU)",
+                 "no_grad forward of the tools/torch_lm_step_opponent.py twin on the CPU"),
+    "lm-host-train-step": ("mojolearn.LanguageModelHostTrainer(parameters, shape=cfg).train_step(ids) (CPU)",
+                           "the same twin on the CPU; zero_grad; forward + mean CE; backward; "
+                           "torch.optim.AdamW step; loss.item()"),
     "transformer-forward": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
                             "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"),
     "transformer-infer": ("mojolearn.TransformerBlockInference(...).forward(x) (CPU host binding)",
@@ -422,7 +456,7 @@ def lane_settings(lane):
     else:
         s["quality"] = "max_abs_diff_vs_ours, max_rel_diff_vs_ours" + (
             ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer") else "") + (
-            ", max_rel_err_vs_fp64" if lane == "gemm" else "")
+            ", max_rel_err_vs_fp64" if MODEL_OF[lane] == "gemm" else "")
     s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
                            ["torch-" + x for x in TORCH_SETTINGS]}
     return s
@@ -566,12 +600,16 @@ def make_inputs(lane, shape, steps, path):
     d = _dims_of(lane, shape)
     rec = {"lane": lane, "shape": shape_record(lane, shape), "seed": SEED}
     arrays = {}
-    if model == "gemm":
+    if model == "gemm" and lane == "gemm-int8":
+        arrays["a"] = rng.integers(-127, 128, (d["m"], d["k"])).astype(np.int8)
+        arrays["b"] = rng.integers(-127, 128, (d["n"], d["k"])).astype(np.int8)
+        rec["inputs"] = "A [m,k], B [n,k] = default_rng(%d).integers(-127, 128) int8; C = A B^T" % SEED
+    elif model == "gemm":
         arrays["a"] = rng.standard_normal((d["m"], d["k"])).astype(np.float32)
         arrays["b"] = rng.standard_normal((d["k"], d["n"])).astype(np.float32)
         rec["inputs"] = "A [m,k], B [k,n] = default_rng(%d).standard_normal float32" % SEED
     elif model == "lm":
-        dims = LM_SHAPES[shape]
+        dims = lm_dims(lane, shape)
         shapes = lm_registry(dims)
         n_total = sum(int(np.prod(s)) for _, s in shapes)
         flat = rng.normal(0, .02, n_total).astype(np.float32)
@@ -725,7 +763,7 @@ class OursLM(Ours):
         import numpy as np
         self.np = np
         ml = _ours_module()
-        dims = LM_SHAPES[shape]
+        dims = lm_dims(lane, shape)
         cfg = ml.LanguageModelConfig(*dims)
         twin = lm_registry(dims)
         ours = [(e["name"], tuple(e["shape"])) for e in ml.LanguageModelTrainer.parameter_registry(cfg)]
@@ -733,6 +771,22 @@ class OursLM(Ours):
             raise RuntimeError("REFUSED: our parameter registry differs from the torch twin's")
         self.lane = lane
         self.batches = data["batches"]
+        if lane in ("lm-infer", "lm-host-train-step"):
+            flat = np.ascontiguousarray(data["init"])
+            if lane == "lm-infer":
+                self.model = ml.LanguageModelInference(flat, shape=cfg)
+            else:
+                self.model = ml.LanguageModelHostTrainer(flat, shape=cfg, lr=ADAMW["lr"],
+                                                         betas=ADAMW["betas"], eps=ADAMW["eps"],
+                                                         weight_decay=ADAMW["weight_decay"])
+            self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__",
+                                               None), ml.numeric_mode(), "cpu")
+            self.info.update(call=LANE_TEXT[lane][0], cls=type(self.model).__name__)
+            self.k = 0
+            self.losses = []
+            self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
+            self.record = _ours_record(lane)
+            return
         self.trainer = ml.LanguageModelTrainer(
             np.ascontiguousarray(data["init"]), shape=cfg, resident=True, step_result="lean",
             data_schedule={"fixture": "tools/bench_board_neural.py", "seed": SEED,
@@ -751,20 +805,27 @@ class OursLM(Ours):
         self.record = _ours_record(lane, config_readback=meta.get("config"))
 
     def call(self):
+        np = self.np
         if self.lane == "lm-train-step":
-            res = self.trainer.train_step(self.np.ascontiguousarray(self.batches[self.k]))
+            res = self.trainer.train_step(np.ascontiguousarray(self.batches[self.k]))
             self.losses.append(float(res["loss"]))
             self.k += 1
+        elif self.lane == "lm-host-train-step":
+            bits = self.model.train_step(np.ascontiguousarray(self.batches[self.k]))
+            self.losses.append(float(np.array([int(bits)], dtype=np.uint32).view(np.float32)[0]))
+            self.k += 1
+        elif self.lane == "lm-infer":
+            self.out = self.model.logits(self.ids)
         else:
             self.out = self.trainer.logits(self.ids)
 
     def outputs(self):
-        if self.lane == "lm-train-step":
+        if self.lane in TRAIN_LANES:
             return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
         return {"y": self.np.asarray(self.out)}
 
     def digest(self):
-        return None if self.lane == "lm-train-step" else Ours.digest(self)
+        return None if self.lane in TRAIN_LANES else Ours.digest(self)
 
 
 class OursGEMM(Ours):
@@ -774,13 +835,21 @@ class OursGEMM(Ours):
         ml = _ours_module()
         import mojolearn.linalg as linalg
         self.linalg = linalg
+        self.lane = lane
         self.a, self.b = np.ascontiguousarray(data["a"]), np.ascontiguousarray(data["b"])
+        if lane == "gemm-bf16":           # the bf16 bits, made before the clock
+            self.a, self.b = linalg.to_bf16(self.a), linalg.to_bf16(self.b)
+        elif lane == "gemm-int8":         # the codes with exponent 0: C = A B^T exactly
+            self.a = (self.a, np.zeros(self.a.shape[0], dtype=np.int32))
+            self.b = (self.b, np.zeros(self.b.shape[0], dtype=np.int32))
         self.info = _ours_info(ml, getattr(linalg, "__file__", None), linalg.numeric_mode())
         self.info.update(profile=linalg.PROFILE, call=LANE_TEXT[lane][0])
         self.record = _ours_record(lane)
 
     def call(self):
-        self.out = self.linalg.matmul(self.a, self.b)
+        fn = {"gemm": self.linalg.matmul, "gemm-bf16": self.linalg.matmul_bf16,
+              "gemm-int8": self.linalg.matmul_int8}[self.lane]
+        self.out = fn(self.a, self.b)
 
 
 class OursBlock(Ours):
@@ -959,7 +1028,7 @@ class TorchArm:
                                % (arm, where, lane, DEVICE_OF[lane]))
         twin = _load("torch_lm_step_opponent")
         self.twin = twin
-        col = twin.COLUMNS[setting.replace("-", "_")]
+        col = INT8_COLUMNS.get(setting.replace("-", "_")) or twin.COLUMNS[setting.replace("-", "_")]
         if where == "cpu":
             import torch
             dev, kind, name, sync = torch.device("cpu"), "cpu", _cpu_name(), (lambda: None)
@@ -1066,12 +1135,20 @@ class TorchArm:
 
     # -- lane builders -----------------------------------------------------
     def _build_gemm(self):
+        torch = self.torch
         self.host = [self._t(self.data["a"]), self._t(self.data["b"])]
+        if self.lane == "gemm-bf16":
+            self.host = [h.to(torch.bfloat16) for h in self.host]
+        if self.lane == "gemm-int8":
+            if self.kind != "cuda" or getattr(torch.version, "hip", None):
+                raise RuntimeError("REFUSED: torch._int_mm is a CUDA kernel; not on %s" % self.kind)
+            self.module = self._module({}, lambda p, a, b: torch._int_mm(a, b.t()))
+            return
         self.module = self._module({}, lambda p, a, b: a @ b)
 
     def _build_lm(self):
         torch, np, twin = self.torch, self.np, self.twin
-        dims = LM_SHAPES[self.shape]
+        dims = lm_dims(self.lane, self.shape)
         flat = torch.from_numpy(np.ascontiguousarray(self.data["init"]))
         model = twin.build_model(torch, dims, twin.registry(dims), flat, self.dev)
         n = sum(p.numel() for p in model.parameters())
@@ -1384,12 +1461,19 @@ def quality(lane, data, outs):
         return q
     for arm, o in outs.items():
         q[arm] = {}
-    if lane in ("lm-forward", "samba-forward", "samba-infer"):
+    if lane in ("lm-forward", "lm-infer", "samba-forward", "samba-infer"):
         targets = data["batches"][0][:, 1:].astype(np.int64)
         for arm, o in outs.items():
             q[arm]["mean_nll"] = _mean_nll(np, o["y"], targets)
-    if lane == "gemm":
-        c64 = data["a"].astype(np.float64) @ data["b"].astype(np.float64)
+    if MODEL_OF[lane] == "gemm":
+        a64, b64 = data["a"].astype(np.float64), data["b"].astype(np.float64)
+        if lane == "gemm-bf16":           # the bf16-rounded operands (round to nearest even)
+            def bf16(x):
+                u = x.astype(np.float32).view(np.uint32).astype(np.uint64)
+                u = ((u + 0x7FFF + ((u >> 16) & 1)) >> 16) << 16
+                return u.astype(np.uint32).view(np.float32).astype(np.float64)
+            a64, b64 = bf16(data["a"]), bf16(data["b"])
+        c64 = a64 @ b64.T if lane == "gemm-int8" else a64 @ b64
         scale = float(np.abs(c64).max()) or 1.0
         for arm, o in outs.items():
             q[arm]["max_rel_err_vs_fp64"] = float(np.abs(o["y"].astype(np.float64) - c64).max()) / scale
