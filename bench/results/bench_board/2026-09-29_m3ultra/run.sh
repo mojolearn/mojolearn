@@ -8,9 +8,10 @@
 #
 # The steward kills a speed command at 3 hours, which would orphan the board's
 # drivers (they run in their own sessions). So this script stops the board
-# itself before that, or at 12:50Z (the box ends at 13:00Z), whichever comes
-# first, kills every process of this run, and renders BOARD.md from what is
-# finished. The next queued copy of this job resumes.
+# itself at 2 h 50 min, kills every process of this run, and renders BOARD.md
+# from what is finished. The next queued copy of this job resumes. (The first
+# job also stopped at 12:50Z, when the box was to end at 13:00Z; Andrew then
+# kept the box for the whole board, so that stop is gone.)
 set -u
 OUT="$HOME/mojolearn-evidence/bench-board/2026-09-29_m3ultra"
 CACHE="$HOME/bench-board-cache"
@@ -31,9 +32,7 @@ if [ ! -f "$HOME/datasets/.board-staged-ok" ]; then
 fi
 
 start=$(date -u +%s)
-hard=$(date -j -u -f "%Y-%m-%d %H:%M:%S" "2026-09-29 12:50:00" +%s)
 stop=$((start + 10200))
-[ "$hard" -lt "$stop" ] && stop=$hard
 say "board runs until $(date -u -r "$stop" +%FT%TZ) at most"
 
 "$PY" tools/bench_board.py --vendor apple --mojolearn-version 0.8.25 \
