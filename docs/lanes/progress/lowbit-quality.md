@@ -7,7 +7,7 @@ Lane files: `~/mojolearn-evidence/lowbit-quality/`. Records:
 Box: shared pod nvc1 (2x RTX 4090), lane `lowbit-quality`. Nothing runs on
 the laptop; it edits files, talks to the pod and formats JSON records.
 
-## State (2026-09-29T03:20Z)
+## State (2026-09-29T03:40Z)
 
 | Step | State |
 |---|---|
@@ -16,10 +16,33 @@ the laptop; it edits files, talks to the pod and formats JSON records.
 | Quantizer cross-check | PASS in job nvc1-0006 (FAILED once in nvc1-0005, cause below) |
 | This forward against `transformers` | PASS, sabotage arm fails |
 | Inference, six arms and the attention switch, enwik8 | done, job nvc1-0006 |
-| Inference, second text (pile_github) and the width sweep | running, job nvc1-0008 |
-| Finalists F1 and F2, both texts, then training | queued, job nvc1-0009 |
-| Training plan (noise floor, then arms in verdict order) | running, job nvc1-0007 |
+| Inference, six arms and the attention switch, pile_github | done, job nvc1-0008 step 1 |
+| Width sweep, both texts | running, job nvc1-0008 steps 2 and 3 |
+| Training plan (noise floor, then arms) | running, job nvc1-0007 |
+| Finalists F1 and F2, both texts, then their training arms | queued, job nvc1-0010 |
+| F1 and bf16 inference, then bf16 and 15-bit training at five seeds | queued, job nvc1-0011 |
 | Task evaluation of the finalists | OWED: the R2 store holds no task set (below) |
+
+## Decisions that bind this lane (Andrew, through the brief)
+
+- int8 as a model's arithmetic and the int8-attention mix (finalist F2) are
+  DROPPED. Dropped means only that the flag does not offer them. Their
+  measurement is finished and reported; rows carry the note.
+- No new int8 rescue arm. Every arm already planned or queued is run.
+- Nothing is cancelled, queued or running.
+- Training order: bf16 on both operands, forward and backward, first; then
+  15-bit the same way.
+
+## The cancelled job
+
+nvc1-0009 (`finalists.sh`, queued, not started) was cancelled at 03:32:18Z
+on the orchestrator's 04:30Z instruction. The orchestrator withdrew that
+instruction as its error. The script was restored byte for byte (sha256
+0a61b14eb13889d1d3abfee20ebb6fe5e23d1e4d1837b4886854522cb28161c7, the same
+on the pod and at commit 1aa6da891) and resubmitted as nvc1-0010 at
+03:35:42Z. No measurement was lost; the job lost its place in line.
+Code that skipped int8 arms was committed (352f71a29) and removed
+(9dcf5100d) without ever being synced to the pod, so no job ran it.
 
 ## The pass rule
 
@@ -129,11 +152,25 @@ What the rows say:
   carry the signal.
 - 15-bit codes cost nothing measurable on either operand or on both.
 
-The int8 rescue arms stop here (orchestrator, 03:35Z). Seven follow-up rows
-(the finer and the saturating int8 WEIGHT scale, and int8 weights with named
-products on 15 bits) were inside job nvc1-0008 when that instruction came.
-The job was submitted before it and a submitted job is never cancelled, so
-those rows run; none was added after.
+No new int8 rescue arm is added (orchestrator, 03:35Z). The seven follow-up
+rows inside job nvc1-0008 (the finer and the saturating int8 WEIGHT scale,
+and int8 weights with named products on 15 bits) were planned and queued
+before that, so they run and are reported.
+
+## Inference on both texts: the six arms and the attention switch
+
+| Profile | Attention products | enwik8: change (upper end) | pile_github: change (upper end) | Top-1 agreement | Verdict |
+|---|---|---|---|---|---|
+| `bf16f32.v1` | no | 0 | 0 | 1.0000, 1.0000 | PASS, bit-equal to the baseline |
+| bf16 both | no | +0.0093% (+0.0168%) | +0.0000% (+0.0061%) | 0.9962, 0.9976 | PASS |
+| bf16 both | yes | +0.0085% (+0.0179%) | +0.0127% (+0.0224%) | 0.9953, 0.9967 | PASS |
+| `int8i32.v1` | no | +32.18% (+34.62%) | +28.89% (+31.86%) | 0.7659, 0.8501 | MISS; dropped |
+| `int8i32.v1` | yes | +31.61% (+33.91%) | +27.89% (+30.68%) | 0.7653, 0.8489 | MISS; dropped |
+| 15-bit both | no | -0.0027% (+0.0017%) | +0.0046% (+0.0089%) | 0.9979, 0.9986 | PASS |
+| 15-bit both (the F1 configuration) | yes | -0.0015% (+0.0033%) | +0.0055% (+0.0099%) | 0.9980, 0.9987 | PASS |
+| 15-bit weights, int8 activations | no | +27.28% (+29.30%) | +22.59% (+24.85%) | 0.7844, 0.8648 | MISS; dropped |
+| 15-bit weights, int8 activations | yes | +27.59% (+29.61%) | +23.35% (+25.64%) | 0.7825, 0.8626 | MISS; dropped |
+| int8 weights, fp32 activations | no | +1.59% (+1.71%) | +1.06% (+1.16%) | 0.9327, 0.9630 | MISS; dropped |
 
 ## Training (job nvc1-0007, running)
 
@@ -149,8 +186,17 @@ negated fails (cosine -0.06).
 
 Baseline, five seeds, validation loss at step 4000: 1.48804, 1.47899,
 1.46952, 1.47935, 1.46688. Noise floor (sample standard deviation over the
-seeds) 0.0084 nats, 0.84 percent of perplexity. It is close to the bar, so a
-training verdict needs the interval over the seeds, not the mean alone.
+seeds) 0.0085 nats, 0.853 percent of perplexity. It is close to the bar, so a
+training verdict rests on the interval of the PAIRED differences (arm minus
+the baseline of the same seed), which is tighter than the floor.
+
+Interim table, 03:36Z, three seeds per arm (five are queued in nvc1-0011):
+
+| Profile | Products | Mode | Change at step 4000 | Interval (t, 2 degrees of freedom) | Inside the noise | Steps to the baseline's final loss | Verdict |
+|---|---|---|---|---|---|---|---|
+| bf16 both | projections | forward + backward | +0.001% | -0.616% to +0.621% | yes | median 4100 | PASS |
+| 15-bit both | projections | forward | -0.229% | -0.877% to +0.424% | yes | median 4000 | PASS |
+| 15-bit both | projections | forward + backward | -0.184% | -1.400% to +1.046% | yes | median 4000 | UNDERPOWERED at three seeds |
 
 ## Failures, with cause
 
