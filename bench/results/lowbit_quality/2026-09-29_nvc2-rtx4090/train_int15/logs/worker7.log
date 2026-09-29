@@ -1,0 +1,7 @@
+e.fwd.attn.s2 step 1000 train 1.585 val 1.6422
+e.fwd.attn.s2 step 2000 train 1.5947 val 1.5373
+e.fwd.attn.s2 step 3000 train 1.5856 val 1.4995
+e.fwd.attn.s2 step 4000 train 1.4116 val 1.4731
+e.fwd.attn.s2 step 5000 train 1.5133 val 1.4523
+e.fwd.attn.s2 step 6000 train 1.3636 val 1.4297
+DONE e.fwd.attn.s2 val@4000 1.4730609920924485 val@6000 1.4296511445973938 nonfinite None seconds 791.5

@@ -1,0 +1,9 @@
+gpuq: job 0006 lane=lowbit-quality-b gpus=0 cap=240min started 2026-09-29T03:51:14Z
+gpuq: script /root/mojolearn-lowbit-quality-b/bench/lowbit_quality/jobs/train_int15_b.sh sha256 at submit 9d3128eaea89c08e0d56a91209236a48e47d9d933315d535f94d20156c2fae52, now 9d3128eaea89c08e0d56a91209236a48e47d9d933315d535f94d20156c2fae52
+job=0006 lane=lowbit-quality-b gpus=0 commit=5b4bf171a8053bddc9216cf8a1d6097223d4267f started=2026-09-29T03:51:14Z
+  File "/root/mojolearn-lowbit-quality-b/bench/lowbit_quality/byte_lm_train.py", line 543
+    global ZERO_CODE_WIDTHS
+    ^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: name 'ZERO_CODE_WIDTHS' is used prior to global declaration
+self-test FAILED: no run is started
+gpuq: job 0006 failed exit=4 at 2026-09-29T03:51:19Z after 5s

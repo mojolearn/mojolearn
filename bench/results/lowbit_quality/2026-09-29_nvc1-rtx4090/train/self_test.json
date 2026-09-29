@@ -1,0 +1,26 @@
+{
+ "gate": {
+  "min_cosine": 0.999999,
+  "max_rel_norm_error": 0.0001
+ },
+ "forward_only_path": {
+  "cosine": 0.9999999999999999,
+  "rel_norm_error": 0.0,
+  "loss_delta": 0.0
+ },
+ "forward_backward_path": {
+  "cosine": 0.9999999999999897,
+  "rel_norm_error": 1.4223491450202805e-07,
+  "loss_delta": 0.0
+ },
+ "sabotage_negated_weight_gradient": {
+  "cosine": -0.059617841879667934,
+  "rel_norm_error": 1.3819059227608612,
+  "loss_delta": 0.0
+ },
+ "arm_e_fwdbwd_attn_gradient": {
+  "cosine": 0.999999988746548,
+  "norm_ratio": 1.0000170446648537
+ },
+ "verdict": "PASS"
+}

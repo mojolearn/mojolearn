@@ -1,0 +1,30 @@
+gpuq: job 0008 lane=lowbit-quality-b gpus=1 cap=240min started 2026-09-29T03:52:35Z
+gpuq: script /root/mojolearn-lowbit-quality-b/bench/lowbit_quality/jobs/train_int15_b.sh sha256 at submit 9d3128eaea89c08e0d56a91209236a48e47d9d933315d535f94d20156c2fae52, now 9d3128eaea89c08e0d56a91209236a48e47d9d933315d535f94d20156c2fae52
+job=0008 lane=lowbit-quality-b gpus=1 commit=d44962ac36c74977788bc44f733712edb84ff2a6 started=2026-09-29T03:52:35Z
+self_test {"gate": {"min_cosine": 0.999999, "max_rel_norm_error": 0.0001}, "forward_only_path": {"cosine": 0.9999999999999999, "rel_norm_error": 0.0, "loss_delta": 0.0}, "forward_backward_path": {"cosine": 0.9999999999999897, "rel_norm_error": 1.4223491450202805e-07, "loss_delta": 0.0}, "sabotage_negated_weight_gradient": {"cosine": -0.059617841879667934, "rel_norm_error": 1.3819059227608612, "loss_delta": 0.0}, "arm_e_fwdbwd_attn_gradient": {"cosine": 0.999999988746548, "norm_ratio": 1.0000170446648537}, "verdict": "PASS"}
+DONE a.fwd.proj.s0 val@4000 1.4880402752603417 val@6000 1.4498272979986724 nonfinite None seconds 129.4
+DONE e.fwdbwd.attn.s2 val@4000 1.474713791939862 val@6000 1.4423044460081345 nonfinite None seconds 1057.1
+DONE a.fwd.proj.s1 val@4000 1.4789895073500947 val@6000 1.451824291332262 nonfinite None seconds 125.7
+DONE e.fwdbwd.attn.s3 val@4000 1.4821735327186305 val@6000 1.4502472121287817 nonfinite None seconds 1036.8
+DONE e.fwdbwd.attn.s0 val@4000 1.484375673162105 val@6000 1.4422767376273642 nonfinite None seconds 1240.1
+DONE e.fwdbwd.attn.s1 val@4000 1.479028310360632 val@6000 1.4565030492486324 nonfinite None seconds 1246.0
+DONE a.fwd.proj.s2 val@4000 1.4695193936996906 val@6000 1.4446969677956034 nonfinite None seconds 125.4
+DONE e.fwdbwd.attn.s4 val@4000 1.4697855362073207 val@6000 1.4404677026884893 nonfinite None seconds 1060.9
+DONE a.fwd.proj.s3 val@4000 1.4793503644050043 val@6000 1.4483287889581562 nonfinite None seconds 126.1
+DONE a.fwd.proj.s4 val@4000 1.466880080678185 val@6000 1.4383261938607117 nonfinite None seconds 129.5
+DONE e.fwd.attn.s0 val@4000 1.489231037631739 val@6000 1.4446656019291106 nonfinite None seconds 533.1
+DONE e.fwd.attn.s1 val@4000 1.4878304385560979 val@6000 1.4579406351935171 nonfinite None seconds 791.5
+DONE e.fwd.attn.s2 val@4000 1.4730609920924485 val@6000 1.4296511445973938 nonfinite None seconds 791.5
+DONE e.fwd.attn.s3 val@4000 1.4755227974075888 val@6000 1.4415775715160497 nonfinite None seconds 791.4
+DONE e.fwd.attn.s4 val@4000 1.4720228517890204 val@6000 1.441419297385547 nonfinite None seconds 782.0
+baseline fp32.v1: seeds [0, 1, 2, 3, 4], val loss at step 4000 mean 1.47656, noise floor 0.00850 nats (0.853% of perplexity), range 0.02116
+
+The change is the mean over the seeds of (arm minus the baseline of the same seed) at step 4000, as a relative change of validation perplexity. The interval is that mean plus and minus t(0.975, seeds - 1) standard errors; the seeds are resampled; it bounds the run-to-run error at this shape on this corpus and says nothing about another shape or text.
+
+| profile | products | mode | seeds | change at step 4000 | interval | change at step 6000 | interval | noise floor | inside noise | steps to baseline final | gradient cosine against fp32 (min) | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| int15-both+attn (F1) | projections + attention | forward | 5 | +0.298% (+0.00298 nats) | -0.287% to +0.887% | -0.354% (-0.00355 nats) | -1.389% to +0.691% | 0.853% | yes | median 4100 | 1.000000 | PASS |
+| int15-both+attn (F1) | projections + attention | forward + backward | 5 | +0.146% (+0.00146 nats) | -0.275% to +0.569% | -0.024% (-0.00024 nats) | -0.619% to +0.575% | 0.853% | yes | median 4100 | 0.999997 | PASS |
+
+train_int15 part 1 exit=0 finished=2026-09-29T04:13:28Z
+gpuq: job 0008 done exit=0 at 2026-09-29T04:13:32Z after 1257s

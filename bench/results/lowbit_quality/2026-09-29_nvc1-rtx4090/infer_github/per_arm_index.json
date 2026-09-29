@@ -1,0 +1,97 @@
+{
+ "source": "/root/lowbit-quality-work/out/infer_github",
+ "format": "npz: nll float64 (per scored position), top uint16 (the arm's top-1 id)",
+ "arms": {
+  "arm_a.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125332145410692,
+   "nll_sha256": "28b2d9c9459eb20c2a7aa09d12081b4ed15edc6d2d0f9de3ca86767e6d02fe4f",
+   "top_sha256": "9d3dc0916cd7a0988d2c676706833d90b1742205399e972ca300b31d256c8344",
+   "bytes": 852790
+  },
+  "arm_b.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125332145410692,
+   "nll_sha256": "28b2d9c9459eb20c2a7aa09d12081b4ed15edc6d2d0f9de3ca86767e6d02fe4f",
+   "top_sha256": "9d3dc0916cd7a0988d2c676706833d90b1742205399e972ca300b31d256c8344",
+   "bytes": 852790
+  },
+  "arm_c.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125335144097038,
+   "nll_sha256": "5da9890755fdf8f142b4c02785c71226d00e09f5672ba35cbc9c33eac473a3ed",
+   "top_sha256": "e895fe120b77480d73c9f1c8720031e3e4c6a599111d07d9cb6a5fa78e437462",
+   "bytes": 852851
+  },
+  "arm_c_attn.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2126598905939063,
+   "nll_sha256": "9ea1f180c7f5c2ad5c94ce1facb130a2a2ca8e6698c090b9f0cc2824288bb026",
+   "top_sha256": "640e55edc808737ca1f7eb112eb6f416f63f8f83674709f067ca9ec14dbd12ee",
+   "bytes": 852816
+  },
+  "arm_d.npz": {
+   "positions": 102200,
+   "mean_nll": 1.4663592723797547,
+   "nll_sha256": "99b773251f5ce9289d268fccfc6ed0aff6f30c020a6f28d2cc4e24bf34792f38",
+   "top_sha256": "94e38c20080b25b46127e0fdb62426c44da15280c431c6d5602f769384950975",
+   "bytes": 858956
+  },
+  "arm_d_attn.npz": {
+   "positions": 102200,
+   "mean_nll": 1.4585442870466419,
+   "nll_sha256": "f0355453794fbdcc007e6f678bb9d38792781c43bfc1522946a02f16aa70645e",
+   "top_sha256": "3414baca4b7cf2655bd21eb0290a20dfffadbde872b3886ccf7d0b701cfc0548",
+   "bytes": 859466
+  },
+  "arm_e.npz": {
+   "positions": 102200,
+   "mean_nll": 1.212579295232772,
+   "nll_sha256": "df836adf4c914040a59dcdf210fa5e4e57ebbeac0664a36ad4a2d5cea27e2461",
+   "top_sha256": "3c69468d0469037e66c6f4a38c57ba3e134cb5b4a878f82ad2aaaaf7d3f5cc90",
+   "bytes": 852807
+  },
+  "arm_e_attn.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125880120693375,
+   "nll_sha256": "484be3d6366c9670a86cabf8f9952930b772e73885fd170cdd83b156ad8bae44",
+   "top_sha256": "d254521b602bb6794815c9c110310faa917924899e8b1ed70a0d0138d330e746",
+   "bytes": 853001
+  },
+  "arm_f.npz": {
+   "positions": 102200,
+   "mean_nll": 1.4162239778800454,
+   "nll_sha256": "2d1d6864817d445907fe980032fc4e878887e69916b82207fc50941c7ab2eb50",
+   "top_sha256": "805ee400282f5d434674c27e4826c4eaeb853bbb8bd294b5e3563e31f56b9d28",
+   "bytes": 858073
+  },
+  "arm_f_attn.npz": {
+   "positions": 102200,
+   "mean_nll": 1.4223874209912426,
+   "nll_sha256": "61b30b271fcc5410cc2c4d808ccd32cd06413a3f13d513decdc674402074e391",
+   "top_sha256": "fa2d3a7c5857a59f8a8a0a9713718d2ab0a2bfc791cceed4dd93c291e975afc3",
+   "bytes": 858886
+  },
+  "arm_floor.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125332357176597,
+   "nll_sha256": "c09b25565a87b4bc786b2e0b8dd5949a0107ccd9f3a1b2c11c4f7f0530708fa6",
+   "top_sha256": "9d3dc0916cd7a0988d2c676706833d90b1742205399e972ca300b31d256c8344",
+   "bytes": 852855
+  },
+  "arm_fp32w-int8a.npz": {
+   "positions": 102200,
+   "mean_nll": 1.4160179464895668,
+   "nll_sha256": "1f5286c23f8524f25b229f268222097af0e69f541ec1cd1ce349d3d1044aaa5e",
+   "top_sha256": "32057dd2326dfeeb8c344a3bb078267c191628685c296ec07ec4e28e46623873",
+   "bytes": 858209
+  },
+  "arm_int8w-fp32a.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2230299653537482,
+   "nll_sha256": "6f0543e4b07330daa609ed8f587a8b7160b80626cf68ee7a7b6bc3c980abb779",
+   "top_sha256": "ad14c2fd8636dde8a01aa8f73ac13eabe8f459604ae1e0947bdfc2a09dd55bbf",
+   "bytes": 852930
+  }
+ }
+}
