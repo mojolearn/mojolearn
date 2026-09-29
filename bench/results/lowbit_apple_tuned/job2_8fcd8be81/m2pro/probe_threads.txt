@@ -1,0 +1,10 @@
+THREADS ref.t32 128 wrote equal
+THREADS sg8.2x2 256 wrote equal
+THREADS sg16.2x2 512 NEVER-WROTE(4096 cells) equal
+THREADS sg16.1x1 512 wrote equal
+THREADS sg16.1x1.f2d 512 wrote equal
+THREADS ref.t32 128 wrote equal
+THREADS sg8.2x2 256 wrote equal
+THREADS sg16.2x2 512 NEVER-WROTE(4096 cells) equal
+THREADS sg16.1x1 512 wrote equal
+THREADS sg16.1x1.f2d 512 wrote equal
