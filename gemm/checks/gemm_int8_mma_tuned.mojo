@@ -85,8 +85,7 @@ the pinned conversion and the scale are the fifteen-bit profile's seams and
 live in its own file. THE FUSED FORM (`FUSED` True, the orchestrator's
 interface with lane/lowbit-int15) is the same kernel whose last step hands
 each cell's three sums to `int15_store_cell` (lane/lowbit-int15's
-`gemm/checks/gemm_int15_epilogue.mojo`; until that file is on origin, the
-stand-in `gemm_int8_pieces_epilogue_stub.mojo`), which applies the mask,
+`gemm/checks/gemm_int15_epilogue.mojo`), which applies the mask,
 the recombination, the pinned seam and the scale: one launch where the sums
 form needs a second to read twelve bytes a cell back. This file states no
 float rule in either form. THE TWO-PAGE FORM (`PIPE` True) stages the next
@@ -129,7 +128,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import dequant_int8_pinned, int8_row_exponent
 from gemm.checks.gemm_int8_mma import _imma_m16n8k32, _pack4, int8_mma_admits
-from gemm.checks.gemm_int8_pieces_epilogue_stub import int15_store_cell
+from gemm.checks.gemm_int15_epilogue import int15_store_cell
 from gemm.checks.quantize_int8_par import _absmax_step, _code
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip

@@ -90,17 +90,19 @@ arithmetic (`_pieces_fixture_kernel`), the same on every box:
     training.pieces.int8.tuned      quantizer, standing in for the
                                     fifteen-bit one, which is
                                     lane/lowbit-int15's), the four products
-                                    in one launch, and a recombination
+                                    in one launch, and a second launch
                                     (`_pieces_recombine_probe_kernel`) that
-                                    is A STAND-IN of the same work, NOT the
-                                    fifteen-bit profile's pinned seam: its
-                                    time is read, its digest is compared
-                                    between these two arms and with nothing
-                                    else.
+                                    reads the sums back and calls
+                                    lane/lowbit-int15's `int15_store_cell`
+                                    (the recombination, the pinned seam, the
+                                    scale) per cell. The planes are a
+                                    fixture, not the profile's split, so the
+                                    digest is compared between these arms
+                                    and with nothing else.
     inference.pieces.int8.fused     the inference arm's operation in ONE
-                                    launch: the stand-in epilogue
-                                    (`gemm_int8_pieces_epilogue_stub.mojo`,
-                                    the same arithmetic) fused into the
+                                    launch: lane/lowbit-int15's epilogue
+                                    (`int15_store_cell`, the same function
+                                    the second launch calls) fused into the
                                     four-product kernel's last step. Its
                                     digest must equal the inference arm's.
 
@@ -237,7 +239,7 @@ from bench.gemm_shapes import (
     gemm_shape_op,
 )
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
-from checks.numerics import ftz, identical_mul, pow2_f32
+from gemm.checks.gemm_int15_epilogue import int15_store_cell
 from checks.kernel_matrix import (
     COLUMN_APPLE,
     TARGET_COLUMN,
@@ -354,7 +356,7 @@ comptime ARM_PIECES_BASE = ARM_PIECES_FLAT + 1
 comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_COUNT
 comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
 #: The same operation as ARM_INF_PIECES in ONE launch: the four products and
-#: the stand-in epilogue fused into their last step.
+#: lane/lowbit-int15's epilogue fused into their last step.
 comptime ARM_INF_PIECES_FUSED = ARM_TRAIN_PIECES + 1
 #: THE DECODE KERNEL (m <= 16, NVIDIA): one arm per plan on the codes, and
 #: one per plan with the quantizer in the product's launch (float32 in).
@@ -732,11 +734,10 @@ def _pieces_recombine_probe_kernel(
     m_in: Int32,
     n_in: Int32,
 ):
-    """A STAND-IN for the fifteen-bit profile's epilogue, one thread per
-    cell: the three sums recombined in Int64 (`HH 2^14 + MID 2^7 + LL`), the
-    BACKEND'S OWN conversion to float32, one multiply by the power of two,
-    the flush. The profile's pinned conversion is lane/lowbit-int15's and
-    is not this; the work is the same kind and the same size."""
+    """THE SECOND LAUNCH of the two-launch form, one thread per cell: the
+    three sums read back and handed to lane/lowbit-int15's
+    `int15_store_cell` (the recombination in Int64, the pinned seam, the
+    scale), the function the fused form calls at its last step."""
     var m = Int(m_in)
     var n = Int(n_in)
     var cell = Int(block_idx.x) * 256 + Int(thread_idx.x)
@@ -744,13 +745,9 @@ def _pieces_recombine_probe_kernel(
         return
     var i = cell // n
     var j = cell - i * n
-    var v = (
-        Int64(s.unsafe_load(3 * cell)) * Int64(16384)
-        + Int64(s.unsafe_load(3 * cell + 1)) * Int64(128)
-        + Int64(s.unsafe_load(3 * cell + 2))
+    int15_store_cell(
+        c, ea, eb, s.unsafe_load(3 * cell), s.unsafe_load(3 * cell + 1), s.unsafe_load(3 * cell + 2), i, j, m, n
     )
-    var e = Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j))
-    c.unsafe_store(cell, ftz(identical_mul(Float32(v), pow2_f32(e))))
 
 
 def _pieces_recombine_probe(
@@ -1096,12 +1093,12 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
     if arm == ARM_INF_PIECES:
         return (
             String("quantize.a.par+four-products-one-staging.")
-            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+int15_store_cell,second-launch"
         )
     if arm == ARM_TRAIN_PIECES:
         return (
             String("quantize.a.par+pack.b.par+four-products-one-staging.")
-            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+int15_store_cell,second-launch"
         )
     if arm >= ARM_DECODE_BASE and arm < ARM_DECODE_QUANT_BASE:
         if arm - ARM_DECODE_BASE == int8_decode_dispatch(m, n, k):
@@ -1113,7 +1110,7 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         return (
             String("quantize.a.par+four-products-one-staging.")
             + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k))
-            + "+stand-in-epilogue-FUSED,one-launch"
+            + "+int15_store_cell-FUSED,one-launch"
         )
     var plan_name = int8_tuned_plan_name(int8_tuned_dispatch(m, n, k))
     if arm == ARM_INF_INT8_TUNED:
