@@ -1,0 +1,95 @@
+gpuq: job 0027 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T07:15:38Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/check_job.sh sha256 at submit 7f3d9a15f6d34d9b77de380678cd4aa09b457d97f2c7d7ee43798aad291b61ca, now 7f3d9a15f6d34d9b77de380678cd4aa09b457d97f2c7d7ee43798aad291b61ca
+tree_head=cc25b1d16ae21089b3058469ff6e36747f5d13d0 dirty_files=12
+machine=NVIDIA GeForce RTX 4090, 580.126.20
+started=2026-09-29T07:15:38Z
+PHASE install-default                              exit=0   expected=pass held
+PHASE install-test                                 exit=0   expected=pass held
+PHASE build-linalg                                 exit=0   expected=pass held
+PHASE build-linalg-host                            exit=0   expected=pass held
+PHASE build-base                                   exit=0   expected=pass held
+PHASE build-training                               exit=0   expected=pass held
+PHASE build-transformer                            exit=0   expected=pass held
+PHASE build-mamba                                  exit=0   expected=pass held
+PHASE build-byte-lm                                exit=0   expected=pass held
+PHASE build-core-host                              exit=0   expected=pass held
+PHASE build-neural-host                            exit=0   expected=pass held
+PHASE build-transformer-host                       exit=0   expected=pass held
+PHASE build-mamba-host                             exit=0   expected=pass held
+PHASE build-training-host                          exit=0   expected=pass held
+PHASE build-tokenizer-host                         exit=0   expected=pass held
+PHASE build-byte_lm-host                           exit=0   expected=pass held
+PHASE gate-gemm-identity                           exit=0   expected=pass held
+PHASE gate-lowbit                                  exit=0   expected=pass held
+PHASE gate-lowbit-sabotage                         exit=1   expected=fail held
+PHASE gate-int15                                   exit=0   expected=pass held
+PHASE gate-int15-sabotage                          exit=1   expected=fail held
+PHASE gate-int15-tuned                             exit=0   expected=pass held
+PHASE gate-int8-mma-tuned                          exit=0   expected=pass held
+PHASE gate-int8-mma-tuned-sabotage                 exit=1   expected=fail held
+PHASE gate-int8-pieces-tuned                       exit=0   expected=pass held
+PHASE gate-int8-pieces-tuned-sabotage              exit=1   expected=fail held
+PHASE gate-transformer                             exit=0   expected=pass held
+PHASE gate-transformer-int15                       exit=0   expected=pass held
+PHASE gate-transformer-int15-sabotage              exit=1   expected=fail held
+PHASE python-tests                                 exit=1   expected=pass BROKEN
+    | <frozen importlib._bootstrap>:491
+    |   <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+    | 
+    | <frozen importlib._bootstrap>:491
+    |   <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+    | 
+    | <frozen importlib._bootstrap>:491
+    |   <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+    | 
+    | mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+    |   <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _BpeHandle has no __module__ attribute
+    | 
+    | mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+    |   <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _BpeTrainedHandle has no __module__ attribute
+    | 
+    | mojolearn/tests/test_parallel_causal_lm.py::test_layer_transport_matches_cpu_with_isolated_mock_workers[metal-owners1]
+    |   /root/mojolearn-lowbit-default/python/mojolearn/models/causal_lm.py:274: NumericProfileSpeedWarning: mojolearn: numeric profile 'fixed15_v1' was measured on M3 Ultra (3.40 to 3.65) and M2 Pro (3.44 to 3.57) to take 3.4 to 3.65 times fp32_v1's time (the complete 15-bit inference GEMM call at SmolLM2-360M's four 512-token rows (qkv, mlp_up, mlp_down, lm_head), the plan this release dispatches on Apple; the whole model was not timed on Apple; lane/lowbit-apple-tuned job 1 (19ad540d3), bench/results/lowbit_apple_tuned/job1_19ad540d3). Its bits are the same on every vendor; on this one it costs time. numeric_profile='fp32_v1' (or MOJOLEARN_NUMERIC_PROFILE=fp32_v1) gives the previous arithmetic.
+    |     self.numeric_profile = _numeric_profile.resolve(
+    | 
+    | -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+    | =========================== short test summary info ============================
+    | SKIPPED [1] mojolearn/tests/test_numeric_profile.py:645: the Samba bindings are not built here: /root/mojolearn-lowbit-default/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:198: the source reference training and transformer host bindings are not built here (a wheel has neither)
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:395: the source reference training and transformer host bindings are not built here
+    | 6 failed, 555 passed, 3 skipped, 13 warnings, 4 subtests passed in 53.24s
+    | 6 failed, 555 passed, 3 skipped, 13 warnings, 4 subtests passed in 53.24s
+    | SKIPPED [1] mojolearn/tests/test_numeric_profile.py:645: the Samba bindings are not built here: /root/mojolearn-lowbit-default/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object fil
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:198: the source reference training and transformer host bindings are not built here (a wheel has neither)
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:395: the source reference training and transformer host bindings are not built here
+PHASE profile-tests-ran                            exit=0   expected=fail BROKEN
+    | SKIPPED [1] mojolearn/tests/test_numeric_profile.py:645: the Samba bindings are not built here: /root/mojolearn-lowbit-default/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+PHASE verify-causal-lm-default                     exit=4   expected=pass BROKEN
+    | 961989 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11c0c0000000, nodemask=1)
+    | # verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+    | 962122 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x514cc0000000, nodemask=1)
+    | RESULT: CANNOT RUN: MOJOLEARN_PAR_DEVICES is set to more than device 0; the reference is the one-device record. Unset it.. exit 4
+PHASE verify-causal-lm-fp32env                     exit=4   expected=pass BROKEN
+    | 962295 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7004c0000000, nodemask=1)
+    | # verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+    | 962426 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327740000000, nodemask=1)
+    | RESULT: CANNOT RUN: MOJOLEARN_PAR_DEVICES is set to more than device 0; the reference is the one-device record. Unset it.. exit 4
+PHASE smollm2-default-gate                         exit=0   expected=pass held
+    | RESULT hash default d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f
+    | RESULT hash fp32_v1 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32_reports fp32_v1
+    | RESULT hash env_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash env_fp32_reports fp32_v1
+    | RESULT check default is fixed15_v1: HELD
+    | RESULT check default hash d37c2ea81d13743a: HELD
+    | RESULT check fp32_v1 hash 833c9a8947bdd619: HELD
+    | RESULT check set_numeric_profile(fp32_v1) == fp32_v1 bits: HELD
+    | RESULT check MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits: HELD
+    | RESULT generate box=447c5c6d4d39 arm=default route=per-layer prompt=512 new=32 median 3170.0 ms (99.06 ms/token) runs 3170.0 3180.5 3120.2 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1391.4 ms (43.48 ms/token) runs 1391.4 1472.5 1154.2 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 default/fp32_v1 = 2.278 (default SLOWER)
+    | DEFAULT GATE GREEN
+finished=2026-09-29T07:35:27Z
+MERGE CHECK RED
+gpuq: job 0027 failed exit=1 at 2026-09-29T07:35:30Z after 1192s

@@ -117,7 +117,12 @@ def test_every_entry_samba_reaches_is_on_the_host():
                    ("create", "open", "step", "export_state", "load_state", "close")},  # 769936f70, probed by `_has`
             "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
                 | {"transformer_decode_session_" + name for name in
-                   ("create", "open", "step", "forward", "export_state", "load_state", "close")},
+                   ("create", "open", "step", "forward", "export_state", "load_state", "close")}
+                # numeric_profile="fixed15_v1": the GPU sessions' profile entries
+                # (lane/lowbit-blocks, lane/lowbit-default); the host route takes
+                # `transformer_forward_int15`, and a host session under the
+                # profile is refused by name
+                | {"transformer_session_forward_int15", "transformer_decode_session_open_int15"},
         }.get(fam, set())
         missing = [m for m in missing if not m.endswith("_available") and m not in resident]
         assert not missing, f"{fam}: SambaStack's modules call {missing}, absent from the host binding"

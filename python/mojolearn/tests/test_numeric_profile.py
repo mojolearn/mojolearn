@@ -431,8 +431,9 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     g = _clean_default(ml)
     assert ml.numeric_profile() == "fixed15_v1"
     from mojolearn import _training_impl as T
-    opt = T._Optimizer([], "AdamW")
-    assert opt is not None
+    # past the profile line: the next refusal is the empty registry's
+    with pytest.raises(ValueError, match="params is empty"):
+        T._Optimizer([], "AdamW")
     for where in ("mojolearn.SmallByteLanguageModelTrainer", "mojolearn.LanguageModelHostTrainer",
                   "mojolearn.AdamW", "mojolearn.SambaStack"):
         assert g.require_training(where) == "fp32_v1"
@@ -477,10 +478,10 @@ def test_a_bare_block_stays_fp32_v1_and_its_backward_refuses_fixed15():
         return ml.Array.from_list([((i * 2654435761 + seed) % 1000) / 4000.0 - 0.125 for i in range(n)],
                                   "<f4").reshape(shape)
     w = {"input_layernorm.weight": f32((dm,), 1), "post_attention_layernorm.weight": f32((dm,), 2),
-         "self_attn.q_proj.weight": f32((dm, dm), 3), "self_attn.k_proj.weight": f32((dm, dm), 4),
-         "self_attn.v_proj.weight": f32((dm, dm), 5), "self_attn.o_proj.weight": f32((dm, dm), 6),
-         "mlp.gate_proj.weight": f32((it, dm), 7), "mlp.up_proj.weight": f32((it, dm), 8),
-         "mlp.down_proj.weight": f32((dm, it), 9)}
+         "q_proj.weight": f32((dm, dm), 3), "k_proj.weight": f32((dm, dm), 4),
+         "v_proj.weight": f32((dm, dm), 5), "o_proj.weight": f32((dm, dm), 6),
+         "gate_proj.weight": f32((it, dm), 7), "up_proj.weight": f32((it, dm), 8),
+         "down_proj.weight": f32((dm, it), 9)}
     try:
         blk = TransformerBlock(w, n_heads=2)
     except (ImportError, OSError, RuntimeError) as e:

@@ -178,6 +178,12 @@ class _GpuPrimitives:
     def linear(self, x2d, weight):
         return self._T.linear_forward(x2d, weight)
 
+    def linear_int15(self, x2d, planes):
+        """The head under numeric_profile="fixed15_v1": `mojolearn.linalg.matmul_int15`
+        on the head's kept planes (lane/lowbit-blocks), a primitive since
+        lane/lowbit-default so a layer-owned model runs it on the head's owner."""
+        return _matmul_int15(x2d, planes)
+
 
 class _CpuPrimitives:
     """The three non-block steps as `SambaInference._run` spells them, at
@@ -210,6 +216,14 @@ class _CpuPrimitives:
         self._ext.linear_forward(
             [addr(y, name="logits"), addr_ro(x2d, name="hn"), addr_ro(weight, name="head")], [n, v, d])
         return y
+
+    def linear_int15(self, x2d, planes):
+        return _matmul_int15(x2d, planes)
+
+
+def _matmul_int15(x2d, planes):
+    from .._linalg_impl import matmul_int15
+    return matmul_int15(x2d, planes)
 
 
 class CausalLMState:
@@ -504,8 +518,7 @@ class CausalLM:
                 x = blk.forward(x, state.layers[i])
         hn = self._prims.rms_norm(x.reshape((n, d)), self._norm, self.norm_eps)
         if self._head_int15 is not None:
-            from .._linalg_impl import matmul_int15
-            logits = matmul_int15(hn, self._head_int15)
+            logits = self._prims.linear_int15(hn, self._head_int15)
         else:
             logits = self._prims.linear(hn, self._head)
         if state is not None:

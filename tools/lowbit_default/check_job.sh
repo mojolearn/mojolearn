@@ -73,6 +73,9 @@ ARCH=""
 command -v nvidia-smi > /dev/null 2>&1 && ARCH=sm_$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '. ')
 rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
 phase build-byte-lm pass env MOJOLEARN_GPU_ARCHS=$ARCH sh bindings/build_byte_lm.sh
+# the portable math library SambaStack's optimizer dlopens (the tree's own
+# recipe, as tools/gap_column_leg.sh builds it); without it the Samba tests skip
+phase build-portable-math pass env PYTHONPATH=$PWD/packaging/portable_math pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('$PWD/python/mojolearn/.libs/libMojolearnMath.so'))"
 for f in core linalg neural transformer mamba training tokenizer byte_lm; do
     [ "$f" = linalg ] && continue  # built above
     rm -f "python/mojolearn/host/_mojolearn_${f}_host.so"
@@ -109,7 +112,8 @@ phase profile-tests-ran fail grep -E '^SKIPPED.*test_numeric_profile' "$OUT/pyth
 
 # the verifier's causal-LM lanes against the reference table (fp32_v1 by name
 # in the harness), under the new default and under the escape hatch
-export MOJOLEARN_PAR_DEVICES=0,1
+# (one device: the reference is the one-device record)
+unset MOJOLEARN_PAR_DEVICES
 phase verify-causal-lm-default pass sh -c "cd python && pixi run -e test python -m mojolearn verify --lanes hf-causal-lm,par-causal-lm"
 phase verify-causal-lm-fp32env pass sh -c "cd python && MOJOLEARN_NUMERIC_PROFILE=fp32_v1 pixi run -e test python -m mojolearn verify --lanes hf-causal-lm,par-causal-lm"
 grep -E 'IDENTICAL|DIFFERENT|MISMATCH|verdict|VERDICT|PASS|FAIL' "$OUT/verify-causal-lm-default.log" | tail -8 | sed 's/^/    | /'
@@ -118,6 +122,8 @@ grep -E 'IDENTICAL|DIFFERENT|MISMATCH|verdict|VERDICT|PASS|FAIL' "$OUT/verify-ca
 if [ -n "$MODEL" ]; then
     phase smollm2-default-gate pass sh -c "pixi run -e default python tools/lowbit_default/default_gate.py --model $MODEL --phases hash,generate --out $OUT"
     grep -E 'RESULT|GATE' "$OUT/smollm2-default-gate.log" | sed 's/^/    | /'
+    phase smollm2-resident-gate pass sh -c "pixi run -e default python tools/lowbit_default/resident_gate.py --model $MODEL"
+    grep -E 'RESULT|GATE' "$OUT/smollm2-resident-gate.log" | sed 's/^/    | /'
 else
     echo "PHASE smollm2-default-gate BROKEN: no staged SmolLM2-360M"; red=1
 fi

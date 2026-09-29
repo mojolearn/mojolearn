@@ -96,8 +96,9 @@ def test_remote_state_refuses_wrong_layer_and_release_is_idempotent():
     with pytest.raises(ValueError,match='released'): a._run('step',None,state)
 
 
+@pytest.mark.parametrize('profile', [None, 'fp32_v1'])
 @pytest.mark.parametrize('vendor,owners', [('cuda', (2, 0)), ('metal', (0, 0))])
-def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp_path, vendor, owners):
+def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp_path, vendor, owners, profile):
     """Real CPU numerics through emulated RPC; not physical GPU evidence."""
     import pickle
     from mojolearn import Array
@@ -111,7 +112,8 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
         pytest.skip(str(exc))
     cfg=fixtures._llama_config()
     fixtures._write_checkpoint(tmp_path, cfg, fixtures._llama_tensors(cfg))
-    plain=base.CausalLM.load(tmp_path, device='cpu')
+    kw={} if profile is None else {'numeric_profile': profile}
+    plain=base.CausalLM.load(tmp_path, device='cpu', **kw)
     cpu_classes=base._block_classes('cpu')
     monkeypatch.setattr(base,'_block_classes', lambda route: cpu_classes)
     monkeypatch.setattr(base,'_GpuPrimitives',base._CpuPrimitives)
@@ -131,7 +133,8 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
             return pickle.loads(pickle.dumps(worker.execute(operation,args)))
     monkeypatch.setattr(mod,'DevicePool',Pool)
     ids=Array.from_list([[1,3,7],[2,4,8]],'<i4')
-    with mod.ParallelCausalLM.load(tmp_path, layer_devices=iter(owners)) as split:
+    with mod.ParallelCausalLM.load(tmp_path, layer_devices=iter(owners), **kw) as split:
+        assert split.numeric_profile == plain.numeric_profile
         assert digest(plain.forward(ids))==digest(split.forward(ids))
         a=plain.allocate_state(2,8); b=split.allocate_state(2,8)
         assert digest(plain.forward(ids,a))==digest(split.forward(ids,b))
@@ -147,7 +150,9 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
         assert set(worlds[0][0]) == {0, 1}
     else:
         assert set(worlds[2][0])=={0} and set(worlds[0][0])=={1}
-    assert (owners[0],'embedding') in calls and (owners[-1],'head') in calls
+    # the head runs on its owner under either profile (lane/lowbit-default)
+    head = 'head' if plain.numeric_profile == 'fp32_v1' else 'head_int15'
+    assert (owners[0],'embedding') in calls and (owners[-1],head) in calls
 
 
 @pytest.mark.parametrize('devices', [(0, 1), (1, 1), (True, 0), ()])

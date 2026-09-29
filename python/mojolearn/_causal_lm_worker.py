@@ -67,4 +67,11 @@ def execute(operation, args):
         return prims.rms_norm(x, _tensors['norm'], eps)
     if operation == 'head':
         return prims.linear(args, _tensors['head'])
+    if operation == 'head_int15':
+        # lane/lowbit-default: the head under numeric_profile="fixed15_v1",
+        # its planes sent by the driver with the other head tensors
+        planes = _tensors.get('head_int15')
+        if planes is None:
+            raise ValueError('loaded-model worker holds no fixed15_v1 head planes')
+        return prims.linear_int15(args, planes)
     raise ValueError('unknown loaded-model operation: ' + operation)

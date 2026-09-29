@@ -113,6 +113,10 @@ class _RemotePrimitives:
     def linear(self, x, weight):
         return self.model._rpc(self.model.layer_devices[-1], 'head', x)
 
+    def linear_int15(self, x, planes):
+        # the head under fixed15_v1 runs on the head's owner, as `linear` does
+        return self.model._rpc(self.model.layer_devices[-1], 'head_int15', x)
+
 
 class ParallelCausalLM(CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
@@ -122,7 +126,7 @@ class ParallelCausalLM(CausalLM):
     explicitly or use a context manager. Calls and states must not be used
     concurrently. Output and state mathematics are the ordinary CausalLM path.
     """
-    def _generate_resident(self, ids, n_new, total):
+    def _generate_resident(self, ids, n_new, total, last_logits=None):
         # Blocks and decode handles belong to remote worker processes. The
         # parent's single-process resident loop cannot consume those handles;
         # generate must use the existing per-layer RPC forward/step route.
@@ -148,7 +152,8 @@ class ParallelCausalLM(CausalLM):
                 self._rpc(device, 'route', self.route)
             super().__init__(plan, weights, device=self.route, **kwargs)
             self._rpc(self.layer_devices[0], 'tensors', {'embed': self._embed})
-            self._rpc(self.layer_devices[-1], 'tensors', {'norm': self._norm, 'head': self._head})
+            self._rpc(self.layer_devices[-1], 'tensors', {'norm': self._norm, 'head': self._head,
+                                                          'head_int15': self._head_int15})
             self._prims = _RemotePrimitives(self)
         except BaseException:
             self.close()
