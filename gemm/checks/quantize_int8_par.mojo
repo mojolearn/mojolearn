@@ -133,6 +133,7 @@ def quantize_rows_int8_par_kernel[NT: Int](
     x: MutPointer[Float32, MutAnyOrigin],
     rows_in: Int32,
     cols_in: Int32,
+    aligned_in: Int32,
 ):
     """One block of `NT` threads per row: the absmax reduced by the block,
     the exponent stored once, the codes written by every thread. Grid
@@ -196,8 +197,9 @@ def quantize_rows_int8_par_kernel[NT: Int](
     # ---- PASS TWO: the codes of the slots this thread owns. The packed
     # store is taken only where it is aligned: a row of whole slots starts
     # on a multiple of four bytes (`gemm_int8_mma.mojo::_pack4`'s
-    # discipline, on the store).
-    var whole = (cols & (QUANT_PAR_SLOT - 1)) == 0
+    # discipline, on the store), in a buffer whose base the launch found on
+    # one (`aligned_in`).
+    var whole = aligned_in != Int32(0) and (cols & (QUANT_PAR_SLOT - 1)) == 0
     s = tid
     while s < slots:
         var c0 = s * QUANT_PAR_SLOT
@@ -230,6 +232,11 @@ def quantize_rows_int8_par_with_block(
     Asynchronous."""
     if rows <= 0 or cols <= 0:
         raise Error("quantize_rows_int8_par: rows and cols must be positive")
+    # The packed store states its alignment only where the base of the code
+    # buffer is a multiple of the slot, read here from the pointer passed.
+    var aligned = Int32(0)
+    if (Int(q.unsafe_ptr()) & (QUANT_PAR_SLOT - 1)) == 0:
+        aligned = Int32(1)
     if block == QUANT_PAR_BLOCK_NARROW:
         comptime kern_narrow = quantize_rows_int8_par_kernel[QUANT_PAR_TPB_NARROW]
         ctx.enqueue_function[kern_narrow](
@@ -238,6 +245,7 @@ def quantize_rows_int8_par_with_block(
             x.unsafe_ptr(),
             Int32(rows),
             Int32(cols),
+            aligned,
             grid_dim=(rows, 1, 1),
             block_dim=(QUANT_PAR_TPB_NARROW, 1, 1),
         )
@@ -254,6 +262,7 @@ def quantize_rows_int8_par_with_block(
         x.unsafe_ptr(),
         Int32(rows),
         Int32(cols),
+        aligned,
         grid_dim=(rows, 1, 1),
         block_dim=(QUANT_PAR_TPB_WIDE, 1, 1),
     )

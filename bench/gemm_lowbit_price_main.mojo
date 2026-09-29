@@ -75,6 +75,27 @@ plan's:
                                     split and its recombination are
                                     lane/lowbit-int15's and are not in it.
 
+and FOUR PRODUCTS, ONE STAGING (`identical_gemm_int8_pieces_tuned_kernel`):
+two int8 planes of each operand in, three Int32 sums per cell out (HH,
+HL + LH, LL). The planes here are made from the row's int8 codes by integer
+arithmetic (`_pieces_fixture_kernel`), the same on every box:
+
+    pieces.int8.flat                the reference device plan, one thread
+                                    per cell: the digest the plans must equal
+    pieces.int8.mma.staged.*        one arm per staged plan. The rate is
+                                    over `4 m n k` multiply-accumulates
+    inference.pieces.int8.tuned     parallel quantize A (the int8
+    training.pieces.int8.tuned      quantizer, standing in for the
+                                    fifteen-bit one, which is
+                                    lane/lowbit-int15's), the four products
+                                    in one launch, and a recombination
+                                    (`_pieces_recombine_probe_kernel`) that
+                                    is A STAND-IN of the same work, NOT the
+                                    fifteen-bit profile's pinned seam: its
+                                    time is read, its digest is compared
+                                    between these two arms and with nothing
+                                    else.
+
 THE CONVERSIONS ARE THEIR OWN ROWS, because a low-bit product's operands do
 not arrive low-bit for free:
 
@@ -208,6 +229,7 @@ from bench.gemm_shapes import (
     gemm_shape_op,
 )
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
+from checks.numerics import ftz, identical_mul, pow2_f32
 from checks.kernel_matrix import (
     COLUMN_APPLE,
     TARGET_COLUMN,
@@ -229,7 +251,14 @@ from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_DIRECT_AVAILABLE,
     INT8_DIRECT_COUNT,
+    INT8_PIECES_MAX_K,
+    INT8_PIECES_PLAN_COUNT,
     INT8_TUNED_PLAN_COUNT,
+    identical_gemm_int8_pieces_flat_into,
+    identical_gemm_int8_pieces_tuned_into,
+    identical_gemm_int8_pieces_tuned_with_plan,
+    int8_pieces_dispatch,
+    int8_pieces_plan_name,
     identical_gemm_int8_mma_direct_into,
     identical_gemm_int8_mma_tuned_into,
     identical_gemm_int8_mma_tuned_with_plan,
@@ -303,7 +332,15 @@ comptime ARM_INF_INT8_TUNED = ARM_DIRECT_BASE + INT8_DIRECT_COUNT
 comptime ARM_TRAIN_INT8_TUNED = ARM_INF_INT8_TUNED + 1
 comptime ARM_INF_4X_TUNED = ARM_INF_INT8_TUNED + 2
 comptime ARM_TRAIN_4X_TUNED = ARM_INF_INT8_TUNED + 3
-comptime ARM_COUNT = ARM_INF_INT8_TUNED + 4
+#: FOUR PRODUCTS, ONE STAGING.
+comptime ARM_PIECES_FLAT = ARM_INF_INT8_TUNED + 4
+comptime ARM_PIECES_BASE = ARM_PIECES_FLAT + 1
+comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_COUNT
+comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
+comptime ARM_COUNT = ARM_TRAIN_PIECES + 1
+
+#: What no sum of the four-product kernel is (its largest is 2147450880).
+comptime SUM_POISON = Int32(2147483647)
 
 #: Products per GEMM of the 15-bit profile (the brief: HH, HL, LH, LL).
 comptime PIECE_PRODUCTS = 4
@@ -377,7 +414,20 @@ def _arm_name(arm: Int) -> String:
         return String("training.int8i32.v1.tuned")
     if arm == ARM_INF_4X_TUNED:
         return String("inference.4x.int8i32.v1.tuned")
-    return String("training.4x.int8i32.v1.tuned")
+    if arm == ARM_TRAIN_4X_TUNED:
+        return String("training.4x.int8i32.v1.tuned")
+    if arm == ARM_PIECES_FLAT:
+        return String("pieces.int8.flat")
+    if arm < ARM_INF_PIECES:
+        return String("pieces.int8.mma.") + int8_pieces_plan_name(arm - ARM_PIECES_BASE)
+    if arm == ARM_INF_PIECES:
+        return String("inference.pieces.int8.tuned")
+    return String("training.pieces.int8.tuned")
+
+
+def _arm_is_sums(arm: Int) -> Bool:
+    """Whether the arm's output is the three Int32 sums per cell."""
+    return arm >= ARM_PIECES_FLAT and arm < ARM_INF_PIECES
 
 
 def _arm_is_probe(arm: Int) -> Bool:
@@ -392,6 +442,8 @@ def _arm_is_product(arm: Int) -> Bool:
     """Whether the arm's output is the product `C` (a plan alone, or a
     complete operation that ends in one)."""
     if arm == ARM_QUANTIZE_A_PAR or arm == ARM_INT8_PACK_B_PAR:
+        return False
+    if _arm_is_sums(arm):
         return False
     return arm <= ARM_INT8_APPLE_CHUNK or arm >= ARM_INF_BF16
 
@@ -411,6 +463,8 @@ def _arm_runs(arm: Int) -> Bool:
         return HAS_APPLE_CHUNK
     if arm >= ARM_DIRECT_BASE and arm < ARM_INF_INT8_TUNED:
         return INT8_DIRECT_AVAILABLE
+    if arm == ARM_PIECES_FLAT:
+        return True
     if arm >= ARM_TUNED_BASE and arm < ARM_DIRECT_BASE:
         return HAS_INT8_MMA and int8_tuned_plan_available(arm - ARM_TUNED_BASE)
     if arm >= ARM_TUNED_BASE:
@@ -601,6 +655,127 @@ def _digest_codes(
     return d
 
 
+def _pieces_fixture_kernel(
+    hi: MutPointer[Int8, MutAnyOrigin],
+    lo: MutPointer[Int8, MutAnyOrigin],
+    q: MutPointer[Int8, MutAnyOrigin],
+    count_in: Int32,
+):
+    """The two planes the four-product arms read, made from a row's int8
+    codes by integer arithmetic, one element per thread: the high plane is
+    the code, the low plane `(37 q + 11) mod 128`, in [0, 127]. A FIXTURE,
+    not the fifteen-bit profile's split: what matters here is that the four
+    planes differ and are the same on every box."""
+    var i = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if i >= Int(count_in):
+        return
+    var code = Int(q.unsafe_load(i))
+    hi.unsafe_store(i, Int8(code))
+    lo.unsafe_store(i, Int8((37 * code + 11) & 127))
+
+
+def _pieces_fixture(
+    ctx: DeviceContext,
+    mut hi: DeviceBuffer[DType.int8],
+    mut lo: DeviceBuffer[DType.int8],
+    mut q: DeviceBuffer[DType.int8],
+    count: Int,
+) raises:
+    ctx.enqueue_function[_pieces_fixture_kernel](
+        hi.unsafe_ptr(),
+        lo.unsafe_ptr(),
+        q.unsafe_ptr(),
+        Int32(count),
+        grid_dim=((count + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+
+
+def _pieces_recombine_probe_kernel(
+    c: MutPointer[Float32, MutAnyOrigin],
+    s: MutPointer[Int32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+):
+    """A STAND-IN for the fifteen-bit profile's epilogue, one thread per
+    cell: the three sums recombined in Int64 (`HH 2^14 + MID 2^7 + LL`), the
+    BACKEND'S OWN conversion to float32, one multiply by the power of two,
+    the flush. The profile's pinned conversion is lane/lowbit-int15's and
+    is not this; the work is the same kind and the same size."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var cell = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if cell >= m * n:
+        return
+    var i = cell // n
+    var j = cell - i * n
+    var v = (
+        Int64(s.unsafe_load(3 * cell)) * Int64(16384)
+        + Int64(s.unsafe_load(3 * cell + 1)) * Int64(128)
+        + Int64(s.unsafe_load(3 * cell + 2))
+    )
+    var e = Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j))
+    c.unsafe_store(cell, ftz(identical_mul(Float32(v), pow2_f32(e))))
+
+
+def _pieces_recombine_probe(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut s: DeviceBuffer[DType.int32],
+    mut ea: DeviceBuffer[DType.int32],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+) raises:
+    ctx.enqueue_function[_pieces_recombine_probe_kernel](
+        c.unsafe_ptr(),
+        s.unsafe_ptr(),
+        ea.unsafe_ptr(),
+        eb.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        grid_dim=((m * n + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+
+
+def _poison_sums(ctx: DeviceContext, mut s: DeviceBuffer[DType.int32], count: Int) raises:
+    """The three sums per cell, filled with what no sum is."""
+    _whole(len(s), count, String("a sums buffer"))
+    var h = ctx.enqueue_create_host_buffer[DType.int32](count)
+    ctx.synchronize()
+    for i in range(count):
+        h.unsafe_ptr().unsafe_store(i, SUM_POISON)
+    ctx.enqueue_copy(dst_buf=s, src_ptr=h.unsafe_ptr())
+    ctx.synchronize()
+    _ = h
+
+
+def _digest_sums(
+    ctx: DeviceContext, mut s: DeviceBuffer[DType.int32], count: Int, tag: String
+) raises -> UInt64:
+    """`_dev_digest`'s digest over the Int32 sums, a surviving poison
+    refused."""
+    _whole(len(s), count, String("a sums buffer"))
+    var h = ctx.enqueue_create_host_buffer[DType.int32](count)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=s)
+    ctx.synchronize()
+    var d = UInt64(0xCBF29CE484222325)
+    for i in range(count):
+        var v = h.unsafe_ptr().unsafe_load(i)
+        if v == SUM_POISON:
+            raise Error(
+                "bench/gemm_lowbit_price_main: POISON SURVIVED at sum " + String(i)
+                + " of " + tag
+            )
+        d = _fnv(d, _sabotage_word(UInt64(Int(v) & 0xFFFFFFFF), i, count))
+    _ = h
+    return d
+
+
 struct ShapeBuffers(Movable):
     """Every device buffer one shape's arms read or write, allocated once
     per shape and shared by the arms, so no arm's time holds an allocation."""
@@ -627,9 +802,19 @@ struct ShapeBuffers(Movable):
     var qsb: DeviceBuffer[DType.int8]
     var esb: DeviceBuffer[DType.int32]
     var hs: DeviceBuffer[DType.uint16]
+    #: lane/lowbit-mma-speed, FOUR PRODUCTS: the two planes of each operand
+    #: and the three sums per cell. One element each where the row's `k` is
+    #: above the four-product kernel's bound (no row of the table is).
+    var pah: DeviceBuffer[DType.int8]
+    var pal: DeviceBuffer[DType.int8]
+    var pbh: DeviceBuffer[DType.int8]
+    var pbl: DeviceBuffer[DType.int8]
+    var ps: DeviceBuffer[DType.int32]
     var work: LowbitWorkspace
 
-    def __init__(out self, ctx: DeviceContext, m: Int, n: Int, k: Int) raises:
+    def __init__(
+        out self, ctx: DeviceContext, m: Int, n: Int, k: Int, pieces: Bool
+    ) raises:
         var nws = identical_gemm_workspace_max_floats(m, n, k)
         if nws < 1:
             nws = 1
@@ -647,6 +832,13 @@ struct ShapeBuffers(Movable):
         self.qsb = ctx.enqueue_create_buffer[DType.int8](n * k)
         self.esb = ctx.enqueue_create_buffer[DType.int32](n)
         self.hs = ctx.enqueue_create_buffer[DType.uint16](n * k)
+        # The four-product arms' buffers only where one of them runs: a
+        # box that runs none (Apple) does not pay their memory.
+        self.pah = ctx.enqueue_create_buffer[DType.int8](m * k if pieces else 1)
+        self.pal = ctx.enqueue_create_buffer[DType.int8](m * k if pieces else 1)
+        self.pbh = ctx.enqueue_create_buffer[DType.int8](n * k if pieces else 1)
+        self.pbl = ctx.enqueue_create_buffer[DType.int8](n * k if pieces else 1)
+        self.ps = ctx.enqueue_create_buffer[DType.int32](3 * m * n if pieces else 1)
         self.work = LowbitWorkspace(ctx)
         self.work.ensure(ctx, nws, n * k)
         ctx.synchronize()
@@ -732,6 +924,22 @@ def _enqueue_arm(
             identical_gemm_int8_mma_direct_into(
                 ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DIRECT_BASE
             )
+    elif arm == ARM_PIECES_FLAT:
+        identical_gemm_int8_pieces_flat_into(ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k)
+    elif arm >= ARM_PIECES_BASE and arm < ARM_INF_PIECES:
+        comptime if HAS_INT8_MMA:
+            identical_gemm_int8_pieces_tuned_with_plan(
+                ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k, arm - ARM_PIECES_BASE
+            )
+    elif arm == ARM_INF_PIECES or arm == ARM_TRAIN_PIECES:
+        comptime if HAS_INT8_MMA:
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            if arm == ARM_TRAIN_PIECES:
+                quantize_rows_int8_par_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+            identical_gemm_int8_pieces_tuned_into(
+                ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k
+            )
+            _pieces_recombine_probe(ctx, sb.c, sb.ps, sb.ea, sb.eb, m, n)
     else:
         comptime if HAS_INT8_MMA:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
@@ -758,6 +966,8 @@ def _arm_digest(
     if _arm_is_product(arm):
         _sabotage_f32(ctx, sb.c, m * n)
         return _digest_f32(ctx, sb.c, m * n, tag)
+    if _arm_is_sums(arm):
+        return _digest_sums(ctx, sb.ps, 3 * m * n, tag)
     if arm == ARM_QUANTIZE_A or arm == ARM_QUANTIZE_A_PAR:
         return _digest_codes(ctx, sb.qsa, sb.esa, m, k)
     if arm == ARM_INT8_PACK_B or arm == ARM_INT8_PACK_B_PAR:
@@ -828,6 +1038,22 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         if _arm_is_probe(arm):
             return String("WRONG-ON-PURPOSE,a-time-and-no-identity")
         return String("the-reference's-schedule,one-thing-changed")
+    if arm == ARM_PIECES_FLAT:
+        return String("the-reference-device-plan,three-sums-a-cell")
+    if arm >= ARM_PIECES_BASE and arm < ARM_INF_PIECES:
+        if arm - ARM_PIECES_BASE == int8_pieces_dispatch(m, n, k):
+            return String("the-launcher's-plan,rate-over-4mnk")
+        return String("plan,rate-over-4mnk")
+    if arm == ARM_INF_PIECES:
+        return (
+            String("quantize.a.par+four-products-one-staging.")
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+        )
+    if arm == ARM_TRAIN_PIECES:
+        return (
+            String("quantize.a.par+pack.b.par+four-products-one-staging.")
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+        )
     var plan_name = int8_tuned_plan_name(int8_tuned_dispatch(m, n, k))
     if arm == ARM_INF_INT8_TUNED:
         return String("quantize.a.par+") + plan_name
@@ -874,7 +1100,21 @@ def _time_shape(
         "== " + name + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
         + "  " + cap_word + "  fp32 plan: " + gemm_plan_name(choose_gemm_plan(m, n, k))
     )
-    var sb = ShapeBuffers(ctx, m, n, k)
+    var dig = List[UInt64]()
+    var ran = List[Bool]()
+    var samples = List[List[Int]]()
+    var pieces = False
+    for arm in range(ARM_COUNT):
+        dig.append(UInt64(0))
+        var runs = _arm_runs(arm) and _arm_asked(arms, _arm_name(arm))
+        # The four-product kernel refuses a `k` above its own bound.
+        if arm >= ARM_PIECES_FLAT and k > INT8_PIECES_MAX_K:
+            runs = False
+        if arm >= ARM_PIECES_FLAT and runs:
+            pieces = True
+        ran.append(runs)
+        samples.append(List[Int]())
+    var sb = ShapeBuffers(ctx, m, n, k, pieces)
     # `bench/gemm_price_main.mojo`'s salts at this shape index, so the fp32
     # operands are the ones its device arm reads at the same extents.
     _whole(len(sb.a), m * k, String("the left operand"))
@@ -886,15 +1126,11 @@ def _time_shape(
     bf16_narrow(ctx, sb.bh, sb.b, n * k)
     quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
     quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+    # The four-product arms' planes, from the codes.
+    if pieces:
+        _pieces_fixture(ctx, sb.pah, sb.pal, sb.qa, m * k)
+        _pieces_fixture(ctx, sb.pbh, sb.pbl, sb.qb, n * k)
     ctx.synchronize()
-
-    var dig = List[UInt64]()
-    var ran = List[Bool]()
-    var samples = List[List[Int]]()
-    for arm in range(ARM_COUNT):
-        dig.append(UInt64(0))
-        ran.append(_arm_runs(arm) and _arm_asked(arms, _arm_name(arm)))
-        samples.append(List[Int]())
 
     # Untimed warm-up of every arm, its output poisoned first where the
     # output is float32 and read back after, so an arm that launches without
@@ -914,6 +1150,8 @@ def _time_shape(
             _poison_codes(ctx, sb.qsa, sb.esa, m * k, m)
         elif arm == ARM_INT8_PACK_B_PAR:
             _poison_codes(ctx, sb.qsb, sb.esb, n * k, n)
+        elif _arm_is_sums(arm):
+            _poison_sums(ctx, sb.ps, 3 * m * n)
         _enqueue_arm(ctx, sb, arm, m, n, k)
         ctx.synchronize()
         dig[arm] = _arm_digest(ctx, sb, arm, m, n, k, tag)
@@ -946,7 +1184,7 @@ def _time_shape(
             print(
                 "LOWBIT", column_name(TARGET_COLUMN), name, m, n, k, cap_word, arm_name,
                 "not-timed", "not-timed", "not-timed",
-                "GMAC/s" if _arm_is_product(arm) else "Gelem/s",
+                "GMAC/s" if (_arm_is_product(arm) or _arm_is_sums(arm)) else "Gelem/s",
                 hex(dig[arm]), _arm_note(arm, m, n, k),
             )
             continue
@@ -954,7 +1192,9 @@ def _time_shape(
         var best = _min_ms(samples[arm])
         var count = macs
         var unit = String("GMAC/s")
-        if not _arm_is_product(arm):
+        if _arm_is_sums(arm):
+            count = Float64(PIECE_PRODUCTS) * macs
+        elif not _arm_is_product(arm):
             unit = String("Gelem/s")
             count = Float64(n) * Float64(k)
             if arm == ARM_QUANTIZE_A or arm == ARM_QUANTIZE_A_PAR:
@@ -989,9 +1229,14 @@ def _time_shape(
     bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_APPLE_CHUNK_PARQ, dig, ran, name)
     # Every tuned plan, every direct plan and every operation that ends in
     # one is the profile's product. A probe is compared with nothing.
-    for arm in range(ARM_TUNED_BASE, ARM_COUNT):
+    for arm in range(ARM_TUNED_BASE, ARM_PIECES_FLAT):
         if not _arm_is_probe(arm):
             bad += _must_agree(ARM_INT8_FLAT, arm, dig, ran, name)
+    # FOUR PRODUCTS: every staged plan's three sums are the reference device
+    # plan's, and the two complete operations end in the same cells.
+    for arm in range(ARM_PIECES_BASE, ARM_INF_PIECES):
+        bad += _must_agree(ARM_PIECES_FLAT, arm, dig, ran, name)
+    bad += _must_agree(ARM_INF_PIECES, ARM_TRAIN_PIECES, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^

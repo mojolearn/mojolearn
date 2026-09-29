@@ -6,11 +6,15 @@
 #
 #   quant-gate   tools/lowbit_mma_speed/gate_job.sh quant   (every column)
 #   unit-gate    tools/lowbit_mma_speed/gate_job.sh unit    (NVIDIA, AMD)
+#   pieces-gate  tools/lowbit_mma_speed/gate_job.sh pieces  (NVIDIA, AMD)
 #   quant-price  tools/lowbit_mma_speed/price_job.sh quant: fp32.v1, the
 #                int8 products the box has, the reference quantizer and the
 #                parallel one, and the complete operations with each
 #   unit-price   tools/lowbit_mma_speed/price_job.sh unit: fp32.v1, the
 #                reference unit plan, every tuned plan, the direct kernel
+#   target-price tools/lowbit_mma_speed/price_job.sh target: fp32.v1, the
+#                tuned launcher's plans, FOUR PRODUCTS (four launches, and
+#                one launch of one staging) and the conversions
 #   ptx          tools/lowbit_mma_speed/ptx_probe.sh (NVIDIA): the kernels'
 #                PTX, counted; launches nothing, times nothing
 #
@@ -36,6 +40,13 @@ UNIT_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.mma*,probe.int8.mma*"
 UNIT_ARMS="$UNIT_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
 UNIT_ARMS="$UNIT_ARMS,inference.int8i32.v1.tuned,training.int8i32.v1.tuned"
 UNIT_ARMS="$UNIT_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
+#: The target phase's arms.
+TARGET_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.mma"
+TARGET_ARMS="$TARGET_ARMS,int8i32.v1.mma.staged.w32x32.b128x128.k64.l16,int8i32.v1.mma.staged.w16x16.b32x32.k64.l16"
+TARGET_ARMS="$TARGET_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
+TARGET_ARMS="$TARGET_ARMS,inference.int8i32.v1.tuned,training.int8i32.v1.tuned"
+TARGET_ARMS="$TARGET_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
+TARGET_ARMS="$TARGET_ARMS,pieces.int8*,inference.pieces.int8.tuned,training.pieces.int8.tuned"
 red=0
 summary=""
 for phase in "$@"; do
@@ -43,6 +54,8 @@ for phase in "$@"; do
     case "$phase" in
         quant-gate) bash tools/lowbit_mma_speed/gate_job.sh quant ;;
         unit-gate) bash tools/lowbit_mma_speed/gate_job.sh unit ;;
+        pieces-gate) bash tools/lowbit_mma_speed/gate_job.sh pieces ;;
+        target-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$TARGET_ARMS} bash tools/lowbit_mma_speed/price_job.sh target ;;
         quant-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$QUANT_ARMS} bash tools/lowbit_mma_speed/price_job.sh quant ;;
         unit-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS} bash tools/lowbit_mma_speed/price_job.sh unit ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
