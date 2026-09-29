@@ -335,6 +335,28 @@ def _ord_std_and_mags_kernel(
     var a1 = Float32(0.0)
     var a2 = Float32(0.0)
     var i = tid
+    # four strides' loads issued together, then added IN ORDER: the same
+    # sequence of adds as the one-stride loop, more loads in flight (the
+    # block is one threadgroup, so its latency is the whole kernel's)
+    comptime STEP = 4 * REDUCE_LANES_BLOCK
+    while i + 3 * REDUCE_LANES_BLOCK < total:
+        var w = SIMD[DType.float32, 4]()
+        var g = SIMD[DType.float32, 4]()
+        var qm = SIMD[DType.uint32, 4]()
+        comptime for k in range(4):
+            w[k] = sw.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+            g[k] = sg.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+            qm[k] = quality.unsafe_load(i + k * REDUCE_LANES_BLOCK)
+        comptime for k in range(4):
+            var term = Float32(0.0)
+            if qm[k] != UInt32(0):
+                if w[k] > Float32(0.0):
+                    var q = ftz(g[k] / w[k])
+                    term = ftz(ftz(q * q) * w[k])
+            a0 += term
+            a1 += abs(w[k])
+            a2 += abs(g[k])
+        i += STEP
     while i < total:
         var w = sw.unsafe_load(i)
         var g = sg.unsafe_load(i)
