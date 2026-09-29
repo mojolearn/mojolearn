@@ -1198,7 +1198,7 @@ def _stage_window_async[
                 var base = gr * k + k0 + kq
                 if inside and aligned and k0 + kq + LW <= k and (k & (LW - 1)) == 0:
                     inlined_assembly[CP, NoneType, constraints="r,l,~{memory}"](
-                        Int32(Int(dst + at_)), Int64(Int(q) + base)
+                        Int32(Int(dst) + 4 * at_), Int64(Int(q) + base)
                     )
                 else:
                     var v = SIMD[DType.int8, LW](0)
@@ -1632,10 +1632,10 @@ def _launch_pieces[
     FUSED: Bool, PIPE: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
     ctx: DeviceContext,
-    mut s: DeviceBuffer[DType.int32],
-    mut c: DeviceBuffer[DType.float32],
-    mut ea: DeviceBuffer[DType.int32],
-    mut eb: DeviceBuffer[DType.int32],
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     mut ah: DeviceBuffer[DType.int8],
     mut al: DeviceBuffer[DType.int8],
     mut bh: DeviceBuffer[DType.int8],
@@ -1655,10 +1655,10 @@ def _launch_pieces[
     ):
         aligned = Int32(1)
     ctx.enqueue_function[kern](
-        s.unsafe_ptr(),
-        c.unsafe_ptr(),
-        ea.unsafe_ptr(),
-        eb.unsafe_ptr(),
+        s,
+        c,
+        ea,
+        eb,
         ah.unsafe_ptr(),
         al.unsafe_ptr(),
         bh.unsafe_ptr(),
@@ -1674,10 +1674,10 @@ def _launch_pieces[
 
 def _pieces_with_plan[FUSED: Bool](
     ctx: DeviceContext,
-    mut s: DeviceBuffer[DType.int32],
-    mut c: DeviceBuffer[DType.float32],
-    mut ea: DeviceBuffer[DType.int32],
-    mut eb: DeviceBuffer[DType.int32],
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     mut ah: DeviceBuffer[DType.int8],
     mut al: DeviceBuffer[DType.int8],
     mut bh: DeviceBuffer[DType.int8],
@@ -1739,8 +1739,8 @@ def identical_gemm_int8_pieces_tuned_with_plan(
     Asynchronous."""
     # The sums form reads no float and no exponent: `c` is `s` under the
     # float type, `ea` and `eb` are `s`, and none of the three is touched.
-    var c = DeviceBuffer[DType.float32](ctx, s.unsafe_ptr().bitcast[Float32](), 1, owning=False)
-    _pieces_with_plan[False](ctx, s, c, s, s, ah, al, bh, bl, m, n, k, plan)
+    var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    _pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
 
 
 def identical_gemm_int8_pieces_tuned_into(
@@ -1782,7 +1782,21 @@ def identical_gemm_int8_pieces_tuned_fused_with_plan(
     cell stored by `int15_store_cell` (the caller's seam). No sums buffer.
     The sums form's refusals and plans. Asynchronous."""
     # The fused form writes no sums: `s` is `ea` and is not touched.
-    _pieces_with_plan[True](ctx, ea, c, ea, eb, ah, al, bh, bl, m, n, k, plan)
+    _pieces_with_plan[True](
+        ctx,
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        eb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ah,
+        al,
+        bh,
+        bl,
+        m,
+        n,
+        k,
+        plan,
+    )
 
 
 def identical_gemm_int8_pieces_tuned_fused_into(
