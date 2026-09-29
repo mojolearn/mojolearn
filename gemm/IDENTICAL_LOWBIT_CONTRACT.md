@@ -161,8 +161,8 @@ keep activations in float32 and store only weights low-bit.
 
 ## 6. THE FIFTEEN-BIT PROFILE: `mojolearn.identical.gemm.int15i64.v1`
 
-Lane lane/lowbit-int15, 2026-09-29. DEVIATIONS 2965 to 2973. Clauses W-1 to
-W-8. Answers: `gemm/host/gemm_int15_oracle.mojo`. Device:
+Lane lane/lowbit-int15, 2026-09-29. DEVIATIONS 2965 to 2976. Clauses W-1 to
+W-11. Answers: `gemm/host/gemm_int15_oracle.mojo`. Device:
 `gemm/checks/gemm_int15.mojo`. Gates: `gemm/checks/gemm_int15_check.mojo` and
 `gemm/checks/gemm_int15_sim_check.mojo`. Seams: `checks/numerics_int15.mojo`,
 a file of its own so that no binding which imports `checks/numerics.mojo` is
@@ -197,6 +197,10 @@ arithmetic and claims no quality.
 | W-6 | sum to float | `i64_to_f32_pinned`: the magnitude split into two 24-bit parts, each converted exactly from an Int32, the high part scaled by `2^24` exactly, ONE IEEE addition; at and above `2^48` the low sixteen bits fold into a sticky bit first and the result is scaled by `2^16` exactly | 2970 |
 | W-7 | dequantization | `dequant_int15_pinned`: `ftz(identical_mul(f, 2^(ea + eb)))`, `pow2_f32` as in L-6 | 2971 |
 | W-8 | execution plans | FLAT (the Int16 codes, one Int32 product per step, the sum in Int64, one thread per cell), PIECES (the int8 planes, the three accumulators of W-4, one thread per cell), MMA (the planes on the vendor's integer matrix unit through `gemm_int8_mma.mojo`'s own fragment loads and step, four products per k-tile of 32, zero-code padding). All three are the profile; `check_int15_plans_agree` requires their bits to match on every shape, so the choice is scheduling | 2972 |
+
+| W-9 | which values a product quantizes | EVERY PRODUCT QUANTIZES ITS OWN OPERANDS FROM THEIR FLOAT32 VALUES, along that product's own contracted extent. Codes are never carried from one product to another and never transposed; section 6.8 | 2976 |
+| W-10 | conversion schedules | ROWS (`quantize_rows_int15_kernel`, and `quantize_cols_int15_kernel` for an operand stored the other way: one thread per row of the matrix being quantized) and PARALLEL (the row's absmax in chunks of 256 values, the chunk maxima reduced to one exponent per row, then one thread per value, to codes or straight to planes). Both are the quantizer: the absmax is a maximum of magnitudes that a NaN never enters, the same float under every grouping, and a code is a function of its own value and its row's exponent. `check_int15_device_conversions_match_host` requires both schedules' codes, exponents and planes to be the host's | 2974 |
+| W-11 | fragment loads of the matrix units | a load of four or eight codes states its alignment only where it is a fact: the offset inside the buffer is a multiple of the word (tested in `_pack4` and `_pack8`) and the base of the buffer is a multiple of 8 (read by the launch off the pointers it passes). Elsewhere the load is unstated, and beyond the row the byte path with its zero codes. The same bytes reach the unit whichever load fetched them; `-D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1` keeps the unstated loads and must print the same digests. It applies to `int8i32.v1`'s unit plan as well, whose kernel shares the step | 2975 |
 
 ### 6.2 THE BOUNDS
 
@@ -332,3 +336,52 @@ quantizer's codes and exponents and `gemm_int15_oracle`'s product to be the
 simulation's, bit for bit, NaN cells as NaN. So the arithmetic whose quality
 was measured is the arithmetic that ships. Under the host arm the check
 must fail.
+
+### 6.7 What was measured
+
+Filled from runs of record only; see `docs/lanes/progress/lowbit-int15.md`
+for the tables and the runs they come from. Until a run is recorded there,
+no sentence of this contract states a time.
+
+### 6.8 Clause W-9: the products of a training step
+
+The scale of an operand is one power of two per ROW ALONG THE CONTRACTED
+EXTENT. A training step's three products contract three different extents,
+so one tensor has DIFFERENT codes in each product it enters, and "quantize
+the transposed tensor" and "transpose the quantized tensor" are different
+arithmetic. The profile is the first, always:
+
+| product | contracted extent | left operand, quantized along it | right operand, quantized along it |
+|---|---|---|---|
+| forward, `Y = X W^T` | the input features | `X`, one scale per TOKEN (each row of `X` over the features) | `W`, one scale per OUTPUT FEATURE (each row of `W` over the input features) |
+| weight gradient, `dW = dY^T X` | the tokens | `dY`, one scale per OUTPUT FEATURE (each column of `dY` over the tokens) | `X`, one scale per INPUT FEATURE (each column of `X` over the tokens) |
+| input gradient, `dX = dY W` | the output features | `dY`, one scale per TOKEN (each row of `dY` over the output features) | `W`, one scale per INPUT FEATURE (each column of `W` over the output features) |
+
+**Why this rule and no other.** It is the only one under which a per-row
+scale on both operands is a per-cell scale of the output, which is what
+makes the integer sum the product (section 0): cell `(i, j)` is
+`2^(ea[i] + eb[j])` times the sum over the contracted extent of two codes,
+and that needs `ea` to be constant along the contraction for row `i` of the
+left operand and `eb` constant along it for row `j` of the right one.
+
+**What the transposing quantizer computes.** Every product is run as
+OP_NT, `C = A B^T` with `A` of `m` rows and `B` of `n` rows, each row
+running along the contracted extent `k`. An operand that is STORED the
+other way (`k` rows of `m`, or `k` rows of `n`: the columns of the stored
+matrix run along the contraction) is read by
+`quantize_cols_int15_kernel`, or by the parallel schedule with its two
+strides exchanged: for each COLUMN `c` of the stored `rows x cols` matrix
+`x`, the absmax of `x[0, c], x[1, c], ...` after the flush, its exponent by
+W-1, and the codes of those values by W-2, written as row `c` of the
+`cols x rows` result. Those are the codes of the rows of the transpose of
+the float32 matrix. No code of the stored orientation is read, because
+none is ever made: the quantizer's input is float32. So it is W-9, and
+`check_int15_device_conversions_match_host` holds the device's codes and
+exponents to `quantize_rows_int15` applied to the transposed float32
+values, spelled in the check and not taken from the function under test.
+
+**What is owed under W-9.** Vectors of the two backward products exported
+from the quality lane's training simulation, with the host oracle and the
+devices held to them bit for bit, as section 6.6 does for the forward
+product.
+
