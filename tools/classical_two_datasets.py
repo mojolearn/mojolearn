@@ -772,6 +772,10 @@ def _to_host(a):
         return a.detach().cpu().numpy()
     if type(a).__module__.split(".")[0] == "cupy":
         return a.get()
+    if type(a).__module__.split(".")[0] == "cudf":
+        # cudf 26.8 refuses the implicit np.array() (__array__ raises TypeError;
+        # cuML's Holt-Winters forecast returns a cudf object): the explicit copy
+        return np.array(a.to_numpy(), copy=True)
     if hasattr(a, "copy_to_host"):
         # cuVS/pylibraft device_ndarray: np.array() of it reads host garbage
         # (measured 2026-09-27: every cuvs-gpu recall read ~0 through it)

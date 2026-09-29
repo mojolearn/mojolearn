@@ -246,3 +246,18 @@ def test_device_ndarray_is_copied_to_host():
     ctd = _load("classical_two_datasets")
     assert ctd._to_host(Dev()).tolist() == [[0, 1, 2], [3, 4, 5]]
     assert A._arr(Dev(), np.int64).tolist() == [[0, 1, 2], [3, 4, 5]]
+
+
+def test_cudf_object_is_copied_to_host_explicitly():
+    """cudf 26.8 raises on np.array(frame) (__array__); cuML's Holt-Winters
+    forecast returns a cudf object (classical2/ets cuml-gpu, L40S 2026-09-29)."""
+    class Frame(object):
+        __module__ = "cudf.core.dataframe"
+
+        def to_numpy(self):
+            return np.arange(4.0).reshape(2, 2)
+
+        def __array__(self, dtype=None, copy=None):
+            raise TypeError("Implicit conversion to a host NumPy array via __array__ is not allowed")
+    ctd = _load("classical_two_datasets")
+    assert ctd._to_host(Frame()).tolist() == [[0.0, 1.0], [2.0, 3.0]]
