@@ -555,6 +555,18 @@ def _snap_gradients(
             stats[st * n_rows + pos] = v
 
 
+def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32):
+    """`snap_plane_to_scale_kernel` (`kernel/histogram_utils.mojo`,
+    lane/sym-quality): the pointwise searcher's gradient plane onto the
+    tree's fixed-point grid, keyed on the plane index."""
+    for i in range(n):
+        var q = _hist2_quantize(plane[i], fixed_scale, _hist2_dither(i))
+        var v = Float32(0.0)
+        if q != Int32(0):
+            v = ftz(Float32(Int(q)) / fixed_scale)
+        plane[i] = v
+
+
 # ===========================================================================
 # THE GRID: borders, NaN treatment, the compressed index
 # ===========================================================================
