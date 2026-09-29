@@ -305,13 +305,25 @@ EXCEPTIONS = [
                  "multioutput-clf", "multioutput-reg", "ovr", "calibrated", "classical-mds",
                  "pagerank", "connected-components", "lu-solve", "lstsq",
                  "autoarima", "stl", "var", "theta", "croston", "damped-ets", "garch", "prophet",
-                 "rmsprop", "adagrad", "adamax", "nadam", "adafactor", "lion", "lamb")
+                 "rmsprop", "adagrad", "adamax", "nadam", "adafactor", "lion", "lamb",
+                 # the coverage lanes of 2026-09-29 (tools/bench_board_algos.py)
+                 "minmax-scaler", "standard-scaler", "select-r-regression",
+                 "optimized-theta", "dynamic-theta", "dynamic-optimized-theta", "auto-theta",
+                 "croston-optimized", "croston-sba", "sgd", "adam", "adamw",
+                 "lu-factor", "cholesky", "qr", "eigh", "svd", "sparse-coder",
+                 "radius-neighbors", "cross-val-score")
 ] + [
     ("algos/" + lane, "seed", "ours*", "ours' layer has no weights to draw and takes no seed; the "
      "torch arm calls torch.manual_seed(7) and both read the same seed-7 input")
     for lane in ("layernorm", "maxpool2d", "avgpool2d", "maxpool1d", "avgpool1d", "batchnorm1d",
                  "batchnorm2d", "global-avgpool", "global-maxpool")
 ] + [
+    ("algos/select-mutual-info-reg", "seed", "*", "SelectKBest takes no seed argument on "
+     "either side; the noise seed 7 is bound into score_func=mutual_info_regression("
+     "random_state=7) on both arms"),
+    ("algos/embedding", "seed", "ours*", "ours' Embedding refuses to draw a table and takes no "
+     "seed: it is handed torch's seed-7 nn.Embedding init as weight=, so both arms hold the "
+     "same table"),
     ("algos/svgp", "seed", "ours*", "ours' SVGP takes no seed: fixed inducing points and "
      "hyperparameters, q(u) in closed form; nothing is drawn"),
     ("algos/louvain", "seed", "cugraph-gpu", "cuGraph louvain takes no seed; ours and networkx get 7"),
