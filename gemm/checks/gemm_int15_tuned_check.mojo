@@ -250,42 +250,54 @@ def check_int15_tuned_planted_worst_cases(ctx: DeviceContext) raises:
 
 
 def check_int15_tuned_refuses(ctx: DeviceContext) raises:
-    """GATE: a named plan refuses `k = 65536` by name (the sums kernel's
-    bound) and `k = 65537` (the profile's), fused and two-launch; the
-    dispatched plan refuses only the second, on both paths."""
-    var one8: List[Int8] = [1]
+    """GATE: every path of the tuned plan refuses, by name and before it
+    launches, the first extent above the bound it states: a named plan,
+    fused and two-launch, at `INT8_PIECES_MAX_K + 1` (the sums kernel's
+    bound, read from its file, not assumed) and at `INT15_MAX_K + 1` (the
+    profile's); the dispatched plan, fused and two-launch, at
+    `INT15_MAX_K + 1`.
+
+    The operands are as long as the largest shape probed (`1 x k`), so a
+    call that failed to refuse launches inside its buffers and the gate
+    fails on the count, never by reading outside an allocation. (Until
+    2026-09-29 the gate assumed the sums kernel refused `k = 65536` and
+    passed one-byte buffers; lane/lowbit-mma-speed raised that bound to
+    65536 in 520406a38 and the MI325X read outside the allocation, job
+    1790657862351.)"""
+    var k_sums = INT8_PIECES_MAX_K + 1
+    var k_prof = INT15_MAX_K + 1
+    var k_big = k_sums if k_sums > k_prof else k_prof
+    var ones = List[Int8](length=k_big, fill=Int8(1))
     var e0: List[Int32] = [0]
-    var dah = _upload[DType.int8](ctx, one8)
-    var dal = _upload[DType.int8](ctx, one8)
-    var dbh = _upload[DType.int8](ctx, one8)
-    var dbl = _upload[DType.int8](ctx, one8)
+    var dah = _upload[DType.int8](ctx, ones)
+    var dal = _upload[DType.int8](ctx, ones)
+    var dbh = _upload[DType.int8](ctx, ones)
+    var dbl = _upload[DType.int8](ctx, ones)
     var dea = _upload[DType.int32](ctx, e0)
     var deb = _upload[DType.int32](ctx, e0)
     var dc = _poisoned(ctx, 1)
     var work = Int15SumsWorkspace(ctx)
+    var tried = 0
     var refused = 0
+    var extents: List[Int] = [k_sums, k_prof]
+    for at_ in range(len(extents)):
+        var k = extents[at_]
+        tried += 2
+        try:
+            identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, k, 0)
+        except e:
+            refused += 1
+        try:
+            identical_gemm_int15_tuned_two_launch_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, k, 0)
+        except e:
+            refused += 1
+    tried += 2
     try:
-        identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K, 0)
+        identical_gemm_int15_tuned_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, k_prof)
     except e:
         refused += 1
     try:
-        identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1, 0)
-    except e:
-        refused += 1
-    try:
-        identical_gemm_int15_tuned_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1)
-    except e:
-        refused += 1
-    try:
-        identical_gemm_int15_tuned_two_launch_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K, 0)
-    except e:
-        refused += 1
-    try:
-        identical_gemm_int15_tuned_two_launch_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1, 0)
-    except e:
-        refused += 1
-    try:
-        identical_gemm_int15_tuned_two_launch_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1)
+        identical_gemm_int15_tuned_two_launch_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, k_prof)
     except e:
         refused += 1
     ctx.synchronize()
@@ -297,9 +309,12 @@ def check_int15_tuned_refuses(ctx: DeviceContext) raises:
     _ = deb
     _ = dc
     _ = work^
-    if refused != 6:
-        raise Error("only " + String(refused) + " of 6 launches refused")
-    print("   ok 6 launches refuse an extent above their bound")
+    if refused != tried:
+        raise Error("only " + String(refused) + " of " + String(tried) + " launches refused")
+    print(
+        "   ok " + String(tried) + " launches refuse the first extent above their bound (sums kernel "
+        + String(INT8_PIECES_MAX_K) + ", profile " + String(INT15_MAX_K) + ")"
+    )
 
 
 def _gate(name: String, mut ran: Int, mut failed: Int, e: String):

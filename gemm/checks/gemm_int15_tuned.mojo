@@ -34,12 +34,13 @@ on `k`, so they are the three integers the reference unit plan holds in its
 registers, whatever the tile, the staging or the order (clause W-8's
 argument); and what is done with them is the same two functions.
 
-THE BOUND ON `k`. The sums kernel refuses `k` above 65535
-(`INT8_PIECES_MAX_K`): it allows a low piece of -128, which this profile
-never makes, so its cross term is 32768 a step where this profile's is
-32512. The profile admits `k = 65536`. At that one extent this plan is not
-available and `identical_gemm_int15_tuned_into` takes the reference unit
-plan, which is the same bits.
+THE BOUND ON `k`. The sums kernel states its own bound, `INT8_PIECES_MAX_K`
+(65535 until lane/lowbit-mma-speed's 520406a38, 65536 since, for operands
+whose low piece never reaches -128, which this profile's never does). The
+profile admits `k <= INT15_MAX_K = 65536`. Where the sums kernel's bound is
+the smaller, `identical_gemm_int15_tuned_into` takes the reference unit
+plan there, which is the same bits; the gate reads both bounds from their
+files and probes the first extent above each.
 
 WHAT THE FOLD SAVES. The two-launch path pays one more launch and twelve
 bytes written and read per output cell. Whether the fused kernel is faster
