@@ -1,5 +1,7 @@
 # lowbit-e2e: integration evidence on existing resources
 
+Restart entry point: [handoff](../../HANDOFF_LOWBIT_E2E_2026-09-29.md).
+
 User authorization, 2026-09-29: create an isolated worktree and start/queue
 tests on existing resources. Apple slowdown is an acceptable documented
 tradeoff. No new rental, no default flip, no release or merge requested.
