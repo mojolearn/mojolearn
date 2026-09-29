@@ -127,6 +127,8 @@ import speed_gbdt_arm as spec           # noqa: E402
 OUR_ENTRY_POINTS = {
     "gbdt-symmetric": "mojolearn.GradientBoosting(grow_policy='SymmetricTree')"
                       " -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-symmetric-1000": "mojolearn.GradientBoosting(grow_policy='SymmetricTree',"
+                           " n_estimators=1000) -> gbdt/ via _mojolearn_gbdt",
     "gbdt-depthwise": "mojolearn.GradientBoosting(grow_policy='Depthwise')"
                       " -> gbdt/ via _mojolearn_gbdt",
     "gbdt-lossguide": "mojolearn.GradientBoosting(grow_policy='Lossguide')"
@@ -236,6 +238,11 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
     bfa = spec.boost_from_average_for(data)
     if bfa is not None:
         params["boost_from_average"] = bfa
+    spw = spec.scale_pos_weight_for(cfg, data)
+    if spw is not None:
+        # gbm-bench's scale_pos_weight on the other arms: CatBoost's own
+        # equivalent is class weights [1, scale_pos_weight]
+        params["class_weights"] = [1.0, spw]
     if data.cat_idx:
         # DEVIATION 2634's OTHER SIDE. `cat_features` is the only way to reach
         # the CTR target prep at all: with no categorical column 2634 skips it,
@@ -445,6 +452,7 @@ OUR_BUILDERS = {
     "gbdt-multiclass": our_gbdt_arm,
     "gbdt-categorical": our_gbdt_arm,
     "gbdt-symmetric": our_gbdt_arm,
+    "gbdt-symmetric-1000": our_gbdt_arm,
     "gbdt-depthwise": our_gbdt_arm,
     "gbdt-lossguide": our_gbdt_arm,
     "rf": our_rf_arm,
