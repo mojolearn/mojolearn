@@ -31,6 +31,18 @@ def payloads(wheels):
     return result
 
 
+
+def validate_bindings(report, payload):
+    bindings = report.get('bindings', [])
+    require(bindings and len({b['module'] for b in bindings}) == len(bindings),
+            'Missing or duplicate native witnesses')
+    for binding in bindings:
+        module = binding['module'].rsplit('.', 1)[-1]
+        require(any(Path(name).name in (module + '.so', module + '.dylib')
+                    and digest == binding['sha256'] for name, digest in payload.items()),
+                'Reported native binding is not the packaged bytes: ' + binding['module'])
+
+
 def admit(initial, repair, table, lanes, commit):
     require(initial.get('format') == 'mojolearn.verify-all-report.v1', 'Wrong initial report')
     require(initial.get('fixtures') == ['base'] and initial.get('repeats') == 1, 'Wrong initial fixture scope')
@@ -100,6 +112,8 @@ def main():
     selection = json.loads(args.selection.read_text())
     before, after = payloads(args.initial_wheel), payloads(args.final_wheel)
     require(set(before) == set(after), 'Packaged Python/native inventory changed')
+    validate_bindings(initial, before)
+    validate_bindings(repair, after)
     changed = {name for name in before if before[name] != after[name]}
     require(changed == {'mojolearn/_expansion_cluster.py'}, 'Unexpected shipped code/native changes: ' + str(changed))
     core = [p for p in args.final_wheel if p.name.startswith('mojolearn-')]

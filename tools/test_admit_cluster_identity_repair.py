@@ -1,7 +1,7 @@
 import copy
 import pytest
 
-from admit_cluster_identity_repair import admit
+from admit_cluster_identity_repair import admit, validate_bindings
 from test_compare_installed_identity import records
 
 
@@ -58,3 +58,15 @@ def test_rejects_gaps_unfixed_failures_and_changed_passes(mutation):
     mutation(initial, repair, table)
     with pytest.raises(ValueError):
         admit(initial, repair, table, ['x-cluster-bgmm', 'ridge'], 'a' * 40)
+
+
+def test_native_witness_must_match_packaged_module_and_bytes():
+    report = {'bindings': [{'module': 'mojolearn._host._example', 'sha256': 'a' * 64}]}
+    validate_bindings(report, {'mojolearn/host/_example.so': 'a' * 64})
+    with pytest.raises(ValueError):
+        validate_bindings(report, {'mojolearn/host/_example.so': 'b' * 64})
+    with pytest.raises(ValueError):
+        validate_bindings(report, {'mojolearn/host/_wrong.so': 'a' * 64})
+    report['bindings'] *= 2
+    with pytest.raises(ValueError):
+        validate_bindings(report, {'mojolearn/host/_example.so': 'a' * 64})
