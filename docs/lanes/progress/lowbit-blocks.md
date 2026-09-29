@@ -144,8 +144,10 @@ records in `bench/results/lowbit_blocks/2026-09-29/`.
 | RTX 4090 (nvc2) | nvc2-0017 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
 | H100 NVL (nvc3) | nvc3-0035 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
 | CPU host path (nvc2's x86-64 host, MOJOLEARN_VENDOR=cpu, device cpu) | nvc2-0018 | d37c2ea81d13743a... | 833c9a8947bdd619... | | |
-| M2 Pro | steward, pending | | | | |
-| MI325X | steward, pending | | | | |
+| M2 Pro | steward 1790659101869 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
+| MI325X | steward 1790660159967 (reference plan), 1790662265717 (tuned plan) | d37c2ea81d13743a... (both plans) | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
+| 4090, tuned plan | nvc2-0021 | d37c2ea81d13743a... | | EQUAL x3 | EQUAL x2 |
+| H100, tuned plan | nvc3-0043 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
 | SABOTAGE: 4090, tree copy with `int15_device_value_flip.patch`, linalg and transformer rebuilt | nvc2-0018 | 703b7e2158a0e140... MOVED | 833c9a8947bdd619... unmoved | | |
 
 The M3 Ultra is not in the table: it was released (orchestrator, 2026-09-29).
@@ -169,6 +171,40 @@ simulation) can share. On pile_github the change agrees to two digits;
 on enwik8 our change lies inside Lane B's interval and Lane B's inside ours,
 and the two differ in sign: the change there is below either run's
 resolution. Both are far under the 1 percent bar.
+
+### (f) whole-forward time, SmolLM2-360M, fixed15_v1 against fp32_v1, same box, same job
+
+`tools/lowbit_blocks/time_job.sh` / `model_logits.py --phases time`: prefill of
+512 tokens at B=1 (one untimed call, then the median of 5); decode per token
+(a 512-token prefill, then 32 `step` calls; one untimed run, median of 5). The
+two profiles alternate twice in one job; both medians are given. The job held
+every GPU of its box (nvc2: both slots; nvc3: its one; steward: alone).
+
+| Box | Job | Plan | Prefill 512, fixed15 / fp32 (ms) | over | Decode, fixed15 / fp32 (ms/token) | over |
+|---|---|---|---|---|---|---|
+| RTX 4090 | nvc2-0020 | reference | 423 / 1235, 536 / 1343 | 0.34, 0.40 | 94.1 / 296.4, 88.1 / 289.6 | 0.32, 0.30 |
+| RTX 4090 | nvc2-0021 | tuned | 442 / 1262, 600 / 1055 | 0.35, 0.57 | 115.7 / 297.3, 109.0 / 231.8 | 0.39, 0.47 |
+| H100 NVL | nvc3-0038 | reference | 270 / 397, 271 / 421 | 0.68, 0.64 | 143.3 / 299.9, 134.7 / 320.1 | 0.48, 0.42 |
+| H100 NVL | nvc3-0043 | tuned | 282 / 399, 288 / 399 | 0.71, 0.72 | 131.2 / 290.1, 131.5 / 287.8 | 0.45, 0.46 |
+| MI325X | 1790660933293 | reference | 227 / 269, 228 / 256 | 0.85, 0.89 | 103.5 / 159.7, 103.5 / 163.5 | 0.65, 0.63 |
+| MI325X | 1790662265717 | tuned | 251 / 269, 253 / 268 | 0.93, 0.94 | 106.4 / 160.2, 107.8 / 160.1 | 0.66, 0.67 |
+| M2 Pro | 1790660930020 | reference (float unit) | pending | | | |
+
+The reference plan is the default (the tuned plan was not faster at the
+model on any box); the numbers of record are the reference rows.
+
+WHAT THESE TIMES ARE. The per-layer Python route (`CausalLM.forward`,
+`step`), the route every identity run above used. On it fp32_v1 uploads and
+validates every float32 weight of every layer and the head on every call,
+while the profile's planes stay resident in the block's session; the profile
+also forces the eager attention path (per (batch, head) launches) where
+fp32_v1 runs the fused one. So the over-ratios mix arithmetic with weight
+residency and attention scheduling, and decode per token is mostly per-call
+overhead on both. Against a product alone (Lane C: complete 15-bit call over
+fp32.v1 0.44 to 0.56 on the H100, 0.19 to 0.30 on the MI325X) the model gains
+less on the MI325X (0.85 to 0.89) and about as much on the H100 (0.64 to 0.68).
+The resident fp32 generate session was not timed against the profile (the
+profile has no resident session yet).
 
 ## Failures
 
