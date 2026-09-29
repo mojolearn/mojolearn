@@ -184,7 +184,7 @@ TREE_OPPONENTS = {
 # ---------------------------------------------------------------------------
 
 TREE_TASK_LANES = ("gbdt-rank-yetirank", "gbdt-rank-pairlogit", "gbdt-multiclass",
-                   "gbdt-categorical")
+                   "gbdt-categorical", "gbdt-ordered")
 
 #: board dataset -> the driver's --dataset, per task lane. Istella-S is the
 #: learning-to-rank set (query ids from istella_rank.npz); multiclass is
@@ -197,6 +197,7 @@ TREE_TASK_DATASETS = {
     "gbdt-rank-pairlogit": {"istella": "istellarank"},
     "gbdt-multiclass": {"taxi": "taximc", "istella": "istellamc"},
     "gbdt-categorical": {"taxi": "taxicat"},
+    "gbdt-ordered": {"taxi": "taxi", "istella": "istella"},
 }
 
 #: data files a driver dataset reads beyond its board dataset's own cache
@@ -218,6 +219,8 @@ def _no_lgbm(arms):
 for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TASK_AMD)):
     for _lane in TREE_TASK_LANES:
         TREE_OPPONENTS[_v][_lane] = _no_lgbm(_arms) if _lane == "gbdt-rank-pairlogit" else _arms
+    # Ordered boosting: CatBoost only, as gbdt-symmetric
+    TREE_OPPONENTS[_v]["gbdt-ordered"] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
 DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
 R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
 
