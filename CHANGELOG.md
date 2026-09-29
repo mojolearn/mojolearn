@@ -24,7 +24,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ### Measured
 - The time of the complete 15-bit inference call over our own fp32.v1 call at the same 512-token rows, on the same box, in the same run: H100 0.43 to 0.50 (run 5); MI325X 0.19 to 0.30, with a stand-in recombination, one run; M3 Ultra 3.4 to 3.6, on the float unit, untuned.
 
-## 0.8.27 (unreleased)
+## 0.8.27 (published 2026-09-29)
 
 ### Fixed
 - Verification reports now fingerprint every fixture used by bundled saved-model checks, including non-base fixtures in quick/default runs. Previously these missing fingerprints could make valid reports incomparable.
