@@ -135,32 +135,45 @@ def main():
         rec["decode"] = res
 
     if "time" in phases:
-        def med(fn, n=5):
-            fn()
-            ts = []
-            for _ in range(n):
-                t = time.perf_counter()
-                fn()
-                ts.append(time.perf_counter() - t)
-            return statistics.median(ts), ts
+        # EVERY TIMED OUTPUT IS CHECKED (brief rule 10, a Metal launch cut
+        # short leaves cells unwritten and says nothing): the sha256 of every
+        # timed prefill's logits and of every timed decode run's logits are
+        # recorded, must agree across the runs, and are compared across boxes.
         pre = Array.from_list(token_ids(1, 512, v, SEED + 7), "<i4")
-        pm, pts = med(lambda: lm.forward(pre))
+        pre_sha = []
+
+        def prefill():
+            pre_sha.append(sha(raw(lm.forward(pre))))
+        prefill()
+        pts = []
+        for _ in range(5):
+            t = time.perf_counter()
+            prefill()
+            pts.append(time.perf_counter() - t)
+        pm = statistics.median(pts)
         steps = 32
         nxt = token_ids(1, steps, v, SEED + 11)[0]
+        dec_sha = []
 
         def decode_run():
             st = lm.allocate_state(1, 512 + steps)
             lm.forward(pre, st)
+            outs = []
             t = time.perf_counter()
             for k in range(steps):
-                lm.step(Array.from_list([[nxt[k]]], "<i4"), st)
-            return (time.perf_counter() - t) / steps
+                outs.append(lm.step(Array.from_list([[nxt[k]]], "<i4"), st))
+            dt = (time.perf_counter() - t) / steps
+            dec_sha.append(sha(b"".join(raw(o) for o in outs)))
+            return dt
         decode_run()
         dts = [decode_run() for _ in range(5)]
         dm = statistics.median(dts)
-        rec["time"] = {"prefill512_s": pm, "prefill512_runs": pts, "decode_per_token_s": dm, "decode_runs": dts}
+        same = len(set(pre_sha)) == 1 and len(set(dec_sha)) == 1
+        rec["time"] = {"prefill512_s": pm, "prefill512_runs": pts, "decode_per_token_s": dm, "decode_runs": dts,
+                       "prefill512_sha256": pre_sha, "decode32_sha256": dec_sha, "outputs_agree": same}
         print(f"RESULT time box={args.box} profile={lm.numeric_profile} prefill512 {pm * 1000:.1f} ms "
-              f"decode {dm * 1000:.2f} ms/token", flush=True)
+              f"decode {dm * 1000:.2f} ms/token  outputs {'AGREE' if same else 'DISAGREE'} "
+              f"prefill512_sha256={pre_sha[0][:16]} decode32_sha256={dec_sha[0][:16]}", flush=True)
 
     path = os.path.join(args.out, f"model_{args.box}_{lm.numeric_profile}_{lm.device}.json")
     with open(path, "w") as f:
