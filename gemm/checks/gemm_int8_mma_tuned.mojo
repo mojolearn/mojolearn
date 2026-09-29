@@ -82,13 +82,14 @@ fragments, into three Int32 accumulators per cell: HH, HL + LH (the two
 share their power of two in the recombination, so they share a register),
 LL. It stores the three sums and NOTHING ELSE: the recombination in Int64,
 the pinned conversion and the scale are the fifteen-bit profile's seams and
-live in its own file. THE SEAM FORM
-(`identical_gemm_int8_pieces_seam_kernel[E]`) is the same kernel whose last
-step hands each cell's three sums and the sum of the two row exponents to
-`E.cell`, a function of the CALLER'S (the trait `PiecesEpilogue`), and
-stores the float32 it returns: one launch where the sums form needs a second
-to read twelve bytes a cell back. This file states no float rule of its own
-in either form; the rule is the type the caller instantiates it with. Every sum is an exact integer under
+live in its own file. THE FUSED FORM (`FUSED` True, the orchestrator's
+interface with lane/lowbit-int15) is the same kernel whose last step hands
+each cell's three sums to `int15_store_cell` (lane/lowbit-int15's
+`gemm/checks/gemm_int15_epilogue.mojo`), which applies the mask,
+the recombination, the pinned seam and the scale: one launch where the sums
+form needs a second to read twelve bytes a cell back. This file states no
+float rule in either form. THE TWO-PAGE FORM (`PIPE` True) stages the next
+window with `cp.async` while the unit steps read this one. Every sum is an exact integer under
 `INT8_PIECES_MAX_K` for the operands that bound is stated for (low planes
 in [0, 127]), so every plan of it returns the same three integers.
 
@@ -108,8 +109,10 @@ THE SABOTAGE ARMS.
 """
 
 from std.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined, llvm_intrinsic
+from std.sys._assembly import inlined_assembly
 from std.sys.info import is_amd_gpu, is_nvidia_gpu
 from std.sys.intrinsics import _RegisterPackType
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -124,8 +127,10 @@ from checks.kernel_matrix import (
     column_shared_limit,
     lib_int8_matrix_unit_for,
 )
-from checks.numerics import dequant_int8_pinned
+from checks.numerics import dequant_int8_pinned, int8_row_exponent
 from gemm.checks.gemm_int8_mma import _imma_m16n8k32, _pack4, int8_mma_admits
+from gemm.checks.gemm_int15_epilogue import int15_store_cell
+from gemm.checks.quantize_int8_par import _absmax_step, _code
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 
@@ -143,6 +148,10 @@ comptime INT8_TUNED_UNSTATED = is_defined["MOJOLEARN_INT8_TUNED_UNSTATED"]()
 
 #: The four-product kernel's defect arm: HL twice, LH never.
 comptime INT8_PIECES_SABOTAGE = is_defined["MOJOLEARN_INT8_PIECES_SABOTAGE"]()
+#: The decode kernel's quantizer arm: the first level of the warp's absmax
+#: butterfly skipped. The parallel quantizer's own arm
+#: (`MOJOLEARN_QUANT_PAR_SABOTAGE`) turns it on too.
+comptime INT8_DECODE_QA_SABOTAGE = is_defined["MOJOLEARN_QUANT_PAR_SABOTAGE"]()
 
 #: The largest `k` of the four-product kernel, the fifteen-bit profile's
 #: own (`INT15_MAX_K`, its clause W-4), and THE OPERANDS IT IS STATED FOR:
@@ -227,7 +236,14 @@ comptime INT8_PIECES_PLAN_SQUARE = 3  #: 16x16 per warp, 4x4 warps: block 64x64
 comptime INT8_PIECES_PLAN_TALL128 = 4  #: 16x32 per warp, 8x2 warps: block 128x64, KB 32
 comptime INT8_PIECES_PLAN_TALL256 = 5  #: 16x32 per warp, 16x1 warps: block 256x32, KB 32
 comptime INT8_PIECES_PLAN_TALL256_N16 = 6  #: 16x16 per warp, 16x1 warps: block 256x16, KB 32
-comptime INT8_PIECES_PLAN_COUNT = 7
+#: The launcher's geometry with 32 k steps a window: the one-page control
+#: of the two-page plan below (the window is what two pages cost).
+comptime INT8_PIECES_PLAN_WARPS16_K32 = 7
+#: TWO PAGES, `cp.async` staging of the next window (`_pieces_block`, `PIPE`).
+comptime INT8_PIECES_PLAN_PIPE_WARPS16 = 8  #: 16x32 per warp, 4x4 warps, KB 32
+comptime INT8_PIECES_PLAN_PIPE_FRAG2 = 9  #: 32x32 per warp, 2x4 warps, KB 32
+comptime INT8_PIECES_PLAN_PIPE_SMALL = 10  #: 16x16 per warp, 2x2 warps, KB 64
+comptime INT8_PIECES_PLAN_COUNT = 11
 
 #: Outputs of at most this many rows take the launcher's small plan: a
 #: 128-row block would multiply 112 rows of zero codes for them.
@@ -316,7 +332,15 @@ def int8_pieces_plan_name(plan: Int) -> String:
         return String("staged.w16x32.b128x64.k32.l16")
     if plan == INT8_PIECES_PLAN_TALL256:
         return String("staged.w16x32.b256x32.k32.l16")
-    return String("staged.w16x16.b256x16.k32.l16")
+    if plan == INT8_PIECES_PLAN_TALL256_N16:
+        return String("staged.w16x16.b256x16.k32.l16")
+    if plan == INT8_PIECES_PLAN_WARPS16_K32:
+        return String("staged.w16x32.b64x128.k32.l16")
+    if plan == INT8_PIECES_PLAN_PIPE_WARPS16:
+        return String("pipe2.w16x32.b64x128.k32.l16")
+    if plan == INT8_PIECES_PLAN_PIPE_FRAG2:
+        return String("pipe2.w32x32.b64x128.k32.l16")
+    return String("pipe2.w16x16.b32x32.k64.l16")
 
 
 def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
@@ -1096,31 +1120,404 @@ def identical_gemm_int8_mma_tuned_into(
 
 
 # ===========================================================================
+# THE DECODE KERNEL: rows 1 to 16, the weights streamed, k split over warps
+# ===========================================================================
+#
+# At the decode rows the staged plans spend their time waiting: 32 x 32
+# blocks of four warps, one window at a time and two barriers per window,
+# over weights that are read once. Here a block owns SIXTEEN output columns
+# and all of `m <= 16` rows, its NW warps take interleaved 64-byte chunks of
+# `k`, each lane loads sixteen bytes of each of its two weight rows per
+# chunk straight from device memory (no staging, no barrier in the k loop),
+# and the warps' Int32 sums are added in threadgroup memory at the end.
+#
+# THE K ORDER. Lane `t` of a group holds the chunk's words `4t .. 4t + 3`
+# of each row it reads and feeds words `4t + 2s` and `4t + 2s + 1` to the
+# unit as the words the unit calls `t` and `t + 4` of step `s`. The SAME map
+# is applied to the left rows and the weight rows, so every product
+# `A[i][p] B[j][p]` of the chunk is formed exactly once, and the sums are
+# exact Int32: the order in which the unit and the warps add them cannot
+# change a bit. The contract's `INT8_MAX_K` bounds every partial sum as it
+# bounds the whole.
+#
+# `QA` True: THE QUANTIZER IN THE LAUNCH. The left operand arrives as float32
+# rows; each block reduces their absmax (warp `w` takes rows `w, w + NW,
+# ...`, a warp-wide maximum, which is exact under any grouping, contract
+# L-3), takes the exponent with `int8_row_exponent`, and quantizes each
+# chunk as it loads it with `quantize_rows_int8_par`'s own `_code` (L-4).
+# Block 0 stores the exponents for the caller. The codes are the parallel
+# quantizer's, value for value; they never leave the registers.
+
+comptime INT8_DECODE_MAX_M = 16
+#: Bytes of `k` one warp takes per chunk: four lanes of sixteen bytes.
+comptime INT8_DECODE_CHUNK = 64
+comptime INT8_DECODE_AVAILABLE = INT8_TUNED_AVAILABLE and TARGET_COLUMN == COLUMN_NVIDIA
+comptime INT8_DECODE_PLAN_W4 = 0  #: 4 warps a block
+comptime INT8_DECODE_PLAN_W8 = 1  #: 8 warps a block
+comptime INT8_DECODE_PLAN_W16 = 2  #: 16 warps a block
+comptime INT8_DECODE_PLAN_COUNT = 3
+
+
+def int8_decode_plan_name(plan: Int) -> String:
+    """No spaces."""
+    if plan == INT8_DECODE_PLAN_W4:
+        return String("decode.n16.w4.c64")
+    if plan == INT8_DECODE_PLAN_W8:
+        return String("decode.n16.w8.c64")
+    return String("decode.n16.w16.c64")
+
+
+def int8_decode_dispatch(m: Int, n: Int, k: Int) -> Int:
+    """The plan `identical_gemm_int8_mma_decode_into` takes. Every plan is
+    the profile; not yet measured, so the middle one."""
+    return INT8_DECODE_PLAN_W8
+
+
+@always_inline
+def _load16_codes(
+    p: MutPointer[Int8, MutAnyOrigin], row: Int, rows: Int, kb: Int, k: Int, aligned: Bool
+) -> SIMD[DType.int32, 4]:
+    """Sixteen codes of row `row` from byte `kb`, as four words; a row at or
+    beyond `rows` and a byte at or beyond `k` are the ZERO CODE. The vector
+    load is taken only where it is whole and aligned (`aligned`: the base
+    is on sixteen bytes; `k` a multiple of sixteen puts every row there),
+    and it states its alignment."""
+    if row >= rows:
+        return SIMD[DType.int32, 4](0)
+    var base = row * k
+    if aligned and kb + 16 <= k and (k & 15) == 0:
+        return bitcast[DType.int32, 4](p.unsafe_load[width=16, alignment=16](base + kb))
+    var v = SIMD[DType.int8, 16](0)
+    comptime for i in range(16):
+        comptime if INT8_TUNED_SABOTAGE:
+            # SABOTAGE: the padding rule broken. A byte beyond `k` is read
+            # from the buffer (the next row's codes) instead of the zero code.
+            if base + kb + i < rows * k:
+                v[i] = p.unsafe_load(base + kb + i)
+        else:
+            if kb + i < k:
+                v[i] = p.unsafe_load(base + kb + i)
+    return bitcast[DType.int32, 4](v)
+
+
+@always_inline
+def _quant16_codes(
+    x: MutPointer[Float32, MutAnyOrigin], row: Int, rows: Int, kb: Int, k: Int, ex: Int, aligned: Bool
+) -> SIMD[DType.int32, 4]:
+    """`_load16_codes` of the codes the parallel quantizer makes of row
+    `row` of `x` with exponent `ex`: `_code(x, ex)` per value, the zero code
+    beyond the row or beyond `k`."""
+    if row >= rows:
+        return SIMD[DType.int32, 4](0)
+    var base = row * k
+    var v = SIMD[DType.int8, 16](0)
+    if aligned and kb + 16 <= k and (k & 3) == 0:
+        comptime for q in range(4):
+            var f = x.unsafe_load[width=4, alignment=16](base + kb + 4 * q)
+            comptime for i in range(4):
+                v[4 * q + i] = _code(f[i], ex)
+    else:
+        comptime for i in range(16):
+            if kb + i < k:
+                v[i] = _code(x.unsafe_load(base + kb + i), ex)
+    return bitcast[DType.int32, 4](v)
+
+
+@always_inline
+def _store_cell_decode(
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea_i: Int,
+    eb: MutPointer[Int32, MutAnyOrigin],
+    acc: Int32,
+    i: Int,
+    j: Int,
+    m: Int,
+    n: Int,
+):
+    """`_store_cell_tuned` with the row's exponent passed as a value."""
+    if i >= m or j >= n:
+        return
+    var out = dequant_int8_pinned(acc, ea_i + Int(eb.unsafe_load(j)))
+    comptime if INT8_TUNED_VALUE_SABOTAGE:
+        out = gemm_oracle_sabotage_value_flip(out)
+    c.unsafe_store(i * n + j, out)
+
+
+def identical_gemm_int8_mma_decode_kernel[QA: Bool, NW: Int](
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    aligned_in: Int32,
+):
+    """OP_NT, `m <= 16`. `QA` False: `C = Qa . Qb^T` from the codes `qa` and
+    the exponents `ea`; `x` is not read. `QA` True: the left codes and
+    exponents are made here from the float32 rows `x` (the parallel
+    quantizer's, value for value), block 0 stores the exponents to `ea`, and
+    `qa` is not read. Grid `(ceil(n / 16), 1, 1)`, block `NW * WARP_SIZE`.
+
+    Every thread of the block reaches both `barrier()`s: nothing before
+    them returns."""
+    comptime NT = NW * WARP_SIZE
+    comptime assert NW >= 1 and NW * WARP_SIZE <= INT8_TUNED_MAX_TPB, (
+        "identical_gemm_int8_mma_decode_kernel: a block is at most 1024 threads"
+    )
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
+    var tid = Int(thread_idx.x)
+    var w = tid // WARP_SIZE
+    var lane = Int(lane_id())
+    var g = lane >> 2
+    var t = lane & 3
+    var j0 = Int(block_idx.x) * 16
+
+    var ex_s = stack_allocation[
+        INT8_DECODE_MAX_M, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var red = stack_allocation[
+        NW * 8 * WARP_SIZE, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+
+    comptime if QA:
+        # ---- THE ABSMAX of each left row, one warp a row (contract L-3).
+        var r = w
+        while r < m:
+            var best = Float32(0.0)
+            var slots = (k + 3) // 4
+            var s = lane
+            while s < slots:
+                var c0 = s * 4
+                if aligned and c0 + 4 <= k and (k & 3) == 0:
+                    var v = x.unsafe_load[width=4, alignment=16](r * k + c0)
+                    comptime for i in range(4):
+                        best = _absmax_step(v[i], best)
+                else:
+                    comptime for i in range(4):
+                        if c0 + i < k:
+                            best = _absmax_step(x.unsafe_load(r * k + c0 + i), best)
+                s += WARP_SIZE
+            # A maximum of maxima over the warp: exact under any grouping.
+            comptime for lvl in range(5):
+                comptime if INT8_DECODE_QA_SABOTAGE and lvl == 0:
+                    # SABOTAGE: the first level of the warp's butterfly is
+                    # skipped; the upper half of the lanes' maxima never
+                    # reach the lower half.
+                    pass
+                else:
+                    var other = shuffle_xor(best, UInt32(16 >> lvl))
+                    if other > best:
+                        best = other
+            if lane == 0:
+                var ex = int8_row_exponent(best)
+                ex_s.unsafe_store(r, Int32(ex))
+                if block_idx.x == 0:
+                    ea.unsafe_store(r, Int32(ex))
+            r += NW
+    else:
+        if tid < m:
+            ex_s.unsafe_store(tid, ea.unsafe_load(tid))
+    barrier()
+
+    var ex_g = 0
+    var ex_g8 = 0
+    comptime if QA:
+        if g < m:
+            ex_g = Int(ex_s.unsafe_load(g))
+        if g + 8 < m:
+            ex_g8 = Int(ex_s.unsafe_load(g + 8))
+
+    var acc0 = SIMD[DType.int32, 4](0)
+    var acc1 = SIMD[DType.int32, 4](0)
+    var chunks = (k + INT8_DECODE_CHUNK - 1) // INT8_DECODE_CHUNK
+    var ch = w
+    while ch < chunks:
+        var kb = ch * INT8_DECODE_CHUNK + t * 16
+        var b0 = _load16_codes(qb, j0 + g, n, kb, k, aligned)
+        var b1 = _load16_codes(qb, j0 + 8 + g, n, kb, k, aligned)
+        var a0: SIMD[DType.int32, 4]
+        var a1: SIMD[DType.int32, 4]
+        comptime if QA:
+            a0 = _quant16_codes(x, g, m, kb, k, ex_g, aligned)
+            a1 = _quant16_codes(x, g + 8, m, kb, k, ex_g8, aligned)
+        else:
+            a0 = _load16_codes(qa, g, m, kb, k, aligned)
+            a1 = _load16_codes(qa, g + 8, m, kb, k, aligned)
+        comptime for s in range(2):
+            acc0 = _imma_m16n8k32(
+                a0[2 * s], a1[2 * s], a0[2 * s + 1], a1[2 * s + 1], b0[2 * s], b0[2 * s + 1], acc0
+            )
+            acc1 = _imma_m16n8k32(
+                a0[2 * s], a1[2 * s], a0[2 * s + 1], a1[2 * s + 1], b1[2 * s], b1[2 * s + 1], acc1
+            )
+        ch += NW
+
+    # ---- THE WARPS' SUMS, added in threadgroup memory (exact Int32).
+    comptime for e in range(4):
+        red.unsafe_store((w * 8 + e) * WARP_SIZE + lane, acc0[e])
+        red.unsafe_store((w * 8 + 4 + e) * WARP_SIZE + lane, acc1[e])
+    barrier()
+    var q = tid
+    while q < 8 * WARP_SIZE:
+        var v = q // WARP_SIZE
+        var ln = q - v * WARP_SIZE
+        var total = Int32(0)
+        for ww in range(NW):
+            total += red.unsafe_load((ww * 8 + v) * WARP_SIZE + ln)
+        # C/D (16 x 8, s32) of half `v // 4`: register `e = v % 4` of lane
+        # `ln` is row `g + 8 (e >> 1)`, column `2 t + (e & 1)`.
+        var e = v & 3
+        var gi = (ln >> 2) + 8 * (e >> 1)
+        var gj = j0 + (v >> 2) * 8 + (ln & 3) * 2 + (e & 1)
+        if gi < m:
+            _store_cell_decode(c, Int(ex_s.unsafe_load(gi)), eb, total, gi, gj, m, n)
+        q += NT
+
+
+def _refuse_decode_shape(m: Int, n: Int, k: Int) raises:
+    if m <= 0 or n <= 0 or k <= 0 or m > INT8_DECODE_MAX_M or k > INT8_MAX_K:
+        raise Error(
+            "identical_gemm_int8_mma_decode: 1 <= m <= " + String(INT8_DECODE_MAX_M)
+            + ", n and k positive, k at most " + String(INT8_MAX_K) + "; got m="
+            + String(m) + " n=" + String(n) + " k=" + String(k)
+        )
+
+
+def _launch_decode[QA: Bool, NW: Int](
+    ctx: DeviceContext,
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    comptime kern = identical_gemm_int8_mma_decode_kernel[QA, NW]
+    var aligned = Int32(0)
+    var left = Int(x) if QA else Int(qa)
+    if (left & 15) == 0 and (Int(qb) & 15) == 0:
+        aligned = Int32(1)
+    ctx.enqueue_function[kern](
+        c,
+        qa,
+        x,
+        ea,
+        qb,
+        eb,
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        aligned,
+        grid_dim=((n + 15) // 16, 1, 1),
+        block_dim=(NW * WARP_SIZE, 1, 1),
+    )
+
+
+def _decode_with_plan[QA: Bool](
+    ctx: DeviceContext,
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    comptime if not INT8_DECODE_AVAILABLE:
+        raise Error(
+            "identical_gemm_int8_mma_decode: column " + column_name(TARGET_COLUMN)
+            + " has no decode kernel (NVIDIA's m16n8k32 only); the tuned plans serve it"
+        )
+    else:
+        _refuse_decode_shape(m, n, k)
+        if plan == INT8_DECODE_PLAN_W4:
+            _launch_decode[QA, 4](ctx, c, qa, x, ea, qb, eb, m, n, k)
+        elif plan == INT8_DECODE_PLAN_W8:
+            _launch_decode[QA, 8](ctx, c, qa, x, ea, qb, eb, m, n, k)
+        elif plan == INT8_DECODE_PLAN_W16:
+            _launch_decode[QA, 16](ctx, c, qa, x, ea, qb, eb, m, n, k)
+        else:
+            raise Error("identical_gemm_int8_mma_decode: no plan " + String(plan))
+
+
+def identical_gemm_int8_mma_decode_with_plan(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut qa: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut qb: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    """The decode kernel on codes, `identical_gemm_int8_mma_into`'s
+    signature and its bits, `m <= 16`, NVIDIA. Asynchronous."""
+    var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    _decode_with_plan[False](
+        ctx,
+        cp,
+        qa.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        cp,
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        qb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        eb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m,
+        n,
+        k,
+        plan,
+    )
+
+
+def identical_gemm_int8_mma_decode_quant_with_plan(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut ea: DeviceBuffer[DType.int32],
+    mut qb: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    """THE QUANTIZER IN THE PRODUCT'S LAUNCH: `x` (m x k float32) in, `C`
+    out, ONE launch; `ea` receives the left rows' exponents. The same
+    cells as `quantize_rows_int8_par_device` then
+    `identical_gemm_int8_mma_tuned_into`. `m <= 16`, NVIDIA.
+    Asynchronous."""
+    var cp = c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    _decode_with_plan[True](
+        ctx,
+        cp,
+        qb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        qb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        eb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        m,
+        n,
+        k,
+        plan,
+    )
+
+
+# ===========================================================================
 # FOUR PRODUCTS, ONE STAGING
 # ===========================================================================
-
-
-trait PiecesEpilogue:
-    """What a caller does with one cell's three exact sums: the seam of ITS
-    profile. `identical_gemm_int8_pieces_seam_kernel[E]` calls `E.cell` once
-    per output cell, in the thread that holds the cell's accumulators, and
-    stores what it returns. The kernel knows nothing of the rule."""
-
-    @staticmethod
-    def cell(hh: Int32, mid: Int32, ll: Int32, e_sum: Int) -> Float32:
-        """`hh`, `mid` (HL + LH) and `ll` of one cell, and `e_sum`, the sum
-        of the left row's exponent and the right row's. The float32 the
-        cell stores."""
-        ...
-
-
-struct PiecesSumsOnly(PiecesEpilogue):
-    """The type the SUMS form is instantiated with. Its `cell` is never
-    called: that form stores the three sums and no float."""
-
-    @staticmethod
-    def cell(hh: Int32, mid: Int32, ll: Int32, e_sum: Int) -> Float32:
-        return bitcast[DType.float32](hh)
 
 
 @always_inline
@@ -1150,7 +1547,7 @@ def _store_sums(
 
 
 @always_inline
-def _store_cell_of_sums[E: PiecesEpilogue, SEAM: Bool](
+def _store_cell_of_sums[FUSED: Bool](
     s: MutPointer[Int32, MutAnyOrigin],
     c: MutPointer[Float32, MutAnyOrigin],
     ea: MutPointer[Int32, MutAnyOrigin],
@@ -1164,16 +1561,79 @@ def _store_cell_of_sums[E: PiecesEpilogue, SEAM: Bool](
     n: Int,
 ):
     """One cell of either form, masked to the output: the three sums as
-    they are, or what the caller's seam makes of them."""
-    comptime if SEAM:
-        if i >= m or j >= n:
-            return
-        c.unsafe_store(
-            i * n + j,
-            E.cell(hh, mid, ll, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j))),
-        )
+    they are, or what the caller's seam (`int15_store_cell`) makes of
+    them. This file states no float rule."""
+    comptime if FUSED:
+        int15_store_cell(c, ea, eb, hh, mid, ll, i, j, m, n)
     else:
         _store_sums(s, hh, mid, ll, i, j, m, n)
+
+
+@always_inline
+def _async_wait_all():
+    """Every `cp.async` this thread issued has landed in threadgroup memory
+    (PTX `cp.async.wait_all`, which commits the open group first). Nothing
+    on a column with no `cp.async`, whose staging is synchronous."""
+    comptime if is_nvidia_gpu():
+        inlined_assembly["cp.async.wait_all;", NoneType, constraints="~{memory}"]()
+
+
+@always_inline
+def _stage_window_async[
+    ROWS: Int, KB: Int, NT: Int, LW: Int, SW: Int
+](
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    dst0: Int,
+    q: MutPointer[Int8, MutAnyOrigin],
+    row0: Int,
+    rows: Int,
+    k0: Int,
+    k: Int,
+    tid: Int,
+    aligned: Bool,
+):
+    """`_stage_window`, the same loads to the same words, with the whole
+    aligned loads issued as `cp.async` on NVIDIA: the codes go from device
+    memory to threadgroup memory with no register between, and the thread
+    goes on. A load that is not whole and aligned (a ragged row end, a row
+    or step beyond the operand) is written as `_stage_window` writes it,
+    zero codes stored, synchronously. The caller waits (`_async_wait_all`)
+    and then reaches a barrier before any thread reads the page."""
+    comptime if not is_nvidia_gpu():
+        _stage_window[ROWS, KB, NT, LW, SW](dst, dst0, q, row0, rows, k0, k, tid, aligned)
+    else:
+        comptime LPR = KB // LW
+        comptime LOADS = ROWS * LPR
+        comptime SL = (LOADS + NT - 1) // NT
+        comptime CP = "cp.async.cg.shared.global [$0], [$1], 16;" if LW == 16 else (
+            "cp.async.ca.shared.global [$0], [$1], 8;" if LW == 8 else "cp.async.ca.shared.global [$0], [$1], 4;"
+        )
+        comptime for sl in range(SL):
+            var s = sl * NT + tid
+            if s < LOADS:
+                var r = s // LPR
+                var kq = (s % LPR) * LW
+                var gr = row0 + r
+                var inside = gr < rows and k0 + kq < k
+                var at_ = dst0 + r * SW + kq // 4
+                var base = gr * k + k0 + kq
+                if inside and aligned and k0 + kq + LW <= k and (k & (LW - 1)) == 0:
+                    inlined_assembly[CP, NoneType, constraints="r,l,~{memory}"](
+                        Int32(Int(dst) + 4 * at_), Int64(Int(q) + base)
+                    )
+                else:
+                    var v = SIMD[DType.int8, LW](0)
+                    if inside:
+                        comptime for i in range(LW):
+                            if k0 + kq + i < k:
+                                v[i] = q.unsafe_load(base + i)
+                    comptime if INT8_TUNED_SABOTAGE:
+                        # SABOTAGE: the padding rule broken, as in
+                        # `_stage_window`.
+                        if inside:
+                            dst.unsafe_store[alignment=LW](at_, bitcast[DType.int32, LW // 4](v))
+                    else:
+                        dst.unsafe_store[alignment=LW](at_, bitcast[DType.int32, LW // 4](v))
 
 
 def identical_gemm_int8_pieces_flat_kernel(
@@ -1212,8 +1672,124 @@ def identical_gemm_int8_pieces_flat_kernel(
 
 
 @always_inline
+def _pieces_window_steps[
+    FM: Int, FN: Int, KB: Int, SW: Int, APLANE: Int, BPLANE: Int, NACC: Int
+](
+    mut acc: InlineArray[SIMD[DType.int32, 4], 3 * NACC],
+    as_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    bs_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    abase: Int,
+    bbase: Int,
+    k0: Int,
+    k: Int,
+    lane: Int,
+    lrow: Int,
+    lcol: Int,
+    live: Bool,
+):
+    """The unit steps of one staged window, from the page that starts at
+    word `abase` of `as_` and `bbase` of `bs_`, into the three accumulators
+    of every half tile. Nothing here waits: the caller's barriers bound it."""
+    comptime KSTEPS = KB // INT8_TUNED_K_TILE
+    if live:
+        comptime for ks in range(KSTEPS):
+            if k0 + ks * INT8_TUNED_K_TILE < k:
+                comptime if is_nvidia_gpu():
+                    var g = lane >> 2
+                    var t = lane & 3
+                    var kw = ks * 8 + t
+                    # Per half tile of B: the high plane's two words,
+                    # then the low plane's.
+                    var bfr = InlineArray[Int32, 8 * FN](fill=Int32(0))
+                    comptime for fq in range(FN):
+                        comptime for h in range(2):
+                            var br = (lcol + fq * 16 + h * 8 + g) * SW + kw
+                            bfr[(fq * 2 + h) * 4] = bs_.unsafe_load(bbase + br)
+                            bfr[(fq * 2 + h) * 4 + 1] = bs_.unsafe_load(bbase + br + 4)
+                            bfr[(fq * 2 + h) * 4 + 2] = bs_.unsafe_load(bbase + BPLANE + br)
+                            bfr[(fq * 2 + h) * 4 + 3] = bs_.unsafe_load(bbase + BPLANE + br + 4)
+                    comptime for fm in range(FM):
+                        var ar = (lrow + fm * 16 + g) * SW + kw
+                        var h0 = as_.unsafe_load(abase + ar)
+                        var h1 = as_.unsafe_load(abase + ar + 8 * SW)
+                        var h2 = as_.unsafe_load(abase + ar + 4)
+                        var h3 = as_.unsafe_load(abase + ar + 8 * SW + 4)
+                        var l0 = as_.unsafe_load(abase + APLANE + ar)
+                        var l1 = as_.unsafe_load(abase + APLANE + ar + 8 * SW)
+                        var l2 = as_.unsafe_load(abase + APLANE + ar + 4)
+                        var l3 = as_.unsafe_load(abase + APLANE + ar + 8 * SW + 4)
+                        comptime for fq in range(FN):
+                            comptime for h in range(2):
+                                var bh0 = bfr[(fq * 2 + h) * 4]
+                                var bh1 = bfr[(fq * 2 + h) * 4 + 1]
+                                var bl0 = bfr[(fq * 2 + h) * 4 + 2]
+                                var bl1 = bfr[(fq * 2 + h) * 4 + 3]
+                                acc[((fm * FN + fq) * 2 + h) * 3] = _imma_m16n8k32(
+                                    h0, h1, h2, h3, bh0, bh1,
+                                    acc[((fm * FN + fq) * 2 + h) * 3],
+                                )
+                                acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
+                                    h0, h1, h2, h3, bl0, bl1,
+                                    acc[((fm * FN + fq) * 2 + h) * 3 + 1],
+                                )
+                                comptime if INT8_PIECES_SABOTAGE:
+                                    # SABOTAGE: HL again where LH belongs.
+                                    acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
+                                        h0, h1, h2, h3, bl0, bl1,
+                                        acc[((fm * FN + fq) * 2 + h) * 3 + 1],
+                                    )
+                                else:
+                                    acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
+                                        l0, l1, l2, l3, bh0, bh1,
+                                        acc[((fm * FN + fq) * 2 + h) * 3 + 1],
+                                    )
+                                acc[((fm * FN + fq) * 2 + h) * 3 + 2] = _imma_m16n8k32(
+                                    l0, l1, l2, l3, bl0, bl1,
+                                    acc[((fm * FN + fq) * 2 + h) * 3 + 2],
+                                )
+                elif is_amd_gpu():
+                    var i16 = lane & 15
+                    var kw = ks * 8 + (lane >> 4) * 2
+                    var bfr = InlineArray[Int64, 2 * FN](fill=Int64(0))
+                    comptime for fq in range(FN):
+                        var br = (lcol + fq * 16 + i16) * SW + kw
+                        bfr[fq * 2] = bitcast[DType.int64, 1](
+                            bs_.unsafe_load[width=2, alignment=8](bbase + br)
+                        )[0]
+                        bfr[fq * 2 + 1] = bitcast[DType.int64, 1](
+                            bs_.unsafe_load[width=2, alignment=8](bbase + BPLANE + br)
+                        )[0]
+                    comptime for fm in range(FM):
+                        var ar = (lrow + fm * 16 + i16) * SW + kw
+                        var a_hi = bitcast[DType.int64, 1](
+                            as_.unsafe_load[width=2, alignment=8](abase + ar)
+                        )[0]
+                        var a_lo = bitcast[DType.int64, 1](
+                            as_.unsafe_load[width=2, alignment=8](abase + APLANE + ar)
+                        )[0]
+                        comptime for fq in range(FN):
+                            acc[(fm * FN + fq) * 3] = _mfma_i8(
+                                a_hi, bfr[fq * 2], acc[(fm * FN + fq) * 3]
+                            )
+                            acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
+                                a_hi, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 1]
+                            )
+                            comptime if INT8_PIECES_SABOTAGE:
+                                acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
+                                    a_hi, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 1]
+                                )
+                            else:
+                                acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
+                                    a_lo, bfr[fq * 2], acc[(fm * FN + fq) * 3 + 1]
+                                )
+                            acc[(fm * FN + fq) * 3 + 2] = _mfma_i8(
+                                a_lo, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 2]
+                            )
+
+
+@always_inline
 def _pieces_block[
-    E: PiecesEpilogue, SEAM: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+    FUSED: Bool, PIPE: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
     s: MutPointer[Int32, MutAnyOrigin],
     c: MutPointer[Float32, MutAnyOrigin],
@@ -1233,9 +1809,16 @@ def _pieces_block[
     `identical_gemm_int8_mma_tuned_kernel`'s block, warps, windows and
     barriers; the staged page of an operand holds its two planes, the high
     one first; a tile's four unit steps read the fragments of the two
-    planes of each side, loaded once. `SEAM` False: the three sums to `s`,
-    and `c`, `ea`, `eb` are not read. `SEAM` True: `E.cell` of the three
-    sums and the two exponents to `c`, and `s` is not read.
+    planes of each side, loaded once. `FUSED` False: the three sums to `s`,
+    and `c`, `ea`, `eb` are not read. `FUSED` True: `int15_store_cell` of
+    the three sums to `c` (the caller's seam), and `s` is not written.
+
+    `PIPE` True: TWO PAGES. The window after the one the unit steps read is
+    staged into the other page while they run, with `cp.async` on NVIDIA
+    (no register holds the codes on their way), and one barrier per window
+    where the one-page form has two. On a column with no `cp.async` the
+    same schedule stages synchronously. The same codes land at the same
+    words either way; only the order of the work changes.
 
     Every thread of the block reaches every `barrier()`, for the reasons
     the one-product kernel gives."""
@@ -1262,7 +1845,11 @@ def _pieces_block[
     comptime assert NT <= INT8_TUNED_MAX_TPB, (
         "identical_gemm_int8_pieces_tuned_kernel: a block is at most 1024 threads"
     )
-    comptime assert 2 * (BM + BN) * SS <= column_shared_limit(TARGET_COLUMN), (
+    comptime PAGES = 2 if PIPE else 1
+    #: Words of one page of each operand: its two planes.
+    comptime APAGE = 2 * APLANE
+    comptime BPAGE = 2 * BPLANE
+    comptime assert PAGES * 2 * (BM + BN) * SS <= column_shared_limit(TARGET_COLUMN), (
         "identical_gemm_int8_pieces_tuned_kernel: the staged window does not"
         " fit the column's threadgroup memory"
     )
@@ -1283,13 +1870,13 @@ def _pieces_block[
     var live = i0 + lrow < m and j0 + lcol < n
 
     var as_ = stack_allocation[
-        2 * APLANE,
+        PAGES * APAGE,
         Scalar[DType.int32],
         alignment=16,
         address_space = AddressSpace.SHARED,
     ]()
     var bs_ = stack_allocation[
-        2 * BPLANE,
+        PAGES * BPAGE,
         Scalar[DType.int32],
         alignment=16,
         address_space = AddressSpace.SHARED,
@@ -1299,108 +1886,47 @@ def _pieces_block[
     var acc = InlineArray[SIMD[DType.int32, 4], 3 * NACC](fill=SIMD[DType.int32, 4](0))
 
     var windows = (k + KB - 1) // KB
-    for w in range(windows):
-        var k0 = w * KB
-        _stage_window[BM, KB, NT, LW, SW](as_, 0, ah, i0, m, k0, k, tid, aligned)
-        _stage_window[BM, KB, NT, LW, SW](as_, APLANE, al, i0, m, k0, k, tid, aligned)
-        _stage_window[BN, KB, NT, LW, SW](bs_, 0, bh, j0, n, k0, k, tid, aligned)
-        _stage_window[BN, KB, NT, LW, SW](bs_, BPLANE, bl, j0, n, k0, k, tid, aligned)
+    comptime if PIPE:
+        _stage_window_async[BM, KB, NT, LW, SW](as_, 0, ah, i0, m, 0, k, tid, aligned)
+        _stage_window_async[BM, KB, NT, LW, SW](as_, APLANE, al, i0, m, 0, k, tid, aligned)
+        _stage_window_async[BN, KB, NT, LW, SW](bs_, 0, bh, j0, n, 0, k, tid, aligned)
+        _stage_window_async[BN, KB, NT, LW, SW](bs_, BPLANE, bl, j0, n, 0, k, tid, aligned)
+        _async_wait_all()
         barrier()
-        if live:
-            comptime for ks in range(KSTEPS):
-                if k0 + ks * INT8_TUNED_K_TILE < k:
-                    comptime if is_nvidia_gpu():
-                        var g = lane >> 2
-                        var t = lane & 3
-                        var kw = ks * 8 + t
-                        # Per half tile of B: the high plane's two words,
-                        # then the low plane's.
-                        var bfr = InlineArray[Int32, 8 * FN](fill=Int32(0))
-                        comptime for fq in range(FN):
-                            comptime for h in range(2):
-                                var br = (lcol + fq * 16 + h * 8 + g) * SW + kw
-                                bfr[(fq * 2 + h) * 4] = bs_.unsafe_load(br)
-                                bfr[(fq * 2 + h) * 4 + 1] = bs_.unsafe_load(br + 4)
-                                bfr[(fq * 2 + h) * 4 + 2] = bs_.unsafe_load(BPLANE + br)
-                                bfr[(fq * 2 + h) * 4 + 3] = bs_.unsafe_load(BPLANE + br + 4)
-                        comptime for fm in range(FM):
-                            var ar = (lrow + fm * 16 + g) * SW + kw
-                            var h0 = as_.unsafe_load(ar)
-                            var h1 = as_.unsafe_load(ar + 8 * SW)
-                            var h2 = as_.unsafe_load(ar + 4)
-                            var h3 = as_.unsafe_load(ar + 8 * SW + 4)
-                            var l0 = as_.unsafe_load(APLANE + ar)
-                            var l1 = as_.unsafe_load(APLANE + ar + 8 * SW)
-                            var l2 = as_.unsafe_load(APLANE + ar + 4)
-                            var l3 = as_.unsafe_load(APLANE + ar + 8 * SW + 4)
-                            comptime for fq in range(FN):
-                                comptime for h in range(2):
-                                    var bh0 = bfr[(fq * 2 + h) * 4]
-                                    var bh1 = bfr[(fq * 2 + h) * 4 + 1]
-                                    var bl0 = bfr[(fq * 2 + h) * 4 + 2]
-                                    var bl1 = bfr[(fq * 2 + h) * 4 + 3]
-                                    acc[((fm * FN + fq) * 2 + h) * 3] = _imma_m16n8k32(
-                                        h0, h1, h2, h3, bh0, bh1,
-                                        acc[((fm * FN + fq) * 2 + h) * 3],
-                                    )
-                                    acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
-                                        h0, h1, h2, h3, bl0, bl1,
-                                        acc[((fm * FN + fq) * 2 + h) * 3 + 1],
-                                    )
-                                    comptime if INT8_PIECES_SABOTAGE:
-                                        # SABOTAGE: HL again where LH belongs.
-                                        acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
-                                            h0, h1, h2, h3, bl0, bl1,
-                                            acc[((fm * FN + fq) * 2 + h) * 3 + 1],
-                                        )
-                                    else:
-                                        acc[((fm * FN + fq) * 2 + h) * 3 + 1] = _imma_m16n8k32(
-                                            l0, l1, l2, l3, bh0, bh1,
-                                            acc[((fm * FN + fq) * 2 + h) * 3 + 1],
-                                        )
-                                    acc[((fm * FN + fq) * 2 + h) * 3 + 2] = _imma_m16n8k32(
-                                        l0, l1, l2, l3, bl0, bl1,
-                                        acc[((fm * FN + fq) * 2 + h) * 3 + 2],
-                                    )
-                    elif is_amd_gpu():
-                        var i16 = lane & 15
-                        var kw = ks * 8 + (lane >> 4) * 2
-                        var bfr = InlineArray[Int64, 2 * FN](fill=Int64(0))
-                        comptime for fq in range(FN):
-                            var br = (lcol + fq * 16 + i16) * SW + kw
-                            bfr[fq * 2] = bitcast[DType.int64, 1](
-                                bs_.unsafe_load[width=2, alignment=8](br)
-                            )[0]
-                            bfr[fq * 2 + 1] = bitcast[DType.int64, 1](
-                                bs_.unsafe_load[width=2, alignment=8](BPLANE + br)
-                            )[0]
-                        comptime for fm in range(FM):
-                            var ar = (lrow + fm * 16 + i16) * SW + kw
-                            var a_hi = bitcast[DType.int64, 1](
-                                as_.unsafe_load[width=2, alignment=8](ar)
-                            )[0]
-                            var a_lo = bitcast[DType.int64, 1](
-                                as_.unsafe_load[width=2, alignment=8](APLANE + ar)
-                            )[0]
-                            comptime for fq in range(FN):
-                                acc[(fm * FN + fq) * 3] = _mfma_i8(
-                                    a_hi, bfr[fq * 2], acc[(fm * FN + fq) * 3]
-                                )
-                                acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
-                                    a_hi, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 1]
-                                )
-                                comptime if INT8_PIECES_SABOTAGE:
-                                    acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
-                                        a_hi, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 1]
-                                    )
-                                else:
-                                    acc[(fm * FN + fq) * 3 + 1] = _mfma_i8(
-                                        a_lo, bfr[fq * 2], acc[(fm * FN + fq) * 3 + 1]
-                                    )
-                                acc[(fm * FN + fq) * 3 + 2] = _mfma_i8(
-                                    a_lo, bfr[fq * 2 + 1], acc[(fm * FN + fq) * 3 + 2]
-                                )
-        barrier()
+        for w in range(windows):
+            var cur = w & 1
+            if w + 1 < windows:
+                # The other page was last read in window `w - 1`, whose
+                # steps every thread left before the barrier that ended it.
+                var nxt = 1 - cur
+                var k1 = (w + 1) * KB
+                _stage_window_async[BM, KB, NT, LW, SW](as_, nxt * APAGE, ah, i0, m, k1, k, tid, aligned)
+                _stage_window_async[BM, KB, NT, LW, SW](
+                    as_, nxt * APAGE + APLANE, al, i0, m, k1, k, tid, aligned
+                )
+                _stage_window_async[BN, KB, NT, LW, SW](bs_, nxt * BPAGE, bh, j0, n, k1, k, tid, aligned)
+                _stage_window_async[BN, KB, NT, LW, SW](
+                    bs_, nxt * BPAGE + BPLANE, bl, j0, n, k1, k, tid, aligned
+                )
+            _pieces_window_steps[FM, FN, KB, SW, APLANE, BPLANE, NACC](
+                acc, as_, bs_, cur * APAGE, cur * BPAGE, w * KB, k, lane, lrow, lcol, live
+            )
+            # This thread's copies into the other page have landed; the
+            # barrier makes every thread's visible and frees this page.
+            _async_wait_all()
+            barrier()
+    else:
+        for w in range(windows):
+            var k0 = w * KB
+            _stage_window[BM, KB, NT, LW, SW](as_, 0, ah, i0, m, k0, k, tid, aligned)
+            _stage_window[BM, KB, NT, LW, SW](as_, APLANE, al, i0, m, k0, k, tid, aligned)
+            _stage_window[BN, KB, NT, LW, SW](bs_, 0, bh, j0, n, k0, k, tid, aligned)
+            _stage_window[BN, KB, NT, LW, SW](bs_, BPLANE, bl, j0, n, k0, k, tid, aligned)
+            barrier()
+            _pieces_window_steps[FM, FN, KB, SW, APLANE, BPLANE, NACC](
+                acc, as_, bs_, 0, 0, k0, k, lane, lrow, lcol, live
+            )
+            barrier()
 
     if not live:
         return
@@ -1421,7 +1947,7 @@ def _pieces_block[
             var gi = i0 + lrow + fm * 16 + g
             var gj = j0 + lcol + fq * 16 + h * 8 + t * 2
             comptime for e in range(4):
-                _store_cell_of_sums[E, SEAM](
+                _store_cell_of_sums[FUSED](
                     s,
                     c,
                     ea,
@@ -1443,7 +1969,7 @@ def _pieces_block[
             var gi = i0 + lrow + fm * 16 + i4
             var gj = j0 + lcol + fq * 16 + i16
             comptime for e in range(4):
-                _store_cell_of_sums[E, SEAM](
+                _store_cell_of_sums[FUSED](
                     s,
                     c,
                     ea,
@@ -1459,48 +1985,29 @@ def _pieces_block[
 
 
 def identical_gemm_int8_pieces_tuned_kernel[
-    FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+    FUSED: Bool, PIPE: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
     s: MutPointer[Int32, MutAnyOrigin],
-    ah: MutPointer[Int8, MutAnyOrigin],
-    al: MutPointer[Int8, MutAnyOrigin],
-    bh: MutPointer[Int8, MutAnyOrigin],
-    bl: MutPointer[Int8, MutAnyOrigin],
-    m_in: Int32,
-    n_in: Int32,
-    k_in: Int32,
-    aligned_in: Int32,
-):
-    """THE SUMS FORM: three Int32 per cell at `3 (i n + j)`, HH, HL + LH,
-    LL. Grid `(ceil(n / BN), ceil(m / BM), 1)`, block `WM * WN * WARP_SIZE`.
-    The pointers the block takes for the seam form are `s` again, under the
-    types it asks for, and are not read."""
-    _pieces_block[PiecesSumsOnly, False, FM, FN, WM, WN, KB, LW](
-        s, s.bitcast[Float32](), s, s, ah, al, bh, bl, m_in, n_in, k_in, aligned_in
-    )
-
-
-def identical_gemm_int8_pieces_seam_kernel[
-    E: PiecesEpilogue, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
-](
     c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
     al: MutPointer[Int8, MutAnyOrigin],
-    ea: MutPointer[Int32, MutAnyOrigin],
     bh: MutPointer[Int8, MutAnyOrigin],
     bl: MutPointer[Int8, MutAnyOrigin],
-    eb: MutPointer[Int32, MutAnyOrigin],
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
     aligned_in: Int32,
 ):
-    """THE SEAM FORM: `C[i, j] = E.cell(HH, HL + LH, LL, ea[i] + eb[j])`,
-    one float32 per cell, in the launch that computed the sums. The same
-    grid and block. The pointer the block takes for the sums form is `ea`
-    and is not written."""
-    _pieces_block[E, True, FM, FN, WM, WN, KB, LW](
-        ea, c, ea, eb, ah, al, bh, bl, m_in, n_in, k_in, aligned_in
+    """FOUR PRODUCTS, ONE STAGING. `FUSED` False, THE SUMS FORM: three Int32
+    per cell at `s[3 (i n + j)]`, HH, HL + LH, LL; `c`, `ea` and `eb` are not
+    read. `FUSED` True: `int15_store_cell(c, ea, eb, HH, HL + LH, LL, i, j,
+    m, n)` per cell, in the launch that computed the sums; `s` is not
+    written. Grid `(ceil(n / BN), ceil(m / BM), 1)`, block `WM * WN *
+    WARP_SIZE`, for both. `PIPE`: see `_pieces_block`."""
+    _pieces_block[FUSED, PIPE, FM, FN, WM, WN, KB, LW](
+        s, c, ea, eb, ah, al, bh, bl, m_in, n_in, k_in, aligned_in
     )
 
 
@@ -1543,10 +2050,13 @@ def identical_gemm_int8_pieces_flat_into(
 
 
 def _launch_pieces[
-    FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+    FUSED: Bool, PIPE: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
     ctx: DeviceContext,
-    mut s: DeviceBuffer[DType.int32],
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     mut ah: DeviceBuffer[DType.int8],
     mut al: DeviceBuffer[DType.int8],
     mut bh: DeviceBuffer[DType.int8],
@@ -1555,16 +2065,21 @@ def _launch_pieces[
     n: Int,
     k: Int,
 ) raises:
+    """One launch of either form. The form's unused buffers are passed and
+    not touched (the caller hands the ones it has)."""
     comptime BM = WM * FM * INT8_TUNED_TILE
     comptime BN = WN * FN * INT8_TUNED_TILE
-    comptime kern = identical_gemm_int8_pieces_tuned_kernel[FM, FN, WM, WN, KB, LW]
+    comptime kern = identical_gemm_int8_pieces_tuned_kernel[FUSED, PIPE, FM, FN, WM, WN, KB, LW]
     var aligned = Int32(0)
     if _bases_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr()), LW) and _bases_aligned(
         Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr()), LW
     ):
         aligned = Int32(1)
     ctx.enqueue_function[kern](
-        s.unsafe_ptr(),
+        s,
+        c,
+        ea,
+        eb,
         ah.unsafe_ptr(),
         al.unsafe_ptr(),
         bh.unsafe_ptr(),
@@ -1576,6 +2091,55 @@ def _launch_pieces[
         grid_dim=((n + BN - 1) // BN, (m + BM - 1) // BM, 1),
         block_dim=(WM * WN * WARP_SIZE, 1, 1),
     )
+
+
+def _pieces_with_plan[FUSED: Bool](
+    ctx: DeviceContext,
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    comptime if not INT8_TUNED_AVAILABLE:
+        raise Error(
+            "identical_gemm_int8_pieces_tuned: column " + column_name(TARGET_COLUMN)
+            + " has no int8 matrix unit (kernel_matrix row"
+            " lib_int8_matrix_unit_for); the flat kernel serves it"
+        )
+    else:
+        _refuse_pieces_shape(m, n, k)
+        if plan == INT8_PIECES_PLAN_SMALL:
+            _launch_pieces[FUSED, False, 1, 1, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_WARPS16:
+            _launch_pieces[FUSED, False, 1, 2, 4, 4, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_FRAG2:
+            _launch_pieces[FUSED, False, 2, 2, 2, 4, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_SQUARE:
+            _launch_pieces[FUSED, False, 1, 1, 4, 4, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL128:
+            _launch_pieces[FUSED, False, 1, 2, 8, 2, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256:
+            _launch_pieces[FUSED, False, 1, 2, 16, 1, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256_N16:
+            _launch_pieces[FUSED, False, 1, 1, 16, 1, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_WARPS16_K32:
+            _launch_pieces[FUSED, False, 1, 2, 4, 4, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_PIPE_WARPS16:
+            _launch_pieces[FUSED, True, 1, 2, 4, 4, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_PIPE_FRAG2:
+            _launch_pieces[FUSED, True, 2, 2, 2, 4, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_PIPE_SMALL:
+            _launch_pieces[FUSED, True, 1, 1, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        else:
+            raise Error("identical_gemm_int8_pieces_tuned: no plan " + String(plan))
 
 
 def identical_gemm_int8_pieces_tuned_with_plan(
@@ -1594,30 +2158,10 @@ def identical_gemm_int8_pieces_tuned_with_plan(
     harness. `s` holds `3 m n` Int32: cell `(i, j)`'s HH, HL + LH and LL at
     `3 (i n + j)`. Refuses by name on a column with no integer matrix unit.
     Asynchronous."""
-    comptime if not INT8_TUNED_AVAILABLE:
-        raise Error(
-            "identical_gemm_int8_pieces_tuned: column " + column_name(TARGET_COLUMN)
-            + " has no int8 matrix unit (kernel_matrix row"
-            " lib_int8_matrix_unit_for); the flat kernel serves it"
-        )
-    else:
-        _refuse_pieces_shape(m, n, k)
-        if plan == INT8_PIECES_PLAN_SMALL:
-            _launch_pieces[1, 1, 2, 2, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_WARPS16:
-            _launch_pieces[1, 2, 4, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_FRAG2:
-            _launch_pieces[2, 2, 2, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_SQUARE:
-            _launch_pieces[1, 1, 4, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL128:
-            _launch_pieces[1, 2, 8, 2, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL256:
-            _launch_pieces[1, 2, 16, 1, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL256_N16:
-            _launch_pieces[1, 1, 16, 1, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        else:
-            raise Error("identical_gemm_int8_pieces_tuned: no plan " + String(plan))
+    # The sums form reads no float and no exponent: `c` is `s` under the
+    # float type, `ea` and `eb` are `s`, and none of the three is touched.
+    var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    _pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
 
 
 def identical_gemm_int8_pieces_tuned_into(
@@ -1640,47 +2184,7 @@ def identical_gemm_int8_pieces_tuned_into(
     )
 
 
-def _launch_pieces_seam[
-    E: PiecesEpilogue, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
-](
-    ctx: DeviceContext,
-    mut c: DeviceBuffer[DType.float32],
-    mut ah: DeviceBuffer[DType.int8],
-    mut al: DeviceBuffer[DType.int8],
-    mut ea: DeviceBuffer[DType.int32],
-    mut bh: DeviceBuffer[DType.int8],
-    mut bl: DeviceBuffer[DType.int8],
-    mut eb: DeviceBuffer[DType.int32],
-    m: Int,
-    n: Int,
-    k: Int,
-) raises:
-    comptime BM = WM * FM * INT8_TUNED_TILE
-    comptime BN = WN * FN * INT8_TUNED_TILE
-    comptime kern = identical_gemm_int8_pieces_seam_kernel[E, FM, FN, WM, WN, KB, LW]
-    var aligned = Int32(0)
-    if _bases_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr()), LW) and _bases_aligned(
-        Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr()), LW
-    ):
-        aligned = Int32(1)
-    ctx.enqueue_function[kern](
-        c.unsafe_ptr(),
-        ah.unsafe_ptr(),
-        al.unsafe_ptr(),
-        ea.unsafe_ptr(),
-        bh.unsafe_ptr(),
-        bl.unsafe_ptr(),
-        eb.unsafe_ptr(),
-        Int32(m),
-        Int32(n),
-        Int32(k),
-        aligned,
-        grid_dim=((n + BN - 1) // BN, (m + BM - 1) // BM, 1),
-        block_dim=(WM * WN * WARP_SIZE, 1, 1),
-    )
-
-
-def identical_gemm_int8_pieces_seam_with_plan[E: PiecesEpilogue](
+def identical_gemm_int8_pieces_tuned_fused_with_plan(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut ah: DeviceBuffer[DType.int8],
@@ -1694,35 +2198,29 @@ def identical_gemm_int8_pieces_seam_with_plan[E: PiecesEpilogue](
     k: Int,
     plan: Int,
 ) raises:
-    """The seam form on a NAMED plan: the sums form's plans, the same
-    numbers. Refuses by name as the sums form does. Asynchronous."""
-    comptime if not INT8_TUNED_AVAILABLE:
-        raise Error(
-            "identical_gemm_int8_pieces_seam: column " + column_name(TARGET_COLUMN)
-            + " has no int8 matrix unit (kernel_matrix row"
-            " lib_int8_matrix_unit_for); the flat kernel serves it"
-        )
-    else:
-        _refuse_pieces_shape(m, n, k)
-        if plan == INT8_PIECES_PLAN_SMALL:
-            _launch_pieces_seam[E, 1, 1, 2, 2, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_WARPS16:
-            _launch_pieces_seam[E, 1, 2, 4, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_FRAG2:
-            _launch_pieces_seam[E, 2, 2, 2, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_SQUARE:
-            _launch_pieces_seam[E, 1, 1, 4, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL128:
-            _launch_pieces_seam[E, 1, 2, 8, 2, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL256:
-            _launch_pieces_seam[E, 1, 2, 16, 1, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        elif plan == INT8_PIECES_PLAN_TALL256_N16:
-            _launch_pieces_seam[E, 1, 1, 16, 1, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
-        else:
-            raise Error("identical_gemm_int8_pieces_seam: no plan " + String(plan))
+    """THE FUSED FORM on a NAMED plan: two int8 planes and the row
+    exponents of each operand in, `C[m x n]` float32 out, ONE launch, each
+    cell stored by `int15_store_cell` (the caller's seam). No sums buffer.
+    The sums form's refusals and plans. Asynchronous."""
+    # The fused form writes no sums: `s` is `ea` and is not touched.
+    _pieces_with_plan[True](
+        ctx,
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        eb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ah,
+        al,
+        bh,
+        bl,
+        m,
+        n,
+        k,
+        plan,
+    )
 
 
-def identical_gemm_int8_pieces_seam_into[E: PiecesEpilogue](
+def identical_gemm_int8_pieces_tuned_fused_into(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
     mut ah: DeviceBuffer[DType.int8],
@@ -1735,10 +2233,8 @@ def identical_gemm_int8_pieces_seam_into[E: PiecesEpilogue](
     n: Int,
     k: Int,
 ) raises:
-    """**THE ENTRY POINT for a profile that brings its own seam**: two int8
-    planes and the row exponents of each operand in, `C[m x n]` out, one
-    launch, on the plan `int8_pieces_dispatch` names. `E` is the caller's
-    `PiecesEpilogue`. Asynchronous."""
-    identical_gemm_int8_pieces_seam_with_plan[E](
+    """**THE ENTRY POINT for a profile whose seam is `int15_store_cell`**:
+    the fused form on the plan `int8_pieces_dispatch` names. Asynchronous."""
+    identical_gemm_int8_pieces_tuned_fused_with_plan(
         ctx, c, ah, al, ea, bh, bl, eb, m, n, k, int8_pieces_dispatch(m, n, k)
     )

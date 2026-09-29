@@ -68,6 +68,17 @@ rc=$?
 echo "neighbors exit=$rc $(( $(date +%s) - t0 ))s: $(grep -E '^RESULT: ' "$OUT/neighbors.stdout" | tail -1)" >> "$OUT/harness.txt"
 [ "$rc" -eq 0 ] || red=1
 
+# The verifier's comparator self-test fits `ols` before any lane, so it needs
+# the estimators binding, which the lane check does not build (it builds only
+# what gemm-int15 and its neighbors import). Without it `verify` stops at the
+# self-test (H100 nvc3-0029 and M3 Ultra 1790657536591, 2026-09-29). Built
+# here when absent; a build failure is recorded and verify reads what it reads.
+if [ ! -f python/mojolearn/identical/_mojolearn_estimators.so ]; then
+    t0=$(date +%s)
+    MOJOLEARN_NUMERIC_MODE=identical sh bindings/build_estimators.sh > "$OUT/build_estimators.log" 2>&1
+    echo "build_estimators (for verify's self-test) exit=$? $(( $(date +%s) - t0 ))s" >> "$OUT/harness.txt"
+fi
+
 t0=$(date +%s)
 PYTHONPATH="$PWD/python" MOJOLEARN_NUMERIC_MODE=identical pixi run -e default python -m mojolearn verify \
     --lanes gemm-int15 --repeats 2 --json-out "$OUT/verify.json" > "$OUT/verify.stdout" 2>&1

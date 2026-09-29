@@ -1513,9 +1513,13 @@ def check_int15_unit_loads_state_their_alignment(ctx: DeviceContext) raises:
 
 def check_int15_device_refuses_above_max_k(ctx: DeviceContext) raises:
     """GATE: every launch refuses `k = INT15_MAX_K + 1` by name, before it
-    reads a buffer."""
-    var one16: List[Int16] = [1]
-    var one8: List[Int8] = [1]
+    reads a buffer. The operands are as long as the shape the calls pass
+    (`1 x k` each), so a launch that failed to refuse reads inside its
+    buffers and the gate fails on the count, never on memory outside an
+    allocation (the MI325X finding, 2026-09-29, job 1790657862351)."""
+    var k = INT15_MAX_K + 1
+    var one16 = List[Int16](length=k, fill=Int16(1))
+    var one8 = List[Int8](length=k, fill=Int8(1))
     var e0: List[Int32] = [0]
     var dqa = _upload[DType.int16](ctx, one16)
     var dqb = _upload[DType.int16](ctx, one16)
@@ -1527,7 +1531,6 @@ def check_int15_device_refuses_above_max_k(ctx: DeviceContext) raises:
     var deb = _upload[DType.int32](ctx, e0)
     var dc = _poisoned(ctx, 1)
     var work = Int15Workspace(ctx)
-    var k = INT15_MAX_K + 1
     var refused = 0
     try:
         identical_gemm_int15_flat_into(ctx, dc, dqa, dea, dqb, deb, 1, 1, k)
