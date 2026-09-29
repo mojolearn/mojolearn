@@ -48,6 +48,27 @@ full contract. In short:
   only. `bench/results/bench_board/COVERAGE.md` maps every public algorithm
   to its races.
 
+## The smoke check
+
+`--smoke` checks that the board's measurements work before a full board
+spends a box. It plans every race at 2,000 rows, one round and the small
+neural shape, into `<out>-smoke` (never the board's own directory), and
+neither reads nor writes the opponent store. A race passes only when it is
+done, its BOARD-PARAMS check is MATCHED, and every planned arm has a time and
+a quality value; an arm the plan races although it refuses by name on that
+vendor (`PLANNED_REFUSALS` in tools/bench_board.py: LightGBM's CUDA arm on
+NVIDIA, XGBoost's GPU arm on AMD, cuML's spectral classes on NVIDIA) passes
+only as a named refusal. It writes `smoke.json` and prints `SMOKE PASS n/n`,
+or `SMOKE FAIL k/n` with one line per failing race and arm (exit 1).
+`--shard i/n` runs the i-th of n round-robin shares of the planned races (by
+race id), so two boxes can run halves. A full board (full rows, the full
+neural shape) refuses to start unless the smoke results beside `--out`
+(`<out>-smoke*/smoke.json`, plus any `--smoke-json`) pass every planned race
+on this vendor with the same board and driver files (sha256 of
+tools/bench_board*.py, speed_gbdt_arm.py, classical_two_datasets.py and
+bench/speed/forest_speed_arm.py); `--no-smoke-gate` overrides it and
+board.json records the override.
+
 ## The opponent store
 
 An opponent is measured once per key and reused. Every finished opponent cell
