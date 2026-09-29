@@ -386,3 +386,89 @@ def summarize(samples):
             "warmup_gpu_mb": (warm or {}).get("gpu_mb"),
             "host_method": last.get("host_method"), "gpu_method": last.get("gpu_method"),
             "rounds_sampled": len(timed)}
+
+
+# ---------------------------------------------------------------------------
+# The arm's own library identity (the opponent store's key; tools/bench_board_store.py)
+# ---------------------------------------------------------------------------
+
+#: a board library name -> the module it imports as
+IMPORT_NAME = {"scikit-learn": "sklearn", "umap-learn": "umap", "hf": "tokenizers",
+               "torch-geometric": "torch_geometric", "faiss-cpu": "faiss", "cuml-cu12": "cuml"}
+
+
+def library_version(library):
+    """The exact version of the library this process imports: module.__version__,
+    else importlib.metadata.version of its distribution; None if not importable."""
+    if not library or library in ("mojolearn",):
+        return None
+    name = IMPORT_NAME.get(library, library).replace("-", "_")
+    try:
+        import importlib
+        mod = sys.modules.get(name) or importlib.import_module(name)
+        v = getattr(mod, "__version__", None)
+        if v:
+            return str(v)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import importlib.metadata as md
+        for dist in md.packages_distributions().get(name, []) + [library]:
+            try:
+                return md.version(dist)
+            except md.PackageNotFoundError:
+                continue
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def gpu_device_name():
+    """The GPU this process sees: torch or CuPy when already imported, else the
+    vendor tool; None when there is none."""
+    torch = sys.modules.get("torch")
+    try:
+        if torch is not None and torch.cuda.is_available():
+            return torch.cuda.get_device_name(0)
+    except Exception:  # noqa: BLE001
+        pass
+    cupy = sys.modules.get("cupy")
+    try:
+        if cupy is not None:
+            name = cupy.cuda.runtime.getDeviceProperties(0)["name"]
+            return name.decode() if isinstance(name, bytes) else str(name)
+    except Exception:  # noqa: BLE001
+        pass
+    for cmd in (["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                ["rocm-smi", "--showproductname"]):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if not out.strip():
+            continue
+        if cmd[0] == "nvidia-smi":
+            return out.splitlines()[0].strip()
+        for line in out.splitlines():
+            if "Card Series" in line and ":" in line:
+                return line.rsplit(":", 1)[1].strip()
+    if sys.platform == "darwin":
+        try:
+            return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True,
+                                  text=True, timeout=10).stdout.strip() or None
+        except (OSError, subprocess.SubprocessError):
+            return None
+    return None
+
+
+def library_identity(info):
+    """Fill `version` and, on a GPU arm, `device_name` in a worker's info when the
+    arm did not set them (the store keys an opponent by what it imported and the
+    device it ran on)."""
+    info = info if isinstance(info, dict) else {}
+    out = {}
+    if not info.get("version"):
+        out["version"] = library_version(info.get("library"))
+    if info.get("device") == "gpu" and not info.get("device_name"):
+        out["device_name"] = gpu_device_name()
+    return out

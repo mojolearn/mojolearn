@@ -108,10 +108,13 @@ SCHEMA = "mojolearn-bench-board/1"
 #: Fields added to schema /1 without breaking a resume: the `ours-cpu` arm and
 #: per cell `peak_host_mb`, `peak_gpu_mb`, `memory` and `ratio_ours_cpu_over`.
 SEED = 7                 # the drivers' own seed (lane_config seed=7); one seed only
-DEFAULT_ROUNDS = 5
+DEFAULT_ROUNDS = 1
 TREE_ROW_FLOOR = 1_000_000
 
-TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
+#: gbdt-symmetric-1000 is gbdt-symmetric at 1000 trees (CatBoost's own default
+#: iteration count; oblivious trees are weaker per tree), same arms and datasets.
+TREE_LANES = ("gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-depthwise", "gbdt-lossguide",
+              "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 FAMILIES = ("trees", "classical", "classical2", "neural", "algos")
 NEURAL_SHAPES = ("full", "small")
@@ -138,6 +141,7 @@ TREE_OPPONENTS = {
     # on every core (resolve_devices' `auto` is cpu on the Mac).
     "apple": {
         "gbdt-symmetric": ("catboost-cpu",),
+        "gbdt-symmetric-1000": ("catboost-cpu",),
         "gbdt-depthwise": ("catboost-cpu", "xgboost-cpu"),
         "gbdt-lossguide": ("catboost-cpu", "xgboost-cpu", "lightgbm-cpu"),
         "rf": ("sklearn-rf-cpu", "lightgbm-cpu"),
@@ -147,6 +151,7 @@ TREE_OPPONENTS = {
     # NVIDIA: the vendor GPU path only; bench_all_ours.sh's tree_arms_for.
     "nvidia": {
         "gbdt-symmetric": ("catboost-gpu",),
+        "gbdt-symmetric-1000": ("catboost-gpu",),
         "gbdt-depthwise": ("catboost-gpu", "xgboost-gpu"),
         "gbdt-lossguide": ("catboost-gpu", "xgboost-gpu", "lightgbm-cuda"),
         "rf": ("cuml-rf-gpu",),
@@ -160,6 +165,7 @@ TREE_OPPONENTS = {
     # carries one, and xgboost-cpu stands beside it.
     "amd": {
         "gbdt-symmetric": ("catboost-cpu",),
+        "gbdt-symmetric-1000": ("catboost-cpu",),
         "gbdt-depthwise": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu"),
         "gbdt-lossguide": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu", "lightgbm-cpu"),
         "rf": ("sklearn-rf-cpu", "lightgbm-cpu"),
@@ -178,7 +184,7 @@ TREE_OPPONENTS = {
 # ---------------------------------------------------------------------------
 
 TREE_TASK_LANES = ("gbdt-rank-yetirank", "gbdt-rank-pairlogit", "gbdt-multiclass",
-                   "gbdt-categorical")
+                   "gbdt-categorical", "gbdt-ordered")
 
 #: board dataset -> the driver's --dataset, per task lane. Istella-S is the
 #: learning-to-rank set (query ids from istella_rank.npz); multiclass is
@@ -191,6 +197,7 @@ TREE_TASK_DATASETS = {
     "gbdt-rank-pairlogit": {"istella": "istellarank"},
     "gbdt-multiclass": {"taxi": "taximc", "istella": "istellamc"},
     "gbdt-categorical": {"taxi": "taxicat"},
+    "gbdt-ordered": {"taxi": "taxi", "istella": "istella"},
 }
 
 #: data files a driver dataset reads beyond its board dataset's own cache
@@ -212,6 +219,8 @@ def _no_lgbm(arms):
 for _v, _arms in (("apple", _TASK_APPLE), ("nvidia", _TASK_NVIDIA), ("amd", _TASK_AMD)):
     for _lane in TREE_TASK_LANES:
         TREE_OPPONENTS[_v][_lane] = _no_lgbm(_arms) if _lane == "gbdt-rank-pairlogit" else _arms
+    # Ordered boosting: CatBoost only, as gbdt-symmetric
+    TREE_OPPONENTS[_v]["gbdt-ordered"] = TREE_OPPONENTS[_v]["gbdt-symmetric"]
 DATA_FILES["istella-rank"] = "istella/istella_rank.npz"
 R2_KEYS["istella-rank"] = "gbm-bench/istella/istella_rank.npz"
 
@@ -318,10 +327,9 @@ def classical_round_seconds(lane, dataset, vendor):
     return 1800 if vendor == "apple" else 900
 
 
-#: DBSCAN eps,min_samples per dataset, the values the published rows used
-#: (bench_all_ours.sh; the racer refuses with no default).
-DBSCAN_DEFAULTS = {"MOJOLEARN_CTD_DBSCAN_TAXI": "0.177,10",
-                   "MOJOLEARN_CTD_DBSCAN_ISTELLA": "4.17,10"}
+#: DBSCAN eps and min_samples: the cuML benchmark's (eps=3, min_samples=2 on
+#: every dataset, tools/bench_board_harness.py), constants of the racer
+#: (classical_two_datasets.DBSCAN_EPS / DBSCAN_MIN_SAMPLES) since 2026-09-29.
 
 #: Classical block each lane reads (classical_two_datasets.BLOCK_OF).
 CLASSICAL_BLOCK = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
@@ -422,6 +430,14 @@ NEURAL_OPPONENTS = {v: {lane: NEURAL.opponents(v, lane) for lane in NEURAL_LANES
 #: and the classical kmeans/pca/ols/svc lanes; on unless --no-infer. The cells
 #: live in a race record's `infer_cells`, apart from the fit `cells`.
 INFER = _load_tool("bench_board_infer")
+
+#: NVIDIA's harnesses (tools/bench_board_harness.py): which lanes take their
+#: values, and from which file and commit (standard library only).
+HARNESS = _load_tool("bench_board_harness")
+
+#: The opponent store (tools/bench_board_store.py): an opponent is measured once
+#: per key (box, device, library version, settings, data, ...) and reused.
+STORE = _load_tool("bench_board_store")
 
 #: Per-arm memory and the ours-cpu readback (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
@@ -595,7 +611,7 @@ def arm_library(arm):
     if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM):
         return "mojolearn"
     head = arm.split("-", 1)[0]
-    return {"sklearn": "scikit-learn", "umap": "umap-learn"}.get(head, head)
+    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers"}.get(head, head)
 
 
 def arm_device(arm, vendor):
@@ -1015,7 +1031,7 @@ def parse_tree_log(path):
     """{arms: {arm: rec}, verdict, verdict_line, shape, notes, bindings}."""
     summ = _load_tool("bench_all_summarize")
     arms, verdict, shape = summ.parse_tree_log(path)
-    bindings, warm, notes, verdict_line, mem = {}, {}, [], None, {}
+    bindings, warm, notes, verdict_line, mem, libs = {}, {}, [], None, {}, {}
     with open(path, errors="replace") as fh:
         for line in fh:
             head, _, rest = line.rstrip("\n").partition(" ")
@@ -1030,6 +1046,12 @@ def parse_tree_log(path):
                     pass
             elif head == "FSPEED-NOTE":
                 notes.append(rest[:300])
+            elif head == "FSPEED-LIBRARY":
+                try:
+                    d = json.loads(rest)
+                    libs[d.get("arm")] = d
+                except ValueError:
+                    pass
             elif head == "FSPEED-FIT-VERDICT":
                 verdict_line = rest[:300]
             elif head == "FSPEED-MEM":
@@ -1049,7 +1071,8 @@ def parse_tree_log(path):
                 mem.setdefault(f.get("arm"), {})[r] = num
     return {"arms": arms, "verdict": verdict, "verdict_line": verdict_line,
             "shape": shape, "notes": notes, "bindings": bindings, "warmup": warm,
-            "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()}}
+            "mem": {a: [rs[k] for k in sorted(rs)] for a, rs in mem.items()},
+            "libraries": libs}
 
 
 def tree_cmd(ctx, race):
@@ -1128,6 +1151,9 @@ def tree_cells(ctx, race, parsed):
                                    "fit_verdict_line": parsed["verdict_line"]},
                     verdict=parsed["verdict"] or "UNKNOWN")
         cell.update(memory_fields(parsed.get("mem", {}).get(arm)))
+        lib = (parsed.get("libraries") or {}).get(arm) or {}
+        cell["library_version"] = lib.get("version")
+        cell["device_name"] = lib.get("device_name")
         if mode:
             b = parsed["bindings"].get(arm) or {}
             cell["binding"] = b
@@ -1227,7 +1253,7 @@ def classical_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"])]
     if ctx.get("infer"):
         cmd += INFER.driver_args(race)
-    env = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
+    env = {}
     ceiling = 600 + max(rsec, 600) * len(race["arms"]) + rsec * ctx["rounds"] * len(race["arms"]) + 900
     return cmd, env, ceiling
 
@@ -1515,10 +1541,16 @@ def race_settings(ctx, race):
             s["driver"] = "tools/classical_two_datasets.py"
             s["block"] = CLASSICAL_BLOCK[race["lane"]]
             s["shape_rule"] = ("the lane's own shape (kmeans/pca/ols 4,000,000 rows or the "
-                               "Istella train split; knn 400,000 x 4,000 queries, k=10; kde "
+                               "Istella train split; knn 400,000 x 4,000 queries, k=64; kde "
                                "100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)")
             if race["lane"] == "dbscan":
-                s["dbscan_eps_min_samples"] = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
+                s["dbscan_eps_min_samples"] = "eps=3, min_samples=2 (cuML benchmark DBSCAN)"
+        # where this lane's values come from: an NVIDIA harness, or the board's own
+        hid = ("algos/" + race["lane"]) if race["family"] == "algos" else race["lane"]
+        src = HARNESS.harness_source(hid) if race["family"] != "neural" else None
+        s["config"] = src or "the board's own settings (no NVIDIA harness entry)"
+        if race["family"] != "neural":
+            s["seed"] = _params_mod().seed_for(hid)     # 42 where cuML's benchmark sets it
         _SETTINGS_CACHE[key] = s
     return dict(_SETTINGS_CACHE[key])
 
@@ -1570,7 +1602,358 @@ def add_ratios(cells):
 # Running
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# The opponent store: keys, lookup before a race, append after it
+# ---------------------------------------------------------------------------
+
+def _machine(box):
+    return ((box.get("gpu") or {}).get("name") or (box.get("host") or {}).get("cpu_model")
+            or (box.get("host") or {}).get("machine"))
+
+
+def _device_text(box, arm, vendor, device_name=None):
+    """'gpu (NVIDIA H100 80GB HBM3)' / 'cpu (Apple M3 Ultra)': the arm's device and
+    the name its own worker reported (a CPU arm: the box's CPU model)."""
+    dev = arm_device(arm, vendor)
+    name = device_name if dev == "gpu" else (box.get("host") or {}).get("cpu_model")
+    return "%s (%s)" % (dev, name) if name else None
+
+
+_R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
+
+
+def race_data_files(ctx, race):
+    """[(name, path)] of the data files a race reads; [] for seeded data."""
+    fam, lane, ds = race["family"], race["lane"], race["dataset"]
+    if fam == "neural":
+        return []
+    if fam == "algos":
+        out = []
+        for key in ALGOS.r2_keys(lane, ds):
+            if key in _R2_TO_DATA:
+                out.append((_R2_TO_DATA[key], os.path.join(ctx["data_root"], DATA_FILES[_R2_TO_DATA[key]])))
+            else:
+                out.append((key, ALGOS.corpus_path(key)))
+        return out
+    return [(k, os.path.join(ctx["data_root"], DATA_FILES[k])) for k in race_data_keys(race)
+            if k in DATA_FILES]
+
+
+def race_data_sha(ctx, race, box):
+    """sha256 of what the race reads (one hash over several files); the neural
+    family's inputs come from the installed wheel's sources, so its wheel; a
+    seeded synthetic set is named as such. None when a file is missing."""
+    if race["family"] == "neural":
+        w = ((box.get("mojolearn") or {}).get("wheel") or {}).get("sha256")
+        v = (box.get("mojolearn") or {}).get("version")
+        return "mojolearn-sources:%s" % (w or v) if (w or v) else None
+    files = race_data_files(ctx, race)
+    if not files:
+        return "synthetic (seed %d)" % SEED
+    cache = ctx.setdefault("data_sha", {})
+    shas = []
+    for name, path in files:
+        if name not in cache:
+            cache[name] = sha256_file(path) if path and os.path.isfile(path) else None
+        if cache[name] is None:
+            return None
+        shas.append(cache[name])
+    return shas[0] if len(shas) == 1 else STORE.sha256_json(shas)
+
+
+def opponent_key(box, race, arm, settings, data_sha, rounds, params=None, version=None,
+                 device_name=None):
+    """The store key of one opponent arm. `params` is its canonical read-back
+    (BOARD-PARAMS), `version` and `device_name` what its own worker reported."""
+    vendor = (box.get("gpu") or {}).get("vendor")
+    return {"box": (box.get("host") or {}).get("hostname"), "machine": _machine(box),
+            "vendor": vendor, "device": _device_text(box, arm, vendor, device_name),
+            "os": (box.get("os") or {}).get("platform"),
+            "library": arm_library(arm), "library_version": version,
+            "family": race["family"], "lane": race["lane"], "dataset": race["dataset"],
+            "rows": race.get("rows"), "neural_shape": race.get("shape"), "arm": arm,
+            "params_sha256": STORE.sha256_json(params) if params is not None else None,
+            "settings_sha256": STORE.sha256_json(settings) if settings else None,
+            "data_sha256": data_sha, "rounds": rounds}
+
+
+_PARAMS_ONLY_CMD = {"classical": "classical_cmd", "classical2": "more_cmd", "algos": "algos_cmd",
+                    "neural": "neural_cmd"}
+
+
+def params_probe(ctx, race, arms):
+    """Construct `arms` (no fit, no timed round) through the race's own driver
+    (--params-only) and read back what each got: {arm: {"params": canonical
+    read-back, "version", "device_name"}}. An arm that did not construct is
+    absent (it then runs normally)."""
+    probe_dir = os.path.join(ctx["out"], "raw", "params-only", race["id"].replace("/", "."))
+    os.makedirs(probe_dir, exist_ok=True)
+    sub = dict(race, arms=list(arms), opponents=list(arms))
+    log = os.path.join(probe_dir, "probe.log")
+    out = {}
+    if race["family"] == "trees":
+        cmd, extra = tree_cmd(ctx, sub)
+        cmd = cmd + ["--params-only"]
+        run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        try:
+            with open(log, errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            return {}
+        reps = _params_mod().parse_lines(text)
+        rep = reps[-1] if reps else {}
+        libs = {}
+        for line in text.splitlines():
+            if line.startswith("FSPEED-LIBRARY {"):
+                try:
+                    d = json.loads(line[len("FSPEED-LIBRARY "):])
+                    libs[d.get("arm")] = d
+                except ValueError:
+                    pass
+        for arm in arms:
+            a = (rep.get("arms") or {}).get(arm)
+            if a is None or arm not in libs:
+                continue
+            out[arm] = {"params": a.get("params"), "version": libs[arm].get("version"),
+                        "device_name": libs[arm].get("device_name")}
+        return out
+    cmd, extra, ceiling = globals()[_PARAMS_ONLY_CMD[race["family"]]](ctx, sub)
+    cmd = list(cmd)
+    cmd[cmd.index("--out") + 1] = probe_dir
+    cmd.append("--params-only")
+    for f in os.listdir(probe_dir):
+        if f.endswith(".params.json"):
+            os.remove(os.path.join(probe_dir, f))
+    run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
+    if not found:
+        return {}
+    r = load_result(os.path.join(probe_dir, found[0])) or {}
+    rep = r.get("params_check") or {}
+    for arm in arms:
+        a = (r.get("arms") or {}).get(arm) or {}
+        p = (rep.get("arms") or {}).get(arm)
+        if a.get("status") not in (None, "ok", "params_only") or p is None:
+            continue
+        info = a.get("info") or {}
+        out[arm] = {"params": p.get("params"), "version": info.get("version"),
+                    "device_name": info.get("device_name")}
+    return out
+
+
+def stored_opponents(ctx, race):
+    """{arm: stored record} for the race's opponents the store holds under the
+    same key, read-back included: a candidate (the fields known before
+    construction match) is constructed through its driver and reused only when
+    its read-back, library version and device equal the stored ones. None with
+    --retime-opponents or without a store."""
+    if not ctx.get("store_path") or ctx.get("retime") or not ctx.get("box"):
+        return {}
+    store = STORE.load(ctx["store_path"])
+    if not store:
+        return {}
+    settings = race_settings(ctx, race)
+    dsha = race_data_sha(ctx, race, ctx["box"])
+    cands = [a for a in race.get("opponents") or []
+             if STORE.candidates(store, opponent_key(ctx["box"], race, a, settings, dsha,
+                                                     ctx["rounds"]))]
+    if not cands:
+        return {}
+    probe = params_probe(ctx, race, cands)
+    out = {}
+    for arm in cands:
+        pr = probe.get(arm)
+        if pr is None:
+            continue
+        key = opponent_key(ctx["box"], race, arm, settings, dsha, ctx["rounds"],
+                           params=pr.get("params"), version=pr.get("version"),
+                           device_name=pr.get("device_name"))
+        hit = STORE.lookup(store, key)
+        if hit is not None:
+            out[arm] = hit
+    return out
+
+
+def store_opponents(ctx, race, rec):
+    """Append every opponent cell measured in this race to the store, keyed by
+    the race's own read-back and each arm's reported version and device;
+    returns how many were stored."""
+    if not ctx.get("store_path") or not ctx.get("box"):
+        return 0
+    settings = race_settings(ctx, race)
+    dsha = race_data_sha(ctx, race, ctx["box"])
+    params = ((rec.get("params") or {}).get("arms") or {})
+    n = 0
+    for c in rec.get("cells") or []:
+        if c.get("library") == "mojolearn" or c.get("stored"):
+            continue
+        key = opponent_key(ctx["box"], race, c["arm"], settings, dsha, ctx["rounds"],
+                           params=(params.get(c["arm"]) or {}).get("params"),
+                           version=c.get("library_version"), device_name=c.get("device_name"))
+        if STORE.missing(key):
+            c["store"] = "not stored (key fields missing: %s)" % ", ".join(STORE.missing(key))
+            continue
+        infer = [ic for ic in rec.get("infer_cells") or [] if ic.get("arm") == c["arm"]]
+        STORE.append(ctx["store_path"], STORE.record(
+            key, c, measured_at=rec.get("finished"), commit=ctx.get("commit"),
+            params=params.get(c["arm"]), infer_cells=infer))
+        n += 1
+    return n
+
+
+def _manifest_pins():
+    """{R2 key: (bytes, sha256)} from bench/results/dataset_store/manifest.tsv."""
+    pins = {}
+    try:
+        with open(os.path.join(REPO, "bench", "results", "dataset_store", "manifest.tsv")) as fh:
+            for line in fh:
+                f = line.rstrip("\n").split("\t")
+                if len(f) >= 3 and f[1].isdigit():
+                    pins[f[0]] = (int(f[1]), f[2])
+    except OSError:
+        pass
+    return pins
+
+
+def _venv_version(python, library, started):
+    """(version, why) of `library` in the board's recorded venv, read from its
+    dist-info, and only when that dist-info was last written before the board
+    started (the venv then still holds what the board imported)."""
+    import glob
+    import importlib.metadata as md
+    if not python:
+        return None, "no recorded venv"
+    venv = os.path.dirname(os.path.dirname(python))
+    sites = glob.glob(os.path.join(venv, "lib", "python*", "site-packages"))
+    if not sites:
+        return None, "the recorded venv %s is not on this box" % venv
+    name = PROBE.IMPORT_NAME.get(library, library)
+    try:
+        started_ts = datetime.datetime.strptime(started, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None, "the board's start time is unknown"
+    for site in sites:
+        for dist in md.distributions(path=[site]):
+            dname = (dist.metadata.get("Name") or "").lower()
+            top = (dist.read_text("top_level.txt") or "").split()
+            if dname != library.lower() and not dname.startswith(library.lower() + "-") \
+                    and name not in top:
+                continue
+            info = getattr(dist, "_path", None)
+            mtime = os.path.getmtime(str(info)) if info is not None else None
+            if mtime is None:
+                return None, "the dist-info of %s has no time" % dname
+            if mtime >= started_ts:
+                return None, "%s changed in the venv after the board started" % dname
+            return dist.version, None
+    return None, "%s is not in the recorded venv" % library
+
+
+def backfill_store(board_json, store_path):
+    """Import the opponent cells of an existing board.json into the store, the
+    key and provenance from the board's box, config and each cell's settings,
+    read-back and reported version. Returns (imported, {reason: skipped})."""
+    res = load_result(board_json)
+    if res is None:
+        raise SystemExit("bench_board: cannot read %s" % board_json)
+    box = res.get("box") or {}
+    cfg = res.get("config") or {}
+    data = cfg.get("data") or {}
+    shas = dict(cfg.get("data_sha256") or {})
+    for name, d in data.items():         # a pinned file whose size matched its pin
+        if name not in shas and d.get("size_ok") and d.get("pinned_sha256"):
+            shas[name] = d["pinned_sha256"]
+    pins = _manifest_pins()
+    ctx = {"data_root": cfg.get("data_root") or "", "data_sha": shas}
+    started = res.get("created")
+    python = (box.get("python") or {}).get("executable")
+    imported, skipped = 0, {}
+
+    def skip(why):
+        skipped[why] = skipped.get(why, 0) + 1
+
+    for rid, rr in sorted((res.get("races") or {}).items()):
+        race = {"family": rr.get("family"), "lane": rr.get("lane"), "dataset": rr.get("dataset"),
+                "rows": rr.get("rows"), "shape": rr.get("shape")}
+        if not race["family"]:
+            continue
+        dsha, why_data = None, None
+        try:
+            files = race_data_files(ctx, race)
+        except Exception as exc:        # noqa: BLE001
+            files, why_data = None, "the race's data files cannot be named (%s)" % exc
+        if files is not None:
+            for name, path in files:
+                if name in shas:
+                    continue
+                pin = pins.get(name)      # a corpus key: its pin, when the staged file matches
+                if pin and path and os.path.isfile(path) and os.path.getsize(path) == pin[0]:
+                    shas[name] = pin[1]
+            missing = [n for n, _ in files if n not in shas]
+            if missing:
+                why_data = "no sha256 for %s (not recorded, and no pinned file of the pinned size here)" \
+                    % ", ".join(missing)
+            else:
+                dsha = race_data_sha(ctx, race, box)
+        params = ((rr.get("params") or {}).get("arms") or {})
+        for c in rr.get("cells") or []:
+            if c.get("library") == "mojolearn" or c.get("stored"):
+                continue
+            if why_data:
+                skip(why_data)
+                continue
+            version = c.get("library_version")
+            if not version:
+                version, why = _venv_version(python, c.get("library"), started)
+                if not version:
+                    skip("library version: " + why)
+                    continue
+            key = opponent_key(box, race, c.get("arm"), c.get("settings"), dsha,
+                               (c.get("settings") or {}).get("rounds") or cfg.get("rounds"),
+                               params=(params.get(c.get("arm")) or {}).get("params"),
+                               version=version, device_name=c.get("device_name"))
+            miss = STORE.missing(key)
+            if miss:
+                skip("key fields missing: " + ", ".join(miss))
+                continue
+            infer = [ic for ic in rr.get("infer_cells") or [] if ic.get("arm") == c.get("arm")]
+            STORE.append(store_path, STORE.record(
+                key, c, measured_at=rr.get("finished"), commit=(box.get("repo") or {}).get("commit"),
+                params=params.get(c.get("arm")), infer_cells=infer))
+            imported += 1
+    return imported, skipped
+
+
 def run_race(ctx, race):
+    """Run one race and return its record (status, rc, log, cells). Opponents
+    the store already holds for this key are not run; their stored cells join
+    the race (tools/bench_board_store.py)."""
+    stored = stored_opponents(ctx, race)
+    full = race
+    if stored:
+        race = dict(race, opponents=[a for a in race["opponents"] if a not in stored],
+                    arms=[a for a in race["arms"] if a not in stored])
+        print("bench_board:   stored (not run): %s" % ", ".join(
+            "%s [%s]" % (a, STORE.source_text(r)) for a, r in sorted(stored.items())), flush=True)
+    rec = _run_race(ctx, race)
+    rec["arms"] = full["arms"]
+    rec["stored_arms"] = sorted(stored)
+    for c in rec["cells"]:
+        if c.get("library") != "mojolearn":
+            c["source"] = "measured this run"
+    for arm, r in sorted(stored.items()):
+        rec["cells"].append(STORE.stored_cell(r))
+        if r.get("infer_cells") and rec.get("infer_cells") is not None:
+            for ic in r["infer_cells"]:
+                ic = dict(ic, source=STORE.source_text(r))
+                rec["infer_cells"].append(ic)
+    rec["cells"] = add_ratios(rec["cells"])
+    rec["stored_now"] = store_opponents(ctx, full, rec)
+    return rec
+
+
+def _run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells)."""
     rec = {"id": race["id"], "family": race["family"], "lane": race["lane"],
            "dataset": race["dataset"], "rows": race["rows"], "arms": race["arms"],
@@ -1656,6 +2039,8 @@ def run_race(ctx, race):
                           status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
         else:
             cells = classical_cells(ctx, race, r)
+            # the classical driver's settings and mismatch lines reach BOARD.md
+            rec["lane_config"] = r.get("lane_config")
             if ctx.get("infer"):
                 rec["infer_cells"] = INFER.classical_cells(_bb(), ctx, race, r)
         # the arms' saved outputs are only for the conductor's quality pass
@@ -1670,7 +2055,72 @@ def run_race(ctx, race):
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
+    attach_params(ctx, rec)
     return rec
+
+
+def _params_mod():
+    spec = importlib.util.spec_from_file_location("bench_board_params",
+                                                  os.path.join(HERE, "bench_board_params.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def attach_params(ctx, rec):
+    """tools/bench_board_params.py: the driver printed one BOARD-PARAMS line
+    per race (every arm's parameters, read back from the constructed object).
+    The report goes on the race and each arm's resolved parameters on its
+    cell. A REFUSED report fails the race by name, whatever the driver's rc.
+    No line means the driver ran without the check: `params_check` says so."""
+    try:
+        with open(os.path.join(ctx["out"], rec["log"]), errors="replace") as fh:
+            reports = _params_mod().parse_lines(fh.read())
+    except (OSError, KeyError, TypeError):
+        reports = []
+    if not reports:
+        rec["params_check"] = "NOT CHECKED (the driver printed no BOARD-PARAMS line)"
+        return
+    rep = reports[-1]
+    rec["params"] = rep
+    rec["params_check"] = rep.get("verdict")
+    for c in rec.get("cells") or []:
+        arm = rep.get("arms", {}).get(c.get("arm"))
+        if arm is not None:
+            c["params"] = arm
+    if rep.get("verdict") == "REFUSED":
+        rec["status"] = "failed"
+        rec["failure"] = "PARAMS REFUSED: " + " | ".join(rep.get("problems") or [])
+
+
+def render_params(rr):
+    """The resolved parameters of every arm side by side, under the race."""
+    L = [""]
+    rep = rr.get("params")
+    if not rep:
+        L.append("parameters: %s" % clean(rr.get("params_check") or "NOT CHECKED"))
+        return L
+    arms = list(rep.get("arms") or {})
+    names = sorted({p for a in arms for p in rep["arms"][a].get("params", {})})
+    L.append("parameters (tools/bench_board_params.py, read back from each constructed arm; "
+             "reference `%s`, seed %s): %s" % (rep.get("reference"), rep.get("seed"),
+                                                clean(rep.get("verdict"))))
+    L.append("")
+    L.append("| parameter | %s |" % " | ".join(arms))
+    L.append("|---|%s" % "---|" * len(arms))
+    L.append("| library (source) | %s |" % " | ".join(
+        "%s (%s)" % (rep["arms"][a].get("library"), rep["arms"][a].get("source")) for a in arms))
+    for n in names:
+        L.append("| %s | %s |" % (n, " | ".join(
+            clean(json.dumps(rep["arms"][a]["params"][n])) if n in rep["arms"][a].get("params", {})
+            else "-" for a in arms)))
+    for e in rep.get("exceptions") or []:
+        L.append("")
+        L.append("accepted difference: %s %s: %s" % (e.get("arm"), e.get("param"), clean(e.get("reason"))))
+    for pr in rep.get("problems") or []:
+        L.append("")
+        L.append("REFUSED: %s" % clean(pr))
+    return L
 
 
 def all_cells(result):
@@ -1725,7 +2175,7 @@ def _arm_label(c):
 QUALITY_NOTE = {
     "auc": "higher is better", "accuracy": "higher is better", "logloss": "lower is better",
     "rmse": "lower is better", "r2": "higher is better", "inertia": "lower is better",
-    "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better",
+    "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better", "recall_at_k": "higher is better",
     "mean_log_likelihood": "higher is better",
     "ndcg10": "higher is better", "ndcg5": "higher is better", "map": "higher is better",
     "mlogloss": "lower is better",
@@ -1933,7 +2383,8 @@ def render_board(result):
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
                              clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
-                             clean(c["status"])))
+                             clean(c["status"]) + (" (%s)" % clean(c["source"])
+                                                   if c.get("source") else "")))
             L.extend(render_memory_methods(rc))
             lc = rr.get("lane_config") or {}
             if lc:
@@ -1948,6 +2399,14 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
+            src = next((c.get("settings", {}).get("config") for c in rr.get("cells") or []
+                        if c.get("settings", {}).get("config")), None)
+            if src:
+                L.append("")
+                L.append("config: %s" % clean(src if isinstance(src, str) else
+                                              "%s, %s (%s)" % (src.get("harness"), src.get("entry"),
+                                                               src.get("url"))))
+            L.extend(render_params(rr))
             L.extend(INFER.render_race(_bb(), rr))
             L.append("")
     L.append("## Not covered by this board")
@@ -2061,7 +2520,7 @@ def build_parser():
                         "control shape, 4096^3 GEMM, L2048 blocks) or small (a smoke; the board "
                         "says SMOKE). --rows does not apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
-                   help="timed rounds after one warm-up (default 5)")
+                   help="timed rounds after one warm-up (default 1)")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
     p.add_argument("--mojolearn-wheel", default=None,
                    help="install this wheel file instead of downloading one (sha256 recorded)")
@@ -2104,6 +2563,21 @@ def build_parser():
     p.add_argument("--no-cpu-arm", action="store_true",
                    help="skip our CPU tier: no `ours-cpu` arm (by default it races on every lane "
                         "whose estimator has a CPU path, on every vendor)")
+    p.add_argument("--rerun", default=None,
+                   help="comma list of race id prefixes (e.g. trees/rf/,trees/et/) to run again "
+                        "although done; the old record is kept under `superseded`")
+    p.add_argument("--rerun-before", default=None,
+                   help="with --rerun: only races that finished before this UTC time "
+                        "(ISO, e.g. 2026-09-29T13:00:00Z)")
+    p.add_argument("--opponent-store", default=None,
+                   help="the opponent store, JSONL (default <out>/../opponent-store.jsonl): an "
+                        "opponent already measured for the same key is not run again; its stored "
+                        "cell joins the race (tools/bench_board_store.py)")
+    p.add_argument("--retime-opponents", action="store_true",
+                   help="measure every opponent again (and store the new measurement)")
+    p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
+                   help="import the opponent cells of an existing board.json into the store, "
+                        "print how many were imported and skipped, and exit")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -2121,6 +2595,41 @@ def build_parser():
     p.add_argument("--algos-data", default=None,
                    help="algos block dir (default <cache>/algos-data); prep is untimed and once")
     return p
+
+
+_DRIVER_KEY = {"trees": "tree_driver", "classical": "classical_driver", "classical2": "more_driver",
+               "neural": "neural_driver", "algos": "algos_driver"}
+
+
+def _driver_has_params_check(ctx, family):
+    """Does this family's driver call tools/bench_board_params.py? A finished
+    race whose record has no MATCHED check is run again once it does, so every
+    race on the board ends up checked (Andrew, 2026-09-29: same seed, same
+    tuning parameters, enforced). Only the driver this run uses is read: the
+    trees driver (bench/speed/forest_speed_arm.py) calls the check itself, and
+    reading tools/speed_gbdt_arm.py beside it made a driver without the check
+    (a stub, an older driver) rerun its finished races on every resume."""
+    paths = [ctx.get(_DRIVER_KEY.get(family, ""), "")]
+    for p in paths:
+        try:
+            with open(p, errors="replace") as fh:
+                if "bench_board_params" in fh.read():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
+def _rerun_wanted(args, race_id, prev):
+    """--rerun: a finished race whose id starts with one of the prefixes and
+    that finished before --rerun-before (UTC, ISO) runs again. The earlier
+    record is kept under `superseded` in board.json. The time bound makes a
+    resumed rerun job skip the races it already reran."""
+    if not args.rerun:
+        return False
+    if not any(race_id.startswith(p.strip()) for p in args.rerun.split(",") if p.strip()):
+        return False
+    return str(prev.get("finished") or "") < (args.rerun_before or "9999")
 
 
 def parse_rows(text):
@@ -2226,6 +2735,17 @@ def main(argv=None):
     if args.rounds < 1:
         raise SystemExit("--rounds must be >= 1")
 
+    if args.backfill_store:
+        board_json = os.path.abspath(os.path.expanduser(args.backfill_store))
+        store = args.opponent_store or os.path.join(os.path.dirname(os.path.dirname(board_json)),
+                                                    "opponent-store.jsonl")
+        imported, skipped = backfill_store(board_json, os.path.abspath(os.path.expanduser(store)))
+        print("bench_board: backfill %s -> %s: imported %d opponent cells, skipped %d"
+              % (board_json, store, imported, sum(skipped.values())), flush=True)
+        for why, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
+            print("bench_board:   skipped %d: %s" % (n, why), flush=True)
+        return 0
+
     if args.render_only:
         if not args.out:
             raise SystemExit("--render-only needs --out")
@@ -2279,8 +2799,10 @@ def main(argv=None):
     if corpus_missing:
         raise SystemExit(
             "bench_board: REFUSING: corpus key(s) %s missing (looked in $MOJOLEARN_CORPUS_ROOT, "
-            "~/r2-stage, <repo>/training). This script never downloads. Stage from R2:\n  sh "
-            "tools/dataset_store.sh stage \"<ssh flags+target>\" %s"
+            "<repo>/training, ~/r2-stage, ~/CascadeProjects/mojolearn/training and "
+            "~/mojolearn-wt/*/training). This script never downloads. Stage from R2 on the Mac "
+            "that holds the credential:\n  sh tools/dataset_store.sh stage \"<ssh flags+target>\" %s\n"
+            "(a remote Mac: prefix MOJOLEARN_STAGE_BOX_HOME=<its home>)"
             % (",".join(corpus_missing), " ".join(corpus_missing)))
     if args.verify_data:
         data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed, verify=True)
@@ -2320,6 +2842,11 @@ def main(argv=None):
            "algos_driver": os.path.abspath(args.algos_driver),
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
+    ctx["box"] = box
+    ctx["retime"] = args.retime_opponents
+    ctx["store_path"] = os.path.abspath(os.path.expanduser(
+        args.opponent_store or os.path.join(os.path.dirname(out), "opponent-store.jsonl")))
+    ctx["data_sha"] = {}
 
     if result is None:
         result = {"schema": SCHEMA, "created": now_utc(), "box": box, "races": {}}
@@ -2342,7 +2869,11 @@ def main(argv=None):
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))
                                  or ("neural" in families and args.neural_shape == "small"),
-                        "data": data}
+                        "data": data, "data_root": ctx["data_root"],
+                        # sha256 of each data file a race read (the store's data key)
+                        "data_sha256": ctx["data_sha"],
+                        "opponent_store": ctx["store_path"],
+                        "retime_opponents": ctx["retime"]}
     result["plan"] = [r["id"] for r in races]
     save_result(rpath, result)
     write_board(out, result)
@@ -2350,9 +2881,19 @@ def main(argv=None):
     todo = []
     for r in races:
         prev = result["races"].get(r["id"])
-        if prev and prev.get("status") == "done":
+        if prev and prev.get("status") == "done" and prev.get("params_check") != "MATCHED" \
+                and _driver_has_params_check(ctx, r["family"]):
+            print("bench_board: RERUN %s (done %s without a MATCHED parameter check: %s; its "
+                  "driver now has the check)" % (r["id"], prev.get("finished"),
+                                                 prev.get("params_check") or "NOT CHECKED"), flush=True)
+            result.setdefault("superseded", []).append(prev)
+        elif prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
             print("bench_board: skip %s (done %s)" % (r["id"], prev.get("finished")), flush=True)
             continue
+        if prev and prev.get("status") == "done":
+            print("bench_board: RERUN %s (done %s, before --rerun-before %s)"
+                  % (r["id"], prev.get("finished"), args.rerun_before), flush=True)
+            result.setdefault("superseded", []).append(prev)
         if prev and prev.get("status") == "failed" and args.skip_failed:
             print("bench_board: skip %s (failed earlier; --skip-failed)" % r["id"], flush=True)
             continue

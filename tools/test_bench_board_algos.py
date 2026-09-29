@@ -26,7 +26,10 @@ def _load(name):
 A = _load("bench_board_algos")
 bb = _load("bench_board")
 
-XLANES = {"linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann"}
+XLANES = {"linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann",
+          # the lanes of the public mojolearn.training, resample, model_selection and
+          # embedding surfaces (2026-09-29)
+          "training", "resample", "model_selection", "embedding"}
 
 
 def test_tables_are_complete_and_stdlib_only():
@@ -50,7 +53,8 @@ def test_tables_are_complete_and_stdlib_only():
                 assert not any(a in A._NVIDIA_ONLY for a in opp), (v, lane)
         # two datasets of different kind, or its own named data
         tab = [d for d in s["datasets"] if d in A.TAB]
-        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "images"), lane
+        assert len(s["datasets"]) >= 2 or s["block"] in ("tensor", "optim", "dense", "sym", "images",
+                                                          "corpus"), lane
         assert not tab or set(tab) == set(A.TAB), lane
     # torch.optim has no Lion and no LAMB: those race ours alone, named in not_planned
     assert alone == {"lion", "lamb"}
@@ -149,8 +153,11 @@ def test_lane_arrays_derivations():
     assert D["X"].ndim == 1
     D = A.lane_arrays("incremental-pca", {"X": B["X"]})
     assert D["X"].shape[0] + D["Xq"].shape[0] == 200
-    p = A._derived_params("gaussian-rp", {"X": B["X"]}, A.LANES["gaussian-rp"]["params"])
+    # 'half' resolves to d // 2; gaussian-rp itself races the cuML benchmark's 10 components
+    p = A._derived_params("gaussian-rp", {"X": B["X"]}, dict(A.LANES["gaussian-rp"]["params"],
+                                                              n_components="half"))
     assert p["n_components"] == 3
+    assert A.LANES["gaussian-rp"]["params"]["n_components"] == 10
     Y = np.random.default_rng(3).standard_normal((2, 100)).astype(np.float32)
     D = A.lane_arrays("gru-clf", {"Y": Y})
     n_fit = int(100 * 0.8) - A.SEQ_T

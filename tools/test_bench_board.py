@@ -389,12 +389,12 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    # the 93 races before the algorithm expansion are unchanged; the algos
-    # family adds its own
+    # the 101 races before the algorithm expansion (93, gbdt-symmetric-1000 and
+    # gbdt-ordered on two datasets each, and four neural lanes since 2026-09-29); the algos family adds its own
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
-    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 336
-    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 336 + sum(len(r["arms"]) for r in algos)) in text
+    assert len(before) == 101 and sum(len(r["arms"]) for r in before) == 362
+    assert "TOTAL races=%d cells=%d" % (101 + len(algos), 362 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -402,7 +402,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
     assert "ours-cpu: off (--no-cpu-arm)" in text
-    assert "family neural     races=16 cells=76" in text
+    assert "family neural     races=20 cells=90" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -559,7 +559,9 @@ NEURAL_IDS = [
     "neural/mamba3-forward/gaussian/shape=full", "neural/mamba3-infer/gaussian/shape=full",
     "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
     "neural/samba-infer/bytes/shape=full",
-    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full"]
+    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full",
+    "neural/lm-infer/bytes/shape=full", "neural/lm-host-train-step/bytes/shape=full",
+    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
                "torch-eager-bf16", "torch-compile-bf16"],
@@ -577,15 +579,20 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
-        want = CPU_ARMS if r["lane"].endswith("-infer") else GPU_ARMS[vendor]
+        cpu_lane = r["lane"].endswith("-infer") or r["lane"] == "lm-host-train-step"
+        want = CPU_ARMS if cpu_lane else GPU_ARMS[vendor]
+        if r["lane"] == "gemm-bf16":
+            want = [a for a in want if a.endswith("bf16")]
+        if r["lane"] == "gemm-int8":
+            want = ["torch-eager-int8", "torch-compile-int8"] if vendor == "nvidia" else []
         if r["lane"].startswith("mamba1-"):
             # the per-token reference scan is not a compile target (named in NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ["ours"] + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
-        assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia"
-                                                      and not r["lane"].endswith("-infer"))
+        assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia" and not cpu_lane
+                                                      and not r["lane"].startswith("gemm-"))
     for arm in GPU_ARMS["nvidia"]:
         assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "gpu"
     for arm in CPU_ARMS:
@@ -593,8 +600,8 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 76, "amd": 76, "nvidia": 95}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 16, "cells": cells}}
+    assert cells == {"apple": 90, "amd": 90, "nvidia": 111}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 20, "cells": cells}}
 
 
 def test_fast_refused_for_neural_by_name(env):
@@ -613,16 +620,16 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 336, 134, 76),
-                                                      ("nvidia", 280, 94, 95),
-                                                      ("amd", 270, 90, 76)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 362, 134, 90),
+                                                      ("nvidia", 304, 94, 111),
+                                                      ("amd", 292, 90, 90)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=%d" % cells in text
+    assert "TOTAL races=101 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=16 cells=%d" % neural in text
+    assert "family neural     races=20 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text
     # what is left off the plan is printed by name, never dropped silently
     assert "neural not planned: torch-compile-* on mamba1-forward" in text
@@ -925,3 +932,186 @@ def test_classical2_pins_installed_per_vendor(tmp_path, monkeypatch):
             assert not any("statsmodels" in c for c in flat)
     assert "umap-learn==0.5.12" in bb.MORE_PINS["apple"] and "faiss-cpu==1.15.1" in bb.MORE_PINS["amd"]
     assert all("==" in p for v in bb.MORE_PINS.values() for p in v)
+
+
+# --- the opponent store (tools/bench_board_store.py) -------------------------
+
+READBACK = {"max_depth": 8, "n_estimators": 500, "seed": 7}
+
+
+def _store_ctx(tmp_path):
+    data_root = tmp_path / "data"
+    (data_root / "taxi").mkdir(parents=True)
+    (data_root / bb.DATA_FILES["taxi"]).write_bytes(b"taxi bytes")
+    box = {"host": {"hostname": "m3ultra-b", "cpu_model": "Apple M3 Ultra", "machine": "arm64"},
+           "os": {"platform": "macOS-26-arm64"},
+           "gpu": {"vendor": "apple", "name": "Apple M3 Ultra"},
+           "mojolearn": {"version": "0.8.22", "wheel": {"sha256": "ab" * 32}}}
+    ctx = {"vendor": "apple", "rounds": 1, "data_root": str(data_root), "box": box,
+           "store_path": str(tmp_path / "opponent-store.jsonl"), "retime": False,
+           "python": "py", "tree_driver": "drv", "arm_budget_s": 60, "race_deadline_s": 600,
+           "infer": False, "commit": "c0ffee", "out": str(tmp_path / "out"), "nice": 0}
+    race = bb.plan_races("apple", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"],
+                         None, cpu_arm=False)[0]
+    return ctx, race
+
+
+def _key(ctx, race, arm, params=READBACK, version="1.2.8", device_name=None, over=None):
+    key = bb.opponent_key(ctx["box"], race, arm, bb.race_settings(ctx, race),
+                          bb.race_data_sha(ctx, race, ctx["box"]), ctx["rounds"],
+                          params=params, version=version, device_name=device_name)
+    key.update(over or {})
+    return key
+
+
+def _stored_record(ctx, race, arm, status="ok", over=None):
+    cell = dict(bb.base_cell(ctx, race, arm, None), status=status, median_ms=1000.0,
+                times_ms=[1000.0], rounds=1)
+    return bb.STORE.record(_key(ctx, race, arm, over=over), cell,
+                           measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
+
+
+def _probe_returns(monkeypatch, result):
+    calls = []
+
+    def fake(ctx, race, arms):
+        calls.append(list(arms))
+        return {a: dict(result) for a in arms}
+    monkeypatch.setattr(bb, "params_probe", fake)
+    return calls
+
+
+def test_store_hit_constructs_then_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    assert race["opponents"] == ["catboost-cpu"]
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    probes = _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    seen = {}
+
+    def fake(ctx_, race_):
+        seen["race"] = race_
+        cells = [dict(bb.base_cell(ctx_, race_, "ours", "identical"), status="ok",
+                      median_ms=500.0, times_ms=[500.0], rounds=1)]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "now"}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(ctx, race)
+    assert probes == [["catboost-cpu"]]          # constructed and read back first
+    assert seen["race"]["opponents"] == [] and "catboost-cpu" not in seen["race"]["arms"]
+    cmd, _env = bb.tree_cmd(ctx, seen["race"])
+    assert "--ours-only" in cmd and "--arms" not in cmd
+    cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
+    assert cat["source"].startswith("stored (measured 2026-09-29T12:00:00Z on m3ultra-b")
+    assert cat["ratio_ours_identical_over"] == 0.5
+    assert rec["stored_arms"] == ["catboost-cpu"] and rec["stored_now"] == 0
+
+
+def test_store_reuses_only_the_same_read_back_version_and_device(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    _probe_returns(monkeypatch, {"params": dict(READBACK, max_depth=6), "version": "1.2.8"})
+    assert bb.stored_opponents(ctx, race) == {}          # a parameter changed
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.9"})
+    assert bb.stored_opponents(ctx, race) == {}          # a new library version
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+    # an arm that did not construct runs normally
+    monkeypatch.setattr(bb, "params_probe", lambda c, r, a: {})
+    assert bb.stored_opponents(ctx, race) == {}
+    # nothing stored that could match: nothing is constructed
+    calls = _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert bb.stored_opponents(dict(ctx, store_path=str(tmp_path / "empty.jsonl")), race) == {}
+    assert calls == []
+
+
+def test_store_miss_when_any_key_field_differs(tmp_path):
+    ctx, race = _store_ctx(tmp_path)
+    base = _key(ctx, race, "catboost-cpu")
+    for field in bb.STORE.KEY_FIELDS:
+        rec = _stored_record(ctx, race, "catboost-cpu", over={field: "something else"})
+        store = {bb.STORE.key_id(rec["key"]): rec}
+        assert bb.STORE.lookup(store, base) is None, field
+    store = {bb.STORE.key_id(base): _stored_record(ctx, race, "catboost-cpu")}
+    assert bb.STORE.lookup(store, base) is not None
+    # a key with a missing field neither hits nor is stored
+    assert bb.STORE.lookup(store, dict(base, library_version=None)) is None
+    assert "params_sha256" in bb.STORE.missing(_key(ctx, race, "catboost-cpu", params=None))
+
+
+def test_store_retime_partial_and_measured_cells(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert bb.stored_opponents(dict(ctx, retime=True), race) == {}
+    part = tmp_path / "partial.jsonl"
+    bb.STORE.append(str(part), _stored_record(ctx, race, "catboost-cpu", status="PARTIAL(0/1 rounds)"))
+    assert bb.stored_opponents(dict(ctx, store_path=str(part)), race) == {}
+
+    def fake(ctx_, race_):
+        cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)), status="ok",
+                      median_ms=700.0, times_ms=[700.0], rounds=1,
+                      library_version=None if a == "ours" else "1.2.8") for a in race_["arms"]]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "2026-09-29T13:00:00Z",
+                "params": {"arms": {"catboost-cpu": {"params": READBACK}}}}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(dict(ctx, retime=True), race)
+    cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
+    assert cat["source"] == "measured this run" and rec["stored_now"] == 1
+    latest = bb.STORE.lookup(bb.STORE.load(ctx["store_path"]), _key(ctx, race, "catboost-cpu"))
+    assert latest["measured_at"] == "2026-09-29T13:00:00Z"
+    assert latest["params"] == {"params": READBACK}
+
+
+def test_backfill_store_imports_and_counts_skips_by_reason(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    cell = dict(bb.base_cell(ctx, race, "catboost-cpu", None), status="ok", median_ms=900.0,
+                library_version="1.2.8")
+    ours = dict(bb.base_cell(ctx, race, "ours", "identical"), status="ok", median_ms=450.0)
+    sha = bb.race_data_sha(ctx, race, ctx["box"])
+    params = {"arms": {"catboost-cpu": {"params": READBACK}}}
+    board = {"box": ctx["box"], "created": "2026-09-29T10:00:00Z",
+             "config": {"rounds": 1, "data_root": ctx["data_root"],
+                        "data": {"taxi": {"size_ok": True, "pinned_sha256": sha}}},
+             "races": {race["id"]: {"family": "trees", "lane": race["lane"], "dataset": "taxi",
+                                    "rows": None, "finished": "2026-09-29T11:00:00Z",
+                                    "params": params, "cells": [ours, cell]},
+                       "trees/gbdt-symmetric/istella/rows=full": {
+                           "family": "trees", "lane": "gbdt-symmetric", "dataset": "istella",
+                           "rows": None, "params": params, "cells": [dict(cell, dataset="istella")]},
+                       "trees/gbdt-depthwise/taxi/rows=full": {
+                           "family": "trees", "lane": "gbdt-depthwise", "dataset": "taxi",
+                           "rows": None, "params": params,
+                           "cells": [dict(cell, library_version=None, lane="gbdt-depthwise")]}}}
+    path = tmp_path / "board.json"
+    path.write_text(json.dumps(board))
+    store = tmp_path / "store.jsonl"
+    imported, skipped = bb.backfill_store(str(path), str(store))
+    assert imported == 1 and sum(skipped.values()) == 2
+    assert any(w.startswith("no sha256 for istella") for w in skipped)
+    assert any(w.startswith("library version: no recorded venv") for w in skipped)
+    ctx["store_path"] = str(store)
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+
+
+def test_backfill_corpus_pin_and_venv_version(tmp_path, monkeypatch):
+    # a corpus key takes its manifest pin when the staged file has the pinned size
+    corpus = tmp_path / "input.txt"
+    corpus.write_bytes(b"x" * 11)
+    monkeypatch.setattr(bb, "_manifest_pins", lambda: {"corpus/enwik8/input.txt": (11, "cd" * 32)})
+    monkeypatch.setattr(bb.ALGOS, "corpus_path", lambda key: str(corpus))
+    race = {"family": "algos", "lane": "bpe-encode", "dataset": "enwik8", "rows": None}
+    ctx = {"data_root": str(tmp_path), "data_sha": {}}
+    files = bb.race_data_files(ctx, race)
+    assert files == [("corpus/enwik8/input.txt", str(corpus))]
+    # the venv version: only a dist-info written before the board started
+    site = tmp_path / "venv" / "lib" / "python3.11" / "site-packages"
+    dist = site / "catboost-1.2.8.dist-info"
+    dist.mkdir(parents=True)
+    (dist / "METADATA").write_text("Metadata-Version: 2.1\nName: catboost\nVersion: 1.2.8\n")
+    py = str(tmp_path / "venv" / "bin" / "python")
+    os.utime(str(dist), (1_700_000_000, 1_700_000_000))
+    assert bb._venv_version(py, "catboost", "2026-09-29T10:00:00Z") == ("1.2.8", None)
+    v, why = bb._venv_version(py, "catboost", "2023-01-01T00:00:00Z")
+    assert v is None and "changed in the venv after the board started" in why
+    v, why = bb._venv_version(py, "xgboost", "2026-09-29T10:00:00Z")
+    assert v is None and "not in the recorded venv" in why

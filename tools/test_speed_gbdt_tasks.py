@@ -25,7 +25,7 @@ TASKS = ("gbdt-rank-yetirank", "gbdt-rank-pairlogit", "gbdt-multiclass", "gbdt-c
 # --- planning ----------------------------------------------------------------
 
 def test_task_lanes_known_to_driver_and_board():
-    assert bb.TREE_TASK_LANES == TASKS
+    assert bb.TREE_TASK_LANES == TASKS + ("gbdt-ordered",)
     for lane in TASKS:
         assert lane in spec.LANE_NAMES and lane in spec.TASK_LANES
         assert spec.LANE_DEFAULT_DATASET[lane] in spec.TASK_LANES[lane]["datasets"]
@@ -111,8 +111,13 @@ def test_dry_run_lists_task_races_and_rank_data(capsys):
 def test_task_config_shares_the_gbdt_knobs_and_names_mismatches(lane):
     base = spec.lane_config("gbdt-symmetric", "shipped")
     cfg = spec.lane_config(lane, "shipped")
-    for k in ("n_estimators", "max_depth", "learning_rate", "l2", "borders", "seed", "max_leaves"):
+    for k in ("learning_rate", "l2", "borders", "seed"):
         assert cfg[k] == base[k], k
+    # gbm-bench's values where it has the task (multiclass, binary); the ranking
+    # lanes, which it lacks, keep 100 trees at depth 6 and 64 leaves
+    want = ((base["n_estimators"], base["max_depth"], base["max_leaves"]) if cfg.get("harness")
+            else (100, 6, 64))
+    assert (cfg["n_estimators"], cfg["max_depth"], cfg["max_leaves"]) == want, lane
     task = spec.TASK_LANES[lane]
     assert cfg["loss"] == task["loss"] and cfg["task"] == task["task"]
     assert cfg["objectives"]["mojolearn"] == task["loss"]
@@ -289,3 +294,16 @@ def test_istella_multiclass_and_ranking(tiny_data):
     assert list(r.bounds_test) == [0, 25, 50, 80]
     capped = spec.load_dataset("istellarank", "shipped", rows_cap=120)
     assert capped.X_train.shape[0] == 100                 # cut at a query boundary
+
+
+def test_ordered_lane_is_catboost_only_on_the_symmetric_grower():
+    cfg = spec.lane_config("gbdt-ordered", "shipped")
+    base = spec.lane_config("gbdt-symmetric", "shipped")
+    assert cfg["boosting_type"] == "Ordered" and base["boosting_type"] == "Plain"
+    assert cfg["grow_policy"] == "SymmetricTree" and cfg["score_function"] == "Cosine"
+    for k in ("n_estimators", "max_depth", "learning_rate", "l2", "borders", "seed", "max_leaves"):
+        assert cfg[k] == base[k], k
+    assert "xgboost_grow_policy" not in cfg
+    for v in bb.VENDORS:
+        assert bb.TREE_OPPONENTS[v]["gbdt-ordered"] == bb.TREE_OPPONENTS[v]["gbdt-symmetric"]
+    assert spec.task_names(spec.TASK_LANES["gbdt-ordered"]) == ("binary", "regression")

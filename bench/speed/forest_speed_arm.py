@@ -83,6 +83,7 @@ which is what every one of them documents as its preferred layout.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -127,6 +128,8 @@ import speed_gbdt_arm as spec           # noqa: E402
 OUR_ENTRY_POINTS = {
     "gbdt-symmetric": "mojolearn.GradientBoosting(grow_policy='SymmetricTree')"
                       " -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-symmetric-1000": "mojolearn.GradientBoosting(grow_policy='SymmetricTree',"
+                           " n_estimators=1000) -> gbdt/ via _mojolearn_gbdt",
     "gbdt-depthwise": "mojolearn.GradientBoosting(grow_policy='Depthwise')"
                       " -> gbdt/ via _mojolearn_gbdt",
     "gbdt-lossguide": "mojolearn.GradientBoosting(grow_policy='Lossguide')"
@@ -147,6 +150,8 @@ OUR_ENTRY_POINTS = {
                        " grow_policy='SymmetricTree') -> gbdt/ via _mojolearn_gbdt",
     "gbdt-categorical": "mojolearn.GradientBoosting(grow_policy='Lossguide',"
                         " cat_features=[...]) -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-ordered": "mojolearn.GradientBoosting(grow_policy='SymmetricTree',"
+                    " boosting_type='Ordered') -> gbdt/ via _mojolearn_gbdt",
 }
 
 
@@ -184,12 +189,11 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         border_count (BORDERS, not bins) grow_policy
         bootstrap_type='No'              random_state <- random_seed
 
-    `boost_from_average` is passed by NEITHER arm, deliberately. Both
-    libraries resolve the same data-dependent default -- auto-true for RMSE,
-    false for Logloss, since Logloss is not on CatBoost's
-    `AdjustBoostFromAverageDefaultValue` list -- and `check-bfa-oracle`
-    proves our bias bit-equal to their `get_scale_and_bias`. Passing it would
-    be overriding a default that already agrees.
+    `boost_from_average` is passed explicitly since 2026-09-29 (same seed,
+    same tuning parameters): True for RMSE and False for Logloss, the
+    data-dependent default both libraries resolve (`check-bfa-oracle` proves
+    our bias bit-equal to their `get_scale_and_bias`), and the value XGBoost
+    and LightGBM are now pinned to as well.
 
     MULTICLASS IS REFUSED BY NAME (DEVIATION 1838). The Mojo layer implements
     `MultiClass`; this Python wrapper is one-dimensional, so a 7-class
@@ -218,9 +222,30 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         bootstrap_type="No",                 # DEVIATION 1833
         grow_policy=cfg["grow_policy"],
         loss=task_loss or ("RMSE" if data.task == "regression" else "Logloss"),
+        # SAME SEED, SAME TUNING PARAMETERS (speed_gbdt_arm.lane_config): every
+        # knob the opponents also have, set to the value they are given
+        max_leaves=cfg["max_leaves"],        # 2 ** depth, accepted off Lossguide
+        min_data_in_leaf=cfg["min_data_in_leaf"],
+        random_strength=cfg["random_strength"],
+        score_function=cfg["score_function"],
+        leaf_estimation_method=cfg["leaf_estimation_method"],
+        leaf_estimation_iterations=cfg["leaf_estimation_iterations"],
+        feature_border_type=cfg["feature_border_type"],
+        nan_mode=cfg["nan_mode"],
+        boosting_type=cfg["boosting_type"],
     )
-    if cfg["grow_policy"] == "Lossguide":
-        params["max_leaves"] = cfg["max_leaves"]
+    if cfg.get("min_split_gain") is not None:
+        params["min_split_gain"] = cfg["min_split_gain"]
+    if cfg.get("min_child_hessian") is not None:
+        params["min_child_hessian"] = cfg["min_child_hessian"]
+    bfa = spec.boost_from_average_for(data)
+    if bfa is not None:
+        params["boost_from_average"] = bfa
+    spw = spec.scale_pos_weight_for(cfg, data)
+    if spw is not None:
+        # gbm-bench's scale_pos_weight on the other arms: CatBoost's own
+        # equivalent is class weights [1, scale_pos_weight]
+        params["class_weights"] = [1.0, spw]
     if data.cat_idx:
         # DEVIATION 2634's OTHER SIDE. `cat_features` is the only way to reach
         # the CTR target prep at all: with no categorical column 2634 skips it,
@@ -285,6 +310,7 @@ def our_rf_arm(lane, cfg, data, extra=None):
         min_samples_split=cfg["min_samples_split"],
         min_impurity_decrease=cfg["min_impurity_decrease"],
         bootstrap=cfg["bootstrap"],
+        max_samples=cfg["max_samples"],   # 1.0: n draws with replacement, as sklearn's
         random_state=cfg["seed"],
         device="gpu",
     )
@@ -428,7 +454,9 @@ OUR_BUILDERS = {
     "gbdt-rank-pairlogit": our_gbdt_arm,
     "gbdt-multiclass": our_gbdt_arm,
     "gbdt-categorical": our_gbdt_arm,
+    "gbdt-ordered": our_gbdt_arm,
     "gbdt-symmetric": our_gbdt_arm,
+    "gbdt-symmetric-1000": our_gbdt_arm,
     "gbdt-depthwise": our_gbdt_arm,
     "gbdt-lossguide": our_gbdt_arm,
     "rf": our_rf_arm,
@@ -918,6 +946,10 @@ def build_parser():
     p.add_argument("--ours-only", action="store_true",
                    help="skip the opponents; use when two CUDA runtimes in "
                         "one process will not coexist")
+    p.add_argument("--params-only", action="store_true",
+                   help="construct every arm, print its parameters (BOARD-PARAMS) and library "
+                        "(FSPEED-LIBRARY) and stop before the warm-up (the board's opponent "
+                        "store lookup)")
     p.add_argument("--list-arms", action="store_true",
                    help="print the roster for the lane and exit")
     p.add_argument("--infer", action="store_true",
@@ -936,6 +968,25 @@ def build_parser():
                    help="rows of the `large` inference batch (the first N training "
                         "rows; default 1,000,000, capped at the training rows)")
     return p
+
+
+def seed_draws(lane, cfg, data):
+    """What the seed drives in this lane's fit on the arms that draw random
+    numbers, or '' when no arm draws one (then the seed note says so)."""
+    if lane in ("rf", "et"):
+        return ("row bootstrap (rf), per-node feature draws, ET thresholds; LightGBM "
+                "derives its bagging, feature and extra-trees seeds from seed 7")
+    if lane == "iforest":
+        return "row subsamples, split features and thresholds"
+    parts = []
+    if cfg.get("random_strength"):
+        parts.append("split-score noise (random_strength %g) on ours and CatBoost"
+                     % cfg["random_strength"])
+    if cfg.get("loss") == "YetiRank":
+        parts.append("YetiRank's sampled permutations on ours and CatBoost")
+    if getattr(data, "cat_idx", None):
+        parts.append("CatBoost's and ours CTR permutations")
+    return "; ".join(parts)
 
 
 def main(argv=None):
@@ -977,12 +1028,13 @@ def main(argv=None):
     if task:
         # A task lane runs its own task only: a dataset of another task would
         # time a different problem under the lane's name.
-        if data.task != task["task"]:
+        if data.task not in spec.task_names(task):
             spec.emit_refused(lane, "all", "dataset %s is a %s task; lane %s races %s "
-                              "(its datasets: %s)" % (data.name, data.task, lane, task["task"],
+                              "(its datasets: %s)" % (data.name, data.task, lane,
+                                                     "/".join(spec.task_names(task)),
                                                      ",".join(task["datasets"])))
             return 1
-        if task["task"] == "binary" and not data.cat_idx:
+        if lane == "gbdt-categorical" and not data.cat_idx:
             spec.emit_refused(lane, "all", "dataset %s declares no categorical column; lane %s "
                               "races the categorical path (its datasets: %s)"
                               % (data.name, lane, ",".join(task["datasets"])))
@@ -1021,9 +1073,12 @@ def main(argv=None):
                    % (",".join(devices), "auto" if devices_auto else "explicit",
                       policy))
     opponents = []
+    # --arms: only the wanted builders run (an unwanted one's refusal would
+    # otherwise reach the board as a cell it never planned)
+    wanted = [n.strip() for n in (args.arms or "").split(",") if n.strip()] or None
     if not args.ours_only and args.opponents_first:
         print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
-        opponents = spec.build_opponents(lane, cfg, data, devices)
+        opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
     arms = build_ours(lane, cfg, data)
     if args.ours_ab:
         import ast
@@ -1041,9 +1096,8 @@ def main(argv=None):
         arms.extend(proxies)
     if not args.ours_only:
         if not args.opponents_first:
-            opponents = spec.build_opponents(lane, cfg, data, devices)
+            opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
         if args.arms:
-            wanted = [n.strip() for n in args.arms.split(",") if n.strip()]
             have = {a.name for a in opponents}
             for name in wanted:
                 if name not in have:
@@ -1060,6 +1114,58 @@ def main(argv=None):
         spec.emit_refused(lane, "all", "nothing could be constructed on this "
                                        "box; see the refusals above")
         return 1
+    # THE PARAMETER CHECK (tools/bench_board_params.py; Andrew, 2026-09-29:
+    # "same seed same tuning params"), before the first timed round. Each
+    # arm's model is constructed, not fitted, and its parameters are read
+    # back from the object; a seed or a shared parameter that differs
+    # refuses the race by name. The CPU proxy arms are ours on another
+    # column and carry the same parameters, so they are not compared.
+    # `ours-ab` differs from ours by the one key --ours-ab names, on purpose.
+    import bench_board_params as BP
+    proxy_names = {getattr(a, "name", None) for a in proxies}
+    records = {}
+    for arm in arms:
+        if arm.name in proxy_names:
+            continue
+        try:
+            records[arm.name] = arm.make()
+        except Exception as exc:  # noqa: BLE001
+            records[arm.name] = {"__record__": True, "library": "?",
+                                 "source": "construction failed (%s)" % exc, "params": {}}
+    # each arm's own library version and GPU (the board's opponent store keys
+    # an opponent by them), one FSPEED-LIBRARY JSON line per constructed arm
+    import bench_board_probe
+    for arm in arms:
+        if arm.name in proxy_names or arm.name not in records \
+                or isinstance(records[arm.name], dict):          # not constructed
+            continue
+        lib = getattr(arm, "library", None) or "mojolearn"
+        gpu = any(t in arm.name for t in ("gpu", "cuda", "opencl")) or arm.name in ("ours", "ours-ab")
+        print("FSPEED-LIBRARY %s" % json.dumps({
+            "lane": lane, "arm": arm.name, "library": lib,
+            "version": bench_board_probe.library_version(lib),
+            "device": "gpu" if gpu else "cpu",
+            "device_name": bench_board_probe.gpu_device_name() if gpu else None},
+            sort_keys=True), flush=True)
+    if args.params_only:
+        # the board's opponent-store lookup: constructed, read back, stopped
+        BP.emit(BP.check(lane, records, family="trees"))
+        print("PARAMS-ONLY lane=%s arms=%s" % (lane, ",".join(sorted(records))), flush=True)
+        return 0
+    extra = ()
+    if args.ours_ab:
+        extra = ((args.ours_ab.partition("=")[0].strip(), "ours-ab",
+                  "--ours-ab changes this one key on purpose (the A/B arm)"),)
+    try:
+        BP.enforce(lane, records, family="trees", extra_exceptions=extra)
+    except BP.ParamsRefused as exc:
+        spec.emit_refused(lane, "all", "PARAMETER CHECK REFUSED: %s" % exc)
+        return 1
+    # SAME SEED, SAME TUNING PARAMETERS: rule 1's note, then the board's check
+    # on one constructed estimator per arm, before any warm-up or timed round
+    spec.emit_seed_note(lane, [a.name for a in arms], seed_draws(lane, cfg, data))
+    if not spec.enforce_board_params(lane, arms, skip={p.name for p in proxies}):
+        return 2
     # `cfg` reaches the runner so the FIT-EQUIVALENCE check can hold each
     # arm's FITTED tree count against the count this lane asked for. Without
     # it the shapes are still reported and that one check is skipped; an

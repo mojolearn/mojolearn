@@ -173,6 +173,10 @@ _ACC_TOL = 0.02
 #: from this tuple was never for that reason.
 LANE_NAMES = (
     "gbdt-symmetric",
+    # gbdt-symmetric at 1000 trees (2026-09-29): oblivious trees are weaker
+    # per tree, and 1000 is CatBoost's own default iteration count
+    # (tools/bench_board_harness.py CATBOOST_DEFAULTS)
+    "gbdt-symmetric-1000",
     "gbdt-depthwise",
     "gbdt-lossguide",
     "rf",
@@ -186,6 +190,9 @@ LANE_NAMES = (
     "gbdt-rank-pairlogit",
     "gbdt-multiclass",
     "gbdt-categorical",
+    # Ordered boosting (2026-09-29): GradientBoosting boosting_type='Ordered'
+    # against CatBoost boosting_type='Ordered', gbm-bench's values otherwise
+    "gbdt-ordered",
 )
 
 
@@ -1155,6 +1162,7 @@ def load_taxi(size, rows_cap=None, regression=False, multiclass=False,
 #: evidence can be re-read). `year` and `covtype` remain as small fixtures.
 LANE_DEFAULT_DATASET = {
     "gbdt-symmetric": "taxi",
+    "gbdt-symmetric-1000": "taxi",
     "gbdt-depthwise": "taxi",
     "gbdt-lossguide": "taxi",
     "rf": "taxi",
@@ -1164,6 +1172,7 @@ LANE_DEFAULT_DATASET = {
     "gbdt-rank-pairlogit": "istellarank",
     "gbdt-multiclass": "taximc",
     "gbdt-categorical": "taxicat",
+    "gbdt-ordered": "taxi",
 }
 
 
@@ -1718,9 +1727,12 @@ def download(name):
 
 #: THE GBDT TASK LANES: what each one fits, each library's objective, the
 #: datasets it runs, and every mismatch that could not be removed, one line
-#: each with its reason. The shared knobs (100 trees, depth 6, rate 0.1, L2 1,
-#: 254 borders, no bagging, seed 7, Plain boosting) are the gbdt lanes' own
-#: (`lane_config`); only the task, the objective and the grower differ.
+#: each with its reason. The shared knobs are the gbdt lanes' own
+#: (`lane_config`): gbm-bench's 500 trees, depth 8, 256 leaves, rate 0.1, L2 1
+#: for gbdt-multiclass and gbdt-categorical; 100 trees, depth 6, 64 leaves for
+#: the ranking lanes, which gbm-bench does not have; 254 borders, no bagging,
+#: seed 7, Plain boosting on all. Only the task, the objective and the grower
+#: differ.
 #:
 #: WHY THE GROWER DIFFERS. The public GradientBoosting fits the ranking and
 #: multiclass losses on SymmetricTree only (Depthwise and Lossguide refuse by
@@ -1777,12 +1789,14 @@ TASK_LANES = {
                     "xgboost": "multi:softprob", "lightgbm": "multiclass"},
         mismatches=(
             "grower: ours and CatBoost fit MultiClass on symmetric trees (ours has no other "
-            "policy for a multiclass loss); XGBoost depthwise at depth 6, LightGBM leaf-wise "
-            "capped at depth 6 and 64 leaves, because neither has an oblivious grower",
+            "policy for a multiclass loss); XGBoost depthwise at depth 8, LightGBM leaf-wise "
+            "capped at depth 8 and 256 leaves, because neither has an oblivious grower",
             "model shape: ours and CatBoost grow ONE tree per round with a vector of class "
             "values in each leaf; XGBoost and LightGBM grow one tree PER CLASS per round, so "
             "the fit verdict divides their tree and leaf counts by n_classes",
-            "the loss is the same softmax cross-entropy on every arm",
+            "the loss is the same softmax cross-entropy on every arm; gbm-bench itself "
+            "gives CatBoost MultiClassOneVsAll beside XGBoost multi:softmax, two different "
+            "losses, so the board keeps one loss on every arm",
             "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: "
             "at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first multiclass tree",
         )),
@@ -1811,6 +1825,26 @@ TASK_LANES = {
 }
 
 
+TASK_LANES["gbdt-ordered"] = dict(
+    task=("binary", "regression"), loss=None, grow_policy="SymmetricTree",
+    boosting_type="Ordered", datasets=("taxi", "istella"),
+    objectives={"mojolearn": "Logloss (taxi) / RMSE (Istella-S)",
+                "catboost": "Logloss (taxi) / RMSE (Istella-S)"},
+    mismatches=(
+        "Ordered boosting on ours and CatBoost only: XGBoost and LightGBM have no ordered "
+        "(permutation) boosting, so the lane races CatBoost alone, on the symmetric grower "
+        "Ordered requires (catboost_options.cpp:757-759)",
+        "each library draws its fold permutations from its own generator seeded 7; the "
+        "streams are not shared, so the fits differ by construction",
+    ))
+
+
+def task_names(task):
+    """A task lane's task, or tuple of tasks, as a tuple."""
+    t = task["task"]
+    return t if isinstance(t, tuple) else (t,)
+
+
 def task_of(lane):
     """The TASK_LANES record of a task lane, or None for the original lanes."""
     return TASK_LANES.get(lane)
@@ -1818,6 +1852,21 @@ def task_of(lane):
 
 def lane_config(lane, size):
     """The knobs every arm of `lane` is given, spelled once.
+
+    NVIDIA'S VALUES (2026-09-29, Andrew: "use their tuning params for us and
+    the opponent"). Every lane NVIDIA gbm-bench covers takes each parameter
+    gbm-bench sets explicitly, on our arm and every opponent arm
+    (tools/bench_board_harness.py GBM, source URL and commit there and in
+    `cfg["harness"]`): 500 trees (runme.py -ntrees), max_depth 8,
+    learning_rate 0.1, reg_lambda 1 (shared_params), 256 leaves (LightGBM's
+    max_leaves, 2 ** 8 on every arm), and on a binary task scale_pos_weight =
+    len(y_train) / count_nonzero(y_train) on XGBoost, LightGBM and CatBoost
+    (ours class_weights [1, that]). The rf lane takes gbm-bench's forest
+    values: max_depth 8, 500 trees. What gbm-bench leaves at each library's
+    default stays pinned below, one value on every arm. gbdt-symmetric-1000
+    is gbdt-symmetric at 1000 trees, CatBoost's own default. The ranking
+    lanes, et and iforest have no gbm-bench entry and keep the values below
+    (100 trees, depth 6, 64 leaves; depth 16 forests).
 
     IDENTICAL CONFIG ON EVERY ARM; THE DEVICE IS THE ONLY VARIABLE. Where a
     default differs between libraries it is set EXPLICITLY on all of them and
@@ -1867,6 +1916,50 @@ def lane_config(lane, size):
                          Plain. Both CatBoost arms are pinned to `Plain`.
       seed 7             Every arm.
 
+    SAME SEED, SAME TUNING PARAMETERS (2026-09-29, Andrew: "they need to be
+    comparable same seed same tuning params"). The M3 Ultra board read
+    NOT-COMPARABLE on the taxi depthwise/lossguide races and the LightGBM
+    forests; the knobs below were left to library defaults that differ in
+    meaning, and are now pinned on every arm that has them:
+
+      max_leaves 64      2 ** depth on every lane and arm (ours and CatBoost
+                         accept exactly that value off Lossguide; XGBoost
+                         max_leaves, LightGBM num_leaves).
+      min_child_weight 0 XGBoost's default 1.0 is a hessian floor ours and
+                         CatBoost do not have; on taxi's Logloss (hessian
+                         about 0.18 per row) it stopped XGBoost at 3911
+                         leaves against ours 5903. Ours carries it as
+                         min_child_hessian (0.0) where it exists (Lossguide
+                         with NewtonL2). LightGBM keeps 1e-3 (it aborts at 0).
+      min_split_gain 0   XGBoost gamma 0.0 and LightGBM 0.0 require a
+                         positive gain, and so does CatBoost CPU (gain >=
+                         1e-9, greedy_tensor_search.cpp); ours off
+                         SymmetricTree could split at zero gain (min_split_gain
+                         None), which grew ours past CatBoost on taxi
+                         Lossguide (6239 against 5743). Ours now takes 0.0 on
+                         Depthwise and Lossguide.
+      leaf estimation    Newton, ONE iteration on ours and CatBoost: the one
+                         Newton step XGBoost and LightGBM take. CatBoost's
+                         Logloss default is 10, cut to 1 on taxi by
+                         UpdateLeavesEstimationIterations (under 200 trees and
+                         20 features, every policy) while ours applies that
+                         cut under SymmetricTree only, so ours ran 10 against
+                         CatBoost's 1 on taxi Depthwise and Lossguide.
+      random_strength    1.0 on the symmetric grower (both libraries'
+                         default), 0.0 on Depthwise and Lossguide, where
+                         CatBoost CPU's default 1.0 met ours 0.0.
+      score_function     Cosine on SymmetricTree and Depthwise; NewtonL2 on
+                         Lossguide (ours and CatBoost GPU; CatBoost CPU has
+                         Cosine and L2 only and keeps Cosine, a named
+                         mismatch). XGBoost and LightGBM have one Newton L2
+                         gain and no such knob.
+      boost_from_average False for Logloss on ours and CatBoost (their
+                         default), XGBoost base_score 0.5 (margin 0) and
+                         LightGBM boost_from_average False, which both
+                         default to the class prior; True for RMSE on every
+                         arm.
+      borders            GreedyLogSum and nan_mode Min on ours and CatBoost.
+
     The forest knobs:
 
       n_estimators 100   cuML's, sklearn's and ours.
@@ -1893,12 +1986,22 @@ def lane_config(lane, size):
                          run 0.632/freq=1 -- DEVIATION 1835, forced by
                          LightGBM, already recorded as
                          `PARITY_NOTES['lgbm-rf-bagging']`.
+      LightGBM forests   (2026-09-29) max_features is sampled PER NODE
+                         (feature_fraction_bynode, the RF definition), not per
+                         tree: feature_fraction 0.25 per tree left each taxi
+                         tree 4 of 16 columns and LightGBM grew 3538 ET leaves
+                         against ours 881399. max_bin is the rf lane's n_bins
+                         (128), min_data_in_bin 1, num_leaves 2 ** max_depth
+                         (65536, never binding at depth 16).
+      max_samples        1.0 on ours and sklearn in rf (each draws n rows with
+                         replacement); et does not bootstrap.
     """
     smoke = size == "smoke"
     common = dict(
         seed=7,
         n_estimators=10 if smoke else 100,
     )
+    harness = _harness_source(lane)
     if lane.startswith("gbdt-"):
         cfg = dict(common)
         task = task_of(lane)
@@ -1910,19 +2013,61 @@ def lane_config(lane, size):
             max_leaves=64,     # 2 ** 6, so the lossguide lane matches depth 6
             grow_policy=task["grow_policy"] if task else {
                 "gbdt-symmetric": "SymmetricTree",
+                "gbdt-symmetric-1000": "SymmetricTree",
                 "gbdt-depthwise": "Depthwise",
                 "gbdt-lossguide": "Lossguide",
             }[lane],
+        )
+        if harness:
+            # gbm-bench: shared_params, runme.py -ntrees 500, LightGBM
+            # max_leaves 256 (2 ** 8, every arm), the binary scale_pos_weight
+            cfg.update(
+                n_estimators=10 if smoke else (1000 if lane == "gbdt-symmetric-1000" else 500),
+                max_depth=8,
+                learning_rate=0.1,
+                l2=1.0,
+                max_leaves=256,
+                scale_pos_weight="gbm-bench",
+                harness=harness,
+            )
+        policy = cfg["grow_policy"]
+        symmetric = policy == "SymmetricTree"
+        loss = task["loss"] if task else None
+        cfg.update(
+            # the SAME SEED, SAME TUNING PARAMETERS block of the docstring
+            min_child_weight=0.0,          # XGBoost; ours min_child_hessian below
+            min_split_gain=None if symmetric else 0.0,
+            min_child_hessian=(0.0 if policy == "Lossguide"
+                               and loss in (None, "Logloss", "RMSE") else None),
+            min_data_in_leaf=1,
+            random_strength=1.0 if symmetric else 0.0,
+            score_function="NewtonL2" if policy == "Lossguide" else "Cosine",
+            leaf_estimation_method="Newton",
+            leaf_estimation_iterations=1,
+            feature_border_type="GreedyLogSum",
+            nan_mode="Min",
+            boosting_type="Plain",
         )
         if task:
             cfg.update(task=task["task"], loss=task["loss"],
                        objectives=dict(task["objectives"]),
                        mismatches=list(task["mismatches"]))
-            if task["grow_policy"] == "SymmetricTree":
+            if task.get("boosting_type"):
+                cfg["boosting_type"] = task["boosting_type"]
+            if task["grow_policy"] == "SymmetricTree" and lane != "gbdt-ordered":
                 # the opponents without an oblivious grower race their own
                 # at the same depth (TASK_LANES, "grower")
                 cfg["xgboost_grow_policy"] = "depthwise"
                 cfg["lightgbm_leafwise"] = True
+                cfg["mismatches"] += [
+                    "random_strength 1.0 on ours and CatBoost (the symmetric-grower default "
+                    "on both, each from its own seeded generator); XGBoost and LightGBM have "
+                    "no split-score noise",
+                    "split floors: ours takes min_split_gain and min_child_hessian off the "
+                    "symmetric grower only, so here ours and CatBoost have no hessian floor or "
+                    "gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM "
+                    "min_split_gain 0",
+                ]
         return cfg
     if lane in ("rf", "et"):
         cfg = dict(common)
@@ -1933,7 +2078,14 @@ def lane_config(lane, size):
             min_samples_split=2,
             min_impurity_decrease=0.0,
             bootstrap=(lane == "rf"),
+            # n draws with replacement per tree on ours and sklearn; sklearn
+            # refuses max_samples without bootstrap, so et leaves it unset
+            max_samples=1.0 if lane == "rf" else None,
         )
+        if harness:
+            # gbm-bench skrf / cumlrf: shared_params minus reg_lambda and
+            # learning_rate (max_depth 8), n_estimators = runme.py -ntrees 500
+            cfg.update(max_depth=8, n_estimators=10 if smoke else 500, harness=harness)
         return cfg
     if lane == "iforest":
         cfg = dict(common)
@@ -1946,10 +2098,100 @@ def lane_config(lane, size):
     raise SystemExit("unknown lane " + repr(lane))
 
 
+def _harness_source(lane):
+    """tools/bench_board_harness.harness_source(lane): the NVIDIA harness a
+    lane's values come from (URL, commit), or None for a lane it lacks."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_harness
+    return bench_board_harness.harness_source(lane)
+
+
+def scale_pos_weight_for(cfg, data):
+    """gbm-bench's binary classification weight on the positive class,
+    len(y_train) / count_nonzero(y_train) (algorithms.py, XgbAlgorithm,
+    LgbmAlgorithm and CatAlgorithm configure), for a lane that takes
+    gbm-bench's values; None otherwise (no weight passed)."""
+    if cfg.get("scale_pos_weight") != "gbm-bench" or data.task != "binary":
+        return None
+    y = np.asarray(data.y_train)
+    return float(len(y)) / float(np.count_nonzero(y))
+
+
 def max_features_for(data):
     """'sqrt' for a classification forest, 1.0 for a regression forest. The
     RF definition, and each library's own default for the task."""
     return "sqrt" if data.task in ("binary", "multiclass") else 1.0
+
+
+def boost_from_average_for(data):
+    """The starting margin every boosted arm is given, explicitly: the mean
+    for RMSE (ours and CatBoost's default, LightGBM's, XGBoost's fitted
+    intercept), margin 0 for Logloss (ours and CatBoost's default; XGBoost
+    and LightGBM default to the class prior and are pinned to 0). None for
+    multiclass and ranking, whose losses no arm starts from an average."""
+    if data.task == "regression":
+        return True
+    if data.task == "binary":
+        return False
+    return None
+
+
+def forest_feature_fraction(data):
+    """max_features as the fraction LightGBM samples PER NODE: floor(sqrt(n))
+    features of n for 'sqrt', the count sklearn (int(sqrt(n))) and ours (the
+    fraction truncated) take; LightGBM rounds n * fraction, so the fraction
+    is the exact count over n."""
+    n_feat = data.X_train.shape[1]
+    if max_features_for(data) == "sqrt":
+        return max(1, int(np.sqrt(n_feat))) / float(n_feat)
+    return 1.0
+
+
+def enforce_board_params(lane, arms, skip=()):
+    """THE BOARD'S PARAMETER CHECK (tools/bench_board_params.py): same seed,
+    same tuning parameters, read back from a constructed estimator of every
+    arm (one `make()` each, no fit) before the first warm-up. Prints the
+    BOARD-PARAMS line; on a mismatch prints BOARD-PARAMS-REFUSED and one
+    FSPEED-REFUSED line per arm and returns False, so the race fails by name.
+    `skip`: arms whose `make()` is not an estimator (the CPU proxy)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import bench_board_params as BP
+    objs = {}
+    for arm in arms:
+        if arm.name in skip:
+            continue
+        try:
+            objs[arm.name] = arm.make()
+        except Exception as exc:                   # noqa: BLE001
+            emit_refused(lane, arm.name, "BOARD-PARAMS: constructing the arm for the "
+                         "parameter check raised %s: %s" % (exc.__class__.__name__, exc))
+            return False
+    try:
+        BP.enforce(lane, objs, family="trees")
+    except BP.ParamsRefused as exc:
+        for name in objs:
+            emit_refused(lane, name, "BOARD-PARAMS-REFUSED: %s" % exc)
+        return False
+    return True
+
+
+def emit_seed_note(lane, arms, sampled):
+    """Rule 1 of the bench board: every arm gets seed 7 through its own seed
+    argument. Say by name where a seed reaches an arm and changes nothing."""
+    if sampled:
+        emit_note(lane, arms, "mismatch", 0.0,
+                  "seed 7 on every arm through its own argument (random_state, random_seed, "
+                  "seed); each library draws from its own generator, so the streams are not "
+                  "shared: %s" % sampled)
+    else:
+        emit_note(lane, arms, "mismatch", 0.0,
+                  "seed 7 on every arm through its own argument; with no row or column "
+                  "sampling and random_strength 0 no arm draws a random number in this fit, "
+                  "so the seed is passed and ignored by every library alike")
 
 
 # --------------------------------------------------------------------------
@@ -2003,30 +2245,64 @@ def _blocking(name):
 
 # ---- CatBoost -------------------------------------------------------------
 
+def catboost_tree_params(cfg, task_type):
+    """Every tree knob a CatBoost arm is given, one dict for the gbdt and the
+    ranking builders, each set explicitly (lane_config's SAME SEED, SAME
+    TUNING PARAMETERS). CatBoost CPU scores splits with Cosine or L2 only
+    (leafwise_scoring.cpp), so a NewtonL2 lane keeps Cosine there and says
+    so in a mismatch line."""
+    score = cfg["score_function"]
+    if task_type == "CPU" and score not in ("Cosine", "L2"):
+        score = "Cosine"
+    p = dict(
+        iterations=cfg["n_estimators"],
+        depth=cfg["max_depth"],
+        learning_rate=cfg["learning_rate"],
+        l2_leaf_reg=cfg["l2"],
+        border_count=cfg["borders"],
+        random_seed=cfg["seed"],
+        bootstrap_type="No",       # DEVIATION 1833
+        boosting_type=cfg["boosting_type"],   # Plain (DEVIATION 1841) or the Ordered lane's
+        grow_policy=cfg["grow_policy"],
+        max_leaves=cfg["max_leaves"],   # 2 ** depth; CatBoost accepts exactly that off Lossguide
+        min_data_in_leaf=cfg["min_data_in_leaf"],
+        random_strength=cfg["random_strength"],
+        score_function=score,
+        leaf_estimation_method=cfg["leaf_estimation_method"],
+        leaf_estimation_iterations=cfg["leaf_estimation_iterations"],
+        feature_border_type=cfg["feature_border_type"],
+        nan_mode=cfg["nan_mode"],
+        task_type=task_type,
+        verbose=False,
+        allow_writing_files=False,
+    )
+    if task_type == "GPU":
+        p["devices"] = "0"
+    return p
+
+
+def _catboost_score_note(lane, cfg, devices):
+    if "cpu" in devices and cfg["score_function"] not in ("Cosine", "L2"):
+        emit_note(lane, ["catboost-cpu", "ours"], "mismatch", 1.0,
+                  "score_function: ours (and catboost-gpu) %s, catboost-cpu Cosine: CatBoost's "
+                  "CPU learner scores splits with Cosine or L2 only "
+                  "(leafwise_scoring.cpp); XGBoost and LightGBM have one Newton L2 gain"
+                  % cfg["score_function"])
+
+
 def catboost_arms(lane, cfg, data, devices):
     """CatBoost CPU and CatBoost's CUDA learner. The symmetric-tree opponent,
     and per Andrew's standing order the ONLY opponent in `gbdt-symmetric`."""
     import catboost
 
     def _params(task_type):
-        p = dict(
-            iterations=cfg["n_estimators"],
-            depth=cfg["max_depth"],
-            learning_rate=cfg["learning_rate"],
-            l2_leaf_reg=cfg["l2"],
-            border_count=cfg["borders"],
-            random_seed=cfg["seed"],
-            bootstrap_type="No",       # DEVIATION 1833
-            boosting_type="Plain",     # DEVIATION 1841, the data-dependent trap
-            grow_policy=cfg["grow_policy"],
-            task_type=task_type,
-            verbose=False,
-            allow_writing_files=False,
-        )
-        if cfg["grow_policy"] == "Lossguide":
-            p["max_leaves"] = cfg["max_leaves"]
-        if task_type == "GPU":
-            p["devices"] = "0"
+        p = catboost_tree_params(cfg, task_type)
+        bfa = boost_from_average_for(data)
+        if bfa is not None:
+            p["boost_from_average"] = bfa
+        spw = scale_pos_weight_for(cfg, data)
+        if spw is not None:
+            p["scale_pos_weight"] = spw
         return p
 
     def make(task_type):
@@ -2079,6 +2355,7 @@ def catboost_arms(lane, cfg, data, devices):
                     y_anom=d.y_anom, cat_idx=d.cat_idx)
         return _score_sklearn_like(m, shim)
 
+    _catboost_score_note(lane, cfg, devices)
     out = []
     for dev in devices:
         if dev == "opencl":
@@ -2129,15 +2406,25 @@ def xgboost_arms(lane, cfg, data, devices):
             colsample_bytree=1.0,
             colsample_bylevel=1.0,
             colsample_bynode=1.0,
-            min_child_weight=1.0,
+            # no hessian floor and a strictly positive gain, as ours and
+            # CatBoost (lane_config); XGBoost's default 1.0 was a floor no
+            # other arm had
+            min_child_weight=cfg["min_child_weight"],
+            gamma=0.0,
+            max_delta_step=0.0,
+            max_leaves=cfg["max_leaves"],
+            booster="gbtree",
             tree_method="hist",
             grow_policy=policy,
             random_state=cfg["seed"],
             device=device,
             verbosity=0,
         )
-        if policy == "lossguide":
-            p["max_leaves"] = cfg["max_leaves"]
+        if boost_from_average_for(data) is False:
+            p["base_score"] = 0.5      # margin 0, ours and CatBoost's Logloss start
+        spw = scale_pos_weight_for(cfg, data)
+        if spw is not None:
+            p["scale_pos_weight"] = spw
         return p
 
     def make(device):
@@ -2253,6 +2540,10 @@ def lightgbm_arms(lane, cfg, data, devices):
     import lightgbm as lgb
 
     forest = lane in ("rf", "et")
+    # LightGBM's scikit-learn names throughout (subsample, subsample_freq,
+    # colsample_bytree): a LightGBM alias beside its scikit-learn twin is two
+    # spellings of one knob in get_params, and the board's parameter check
+    # reads get_params.
     p = dict(
         n_estimators=cfg["n_estimators"],
         random_state=cfg["seed"],
@@ -2260,26 +2551,60 @@ def lightgbm_arms(lane, cfg, data, devices):
         min_child_samples=1,
         min_child_weight=0.0,
         min_split_gain=0.0,
+        reg_alpha=0.0,
     )
     if forest:
         # LightGBM REFUSES rf boosting with bagging_fraction=1.0
         # (DEVIATION 1835): the asymmetry is forced by LightGBM, not chosen.
-        mf = max_features_for(data)
-        n_feat = data.X_train.shape[1]
-        frac = (float(np.sqrt(n_feat)) / n_feat) if mf == "sqrt" else 1.0
+        #
+        # max_features IS PER NODE (2026-09-29). This passed feature_fraction,
+        # which LightGBM samples ONCE PER TREE: on taxi each tree saw 4 of 16
+        # columns for every split, and the M3 Ultra board read 463191 rf
+        # leaves and 3538 et leaves against ours 1718168 and 881399.
+        # feature_fraction_bynode is the per-node draw ours, sklearn and cuML
+        # make, with the same count (forest_feature_fraction).
         p.update(
             boosting_type="rf",
-            bagging_fraction=0.632,
-            bagging_freq=1,
-            feature_fraction=frac,
+            subsample=0.632,
+            subsample_freq=1,
+            colsample_bytree=1.0,
+            feature_fraction_bynode=forest_feature_fraction(data),
             max_depth=cfg["max_depth"],
-            num_leaves=2 ** min(cfg["max_depth"], 15),
-            max_bin=255,
+            # 2 ** max_depth: a depth-16 tree never reaches it, as ours and
+            # sklearn have no leaf cap (was 2 ** 15, a cap below theirs)
+            num_leaves=2 ** cfg["max_depth"],
+            # rf: the lane's n_bins (ours and cuML 128 quantile bins); et has
+            # no bin count on ours or sklearn and keeps LightGBM's 255
+            max_bin=cfg["n_bins"] if lane == "rf" else 255,
+            min_data_in_bin=1,
             reg_lambda=0.0,
             learning_rate=1.0,   # ignored by rf boosting; pinned, not left
         )
         if lane == "et":
             p["extra_trees"] = True
+        for i, why in enumerate((
+                "rows: LightGBM rf boosting refuses bagging_fraction 1.0, so each tree "
+                "samples 63.2%% of rows WITHOUT replacement (subsample 0.632, freq 1); ours "
+                "and sklearn %s" % ("draw n rows WITH replacement (bootstrap True)"
+                                    if lane == "rf" else "use every row (bootstrap False)"),
+                "split criterion: LightGBM has none to set; its gain on binary logloss at "
+                "the constant starting score is the variance of the label, the Gini "
+                "decrease up to scale (ours and sklearn criterion gini)",
+                "binning: LightGBM max_bin %d from its own bin finder on a 200,000-row "
+                "sample, min_data_in_bin 1; %s" % (
+                    p["max_bin"], "ours 128 quantile bins (n_bins), sklearn exact thresholds"
+                    if lane == "rf" else "ours and sklearn ExtraTrees draw a uniform threshold "
+                    "in the node's range, LightGBM extra_trees one random bin threshold"),
+                "max_features per node: LightGBM feature_fraction_bynode %.6f of the "
+                "features it keeps after binning (it drops constant columns), ours and "
+                "sklearn %s of every column; sklearn keeps drawing past that count while "
+                "the drawn columns are constant in the node, ours and LightGBM do not"
+                % (p["feature_fraction_bynode"], max_features_for(data)),
+                "leaf cap: LightGBM num_leaves %d (2 ** max_depth, never binding at "
+                "depth %d); ours max_leaves -1 and sklearn max_leaf_nodes None have no cap"
+                % (p["num_leaves"], cfg["max_depth"]),
+        )):
+            emit_note(lane, ["lightgbm-*"], "mismatch", float(i + 1), why)
     else:
         if cfg["grow_policy"] == "SymmetricTree" and not cfg.get("lightgbm_leafwise"):
             raise RuntimeError(
@@ -2287,20 +2612,39 @@ def lightgbm_arms(lane, cfg, data, devices):
                 "order 2026-08-22); LightGBM has no symmetric mode"
             )
         p.update(
+            boosting_type="gbdt",
             max_depth=cfg["max_depth"],
             num_leaves=cfg["max_leaves"],
             learning_rate=cfg["learning_rate"],
             reg_lambda=cfg["l2"],
             max_bin=cfg["borders"] + 1,      # DEVIATION 1832
-            bagging_fraction=1.0,            # DEVIATION 1833
-            feature_fraction=1.0,
+            subsample=1.0,                   # DEVIATION 1833
+            subsample_freq=0,
+            colsample_bytree=1.0,
         )
-        if cfg.get("task"):
-            # the task lanes: at min_child_weight 0 LightGBM 4.7.0 aborts
-            # the first multiclass and categorical tree ("Check failed:
-            # (best_split_info.left_count) > (0)", Apple board smoke
-            # 2026-09-26), so both stay at LightGBM's defaults (TASK_LANES)
-            p.update(min_child_samples=20, min_child_weight=1e-3)
+        bfa = boost_from_average_for(data)
+        if bfa is not None:
+            p["boost_from_average"] = bfa
+        spw = scale_pos_weight_for(cfg, data)
+        if spw is not None:
+            p["scale_pos_weight"] = spw
+        # At min_child_weight 0 LightGBM 4.7.0 aborts a boosted tree ("Check
+        # failed: (best_split_info.left_count) > (0)"): the first multiclass
+        # and categorical tree (Apple board smoke 2026-09-26) and, at full
+        # size, the binary gbdt-lossguide warm-up on taxi AND Istella-S (M3
+        # Ultra board 2026-09-29, both cells REFUSED). So every boosted
+        # LightGBM arm keeps LightGBM's defaults, and a non-task lane says so
+        # in a mismatch line (the task lanes carry it in TASK_LANES).
+        p.update(min_child_samples=20, min_child_weight=1e-3)
+        if not cfg.get("task"):
+            emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
+                      "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its "
+                      "defaults: at 0 (the other arms' value) LightGBM 4.7.0 aborts the "
+                      "first tree (Check failed: best_split_info.left_count > 0)")
+        emit_note(lane, ["lightgbm-*"], "mismatch", 2.0,
+                  "LightGBM min_data_in_bin 3 (its default; ours, CatBoost and XGBoost have "
+                  "no minimum bin count) and a 200,000-row bin sample (ours "
+                  "border_build_max_samples 200000, CatBoost's 200000, XGBoost sketches every row)")
     # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
     # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
     # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
@@ -2366,15 +2710,8 @@ def catboost_rank_arms(lane, cfg, data, devices):
     import catboost
 
     def make(task_type):
-        p = dict(loss_function=cfg["objectives"]["catboost"],
-                 iterations=cfg["n_estimators"], depth=cfg["max_depth"],
-                 learning_rate=cfg["learning_rate"], l2_leaf_reg=cfg["l2"],
-                 border_count=cfg["borders"], random_seed=cfg["seed"],
-                 bootstrap_type="No", boosting_type="Plain",
-                 grow_policy=cfg["grow_policy"], task_type=task_type,
-                 verbose=False, allow_writing_files=False)
-        if task_type == "GPU":
-            p["devices"] = "0"
+        p = catboost_tree_params(cfg, task_type)
+        p["loss_function"] = cfg["objectives"]["catboost"]
         return catboost.CatBoostRanker(**p)
 
     def fit(m, d):
@@ -2404,7 +2741,9 @@ def xgboost_rank_arms(lane, cfg, data, devices):
             objective=cfg["objectives"]["xgboost"], n_estimators=cfg["n_estimators"],
             reg_lambda=cfg["l2"], reg_alpha=0.0, max_bin=cfg["borders"] + 1,
             subsample=1.0, colsample_bytree=1.0, colsample_bylevel=1.0,
-            colsample_bynode=1.0, min_child_weight=1.0, tree_method="hist",
+            colsample_bynode=1.0, min_child_weight=cfg["min_child_weight"], gamma=0.0,
+            max_delta_step=0.0, max_leaves=cfg["max_leaves"], booster="gbtree",
+            tree_method="hist",
             grow_policy=cfg.get("xgboost_grow_policy", "depthwise"), device=device,
             verbosity=0, **_rank_common(cfg))
 
@@ -2436,8 +2775,9 @@ def lightgbm_rank_arms(lane, cfg, data, devices):
     def make(device_type):
         return lgb.LGBMRanker(
             objective=cfg["objectives"]["lightgbm"], n_estimators=cfg["n_estimators"],
-            num_leaves=cfg["max_leaves"], reg_lambda=cfg["l2"], max_bin=cfg["borders"] + 1,
-            bagging_fraction=1.0, feature_fraction=1.0, min_child_samples=20,
+            num_leaves=cfg["max_leaves"], reg_lambda=cfg["l2"], reg_alpha=0.0,
+            max_bin=cfg["borders"] + 1, boosting_type="gbdt",
+            subsample=1.0, subsample_freq=0, colsample_bytree=1.0, min_child_samples=20,
             min_child_weight=1e-3, min_split_gain=0.0, verbose=-1,
             device_type=device_type, **_rank_common(cfg))
 
@@ -2525,8 +2865,23 @@ def sklearn_forest_arm(lane, cfg, data):
         min_impurity_decrease=cfg["min_impurity_decrease"],
         bootstrap=cfg["bootstrap"],
         random_state=cfg["seed"],
+        min_weight_fraction_leaf=0.0,
+        max_leaf_nodes=None,       # sklearn's best-first budget; None = depth-first, no cap
+        ccp_alpha=0.0,
+        criterion="squared_error" if data.task == "regression" else "gini",
         n_jobs=-1,
     )
+    if cfg.get("max_samples") is not None:
+        common["max_samples"] = cfg["max_samples"]
+    emit_note(lane, [("sklearn-et-cpu" if lane == "et" else "sklearn-rf-cpu"), "ours"],
+              "mismatch", 1.0,
+              "%s. sklearn keeps drawing features past max_features while the drawn ones "
+              "are constant in the node; ours stops at max_features"
+              % ("thresholds: ours and sklearn both draw one uniform threshold per candidate "
+                 "feature in the node's range, each from its own seeded generator"
+                 if lane == "et" else
+                 "thresholds: sklearn searches exact thresholds (no bin count), ours 128 "
+                 "quantile bins (n_bins, cuML's algorithm; DEVIATION 1834)"))
 
     def make():
         if lane == "et":
@@ -2556,6 +2911,12 @@ def sklearn_iforest_arm(cfg, data):
     and the benchmark output must say so in the lane's own row."""
     from sklearn.ensemble import IsolationForest
 
+    emit_note("iforest", ["sklearn-iforest-cpu", "ours"], "mismatch", 1.0,
+              "max_depth: sklearn has no parameter and fixes ceil(log2(max_samples)) = 8; "
+              "ours max_depth None resolves to the same integer ceil(log2(max_samples)). "
+              "Ours keeps no forest after fit (DEVIATION 1836), so its leaf count cannot be "
+              "read and the fit verdict is UNKNOWN by construction")
+
     def make():
         return IsolationForest(
             n_estimators=cfg["n_estimators"],
@@ -2564,6 +2925,7 @@ def sklearn_iforest_arm(cfg, data):
             bootstrap=cfg["bootstrap"],
             contamination="auto",
             random_state=cfg["seed"],
+            warm_start=False,
             n_jobs=-1,
         )
 
@@ -3206,6 +3568,10 @@ def opponent_builders(lane, cfg, data, devices):
         if "lightgbm" in task["objectives"]:
             builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                              lambda: lightgbm_rank_arms(lane, cfg, data, devices)))
+    elif lane == "gbdt-ordered":
+        # Ordered boosting: CatBoost is the only other library that has it
+        builders.append((["catboost-cpu", "catboost-gpu"],
+                         lambda: catboost_arms(lane, cfg, data, devices)))
     elif task:
         # multiclass and categorical: the gbdt builders, which read the task
         # from the data (MultiClass / multi:softprob / multiclass) and the
@@ -3216,7 +3582,7 @@ def opponent_builders(lane, cfg, data, devices):
                          lambda: xgboost_arms(lane, cfg, data, devices)))
         builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                          lambda: lightgbm_arms(lane, cfg, data, devices)))
-    elif lane == "gbdt-symmetric":
+    elif lane in ("gbdt-symmetric", "gbdt-symmetric-1000"):
         # CatBoost ONLY. Standing order, 2026-08-22.
         builders.append((["catboost-cpu", "catboost-gpu"],
                          lambda: catboost_arms(lane, cfg, data, devices)))
@@ -3360,13 +3726,21 @@ def resolve_devices(requested, lane=None):
     return want, auto
 
 
-def build_opponents(lane, cfg, data, devices):
+def build_opponents(lane, cfg, data, devices, wanted=None):
     """Run every builder inside its own `try` and turn a failure into
     refusals. Nothing here may take the process down: an opponent that will
-    not install on a rented box is the NORMAL case, not the exception."""
+    not install on a rented box is the NORMAL case, not the exception.
+
+    `wanted` (the --arms list): a builder none of whose arms is wanted is not
+    run at all. Before 2026-09-29 every builder ran and --arms filtered
+    afterwards, so an unwanted builder's refusal (cuML on a Mac) still
+    printed FSPEED-REFUSED and the bench board recorded a REFUSED cell for an
+    arm it never planned."""
     arms = []
     allow_cpu = "cpu" in devices
     for names, thunk in opponent_builders(lane, cfg, data, devices):
+        if wanted is not None and not set(names) & set(wanted):
+            continue
         # THE CHOKEPOINT FOR THE GPU-PATH-ONLY RULE, and it is here rather
         # than in each builder because two of the forest builders --
         # `sklearn_forest_arm` and `sklearn_iforest_arm` -- never took
@@ -3707,6 +4081,8 @@ def main(argv=None):
         emit_refused(args.lane, "all-opponents",
                      "no opponent could be constructed on this box")
         return 1
+    if not enforce_board_params(args.lane, arms):
+        return 2
     run(args.lane, arms, data, rounds(), size, cfg=cfg)
     return 0
 
