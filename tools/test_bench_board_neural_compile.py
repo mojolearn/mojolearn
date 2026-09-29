@@ -81,3 +81,23 @@ def test_cpu_compile_leaves_other_platforms_alone(tmp_path, monkeypatch):
     monkeypatch.delenv("OMP_PREFIX", raising=False)
     bbn._pin_inductor_openmp(_FakeTorch(str(tmp_path)))
     assert "OMP_PREFIX" not in os.environ
+
+
+def test_block_residuals_promote_explicitly():
+    """The residual adds widen a bf16 linear output to x's dtype themselves
+    (the same value eager promotion gives), so inductor cannot fold a float32
+    bias into a bf16 addmm."""
+    torch = pytest.importorskip("torch")
+    import speed_torch_seq as sts
+    cfg = {"n_heads": 2, "n_kv": 2, "head_dim": 4, "ctx": 0, "l": 3}
+    d = 8
+    g = torch.Generator().manual_seed(7)
+    names = ["norm1.weight", "norm2.weight", "q_proj.weight", "k_proj.weight", "v_proj.weight",
+             "o_proj.weight", "gate_proj.weight", "up_proj.weight", "down_proj.weight"]
+    shapes = [(d,), (d,), (d, d), (d, d), (d, d), (d, d), (16, d), (16, d), (d, 16)]
+    W = {n: torch.randn(*s, generator=g) * 0.1 for n, s in zip(names, shapes)}
+    m = sts.LlamaEager(torch, torch.device("cpu"), cfg, W, torch.float32)
+    x = torch.randn(3, d, generator=g)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        out = m.block(x, None, 1, 3, sdpa=True)[0]
+    assert out.dtype == torch.float32 and out.shape == (3, d)
