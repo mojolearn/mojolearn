@@ -909,7 +909,6 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     that describes different bytes, and a user would read DIVERGENT for
     something that is not their machine."""
     import json
-import os
 
     table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
     with_cells = {key.partition("/")[0] for key in table["cells"]}

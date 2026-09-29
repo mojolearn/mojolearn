@@ -103,10 +103,13 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     # `has_nan_f32`) as the device fit, which had hung on it. A refusal
     # before the first split cannot move a bit of a fit that runs.
     #
+    # core.host_parallel pins the caller FP environment for each independent
+    # task; checks.fixed_point supplies weighted-objective integer scaling.
+    # Direct max.algorithm dispatch is no longer admitted.
     # A future import needs its own sentence here before it is added.
     assert sorted(set(imports)) == [
-        "checks.numerics", "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
-        "max.algorithm", "std.builtin.sort", "std.math", "std.memory",
+        "checks.fixed_point", "checks.numerics", "core.host_parallel", "core.host_predict_threads", "ensemble.host_layout",
+        "std.builtin.sort", "std.math", "std.memory",
         "std.sys.compile",
     ], imports
 

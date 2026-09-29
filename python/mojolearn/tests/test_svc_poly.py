@@ -65,9 +65,12 @@ def test_host_update_f_parallelizes_rows_not_kernel_folds():
     assert "host_predict_task_count(n_rows)" in fit
     assert "if n_rows * nnz * k < (1 << 18):\n                update_tasks = 1" in fit
     worker = fit.split("def _update_f(", 1)[1].split("if update_tasks == 1:", 1)[0]
-    assert "for i in range(lo, hi):" in worker
-    assert "for rr in range(nnz):" in worker
-    assert worker.index("for i in range(lo, hi):") < worker.index("for rr in range(nnz):")
+    assert "while cell_block and i0 + SMO_W <= hi:" in worker
+    assert worker.count("for rr in range(nnz):") == 2
+    assert worker.count("var j = Int(order[rr])") == 2
+    assert "identical_mul_add_simd[SMO_W]" in worker
+    tail = worker[worker.index("for i in range(i0, hi):"):]
+    assert tail.index("for i in range(i0, hi):") < tail.index("for rr in range(nnz):")
     assert "f[i + n_rows] = _flush[dt](f[i + n_rows] + acc)" in worker
 
 
