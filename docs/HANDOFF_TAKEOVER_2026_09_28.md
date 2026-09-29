@@ -1,3 +1,15 @@
+# FINAL SOURCE FROZEN — 2026-09-29T02:06:36+00:00
+
+Official source **1e9194cb7f2495d26f61969ef9dd335674103b34**, checkout `/Users/andrewhendel/mojolearn-wt/release025-final`, pushedbranch release/0.8.25-final. Merged/pushedmain32b386409. All18physical1vs2GPU casesPASS; parallelUMAPone-deviceall9genuine2repeatsPASS. Strictreferencecommit5232a055bcherriedas1e9194cb7: only18parGMM/parUMAPtablecells change,45numericvaluescorrected,36GMMpropertydeclarationsadded; allothercellsunchanged independentlychecked. GMMcurrentAMD+NVIDIA; parallelUMAPNVIDIA-only explicitly, ordinaryUMAP3vendorproofunchanged. Allneedednumericcapturessecured.
+
+Agents ACTIVELY finalpack: applicability all3LinuxCPU-onlypack/audit, thenAMDexpanded+14; integration_audit MacCPU-onlypack/audit, expanded+14. Runner preparesH100expanded+21clusterfamily andnew4090expanded+14; awaitsLinuxauditedwheels. Exactnewselections `E/packaging-preparation/installed-light-identity-selection-1e9194cb7f24.json` and `installed-cluster21-repair-selection-1e9194cb7f24.json`. Originalselection/reportfilespreserved. All251Linuxnative/runtimebytes mustmatch9ab; only_expansion_cluster.pyallowedshippedcodechange. No nativebuild/full445repeat.
+
+Root toolad6d126e0 also bindsoriginal/repairedreportnativewitnessmodule+SHA toactualwheels; all75oldH100bindingsmatched,25focusedtestsPASS. Need runrealcomposite445admission oncefinal21reportexists; comparefinal3vendor14; existingexpandedartifactgates; by-handpublisherpath(documented) avoidslegacyfakecolumns. FinalpluginSHAswillchange because source-specificpayloadmetadata, stageall3. No PyPIpublished. Officialstate sourceupdated; onlyfreezemetadata markedcomplete. Original9abbuild/smokereceiptsretainedearlierfolder, notrelabeled.
+
+Fleet no changes: H100boundedholdexec58128untilrepaired21queuedmarker; new4090idleafterphysicalcapture, availablefinal14; old4090inheritedbenchmark+queuedjobsuntouched; AMDdeadline03:04:52UTC; M2steward/caffeinate/benchmarkalive; M3hostretainednoinstance. See RUNNER_HANDOFFtop. No cancellations/restarts/releases. Priorcheckpointbelowcontainsactualaccess/evidencepaths.
+
+---
+
 # Active checkpoint — 2026-09-29 01:49 UTC
 
 Main1fe35ed50 pushed. README now100+algorithms/modelcomponents in13families (229role-normalized publiccomponents inventoried; NOT229canonicalalgorithms). Followup source checkout `/Users/andrewhendel/mojolearn-wt/release025-final`, branch release/0.8.25-final HEAD0446ca1da: exact9ab5 baseline +Python3.10/3.11 clusterbufferfix +bounded/strictneuraltests +README. Await combinedphysicalreferencecommit from integration_audit, then freeze FROM THIS BRANCH; main pixi.toml taskchange b8a remains excluded to preserve nativeclosures. Native source3dded unchanged. Current officialfreeze still9ab5, no publication.
