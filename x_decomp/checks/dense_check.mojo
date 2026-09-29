@@ -245,7 +245,16 @@ def main() raises:
     for sh in range(len(bshapes) // 2):
         var bm = bshapes[2 * sh]
         var bn = bshapes[2 * sh + 1]
-        var ba = seam_fixture(bm, bn, UInt64(95 + sh))
+        # a well-scaled fixture (seam_fixture's 1e-3 .. 1e8 columns exhaust
+        # the sweep budget and HostExec.svd refuses them): uniform in (-2, 2]
+        # from the seam LCG, with seam_fixture's tie and negated rows planted
+        var ba = List[Float32](capacity=bm * bn)
+        var bst = UInt64(95 + sh) * UInt64(2654435761) + UInt64(1)
+        for _ in range(bm * bn):
+            ba.append(lcg_unit(bst) * Float32(4) - Float32(2))
+        for f in range(bn):
+            ba[2 * bn + f] = ba[1 * bn + f] * Float32(0.5)
+            ba[4 * bn + f] = -ba[3 * bn + f]
         var bh = ba.copy()
         var s_h = zeros(bn)
         var v_h = zeros(bn * bn)
