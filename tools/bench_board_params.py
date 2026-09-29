@@ -231,11 +231,11 @@ EXCEPTIONS = [
 ] + [
     (lane, "min_child_weight", "*", "ours takes min_child_hessian on Depthwise and Lossguide only; "
      "on the symmetric grower it is unset (no hessian floor, as CatBoost; XGBoost 0)")
-    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass")
+    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass", "gbdt-ordered")
 ] + [
     (lane, "min_split_gain", "*", "ours takes min_split_gain on Depthwise and Lossguide only; on "
      "the symmetric grower it is unset (CatBoost has none; XGBoost gamma 0, LightGBM 0)")
-    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass")
+    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass", "gbdt-ordered")
 ] + [
     (lane, "grow_policy", "xgboost-*", "ours and CatBoost fit this loss on the symmetric grower "
      "only; XGBoost has none and runs depthwise at the same depth")
