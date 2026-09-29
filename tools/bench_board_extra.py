@@ -70,7 +70,7 @@ _TAB = ("taxi", "istella")
 def register(add):
     """Add the extra lanes to the algos table through its `_add`."""
     add("qn-reg", xlane="linear", ours="QNRegressor", kind="extra", task="qn", block="reg",
-        datasets=_TAB, params=dict(QN), quality="held-out R2 and RMSE",
+        datasets=_TAB, params=dict(QN), quality="x-qn",
         fit_text="fit(X, y)", other={"sklearn-cpu": "sklearn", "cuml-gpu": "cuml-qn"},
         notes=["ours and cuML: the quasi-Newton solver on the squared loss, no penalty "
                "(cuml.solvers.QN(loss='l2'), present in the pinned cuML 26.08); scikit-learn "
@@ -79,8 +79,7 @@ def register(add):
               "form (scipy lstsq); it has no max_iter, tol or L-BFGS settings"])
     add("kpss", xlane="sequence", ours="kpss_test", kind="extra", task="kpss", block="ts",
         datasets=_TS, params=dict(d=0, D=0, s=0, pval_threshold=0.05),
-        quality="agreement of the stationarity flags; max relative difference of the statistic "
-                "vs statsmodels",
+        quality="x-kpss",
         fit_text="the KPSS test of every series", other={"statsmodels-cpu": "statsmodels"},
         notes=["statsmodels.tsa.stattools.kpss(y, regression='c', nlags=ceil(12 (n/100)^0.25)): "
                "ours' lag count passed explicitly; one call per series"],
@@ -88,7 +87,7 @@ def register(add):
               "decides against cuML's table in float32"])
     add("select-d", xlane="sequence", ours="select_d", kind="extra", task="selectd", block="ts",
         datasets=_TS, params=dict(D=0, s=0, pval_threshold=0.05),
-        quality="agreement of the chosen d per series with statsmodels'",
+        quality="x-selectd",
         fit_text="the differencing order of every series (KPSS at d = 0, 1)",
         other={"statsmodels-cpu": "statsmodels"},
         notes=["statsmodels: kpss (regression='c', ours' lag count for the differenced length) "
@@ -96,15 +95,14 @@ def register(add):
     add("clip-grad-norm", xlane="training", ours=("clip_grad_norm_", "training.clip_grad_norm_"),
         kind="extra", task="clip", block="tensor", datasets=("synthetic",),
         params=dict(max_norm=1.0, norm_type=2.0, error_if_nonfinite=True),
-        quality="relative difference of the returned total norm vs ours",
+        quality="x-clip",
         fit_text="clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values", torch_fp32=True,
         notes=["gradients default_rng(7) standard normal; every round clips the same arrays "
                "again, on every arm, so each arm walks the same sequence"])
     add("cross-entropy", xlane="training", ours=("cross_entropy", "training.cross_entropy"),
         kind="extra", task="xent", block="tensor", datasets=("synthetic",),
         params=dict(reduction="mean", label_smoothing=0.0, ignore_index=-100),
-        quality="loss relative difference vs float64; max relative difference of dlogits "
-                "(first 256 rows) vs ours",
+        quality="x-xent",
         fit_text="cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
         torch_fp32=True,
         notes=["logits default_rng(7) standard normal, targets integers in [0, 8192)"])
@@ -114,8 +112,7 @@ def register(add):
             ("tokenizer.BpeVocabularyTrainer",), kind="extra",
             task=slug.replace("-", ""), block="corpus", datasets=("enwik8",),
             params=dict(vocab_size=BPE_VOCAB, min_frequency=2),
-            quality=("fraction of documents whose ids equal ours" if slug == "bpe-encode"
-                     else "Jaccard of the learned token byte strings against ours"),
+            quality="x-" + slug.replace("-", ""),
             fit_text=what, other={"hf-tokenizers-cpu": "tokenizers"},
             notes=["the first 4 MiB of enwik8 (UTF-8, invalid bytes replaced), 2,048-character "
                    "documents; the vocabulary is trained on the first 1 MiB",
@@ -125,16 +122,31 @@ def register(add):
     for slug, (cls, p) in SCHED.items():
         add(slug, xlane="sequence" if "." not in cls else "training", ours=(cls,), kind="extra",
             task="sched", block="tensor", datasets=("synthetic",), params=dict(p),
-            quality="max relative difference of the learning rates vs ours",
+            quality="x-sched",
             fit_text="the learning rate of steps 1 .. %d" % SCHED_STEPS,
             other={"torch-cpu": "torch"}, notes=["torch: " + TORCH_SCHED_TEXT[slug]])
     add("jl-min-dim", xlane="decomp", ours="johnson_lindenstrauss_min_dim", kind="extra",
         task="jl", block="tensor", datasets=("synthetic",), params={},
-        quality="fraction of grid points where the integer equals scikit-learn's",
+        quality="x-jl",
         fit_text="johnson_lindenstrauss_min_dim over 200 n_samples x 50 eps (one scalar call "
                  "per point on both arms)",
         other={"sklearn-cpu": "sklearn"},
         notes=["n_samples = unique(int(logspace(1, 9, 200))), eps = linspace(0.05, 0.95, 50)"])
+
+
+QUALITY_TEXT = {
+    "x-qn": "held-out R2 and RMSE",
+    "x-kpss": "agreement of the stationarity flags; max relative difference of the statistic vs "
+              "statsmodels",
+    "x-selectd": "agreement of the chosen d per series with statsmodels'",
+    "x-clip": "relative difference of the returned total norm vs ours",
+    "x-xent": "loss relative difference vs float64; max relative difference of dlogits (first "
+              "256 rows) vs ours",
+    "x-bpeencode": "fraction of documents whose ids equal ours",
+    "x-bpetrain": "Jaccard of the learned token byte strings against ours",
+    "x-sched": "max relative difference of the learning rates vs ours",
+    "x-jl": "fraction of grid points where the integer equals scikit-learn's",
+}
 
 
 def opponents(vendor, lane, spec, torch_gpu):
