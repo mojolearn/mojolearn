@@ -221,33 +221,56 @@ def check_int15_tuned_planted_worst_cases(ctx: DeviceContext) raises:
     print("   ok " + String(cases) + " planted cases, every tuned plan equal to the oracle")
 
 
+def _refused_by_name(e: String, bound: Int) -> Bool:
+    return e.find(String(bound)) >= 0
+
+
 def check_int15_tuned_refuses(ctx: DeviceContext) raises:
-    """GATE: a named plan refuses `k = 65536` by name (the sums kernel's
-    bound) and `k = 65537` (the profile's); the dispatched plan refuses
-    only the second."""
-    var one8: List[Int8] = [1]
+    """GATE: every call above a bound is refused BY NAME before anything is
+    launched. A named plan of the sums kernel refuses one step above ITS
+    bound (`INT8_PIECES_MAX_K`) and one step above the profile's
+    (`INT15_MAX_K`); the dispatched plan refuses one step above the
+    profile's. The bounds are read, not assumed: lane/lowbit-mma-speed
+    raised the sums kernel's to 65536 (520406a38), the profile's own, and
+    the gate that expected k = 65536 to be refused then LAUNCHED a 1 x 1 x
+    65536 product on buffers of one code (an out-of-bounds read; MI325X job
+    1790658495381). The operands here hold every code the largest `k` asked
+    reads, so a call that is not refused reads nothing outside them."""
+    var kmax = INT15_MAX_K + 1
+    if INT8_PIECES_MAX_K + 1 > kmax:
+        kmax = INT8_PIECES_MAX_K + 1
+    var codes = List[Int8]()
+    for _ in range(kmax):
+        codes.append(Int8(1))
     var e0: List[Int32] = [0]
-    var dah = _upload[DType.int8](ctx, one8)
-    var dal = _upload[DType.int8](ctx, one8)
-    var dbh = _upload[DType.int8](ctx, one8)
-    var dbl = _upload[DType.int8](ctx, one8)
+    var dah = _upload[DType.int8](ctx, codes)
+    var dal = _upload[DType.int8](ctx, codes)
+    var dbh = _upload[DType.int8](ctx, codes)
+    var dbl = _upload[DType.int8](ctx, codes)
     var dea = _upload[DType.int32](ctx, e0)
     var deb = _upload[DType.int32](ctx, e0)
     var dc = _poisoned(ctx, 1)
     var work = Int15SumsWorkspace(ctx)
-    var refused = 0
+    var bad = String("")
+    var sums_k = INT8_PIECES_MAX_K + 1
     try:
-        identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K, 0)
+        identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, sums_k, 0)
+        bad += "the named plan did not refuse k = " + String(sums_k) + "; "
     except e:
-        refused += 1
+        if not _refused_by_name(String(e), INT8_PIECES_MAX_K) and not _refused_by_name(String(e), INT15_MAX_K):
+            bad += "the named plan refused k = " + String(sums_k) + " but not by its bound: " + String(e) + "; "
     try:
         identical_gemm_int15_tuned_with_plan(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1, 0)
+        bad += "the named plan did not refuse k = " + String(INT15_MAX_K + 1) + "; "
     except e:
-        refused += 1
+        if not _refused_by_name(String(e), INT15_MAX_K):
+            bad += "the named plan refused k = " + String(INT15_MAX_K + 1) + " but not by the profile's bound: " + String(e) + "; "
     try:
         identical_gemm_int15_tuned_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, work, 1, 1, INT15_MAX_K + 1)
+        bad += "the dispatched plan did not refuse k = " + String(INT15_MAX_K + 1) + "; "
     except e:
-        refused += 1
+        if not _refused_by_name(String(e), INT15_MAX_K):
+            bad += "the dispatched plan refused k = " + String(INT15_MAX_K + 1) + " but not by the profile's bound: " + String(e) + "; "
     ctx.synchronize()
     _ = dah
     _ = dal
@@ -257,9 +280,12 @@ def check_int15_tuned_refuses(ctx: DeviceContext) raises:
     _ = deb
     _ = dc
     _ = work^
-    if refused != 3:
-        raise Error("only " + String(refused) + " of 3 launches refused")
-    print("   ok 3 launches refuse an extent above their bound")
+    if bad.byte_length() > 0:
+        raise Error(bad)
+    print(
+        "   ok 3 calls refuse an extent above their bound by name (sums kernel "
+        + String(INT8_PIECES_MAX_K) + ", profile " + String(INT15_MAX_K) + ")"
+    )
 
 
 def _gate(name: String, mut ran: Int, mut failed: Int, e: String):

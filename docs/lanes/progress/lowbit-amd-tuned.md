@@ -24,8 +24,9 @@ operation on the H100's launcher plan 0.191 to 0.299.
 | Timing harness: every arm of `bench/gemm_lowbit_price_main.mojo` plus the AMD plans and the complete operation on every four-product plan | `bench/gemm_lowbit_amd_price_main.mojo` | NOT BUILT |
 | Job phases `amd-gate`, `amd-price` | `tools/lowbit_mma_speed/{box_job,gate_job,price_job}.sh` | NOT RUN |
 
-`amd-asm` (named in box_job.sh) calls `tools/lowbit_amd_tuned/asm_probe.sh`, which
-does not exist; the phase is not used.
+`amd-asm` (named in box_job.sh at the handover) called a script that never
+existed; the phase is removed. `amd-fault-repro` (`tools/lowbit_amd_tuned/fault_repro.sh`)
+is in its place.
 
 ## Hunks in files this lane does not own
 
@@ -37,6 +38,7 @@ code path moves.
 | `gemm/checks/gemm_int8_mma_tuned.mojo` (Lane D) | import `COLUMN_AMD` from `checks.kernel_matrix` |
 | same | `int8_pieces_dispatch`: on AMD, m > 16 and n > 8192 takes `INT8_PIECES_PLAN_FRAG2` |
 | same | `int8_tuned_dispatch`: on AMD, m > 16 takes `INT8_TUNED_PLAN_FRAG2_K64`, and `INT8_TUNED_PLAN_K64` where n > 14336 |
+| `gemm/checks/gemm_int15_tuned_check.mojo` (Lane C) | `check_int15_tuned_refuses` rewritten (Failures 3): reads both bounds, never launches on buffers shorter than `k`, checks each refusal names its bound. Also as a patch: `~/mojolearn-evidence/lowbit-amd-tuned/int15_refuses_gate_fix.patch` |
 | `gemm/checks/gemm_int15_tuned.mojo` (lane/lowbit-int15) | import `COLUMN_AMD` and `identical_gemm_int8_pieces_amd_into` |
 | same | `identical_gemm_int15_tuned_into`: on AMD the sums come from `identical_gemm_int8_pieces_amd_into` (this lane's launcher) in place of `identical_gemm_int8_pieces_tuned_into` |
 
@@ -49,6 +51,7 @@ merges this, its build on the H100 and a Mac must be seen.
 | Box | Request | Commit | What | Verdict |
 |---|---|---|---|---|
 | MI325X | 1790657510941 | 0a29ffdf3 | amd-gate, full-price (run of record 2), amd-price | gate: clean GREEN, four arms seen failing, byte-path arm RED (fault); full-price GREEN; amd-price did not build |
+| MI325X | 1790658495381 | 6153fb859 | Lane D's unit and pieces gates (the AMD column), amd-gate, amd-price on the new dispatch, int15 tuned gate, int15 price | every lowbit-mma-speed and AMD gate GREEN with every arm as expected; amd-price GREEN (1380 of 1380 cold == record, 345 of 345 sabotage seen); int15 tuned gate RED at the stale refusal gate only; int15 price GREEN (372 digests warm == timed, sabotage seen) |
 | MI325X | 1790657862351 | 6c6f2bb88 | amd-gate, amd-price (every plan of both files, run 3 of the shared arms), lane/lowbit-int15's tuned gate | amd-gate GREEN with all six arms as expected (byte-path arm passed); amd-price GREEN: cold == record at 1380 of 1380, sabotage seen at 345 of 345; int15 tuned gate RED (Failures 3) |
 
 ## Gate verdicts (MI325X, job 1790657510941)
@@ -169,6 +172,40 @@ or in 128x64 where n > 14336. Lane D's launcher can take only its own file's
 plans (the direct kernels live here and this file imports that one); its AMD
 column takes the best of them.
 
+## THE COMPLETE OPERATION ON AMD'S LAUNCHER (tasks 4 and 6), job 1790658495381
+
+One call, one wait, over fp32.v1 in the same run. The launcher takes AMD's plan
+per row (`int8_amd_pieces_dispatch`); beside it the same operation on the H100's
+launcher plan. fp32.v1 ms: 1.004, 2.509, 2.521, 2.861; decode 0.060, 0.073,
+0.169, 0.180, 0.163, 0.197, 1.411, 1.409.
+
+| operation | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 | qkv.t1 | qkv.t8 | mlp_up.t1 | mlp_up.t8 | mlp_down.t1 | mlp_down.t8 | lm_head.t1 | lm_head.t8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| int8 stand-in, inference, AMD's plan | 0.179 | 0.176 | 0.211 | 0.193 | 0.935 | 0.890 | 0.518 | 0.496 | 1.046 | 0.956 | 0.274 | 0.331 |
+| the same, the H100's plan | 0.180 | 0.184 | 0.220 | 0.195 | 1.825 | 1.483 | 0.742 | 0.764 | 1.964 | 1.708 | 0.353 | 0.361 |
+| int8 stand-in, training (both operands quantized), AMD's plan | 0.198 | 0.214 | 0.256 | 0.227 | 1.459 | 1.305 | 1.111 | 1.054 | 1.713 | 1.508 | 0.870 | 0.929 |
+| one product, AMD's plan, quantize A included | 0.104 | 0.060 | 0.116 | 0.060 | 0.561 | 0.494 | 0.240 | 0.243 | 0.511 | 0.436 | 0.127 | 0.150 |
+| one launch and one wait (the floor) | 0.017 | 0.007 | 0.007 | 0.007 | 0.192 | 0.153 | 0.087 | 0.087 | 0.149 | 0.073 | 0.011 | 0.012 |
+
+THE FIFTEEN-BIT PROFILE ITSELF (task 5; lane/lowbit-int15's harness, the real
+quantizer to planes, the four products on AMD's launcher through this lane's
+branch in `gemm_int15_tuned.mojo`, the profile's own recombination and pinned
+seam as its epilogue launch), same job; fp32.v1 ms 0.962, 2.355, 2.433, 2.673;
+decode 0.062, 0.073, 0.169, 0.170, 0.159, 0.195, 1.421, 1.381:
+
+| operation | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 | qkv.t1 | qkv.t8 | mlp_up.t1 | mlp_up.t8 | mlp_down.t1 | mlp_down.t8 | lm_head.t1 | lm_head.t8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| inference.int15i64.v1.tuned (THE COMPLETE CALL) | 0.273 | 0.208 | 0.243 | 0.214 | 1.396 | 1.503 | 0.669 | 0.843 | 1.250 | 1.247 | 0.301 | 0.376 |
+| int15i64.v1.tuned (the product and its epilogue, planes given) | 0.184 | 0.169 | 0.185 | 0.176 | 0.755 | 0.726 | 0.395 | 0.463 | 0.793 | 0.731 | 0.252 | 0.326 |
+| inference.int15i64.v1.planes (the reference unit plan, four launches) | 0.633 | 0.829 | 0.752 | 0.815 | 1.850 | 1.837 | 0.805 | 0.943 | 1.765 | 1.668 | 0.456 | 0.572 |
+
+At the 512-token rows the complete fifteen-bit call is 0.21 to 0.27 of fp32.v1
+(the brief's stand-in number was 0.19 to 0.30). At the decode rows it is OVER
+fp32.v1 at qkv and mlp_down (1.25 to 1.50): the fifteen-bit parallel quantizer
+to planes alone takes 0.043 to 0.080 ms there (0.70 of fp32.v1 at qkv.t1), and
+the call is three launches (quantize, sums, epilogue) where fp32.v1 is one. The
+int8 stand-in's quantizer at the same row is under half of that.
+
 ## Failures, each with its cause
 
 1. Job 1790657510941, `amd-unstated` (byte path forced): exit 139, "Memory
@@ -185,8 +222,11 @@ column takes the best of them.
    failing. Cause: the gate expects the sums kernel to refuse k = 65536, and
    lane/lowbit-mma-speed raised that kernel's bound to 65536 (commit
    520406a38). The gate is stale, not the arithmetic. Worse, that call then
-   LAUNCHES at k = 65536 on buffers of one byte: reads out of bounds. Not this
-   lane's file; reported to the orchestrator.
+   LAUNCHES at k = 65536 on buffers of one byte: reads out of bounds. Seen
+   again in job 1790658495381. FIXED at its root on this branch (rule 16): the
+   gate reads both bounds, holds every code the largest `k` reads, and checks
+   that each refusal names its bound; the patch is sent to the orchestrator
+   for Lane C.
 
 ## Owed
 

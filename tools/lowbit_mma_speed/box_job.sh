@@ -25,8 +25,10 @@
 #                reference unit plan, every tuned plan and every AMD plan,
 #                one product and four, and the complete operation on every
 #                four-product plan
-#   amd-asm      tools/lowbit_amd_tuned/asm_probe.sh (AMD): the kernels'
-#                assembly, counted; launches nothing, times nothing
+#   amd-fault-repro  tools/lowbit_amd_tuned/fault_repro.sh (AMD): the
+#                byte-path gate built four times and each run three times,
+#                every launch named; whether job 1790657510941's fault comes
+#                back, and whether it belongs to a build or to a run
 #   ptx          tools/lowbit_mma_speed/ptx_probe.sh (NVIDIA): the kernels'
 #                PTX, counted; launches nothing, times nothing
 #
@@ -83,7 +85,7 @@ for phase in "$@"; do
         unit-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS} bash tools/lowbit_mma_speed/price_job.sh unit ;;
         amd-gate) bash tools/lowbit_mma_speed/gate_job.sh amd ;;
         amd-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$AMD_ARMS} MOJOLEARN_LOWBIT_PRICE_MAIN=bench/gemm_lowbit_amd_price_main.mojo bash tools/lowbit_mma_speed/price_job.sh amd ;;
-        amd-asm) bash tools/lowbit_amd_tuned/asm_probe.sh ;;
+        amd-fault-repro) bash tools/lowbit_amd_tuned/fault_repro.sh 4 3 ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
         *) echo "box_job.sh: unknown phase $phase" >&2; exit 2 ;;
     esac
