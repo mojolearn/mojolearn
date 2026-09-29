@@ -4158,6 +4158,8 @@ def worker(args):
         traceback.print_exc()
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
+    if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
+        runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
     mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
@@ -4632,6 +4634,10 @@ def race(args):
     # round: same seed, same tuning parameters, read back from what each worker
     # constructed. A refusal fails the race by name (exit 3, params_refused in
     # the JSON, the BOARD-PARAMS-REFUSED line in this log).
+    if getattr(args, "params_only", False):
+        return _tool("classical_two_datasets").params_only_exit(
+            result, workers, arms, "algos/" + lane, "algos",
+            os.path.join(args.out, tag + ".params.json"))
     BP = _BP()
     records = {a: result["arms"][a]["params_record"] for a in arms
                if workers[a].alive and result["arms"][a].get("params_record")}
@@ -4758,6 +4764,9 @@ def build_parser():
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
     r.add_argument("--ready-seconds", type=float, default=1800)
+    r.add_argument("--params-only", action="store_true",
+                   help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
+                        "and stop before the warm-up (the board's opponent-store lookup)")
     r.add_argument("--warmup-seconds", type=float, default=1800)
     r.add_argument("--round-seconds", type=float, default=1800)
     w = sub.add_parser("worker")
