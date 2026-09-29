@@ -298,7 +298,7 @@ from core.step_glue import (
 )
 
 from core.identity_trace import IdentityTrace
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from gemm.checks.gemm_identical import GemmWorkspace
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -4016,8 +4016,10 @@ def attention_eager_core(
     # lane/lowbit-default: under `fixed15_v1` at the decode rows, every
     # (batch, head) at once (`llama_int15_scores_heads`: one gather, one
     # quantizer launch a side, one product launch), the same bits as the
-    # loop below, which every other case keeps.
-    var heads_at_once = stages.int15_on and l <= INT15_HEADS_MAX_L
+    # loop below, which every other case keeps. NVIDIA only until the heads
+    # gate has run on the other columns.
+    comptime heads_column = TARGET_COLUMN == COLUMN_NVIDIA
+    var heads_at_once = heads_column and stages.int15_on and l <= INT15_HEADS_MAX_L
     if heads_at_once:
         if not stages.int15:
             stages.int15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
