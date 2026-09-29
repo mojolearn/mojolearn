@@ -82,7 +82,13 @@ fragments, into three Int32 accumulators per cell: HH, HL + LH (the two
 share their power of two in the recombination, so they share a register),
 LL. It stores the three sums and NOTHING ELSE: the recombination in Int64,
 the pinned conversion and the scale are the fifteen-bit profile's seams and
-live in its own file. Every sum is an exact integer under
+live in its own file. THE SEAM FORM
+(`identical_gemm_int8_pieces_seam_kernel[E]`) is the same kernel whose last
+step hands each cell's three sums and the sum of the two row exponents to
+`E.cell`, a function of the CALLER'S (the trait `PiecesEpilogue`), and
+stores the float32 it returns: one launch where the sums form needs a second
+to read twelve bytes a cell back. This file states no float rule of its own
+in either form; the rule is the type the caller instantiates it with. Every sum is an exact integer under
 `INT8_PIECES_MAX_K` for the operands that bound is stated for (low planes
 in [0, 127]), so every plan of it returns the same three integers.
 
@@ -1074,6 +1080,29 @@ def identical_gemm_int8_mma_tuned_into(
 # ===========================================================================
 
 
+trait PiecesEpilogue:
+    """What a caller does with one cell's three exact sums: the seam of ITS
+    profile. `identical_gemm_int8_pieces_seam_kernel[E]` calls `E.cell` once
+    per output cell, in the thread that holds the cell's accumulators, and
+    stores what it returns. The kernel knows nothing of the rule."""
+
+    @staticmethod
+    def cell(hh: Int32, mid: Int32, ll: Int32, e_sum: Int) -> Float32:
+        """`hh`, `mid` (HL + LH) and `ll` of one cell, and `e_sum`, the sum
+        of the left row's exponent and the right row's. The float32 the
+        cell stores."""
+        ...
+
+
+struct PiecesSumsOnly(PiecesEpilogue):
+    """The type the SUMS form is instantiated with. Its `cell` is never
+    called: that form stores the three sums and no float."""
+
+    @staticmethod
+    def cell(hh: Int32, mid: Int32, ll: Int32, e_sum: Int) -> Float32:
+        return bitcast[DType.float32](hh)
+
+
 @always_inline
 def _store_sums(
     s: MutPointer[Int32, MutAnyOrigin],
@@ -1098,6 +1127,33 @@ def _store_sums(
         s.unsafe_store(at_, hh)
         s.unsafe_store(at_ + 1, mid)
         s.unsafe_store(at_ + 2, ll)
+
+
+@always_inline
+def _store_cell_of_sums[E: PiecesEpilogue, SEAM: Bool](
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    hh: Int32,
+    mid: Int32,
+    ll: Int32,
+    i: Int,
+    j: Int,
+    m: Int,
+    n: Int,
+):
+    """One cell of either form, masked to the output: the three sums as
+    they are, or what the caller's seam makes of them."""
+    comptime if SEAM:
+        if i >= m or j >= n:
+            return
+        c.unsafe_store(
+            i * n + j,
+            E.cell(hh, mid, ll, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j))),
+        )
+    else:
+        _store_sums(s, hh, mid, ll, i, j, m, n)
 
 
 def identical_gemm_int8_pieces_flat_kernel(
@@ -1135,10 +1191,14 @@ def identical_gemm_int8_pieces_flat_kernel(
     _store_sums(s, hh, mid, ll, i, j, m, n)
 
 
-def identical_gemm_int8_pieces_tuned_kernel[
-    FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+@always_inline
+def _pieces_block[
+    E: PiecesEpilogue, SEAM: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
     s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
     al: MutPointer[Int8, MutAnyOrigin],
     bh: MutPointer[Int8, MutAnyOrigin],
@@ -1148,12 +1208,14 @@ def identical_gemm_int8_pieces_tuned_kernel[
     k_in: Int32,
     aligned_in: Int32,
 ):
-    """OP_NT, the four products of two-plane operands, ONE staging:
-    `S[i, j] = (Ah . Bh^T, Ah . Bl^T + Al . Bh^T, Al . Bl^T)[i, j]`, three
-    Int32 per cell. `identical_gemm_int8_mma_tuned_kernel`'s block, warps,
-    windows and barriers; the staged page of an operand holds its two
-    planes, the high one first; a tile's four unit steps read the fragments
-    of the two planes of each side, loaded once. The same grid and block.
+    """The body of both forms of the four-product kernel. OP_NT, ONE
+    staging: `(Ah . Bh^T, Ah . Bl^T + Al . Bh^T, Al . Bl^T)[i, j]`.
+    `identical_gemm_int8_mma_tuned_kernel`'s block, warps, windows and
+    barriers; the staged page of an operand holds its two planes, the high
+    one first; a tile's four unit steps read the fragments of the two
+    planes of each side, loaded once. `SEAM` False: the three sums to `s`,
+    and `c`, `ea`, `eb` are not read. `SEAM` True: `E.cell` of the three
+    sums and the two exponents to `c`, and `s` is not read.
 
     Every thread of the block reaches every `barrier()`, for the reasons
     the one-product kernel gives."""
@@ -1339,8 +1401,11 @@ def identical_gemm_int8_pieces_tuned_kernel[
             var gi = i0 + lrow + fm * 16 + g
             var gj = j0 + lcol + fq * 16 + h * 8 + t * 2
             comptime for e in range(4):
-                _store_sums(
+                _store_cell_of_sums[E, SEAM](
                     s,
+                    c,
+                    ea,
+                    eb,
                     outs.unsafe_load(a * 12 + e),
                     outs.unsafe_load(a * 12 + 4 + e),
                     outs.unsafe_load(a * 12 + 8 + e),
@@ -1358,8 +1423,11 @@ def identical_gemm_int8_pieces_tuned_kernel[
             var gi = i0 + lrow + fm * 16 + i4
             var gj = j0 + lcol + fq * 16 + i16
             comptime for e in range(4):
-                _store_sums(
+                _store_cell_of_sums[E, SEAM](
                     s,
+                    c,
+                    ea,
+                    eb,
                     outs.unsafe_load(a * 12 + e),
                     outs.unsafe_load(a * 12 + 4 + e),
                     outs.unsafe_load(a * 12 + 8 + e),
@@ -1368,6 +1436,52 @@ def identical_gemm_int8_pieces_tuned_kernel[
                     m,
                     n,
                 )
+
+
+def identical_gemm_int8_pieces_tuned_kernel[
+    FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+](
+    s: MutPointer[Int32, MutAnyOrigin],
+    ah: MutPointer[Int8, MutAnyOrigin],
+    al: MutPointer[Int8, MutAnyOrigin],
+    bh: MutPointer[Int8, MutAnyOrigin],
+    bl: MutPointer[Int8, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    aligned_in: Int32,
+):
+    """THE SUMS FORM: three Int32 per cell at `3 (i n + j)`, HH, HL + LH,
+    LL. Grid `(ceil(n / BN), ceil(m / BM), 1)`, block `WM * WN * WARP_SIZE`.
+    The pointers the block takes for the seam form are `s` again, under the
+    types it asks for, and are not read."""
+    _pieces_block[PiecesSumsOnly, False, FM, FN, WM, WN, KB, LW](
+        s, s.bitcast[Float32](), s, s, ah, al, bh, bl, m_in, n_in, k_in, aligned_in
+    )
+
+
+def identical_gemm_int8_pieces_seam_kernel[
+    E: PiecesEpilogue, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+](
+    c: MutPointer[Float32, MutAnyOrigin],
+    ah: MutPointer[Int8, MutAnyOrigin],
+    al: MutPointer[Int8, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    bh: MutPointer[Int8, MutAnyOrigin],
+    bl: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    aligned_in: Int32,
+):
+    """THE SEAM FORM: `C[i, j] = E.cell(HH, HL + LH, LL, ea[i] + eb[j])`,
+    one float32 per cell, in the launch that computed the sums. The same
+    grid and block. The pointer the block takes for the sums form is `ea`
+    and is not written."""
+    _pieces_block[E, True, FM, FN, WM, WN, KB, LW](
+        ea, c, ea, eb, ah, al, bh, bl, m_in, n_in, k_in, aligned_in
+    )
 
 
 def _refuse_pieces_shape(m: Int, n: Int, k: Int) raises:
@@ -1503,4 +1617,108 @@ def identical_gemm_int8_pieces_tuned_into(
     seams are the caller's. Asynchronous."""
     identical_gemm_int8_pieces_tuned_with_plan(
         ctx, s, ah, al, bh, bl, m, n, k, int8_pieces_dispatch(m, n, k)
+    )
+
+
+def _launch_pieces_seam[
+    E: PiecesEpilogue, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    comptime BM = WM * FM * INT8_TUNED_TILE
+    comptime BN = WN * FN * INT8_TUNED_TILE
+    comptime kern = identical_gemm_int8_pieces_seam_kernel[E, FM, FN, WM, WN, KB, LW]
+    var aligned = Int32(0)
+    if _bases_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr()), LW) and _bases_aligned(
+        Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr()), LW
+    ):
+        aligned = Int32(1)
+    ctx.enqueue_function[kern](
+        c.unsafe_ptr(),
+        ah.unsafe_ptr(),
+        al.unsafe_ptr(),
+        ea.unsafe_ptr(),
+        bh.unsafe_ptr(),
+        bl.unsafe_ptr(),
+        eb.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        aligned,
+        grid_dim=((n + BN - 1) // BN, (m + BM - 1) // BM, 1),
+        block_dim=(WM * WN * WARP_SIZE, 1, 1),
+    )
+
+
+def identical_gemm_int8_pieces_seam_with_plan[E: PiecesEpilogue](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    """The seam form on a NAMED plan: the sums form's plans, the same
+    numbers. Refuses by name as the sums form does. Asynchronous."""
+    comptime if not INT8_TUNED_AVAILABLE:
+        raise Error(
+            "identical_gemm_int8_pieces_seam: column " + column_name(TARGET_COLUMN)
+            + " has no int8 matrix unit (kernel_matrix row"
+            " lib_int8_matrix_unit_for); the flat kernel serves it"
+        )
+    else:
+        _refuse_pieces_shape(m, n, k)
+        if plan == INT8_PIECES_PLAN_SMALL:
+            _launch_pieces_seam[E, 1, 1, 2, 2, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_WARPS16:
+            _launch_pieces_seam[E, 1, 2, 4, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_FRAG2:
+            _launch_pieces_seam[E, 2, 2, 2, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_SQUARE:
+            _launch_pieces_seam[E, 1, 1, 4, 4, 64, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL128:
+            _launch_pieces_seam[E, 1, 2, 8, 2, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256:
+            _launch_pieces_seam[E, 1, 2, 16, 1, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256_N16:
+            _launch_pieces_seam[E, 1, 1, 16, 1, 32, 16](ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        else:
+            raise Error("identical_gemm_int8_pieces_seam: no plan " + String(plan))
+
+
+def identical_gemm_int8_pieces_seam_into[E: PiecesEpilogue](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """**THE ENTRY POINT for a profile that brings its own seam**: two int8
+    planes and the row exponents of each operand in, `C[m x n]` out, one
+    launch, on the plan `int8_pieces_dispatch` names. `E` is the caller's
+    `PiecesEpilogue`. Asynchronous."""
+    identical_gemm_int8_pieces_seam_with_plan[E](
+        ctx, c, ah, al, ea, bh, bl, eb, m, n, k, int8_pieces_dispatch(m, n, k)
     )

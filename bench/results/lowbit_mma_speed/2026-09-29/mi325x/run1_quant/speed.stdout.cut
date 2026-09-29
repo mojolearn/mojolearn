@@ -1,0 +1,800 @@
+######## phase quant-gate on mi325x, started 2026-09-29T03:41:46Z
+quant	0	4s	expected=pass	held=yes
+quant-sabotage	1	3s	expected=fail	held=yes
+quant-value-sabotage	1	4s	expected=fail	held=yes
+box=mi325x gate=quant
+started=2026-09-29T03:41:46Z
+tree_head=3c02e352974343d661dc6634000292c852c78b43 dirty_files=32
+machine=GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+finished=2026-09-29T03:41:57Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== quant.log
+✨ Pixi task (check-quantize-int8-par in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: amd  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   quantizer: 36 cases, 0 failed
+ok check_par_quantizer_matches
+   quantize-and-multiply: 4 cases, 0 failed
+ok check_par_quantizer_feeds_the_product
+== 2 gates, 0 failed ==
+== quant-sabotage.log
+✨ Pixi task (check-quantize-int8-par-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_QUANT_PAR_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: TREE_SKIPS_ITS_FIRST_LEVEL ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: amd  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   !! quantize 9x129 NARROW (parallel vs host): 2 of 9 exponents and 130 of 1161 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize 12x255 NARROW (parallel vs host): 3 of 12 exponents and 511 of 3060 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1000 NARROW (parallel vs host): 4 of 9 exponents and 3000 of 9000 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1000 WIDE (parallel vs host): 3 of 9 exponents and 2001 of 9000 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1023 NARROW (parallel vs host): 4 of 9 exponents and 3069 of 9207 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 81 want 0
+   !! quantize 9x1023 WIDE (parallel vs host): 3 of 9 exponents and 2047 of 9207 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 81 want 0
+   !! quantize 16x1024 NARROW (parallel vs host): 2 of 16 exponents and 1025 of 16384 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -7 want 0
+   !! quantize 16x1024 WIDE (parallel vs host): 4 of 16 exponents and 3072 of 16384 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -7 want 0
+   !! quantize 9x4096 NARROW (parallel vs host): 2 of 9 exponents and 4097 of 36864 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -14 want 0
+   !! quantize 9x4096 WIDE (parallel vs host): 2 of 9 exponents and 4097 of 36864 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -14 want 0
+   !! quantize 9x14336 NARROW (parallel vs host): 3 of 9 exponents and 28672 of 129024 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize 9x14336 WIDE (parallel vs host): 4 of 9 exponents and 43008 of 129024 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   quantizer: 36 cases, 12 failed
+!! GATE FAILED: check_par_quantizer_matches
+   12 of 36 quantizer cases differ; first: quantize 9x129 NARROW (parallel vs host): 2 of 9 exponents and 130 of 1161 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize and multiply 3x70x1000 (device vs oracle): 73 of 210 cells differ; first at 1 got -127.578125/0x0xc2ff2800 want 499712.0/0x0x48f40000
+   !! quantize and multiply 33x129x4096 (device vs oracle): 157 of 4257 cells differ; first at 1 got 2730.8438/0x0x452aad80 want 6371328.0/0x0x4ac27000
+   quantize-and-multiply: 4 cases, 2 failed
+!! GATE FAILED: check_par_quantizer_feeds_the_product
+   2 of 4 quantize-and-multiply cases differ; first: quantize and multiply 3x70x1000 (device vs oracle): 73 of 210 cells differ; first at 1 got -127.578125/0x0xc2ff2800 want 499712.0/0x0x48f40000
+== 2 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 2 gates failed
+/root/mojolearn-wt/steward-do-amd/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== quant-value-sabotage.log
+✨ Pixi task (check-quantize-int8-par-value-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: amd  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   !! quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x1 WIDE (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x5 NARROW (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 9x5 WIDE (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 10x32 NARROW (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 10x32 WIDE (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 9x129 NARROW (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x129 WIDE (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 12x255 NARROW (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 12x255 WIDE (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 9x1000 NARROW (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1000 WIDE (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1023 NARROW (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 9x1023 WIDE (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 16x1024 NARROW (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 16x1024 WIDE (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x4096 NARROW (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 9x4096 WIDE (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 11x4097 NARROW (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 11x4097 WIDE (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 9x14336 NARROW (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 9x14336 WIDE (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 300x96 NARROW (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   !! quantize 300x96 WIDE (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   quantizer: 36 cases, 24 failed
+!! GATE FAILED: check_par_quantizer_matches
+   24 of 36 quantizer cases differ; first: quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+   !! quantize and multiply 33x129x4096 (device vs oracle): 4257 of 4257 cells differ; first at 0 got 1101.5939/0x0x4489b301 want 1096.2344/0x0x44890780
+   !! quantize and multiply 1x300x4097 (device vs oracle): 300 of 300 cells differ; first at 0 got -2797.1721/0x0xc52ed2c1 want -2845.2031/0x0xc531d340
+   !! quantize and multiply 130x17x96 (device vs oracle): 2210 of 2210 cells differ; first at 0 got 329.75003/0x0x43a4e001 want 336.71875/0x0x43a85c00
+   quantize-and-multiply: 4 cases, 4 failed
+!! GATE FAILED: check_par_quantizer_feeds_the_product
+   4 of 4 quantize-and-multiply cases differ; first: quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+== 2 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 2 gates failed
+/root/mojolearn-wt/steward-do-amd/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+gate_job: box=mi325x gate=quant red=0
+######## phase quant-gate on mi325x exit=0, finished 2026-09-29T03:41:57Z
+######## phase quant-price on mi325x, started 2026-09-29T03:41:57Z
+box=mi325x name=quant
+started=2026-09-29T03:41:57Z
+tree_head=3c02e352974343d661dc6634000292c852c78b43 dirty_files=32
+machine=GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+arms=fp32.v1,int8i32.v1.flat,int8i32.v1.mma,int8i32.v1.applechunk,convert.int8.quantize.a,convert.int8.pack.b,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1,training.int8i32.v1,inference.int8i32.v1.parq,training.int8i32.v1.parq,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk,inference.int8i32.v1.applechunk.parq,training.int8i32.v1.applechunk.parq only=all r
+build exit=0
+build-sabotage exit=0
+cold started=2026-09-29T03:42:26Z
+cold exit=0 (the first run after the build: its times are never read)
+price started=2026-09-29T03:42:37Z
+price exit=0 (the run of record)
+cold-vs-record exit=0 (0: the two runs' digests agree at every arm and shape)
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:42:50Z
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column amd
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: mma (lib_int8_matrix_unit_for)
+sabotage: price none  lowbit none  apple chunk none  parallel quantizer none
+repeats 5  mac budget 34359738368  only   arms fp32.v1,int8i32.v1.flat,int8i32.v1.mma,int8i32.v1.applechunk,convert.int8.quantize.a,convert.int8.pack.b,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1,training.int8i32.v1,inference.int8i32.v1.parq,training.int8i32.v1.parq,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk,inference.int8i32.v1.applechunk.parq,trai
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0614 0.0588 273.2045 GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.0769 1.0507 15.5786 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.0484 0.0483 346.5651 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.3449 1.3375 0.0030 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 3.8354 3.8109 4.3743 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 1.4013 1.3811 11.9722 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 5.1827 5.1437 3.2372 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.0211 0.0162 0.1940 Gelem/s 0x54279cbda1444726 per-call,block=1
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.0415 0.0404 404.5627 Gelem/s 0x305b1a502296caf6 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.parq 0.0562 0.0540 298.4208 GMAC/s 0x8a9227b93e430acd quantize.a.par+product
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.parq 0.0879 0.0835 190.7803 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.0820 0.0724 1637.4006 GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 1.1406 1.1292 117.6722 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.0500 0.0498 2684.8915 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.4271 1.4129 0.0230 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8091 3.8011 4.4045 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 1.4888 1.4764 90.1523 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 5.3075 5.2741 25.2884 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.0181 0.0163 1.8154 Gelem/s 0xbd0b5aed2b83cb45 per-call,block=1
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.0454 0.0442 369.2169 Gelem/s 0xa8ce17326c01345 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.parq 0.0567 0.0559 2365.9039 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+product
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.parq 0.0890 0.0861 1507.7255 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 0.9526 0.9451 9017.6603 GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 41.7794 41.7629 205.6023 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 0.2678 0.2654 32074.8541 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.6619 3.6597 0.5727 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.7031 3.6844 4.5306 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 3.9446 3.9098 2177.6700 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 7.4818 7.4769 1148.1173 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.0211 0.0200 99.2547 Gelem/s 0xe8bb3ad105a4ae26 per-call,block=1
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.0455 0.0445 369.0626 Gelem/s 0xd5ea46fdcb251db4 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.parq 0.2748 0.2724 31261.1347 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+product
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.parq 0.3159 0.3148 27187.7252 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1599 0.1589 367.2334 GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 1.0983 1.0828 53.4663 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.0548 0.0535 1071.9287 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3448 1.3399 0.0030 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 4.0811 4.0596 14.3883 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 1.4223 1.4020 41.2843 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 5.4484 5.4125 10.7775 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a.par 0.0172 0.0163 0.2380 Gelem/s 0x1343c750c1ded02 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b.par 0.1149 0.1145 510.9175 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.parq 0.0667 0.0661 881.0241 GMAC/s 0xff302668595b02d quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.parq 0.1673 0.1656 351.0738 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.1658 0.1648 2833.4935 GMAC/s 0x7b30465d325906e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.8872 2.8834 162.7048 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.0650 0.0621 7229.3328 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.4467 1.4420 0.0227 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 4.1076 4.0765 14.2956 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 1.5237 1.5213 308.3041 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 5.5324 5.5006 84.9112 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a.par 0.0171 0.0168 1.9185 Gelem/s 0x5e46321f760ef85d per-call,block=1
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b.par 0.1124 0.1109 522.4687 Gelem/s 0xa9e079afde494e3d once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.parq 0.0716 0.0709 6560.0063 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.parq 0.1689 0.1667 2782.1264 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 2.5295 2.5240 11885.5449 GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 151.1694 151.0888 198.8813 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 0.8904 0.8885 33765.1628 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.8893 3.7354 0.5392 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 4.1743 4.1385 14.0669 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 4.6929 4.6224 6406.3803 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 8.8649 8.6868 3391.4306 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a.par 0.0200 0.0194 104.9153 Gelem/s 0x8c503fb082856006 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b.par 0.1132 0.1093 518.5057 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.parq 0.9248 0.9069 32509.2031 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.parq 1.0478 1.0265 28693.5905 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1508 0.1496 389.4174 GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 3.7615 3.7376 15.6110 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.1367 0.1355 429.5242 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.7451 4.6438 0.0030 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.9080 13.7208 4.2221 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 4.9227 4.8399 11.9285 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 18.7519 18.6225 3.1314 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a.par 0.0294 0.0271 0.4881 Gelem/s 0x160d734878c0f458 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b.par 0.1229 0.1203 477.9834 Gelem/s 0x31274090cc79ba2f once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.parq 0.1722 0.1718 340.9825 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.parq 0.2781 0.2749 211.1791 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.1902 0.1894 2469.3257 GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 3.7495 3.7418 125.2882 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.1437 0.1422 3268.5920 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 5.1222 5.0934 0.0224 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 14.0403 13.8916 4.1823 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 5.3189 5.2496 88.3197 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 19.1789 19.0928 24.4936 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a.par 0.0296 0.0279 3.8732 Gelem/s 0xbb4f2a7232392bfe per-call,block=1
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b.par 0.1262 0.1235 465.4796 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.parq 0.1772 0.1739 2651.0423 GMAC/s 0x694aafd520fdadad quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.parq 0.2821 0.2789 1665.2973 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 2.5925 2.5604 11596.8974 GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 139.3887 138.9228 215.6901 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 0.8488 0.8470 35418.6967 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 13.3351 13.3256 0.5504 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.6360 13.6213 4.3063 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 14.2304 14.1999 2112.7183 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 27.2081 27.2024 1104.9934 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a.par 0.0354 0.0339 207.5801 Gelem/s 0x903f6ff84c6082 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b.par 0.1229 0.1192 477.8667 Gelem/s 0xa046020a81d05746 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.parq 0.8918 0.8870 33712.4970 GMAC/s 0x6120545eacb068ad quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.parq 1.0516 1.0359 28589.6047 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.6071 1.5436 326.8895 GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 6.2839 6.0864 83.6004 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.2788 0.2760 1884.2167 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3683 1.3499 0.0030 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 15.7357 15.6259 33.3850 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 1.6538 1.6509 317.6529 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 17.4058 17.3267 30.1816 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a.par 0.0185 0.0169 0.2214 Gelem/s 0x67d2e298b047bf2b per-call,block=1
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b.par 0.8532 0.8491 615.7546 Gelem/s 0x1c75800d0b1054bd once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.parq 0.2928 0.2919 1793.9985 GMAC/s 0xe0222b2f9de835ed quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.parq 1.1552 1.1511 454.7475 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 1.6544 1.4092 2540.3476 GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 47.1462 45.9099 89.1417 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 0.3288 0.3251 12783.0782 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.4441 1.4306 0.0227 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 16.0919 15.8587 32.6461 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 1.7837 1.7685 2356.1577 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 17.7314 17.4311 237.0202 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a.par 0.0210 0.0192 1.5574 Gelem/s 0x443be8ad16d189a3 per-call,block=1
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b.par 0.8534 0.8518 615.5742 Gelem/s 0x8e01af3f075298bb once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.parq 0.3420 0.3332 12288.6108 GMAC/s 0x8151fd05ff287a5d quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.parq 1.2100 1.2010 3473.3083 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 2.8671 2.8357 11726.5696 GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 249.7247 248.7966 134.6344 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 1.0096 1.0086 33301.5793 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.7850 3.7464 0.5541 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 4.3455 4.2252 15.1117 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 4.8641 4.8514 6912.2097 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 9.0480 8.9703 3715.9032 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a.par 0.0234 0.0220 89.5071 Gelem/s 0xfd89ee79d025dda7 per-call,block=1
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b.par 0.1220 0.1204 538.3429 Gelem/s 0xcc187b17bc36366d once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.parq 1.0446 1.0393 32186.7212 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.parq 1.2004 1.1885 28009.6179 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+
+== done [IDENTICAL]: 12 shapes ==
+== cold against the run of record
+compared 132, differ 0
+VERDICT: the two runs agree at every arm and shape compared
+== sabotage verdict
+DISAGREE (expected) llama8b.qkv.t1 fp32.v1: clean 0x920cdd138650a8bd sabotage 0x920cdc138650a70a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.flat: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.mma: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a.par: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b.par: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t8 fp32.v1: clean 0xd5677d8a13939709 sabotage 0xd5677c8a13939556
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.flat: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.mma: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a.par: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b.par: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t512 fp32.v1: clean 0x67d3d940546b834c sabotage 0x67d3da40546b84ff
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.flat: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.mma: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a.par: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b.par: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+sabotage comparison: 33 compared, 33 differed, 0 did not, 0 not compared
+VERDICT: the sabotage arm was seen at every arm and shape compared
+== the lever table
+# lane/lowbit-mma-speed: time and rate per arm
+
+Written by `tools/lowbit_mma_speed/table.py --levers`. `over` is the arm's median
+over fp32.v1's at the same shape on the same box; above 1 the arm took longer.
+One run per box; the median of the timed calls, the minimum beside it.
+An arm named `probe.*` computes a WRONG product on purpose (a part of a kernel,
+timed alone): it has no identity and is no plan.
+
+## mi325x
+
+### llama8b.qkv.t1 (m=1 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.0614 | 0.0588 | 273.2 | GMAC/s | 1.000 | 0x920cdd138650a8bd | plan=13 |
+| int8i32.v1.flat | 1.0769 | 1.0507 | 15.6 | GMAC/s | 17.539 | 0x8a9227b93e430acd | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.0484 | 0.0483 | 346.6 | GMAC/s | 0.788 | 0x8a9227b93e430acd | dispatched |
+| convert.int8.quantize.a | 1.3449 | 1.3375 | 0.0 | Gelem/s | 21.904 | 0x54279cbda1444726 | per-call |
+| convert.int8.pack.b | 3.8354 | 3.8109 | 4.4 | Gelem/s | 62.466 | 0x305b1a502296caf6 | once-per-weight |
+| inference.int8i32.v1 | 1.4013 | 1.3811 | 12.0 | GMAC/s | 22.822 | 0x8a9227b93e430acd | quantize.a+product |
+| training.int8i32.v1 | 5.1827 | 5.1437 | 3.2 | GMAC/s | 84.409 | 0x8a9227b93e430acd | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0211 | 0.0162 | 0.2 | Gelem/s | 0.344 | 0x54279cbda1444726 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.0415 | 0.0404 | 404.6 | Gelem/s | 0.676 | 0x305b1a502296caf6 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.0562 | 0.0540 | 298.4 | GMAC/s | 0.915 | 0x8a9227b93e430acd | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.0879 | 0.0835 | 190.8 | GMAC/s | 1.432 | 0x8a9227b93e430acd | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 3.153 | 25.057 | 3.497 | 87.523 | 4.173 |
+
+### llama8b.qkv.t8 (m=8 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.0820 | 0.0724 | 1637.4 | GMAC/s | 1.000 | 0xd5677d8a13939709 | plan=14 |
+| int8i32.v1.flat | 1.1406 | 1.1292 | 117.7 | GMAC/s | 13.910 | 0x484bd20aabe66ee5 | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.0500 | 0.0498 | 2684.9 | GMAC/s | 0.610 | 0x484bd20aabe66ee5 | dispatched |
+| convert.int8.quantize.a | 1.4271 | 1.4129 | 0.0 | Gelem/s | 17.404 | 0xbd0b5aed2b83cb45 | per-call |
+| convert.int8.pack.b | 3.8091 | 3.8011 | 4.4 | Gelem/s | 46.452 | 0xa8ce17326c01345 | once-per-weight |
+| inference.int8i32.v1 | 1.4888 | 1.4764 | 90.2 | GMAC/s | 18.156 | 0x484bd20aabe66ee5 | quantize.a+product |
+| training.int8i32.v1 | 5.3075 | 5.2741 | 25.3 | GMAC/s | 64.726 | 0x484bd20aabe66ee5 | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0181 | 0.0163 | 1.8 | Gelem/s | 0.221 | 0xbd0b5aed2b83cb45 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.0454 | 0.0442 | 369.2 | Gelem/s | 0.554 | 0xa8ce17326c01345 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.0567 | 0.0559 | 2365.9 | GMAC/s | 0.691 | 0x484bd20aabe66ee5 | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.0890 | 0.0861 | 1507.7 | GMAC/s | 1.085 | 0x484bd20aabe66ee5 | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 2.439 | 19.843 | 2.660 | 66.295 | 3.213 |
+
+### llama8b.qkv.t512 (m=512 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.9526 | 0.9451 | 9017.7 | GMAC/s | 1.000 | 0x67d3d940546b834c | plan=10 |
+| int8i32.v1.flat | 41.7794 | 41.7629 | 205.6 | GMAC/s | 43.858 | 0xa5f2ce1f1b9a0ebd | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.2678 | 0.2654 | 32074.9 | GMAC/s | 0.281 | 0xa5f2ce1f1b9a0ebd | dispatched |
+| convert.int8.quantize.a | 3.6619 | 3.6597 | 0.6 | Gelem/s | 3.844 | 0xe8bb3ad105a4ae26 | per-call |
+| convert.int8.pack.b | 3.7031 | 3.6844 | 4.5 | Gelem/s | 3.887 | 0xd5ea46fdcb251db4 | once-per-weight |
+| inference.int8i32.v1 | 3.9446 | 3.9098 | 2177.7 | GMAC/s | 4.141 | 0xa5f2ce1f1b9a0ebd | quantize.a+product |
+| training.int8i32.v1 | 7.4818 | 7.4769 | 1148.1 | GMAC/s | 7.854 | 0xa5f2ce1f1b9a0ebd | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0211 | 0.0200 | 99.3 | Gelem/s | 0.022 | 0xe8bb3ad105a4ae26 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.0455 | 0.0445 | 369.1 | Gelem/s | 0.048 | 0xd5ea46fdcb251db4 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.2748 | 0.2724 | 31261.1 | GMAC/s | 0.288 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.3159 | 0.3148 | 27187.7 | GMAC/s | 0.332 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.125 | 4.969 | 1.147 | 8.856 | 1.194 |
+
+### llama8b.mlp_up.t1 (m=1 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.1599 | 0.1589 | 367.2 | GMAC/s | 1.000 | 0x4965ea6af2ff5e61 | plan=13 |
+| int8i32.v1.flat | 1.0983 | 1.0828 | 53.5 | GMAC/s | 6.869 | 0xff302668595b02d | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.0548 | 0.0535 | 1071.9 | GMAC/s | 0.343 | 0xff302668595b02d | dispatched |
+| convert.int8.quantize.a | 1.3448 | 1.3399 | 0.0 | Gelem/s | 8.410 | 0x1343c750c1ded02 | per-call |
+| convert.int8.pack.b | 4.0811 | 4.0596 | 14.4 | Gelem/s | 25.523 | 0x9dd5dd0e7f10b4d0 | once-per-weight |
+| inference.int8i32.v1 | 1.4223 | 1.4020 | 41.3 | GMAC/s | 8.895 | 0xff302668595b02d | quantize.a+product |
+| training.int8i32.v1 | 5.4484 | 5.4125 | 10.8 | GMAC/s | 34.074 | 0xff302668595b02d | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0172 | 0.0163 | 0.2 | Gelem/s | 0.108 | 0x1343c750c1ded02 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1149 | 0.1145 | 510.9 | Gelem/s | 0.719 | 0x9dd5dd0e7f10b4d0 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.0667 | 0.0661 | 881.0 | GMAC/s | 0.417 | 0xff302668595b02d | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.1673 | 0.1656 | 351.1 | GMAC/s | 1.046 | 0xff302668595b02d | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.371 | 9.781 | 1.478 | 35.304 | 2.197 |
+
+### llama8b.mlp_up.t8 (m=8 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.1658 | 0.1648 | 2833.5 | GMAC/s | 1.000 | 0x7b30465d325906e | plan=14 |
+| int8i32.v1.flat | 2.8872 | 2.8834 | 162.7 | GMAC/s | 17.414 | 0xbd4b3a783f9d9a0d | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.0650 | 0.0621 | 7229.3 | GMAC/s | 0.392 | 0xbd4b3a783f9d9a0d | dispatched |
+| convert.int8.quantize.a | 1.4467 | 1.4420 | 0.0 | Gelem/s | 8.726 | 0x5e46321f760ef85d | per-call |
+| convert.int8.pack.b | 4.1076 | 4.0765 | 14.3 | Gelem/s | 24.774 | 0xa9e079afde494e3d | once-per-weight |
+| inference.int8i32.v1 | 1.5237 | 1.5213 | 308.3 | GMAC/s | 9.190 | 0xbd4b3a783f9d9a0d | quantize.a+product |
+| training.int8i32.v1 | 5.5324 | 5.5006 | 84.9 | GMAC/s | 33.368 | 0xbd4b3a783f9d9a0d | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0171 | 0.0168 | 1.9 | Gelem/s | 0.103 | 0x5e46321f760ef85d | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1124 | 0.1109 | 522.5 | Gelem/s | 0.678 | 0xa9e079afde494e3d | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.0716 | 0.0709 | 6560.0 | GMAC/s | 0.432 | 0xbd4b3a783f9d9a0d | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.1689 | 0.1667 | 2782.1 | GMAC/s | 1.019 | 0xbd4b3a783f9d9a0d | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.568 | 10.294 | 1.671 | 35.068 | 2.349 |
+
+### llama8b.mlp_up.t512 (m=512 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 2.5295 | 2.5240 | 11885.5 | GMAC/s | 1.000 | 0x27a166783c45f9f0 | plan=10 |
+| int8i32.v1.flat | 151.1694 | 151.0888 | 198.9 | GMAC/s | 59.763 | 0x220ff5fe96f5ef55 | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.8904 | 0.8885 | 33765.2 | GMAC/s | 0.352 | 0x220ff5fe96f5ef55 | dispatched |
+| convert.int8.quantize.a | 3.8893 | 3.7354 | 0.5 | Gelem/s | 1.538 | 0x8c503fb082856006 | per-call |
+| convert.int8.pack.b | 4.1743 | 4.1385 | 14.1 | Gelem/s | 1.650 | 0xf8c1486c6aaba4c1 | once-per-weight |
+| inference.int8i32.v1 | 4.6929 | 4.6224 | 6406.4 | GMAC/s | 1.855 | 0x220ff5fe96f5ef55 | quantize.a+product |
+| training.int8i32.v1 | 8.8649 | 8.6868 | 3391.4 | GMAC/s | 3.505 | 0x220ff5fe96f5ef55 | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0200 | 0.0194 | 104.9 | Gelem/s | 0.008 | 0x8c503fb082856006 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1132 | 0.1093 | 518.5 | Gelem/s | 0.045 | 0xf8c1486c6aaba4c1 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.9248 | 0.9069 | 32509.2 | GMAC/s | 0.366 | 0x220ff5fe96f5ef55 | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.0478 | 1.0265 | 28693.6 | GMAC/s | 0.414 | 0x220ff5fe96f5ef55 | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.408 | 2.946 | 1.416 | 4.596 | 1.461 |
+
+### llama8b.mlp_down.t1 (m=1 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.1508 | 0.1496 | 389.4 | GMAC/s | 1.000 | 0x4efb8e54c724fa9 | plan=13 |
+| int8i32.v1.flat | 3.7615 | 3.7376 | 15.6 | GMAC/s | 24.944 | 0x1ffdde3ffffb72c9 | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.1367 | 0.1355 | 429.5 | GMAC/s | 0.906 | 0x1ffdde3ffffb72c9 | dispatched |
+| convert.int8.quantize.a | 4.7451 | 4.6438 | 0.0 | Gelem/s | 31.466 | 0x160d734878c0f458 | per-call |
+| convert.int8.pack.b | 13.9080 | 13.7208 | 4.2 | Gelem/s | 92.228 | 0x31274090cc79ba2f | once-per-weight |
+| inference.int8i32.v1 | 4.9227 | 4.8399 | 11.9 | GMAC/s | 32.644 | 0x1ffdde3ffffb72c9 | quantize.a+product |
+| training.int8i32.v1 | 18.7519 | 18.6225 | 3.1 | GMAC/s | 124.349 | 0x1ffdde3ffffb72c9 | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0294 | 0.0271 | 0.5 | Gelem/s | 0.195 | 0x160d734878c0f458 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1229 | 0.1203 | 478.0 | Gelem/s | 0.815 | 0x31274090cc79ba2f | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.1722 | 0.1718 | 341.0 | GMAC/s | 1.142 | 0x1ffdde3ffffb72c9 | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.2781 | 0.2749 | 211.2 | GMAC/s | 1.844 | 0x1ffdde3ffffb72c9 | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 3.626 | 35.092 | 3.821 | 127.320 | 4.636 |
+
+### llama8b.mlp_down.t8 (m=8 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 0.1902 | 0.1894 | 2469.3 | GMAC/s | 1.000 | 0xfb21004541ae3e8e | plan=14 |
+| int8i32.v1.flat | 3.7495 | 3.7418 | 125.3 | GMAC/s | 19.713 | 0x694aafd520fdadad | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.1437 | 0.1422 | 3268.6 | GMAC/s | 0.756 | 0x694aafd520fdadad | dispatched |
+| convert.int8.quantize.a | 5.1222 | 5.0934 | 0.0 | Gelem/s | 26.931 | 0xbb4f2a7232392bfe | per-call |
+| convert.int8.pack.b | 14.0403 | 13.8916 | 4.2 | Gelem/s | 73.819 | 0x4b12dcda2ab9acd4 | once-per-weight |
+| inference.int8i32.v1 | 5.3189 | 5.2496 | 88.3 | GMAC/s | 27.965 | 0x694aafd520fdadad | quantize.a+product |
+| training.int8i32.v1 | 19.1789 | 19.0928 | 24.5 | GMAC/s | 100.835 | 0x694aafd520fdadad | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0296 | 0.0279 | 3.9 | Gelem/s | 0.156 | 0xbb4f2a7232392bfe | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1262 | 0.1235 | 465.5 | Gelem/s | 0.664 | 0x4b12dcda2ab9acd4 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.1772 | 0.1739 | 2651.0 | GMAC/s | 0.932 | 0x694aafd520fdadad | quantize.a.par+product |
+| training.int8i32.v1.parq | 0.2821 | 0.2789 | 1665.3 | GMAC/s | 1.483 | 0x694aafd520fdadad | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 3.022 | 29.953 | 3.178 | 103.771 | 3.841 |
+
+### llama8b.mlp_down.t512 (m=512 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 2.5925 | 2.5604 | 11596.9 | GMAC/s | 1.000 | 0x4743c97cb961339e | plan=10 |
+| int8i32.v1.flat | 139.3887 | 138.9228 | 215.7 | GMAC/s | 53.766 | 0x6120545eacb068ad | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.8488 | 0.8470 | 35418.7 | GMAC/s | 0.327 | 0x6120545eacb068ad | dispatched |
+| convert.int8.quantize.a | 13.3351 | 13.3256 | 0.6 | Gelem/s | 5.144 | 0x903f6ff84c6082 | per-call |
+| convert.int8.pack.b | 13.6360 | 13.6213 | 4.3 | Gelem/s | 5.260 | 0xa046020a81d05746 | once-per-weight |
+| inference.int8i32.v1 | 14.2304 | 14.1999 | 2112.7 | GMAC/s | 5.489 | 0x6120545eacb068ad | quantize.a+product |
+| training.int8i32.v1 | 27.2081 | 27.2024 | 1105.0 | GMAC/s | 10.495 | 0x6120545eacb068ad | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0354 | 0.0339 | 207.6 | Gelem/s | 0.014 | 0x903f6ff84c6082 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1229 | 0.1192 | 477.9 | Gelem/s | 0.047 | 0xa046020a81d05746 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.8918 | 0.8870 | 33712.5 | GMAC/s | 0.344 | 0x6120545eacb068ad | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.0516 | 1.0359 | 28589.6 | GMAC/s | 0.406 | 0x6120545eacb068ad | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.310 | 6.453 | 1.323 | 11.713 | 1.371 |
+
+### llama8b.lm_head.t1 (m=1 n=128256 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 1.6071 | 1.5436 | 326.9 | GMAC/s | 1.000 | 0xcdc134cbce391535 | plan=13 |
+| int8i32.v1.flat | 6.2839 | 6.0864 | 83.6 | GMAC/s | 3.910 | 0xe0222b2f9de835ed | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.2788 | 0.2760 | 1884.2 | GMAC/s | 0.173 | 0xe0222b2f9de835ed | dispatched |
+| convert.int8.quantize.a | 1.3683 | 1.3499 | 0.0 | Gelem/s | 0.851 | 0x67d2e298b047bf2b | per-call |
+| convert.int8.pack.b | 15.7357 | 15.6259 | 33.4 | Gelem/s | 9.791 | 0x1c75800d0b1054bd | once-per-weight |
+| inference.int8i32.v1 | 1.6538 | 1.6509 | 317.7 | GMAC/s | 1.029 | 0xe0222b2f9de835ed | quantize.a+product |
+| training.int8i32.v1 | 17.4058 | 17.3267 | 30.2 | GMAC/s | 10.831 | 0xe0222b2f9de835ed | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0185 | 0.0169 | 0.2 | Gelem/s | 0.012 | 0x67d2e298b047bf2b | per-call,block=1 |
+| convert.int8.pack.b.par | 0.8532 | 0.8491 | 615.8 | Gelem/s | 0.531 | 0x1c75800d0b1054bd | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.2928 | 0.2919 | 1794.0 | GMAC/s | 0.182 | 0xe0222b2f9de835ed | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.1552 | 1.1511 | 454.7 | GMAC/s | 0.719 | 0xe0222b2f9de835ed | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 0.694 | 1.545 | 0.705 | 11.337 | 1.236 |
+
+### llama8b.lm_head.t8 (m=8 n=128256 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 1.6544 | 1.4092 | 2540.3 | GMAC/s | 1.000 | 0x3ebab59d0da21444 | plan=14 |
+| int8i32.v1.flat | 47.1462 | 45.9099 | 89.1 | GMAC/s | 28.497 | 0x8151fd05ff287a5d | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 0.3288 | 0.3251 | 12783.1 | GMAC/s | 0.199 | 0x8151fd05ff287a5d | dispatched |
+| convert.int8.quantize.a | 1.4441 | 1.4306 | 0.0 | Gelem/s | 0.873 | 0x443be8ad16d189a3 | per-call |
+| convert.int8.pack.b | 16.0919 | 15.8587 | 32.6 | Gelem/s | 9.727 | 0x8e01af3f075298bb | once-per-weight |
+| inference.int8i32.v1 | 1.7837 | 1.7685 | 2356.2 | GMAC/s | 1.078 | 0x8151fd05ff287a5d | quantize.a+product |
+| training.int8i32.v1 | 17.7314 | 17.4311 | 237.0 | GMAC/s | 10.718 | 0x8151fd05ff287a5d | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0210 | 0.0192 | 1.6 | Gelem/s | 0.013 | 0x443be8ad16d189a3 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.8534 | 0.8518 | 615.6 | Gelem/s | 0.516 | 0x8e01af3f075298bb | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 0.3420 | 0.3332 | 12288.6 | GMAC/s | 0.207 | 0x8151fd05ff287a5d | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.2100 | 1.2010 | 3473.3 | GMAC/s | 0.731 | 0x8151fd05ff287a5d | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 0.795 | 1.668 | 0.808 | 11.395 | 1.324 |
+
+### llama8b.lm_head.t512 (m=512 n=16032 k=4096, CAPPED)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 2.8671 | 2.8357 | 11726.6 | GMAC/s | 1.000 | 0x84fd143bb625cf70 | plan=10 |
+| int8i32.v1.flat | 249.7247 | 248.7966 | 134.6 | GMAC/s | 87.100 | 0xaae4f3d3c69453cd | not-dispatched(the-column-has-the-unit) |
+| int8i32.v1.mma | 1.0096 | 1.0086 | 33301.6 | GMAC/s | 0.352 | 0xaae4f3d3c69453cd | dispatched |
+| convert.int8.quantize.a | 3.7850 | 3.7464 | 0.6 | Gelem/s | 1.320 | 0xfd89ee79d025dda7 | per-call |
+| convert.int8.pack.b | 4.3455 | 4.2252 | 15.1 | Gelem/s | 1.516 | 0xcc187b17bc36366d | once-per-weight |
+| inference.int8i32.v1 | 4.8641 | 4.8514 | 6912.2 | GMAC/s | 1.697 | 0xaae4f3d3c69453cd | quantize.a+product |
+| training.int8i32.v1 | 9.0480 | 8.9703 | 3715.9 | GMAC/s | 3.156 | 0xaae4f3d3c69453cd | quantize.a+pack.b+product |
+| convert.int8.quantize.a.par | 0.0234 | 0.0220 | 89.5 | Gelem/s | 0.008 | 0xfd89ee79d025dda7 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.1220 | 0.1204 | 538.3 | Gelem/s | 0.043 | 0xcc187b17bc36366d | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 1.0446 | 1.0393 | 32186.7 | GMAC/s | 0.364 | 0xaae4f3d3c69453cd | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.2004 | 1.1885 | 28009.6 | GMAC/s | 0.419 | 0xaae4f3d3c69453cd | quantize.a.par+pack.b.par+product |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+THE TARGET: four products of a unit plan plus the conversions, over ONE
+fp32.v1 product. A SUM OF MEDIANS of arms timed alone, not one measured
+operation; the conversions are the int8 quantizer's (the 15-bit profile's own
+split and recombination are lane/lowbit-int15's and are not in it).
+
+| unit plan | 4 products | + quantize A (reference) | + quantize A (parallel) | + quantize A and B (reference) | + quantize A and B (parallel) |
+|---|---:|---:|---:|---:|---:|
+| int8i32.v1.mma | 1.409 | 2.729 | 1.417 | 4.244 | 1.459 |
+
+Not run on this box: bf16f32.v1.fused, bf16f32.v1.widen, convert.bf16.pack.b, convert.bf16.widen.b, convert.int8.dequantize.b, inference.bf16f32.v1, inference.int8i32.v1.applechunk, inference.int8i32.v1.applechunk.parq, int8i32.v1.applechunk, training.bf16f32.v1, training.int8i32.v1.applechunk, training.int8i32.v1.applechunk.parq.
+price_job: box=mi325x name=quant red=0
+######## phase quant-price on mi325x exit=0, finished 2026-09-29T03:42:50Z
+box_job: box=mi325x phases: quant-gate=0 quant-price=0 red=0

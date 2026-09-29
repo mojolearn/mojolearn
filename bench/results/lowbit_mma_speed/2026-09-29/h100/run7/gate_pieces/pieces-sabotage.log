@@ -1,0 +1,651 @@
+✨ Pixi task (check-gemm-int8-pieces-tuned-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_PIECES_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo
+339434 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a1000000000, nodemask=2)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:701:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:242:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:241:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:240:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+339434 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71c740000000, nodemask=1)
+== gemm/checks/gemm_int8_pieces_tuned_check.mojo [IDENTICAL]  sabotage: MIDDLE_TAKES_HL_TWICE ==
+   four int8 products of two-plane operands, one staging; three Int32 sums per cell
+   column: nvidia
+   plan 0: staged.w16x16.b32x32.k64.l16
+   plan 1: staged.w16x32.b64x128.k64.l16
+   plan 2: staged.w32x32.b64x128.k64.l16
+   plan 3: staged.w16x16.b64x64.k64.l16
+   plan 4: staged.w16x32.b128x64.k32.l16
+   plan 5: staged.w16x32.b256x32.k32.l16
+   plan 6: staged.w16x16.b256x16.k32.l16
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces 3x5x17 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 3x5x17 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got 55894 want 45019
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got -26420 want 29998
+   !! int8 pieces 17x33x31 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 17x33x31 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 42700 want 29486
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 60774 want 3415
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 561 of 1683 sums differ; first HL+LH of cell (0, 0) got 93030 want 9047
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -60800 want -13121
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 47 of 141 sums differ; first HL+LH of cell (0, 0) got -52352 want -31681
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -173044 want -381927
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 3500 of 10500 sums differ; first HL+LH of cell (0, 0) got -451572 want -236263
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -468316 want -1071870
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 273 of 819 sums differ; first HL+LH of cell (0, 0) got -667484 want -933118
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 110396 want 71094
+   !! int8 pieces 2x16x32 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 2x16x32 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 32 of 96 sums differ; first HL+LH of cell (0, 0) got 572 want 11318
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 4492 want -39642
+   !! int8 pieces 100x3x64 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 100x3x64 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 300 of 900 sums differ; first HL+LH of cell (0, 0) got 5772 want 55846
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 8384 of 25155 sums differ; first HL+LH of cell (0, 0) got -15486 want 11971
+   !! int8 pieces 65x129x63 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 65x129x63 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -638 want 47683
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -143778 want -73692
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 8001 of 24003 sums differ; first HL+LH of cell (0, 0) got -77474 want -60380
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -226948 want -197449
+   !! int8 pieces 129x65x127 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 129x65x127 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 8385 of 25155 sums differ; first HL+LH of cell (0, 0) got -34436 want -3017
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -27852 want 62270
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 32639 of 97917 sums differ; first HL+LH of cell (0, 0) got -195532 want -191810
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got -106224 want -106907
+   !! int8 pieces 130x255x191 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 130x255x191 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 33150 of 99450 sums differ; first HL+LH of cell (0, 0) got 14608 want 115813
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got 791760 want 25346
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 5100 of 15300 sums differ; first HL+LH of cell (0, 0) got -197424 want -43134
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 707332 want -297806
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 257 of 771 sums differ; first HL+LH of cell (0, 0) got 341508 want 145202
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -813948 want -498695
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 8208 of 24624 sums differ; first HL+LH of cell (0, 0) got -852604 want 25209
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got -424564 want -18873
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 8x128x4096 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 1024 of 3072 sums differ; first HL+LH of cell (0, 0) got 404620 want 229831
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -23642 want -172908
+   !! int8 pieces 128x128x256 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 128x128x256 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 16383 of 49152 sums differ; first HL+LH of cell (0, 0) got -108122 want -90604
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got -8074 want -98944
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 16384 of 49152 sums differ; first HL+LH of cell (0, 0) got 270198 want 180992
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got 60406 want 51246
+   !! int8 pieces 200x40x96 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   !! int8 pieces 200x40x96 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 8000 of 24000 sums differ; first HL+LH of cell (0, 0) got -1546 want -19154
+   shapes: 20, two fixtures each
+   hashed-plane: 320 cases, 280 failed
+!! GATE FAILED: check_pieces_plans_match_flat_and_host
+   280 of 320 hashed-plane cases differ; first: int8 pieces 3x5x17 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 15 of 45 sums differ; first HL+LH of cell (0, 0) got -34730 want -3109
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got -33294592 want -33309696
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-high 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 3) got 2286 want 1143
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-a-low 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 9 of 189 sums differ; first HL+LH of cell (0, 6) got 0 want -381
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 7 of 189 sums differ; first HL+LH of cell (8, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted all-minus-128 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got 134182656 want 134200192
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted high-minus-128-low-plus-127 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 260 of 13065 sums differ; first HL+LH of cell (0, 33) got -133138944 want -133154048
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-high 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 33) got 2286 want 1143
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-a-low 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 65 of 13065 sums differ; first HL+LH of cell (0, 66) got 0 want -381
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (32, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x16.b32x32.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x32.b64x128.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w32x32.b64x128.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x16.b64x64.k64.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x32.b128x64.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x32.b256x32.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 65x67x4096 staged.w16x16.b256x16.k32.l16 (staged vs host): 67 of 13065 sums differ; first HL+LH of cell (64, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 134216448 want 134216192
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got -133167882 want -133169413
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-high 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 65) got 2286 want 1143
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-a-low 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 1 of 390 sums differ; first HL+LH of cell (0, 129) got 0 want -381
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 130 of 390 sums differ; first HL+LH of cell (0, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted all-minus-128 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got 469726976 want 469744512
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted high-minus-128-low-plus-127 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 270 of 3096 sums differ; first HL+LH of cell (0, 64) got -466061824 want -466076928
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-high 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 64) got 2286 want 1143
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-a-low 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 8 of 3096 sums differ; first HL+LH of cell (0, 128) got 0 want -381
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (4, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x16.b32x32.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x32.b64x128.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w32x32.b64x128.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x16.b64x64.k64.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x32.b128x64.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x32.b256x32.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 8x129x14336 staged.w16x16.b256x16.k32.l16 (staged vs host): 129 of 3096 sums differ; first HL+LH of cell (7, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted all-minus-128 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got 2147415808 want 2147433344
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted high-minus-128-low-plus-127 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130643712 want -2130658816
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-a-low 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (0, 2) got 0 want -381
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x16.b32x32.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w32x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x16.b64x64.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x32.b128x64.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x32.b256x32.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 2x3x65535 staged.w16x16.b256x16.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (1, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted all-minus-128 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got 3110656 want 3128192
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted high-minus-128-low-plus-127 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 768 of 99459 sums differ; first HL+LH of cell (0, 128) got -3090944 want -3106048
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-high 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 128) got 2286 want 1143
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-a-low 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 129 of 99459 sums differ; first HL+LH of cell (0, 256) got 0 want -381
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (64, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x16.b32x32.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x32.b64x128.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w32x32.b64x128.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x16.b64x64.k64.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x32.b128x64.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x32.b256x32.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 129x257x96 staged.w16x16.b256x16.k32.l16 (staged vs host): 257 of 99459 sums differ; first HL+LH of cell (128, 0) got 1270 want 635
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got 134313728 want 134331264
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 96 of 1683 sums differ; first HL+LH of cell (0, 16) got -133268992 want -133284096
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-high 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 16) got 2286 want 1143
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-a-low 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 17 of 1683 sums differ; first HL+LH of cell (0, 32) got 0 want -381
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (8, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 33 of 1683 sums differ; first HL+LH of cell (16, 0) got 1270 want 635
+   -- all-minus-128 is not run at k = 65536: its low planes are outside [0, 127]
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x16.b32x32.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w32x32.b64x128.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x16.b64x64.k64.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x32.b128x64.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x32.b256x32.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted high-minus-128-low-plus-127 3x2x65536 staged.w16x16.b256x16.k32.l16 (staged vs host): 5 of 18 sums differ; first HL+LH of cell (0, 1) got -2130676224 want -2130675453
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x16.b32x32.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w32x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x16.b64x64.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x32.b128x64.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x32.b256x32.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-high 3x2x65536 staged.w16x16.b256x16.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 2286 want 1143
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x16.b32x32.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w32x32.b64x128.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x16.b64x64.k64.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x32.b128x64.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x32.b256x32.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-a-low 3x2x65536 staged.w16x16.b256x16.k32.l16 (staged vs host): 3 of 18 sums differ; first HL+LH of cell (0, 1) got 0 want -381
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x16.b32x32.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w32x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x16.b64x64.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x32.b128x64.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x32.b256x32.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-high 3x2x65536 staged.w16x16.b256x16.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (1, 0) got 0 want 889
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x16.b32x32.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w32x32.b64x128.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x16.b64x64.k64.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x32.b128x64.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x32.b256x32.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   !! int8 pieces planted only-b-low 3x2x65536 staged.w16x16.b256x16.k32.l16 (staged vs host): 2 of 18 sums differ; first HL+LH of cell (2, 0) got 1270 want 635
+   planted: 376 cases, 329 failed
+!! GATE FAILED: check_pieces_planted_worst_cases
+   329 of 376 planted cases differ; first: int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 28 of 189 sums differ; first HL+LH of cell (0, 3) got 33552128 want 33569664
+   ok k = 65537 refused by name; bound 65536
+ok check_pieces_refuses_above_its_bound
+== 3 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 3 gates failed
+/root/mojolearn-lowbit-mma-speed/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
