@@ -845,16 +845,53 @@ def box_fingerprint(ctx):
     }
 
 
+def pinned_package_names():
+    """Every library the board pins (the opponents' sets, per family, and
+    torch): their installed versions are part of an NVIDIA resume key."""
+    names = {"torch"}
+    reqs = [r for _, rs in opponent_pins().values() for r in rs]
+    reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
+    reqs += [r for rs in ALGOS.PINS.values() for r in rs]
+    reqs += [r for rs in ALGOS.RAPIDS_EXTRA.values() for r in rs]
+    for r in reqs:
+        m = re.match(r"^([A-Za-z0-9_.-]+)", r)
+        if m:
+            names.add(m.group(1).lower())
+    return sorted(names)
+
+
 def box_key(box):
     """What must not change between a run and its resume: the same box and
     the same library bytes. A board mixing two boxes is the patchwork that
-    produced a wrong CatBoost headline (bench_all_ours.sh)."""
+    produced a wrong CatBoost headline (bench_all_ours.sh).
+
+    NVIDIA (Andrew's orchestrator, 2026-09-29): a shared RunPod pod deletes
+    itself when idle, and each race holds ours and its opponents measured
+    together in one run, so a race is valid on its own. An NVIDIA board
+    therefore resumes on a NEW pod when the GPU model, the driver major
+    version, the wheel and every pinned library version are the same; the
+    hostname is not in its key, and every race records the host it ran on
+    (race_host). A different GPU model refuses: start a new --out. The
+    opponent store keeps its own machine key (a reused opponent must come
+    from the same machine)."""
     w = (box.get("mojolearn") or {}).get("wheel") or {}
-    return {"vendor": (box.get("gpu") or {}).get("vendor"),
-            "gpu": (box.get("gpu") or {}).get("name"),
-            "hostname": (box.get("host") or {}).get("hostname"),
-            "mojolearn": (box.get("mojolearn") or {}).get("version"),
-            "wheel_sha256": w.get("sha256")}
+    gpu = box.get("gpu") or {}
+    key = {"vendor": gpu.get("vendor"),
+           "gpu": gpu.get("name"),
+           "hostname": (box.get("host") or {}).get("hostname"),
+           "mojolearn": (box.get("mojolearn") or {}).get("version"),
+           "wheel_sha256": w.get("sha256")}
+    if gpu.get("vendor") == "nvidia":
+        del key["hostname"]
+        key["driver_major"] = str(gpu.get("driver") or "").split(".")[0] or None
+        pk = box.get("packages") or {}
+        key["pinned"] = {n: pk.get(n) for n in pinned_package_names() if pk.get(n)}
+    return key
+
+
+def race_host():
+    """Where a race ran: the hostname and, on RunPod, the pod id."""
+    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID")}
 
 
 # ---------------------------------------------------------------------------
@@ -2055,6 +2092,7 @@ def _run_race(ctx, race):
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
+    rec["host"] = race_host()
     attach_params(ctx, rec)
     return rec
 
@@ -2362,7 +2400,10 @@ def render_board(result):
                 L.append("### %s / %s (rows %s, shape %s)" % (rr["lane"], rr["dataset"],
                                                              rows_tag(rr["rows"]), _f(shape)))
             L.append("")
-            L.append("race: %s, driver rc %s, log `%s`" % (rr.get("status"), rr.get("rc"), rr.get("log")))
+            rh = rr.get("host") or {"hostname": (box.get("host") or {}).get("hostname")}
+            L.append("race: %s, driver rc %s, log `%s`, ran on %s%s" % (
+                rr.get("status"), rr.get("rc"), rr.get("log"), _f(rh.get("hostname")),
+                " (pod %s)" % rh["pod_id"] if rh.get("pod_id") else ""))
             L.append("")
             L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
                      "ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | peak host MB | "

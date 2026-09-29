@@ -503,6 +503,38 @@ def test_resume_refuses_a_different_box(env):
         _run(env)
 
 
+def _nv_box(host="pod-a", gpu="NVIDIA A40", driver="580.159.04", cuml="26.8.0"):
+    return {"host": {"hostname": host}, "gpu": {"vendor": "nvidia", "name": gpu, "driver": driver},
+            "mojolearn": {"version": "0.8.25", "wheel": {"sha256": "ab"}},
+            "packages": {"cuml-cu12": cuml, "xgboost": "3.2.0", "torch": "2.4.1+cu124",
+                         "unrelated": "1"}}
+
+
+def test_nvidia_resume_key_ignores_the_pod_but_not_the_gpu_driver_or_pins():
+    k = bb.box_key(_nv_box())
+    assert "hostname" not in k
+    assert k["driver_major"] == "580"
+    assert k["pinned"] == {"cuml-cu12": "26.8.0", "xgboost": "3.2.0", "torch": "2.4.1+cu124"}
+    # a new pod with the same GPU model, driver major and pins resumes
+    assert bb.box_key(_nv_box(host="pod-b", driver="580.95.05")) == k
+    # a different GPU model, driver major or pinned version does not
+    assert bb.box_key(_nv_box(gpu="NVIDIA GeForce RTX 4090")) != k
+    assert bb.box_key(_nv_box(driver="570.1")) != k
+    assert bb.box_key(_nv_box(cuml="26.6.0")) != k
+    # every other vendor keeps the hostname
+    apple = {"host": {"hostname": "m3ultra-b"}, "gpu": {"vendor": "apple", "name": "M3 Ultra"}}
+    assert bb.box_key(apple)["hostname"] == "m3ultra-b"
+
+
+def test_races_record_the_host_they_ran_on(env, monkeypatch):
+    monkeypatch.setenv("RUNPOD_POD_ID", "podxyz")
+    assert _run(env) == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    for rec in res["races"].values():
+        assert rec["host"]["pod_id"] == "podxyz" and rec["host"]["hostname"]
+    assert "(pod podxyz)" in (env["out"] / "BOARD.md").read_text()
+
+
 def test_refusal_and_driver_text_never_put_direction_words_on_board(env, monkeypatch):
     monkeypatch.setenv("STUB_REFUSE", "lightgbm-cpu")
     assert _run(env) == 0
