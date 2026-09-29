@@ -53,6 +53,7 @@ sums.
 | Box | Request | Commit | What | Verdict |
 |---|---|---|---|---|
 | MI325X | 1790657510941 | 0a29ffdf3 | amd-gate, full-price (run of record 2), amd-price | gate: clean GREEN, four arms seen failing, byte-path arm RED (fault); full-price GREEN; amd-price did not build |
+| MI325X | 1790659053624 | 72b659823 | lane/lowbit-int15's tuned gate (before its fix was merged here), the fault's reproduction (4 builds x 3 runs, byte path and stated loads) | tuned gate GREEN with this lane's refusal-gate fix (since withdrawn for Lane C's); the fault CAME BACK once in 24 runs (Failures 1) |
 | MI325X | 1790658495381 | 6153fb859 | Lane D's unit and pieces gates (the AMD column), amd-gate, amd-price on the new dispatch, int15 tuned gate, int15 price | every lowbit-mma-speed and AMD gate GREEN with every arm as expected; amd-price GREEN (1380 of 1380 cold == record, 345 of 345 sabotage seen); int15 tuned gate RED at the stale refusal gate only; int15 price GREEN (372 digests warm == timed, sabotage seen) |
 | MI325X | 1790657862351 | 6c6f2bb88 | amd-gate, amd-price (every plan of both files, run 3 of the shared arms), lane/lowbit-int15's tuned gate | amd-gate GREEN with all six arms as expected (byte-path arm passed); amd-price GREEN: cold == record at 1380 of 1380, sabotage seen at 345 of 345; int15 tuned gate RED (Failures 3) |
 
