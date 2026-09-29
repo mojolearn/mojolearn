@@ -158,7 +158,7 @@ if [ "$WHICH" = amd ]; then
         must_name amd-value-sabotage "$g"
     done
     must_pass amd-value-sabotage check_amd_pieces_refuses_above_its_bound
-    run amd-unstated pass amd_check -D MOJOLEARN_INT8_TUNED_UNSTATED=1
+    run amd-unstated pass amd_check -D MOJOLEARN_INT8_TUNED_UNSTATED=1 -D MOJOLEARN_INT8_AMD_TRACE=1
     for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES check_amd_dispatch_is_batch_invariant; do
         must_pass amd-unstated "$g"
     done

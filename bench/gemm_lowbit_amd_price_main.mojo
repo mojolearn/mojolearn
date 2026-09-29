@@ -244,11 +244,11 @@ def _runs(arm: Int) -> Bool:
     return INT8_AMD_AVAILABLE
 
 
-def _launch_floor_kernel(out: MutPointer[Float32, MutAnyOrigin]):
+def _launch_floor_kernel(cell: MutPointer[Float32, MutAnyOrigin]):
     """One cell, stored by one thread of one block."""
     if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
         return
-    out.unsafe_store(0, Float32(1.0))
+    cell.unsafe_store(0, Float32(1.0))
 
 
 def _enqueue(

@@ -52,7 +52,7 @@ not a pass.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
-from std.sys import has_accelerator
+from std.sys import has_accelerator, is_defined
 
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import numeric_mode_name
@@ -135,6 +135,16 @@ comptime HAS_AMD = INT8_AMD_AVAILABLE
 comptime REACH_DIRECT = INT8_AMD_SABOTAGE
 comptime REACH_STAGED = INT8_TUNED_SABOTAGE
 
+#: `-D MOJOLEARN_INT8_AMD_TRACE=1`: every launch is named on stdout, flushed,
+#: before it is enqueued, so a launch that faults the device (the process
+#: dies with no line of its own, job 1790657510941) is the last one named.
+comptime INT8_AMD_TRACE = is_defined["MOJOLEARN_INT8_AMD_TRACE"]()
+
+
+def _trace(what: String):
+    comptime if INT8_AMD_TRACE:
+        print("   launch " + what, flush=True)
+
 
 struct Reach(Movable):
     """What a scheduling arm did against what it can do: the cases it could
@@ -204,6 +214,7 @@ def _run_every_amd_plan(
     var deb = _upload_i32(ctx, eb)
     var dflat = _poisoned(ctx, m * n)
     var dref = _poisoned(ctx, m * n)
+    _trace(tag + " flat and reference")
     identical_gemm_int8_flat_into(ctx, dflat, dqa, dea, dqb, deb, m, n, k)
     identical_gemm_int8_mma_into(ctx, dref, dqa, dea, dqb, deb, m, n, k)
     ctx.synchronize()
@@ -218,6 +229,7 @@ def _run_every_amd_plan(
         # A launch the device refuses is a failed case of THAT plan, named,
         # and the plans after it still run.
         try:
+            _trace(ptag)
             identical_gemm_int8_mma_amd_with_plan(
                 ctx, dc, dqa, dea, dqb, deb, m, n, k, plan
             )
@@ -453,6 +465,7 @@ def _run_every_amd_pieces_plan(
     var dflat = _poisoned_sums(ctx, 3 * m * n)
     var verdict: String
     try:
+        _trace(tag + " pieces flat")
         identical_gemm_int8_pieces_flat_into(ctx, dflat, dah, dal, dbh, dbl, m, n, k)
         ctx.synchronize()
         flat = _read_sums(ctx, dflat, 3 * m * n, tag + " flat")
@@ -466,6 +479,7 @@ def _run_every_amd_pieces_plan(
         var ds = _poisoned_sums(ctx, 3 * m * n)
         var got: String
         try:
+            _trace(ptag)
             identical_gemm_int8_pieces_amd_with_plan(
                 ctx, ds, dah, dal, dbh, dbl, m, n, k, plan
             )
