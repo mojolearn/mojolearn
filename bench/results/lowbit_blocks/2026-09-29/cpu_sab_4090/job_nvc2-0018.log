@@ -1,0 +1,28 @@
+gpuq: job 0018 lane=lowbit-blocks gpus=0 cap=180min started 2026-09-29T05:16:45Z
+gpuq: script /root/mojolearn-lowbit-blocks/tools/lowbit_blocks/cpu_sab_job.sh sha256 at submit ce60b0d0f2b4853eac37b19ef61070df949777866cc62c8dfada68e43d31bcc1, now ce60b0d0f2b4853eac37b19ef61070df949777866cc62c8dfada68e43d31bcc1
+== build build_byte_lm (sm_89)
+build byte_lm exit 0
+                       ^
+built python/mojolearn/identical/_mojolearn_byte_lm.so; attention_memory_profile=estash; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence
+== sabotage tree
+patching file gemm/checks/gemm_int15.mojo
+sabotage sites in the copy: 1
+sab build build_linalg exit 0
+sab build build_transformer exit 0
+== sabotaged tree, fixed15_v1
+model SmolLM2-360M profile fixed15_v1 device gpu vendor cuda load 2.4 s
+RESULT identity box=447c5c6d4d39-sabotage profile=fixed15_v1 B=2 L=64 logits_sha256=703b7e2158a0e140ccb3daa5d8db6fe9db54312a196c9c1f24694f3341e81f99 row0=55a93475a64cd43e row1=94862fa2637faa2f
+wrote /root/mojolearn-lowbit-blocks/bench/results/lowbit_blocks/447c5c6d4d39/cpu_sab/model_447c5c6d4d39-sabotage_fixed15_v1_gpu.json
+== sabotaged tree, fp32_v1
+model SmolLM2-360M profile fp32_v1 device gpu vendor cuda load 1.4 s
+RESULT identity box=447c5c6d4d39-sabotage profile=fp32_v1 B=2 L=64 logits_sha256=833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d row0=ca3de3baf31bbcb1 row1=19022a95c923d2da
+wrote /root/mojolearn-lowbit-blocks/bench/results/lowbit_blocks/447c5c6d4d39/cpu_sab/model_447c5c6d4d39-sabotage_fp32_v1_gpu.json
+== CPU host path (MOJOLEARN_VENDOR=cpu, device cpu), fixed15_v1 then fp32_v1
+model SmolLM2-360M profile fixed15_v1 device cpu vendor cpu load 6.7 s
+RESULT identity box=447c5c6d4d39-cpu profile=fixed15_v1 B=2 L=64 logits_sha256=d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f row0=84f2acb4afc784b6 row1=c909ff3765277b96
+wrote /root/mojolearn-lowbit-blocks/bench/results/lowbit_blocks/447c5c6d4d39/cpu_sab/model_447c5c6d4d39-cpu_fixed15_v1_cpu.json
+model SmolLM2-360M profile fp32_v1 device cpu vendor cpu load 2.7 s
+RESULT identity box=447c5c6d4d39-cpu profile=fp32_v1 B=2 L=64 logits_sha256=833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d row0=ca3de3baf31bbcb1 row1=19022a95c923d2da
+wrote /root/mojolearn-lowbit-blocks/bench/results/lowbit_blocks/447c5c6d4d39/cpu_sab/model_447c5c6d4d39-cpu_fp32_v1_cpu.json
+out /root/mojolearn-lowbit-blocks/bench/results/lowbit_blocks/447c5c6d4d39/cpu_sab
+gpuq: job 0018 done exit=0 at 2026-09-29T05:23:45Z after 420s

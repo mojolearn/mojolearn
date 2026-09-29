@@ -1,0 +1,19 @@
+{
+ "box": "447c5c6d4d39-cpu",
+ "profile": "fp32_v1",
+ "device": "cpu",
+ "vendor": "cpu",
+ "model": "SmolLM2-360M",
+ "load_s": 2.6924776155501604,
+ "commit": "",
+ "identity": {
+  "B": 2,
+  "L": 64,
+  "vocab": 49152,
+  "sha256": "833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d",
+  "rows": [
+   "ca3de3baf31bbcb19b7c0128d9f5c0fa2d8288da6f50ff5c26ef394f08fff143",
+   "19022a95c923d2dabf5cbd3e20912c082d7b1f9b2a7bf130d991fad45496e011"
+  ]
+ }
+}
