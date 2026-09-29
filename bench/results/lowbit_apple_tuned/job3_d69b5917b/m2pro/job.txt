@@ -1,0 +1,36 @@
+== job
+gate	0	23s	expected=pass	held=yes
+gate-chunk-sabotage	1	21s	expected=fail	held=yes
+gate-value-sabotage	1	23s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1 (the tuned Apple float-unit plans)
+box=m2pro phases=devprobe gate price
+started=2026-09-29T05:24:54Z
+tree_head=d69b5917ba9998ee00e73ca0bf3db81eddd38a79 dirty_files=34
+machine=Apple M2 Pro macOS 26.7
+only=t512 variants=dev.,f4.t32.kb32,f2d.t32.kb32,f3.t32.kb16 repeats=default slice=default flat=0
+devload-probe1 exit=1
+devload-probe2 exit=0
+DEVLOAD 2 lane0 threadgroup=1.0,17.0 device=1.0,17.0 tg-of-transpose=1.0,2.0 device-plain=1.0,2.0
+DEVLOAD 2 transposed equal
+DEVLOAD 2 plain equal
+devload: spelling 2 PATCHED IN for this job: 1 line(s)
+reach: gate-chunk-sabotage failed check_tuned_planted_worst_cases, as it must
+reach: gate-chunk-sabotage failed check_tuned_chunk_boundaries, as it must
+reach: gate-chunk-sabotage left check_tuned_shapes_inside_one_chunk passing, as it must
+reach: gate-value-sabotage failed check_tuned_shapes_inside_one_chunk, as it must
+reach: gate-value-sabotage failed check_tuned_shapes_across_chunks, as it must
+reach: gate-value-sabotage failed check_tuned_planted_worst_cases, as it must
+reach: gate-value-sabotage failed check_tuned_chunk_boundaries, as it must
+reach: gate-value-sabotage failed check_tuned_launch_in_slices, as it must
+reach: gate-value-sabotage failed check_tuned_simulation_vectors, as it must
+gate digests=8813
+build exit=0 15s
+warm exit=0 90s (untimed, every arm once)
+price exit=0 528s
+warm-and-timed: the two runs printed the same digests (309)
+price-sabotage exit=0 (identity only)
+price-sabotage-comparison exit=0 (0: every sabotaged tuned digest differed from the clean one)
+devload: the dev module put back as committed
+finished=2026-09-29T05:37:01Z
+verdict=GREEN every expected outcome held
+lowbit_apple_tuned job: box=m2pro red=0
