@@ -22,9 +22,16 @@ if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; the
         export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}; fi ;; esac
 fi
 PX="pixi run -e default"
+# build_byte_lm.sh wants one explicit target off Apple (sm_NN or gfxNNN).
+ARCH=""
+if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then
+    ARCH=sm_$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '. ')
+elif command -v rocminfo > /dev/null 2>&1; then
+    ARCH=$(rocminfo 2>/dev/null | grep -o 'gfx[0-9a-f]*' | head -1)
+fi
 if [ "${LB_BUILD:-1}" = 1 ]; then
     for b in ${LB_GPU_BUILDS-build build_linalg build_training build_transformer build_byte_lm}; do
-        echo "== build $b"; env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
+        echo "== build $b"; A=""; [ "$b" = build_byte_lm ] && [ -n "$ARCH" ] && A="MOJOLEARN_GPU_ARCHS=$ARCH"; env $A MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
     done
     for b in ${LB_HOST_BUILDS-build_core_host build_linalg_host build_neural_host build_transformer_host build_tokenizer_host}; do
         echo "== build $b"; env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
