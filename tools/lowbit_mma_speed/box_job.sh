@@ -18,6 +18,15 @@
 #   full-price   tools/lowbit_mma_speed/price_job.sh full: the unit
 #                phase's arms and the target phase's in ONE run, for a box
 #                that is given one job (the MI325X)
+#   amd-gate     tools/lowbit_mma_speed/gate_job.sh amd     (AMD; the plans
+#                of gemm/checks/gemm_int8_mma_amd.mojo, lane/lowbit-amd-tuned)
+#   amd-price    tools/lowbit_mma_speed/price_job.sh amd with the harness
+#                bench/gemm_lowbit_amd_price_main.mojo: fp32.v1, the
+#                reference unit plan, every tuned plan and every AMD plan,
+#                one product and four, and the complete operation on every
+#                four-product plan
+#   amd-asm      tools/lowbit_amd_tuned/asm_probe.sh (AMD): the kernels'
+#                assembly, counted; launches nothing, times nothing
 #   ptx          tools/lowbit_mma_speed/ptx_probe.sh (NVIDIA): the kernels'
 #                PTX, counted; launches nothing, times nothing
 #
@@ -50,6 +59,16 @@ TARGET_ARMS="$TARGET_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
 TARGET_ARMS="$TARGET_ARMS,inference.int8i32.v1.tuned,training.int8i32.v1.tuned"
 TARGET_ARMS="$TARGET_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
 TARGET_ARMS="$TARGET_ARMS,pieces.int8*,inference.pieces.int8.tuned,training.pieces.int8.tuned"
+#: The AMD phase's arms: every unit plan of either file (the prefix takes
+#: the reference, the tuned and the AMD plans), the four-product plans, and
+#: the complete operations.
+AMD_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.mma*,probe.amd*"
+AMD_ARMS="$AMD_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
+AMD_ARMS="$AMD_ARMS,inference.int8i32.v1.tuned,training.int8i32.v1.tuned"
+AMD_ARMS="$AMD_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
+AMD_ARMS="$AMD_ARMS,inference.int8i32.v1.amd,training.int8i32.v1.amd"
+AMD_ARMS="$AMD_ARMS,inference.4x.int8i32.v1.amd,training.4x.int8i32.v1.amd"
+AMD_ARMS="$AMD_ARMS,pieces.int8*,inference.pieces.int8*,training.pieces.int8*"
 red=0
 summary=""
 for phase in "$@"; do
@@ -62,6 +81,9 @@ for phase in "$@"; do
         target-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$TARGET_ARMS} bash tools/lowbit_mma_speed/price_job.sh target ;;
         quant-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$QUANT_ARMS} bash tools/lowbit_mma_speed/price_job.sh quant ;;
         unit-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS} bash tools/lowbit_mma_speed/price_job.sh unit ;;
+        amd-gate) bash tools/lowbit_mma_speed/gate_job.sh amd ;;
+        amd-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$AMD_ARMS} MOJOLEARN_LOWBIT_PRICE_MAIN=bench/gemm_lowbit_amd_price_main.mojo bash tools/lowbit_mma_speed/price_job.sh amd ;;
+        amd-asm) bash tools/lowbit_amd_tuned/asm_probe.sh ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
         *) echo "box_job.sh: unknown phase $phase" >&2; exit 2 ;;
     esac

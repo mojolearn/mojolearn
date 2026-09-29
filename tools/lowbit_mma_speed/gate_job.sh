@@ -42,14 +42,38 @@
 #     pieces-value-sabotage    every sum's lowest bit flipped. The same.
 #   Runs on a column that has the integer matrix unit.
 #
+#   bash tools/lowbit_mma_speed/gate_job.sh amd     (lane/lowbit-amd-tuned)
+#     amd                   gemm/checks/gemm_int8_mma_amd_check.mojo: every
+#                           plan of gemm/checks/gemm_int8_mma_amd.mojo, one
+#                           product and four, == the reference unit plan ==
+#                           the flat plan == the host. EXPECTED exit 0.
+#     amd-direct-sabotage   -D MOJOLEARN_INT8_AMD_SABOTAGE=1: the direct
+#                           loads' padding rule broken. EXPECTED non-zero,
+#                           naming the five gates that compare products or
+#                           sums; the reach gate must PASS (the staged plans
+#                           and every k of whole windows still agree).
+#     amd-staging-sabotage  -D MOJOLEARN_INT8_TUNED_SABOTAGE=1: the staging's
+#                           padding rule broken. The same five, through the
+#                           staged plans; the reach gate must PASS.
+#     amd-pieces-sabotage   -D MOJOLEARN_INT8_PIECES_SABOTAGE=1: the middle
+#                           sum takes HL twice. EXPECTED non-zero, naming
+#                           the two four-product gates; the one-product
+#                           gates must PASS.
+#     amd-value-sabotage    -D MOJOLEARN_LOWBIT_SABOTAGE=1: every stored
+#                           value flipped. EXPECTED non-zero, naming every
+#                           gate that reads a product or a sum.
+#     amd-unstated          -D MOJOLEARN_INT8_TUNED_UNSTATED=1: every load
+#                           the byte path. EXPECTED exit 0, the same bits.
+#   Runs on AMD only. On any other column it is NOT RUN, which is not a pass.
+#
 # Writes <results>/<box>/gate_<which>/ and prints the logs' gate lines, so a
 # steward's stdout carries them home.
 set -u
 cd "$(dirname "$0")/../.." || exit 9
 WHICH=${1:-}
 case "$WHICH" in
-    quant|unit|pieces) ;;
-    *) echo "gate_job.sh quant|unit|pieces" >&2; exit 2 ;;
+    quant|unit|pieces|amd) ;;
+    *) echo "gate_job.sh quant|unit|pieces|amd" >&2; exit 2 ;;
 esac
 BOX=${MOJOLEARN_LOWBIT_BOX:-$(hostname -s)}
 OUT="$PWD/${MOJOLEARN_LOWBIT_RESULTS:-bench/results/lowbit_mma_speed}/$BOX/gate_$WHICH"
@@ -97,7 +121,48 @@ must_pass() {
         red=1
     fi
 }
-if [ "$WHICH" = quant ]; then
+amd_check() {
+    # The AMD gate is run by its path: lane/lowbit-amd-tuned adds no task.
+    pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 "$@" -I . gemm/checks/gemm_int8_mma_amd_check.mojo
+}
+AMD_PRODUCT_GATES="check_amd_plans_match_reference_flat_oracle check_amd_planted_worst_cases check_amd_minus_128_piece"
+AMD_SUM_GATES="check_amd_pieces_match_flat_and_host check_amd_pieces_planted_worst_cases"
+if [ "$WHICH" = amd ]; then
+    PHASES="amd amd-direct-sabotage amd-staging-sabotage amd-pieces-sabotage amd-value-sabotage amd-unstated"
+    if ! { command -v rocm-smi > /dev/null 2>&1 || command -v amd-smi > /dev/null 2>&1; }; then
+        echo "gate_job: box=$BOX is not an AMD box. NOT RUN, which is not a pass." | tee -a "$OUT/gate.txt"
+        exit 3
+    fi
+    run amd pass amd_check
+    for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES check_amd_dispatch_is_batch_invariant check_amd_pieces_refuses_above_its_bound check_amd_sabotage_reach; do
+        must_pass amd "$g"
+    done
+    run amd-direct-sabotage fail amd_check -D MOJOLEARN_INT8_AMD_SABOTAGE=1
+    run amd-staging-sabotage fail amd_check -D MOJOLEARN_INT8_TUNED_SABOTAGE=1
+    for arm in amd-direct-sabotage amd-staging-sabotage; do
+        for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES; do
+            must_name "$arm" "$g"
+        done
+        must_pass "$arm" check_amd_sabotage_reach
+        must_pass "$arm" check_amd_pieces_refuses_above_its_bound
+    done
+    run amd-pieces-sabotage fail amd_check -D MOJOLEARN_INT8_PIECES_SABOTAGE=1
+    for g in $AMD_SUM_GATES; do
+        must_name amd-pieces-sabotage "$g"
+    done
+    for g in $AMD_PRODUCT_GATES check_amd_dispatch_is_batch_invariant check_amd_pieces_refuses_above_its_bound; do
+        must_pass amd-pieces-sabotage "$g"
+    done
+    run amd-value-sabotage fail amd_check -D MOJOLEARN_LOWBIT_SABOTAGE=1
+    for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES check_amd_dispatch_is_batch_invariant; do
+        must_name amd-value-sabotage "$g"
+    done
+    must_pass amd-value-sabotage check_amd_pieces_refuses_above_its_bound
+    run amd-unstated pass amd_check -D MOJOLEARN_INT8_TUNED_UNSTATED=1
+    for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES check_amd_dispatch_is_batch_invariant; do
+        must_pass amd-unstated "$g"
+    done
+elif [ "$WHICH" = quant ]; then
     PHASES="quant quant-sabotage quant-value-sabotage"
     run quant pass pixi run check-quantize-int8-par
     must_pass quant check_par_quantizer_matches
@@ -150,6 +215,12 @@ for f in $PHASES; do
     echo "== $f.log"
     # every line but the clean cases' ok lines
     grep -v -E '^   ok ' "$OUT/$f.log" | tail -120
+    # and, of a log whose differing cases are more than its tail holds, the
+    # gate lines and the counts, which are the verdict
+    if [ "$(grep -c -v -E '^   ok ' "$OUT/$f.log")" -gt 120 ]; then
+        echo "== $f.log, gate lines"
+        grep -E '^(ok |!! GATE FAILED|== )|cases, [0-9]+ failed|^   reach:' "$OUT/$f.log"
+    fi
 done
 echo "gate_job: box=$BOX gate=$WHICH red=$red"
 exit "$red"
