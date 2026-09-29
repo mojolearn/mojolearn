@@ -142,14 +142,17 @@ def main():
         pre = Array.from_list(token_ids(1, 512, v, SEED + 7), "<i4")
         pre_sha = []
 
-        def prefill():
-            pre_sha.append(sha(raw(lm.forward(pre))))
-        prefill()
+        # The hash is taken AFTER the clock stops: hashing 100 MB of logits
+        # inside the interval added a fixed cost to every timed prefill
+        # (found 2026-09-29 in nvc3-0044, fixed here).
+        pre_sha.append(sha(raw(lm.forward(pre))))
         pts = []
         for _ in range(5):
             t = time.perf_counter()
-            prefill()
+            out = lm.forward(pre)
             pts.append(time.perf_counter() - t)
+            pre_sha.append(sha(raw(out)))
+            del out
         pm = statistics.median(pts)
         steps = 32
         nxt = token_ids(1, steps, v, SEED + 11)[0]

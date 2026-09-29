@@ -1,0 +1,12 @@
+RESULT time box=rtx4090-nvc2 profile=fp32_v1 prefill512 1590.0 ms decode 300.99 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+RESULT time box=rtx4090-nvc2 profile=fixed15_v1 prefill512 563.9 ms decode 99.94 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+RESULT time box=rtx4090-nvc2 profile=fp32_v1 prefill512 1438.7 ms decode 297.38 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+RESULT time box=rtx4090-nvc2 profile=fixed15_v1 prefill512 574.3 ms decode 89.89 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+gpuq: job 0023 done exit=0 at 2026-09-29T06:41:37Z after 211s
+RESULT time box=h100-nvc3 profile=fp32_v1 prefill512 559.7 ms decode 289.55 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+RESULT time box=h100-nvc3 profile=fixed15_v1 prefill512 415.9 ms decode 140.06 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+RESULT time box=h100-nvc3 profile=fp32_v1 prefill512 649.6 ms decode 287.85 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+RESULT time box=h100-nvc3 profile=fixed15_v1 prefill512 508.1 ms decode 149.30 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+gpuq: job 0044 done exit=0 at 2026-09-29T06:44:51Z after 551s
+
+[exited with code 0]
