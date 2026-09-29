@@ -1,0 +1,13 @@
+diff --git a/x_decomp/jacobi2.mojo b/x_decomp/jacobi2.mojo
+index d88b1a199..e4aa00de4 100644
+--- a/x_decomp/jacobi2.mojo
++++ b/x_decomp/jacobi2.mojo
+@@ -548,7 +548,7 @@ def one_sided_svd2_chunk_kernel(
+             var i = tid
+             while i < n:
+                 var xp = ftz(rt.unsafe_load(p0 * n + i))
+-                var xq = ftz(rt.unsafe_load(q0 * n + i))
++                var xq = ftz(rt.unsafe_load(p0 * n + i))  # SABOTAGE: a chunk's first pair folds row p0 twice
+                 lp = ftz(identical_mul_add(xp, xp, lp))
+                 lq = ftz(identical_mul_add(xq, xq, lq))
+                 lpq = ftz(identical_mul_add(xp, xq, lpq))
