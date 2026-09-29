@@ -141,6 +141,7 @@ from gemm.checks.gemm_int15_apple import (
     INT15_APPLE_ROW_MAX_M,
     identical_gemm_int15_apple_into,
 )
+from gemm.checks.gemm_int15_epilogue import INT15_EXPONENT_SABOTAGE
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 
@@ -759,7 +760,12 @@ def _store_cell15(
     output. One spelling for all three plans."""
     if i >= m or j >= n:
         return
-    var out = dequant_int15_pinned(acc, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j)))
+    var jb = j
+    comptime if INT15_EXPONENT_SABOTAGE:
+        # THE DEFECT ARM (-D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1): the
+        # column exponent read at the row index.
+        jb = i % n
+    var out = dequant_int15_pinned(acc, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(jb)))
     comptime if INT15_SABOTAGE:
         out = gemm_oracle_sabotage_value_flip(out)
     c.unsafe_store(i * n + j, out)

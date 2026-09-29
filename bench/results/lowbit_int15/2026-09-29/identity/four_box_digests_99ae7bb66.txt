@@ -1,0 +1,8 @@
+# four-box clean gate digests at 99ae7bb66: H100 nvc3-0028, MI325X 1790656534874, M3 Ultra 1790656532290, M2 Pro 1790656528407
+boxes: h100, mi325x, m3ultra, m2pro
+  h100: 176 cases, plans device, dispatch-codes, dispatch-planes, flat, from-f32, mma, oracle, pieces, 1010 digests
+  mi325x: 176 cases, plans device, dispatch-codes, dispatch-planes, flat, from-f32, mma, oracle, pieces, 1010 digests
+  m3ultra: 176 cases, plans apple-four-row, apple-four-wide, apple-two-row, apple-two-wide, device, dispatch-codes, dispatch-planes, flat, from-f32, oracle, pieces, 1491 digests
+  m2pro: 176 cases, plans apple-four-row, apple-four-wide, apple-two-row, apple-two-wide, device, dispatch-codes, dispatch-planes, flat, from-f32, oracle, pieces, 1491 digests
+cases: 176; missing on a box: 0; disagreeing: 0
+verdict=AGREE: every plan of every box and every host oracle printed the same digest for every case

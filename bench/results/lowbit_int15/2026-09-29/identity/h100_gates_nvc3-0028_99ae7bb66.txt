@@ -1,0 +1,190 @@
+int15	0	23s	expected=pass	held=yes
+int15-force-flat	0	24s	expected=pass	held=yes
+int15-unstated-loads	0	25s	expected=pass	held=yes
+int15-sabotage	1	25s	expected=fail	held=yes
+int15-host-sabotage	1	23s	expected=fail	held=yes
+int15-piece-sabotage	1	24s	expected=fail	held=yes
+int15-quant-sabotage	1	24s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100 vendor=nvidia gpu_archs=unset
+started=2026-09-29T04:38:40Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=59
+machine=NVIDIA H100 NVL, 580.159.04
+loads: stated and unstated alignment printed the same 1010 digests
+reach: int15-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-sabotage failed check_int15_plans_agree, as it must
+reach: int15-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-host-sabotage failed check_int15_pieces_oracle_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_plans_agree, as it must
+reach: int15-host-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-piece-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-piece-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-quant-sabotage failed check_int15_device_conversions_match_host, as it must
+digests=1010 digests_force_flat=1010
+finished=2026-09-29T04:41:28Z
+verdict=GREEN every expected outcome held (see status.tsv)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+!! GATE FAILED: check_int15_planted_worst_cases
+!! GATE FAILED: check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 4 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+!! GATE FAILED: check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+!! GATE FAILED: check_int15_planted_worst_cases
+!! GATE FAILED: check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 5 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+!! GATE FAILED: check_int15_planted_worst_cases
+!! GATE FAILED: check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 5 failed ==
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE nvidia: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_unit_loads_state_their_alignment
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 2 failed ==
+pieces	0	7s	expected=pass	held=yes
+tuned	0	18s	expected=pass	held=yes
+tuned-sabotage	1	17s	expected=fail	held=yes
+tuned-pieces-sabotage	1	16s	expected=fail	held=yes
+tuned-epilogue-sabotage	1	17s	expected=fail	held=yes
+tuned-host-sabotage	1	16s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1 plan=tuned
+box=h100
+started=2026-09-29T04:41:28Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=59
+reach: tuned-sabotage failed check_int15_tuned_matches_oracle, as it must
+reach: tuned-sabotage failed check_int15_tuned_planted_worst_cases, as it must
+reach: tuned-pieces-sabotage failed check_int15_tuned_matches_oracle, as it must
+reach: tuned-pieces-sabotage failed check_int15_tuned_planted_worst_cases, as it must
+reach: tuned-epilogue-sabotage failed check_int15_tuned_matches_oracle, as it must
+reach: tuned-epilogue-sabotage failed check_int15_tuned_planted_worst_cases, as it must
+reach: tuned-host-sabotage failed check_int15_tuned_matches_oracle, as it must
+reach: tuned-host-sabotage failed check_int15_tuned_planted_worst_cases, as it must
+digests=1224
+finished=2026-09-29T04:43:00Z
+verdict=GREEN every expected outcome held (see status.tsv)
+ok check_pieces_plans_match_flat_and_host
+ok check_pieces_planted_worst_cases
+ok check_pieces_refuses_above_its_bound
+== 3 gates, 0 failed ==
+ok check_int15_tuned_matches_oracle
+ok check_int15_tuned_planted_worst_cases
+ok check_int15_tuned_refuses
+== 3 gates, 0 failed ==
+!! GATE FAILED: check_int15_tuned_matches_oracle
+!! GATE FAILED: check_int15_tuned_planted_worst_cases
+ok check_int15_tuned_refuses
+== 3 gates, 2 failed ==
+!! GATE FAILED: check_int15_tuned_matches_oracle
+!! GATE FAILED: check_int15_tuned_planted_worst_cases
+ok check_int15_tuned_refuses
+== 3 gates, 2 failed ==
+!! GATE FAILED: check_int15_tuned_matches_oracle
+!! GATE FAILED: check_int15_tuned_planted_worst_cases
+ok check_int15_tuned_refuses
+== 3 gates, 2 failed ==
+!! GATE FAILED: check_int15_tuned_matches_oracle
+!! GATE FAILED: check_int15_tuned_planted_worst_cases
+ok check_int15_tuned_refuses
+== 3 gates, 2 failed ==
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100
+started=2026-09-29T04:43:00Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=59
+machine=NVIDIA H100 NVL, 580.159.04
+finished=2026-09-29T04:46:03Z
+profiles fp32.v1, int15i64.v1

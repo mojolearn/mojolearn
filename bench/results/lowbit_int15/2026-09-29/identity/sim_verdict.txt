@@ -1,0 +1,7 @@
+boxes: h100, mi325x, m3ultra, m2pro
+  h100: 7 cases, plans device, oracle, simulation, 21 digests
+  mi325x: 7 cases, plans device, oracle, simulation, 21 digests
+  m3ultra: 7 cases, plans device, oracle, simulation, 21 digests
+  m2pro: 7 cases, plans device, oracle, simulation, 21 digests
+cases: 7; missing on a box: 0; disagreeing: 0
+verdict=AGREE: every plan of every box and every host oracle printed the same digest for every case

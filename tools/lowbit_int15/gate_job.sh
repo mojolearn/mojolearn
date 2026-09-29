@@ -151,6 +151,11 @@ run int15-quant-sabotage fail pixi run check-gemm-int15-quant-sabotage
 must_name int15-quant-sabotage check_int15_device_conversions_match_host
 must_pass int15-quant-sabotage check_int15_plans_agree
 must_pass int15-quant-sabotage check_int15_planted_worst_cases
+# The scale's defect arm (clause W-7): the column exponent read at the row
+# index, in every plan's store. Only check_int15_row_scales can see it.
+run int15-exponent-sabotage fail pixi run check-gemm-int15-exponent-sabotage
+must_name int15-exponent-sabotage check_int15_row_scales
+must_pass int15-exponent-sabotage check_int15_device_conversions_match_host
 if [ "$VENDOR" = apple ]; then
     # THE DEFECT ARM of the Apple float-unit plan (clause W-12): the
     # accumulators live across two steps of the unit. Apple only.

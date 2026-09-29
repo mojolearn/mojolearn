@@ -16,3 +16,14 @@ This is the failure the brief names as known and open on the M2 Pro ("a
 plain kernel left cells unwritten at a large shape"); lane/lowbit-int15 is
 reproducing it. The parallel quantizer's own outputs are poisoned and read
 back in its own arms, which passed in both runs.
+
+Read again 2026-09-29 (Lane D, second agent), against the brief's rule 10:
+the flat kernel's single launch at mlp_down.t512 takes 1829 ms in the run of
+record (1799 ms at mlp_up.t512): a launch that holds the GPU for seconds, the
+kind macOS aborts silently leaving the output partly written. The cold run's
+unwritten cells from block 17 on fit that. A second sign in the run of record:
+training.int8i32.v1 at mlp_down.t512 reads min 1217.251 ms against median
+1854.367 ms; one timed call ended ~0.6 s early, most likely an aborted launch
+whose output no one read (timed calls are not each read back). That minimum is
+not a time. The next Mac quantizer job asks for the quantizer arms and the
+apple-chunk probe only, not the multi-second flat-product arms.

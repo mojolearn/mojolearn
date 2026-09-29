@@ -156,3 +156,80 @@ It is another arithmetic than the one whose perplexity was measured for
 - The forward vectors exported again under the moved pin.
 - Failures 2, reproduced alone.
 - The blocks (step 3): not started; waits on the orchestrator's word.
+
+## 2026-09-29 05:00Z, taken over by a new agent (brief_current.md in force)
+
+- RUN 5 READ (nvc3-0028, 99ae7bb66, the alternation in two blocks), the H100
+  run of record: `bench/results/lowbit_int15/2026-09-29/tables/H100_RECORD_run5.md`.
+  gate and tuned_gate GREEN in the same job; 50 tuned digests equal the
+  reference plan's. Complete inference call, tuned plan, over fp32.v1 in the
+  same run: 0.43 to 0.50 at the 512-token rows; t1/t8 0.53 to 2.69 (qkv and
+  mlp_down above 1). Three products of one layer, added: qkv 0.765, mlp_up
+  0.765, mlp_down 0.730; lm_head refused (k = 128256). Weight gradient
+  product alone 0.88 to 0.98.
+- STEWARD JOBS AT 99ae7bb66 (gate, sim): M2 Pro 1790656528407, M3 Ultra
+  1790656532290, MI325X 1790656534874, all GREEN, every sabotage arm seen
+  failing, the large product (512 x 4096 x 14336) written whole on every
+  clean arm. The recorded one-launch arm (no bound) ALSO wrote it whole on
+  both Macs: the abort did not reproduce in the gate; it did in the M2 Pro
+  reproduction (d4c9d8a34, 2 runs of 3). Clean gate digests of H100 nvc3-0028
+  and the three: 176 cases, 0 missing, 0 disagreeing
+  (`identity/four_box_digests_99ae7bb66.txt`).
+- HARNESS (step 2) submitted at d07ecd201: H100 nvc3-0029; M3 Ultra
+  1790657536591; M2 Pro 1790657540572; MI325X 1790657543156.
+- EPILOGUE FOLD (task 4): interface proposed to the orchestrator (a new file
+  `gemm/checks/gemm_int15_epilogue.mojo` with `int15_store_cell`; Lane D's
+  sums kernel takes `FUSED: Bool` and calls it at its store). Nothing written
+  until approved.
+- THE LAUNCH BOUND IS KEPT (orchestrator): the unbounded-launch arm did not
+  reproduce the abort in the 99ae7bb66 jobs, so the bound's need rests on the
+  earlier reproduction (d4c9d8a34, 2 runs of 3 on the M2 Pro).
+- THE M3 ULTRA IS RELEASED TONIGHT (orchestrator, Andrew): nothing new to
+  m3ultra-b; Apple jobs go to m2pro only. The harness request 1790657536591
+  was queued there before the word; not cancelled.
+- EPILOGUE FOLD APPROVED; this lane's half pushed: `gemm_int15_epilogue.mojo`
+  (`int15_store_cell`), the fused path in `gemm_int15_tuned.mojo` (a STUB,
+  `INT15_FUSED_IS_STUB`, until Lane D pushes
+  `identical_gemm_int8_pieces_tuned_fused_with_plan`), the two-launch arms in
+  the gate and the price harness, the exponent sabotage arm. Jobs:
+  `fold_gate_job_h100.sh` (the gate on the stub), `run6_job_h100.sh`.
+- HARNESS (step 2) at d07ecd201: GREEN on H100 nvc3-0029, MI325X
+  1790657543156, M2 Pro 1790657540572, M3 Ultra 1790657536591 (lane check
+  PASS with its sabotage seen, 4 seam patches fail then restore, neighbors
+  AGREE); 8 clean columns IDENTICAL x8 on 9 fixtures
+  (`bench/results/lowbit_int15/2026-09-29/harness/`). verify: OWED on
+  MI325X and M2 Pro (no reference record); stopped at the comparator
+  self-test on H100 and M3 Ultra (estimators binding unbuilt): FIXED in
+  harness_job.sh. nvc3-0029's times are not used (CPU compiles overlapped).
+- FIXED: the refusal gates assumed the sums kernel refuses k = 65536 and
+  launched on one-byte buffers (MI325X out-of-bounds read, Lane F, job
+  1790657862351, after 520406a38 raised INT8_PIECES_MAX_K to 65536). They
+  now probe each kernel's stated bound with operands as long as the shape.
+- Merged lane/lowbit-mma-speed 15e9ecf47 (fused form calls this lane's
+  int15_store_cell). RUN 6 queued: nvc3-0032 at de690f1d4 (gate, then the
+  clock only if GREEN). MI325X tuned gate + gate: 1790658677079.
+- RUN 6 (the epilogue fold): nvc3-0032 RED at its gate (the exponent arm
+  could not fail: every fixture gives an operand one exponent), fixed with
+  check_int15_tuned_row_scales; nvc3-0034 at 71db5bb26 GREEN, timed:
+  `tables/H100_RECORD_run6_fold.md`. Weight gradient fused 0.50 to 0.58 of
+  fp32.v1 (two-launch 0.89 to 1.02); fused/two-launch 0.555 to 0.566.
+  Inference t512 0.42 to 0.47. Three products added 0.59 to 0.64. MI325X
+  tuned gate GREEN (1790659063533), digests equal to the H100's (149 cases).
+  Anomaly, not claimed: qkv.t1/t8 complete fused 1.41x/1.31x two-launch
+  while the product alone is 0.98x/1.05x; cause not established.
+- The reference gate had the same blind spot: check_int15_row_scales and the
+  exponent arm in every plan's store (0efab762e). Jobs: M2 Pro 1790659752178,
+  MI325X 1790659755804; the H100 after run 7.
+- RUN 7 queued: nvc3-0037 at b9db1a41b (lane/lowbit-mma-speed 8b2768883:
+  the dispatcher's two-page plans), Lane D's lever. MI325X 1790659664486.
+- RUN 7 (nvc3-0037, b9db1a41b, Lane D's two-page plans) GREEN:
+  `tables/H100_RECORD_run7.md`. Complete inference call fused 0.26 to 0.31 of
+  fp32.v1 at t512; weight gradient 0.45 to 0.51; three products 0.45 to 0.50.
+  The qkv.t1/t8 complete-call anomaly repeats (cause not established).
+- The reference gate's row-scales case and exponent arm GREEN on the H100
+  (nvc3-0040), the M2 Pro (1790659752178) and the MI325X (1790659755804);
+  178 clean digests agree on three boxes.
+- LANE F'S AMD FUSED COLUMN (patch int15_tuned_amd_fused_column.patch, via
+  a9c13231d, Lane F's job 7 GREEN) merged at 5f209cd4b: both gates GREEN on
+  the H100 (nvc3-0042) and the MI325X (1790662046184). The M2 Pro's build
+  (1790662042389) GREEN: gate, and the patched tuned file builds and runs (no unit there, so its gates say NOT RUN). THE PATCH IS CLEARED.

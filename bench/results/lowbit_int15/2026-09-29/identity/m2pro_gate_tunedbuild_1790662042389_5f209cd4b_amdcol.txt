@@ -1,0 +1,1815 @@
+######## phase gate on m2pro, started 2026-09-29T06:40:01Z
+int15	0	16s	expected=pass	held=yes
+int15-force-flat	0	22s	expected=pass	held=yes
+int15-unstated-loads	0	17s	expected=pass	held=yes
+int15-sabotage	1	17s	expected=fail	held=yes
+int15-host-sabotage	1	16s	expected=fail	held=yes
+int15-piece-sabotage	1	16s	expected=fail	held=yes
+int15-quant-sabotage	1	16s	expected=fail	held=yes
+int15-exponent-sabotage	1	17s	expected=fail	held=yes
+int15-apple-chunk-sabotage	1	15s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m2pro vendor=apple gpu_archs=unset
+started=2026-09-29T06:40:01Z
+tree_head=5f209cd4be0a24364591b052a88588b76c8f6665 dirty_files=36
+machine=Apple M2 Pro macOS 26.7
+loads: stated and unstated alignment printed the same 1509 digests
+reach: int15-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-sabotage failed check_int15_plans_agree, as it must
+reach: int15-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-host-sabotage failed check_int15_pieces_oracle_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_plans_agree, as it must
+reach: int15-host-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-piece-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-piece-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-quant-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-exponent-sabotage failed check_int15_row_scales, as it must
+reach: int15-apple-chunk-sabotage failed check_int15_planted_worst_cases, as it must
+one-launch: exit=0 (recorded); 0 poison lines; ok check_int15_large_product_is_written_whole
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+digests=1509 digests_force_flat=1509
+finished=2026-09-29T06:42:54Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== int15 (every line that is not a digest or a per-shape ok; last 60)
+                alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_row_scales
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+== int15-force-flat (every line that is not a digest or a per-shape ok; last 60)
+                alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_row_scales
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+== int15-unstated-loads (every line that is not a digest or a per-shape ok; last 60)
+                alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_row_scales
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 0 failed ==
+== int15-sabotage (every line that is not a digest or a per-shape ok; last 60)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.126932/0x0xc18903f5 want -17.12693/0x0xc18903f4
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatc
+!! GATE FAILED: check_int15_row_scales
+   row-scales-37x41x300 (flat vs oracle): 1517 of 1517 cells differ; first at 0 got -13.146668/0x0xc15258c1 want -13.1466675/0x0xc15258c0; row-scales-37x41x300 (pieces vs oracle): 1517 of 1517 cells differ; first at 0 got -13.146668/0x0xc15258c1 want -13.1466675/0x0xc15258c0; row-scales-37x41x300 (dispatch-codes vs oracle): 1517 of 1517 cells differ; first at 0 got -13.146668/0x0xc15258c1 want -13
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336 (flat): cell 0 is 641670600000.0/0x0x5315668c, the host oracle has 641670500000.0/0x0x5315668b
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 5 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 5 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-host-sabotage (every line that is not a digest or a per-shape ok; last 60)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+!! GATE FAILED: check_int15_pieces_oracle_matches_oracle
+   host pieces 1x32x32: 32 of 32 cells differ; first at 0 got 159.09662/0x0x431f18bc want 159.09663/0x0x431f18bd
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.12693/0x0xc18903f4 want -17.126932/0x0xc18903f5
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatc
+!! GATE FAILED: check_int15_row_scales
+   row-scales-37x41x300 (flat vs oracle): 1517 of 1517 cells differ; first at 0 got -13.1466675/0x0xc15258c0 want -13.146668/0x0xc15258c1; row-scales-37x41x300 (pieces vs oracle): 1517 of 1517 cells differ; first at 0 got -13.1466675/0x0xc15258c0 want -13.146668/0x0xc15258c1; row-scales-37x41x300 (dispatch-codes vs oracle): 1517 of 1517 cells differ; first at 0 got -13.1466675/0x0xc15258c0 want -1
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336 (flat): cell 0 is 641670500000.0/0x0x5315668b, the host oracle has 641670600000.0/0x0x5315668c
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 6 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 6 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-piece-sabotage (every line that is not a digest or a per-shape ok; last 60)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_PIECE_HI_CLAMP  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: planes at 259 are (-127, 1), want (-128, 1)
+ok check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (pieces vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (dispatch-planes vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (apple-two-wide vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x
+!! GATE FAILED: check_int15_row_scales
+   row-scales-37x41x300 (pieces vs oracle): 557 of 1517 cells differ; first at 0 got -13.004028/0x0xc1501080 want -13.1466675/0x0xc15258c0; row-scales-37x41x300 (dispatch-planes vs oracle): 557 of 1517 cells differ; first at 0 got -13.004028/0x0xc1501080 want -13.1466675/0x0xc15258c0; row-scales-37x41x300 (apple-two-wide vs oracle): 557 of 1517 cells differ; first at 0 got -13.004028/0x0xc1501080 
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.1-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (apple-two-wide vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 wa
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336: pieces printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-codes printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-planes printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: apple-two-wide printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; larg
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 5 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 5 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-quant-sabotage (every line that is not a digest or a per-shape ok; last 60)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_QUANT_TAIL_DROPPED  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: exponent of row 6 is -10 (codes) and -10 (planes), want -4
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32 (from_f32): 32 of 32 cells differ; first at 0 got -25.0/0x0xc1c80000 want -17.12693/0x0xc18903f4
+ok check_int15_plans_agree
+ok check_int15_row_scales
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-apple-chunk-sabotage (every line that is not a digest or a per-shape ok; last 60)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v
+                dst[r * ST + p4 + e] = v
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: INT15_APPLE_CHUNK_BOUNDARY_REMOVED  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+   plans-13x21x4097 (apple-four-wide vs oracle): 2 of 273 cells differ; first at 33 got -100.383194/0x0xc2c8c432 want -100.3832/0x0xc2c8c433; plans-13x21x4097 (apple-four-row vs oracle): 2 of 273 cells differ; first at 33 got -100.383194/0x0xc2c8c432 want -100.3832/0x0xc2c8c433
+ok check_int15_row_scales
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (apple-two-wide vs oracle): 15 of 15 cells differ; first at 0 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (apple-two-row vs oracle): 15 of 15 cells differ; first at 0 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.4-3x5x17 (apple-two-wide vs oracle): 12 of 15 cells differ; first at 1 got 4562844700.0/0x0x4f87fbbe w
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336: dispatch-codes printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-planes printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1; large-512x4096x14336: apple-four-wide printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 14 gates, 3 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 3 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== gate digests (the clean run)
+DIGEST path-1x32x32 oracle 0x7b55f6c6c9a6d3d6
+DIGEST path-1x32x32 device 0x7b55f6c6c9a6d3d6
+DIGEST path-1x32x32 from-f32 0x7b55f6c6c9a6d3d6
+DIGEST path-1x64x128 oracle 0xf3201701ab9e453
+DIGEST path-1x64x128 device 0xf3201701ab9e453
+DIGEST path-1x64x128 from-f32 0xf3201701ab9e453
+DIGEST path-2x96x127 oracle 0xd86bd92d1750f1f0
+DIGEST path-2x96x127 device 0xd86bd92d1750f1f0
+DIGEST path-2x96x127 from-f32 0xd86bd92d1750f1f0
+DIGEST path-7x33x129 oracle 0xadc5f275fa0908bd
+DIGEST path-7x33x129 device 0xadc5f275fa0908bd
+DIGEST path-7x33x129 from-f32 0xadc5f275fa0908bd
+DIGEST path-16x64x1000 oracle 0x53296d682c3c50a
+DIGEST path-16x64x1000 device 0x53296d682c3c50a
+DIGEST path-16x64x1000 from-f32 0x53296d682c3c50a
+DIGEST path-129x129x256 oracle 0x747c54a1847118ca
+DIGEST path-129x129x256 device 0x747c54a1847118ca
+DIGEST path-129x129x256 from-f32 0x747c54a1847118ca
+DIGEST path-1x4096x512 oracle 0x893f5e045ad8c66d
+DIGEST path-1x4096x512 device 0x893f5e045ad8c66d
+DIGEST path-1x4096x512 from-f32 0x893f5e045ad8c66d
+DIGEST path-3x5x17 oracle 0xa575ec9cb636e6c
+DIGEST path-3x5x17 device 0xa575ec9cb636e6c
+DIGEST path-3x5x17 from-f32 0xa575ec9cb636e6c
+DIGEST path-17x33x31 oracle 0x6047182938989608
+DIGEST path-17x33x31 device 0x6047182938989608
+DIGEST path-17x33x31 from-f32 0x6047182938989608
+DIGEST path-33x17x33 oracle 0xd45745ab3d7cacce
+DIGEST path-33x17x33 device 0xd45745ab3d7cacce
+DIGEST path-33x17x33 from-f32 0xd45745ab3d7cacce
+DIGEST path-1x47x100 oracle 0x979b82aa889ee887
+DIGEST path-1x47x100 device 0x979b82aa889ee887
+DIGEST path-1x47x100 from-f32 0x979b82aa889ee887
+DIGEST path-50x70x1000 oracle 0x3189c0a475ad7065
+DIGEST path-50x70x1000 device 0x3189c0a475ad7065
+DIGEST path-50x70x1000 from-f32 0x3189c0a475ad7065
+DIGEST path-13x21x4097 oracle 0xe2520275fd137adf
+DIGEST path-13x21x4097 device 0xe2520275fd137adf
+DIGEST path-13x21x4097 from-f32 0xe2520275fd137adf
+DIGEST path-2x16x32 oracle 0xfbb0b98c34160f85
+DIGEST path-2x16x32 device 0xfbb0b98c34160f85
+DIGEST path-2x16x32 from-f32 0xfbb0b98c34160f85
+DIGEST path-100x3x64 oracle 0xa6aea0e1b1740a35
+DIGEST path-100x3x64 device 0xa6aea0e1b1740a35
+DIGEST path-100x3x64 from-f32 0xa6aea0e1b1740a35
+DIGEST plans-1x32x32 oracle 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 flat 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 pieces 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 dispatch-codes 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 dispatch-planes 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 apple-two-wide 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 apple-two-row 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 apple-four-wide 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 apple-four-row 0x11b4a8af5ba13ce2
+DIGEST plans-1x64x128 oracle 0xcaac78b540d27589
+DIGEST plans-1x64x128 flat 0xcaac78b540d27589
+DIGEST plans-1x64x128 pieces 0xcaac78b540d27589
+DIGEST plans-1x64x128 dispatch-codes 0xcaac78b540d27589
+DIGEST plans-1x64x128 dispatch-planes 0xcaac78b540d27589
+DIGEST plans-1x64x128 apple-two-wide 0xcaac78b540d27589
+DIGEST plans-1x64x128 apple-two-row 0xcaac78b540d27589
+DIGEST plans-1x64x128 apple-four-wide 0xcaac78b540d27589
+DIGEST plans-1x64x128 apple-four-row 0xcaac78b540d27589
+DIGEST plans-2x96x127 oracle 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 flat 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 pieces 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 dispatch-codes 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 dispatch-planes 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 apple-two-wide 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 apple-two-row 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 apple-four-wide 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 apple-four-row 0xd8cf0f1b353ef33c
+DIGEST plans-7x33x129 oracle 0x1043ec32934d91db
+DIGEST plans-7x33x129 flat 0x1043ec32934d91db
+DIGEST plans-7x33x129 pieces 0x1043ec32934d91db
+DIGEST plans-7x33x129 dispatch-codes 0x1043ec32934d91db
+DIGEST plans-7x33x129 dispatch-planes 0x1043ec32934d91db
+DIGEST plans-7x33x129 apple-two-wide 0x1043ec32934d91db
+DIGEST plans-7x33x129 apple-two-row 0x1043ec32934d91db
+DIGEST plans-7x33x129 apple-four-wide 0x1043ec32934d91db
+DIGEST plans-7x33x129 apple-four-row 0x1043ec32934d91db
+DIGEST plans-16x64x1000 oracle 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 flat 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 pieces 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 dispatch-codes 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 dispatch-planes 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 apple-two-wide 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 apple-two-row 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 apple-four-wide 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 apple-four-row 0x1ec0436a4ca8cff6
+DIGEST plans-129x129x256 oracle 0x277a9bc1632c8943
+DIGEST plans-129x129x256 flat 0x277a9bc1632c8943
+DIGEST plans-129x129x256 pieces 0x277a9bc1632c8943
+DIGEST plans-129x129x256 dispatch-codes 0x277a9bc1632c8943
+DIGEST plans-129x129x256 dispatch-planes 0x277a9bc1632c8943
+DIGEST plans-129x129x256 apple-two-wide 0x277a9bc1632c8943
+DIGEST plans-129x129x256 apple-two-row 0x277a9bc1632c8943
+DIGEST plans-129x129x256 apple-four-wide 0x277a9bc1632c8943
+DIGEST plans-129x129x256 apple-four-row 0x277a9bc1632c8943
+DIGEST plans-1x4096x512 oracle 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 flat 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 pieces 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 dispatch-codes 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 dispatch-planes 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 apple-two-wide 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 apple-two-row 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 apple-four-wide 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 apple-four-row 0x88fdbf813b4f71dc
+DIGEST plans-3x5x17 oracle 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 flat 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 pieces 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 dispatch-codes 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 dispatch-planes 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 apple-two-wide 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 apple-two-row 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 apple-four-wide 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 apple-four-row 0x491cc7ccf4a9601d
+DIGEST plans-17x33x31 oracle 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 flat 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 pieces 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 dispatch-codes 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 dispatch-planes 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 apple-two-wide 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 apple-two-row 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 apple-four-wide 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 apple-four-row 0xfcd82c779d4e2b10
+DIGEST plans-33x17x33 oracle 0xa28da29115bb3516
+DIGEST plans-33x17x33 flat 0xa28da29115bb3516
+DIGEST plans-33x17x33 pieces 0xa28da29115bb3516
+DIGEST plans-33x17x33 dispatch-codes 0xa28da29115bb3516
+DIGEST plans-33x17x33 dispatch-planes 0xa28da29115bb3516
+DIGEST plans-33x17x33 apple-two-wide 0xa28da29115bb3516
+DIGEST plans-33x17x33 apple-two-row 0xa28da29115bb3516
+DIGEST plans-33x17x33 apple-four-wide 0xa28da29115bb3516
+DIGEST plans-33x17x33 apple-four-row 0xa28da29115bb3516
+DIGEST plans-1x47x100 oracle 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 flat 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 pieces 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 dispatch-codes 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 dispatch-planes 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 apple-two-wide 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 apple-two-row 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 apple-four-wide 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 apple-four-row 0xd3dca8e8f829030d
+DIGEST plans-50x70x1000 oracle 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 flat 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 pieces 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 dispatch-codes 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 dispatch-planes 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 apple-two-wide 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 apple-two-row 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 apple-four-wide 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 apple-four-row 0xf69c1ab0a1c94533
+DIGEST plans-13x21x4097 oracle 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 flat 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 pieces 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 dispatch-codes 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 dispatch-planes 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 apple-two-wide 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 apple-two-row 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 apple-four-wide 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 apple-four-row 0xc11511d4e4898ceb
+DIGEST plans-2x16x32 oracle 0x8c1af00da214dadd
+DIGEST plans-2x16x32 flat 0x8c1af00da214dadd
+DIGEST plans-2x16x32 pieces 0x8c1af00da214dadd
+DIGEST plans-2x16x32 dispatch-codes 0x8c1af00da214dadd
+DIGEST plans-2x16x32 dispatch-planes 0x8c1af00da214dadd
+DIGEST plans-2x16x32 apple-two-wide 0x8c1af00da214dadd
+DIGEST plans-2x16x32 apple-two-row 0x8c1af00da214dadd
+DIGEST plans-2x16x32 apple-four-wide 0x8c1af00da214dadd
+DIGEST plans-2x16x32 apple-four-row 0x8c1af00da214dadd
+DIGEST plans-100x3x64 oracle 0x2bc885b210500112
+DIGEST plans-100x3x64 flat 0x2bc885b210500112
+DIGEST plans-100x3x64 pieces 0x2bc885b210500112
+DIGEST plans-100x3x64 dispatch-codes 0x2bc885b210500112
+DIGEST plans-100x3x64 dispatch-planes 0x2bc885b210500112
+DIGEST plans-100x3x64 apple-two-wide 0x2bc885b210500112
+DIGEST plans-100x3x64 apple-two-row 0x2bc885b210500112
+DIGEST plans-100x3x64 apple-four-wide 0x2bc885b210500112
+DIGEST plans-100x3x64 apple-four-row 0x2bc885b210500112
+DIGEST row-scales-37x41x300 oracle 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 flat 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 pieces 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 dispatch-codes 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 dispatch-planes 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 apple-two-wide 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 apple-two-row 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 apple-four-wide 0x48f89d2db5f36d6e
+DIGEST row-scales-37x41x300 apple-four-row 0x48f89d2db5f36d6e
+DIGEST row-scales-70x67x1000 oracle 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 flat 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 pieces 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 dispatch-codes 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 dispatch-planes 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 apple-two-wide 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 apple-two-row 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 apple-four-wide 0xa9cee01b796437d9
+DIGEST row-scales-70x67x1000 apple-four-row 0xa9cee01b796437d9
+DIGEST planted-0.0-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 apple-two-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 apple-two-row 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 apple-four-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 apple-four-row 0xcce8ff9f34f2a1ea
+DIGEST planted-0.1-3x5x17 oracle 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 flat 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 pieces 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 dispatch-codes 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 dispatch-planes 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 apple-two-wide 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 apple-two-row 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 apple-four-wide 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 apple-four-row 0xb564081e55a67d6a
+DIGEST planted-0.2-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 apple-two-wide 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 apple-two-row 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 apple-four-wide 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 apple-four-row 0xe2fdb108394a3bda
+DIGEST planted-0.3-3x5x17 oracle 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 flat 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 pieces 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 dispatch-codes 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 dispatch-planes 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 apple-two-wide 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 apple-two-row 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 apple-four-wide 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 apple-four-row 0x151529fff6423281
+DIGEST planted-0.4-3x5x17 oracle 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 flat 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 pieces 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 dispatch-codes 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 dispatch-planes 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 apple-two-wide 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 apple-two-row 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 apple-four-wide 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 apple-four-row 0x5f0af7e8192efa35
+DIGEST planted-0.5-3x5x17 oracle 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 flat 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 pieces 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 dispatch-codes 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 dispatch-planes 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 apple-two-wide 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 apple-two-row 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 apple-four-wide 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 apple-four-row 0x5a3fe7cd06505bd9
+DIGEST planted-0.6-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 apple-two-wide 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 apple-two-row 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 apple-four-wide 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 apple-four-row 0xaad40ad0d4a1e55a
+DIGEST planted-1.0-3x5x17 oracle 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 flat 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 pieces 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 dispatch-codes 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 dispatch-planes 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 apple-two-wide 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 apple-two-row 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 apple-four-wide 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 apple-four-row 0xb564081e55a67d6a
+DIGEST planted-1.1-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 apple-two-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 apple-two-row 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 apple-four-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 apple-four-row 0xcce8ff9f34f2a1ea
+DIGEST planted-1.2-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 apple-two-wide 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 apple-two-row 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 apple-four-wide 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 apple-four-row 0xaad40ad0d4a1e55a
+DIGEST planted-1.3-3x5x17 oracle 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 flat 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 pieces 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 dispatch-codes 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 dispatch-planes 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 apple-two-wide 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 apple-two-row 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 apple-four-wide 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 apple-four-row 0xfd1d72216f254d01
+DIGEST planted-1.4-3x5x17 oracle 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 flat 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 pieces 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 dispatch-codes 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 dispatch-planes 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 apple-two-wide 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 apple-two-row 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 apple-four-wide 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 apple-four-row 0x207a21bf4cf27b35
+DIGEST planted-1.5-3x5x17 oracle 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 flat 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 pieces 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 dispatch-codes 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 dispatch-planes 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 apple-two-wide 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 apple-two-row 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 apple-four-wide 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 apple-four-row 0x2d36d75a8d935059
+DIGEST planted-1.6-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 apple-two-wide 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 apple-two-row 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 apple-four-wide 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 apple-four-row 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 apple-two-wide 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 apple-two-row 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 apple-four-wide 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 apple-four-row 0xe2fdb108394a3bda
+DIGEST planted-2.1-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 apple-two-wide 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 apple-two-row 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 apple-four-wide 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 apple-four-row 0xaad40ad0d4a1e55a
+DIGEST planted-2.2-3x5x17 oracle 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 flat 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 pieces 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 dispatch-codes 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 dispatch-planes 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 apple-two-wide 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 apple-two-row 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 apple-four-wide 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 apple-four-row 0xf46c76fb950488eb
+DIGEST planted-2.3-3x5x17 oracle 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 flat 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 pieces 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 dispatch-codes 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 dispatch-planes 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 apple-two-wide 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 apple-two-row 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 apple-four-wide 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 apple-four-row 0xefdd1fba721a3818
+DIGEST planted-2.4-3x5x17 oracle 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 flat 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 pieces 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 dispatch-codes 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 dispatch-planes 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 apple-two-wide 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 apple-two-row 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 apple-four-wide 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 apple-four-row 0x1c8841aac16eced
+DIGEST planted-2.5-3x5x17 oracle 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 flat 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 pieces 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 dispatch-codes 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 dispatch-planes 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 apple-two-wide 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 apple-two-row 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 apple-four-wide 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 apple-four-row 0x1f00862a46d2f28
+DIGEST planted-2.6-3x5x17 oracle 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 flat 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 pieces 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 dispatch-codes 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 dispatch-planes 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 apple-two-wide 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 apple-two-row 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 apple-four-wide 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 apple-four-row 0xcace0f495248a16b
+DIGEST planted-3.0-3x5x17 oracle 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 flat 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 pieces 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 dispatch-codes 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 dispatch-planes 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 apple-two-wide 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 apple-two-row 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 apple-four-wide 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 apple-four-row 0x151529fff6423281
+DIGEST planted-3.1-3x5x17 oracle 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 flat 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 pieces 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 dispatch-codes 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 dispatch-planes 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 apple-two-wide 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 apple-two-row 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 apple-four-wide 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 apple-four-row 0xfd1d72216f254d01
+DIGEST planted-3.2-3x5x17 oracle 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 flat 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 pieces 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 dispatch-codes 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 dispatch-planes 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 apple-two-wide 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 apple-two-row 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 apple-four-wide 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 apple-four-row 0xefdd1fba721a3818
+DIGEST planted-3.3-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 apple-two-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 apple-two-row 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 apple-four-wide 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 apple-four-row 0xcce8ff9f34f2a1ea
+DIGEST planted-3.4-3x5x17 oracle 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 flat 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 pieces 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 dispatch-codes 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 dispatch-planes 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 apple-two-wide 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 apple-two-row 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 apple-four-wide 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 apple-four-row 0xbef38be739ce54c5
+DIGEST planted-3.5-3x5x17 oracle 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 flat 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 pieces 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 dispatch-codes 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 dispatch-planes 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 apple-two-wide 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 apple-two-row 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 apple-four-wide 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 apple-four-row 0x64d0eb5ba6967141
+DIGEST planted-3.6-3x5x17 oracle 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 flat 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 pieces 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 dispatch-codes 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 dispatch-planes 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 apple-two-wide 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 apple-two-row 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 apple-four-wide 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 apple-four-row 0x79d80a379b0b598
+DIGEST planted-4.0-3x5x17 oracle 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 flat 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 pieces 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 dispatch-codes 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 dispatch-planes 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 apple-two-wide 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 apple-two-row 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 apple-four-wide 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 apple-four-row 0xa4e9d72699ad7965
+DIGEST planted-4.1-3x5x17 oracle 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 flat 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 pieces 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 dispatch-codes 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 dispatch-planes 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 apple-two-wide 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 apple-two-row 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 apple-four-wide 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 apple-four-row 0x9dd7ec7ea442c065
+DIGEST planted-4.2-3x5x17 oracle 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 flat 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 pieces 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 dispatch-codes 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 dispatch-planes 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 apple-two-wide 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 apple-two-row 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 apple-four-wide 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 apple-four-row 0xc4c688abc8bbaa59
+DIGEST planted-4.3-3x5x17 oracle 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 flat 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 pieces 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 dispatch-codes 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 dispatch-planes 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 apple-two-wide 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 apple-two-row 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 apple-four-wide 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 apple-four-row 0xe5bfa54652cd279d
+DIGEST planted-4.4-3x5x17 oracle 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 flat 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 pieces 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 dispatch-codes 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 dispatch-planes 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 apple-two-wide 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 apple-two-row 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 apple-four-wide 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 apple-four-row 0x45c3916e3afd3c95
+DIGEST planted-4.5-3x5x17 oracle 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 flat 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 pieces 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 dispatch-codes 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 dispatch-planes 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 apple-two-wide 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 apple-two-row 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 apple-four-wide 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 apple-four-row 0xecfef9f9a4eb748d
+DIGEST planted-4.6-3x5x17 oracle 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 flat 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 pieces 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 dispatch-codes 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 dispatch-planes 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 apple-two-wide 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 apple-two-row 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 apple-four-wide 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 apple-four-row 0x9d3920241044cf59
+DIGEST planted-5.0-3x5x17 oracle 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 flat 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 pieces 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 dispatch-codes 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 dispatch-planes 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 apple-two-wide 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 apple-two-row 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 apple-four-wide 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 apple-four-row 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.1-3x5x17 oracle 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 flat 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 pieces 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 dispatch-codes 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 dispatch-planes 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 apple-two-wide 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 apple-two-row 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 apple-four-wide 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 apple-four-row 0x7cce0ff6a26f5532
+DIGEST planted-5.2-3x5x17 oracle 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 flat 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 pieces 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 dispatch-codes 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 dispatch-planes 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 apple-two-wide 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 apple-two-row 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 apple-four-wide 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 apple-four-row 0x399187c6f473448a
+DIGEST planted-5.3-3x5x17 oracle 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 flat 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 pieces 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 dispatch-codes 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 dispatch-planes 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 apple-two-wide 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 apple-two-row 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 apple-four-wide 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 apple-four-row 0xc7ad4b78eb7dd925
+DIGEST planted-5.4-3x5x17 oracle 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 flat 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 pieces 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 dispatch-codes 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 dispatch-planes 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 apple-two-wide 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 apple-two-row 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 apple-four-wide 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 apple-four-row 0x9d4958f5fc10242d
+DIGEST planted-5.5-3x5x17 oracle 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 flat 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 pieces 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 dispatch-codes 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 dispatch-planes 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 apple-two-wide 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 apple-two-row 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 apple-four-wide 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 apple-four-row 0xc151a0a976112028
+DIGEST planted-5.6-3x5x17 oracle 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 flat 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 pieces 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 dispatch-codes 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 dispatch-planes 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 apple-two-wide 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 apple-two-row 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 apple-four-wide 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 apple-four-row 0xb6907078b2832d0a
+DIGEST planted-6.0-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 apple-two-wide 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 apple-two-row 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 apple-four-wide 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 apple-four-row 0xaad40ad0d4a1e55a
+DIGEST planted-6.1-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 apple-two-wide 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 apple-two-row 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 apple-four-wide 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 apple-four-row 0xe2fdb108394a3bda
+DIGEST planted-6.2-3x5x17 oracle 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 flat 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 pieces 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 dispatch-codes 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 dispatch-planes 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 apple-two-wide 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 apple-two-row 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 apple-four-wide 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 apple-four-row 0xcace0f495248a16b
+DIGEST planted-6.3-3x5x17 oracle 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 flat 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 pieces 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 dispatch-codes 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 dispatch-planes 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 apple-two-wide 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 apple-two-row 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 apple-four-wide 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 apple-four-row 0x79d80a379b0b598
+DIGEST planted-6.4-3x5x17 oracle 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 flat 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 pieces 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 dispatch-codes 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 dispatch-planes 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 apple-two-wide 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 apple-two-row 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 apple-four-wide 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 apple-four-row 0x804f01342470bed
+DIGEST planted-6.5-3x5x17 oracle 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 flat 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 pieces 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 dispatch-codes 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 dispatch-planes 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 apple-two-wide 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 apple-two-row 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 apple-four-wide 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 apple-four-row 0x15372a4197c9b7a8
+DIGEST planted-6.6-3x5x17 oracle 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 flat 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 pieces 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 dispatch-codes 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 dispatch-planes 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 apple-two-wide 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 apple-two-row 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 apple-four-wide 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 apple-four-row 0xf46c76fb950488eb
+DIGEST planted-9.0-3x5x17 oracle 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 flat 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 pieces 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 dispatch-codes 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 dispatch-planes 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 apple-two-wide 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 apple-two-row 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 apple-four-wide 0xacd913e67476dfaa
+DIGEST planted-9.0-3x5x17 apple-four-row 0xacd913e67476dfaa
+DIGEST planted-0.0-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 apple-two-wide 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 apple-two-row 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 apple-four-wide 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 apple-four-row 0xe939e416194b24c2
+DIGEST planted-0.1-17x33x1000 oracle 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 flat 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 pieces 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 dispatch-codes 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 dispatch-planes 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 apple-two-wide 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 apple-two-row 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 apple-four-wide 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 apple-four-row 0x7756a1b254454b42
+DIGEST planted-0.2-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 apple-two-wide 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 apple-two-row 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 apple-four-wide 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 apple-four-row 0x70fe7870e8298d0b
+DIGEST planted-0.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-0.4-17x33x1000 oracle 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 flat 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 pieces 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 dispatch-codes 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 dispatch-planes 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 apple-two-wide 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 apple-two-row 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 apple-four-wide 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 apple-four-row 0xb36825cd84a2efb5
+DIGEST planted-0.6-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 apple-two-wide 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 apple-two-row 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 apple-four-wide 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 apple-four-row 0xbc9f9a500546e68b
+DIGEST planted-1.0-17x33x1000 oracle 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 flat 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 pieces 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 dispatch-codes 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 dispatch-planes 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 apple-two-wide 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 apple-two-row 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 apple-four-wide 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 apple-four-row 0x7756a1b254454b42
+DIGEST planted-1.1-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 apple-two-wide 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 apple-two-row 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 apple-four-wide 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 apple-four-row 0xe939e416194b24c2
+DIGEST planted-1.2-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 apple-two-wide 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 apple-two-row 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 apple-four-wide 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 apple-four-row 0xbc9f9a500546e68b
+DIGEST planted-1.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-1.4-17x33x1000 oracle 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 flat 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 pieces 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 dispatch-codes 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 dispatch-planes 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 apple-two-wide 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 apple-two-row 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 apple-four-wide 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 apple-four-row 0xf976bbb0212db1b5
+DIGEST planted-1.6-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 apple-two-wide 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 apple-two-row 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 apple-four-wide 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 apple-four-row 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 apple-two-wide 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 apple-two-row 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 apple-four-wide 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 apple-four-row 0x70fe7870e8298d0b
+DIGEST planted-2.1-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 apple-two-wide 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 apple-two-row 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 apple-four-wide 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 apple-four-row 0xbc9f9a500546e68b
+DIGEST planted-2.2-17x33x1000 oracle 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 flat 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 pieces 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 dispatch-codes 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 dispatch-planes 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 apple-two-wide 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 apple-two-row 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 apple-four-wide 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 apple-four-row 0xda82cd17e2bf4944
+DIGEST planted-2.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-2.4-17x33x1000 oracle 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 flat 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 pieces 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 dispatch-codes 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 dispatch-planes 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 apple-two-wide 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 apple-two-row 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 apple-four-wide 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 apple-four-row 0xedf1c59295af2cf5
+DIGEST planted-2.6-17x33x1000 oracle 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 flat 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 pieces 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 dispatch-codes 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 dispatch-planes 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 apple-two-wide 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 apple-two-row 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 apple-four-wide 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 apple-four-row 0xcf08f74251bc77c4
+DIGEST planted-3.0-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.3-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 apple-two-wide 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 apple-two-row 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 apple-four-wide 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 apple-four-row 0xe939e416194b24c2
+DIGEST planted-3.4-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-4.0-17x33x1000 oracle 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 flat 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 pieces 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 dispatch-codes 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 dispatch-planes 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 apple-two-wide 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 apple-two-row 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 apple-four-wide 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 apple-four-row 0x366ec63ade3a4655
+DIGEST planted-4.1-17x33x1000 oracle 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 flat 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 pieces 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 dispatch-codes 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 dispatch-planes 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 apple-two-wide 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 apple-two-row 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 apple-four-wide 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 apple-four-row 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.2-17x33x1000 oracle 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 flat 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 pieces 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 dispatch-codes 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 dispatch-planes 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 apple-two-wide 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 apple-two-row 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 apple-four-wide 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 apple-four-row 0x4139285c38346ff5
+DIGEST planted-4.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-4.4-17x33x1000 oracle 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 flat 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 pieces 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 dispatch-codes 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 dispatch-planes 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 apple-two-wide 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 apple-two-row 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 apple-four-wide 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 apple-four-row 0xf4892fda91cd4ef5
+DIGEST planted-4.6-17x33x1000 oracle 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 flat 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 pieces 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 dispatch-codes 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 dispatch-planes 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 apple-two-wide 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 apple-two-row 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 apple-four-wide 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 apple-four-row 0x8b4f498255b46ff5
+DIGEST planted-5.5-17x33x1000 oracle 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 flat 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 pieces 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 dispatch-codes 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 dispatch-planes 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 apple-two-wide 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 apple-two-row 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 apple-four-wide 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 apple-four-row 0x6d6fafdc5189925d
+DIGEST planted-6.0-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 apple-two-wide 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 apple-two-row 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 apple-four-wide 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 apple-four-row 0xbc9f9a500546e68b
+DIGEST planted-6.1-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 apple-two-wide 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 apple-two-row 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 apple-four-wide 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 apple-four-row 0x70fe7870e8298d0b
+DIGEST planted-6.2-17x33x1000 oracle 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 flat 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 pieces 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 dispatch-codes 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 dispatch-planes 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 apple-two-wide 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 apple-two-row 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 apple-four-wide 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 apple-four-row 0xcf08f74251bc77c4
+DIGEST planted-6.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 apple-two-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 apple-two-row 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 apple-four-wide 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 apple-four-row 0xcb1e820bbe2ad2f5
+DIGEST planted-6.4-17x33x1000 oracle 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 flat 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 pieces 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 dispatch-codes 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 dispatch-planes 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 apple-two-wide 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 apple-two-row 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 apple-four-wide 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 apple-four-row 0x65b04ea110af2cf5
+DIGEST planted-6.6-17x33x1000 oracle 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 flat 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 pieces 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 dispatch-codes 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 dispatch-planes 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 apple-two-wide 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 apple-two-row 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 apple-four-wide 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 apple-four-row 0xda82cd17e2bf4944
+DIGEST planted-9.0-17x33x1000 oracle 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 flat 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 pieces 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 dispatch-codes 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 dispatch-planes 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 apple-two-wide 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 apple-two-row 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 apple-four-wide 0x7b2d3ea9b997463e
+DIGEST planted-9.0-17x33x1000 apple-four-row 0x7b2d3ea9b997463e
+DIGEST planted-0.0-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 apple-two-wide 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 apple-two-row 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 apple-four-wide 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 apple-four-row 0xf1cd2c160ea14165
+DIGEST planted-0.1-1x40x4097 oracle 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 flat 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 pieces 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 dispatch-codes 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 dispatch-planes 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 apple-two-wide 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 apple-two-row 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 apple-four-wide 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 apple-four-row 0x7d5cd3eb9f4dff65
+DIGEST planted-0.2-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 apple-two-wide 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 apple-two-row 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 apple-four-wide 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 apple-four-row 0x6fd1f410698c9c85
+DIGEST planted-0.3-1x40x4097 oracle 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 flat 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 pieces 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 dispatch-codes 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 dispatch-planes 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 apple-two-wide 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 apple-two-row 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 apple-four-wide 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 apple-four-row 0x12a70d29738a5a45
+DIGEST planted-0.4-1x40x4097 oracle 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 flat 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 pieces 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 dispatch-codes 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 dispatch-planes 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 apple-two-wide 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 apple-two-row 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 apple-four-wide 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 apple-four-row 0xd859e46b09ab2600
+DIGEST planted-0.6-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 apple-two-wide 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 apple-two-row 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 apple-four-wide 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 apple-four-row 0xe929cb3b12380b85
+DIGEST planted-1.0-1x40x4097 oracle 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 flat 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 pieces 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 dispatch-codes 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 dispatch-planes 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 apple-two-wide 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 apple-two-row 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 apple-four-wide 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 apple-four-row 0x7d5cd3eb9f4dff65
+DIGEST planted-1.1-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 apple-two-wide 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 apple-two-row 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 apple-four-wide 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 apple-four-row 0xf1cd2c160ea14165
+DIGEST planted-1.2-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 apple-two-wide 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 apple-two-row 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 apple-four-wide 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 apple-four-row 0xe929cb3b12380b85
+DIGEST planted-1.3-1x40x4097 oracle 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 flat 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 pieces 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 dispatch-codes 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 dispatch-planes 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 apple-two-wide 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 apple-two-row 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 apple-four-wide 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 apple-four-row 0x63efb4fac09b8745
+DIGEST planted-1.4-1x40x4097 oracle 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 flat 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 pieces 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 dispatch-codes 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 dispatch-planes 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 apple-two-wide 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 apple-two-row 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 apple-four-wide 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 apple-four-row 0x5ad18321450a0e80
+DIGEST planted-1.6-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 apple-two-wide 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 apple-two-row 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 apple-four-wide 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 apple-four-row 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 apple-two-wide 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 apple-two-row 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 apple-four-wide 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 apple-four-row 0x6fd1f410698c9c85
+DIGEST planted-2.1-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 apple-two-wide 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 apple-two-row 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 apple-four-wide 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 apple-four-row 0xe929cb3b12380b85
+DIGEST planted-2.2-1x40x4097 oracle 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 flat 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 pieces 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 dispatch-codes 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 dispatch-planes 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 apple-two-wide 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 apple-two-row 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 apple-four-wide 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 apple-four-row 0xa6be37d439cc33e5
+DIGEST planted-2.3-1x40x4097 oracle 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 flat 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 pieces 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 dispatch-codes 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 dispatch-planes 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 apple-two-wide 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 apple-two-row 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 apple-four-wide 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 apple-four-row 0x358668cfe7879875
+DIGEST planted-2.4-1x40x4097 oracle 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 flat 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 pieces 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 dispatch-codes 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 dispatch-planes 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 apple-two-wide 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 apple-two-row 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 apple-four-wide 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 apple-four-row 0x2c748c535984555b
+DIGEST planted-2.6-1x40x4097 oracle 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 flat 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 pieces 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 dispatch-codes 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 dispatch-planes 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 apple-two-wide 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 apple-two-row 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 apple-four-wide 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 apple-four-row 0x89753c5919a297e5
+DIGEST planted-3.0-1x40x4097 oracle 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 flat 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 pieces 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 dispatch-codes 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 dispatch-planes 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 apple-two-wide 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 apple-two-row 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 apple-four-wide 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 apple-four-row 0x12a70d29738a5a45
+DIGEST planted-3.1-1x40x4097 oracle 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 flat 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 pieces 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 dispatch-codes 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 dispatch-planes 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 apple-two-wide 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 apple-two-row 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 apple-four-wide 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 apple-four-row 0x63efb4fac09b8745
+DIGEST planted-3.2-1x40x4097 oracle 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 flat 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 pieces 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 dispatch-codes 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 dispatch-planes 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 apple-two-wide 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 apple-two-row 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 apple-four-wide 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 apple-four-row 0x358668cfe7879875
+DIGEST planted-3.3-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 apple-two-wide 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 apple-two-row 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 apple-four-wide 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 apple-four-row 0xf1cd2c160ea14165
+DIGEST planted-3.4-1x40x4097 oracle 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 flat 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 pieces 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 dispatch-codes 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 dispatch-planes 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 apple-two-wide 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 apple-two-row 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 apple-four-wide 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 apple-four-row 0xa3d2b3d218e05431
+DIGEST planted-3.6-1x40x4097 oracle 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 flat 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 pieces 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 dispatch-codes 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 dispatch-planes 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 apple-two-wide 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 apple-two-row 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 apple-four-wide 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 apple-four-row 0x67da607282c77375
+DIGEST planted-4.0-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 apple-two-wide 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 apple-two-row 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 apple-four-wide 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 apple-four-row 0x81b169c331cabfa5
+DIGEST planted-5.5-1x40x4097 oracle 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 flat 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 pieces 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 dispatch-codes 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 dispatch-planes 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 apple-two-wide 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 apple-two-row 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 apple-four-wide 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 apple-four-row 0x63ddce03bdda7083
+DIGEST planted-6.0-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 apple-two-wide 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 apple-two-row 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 apple-four-wide 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 apple-four-row 0xe929cb3b12380b85
+DIGEST planted-6.1-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 apple-two-wide 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 apple-two-row 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 apple-four-wide 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 apple-four-row 0x6fd1f410698c9c85
+DIGEST planted-6.2-1x40x4097 oracle 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 flat 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 pieces 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 dispatch-codes 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 dispatch-planes 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 apple-two-wide 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 apple-two-row 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 apple-four-wide 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 apple-four-row 0x89753c5919a297e5
+DIGEST planted-6.3-1x40x4097 oracle 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 flat 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 pieces 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 dispatch-codes 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 dispatch-planes 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 apple-two-wide 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 apple-two-row 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 apple-four-wide 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 apple-four-row 0x67da607282c77375
+DIGEST planted-6.4-1x40x4097 oracle 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 flat 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 pieces 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 dispatch-codes 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 dispatch-planes 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 apple-two-wide 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 apple-two-row 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 apple-four-wide 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 apple-four-row 0x652ea6abfc47cdb
+DIGEST planted-6.6-1x40x4097 oracle 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 flat 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 pieces 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 dispatch-codes 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 dispatch-planes 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 apple-two-wide 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 apple-two-row 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 apple-four-wide 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 apple-four-row 0xa6be37d439cc33e5
+DIGEST planted-9.0-1x40x4097 oracle 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 flat 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 pieces 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 dispatch-codes 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 dispatch-planes 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 apple-two-wide 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 apple-two-row 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 apple-four-wide 0xb46ee36a86dc4765
+DIGEST planted-9.0-1x40x4097 apple-four-row 0xb46ee36a86dc4765
+DIGEST planted-0.0-2x3x65536 oracle 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 flat 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 pieces 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 dispatch-codes 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 dispatch-planes 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 apple-two-wide 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 apple-two-row 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 apple-four-wide 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 apple-four-row 0x8952dd081175e95d
+DIGEST planted-0.1-2x3x65536 oracle 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 flat 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 pieces 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 dispatch-codes 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 dispatch-planes 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 apple-two-wide 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 apple-two-row 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 apple-four-wide 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 apple-four-row 0xaf6eb4ffcd6d505d
+DIGEST planted-0.2-2x3x65536 oracle 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 flat 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 pieces 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 dispatch-codes 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 dispatch-planes 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 apple-two-wide 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 apple-two-row 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 apple-four-wide 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 apple-four-row 0x51abebeb479a1449
+DIGEST planted-1.0-2x3x65536 oracle 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 flat 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 pieces 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 dispatch-codes 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 dispatch-planes 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 apple-two-wide 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 apple-two-row 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 apple-four-wide 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 apple-four-row 0xaf6eb4ffcd6d505d
+DIGEST planted-1.1-2x3x65536 oracle 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 flat 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 pieces 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 dispatch-codes 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 dispatch-planes 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 apple-two-wide 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 apple-two-row 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 apple-four-wide 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 apple-four-row 0x8952dd081175e95d
+DIGEST planted-1.2-2x3x65536 oracle 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 flat 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 pieces 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 dispatch-codes 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 dispatch-planes 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 apple-two-wide 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 apple-two-row 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 apple-four-wide 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 apple-four-row 0x48ec425bceb3249
+DIGEST planted-2.0-2x3x65536 oracle 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 flat 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 pieces 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 dispatch-codes 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 dispatch-planes 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 apple-two-wide 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 apple-two-row 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 apple-four-wide 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 apple-four-row 0x51abebeb479a1449
+DIGEST planted-2.1-2x3x65536 oracle 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 flat 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 pieces 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 dispatch-codes 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 dispatch-planes 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 apple-two-wide 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 apple-two-row 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 apple-four-wide 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 apple-four-row 0x48ec425bceb3249
+DIGEST planted-2.2-2x3x65536 oracle 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 flat 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 pieces 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 dispatch-codes 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 dispatch-planes 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 apple-two-wide 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 apple-two-row 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 apple-four-wide 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 apple-four-row 0x76d745ed091d068d
+DIGEST planted-3.0-2x3x65536 oracle 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 flat 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 pieces 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 dispatch-codes 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 dispatch-planes 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 apple-two-wide 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 apple-two-row 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 apple-four-wide 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 apple-four-row 0x81d23fd7003c2305
+DIGEST planted-9.0-2x3x65536 oracle 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 flat 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 pieces 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 dispatch-codes 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 dispatch-planes 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 apple-two-wide 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 apple-two-row 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 apple-four-wide 0xc784b38c46df6c29
+DIGEST planted-9.0-2x3x65536 apple-four-row 0xc784b38c46df6c29
+DIGEST scale-127 oracle 0x2124895549aba7c5
+DIGEST scale-127 flat 0x2124895549aba7c5
+DIGEST scale-127 pieces 0x2124895549aba7c5
+DIGEST scale-127 dispatch-codes 0x2124895549aba7c5
+DIGEST scale-127 dispatch-planes 0x2124895549aba7c5
+DIGEST scale-127 apple-two-wide 0x2124895549aba7c5
+DIGEST scale-127 apple-two-row 0x2124895549aba7c5
+DIGEST scale-127 apple-four-wide 0x2124895549aba7c5
+DIGEST scale-127 apple-four-row 0x2124895549aba7c5
+DIGEST scale-128 oracle 0x94b78aae0094ede8
+DIGEST scale-128 flat 0x94b78aae0094ede8
+DIGEST scale-128 pieces 0x94b78aae0094ede8
+DIGEST scale-128 dispatch-codes 0x94b78aae0094ede8
+DIGEST scale-128 dispatch-planes 0x94b78aae0094ede8
+DIGEST scale-128 apple-two-wide 0x94b78aae0094ede8
+DIGEST scale-128 apple-two-row 0x94b78aae0094ede8
+DIGEST scale-128 apple-four-wide 0x94b78aae0094ede8
+DIGEST scale-128 apple-four-row 0x94b78aae0094ede8
+DIGEST scale--126 oracle 0x5407f33bab7aef55
+DIGEST scale--126 flat 0x5407f33bab7aef55
+DIGEST scale--126 pieces 0x5407f33bab7aef55
+DIGEST scale--126 dispatch-codes 0x5407f33bab7aef55
+DIGEST scale--126 dispatch-planes 0x5407f33bab7aef55
+DIGEST scale--126 apple-two-wide 0x5407f33bab7aef55
+DIGEST scale--126 apple-two-row 0x5407f33bab7aef55
+DIGEST scale--126 apple-four-wide 0x5407f33bab7aef55
+DIGEST scale--126 apple-four-row 0x5407f33bab7aef55
+DIGEST scale--127 oracle 0xec9075e202d5c755
+DIGEST scale--127 flat 0xec9075e202d5c755
+DIGEST scale--127 pieces 0xec9075e202d5c755
+DIGEST scale--127 dispatch-codes 0xec9075e202d5c755
+DIGEST scale--127 dispatch-planes 0xec9075e202d5c755
+DIGEST scale--127 apple-two-wide 0xec9075e202d5c755
+DIGEST scale--127 apple-two-row 0xec9075e202d5c755
+DIGEST scale--127 apple-four-wide 0xec9075e202d5c755
+DIGEST scale--127 apple-four-row 0xec9075e202d5c755
+DIGEST scale-230 oracle 0x94b78aae0094ede8
+DIGEST scale-230 flat 0x94b78aae0094ede8
+DIGEST scale-230 pieces 0x94b78aae0094ede8
+DIGEST scale-230 dispatch-codes 0x94b78aae0094ede8
+DIGEST scale-230 dispatch-planes 0x94b78aae0094ede8
+DIGEST scale-230 apple-two-wide 0x94b78aae0094ede8
+DIGEST scale-230 apple-two-row 0x94b78aae0094ede8
+DIGEST scale-230 apple-four-wide 0x94b78aae0094ede8
+DIGEST scale-230 apple-four-row 0x94b78aae0094ede8
+DIGEST scale--278 oracle 0xec9075e202d5c755
+DIGEST scale--278 flat 0xec9075e202d5c755
+DIGEST scale--278 pieces 0xec9075e202d5c755
+DIGEST scale--278 dispatch-codes 0xec9075e202d5c755
+DIGEST scale--278 dispatch-planes 0xec9075e202d5c755
+DIGEST scale--278 apple-two-wide 0xec9075e202d5c755
+DIGEST scale--278 apple-two-row 0xec9075e202d5c755
+DIGEST scale--278 apple-four-wide 0xec9075e202d5c755
+DIGEST scale--278 apple-four-row 0xec9075e202d5c755
+DIGEST largest-sum-scale-84 oracle 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 flat 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 pieces 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 dispatch-codes 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 dispatch-planes 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 apple-two-wide 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 apple-two-row 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 apple-four-wide 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 apple-four-row 0x49a9902bce19a729
+DIGEST largest-sum-scale-85 oracle 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 flat 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 pieces 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 dispatch-codes 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 dispatch-planes 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 apple-two-wide 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 apple-two-row 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 apple-four-wide 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 apple-four-row 0x9fe5c70e212a15
+DIGEST large-512x4096x14336 flat 0xab3415ded9b700f1
+DIGEST large-512x4096x14336 pieces 0xab3415ded9b700f1
+DIGEST large-512x4096x14336 dispatch-codes 0xab3415ded9b700f1
+DIGEST large-512x4096x14336 dispatch-planes 0xab3415ded9b700f1
+DIGEST large-512x4096x14336 apple-two-wide 0xab3415ded9b700f1
+DIGEST large-512x4096x14336 apple-four-wide 0xab3415ded9b700f1
+gate_job: box=m2pro red=0
+######## phase gate on m2pro exit=0, finished 2026-09-29T06:42:54Z
+box_job: box=m2pro phases: gate=0 red=0
+######## build of the tuned plan (Lane F AMD column patch) on Apple
+== gemm/checks/gemm_int15_tuned_check.mojo [IDENTICAL]  sabotage: none  epilogue sabotage: none  sums kernel sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1, the TUNED plan (contract W-13)
+   fused path: fused(lane/lowbit-mma-speed identical_gemm_int8_pieces_tuned_fused_with_plan)
+   column: apple
+   THE TUNED PLAN'S GATES DID NOT RUN: column apple has no int8 matrix unit. That is not a pass.
+== 0 gates, 0 failed ==
+tuned-check-build-and-run exit=0

@@ -98,6 +98,7 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, column_name
 from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
 from gemm.checks.gemm_identical import _AMMA_M64, _amma_load_t, _amma_mma
+from gemm.checks.gemm_int15_epilogue import INT15_EXPONENT_SABOTAGE
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 
@@ -365,8 +366,11 @@ def identical_gemm_int15_apple_kernel[
                 if gi < m and gj < n:
                     var at_cell = 2 * (fm * FN + fq) + e
                     var s = (hi_total[at_cell] << Int64(7)) + lo_total[at_cell]
+                    var gjb = gj
+                    comptime if INT15_EXPONENT_SABOTAGE:
+                        gjb = gi % n
                     var out = dequant_int15_pinned(
-                        s, Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gj))
+                        s, Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gjb))
                     )
                     comptime if INT15_APPLE_VALUE_SABOTAGE:
                         out = gemm_oracle_sabotage_value_flip(out)
@@ -475,9 +479,12 @@ def identical_gemm_int15_apple4_kernel[
                 var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
                 if gi < m and gj < n:
                     var at_cell = 2 * (fm * FN + fq) + e
+                    var gjb = gj
+                    comptime if INT15_EXPONENT_SABOTAGE:
+                        gjb = gi % n
                     var out = dequant_int15_pinned(
                         int15_recombine(hh_total[at_cell], mid_total[at_cell], ll_total[at_cell]),
-                        Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gj)),
+                        Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gjb)),
                     )
                     comptime if INT15_APPLE_VALUE_SABOTAGE:
                         out = gemm_oracle_sabotage_value_flip(out)
