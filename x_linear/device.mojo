@@ -24,6 +24,7 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own
+from x_linear.sgd import sgd_fit
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -67,6 +68,10 @@ comptime X_LINEAR_BLOCKS_GRAM = (
 )
 
 
+#: `-D MOJOLEARN_SGD_IN_FIT_KERNEL=1`: SGD back inside `fit_kernel` (the A/B arm).
+comptime SGD_IN_FIT_KERNEL = is_defined["MOJOLEARN_SGD_IN_FIT_KERNEL"]()
+
+
 def fit_kernel(
     algo: Int32, x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
 ):
@@ -79,6 +84,18 @@ def fit_kernel(
         fit_dispatch(device_team(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
     elif Int(thread_idx.x) == 0:
         fit_dispatch(solo(tw, Int(n), bufs, own), a, x, y, Int(n), Int(d), ip, fp, res, fw, iw)
+
+
+def sgd_kernel(
+    x: FP, y: FP, n: Int32, d: Int32, ip: IP, fp: FP, res: FP, fw: FP, iw: IP, tw: FP,
+):
+    """`fit_kernel` for ALGO_SGD alone (lane/linfit-speed, 2026-09-29): the
+    same call (`sgd_fit` on the whole block's team), compiled as its own
+    entry. Inside `fit_kernel` the SGD row loop shared one register
+    allocation with every other fit (255 registers, spilled flags and local
+    memory in the row loop); alone it gets its own. The same code, the same
+    words."""
+    sgd_fit(device_team(tw, Int(n), team_rows(1, ip), team_own(1, Int(d))), x, y, Int(n), Int(d), ip, fp, res, fw, iw)
 
 
 def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, res: FP):
@@ -138,12 +155,20 @@ def fit_device(
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
     dtw.enqueue_fill(Float32(0))
-    ctx.enqueue_function[fit_kernel](
-        Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
-        dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
-        dtw.unsafe_ptr(),
-        grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
-    )
+    if algo == 1 and not SGD_IN_FIT_KERNEL:
+        ctx.enqueue_function[sgd_kernel](
+            dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
+            dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
+            dtw.unsafe_ptr(),
+            grid_dim=1, block_dim=LINEAR_TPB,
+        )
+    else:
+        ctx.enqueue_function[fit_kernel](
+            Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
+            dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),
+            dtw.unsafe_ptr(),
+            grid_dim=1, block_dim=LINEAR_TPB if team_fit(algo) else 1,
+        )
     if n_out > 0:
         ctx.enqueue_copy(dst_ptr=res, src_buf=dout)
     ctx.synchronize()
