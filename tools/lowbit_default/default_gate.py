@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/lowbit-default: the flipped default on a real model (SmolLM2-360M).
+"""Check the restored FP32 default on a real model (SmolLM2-360M).
 
     python3 tools/lowbit_default/default_gate.py --model /root/models/SmolLM2-360M \
         --phases hash,generate --out <dir>
 
-hash      `CausalLM.load(path)` with NO keyword must print the fixed15_v1
-          full-logits sha256 lane/lowbit-blocks recorded on five boxes
-          (d37c2ea81d13743a...); `numeric_profile="fp32_v1"` its fp32_v1
-          hash (833c9a8947bdd619...); and the two escape hatches,
+hash      `CausalLM.load(path)` with NO keyword must print the fp32_v1
+          hash (833c9a8947bdd619...), equal to explicit fp32_v1;
+          explicit fixed15_v1 must retain d37c2ea81d13743a...;
+          and the two explicit FP32 selectors,
           `set_numeric_profile("fp32_v1")` in this process and
           `MOJOLEARN_NUMERIC_PROFILE=fp32_v1` in a child, the fp32_v1 hash
           with no keyword. Same ids as tools/lowbit_blocks/model_logits.py
@@ -17,7 +17,7 @@ hash      `CausalLM.load(path)` with NO keyword must print the fixed15_v1
 generate  what a user who passes nothing gets from `generate` against what
           fp32_v1 gave them (the orchestrator's condition before the merge):
           a 512-token prompt at B=1, N new tokens, (a) the default model
-          (fixed15_v1; the per-layer route) and (b) a model loaded with
+          (fp32_v1) and (b) a model loaded with
           numeric_profile="fp32_v1" (its resident session where the binding
           has one; which route ran is recorded). One untimed call each, then
           the two alternate, R rounds; medians. Every timed call's ids are
@@ -76,6 +76,9 @@ def main():
 
     if "hash" in phases:
         h = {"default": ident(lm), "fp32_v1": ident(ref)}
+        opted = CausalLM.load(args.model, numeric_profile="fixed15_v1")
+        h["fixed15_v1"] = ident(opted)
+        del opted
         prev = mojolearn.set_numeric_profile("fp32_v1")
         try:
             hatch = CausalLM.load(args.model)
@@ -91,8 +94,9 @@ def main():
         h["env_fp32"] = line[-1].split()[2] if line else "CHILD FAILED: " + r.stderr[-300:]
         h["env_fp32_reports"] = line[-1].split()[1] if line else None
         checks = {
-            "default is fixed15_v1": lm.numeric_profile == "fixed15_v1",
-            "default hash d37c2ea81d13743a": h["default"].startswith(WANT_FIXED15),
+            "default is fp32_v1": lm.numeric_profile == "fp32_v1",
+            "default equals explicit fp32_v1": h["default"] == h["fp32_v1"],
+            "opt-in retains fixed15 hash": h["fixed15_v1"].startswith(WANT_FIXED15),
             "fp32_v1 hash 833c9a8947bdd619": h["fp32_v1"].startswith(WANT_FP32),
             "set_numeric_profile(fp32_v1) == fp32_v1 bits": h["set_numeric_profile_fp32"] == h["fp32_v1"]
             and h["set_numeric_profile_fp32_reports"] == "fp32_v1",

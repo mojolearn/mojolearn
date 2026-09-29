@@ -2,13 +2,13 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`numeric_profile=`: which arithmetic a model's matrix products run.
 
-    mojolearn.numeric_profile()                          # "fixed15_v1"
-    mojolearn.set_numeric_profile("fp32_v1")             # process default: the old behaviour
+    mojolearn.numeric_profile()                          # "fp32_v1"
+    mojolearn.set_numeric_profile("fixed15_v1")          # explicit inference opt-in
     mojolearn.models.CausalLM.load(path, numeric_profile="fp32_v1")
     mojolearn.numeric_profiles()                         # every registered row
 
-    numeric_profile="fixed15_v1"    the inference default of the transformer models
-    numeric_profile="fp32_v1"       the baseline: every other family, every trainer
+    numeric_profile="fixed15_v1"    optional transformer inference arithmetic
+    numeric_profile="fp32_v1"       the default: every family, every trainer
 
 ITS OWN PARAMETER, NOT A VALUE OF `numeric_mode`. `numeric_mode` is the
 PROMISE (identical, deterministic, fast). `numeric_profile` is the NUMBER
@@ -16,12 +16,13 @@ FORMAT the matrix products compute in. They are independent: a profile is
 bitwise identical across vendors under `numeric_mode="identical"` exactly
 as `fp32_v1` is, and picking one never changes the mode.
 
-THE DEFAULT, PER USE AND PER FAMILY (Andrew, 2026-09-29: "make this new
-change the default even if apple is slower"). A call that names no profile
+OPT IN (Andrew, 2026-09-29: "please make it opt in again"). Without an
+explicit keyword, environment or process-level opt-in, every family uses
+fp32_v1. A call that names no profile
 gets:
   - INFERENCE, in a family the default reaches (`default_for`: the
     transformer models of `mojolearn.models`, `CausalLM` and
-    `ParallelCausalLM`): `DEFAULT`, `fixed15_v1`.
+    `ParallelCausalLM`): the process inference default, initially `fp32_v1`.
   - INFERENCE, in any other family (the Mamba models, a bare
     `TransformerBlock`, which is also the trainers' building block):
     `BASELINE`, `fp32_v1`, exactly as before, and the object's
@@ -82,8 +83,8 @@ A CHECKPOINT CARRIES ITS PROFILE. `state_field` is what a writer stores;
 `adopt_saved` and `check_saved` are what a reader calls. A state with no
 field was written under `fp32_v1` (every state before this module), and a
 writer under `fp32_v1` still stores no field, so the bytes of an `fp32_v1`
-checkpoint do not change; a state written under `fixed15_v1` (the inference
-default) carries the field. A reader whose caller named no profile ADOPTS
+checkpoint do not change; a state written under the opt-in `fixed15_v1`
+carries the field. A reader whose caller named no profile ADOPTS
 the state's own (`adopt_saved`); one that named another is refused by name.
 A model's weight file (a Hugging Face checkpoint) is not such a state: it
 holds weights, not the results of an arithmetic, and carries no field.
@@ -113,9 +114,9 @@ __all__ = ["DEFAULT", "ENV", "PROFILES", "REJECTED", "MEASURED",
 #: The arithmetic every family computes under and every identity record
 #: before 2026-09-29 was produced under.
 BASELINE = "fp32_v1"
-#: The INFERENCE default (2026-09-29; `fp32_v1` before). It reaches only the
+#: The INFERENCE default, restored to fp32_v1 by user request. It reaches only the
 #: families its row names in `default_for`.
-DEFAULT = "fixed15_v1"
+DEFAULT = "fp32_v1"
 #: The TRAINING default. No other profile has passed its training gates.
 TRAINING_DEFAULT = "fp32_v1"
 #: The families a caller passes to `resolve`:
@@ -154,7 +155,7 @@ PROFILES = {
                 "and every identity record made before then",
     },
     "fixed15_v1": {
-        "status": "default",
+        "status": "experimental",
         "products": {"projections": "mojolearn.identical.gemm.int15i64.v1",
                      "attention": "mojolearn.identical.gemm.int15i64.v1"},
         "inference": True, "training": False,
@@ -167,7 +168,7 @@ PROFILES = {
                         "and -0.0010% to +0.0076%); training and a task evaluation are owed",
         "note": "15-bit integer codes with one power-of-two scale per row, exact integer "
                 "sums (the projections, the head and Q.K^T; P.V stays on fp32.v1); the "
-                "inference default of the transformer models since 2026-09-29; the same bits "
+                "opt-in inference profile of the transformer models; the same bits "
                 "on NVIDIA, AMD, Apple and the CPU",
     },
 }
