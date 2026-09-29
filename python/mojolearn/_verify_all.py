@@ -3,6 +3,11 @@
 """`python -m mojolearn verify --all`: check mojolearn's identity claims on
 this machine, cell by cell, against the reference table shipped in the wheel.
 
+DEFAULT SCOPE. Every applicable lane on the base fixture. --full explicitly
+selects all fixture variants; --quick samples one lane per family. Neither
+mode runs throughput benchmarks. Fixture bytes retain their historical sizes
+so existing references remain comparable.
+
 WHAT RUNS. The identity_break lanes, through the harness itself: the wheel
 carries a byte copy of `tools/identity_break.py` as
 `mojolearn/_identity_break.py`, and this module imports it and calls its
@@ -218,9 +223,9 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
     else:
         lanes = list(allowed)
     fixtures = list(harness.FIXTURES)
-    if depth == "quick":
+    if depth in ("base", "quick"):
         fixtures = [f for f in fixtures if f in QUICK_FIXTURES]
-        if not asked:
+        if depth == "quick" and not asked:
             fam = family_map(lanes)
             chosen, seen = [], set()
             for lane in lanes:
@@ -3432,7 +3437,9 @@ def _depth(args):
     if getattr(args, "models_only", False) and any(getattr(args, flag, False)
             for flag in ("no_models", "lanes", "fixtures", "include_pending", "batch_checks", "quick")):
         raise ValueError("--models-only cannot be combined with lane, fixture, pending, batch, quick or no-models selection")
-    return "quick" if getattr(args, "quick", False) else "full"
+    if getattr(args, "quick", False):
+        return "quick"
+    return "full" if getattr(args, "full", False) else "base"
 
 
 def _extra_parts(args):
@@ -3732,14 +3739,14 @@ def cmd_verify_all(args):
     # cannot hide withheld CPU routes or lanes dropped for stale references.
     withheld = {name: row["reason"] for name, row in coverage_report["lanes"].items()
                 if row["status"] == "withheld"}
-    scope_gaps = dict(withheld) if not asked and depth == "full" and not models_only else {}
+    scope_gaps = dict(withheld) if not asked and depth != "quick" and not models_only else {}
     if include_pending:
         scope_gaps.update({name: withheld[name] for name in lanes if name in withheld})
         if vclass == "cpu":
             # A CPU checks the driver's logical shards, never physical GPU communication.
             scope_gaps.update({name: "CPU logical-shard replay; physical multi-GPU qualification pending"
                                for name in lanes if name.startswith("par-")})
-            if not asked and depth == "full":
+            if not asked and depth != "quick":
                 scope_gaps.update({name: row["reason"] for name, row in coverage_report["lanes"].items()
                                    if name not in lanes and row["status"] in ("excluded", "unavailable")})
     scope_gaps.update({name: "stale reference" for name in stale})
@@ -3778,7 +3785,7 @@ def cmd_verify_all(args):
         verdict_scope = []                     # judged by the portable models, not by lanes
     elif asked:
         verdict_scope = list(asked)            # an explicit subset passes its own scope
-    elif depth != "full":
+    elif depth == "quick":
         verdict_scope = list(lanes)            # --quick is a declared sample of the families
     else:
         verdict_scope = harness_lanes          # --all means all 256, not the 186 that ran

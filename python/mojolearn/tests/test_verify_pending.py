@@ -72,7 +72,7 @@ def test_new_selection_flags_dispatch_and_reject_ambiguous_model_scope():
     for flag in ('--models-only', '--include-pending'):
         args = cli.build_parser().parse_args(['verify', flag])
         assert cli._wants_suite(args)
-        assert va._depth(args) == 'full'
+        assert va._depth(args) == 'base'
     for flag in ('no_models', 'lanes', 'fixtures', 'include_pending', 'batch_checks', 'quick'):
         with pytest.raises(ValueError, match='models-only'):
             va._depth(types.SimpleNamespace(models_only=True, **{flag: True}))

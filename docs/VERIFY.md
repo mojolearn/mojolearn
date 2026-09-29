@@ -352,7 +352,8 @@ you can CHECK and changed nothing about what the library will train for you.
 
 | flag | effect |
 |---|---|
-| `--all` | every lane this install runs, on every fixture |
+| `--all` | every lane this install runs, on the base fixture |
+| `--full` | every lane and all nine fixture variants (explicit extended check) |
 | `--quick` | one lane per family on the base fixture |
 | `--full` | the same as `--all`, spelled out |
 | `--lanes a,b` | only these lanes |

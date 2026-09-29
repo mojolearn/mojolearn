@@ -260,7 +260,7 @@ def build_parser():
     v.add_argument("--json", action="store_true",
                    help="emit one JSON object instead of the human report")
     v.add_argument("--all", action="store_true",
-                   help="check every identity cell this install can run: the "
+                   help="check every applicable lane on the base fixture (--full selects all fixtures): the "
                         "identity_break lanes (every lane on a GPU install, the "
                         "public CPU reference lanes on a CPU-only one) plus the "
                         "portable GPU-trained models, including applicable gradient, "
@@ -291,8 +291,8 @@ def build_parser():
                    help="implies --all: one lane per family on the base "
                         "fixture")
     v.add_argument("--full", action="store_true",
-                   help="implies --all: every lane and applicable property on every fixture (the "
-                        "default depth of --all)")
+                   help="implies --all: every lane and applicable property on every fixture; "
+                        "--all alone uses the base fixture")
     v.add_argument("--lanes", default="",
                    help="implies --all: only these comma separated lanes")
     v.add_argument("--fixtures", default="",

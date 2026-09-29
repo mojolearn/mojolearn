@@ -1192,6 +1192,21 @@ def test_quick_is_one_lane_per_family_on_base():
     assert "no-ref" not in lanes, "quick picks a lane the table can judge"
 
 
+def test_default_sweep_keeps_all_algorithms_with_one_fixture():
+    from types import SimpleNamespace
+    assert va._depth(SimpleNamespace(all=True)) == "base"
+    assert va._depth(SimpleNamespace(full=True)) == "full"
+    assert va._depth(SimpleNamespace(quick=True)) == "quick"
+    for vendor in ("cpu", "apple", "nvidia", "amd"):
+        lanes, fixtures = va.select_lanes(_FakeHarness, _fake_table(), vendor, "base", [])
+        full_lanes, full_fixtures = va.select_lanes(_FakeHarness, _fake_table(), vendor, "full", [])
+        assert lanes == full_lanes
+        assert fixtures == ["base"]
+        assert full_fixtures == _FakeHarness.FIXTURES
+    # Reducing fixture multiplicity must not silently drop batch/property checks.
+    assert va._extra_parts(SimpleNamespace(all=True)) == vref.OPTIONAL_PARTS
+
+
 def test_full_and_cpu_lane_sets():
     lanes, fixtures = va.select_lanes(_FakeHarness, _fake_table(), "nvidia", "full", [])
     assert lanes == [lane for lane in _FakeHarness.LANES if not lane.startswith("par-")]

@@ -153,7 +153,7 @@ The base install does not require NumPy. See [verification support](docs/VERIFY.
 
 ```sh
 python -m mojolearn verify --quick   # one lane per family
-python -m mojolearn verify --all     # every available lane and all nine fixtures
+python -m mojolearn verify --all     # every available lane on the base fixture; --full adds all nine
 ```
 
 On current main, `--all` also includes applicable gradient, batch-size,
