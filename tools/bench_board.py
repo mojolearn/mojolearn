@@ -716,9 +716,32 @@ def child_env(ctx, extra=None):
 # The box fingerprint
 # ---------------------------------------------------------------------------
 
+def repo_sync(repo=REPO):
+    """The patch sync's provenance (tools/dev_pod.sh writes .git/devpod_synced
+    on a pod): {commit, worktree_dirty, base, patch_sha256, ...}, or None when
+    this tree was not patch-synced or its HEAD is no longer that sync's base."""
+    gd = capture(["git", "-C", repo, "rev-parse", "--absolute-git-dir"], timeout=20)
+    head = capture(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
+    if not gd or not head:
+        return None
+    try:
+        with open(os.path.join(gd, "devpod_synced")) as fh:
+            rec = dict(l.strip().split("=", 1) for l in fh if "=" in l)
+    except OSError:
+        return None
+    if rec.get("base") != head or not rec.get("commit"):
+        return None
+    return rec
+
+
 def repo_commit(repo=REPO):
-    """The repo commit this script shipped in: git, else SHIPPED_COMMIT.txt
-    (legs ship `git archive`, which has no .git), else the environment."""
+    """The repo commit this script shipped in: on a patch-synced pod the synced
+    commit (repo_sync; the box's HEAD is only the merge base), git, else
+    SHIPPED_COMMIT.txt (legs ship `git archive`, which has no .git), else the
+    environment."""
+    sync = repo_sync(repo)
+    if sync:
+        return sync["commit"] + ("-dirty" if sync.get("worktree_dirty") == "1" else "")
     c = capture(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
     if c:
         dirty = capture(["git", "-C", repo, "status", "--porcelain", "--untracked-files=no"], timeout=20)
@@ -839,7 +862,8 @@ def box_fingerprint(ctx):
         "packages": python_packages(python),
         "mojolearn": {"version": mj, "requested": ctx.get("mojolearn_version"),
                       "wheel": ctx.get("wheel")},
-        "repo": {"commit": ctx.get("commit"), "script": os.path.relpath(script, REPO),
+        "repo": {"commit": ctx.get("commit"), "sync": repo_sync(),
+                 "script": os.path.relpath(script, REPO),
                  "script_sha256": sha256_file(script)},
         "env": {k: os.environ.get(k) for k in THREAD_ENV + ("MODULAR_NVPTX_COMPILER_PATH",)},
     }
@@ -2271,6 +2295,9 @@ def render_board(result):
         ("Python", (box.get("python") or {}).get("version")),
         ("mojolearn", "%s (wheel %s, sha256 %s)" % (mj.get("version"), w.get("file"), w.get("sha256"))),
         ("script commit", (box.get("repo") or {}).get("commit")),
+        ("patch sync", ("synced commit %s over base %s, patch sha256 %s" % (
+            sy.get("commit"), sy.get("base"), sy.get("patch_sha256")))
+         if (sy := (box.get("repo") or {}).get("sync")) else "-"),
         ("modes", ", ".join(cfg.get("modes") or [])),
         ("rounds", "%s timed after 1 warm-up, arms interleaved round by round" % cfg.get("rounds")),
         ("seed", SEED),

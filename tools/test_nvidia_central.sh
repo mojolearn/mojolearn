@@ -107,6 +107,7 @@ check "lane-a synced (patch sync to /root/mojolearn-lane-a)" "grep -q 'patch-syn
 check "two lanes spread over two pods" "[ -n \"$pa\" ] && [ -n \"$pb\" ] && [ $pa != $pb ]"
 check "sh sees no GPU and runs in the lane tree" "[ \"\$($N sh lane-a 'echo \$CUDA_VISIBLE_DEVICES:\$PWD')\" = '-1:/root/mojolearn-lane-a' ]"
 check "the lane tree's HEAD is the worktree's merge base" "[ \"\$($N sh lane-a 'git rev-parse HEAD')\" = \"\$(git -C $ROOT merge-base HEAD origin/main)\" ]"
+check "the sync records the synced commit and the patch hash (.git/devpod_synced)" "$N sh lane-a 'cat .git/devpod_synced' > $W/synced-a && grep -qx \"commit=\$(git -C $ROOT rev-parse HEAD)\" $W/synced-a && grep -qE '^patch_sha256=[0-9a-f]{64}\$' $W/synced-a"
 
 echo "== submit, queue, status, log, cancel, run, fetch"
 $N sh lane-a "mkdir -p /root/ev-lane-a && printf '#!/bin/bash\necho gpus=\$CUDA_VISIBLE_DEVICES job=\$NVQ_JOB_ID\nsleep 4\n' > /root/ev-lane-a/gate.sh"

@@ -545,6 +545,16 @@ sync)
             < "$TMPD/sync.patch" || die "patch sync failed (retry with MOJOLEARN_DEVPOD_FULL_SYNC=1)"
         _head=$(bx 60 "cd $BOX_DIR && git rev-parse HEAD" < /dev/null | tr -d '\r')
         [ "$_head" = "$base" ] || die "the box's HEAD ($_head) is not the worktree's merge base ($base)"
+        # PROVENANCE (2026-09-29): the box's HEAD is the merge base, so its own
+        # `git rev-parse HEAD` names code that did not run. Record the synced
+        # commit, whether the worktree had uncommitted changes, the base and the
+        # patch's sha256 in .git/devpod_synced (outside the tree), which
+        # tools/bench_board.py reads (repo_sync).
+        _psha=$( (sha256sum 2>/dev/null || shasum -a 256) < "$TMPD/sync.patch" | cut -d' ' -f1)
+        _dirty=0; [ -z "$(git -C "$wt" status --porcelain 2>/dev/null | grep -vE '\.(so|dylib|metallib)$')" ] || _dirty=1
+        printf 'commit=%s\nworktree_dirty=%s\nbase=%s\npatch_sha256=%s\npatch_bytes=%s\nsynced=%s\n' \
+            "$(git -C "$wt" rev-parse HEAD)" "$_dirty" "$base" "$_psha" "$(wc -c < "$TMPD/sync.patch" | tr -d ' ')" \
+            "$(date -u +%FT%TZ)" | bx 60 "cat > $BOX_DIR/.git/devpod_synced" || die "provenance upload failed"
         say "patch-synced $(cd "$wt" && git rev-parse --short HEAD)+worktree -> $POD_ID:$BOX_DIR ($(wc -c < "$TMPD/sync.patch" | tr -d ' ') bytes over merge base $(git -C "$wt" rev-parse --short "$base"))"
         exit 0
     fi

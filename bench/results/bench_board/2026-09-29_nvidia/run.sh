@@ -27,7 +27,7 @@ PY=/usr/bin/python3
 STOP_S=${BOARD_STOP_S:-13200}          # 220 min: under the 240-minute job cap
 mkdir -p "$OUT" "$CACHE"
 say() { echo "$(date -u +%FT%TZ) $*" | tee -a "$LOG"; }
-say "run.sh start at $(git rev-parse HEAD 2>/dev/null) job ${NVQ_JOB_ID:-?} GPU ${CUDA_VISIBLE_DEVICES:-?} on $(hostname)"
+say "run.sh start at $(git rev-parse HEAD 2>/dev/null) (the pod's base; patch sync: $(tr '\n' ' ' < "$(git rev-parse --absolute-git-dir)/devpod_synced" 2>/dev/null || echo none)) job ${NVQ_JOB_ID:-?} GPU ${CUDA_VISIBLE_DEVICES:-?} on $(hostname)"
 
 # data: staged from R2 by the Mac (tools/dataset_store.sh stage, sha256
 # verified); the Mac writes the marker when every key is verified

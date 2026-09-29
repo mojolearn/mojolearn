@@ -503,6 +503,37 @@ def test_resume_refuses_a_different_box(env):
         _run(env)
 
 
+def _git(repo, *a):
+    import subprocess
+    return subprocess.run(["git", "-C", str(repo)] + list(a), check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def test_repo_commit_names_the_patch_synced_commit_not_the_pods_base(tmp_path):
+    repo = tmp_path / "tree"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "a.txt").write_text("a")
+    _git(repo, "add", "a.txt")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "a.txt").write_text("patched")        # the applied patch
+    # no sync record: the tree's own HEAD, dirty
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+    assert bb.repo_sync(str(repo)) is None
+    synced = "c" * 40
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=0\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced
+    assert bb.repo_sync(str(repo))["patch_sha256"] == "d" * 64
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=1\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced + "-dirty"
+    # a record whose base is not HEAD (the tree moved since) is ignored
+    (repo / ".git" / "devpod_synced").write_text("commit=%s\nbase=%s\n" % (synced, "e" * 40))
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+
+
 def _nv_box(host="pod-a", gpu="NVIDIA A40", driver="580.159.04", cuml="26.8.0"):
     return {"host": {"hostname": host}, "gpu": {"vendor": "nvidia", "name": gpu, "driver": driver},
             "mojolearn": {"version": "0.8.25", "wheel": {"sha256": "ab"}},
@@ -700,6 +731,32 @@ def _run_neural(env, *extra):
     base[base.index("--data-root") + 1] = str(env["tmp"] / "no-data-here")
     return bb.main(["--vendor", "nvidia", "--families", "neural", "--neural-shape", "small"]
                    + base + list(extra))
+
+
+def test_nvidia_board_from_the_old_key_resumes_on_the_same_and_a_new_pod(env, monkeypatch):
+    """A board.json written before the NVIDIA key change (its box carries the
+    hostname, its races no `host`) resumes under the new key: on the same pod,
+    and on a new pod with the same GPU model, driver major and pins; a
+    different GPU model refuses."""
+    gpu = {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA A40", "driver": "580.159.04"}
+    monkeypatch.setattr(bb, "gpu_info", lambda vendor: dict(gpu))
+    assert _run_neural(env) == 0
+    p = env["out"] / "board.json"
+    res = json.loads(p.read_text())
+    host = res["box"]["host"]["hostname"]
+    for rec in res["races"].values():
+        rec.pop("host", None)                 # what the old code wrote
+    p.write_text(json.dumps(res))
+    env["calls"].write_text("")
+    assert _run_neural(env) == 0              # same pod: resumes, runs nothing
+    assert _calls(env) == []
+    assert host in (env["out"] / "BOARD.md").read_text()
+    monkeypatch.setattr(bb.platform, "node", lambda: "a-new-pod")
+    assert _run_neural(env) == 0              # a new pod, same GPU/driver/pins: resumes
+    assert _calls(env) == []
+    gpu["name"] = "NVIDIA GeForce RTX 4090"
+    with pytest.raises(SystemExit, match="different box"):
+        _run_neural(env)
 
 
 def test_neural_run_schema_quality_and_board(env):
