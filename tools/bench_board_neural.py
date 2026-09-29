@@ -86,6 +86,9 @@ The torch models (every one is an existing repo twin; nothing new invented):
                 not the Triton kernels.
   mamba3        gen_corpus.py m3_forward: the pure-PyTorch Mamba-3 SISO
                 reference, not the fused kernels.
+  mamba1/2/3, NVIDIA, arms mamba-ssm-fp32 / mamba-ssm-tf32: mamba_ssm's own
+                fused kernels (Block + Mamba / Mamba2 / Mamba3 SISO, the
+                deployment path; MAMBA_SSM_ARMS below), our weights loaded.
   samba         embedding, then per layer m3_forward or LlamaEager.block
                 (SDPA), final RMSNorm (eps 1e-5), tied head, mean CE,
                 torch.optim.AdamW: the stack composed from those two twins.
@@ -208,8 +211,35 @@ CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 NO_COMPILE = ("mamba1-forward", "mamba1-infer")
 VENDORS = ("apple", "nvidia", "amd")
 
+#: THE STRONGEST MAMBA OPPONENT (Andrew, 2026-09-29: "we should be using the
+#: strongest opponent always"): the mamba_ssm package's own fused kernels,
+#: beside the pure-PyTorch reference arms. One block is mamba_ssm's
+#: modules/block.py Block (fused Triton add+RMSNorm, the mixer, residual in
+#: fp32) around its mixer: mamba_simple.Mamba on the fast path (causal_conv1d
+#: + mamba_inner_fn, the selective-scan CUDA kernel), mamba2.Mamba2 on the
+#: memory-efficient path (mamba_split_conv1d_scan_combined, the SSD Triton
+#: kernels), mamba3.Mamba3 SISO (mamba3_siso_combined, Triton). Weights, input
+#: and dtype (float32) are ours, loaded with load_state_dict(strict=True) and
+#: read back bit for bit. Two settings, the precision in the arm name:
+#:   mamba-ssm-fp32   TF32 off in torch and TRITON_F32_DEFAULT=ieee, so every
+#:                    fp32 tl.dot in the Triton kernels is IEEE fp32 (ours'
+#:                    precision).
+#:   mamba-ssm-tf32   TF32 on in torch and TRITON_F32_DEFAULT=tf32 (Triton's
+#:                    own default for fp32 tl.dot: what an out-of-the-box
+#:                    mamba_ssm install runs). ANOTHER PRECISION than ours.
+#: Pinned to the state-spaces/mamba commit mamba/corpus/gen_corpus.py cites
+#: (tools/bench_board.py MAMBA_SSM_*): PyPI's mamba-ssm 2.3.2.post1 is an
+#: OLDER Mamba-3 (A = -softplus(dd_A)); this commit's Mamba3 is the
+#: heavy-tail A our Mamba3Block and the reference implement.
+MAMBA_SSM_ARMS = ("mamba-ssm-fp32", "mamba-ssm-tf32")
+MAMBA_SSM_LANES = ("mamba1-forward", "mamba2-forward", "mamba3-forward")
+#: mamba_ssm's CUDA extensions and Triton kernels are built and raced on
+#: NVIDIA only (see NOT_PLANNED for AMD and Apple).
+MAMBA_SSM_VENDORS = ("nvidia",)
+
 ARMS = ("ours", "ours-cpu") + tuple("torch-" + s for s in TORCH_SETTINGS) \
-    + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8")
+    + tuple("torch-cpu-" + s for s in CPU_SETTINGS) + ("torch-eager-int8", "torch-compile-int8") \
+    + MAMBA_SSM_ARMS
 #: gemm-int8's torch settings: torch._int_mm (int8 x int8 -> int32), no autocast, no TF32
 INT8_COLUMNS = {"eager_int8": dict(tf32=False, compile=False, autocast=None),
                 "compile_int8": dict(tf32=False, compile=True, autocast=None)}
@@ -225,15 +255,23 @@ NOT_PLANNED = {
        "gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)"]
     + (["gemm-int8: torch._int_mm is a CUDA kernel; torch on %s has no int8 matmul, so ours "
         "races alone" % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
+    + ({"apple": ["mamba-ssm-* on mamba*-forward: mamba_ssm's kernels are CUDA and Triton "
+                  "(no Metal build exists); the Mamba lanes race the torch reference arms"],
+        "amd": ["mamba-ssm-* on mamba*-forward: mamba_ssm publishes no ROCm wheel, and its "
+                "gfx942 source build (setup.py's HIP path, causal-conv1d's and the Mamba-3 "
+                "Triton kernels on ROCm) has not been built and checked on the board's AMD box; "
+                "the Mamba lanes race the torch reference arms there"]}.get(v, [])
+       + ["mamba-ssm bf16: our Mamba blocks are float32, so mamba_ssm races in float32 (and "
+          "its TF32 setting); torch's bf16 arms carry the lower precision"])
     for v in VENDORS}
 
 #: The board's "Not covered" lines for the neural family.
 NOT_COVERED = [
-    "The Mamba opponents are the repo's pure-PyTorch references (mamba/corpus/gen_corpus.py: "
+    "The Mamba torch-* arms are the repo's pure-PyTorch references (mamba/corpus/gen_corpus.py: "
     "mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD reference for Mamba-2, the "
-    "SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton kernels, which the board "
-    "does not install; a Mamba ratio here is against a reference implementation, not a "
-    "deployment kernel.",
+    "SISO reference for Mamba-3), not deployment kernels. On NVIDIA the mamba-ssm-* arms are "
+    "mamba_ssm's own fused CUDA/Triton kernels (the deployment path); on AMD and Apple the "
+    "Mamba lanes race the references only (NOT_PLANNED says why).",
     "The blocks' backward (the Mamba and TransformerBlock VJPs), their decode `step`, ragged "
     "`lengths` and the carried-state forward are public and not raced; only a zero-state "
     "forward is.",
@@ -313,6 +351,8 @@ def opponents(vendor, lane):
         arms = ["torch-" + s for s in GPU_SETTINGS[vendor]]
     if lane in NO_COMPILE:
         arms = [a for a in arms if "-compile-" not in a]
+    if vendor in MAMBA_SSM_VENDORS and lane in MAMBA_SSM_LANES:
+        arms += list(MAMBA_SSM_ARMS)
     return tuple(arms)
 
 
@@ -875,9 +915,35 @@ class OursBlock(Ours):
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
         self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
         self.record = _ours_record(lane)
+        if lane in MAMBA_SSM_LANES:
+            # the block's structural constants, read from the INSTALLED class's
+            # module (and the block), compared with what the mamba-ssm arms'
+            # constructed modules hold (tools/bench_board_params.py ssm_*)
+            self.record.update(ours_ssm_record(model, sys.modules[cls.__module__], self.block))
 
     def call(self):
         self.out = self.block.forward(self.x)
+
+
+def _floats(v):
+    return None if v is None else [float(x) for x in v]
+
+
+def ours_ssm_record(model, mod, block):
+    """Ours' Mamba structural constants under the canonical ssm_* names:
+    the profile constants of the installed mojolearn._mamba_impl and the
+    block's own attributes."""
+    if model == "mamba1":
+        return {"ssm_d_state": mod._M1_D_STATE, "ssm_d_conv": mod._M1_D_CONV,
+                "ssm_expand": mod._M1_EXPAND, "ssm_dt_rank": getattr(block, "dt_rank", None)}
+    if model == "mamba2":
+        return {"ssm_d_state": mod._M2_D_STATE, "ssm_d_conv": mod._M2_D_CONV,
+                "ssm_expand": mod._M2_EXPAND, "ssm_headdim": mod._M2_HEADDIM,
+                "ssm_ngroups": mod._M2_NGROUPS, "ssm_chunk_size": mod._M2_CHUNK_SIZE,
+                "ssm_dt_limit": _floats(getattr(block, "dt_limit", None))}
+    return {"ssm_d_state": mod._M3_D_STATE, "ssm_expand": mod._M3_EXPAND,
+            "ssm_headdim": mod._M3_HEADDIM, "ssm_ngroups": mod._M3_NGROUPS,
+            "ssm_chunk_size": mod._M3_CHUNK_SIZE, "ssm_rope_angles": mod._M3_NUM_ROPE_ANGLES}
 
 
 class OursSamba(Ours):
@@ -1364,9 +1430,243 @@ def _load_speed_torch_seq(torch, info):
     return mod
 
 
+# ---------------------------------------------------------------------------
+# Workers: mamba_ssm's fused kernels (MAMBA_SSM_ARMS)
+# ---------------------------------------------------------------------------
+
+#: The mamba_ssm modules each model runs, and our weight names -> the Block's
+#: state-dict names (block.norm = the block RMSNorm, block.mixer = the mixer).
+MAMBA_SSM_MIXER = {"mamba1": "mamba_ssm.modules.mamba_simple.Mamba",
+                   "mamba2": "mamba_ssm.modules.mamba2.Mamba2",
+                   "mamba3": "mamba_ssm.modules.mamba3.Mamba3"}
+MAMBA_SSM_BLOCK_NORM = {"mamba1": "norm.weight", "mamba2": "block_norm.weight",
+                        "mamba3": "block_norm.weight"}
+
+
+def mamba_ssm_state_name(model, name):
+    """Our weight name -> the mamba_ssm Block's state-dict name."""
+    return "norm.weight" if name == MAMBA_SSM_BLOCK_NORM[model] else "mixer." + name
+
+
+def mamba_ssm_setting(arm):
+    """'mamba-ssm-fp32' -> {'tf32': False, 'triton_f32_default': 'ieee'}."""
+    if arm not in MAMBA_SSM_ARMS:
+        raise ValueError("not a mamba-ssm arm: %r" % arm)
+    tf32 = arm.endswith("-tf32")
+    return {"tf32": tf32, "triton_f32_default": "tf32" if tf32 else "ieee"}
+
+
+def mamba_ssm_config(model, corpus, dm):
+    """The mixer's constructor arguments (every one EXPLICIT, never the
+    library default) and the block norm's eps, from mamba/corpus/gen_corpus.py:
+    the same constants our blocks and the torch references use."""
+    if model == "mamba1":
+        return dict(d_state=corpus.D_STATE, d_conv=corpus.D_CONV, expand=corpus.EXPAND,
+                    dt_rank=-(-dm // 16), conv_bias=True, bias=False,
+                    use_fast_path=True), corpus.EPS
+    if model == "mamba2":
+        return dict(d_state=corpus.M2_D_STATE, d_conv=corpus.M2_D_CONV, expand=corpus.M2_EXPAND,
+                    headdim=corpus.M2_HEADDIM, ngroups=corpus.M2_NGROUPS, D_has_hdim=False,
+                    rmsnorm=True, norm_before_gate=False, dt_limit=(0.0, float("inf")),
+                    bias=False, conv_bias=True, chunk_size=corpus.M2_CHUNK,
+                    use_mem_eff_path=True), corpus.M2_EPS
+    return dict(d_state=corpus.M3_D_STATE, expand=corpus.M3_EXPAND, headdim=corpus.M3_HEADDIM,
+                ngroups=corpus.M3_NGROUPS, rope_fraction=0.5, A_floor=corpus.M3_A_FLOOR,
+                is_outproj_norm=False, is_mimo=False,
+                chunk_size=corpus.M3_CHUNK), corpus.M3_EPS
+
+
+def mamba_ssm_readback(model, block):
+    """The constructed Block's structural values under the canonical ssm_*
+    names (compared with ours' by tools/bench_board_params.py) and the
+    norms' eps (checked against the corpus here)."""
+    m = block.mixer
+    rec = {"ssm_d_state": int(m.d_state), "ssm_expand": int(m.expand)}
+    eps = {"block_norm_eps": float(block.norm.eps)}
+    if model == "mamba1":
+        rec.update(ssm_d_conv=int(m.d_conv), ssm_dt_rank=int(m.dt_rank))
+    elif model == "mamba2":
+        rec.update(ssm_d_conv=int(m.d_conv), ssm_headdim=int(m.headdim),
+                   ssm_ngroups=int(m.ngroups), ssm_chunk_size=int(m.chunk_size),
+                   ssm_dt_limit=[float(v) for v in m.dt_limit])
+        eps["gated_norm_eps"] = float(m.norm.eps)
+    else:
+        rec.update(ssm_headdim=int(m.headdim), ssm_ngroups=int(m.num_bc_heads),
+                   ssm_chunk_size=int(m.chunk_size), ssm_rope_angles=int(m.num_rope_angles))
+        eps.update(B_norm_eps=float(m.B_norm.eps), C_norm_eps=float(m.C_norm.eps))
+    return rec, eps
+
+
+def _mamba_ssm_source():
+    """(version text, pip's direct_url record) of the installed mamba_ssm: a
+    git build's version carries the commit (the board pins one)."""
+    import importlib.metadata as md
+    import mamba_ssm
+    ver = str(getattr(mamba_ssm, "__version__", "unknown"))
+    url = None
+    for dist in ("mamba_ssm", "mamba-ssm"):
+        try:
+            raw = md.distribution(dist).read_text("direct_url.json")
+        except md.PackageNotFoundError:
+            continue
+        if raw:
+            url = json.loads(raw)
+            break
+    commit = ((url or {}).get("vcs_info") or {}).get("commit_id")
+    return (ver + "+g" + commit[:12] if commit else ver), url
+
+
+def _dist_version(name):
+    import importlib.metadata as md
+    try:
+        return md.version(name)
+    except md.PackageNotFoundError:
+        return None
+
+
+class MambaSsmArm:
+    """mamba_ssm's fused kernels on one Mamba forward lane: Block(norm =
+    Triton RMSNorm, mixer, fused_add_norm, residual in fp32); the output is
+    mixer(norm(x)) + x, the block's residual add (the next layer's fused
+    add-norm does it inside a mamba_ssm model). The clock: host x to the
+    device, the block, the output back on the host, synchronized (the torch
+    arms' clock)."""
+
+    def __init__(self, lane, shape, data, arm):
+        import numpy as np
+        self.np, self.lane = np, lane
+        if lane not in MAMBA_SSM_LANES:
+            raise RuntimeError("REFUSED: %s races the Mamba forward lanes only (%s), not %s"
+                               % (arm, ", ".join(MAMBA_SSM_LANES), lane))
+        setting = mamba_ssm_setting(arm)
+        # the Triton fp32 dot precision, set before any kernel compiles
+        os.environ["TRITON_F32_DEFAULT"] = setting["triton_f32_default"]
+        torch, dev, kind, name, sync = _torch_device()
+        hip = getattr(torch.version, "hip", None)
+        if kind != "cuda" or hip:
+            raise RuntimeError("REFUSED: %s: mamba_ssm's CUDA extensions and Triton kernels are "
+                               "raced on NVIDIA CUDA only; this torch is %s" % (arm, "ROCm" if hip else kind))
+        self.torch, self.dev, self._sync = torch, dev, sync
+        twin = _load("torch_lm_step_opponent")
+        precision = twin.set_precision(torch, setting["tf32"])
+        torch.manual_seed(SEED)
+        info = {}
+        corpus = _load_mamba_corpus_restoring(torch, info)
+        try:
+            import mamba_ssm  # noqa: F401
+            from functools import partial
+            from mamba_ssm.modules.block import Block
+            from mamba_ssm.ops.triton.layer_norm import RMSNorm
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError("REFUSED: %s: mamba_ssm does not import in %s: %r"
+                               % (arm, sys.executable, exc))
+        model = MODEL_OF[lane]
+        d = _dims_of(lane, shape)
+        cfg, eps = mamba_ssm_config(model, corpus, d["d_model"])
+        mod_name, cls_name = MAMBA_SSM_MIXER[model].rsplit(".", 1)
+        mixer_mod = importlib.import_module(mod_name)
+        mixer_cls = getattr(mixer_mod, cls_name)
+        # THE FUSED PATH OR NOTHING: an arm that would fall back to a slower
+        # path (no causal_conv1d) refuses by name instead
+        fused = self._fused_path(model, mixer_mod, arm)
+        f32 = torch.float32
+        block = Block(d["d_model"], partial(mixer_cls, device=dev, dtype=f32, **cfg), torch.nn.Identity,
+                      norm_cls=partial(RMSNorm, eps=eps, device=dev, dtype=f32),
+                      fused_add_norm=True, residual_in_fp32=True).to(dev)
+        block.eval()
+        W = _weights(data)
+        sd = {}
+        for k, v in W.items():
+            t = torch.from_numpy(np.ascontiguousarray(v))
+            if model == "mamba3" and k in ("B_bias", "C_bias"):
+                t = t.reshape(t.shape[0], 1, t.shape[1])      # [H, N] -> [H, mimo_rank 1, N]
+            sd[mamba_ssm_state_name(model, k)] = t
+        block.load_state_dict(sd, strict=True)
+        for k, v in sd.items():            # every parameter holds our bits
+            got = block.state_dict()[k].detach().cpu()
+            if got.dtype != f32 or not torch.equal(got.reshape(v.shape), v):
+                raise RuntimeError("REFUSED: %s: %s did not load our float32 bits" % (arm, k))
+        readback, eps_back = mamba_ssm_readback(model, block)
+        for k, v in eps_back.items():
+            if v != eps:
+                raise RuntimeError("REFUSED: %s: %s is %r, ours and the reference use %r"
+                                   % (arm, k, v, eps))
+        self.block = block
+        self.host = [torch.from_numpy(np.ascontiguousarray(data["x"]))]
+        version, direct_url = _mamba_ssm_source()
+        try:
+            import triton
+            triton_ver = triton.__version__
+            f32_default = getattr(getattr(getattr(triton, "knobs", None), "language", None),
+                                  "fp32_default", None)
+        except Exception:  # noqa: BLE001
+            triton_ver, f32_default = None, None
+        if f32_default is not None and f32_default != setting["triton_f32_default"]:
+            raise RuntimeError("REFUSED: %s: Triton's fp32 default reads back %r, not %r"
+                               % (arm, f32_default, setting["triton_f32_default"]))
+        self.info = dict(info)
+        self.info.update({
+            "library": "mamba-ssm", "version": version, "device": "gpu", "device_name": name,
+            "torch_version": torch.__version__, "torch_version_cuda": torch.version.cuda,
+            "torch_backend": kind, "setting": arm[len("mamba-ssm-"):],
+            "precision": ("float32 weights and activations; TF32 %s in torch; Triton fp32 tl.dot "
+                          "input_precision %s" % ("ON" if setting["tf32"] else "off",
+                                                  setting["triton_f32_default"])),
+            "mode": "mamba_ssm fused kernels, eager, %s" % arm[len("mamba-ssm-"):],
+            "precision_readback": precision, "triton_version": triton_ver,
+            "triton_f32_default": f32_default if f32_default is not None
+            else os.environ.get("TRITON_F32_DEFAULT"),
+            "causal_conv1d_version": _dist_version("causal_conv1d") or _dist_version("causal-conv1d"),
+            "mamba_ssm_direct_url": direct_url, "mamba_ssm_file": getattr(mamba_ssm, "__file__", None),
+            "mixer": MAMBA_SSM_MIXER[model], "mixer_config": json.dumps(cfg, sort_keys=True, default=str),
+            "block": "mamba_ssm.modules.block.Block(norm=Triton RMSNorm eps %g, fused_add_norm=True, "
+                     "residual_in_fp32=True, mlp=Identity); out = mixer(norm(x)) + x" % eps,
+            "fused_path": fused, "norm_eps_readback": eps_back, "config_readback": readback,
+            "weights": "ours, load_state_dict(strict=True), read back bit for bit",
+            "compile": "eager (mamba_ssm's own kernels)", "pre_clock_fit": False,
+            "input_home": "host",
+            "call": "mamba_ssm Block(%s).forward(x) on %s; h + residual; .cpu()"
+                    % (MAMBA_SSM_MIXER[model].rsplit(".", 1)[1], dev)})
+        self.record = {"__library__": "mamba-ssm", "seed": SEED}
+        self.record.update(readback)
+        self.out = None
+        sync()
+
+    @staticmethod
+    def _fused_path(model, mixer_mod, arm):
+        if model == "mamba3":
+            return "mamba3_siso_combined (Triton)"
+        if getattr(mixer_mod, "causal_conv1d_fn", None) is None:
+            raise RuntimeError("REFUSED: %s: causal_conv1d does not import, so mamba_ssm would "
+                               "leave its fused path; install the board's pinned causal-conv1d"
+                               % arm)
+        if model == "mamba1":
+            return "mamba_inner_fn (causal_conv1d + selective_scan CUDA kernel, fused)"
+        return "mamba_split_conv1d_scan_combined (causal_conv1d + SSD Triton kernels, gated RMSNorm)"
+
+    def call(self):
+        torch = self.torch
+        x = self.host[0].to(self.dev)
+        with torch.no_grad():
+            h, r = self.block(x)
+            out = h + r
+        self.out = out.float().cpu().numpy()
+
+    def sync(self):
+        self._sync()
+
+    def outputs(self):
+        return {"y": self.out}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.out).data)[:16]
+
+
 def build_runner(lane, arm, shape, data):
     if arm in ("ours", "ours-cpu"):
         return OURS[MODEL_OF[lane]](lane, shape, data)
+    if arm in MAMBA_SSM_ARMS:
+        return MambaSsmArm(lane, shape, data, arm)
     return TorchArm(lane, shape, data, arm)
 
 

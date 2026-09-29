@@ -165,6 +165,13 @@ ALIASES = {
         "normalize": "normalize", "positive": "positive", "class_weight": "class_weight",
         "leaf_size": "leaf_size", "boosting_type": "boosting_type",
         "border_count": ("max_bin", _plus1),
+        # neural Mamba blocks (tools/bench_board_neural.py): ours' profile constants and
+        # the mamba-ssm arms' constructed modules, the ssm_ prefix so no other library's
+        # get_params can collide
+        "ssm_d_state": "ssm_d_state", "ssm_d_conv": "ssm_d_conv", "ssm_expand": "ssm_expand",
+        "ssm_dt_rank": "ssm_dt_rank", "ssm_headdim": "ssm_headdim", "ssm_ngroups": "ssm_ngroups",
+        "ssm_chunk_size": "ssm_chunk_size", "ssm_dt_limit": "ssm_dt_limit",
+        "ssm_rope_angles": "ssm_rope_angles",
         # classical and classical2 (tools/classical_two_datasets.py, tools/bench_board_more.py)
         "gamma": "gamma", "atol": "atol", "rtol": "rtol", "breadth_first": "breadth_first",
         "cluster_selection_method": "cluster_selection_method",
@@ -328,7 +335,8 @@ EXCEPTIONS = [
      "(optimizer=None draws nothing); scikit-learn gets 7"),
     # ---- neural (tools/bench_board_neural.py; lane ids "neural/<lane>"): ours'
     # neural classes take no seed argument (recorded automatically); torch arms
-    # call torch.manual_seed(7)
+    # and the mamba-ssm arms call torch.manual_seed(7) (mamba_ssm's module init
+    # draws before our weights replace every parameter)
     # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>"): the arms
     # with no seed argument that draw nothing (the deterministic lanes, ours'
     # weightless layers, SVGP) are recorded automatically; the third-party arms
