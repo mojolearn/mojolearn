@@ -26,6 +26,15 @@ that has PyTorch; its header says the format. The file is read from
 git blob hash of the `arith.py` that produced it, and the check prints it,
 so a record says which arithmetic it was held to.
 
+TWO FILES. The FORWARD file (`int15_sim_vectors.q15`) is seeded operands
+with the planted rows of clause W-2, and the check requires it to hold NaN
+and infinite cells, so both ends of the scale are exercised. A BACKWARD
+file (`MOJOLEARN_INT15_SIM_KIND=backward`) is operands the quality lane's
+TRAINING simulation handed its three products at one training step
+(forward, weight gradient, input gradient; clause W-9), each already in
+the orientation its product contracts along; its cells are whatever the
+training produced, so no end of the scale is required of it.
+
 A file that is missing, short or of another format is a FAILURE, never a
 skip: a cross-check that did not run has checked nothing.
 """
@@ -260,7 +269,7 @@ def check_sim_host_codes(cases: List[SimCase]) raises:
     print("   ok " + String(codes) + " codes and their exponents are the simulation's; " + String(clamped) + " codes of A sit at the clamp")
 
 
-def check_sim_host_product(cases: List[SimCase]) raises:
+def check_sim_host_product(cases: List[SimCase], require_ends: Bool) raises:
     """GATE: `gemm_int15_oracle` on the SIMULATION'S codes is the
     simulation's product. The codes are the file's and not this host's, so
     this gate and the one above fail apart."""
@@ -279,7 +288,7 @@ def check_sim_host_product(cases: List[SimCase]) raises:
             elif got[i] - got[i] != Float32(0.0):
                 infs += 1
         cells += c.m * c.n
-    if nans == 0 or infs == 0:
+    if require_ends and (nans == 0 or infs == 0):
         raise Error("the vectors hold " + String(nans) + " NaN cells and " + String(infs) + " infinite cells; the ends of the scale are not exercised")
     print("   ok " + String(cells) + " cells are the simulation's (" + String(nans) + " NaN, " + String(infs) + " infinite)")
 
@@ -352,6 +361,12 @@ def main() raises:
     var path = String(getenv("MOJOLEARN_INT15_SIM_VECTORS"))
     if path.byte_length() == 0:
         path = String("gemm/checks/vectors/int15_sim_vectors.q15")
+    var kind = String(getenv("MOJOLEARN_INT15_SIM_KIND"))
+    if kind.byte_length() == 0:
+        kind = String("forward")
+    if kind != "forward" and kind != "backward":
+        raise Error("MOJOLEARN_INT15_SIM_KIND is " + kind + "; forward or backward")
+    print("   kind: " + kind)
     var ran = 0
     var failed = 0
     var cases = List[SimCase]()
@@ -367,7 +382,7 @@ def main() raises:
         except e:
             _gate(String("check_sim_host_codes"), ran, failed, String(e))
         try:
-            check_sim_host_product(cases)
+            check_sim_host_product(cases, kind == "forward")
             _gate(String("check_sim_host_product"), ran, failed, String(""))
         except e:
             _gate(String("check_sim_host_product"), ran, failed, String(e))

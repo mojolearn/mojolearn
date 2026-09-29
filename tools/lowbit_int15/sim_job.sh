@@ -107,6 +107,25 @@ run sim-device-sabotage fail pixi run check-gemm-int15-sim-device-sabotage
 must_name sim-device-sabotage check_sim_device_product
 must_pass sim-device-sabotage check_sim_host_product
 grep -h "^   DIGEST " "$OUT/sim.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
+
+# THE BACKWARD VECTORS (contract clause W-9): what the quality lane's
+# training simulation handed its three products, every file beside the
+# forward one. The same check, the same three arms.
+for BV in gemm/checks/vectors/int15_backward_vectors_*.q15; do
+    [ -f "$BV" ] || continue
+    tag=$(basename "$BV" .q15 | sed 's/^int15_backward_vectors_//')
+    echo "backward_vectors_$tag sha256=$(sha "$BV")" >> "$OUT/sim.txt"
+    export MOJOLEARN_INT15_SIM_VECTORS="$PWD/$BV" MOJOLEARN_INT15_SIM_KIND=backward
+    run "bwd-$tag" pass pixi run check-gemm-int15-sim
+    run "bwd-$tag-host-sabotage" fail pixi run check-gemm-int15-sim-host-sabotage
+    must_name "bwd-$tag-host-sabotage" check_sim_host_product
+    run "bwd-$tag-convert-sabotage" fail pixi run check-gemm-int15-sim-convert-sabotage
+    must_name "bwd-$tag-convert-sabotage" check_sim_host_codes
+    run "bwd-$tag-device-sabotage" fail pixi run check-gemm-int15-sim-device-sabotage
+    must_name "bwd-$tag-device-sabotage" check_sim_device_product
+    unset MOJOLEARN_INT15_SIM_VECTORS MOJOLEARN_INT15_SIM_KIND
+    grep -h "^   DIGEST " "$OUT/bwd-$tag.log" 2>/dev/null | sed "s/^   DIGEST sim-/DIGEST bwd-$tag-/" >> "$OUT/digests.tsv"
+done
 {
     echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     if [ "$red" -eq 0 ]; then
@@ -116,7 +135,7 @@ grep -h "^   DIGEST " "$OUT/sim.log" 2>/dev/null | sed 's/^   //' > "$OUT/digest
     fi
 } >> "$OUT/sim.txt"
 cat "$OUT/status.tsv" "$OUT/sim.txt"
-for f in sim sim-host-sabotage sim-convert-sabotage sim-device-sabotage; do
+for f in sim sim-host-sabotage sim-convert-sabotage sim-device-sabotage $(cd "$OUT" && ls bwd-*.log 2>/dev/null | sed 's/\.log$//'); do
     echo "== $f (every line that is not a digest; last 40)"
     grep -v -E '^   DIGEST |mbind' "$OUT/$f.log" 2>/dev/null | cut -c1-600 | tail -40
 done
