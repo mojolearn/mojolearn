@@ -307,3 +307,40 @@ def test_ordered_lane_is_catboost_only_on_the_symmetric_grower():
     for v in bb.VENDORS:
         assert bb.TREE_OPPONENTS[v]["gbdt-ordered"] == bb.TREE_OPPONENTS[v]["gbdt-symmetric"]
     assert spec.task_names(spec.TASK_LANES["gbdt-ordered"]) == ("binary", "regression")
+
+
+# --- XGBoost's GPU arm needs this vendor's GPU backend ------------------------
+
+class _FakeXgb:
+    __version__ = "3.2.0"
+
+    def __init__(self, info):
+        self._info = info
+
+    def build_info(self):
+        return dict(self._info)
+
+
+@pytest.mark.parametrize("vendor,info,refused", [
+    ("amd", {"USE_CUDA": True, "USE_HIP": None}, True),     # the PyPI wheel on do-amd, 2026-09-29
+    ("amd", {"USE_CUDA": False, "USE_HIP": True}, False),   # a ROCm build
+    ("nvidia", {"USE_CUDA": True}, False),
+    ("nvidia", {"USE_CUDA": False}, True),
+    (None, {"USE_CUDA": True}, True),
+])
+def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, vendor, info, refused):
+    """device='cuda' on a build without this GPU's backend trains on the CPU
+    without an error; the GPU arm must refuse by name instead of timing it."""
+    monkeypatch.setattr(spec, "accel_vendor", lambda: vendor)
+    fake = _FakeXgb(info)
+    assert (spec._xgb_gpu_refusal(fake) is not None) is refused
+    monkeypatch.setitem(sys.modules, "xgboost", fake)
+    cfg = {"xgboost_grow_policy": "depthwise", "grow_policy": "Depthwise"}
+    arms = spec.xgboost_arms("gbdt-depthwise", cfg, None, ["cpu", "gpu"])
+    names = [a.name for a in arms]
+    out = capsys.readouterr().out
+    assert "xgboost-cpu" in names
+    assert ("xgboost-gpu" in names) is not refused
+    assert ("FSPEED-REFUSED lane=gbdt-depthwise arm=xgboost-gpu" in out) is refused
+    rarms = spec.xgboost_rank_arms("gbdt-rank-yetirank", {}, None, ["cpu", "gpu"])
+    assert ("xgboost-gpu" in [a.name for a in rarms]) is not refused
