@@ -476,6 +476,27 @@ def _ord_segment_rows_kernel(
         row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + i - off))
 
 
+def _ord_stage_in_p_kernel(
+    y_p: MutPointer[Float32, MutAnyOrigin],
+    w_p: MutPointer[Float32, MutAnyOrigin],
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    out_y: MutPointer[Float32, MutAnyOrigin],
+    out_w: MutPointer[Float32, MutAnyOrigin],
+    out_c: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """`_ord_stage_in_kernel` from the permutation's targets and weights
+    already in permutation order (`y_p[j] = y[perm[j]]`, gathered once per
+    fit): the same values, one indirection fewer."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var j = Int(row_index.unsafe_load(i))
+        out_y.unsafe_store(i, y_p.unsafe_load(j))
+        out_w.unsafe_store(i, w_p.unsafe_load(j))
+        out_c.unsafe_store(i, cursor.unsafe_load(j))
+
+
 def _grid(n: Int) -> Int:
     return (n + ORDERED_BLOCK - 1) // ORDERED_BLOCK
 
@@ -1051,8 +1072,11 @@ def _ordered_estimate_prepare(
     # the gather into permutation order and the estimator's stage-in, as
     # one pass straight into this task's estimation workspace
     estimate_workspace(ctx, est_ws, arena, estimate_size, n_leaves)
-    ctx.enqueue_function[_ord_stage_in_kernel](
-        y.unsafe_ptr(), weights.unsafe_ptr(), permutation.unsafe_ptr(),
+    # `y` and `weights` arrive in THIS permutation's order (the fit's
+    # per-permutation copies), so the stage-in is one gather through the
+    # partition
+    ctx.enqueue_function[_ord_stage_in_p_kernel](
+        y.unsafe_ptr(), weights.unsafe_ptr(),
         cursor.unsafe_ptr(), slot.row_index.unsafe_ptr(),
         est_ws[0].g_target.unsafe_ptr(), est_ws[0].g_weights.unsafe_ptr(),
         est_ws[0].g_cursor.unsafe_ptr(), Int32(estimate_size),
@@ -1247,6 +1271,27 @@ def fit_ordered(
         block_dim=(ORDERED_BLOCK, 1, 1),
     )
 
+    # every permutation's targets and weights in its own order, ONCE for the
+    # fit: the fold derivatives read prefixes of the learn permutation's, the
+    # batched estimation's stage-in reads them through its partition
+    var dys = List[DeviceBuffer[DType.float32]]()
+    var dws = List[DeviceBuffer[DType.float32]]()
+    for p in range(perm_count):
+        var dy = arena.device[DType.float32](ctx, n_rows)
+        var dw = arena.device[DType.float32](ctx, n_rows)
+        ctx.enqueue_function[_ord_gather_kernel](
+            targets.unsafe_ptr(), dperms[p].unsafe_ptr(), dy.unsafe_ptr(),
+            Int32(n_rows), grid_dim=(_grid(n_rows), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[_ord_gather_kernel](
+            weights.unsafe_ptr(), dperms[p].unsafe_ptr(), dw.unsafe_ptr(),
+            Int32(n_rows), grid_dim=(_grid(n_rows), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        dys.append(dy^)
+        dws.append(dw^)
+
     var bootstrap_on = opts.bootstrap_kind >= 0
     var boot_seeds: DeviceBuffer[DType.uint64]
     if bootstrap_on:
@@ -1264,14 +1309,10 @@ def fit_ordered(
     # the fit's queue orders a tree's rewrite after the last tree's reads,
     # so the per-fold drain that used to free them is gone (it was a drain
     # per fold per tree, nine a tree below 500 rows)
-    var der_gy = List[DeviceBuffer[DType.float32]]()
-    var der_gw = List[DeviceBuffer[DType.float32]]()
     var der_stats = List[DeviceBuffer[DType.float32]]()
     var der_part = List[DeviceBuffer[DType.float32]]()
     for f in range(n_folds):
         var r = folds[f].quality_evaluate_samples.right
-        der_gy.append(arena.device[DType.float32](ctx, r))
-        der_gw.append(arena.device[DType.float32](ctx, r))
         der_stats.append(arena.device[DType.float32](ctx, 2 * r))
         der_part.append(
             arena.device[DType.float32](
@@ -1391,18 +1432,9 @@ def fit_ordered(
         var sg = ctx.enqueue_create_buffer[DType.float32](total)
         for f in range(n_folds):
             var r = folds[f].quality_evaluate_samples.right
-            ref gy = der_gy[f]
-            ref gw = der_gw[f]
-            ctx.enqueue_function[_ord_gather_kernel](
-                targets.unsafe_ptr(), dperms[learn_p].unsafe_ptr(),
-                gy.unsafe_ptr(), Int32(r), grid_dim=(_grid(r), 1, 1),
-                block_dim=(ORDERED_BLOCK, 1, 1),
-            )
-            ctx.enqueue_function[_ord_gather_kernel](
-                weights.unsafe_ptr(), dperms[learn_p].unsafe_ptr(),
-                gw.unsafe_ptr(), Int32(r), grid_dim=(_grid(r), 1, 1),
-                block_dim=(ORDERED_BLOCK, 1, 1),
-            )
+            # the prefix [0, r) of the learn permutation's own-order copies
+            ref gy = dys[learn_p]
+            ref gw = dws[learn_p]
             ref stats = der_stats[f]
             ref part = der_part[f]
             var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
@@ -1589,7 +1621,7 @@ def fit_ordered(
                     pend.append(
                         _ordered_estimate_prepare(
                             ctx, est, folds[f].quality_evaluate_samples.right,
-                            n_leaves, targets, weights, dperms[lp], parts[lp],
+                            n_leaves, dys[lp], dws[lp], dperms[lp], parts[lp],
                             slots[slot],
                             cursors[lp][f], opts, sm_count, est_pools[slot],
                             arena, est_times, walker_times,
@@ -1598,7 +1630,7 @@ def fit_ordered(
             var est_slot = learn_count * n_folds
             pend.append(
                 _ordered_estimate_prepare(
-                    ctx, n_rows, n_rows, n_leaves, targets, weights,
+                    ctx, n_rows, n_rows, n_leaves, dys[est_p], dws[est_p],
                     dperms[est_p], parts[est_p],
                     slots[est_slot], est_cursor, opts, sm_count,
                     est_pools[est_slot], arena, est_times, walker_times,
@@ -1704,8 +1736,8 @@ def fit_ordered(
     _ = parts^
     _ = part_counts^
     _ = part_prefix^
-    _ = der_gy^
-    _ = der_gw^
+    _ = dys^
+    _ = dws^
     _ = der_stats^
     _ = der_part^
     _ = cursors^
