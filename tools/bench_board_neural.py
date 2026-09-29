@@ -511,10 +511,19 @@ def _sha(raw):
 
 
 def _load(name, alias=None):
+    """tools/<name>.py under its alias, REGISTERED in sys.modules: torch.compile
+    (dynamo) imports a traced function's module by name, and an unregistered
+    alias made every torch-compile arm of the lm lanes refuse with
+    "No module named 'bbn_torch_lm_step_opponent'" (do-amd, 2026-09-29)."""
     path = os.path.join(HERE, name + ".py")
     spec = importlib.util.spec_from_file_location(alias or ("bbn_" + name), path)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(spec.name, None)
+        raise
     return mod
 
 
