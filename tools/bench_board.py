@@ -1656,6 +1656,8 @@ def run_race(ctx, race):
                           status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
         else:
             cells = classical_cells(ctx, race, r)
+            # the classical driver's settings and mismatch lines reach BOARD.md
+            rec["lane_config"] = r.get("lane_config")
             if ctx.get("infer"):
                 rec["infer_cells"] = INFER.classical_cells(_bb(), ctx, race, r)
         # the arms' saved outputs are only for the conductor's quality pass
