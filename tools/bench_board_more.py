@@ -315,12 +315,17 @@ LANE_CONFIG = {
     },
     "gmm": {
         "rows": "%d fit and %d held-out stride rows of the reg block (%s)" % (GMM_FIT, GMM_EVAL, _STD),
-        "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6, max_iter=100, "
+        "params": "n_components=8, covariance_type='full', tol=1e-3, reg_covar=1e-6 on taxi and "
+                  "3e-3 on Istella-S (GMM_REG_COVAR), max_iter=100, "
                   "init_params='kmeans', n_init=1, warm_start=False, random_state=7",
         "timed": "fit",
         "quality": "held-out mean log-likelihood, BIC on the fit rows (from each arm's parameters)",
         "mismatches": ["init_params='kmeans': each library seeds its own k-means (ours the "
                        "identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))"],
+        "reg_covar": "Istella-S takes 3e-3 on every arm: on its 100,000 x 200 float32 fit rows "
+                     "scikit-learn's GaussianMixture refuses at 1e-3 (ill-defined empirical "
+                     "covariance) and both arms fit at 3e-3 (m2pro, 2026-09-29, "
+                     "tools/gmm_istella_probe.py); taxi keeps 1e-6, where both arms fit",
         "data": "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)",
     },
     "logreg": {
@@ -675,6 +680,15 @@ def prep(args):
 # Each lane's arrays: the SAME rows for every arm and for the quality pass
 # ---------------------------------------------------------------------------
 
+#: the gmm lane's reg_covar per dataset, the same on every arm
+#: (LANE_CONFIG['gmm']['reg_covar'] gives the measurement behind it)
+GMM_REG_COVAR = {"taxi": 1e-6, "istella": 3e-3}
+
+
+def _gmm_reg_covar(rec):
+    return GMM_REG_COVAR[(rec or {}).get("dataset")]
+
+
 def drop_constant_columns(D):
     """X and Xq without the columns constant on X (the fit rows): the same
     columns for every arm, removed before the clock. A full-covariance mixture
@@ -951,7 +965,7 @@ def _build_ours(lane, D, rec, S):
         out = lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)}  # noqa: E731
     elif lane == "gmm":
         make = lambda: ml.GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full",  # noqa: E731
-                                          tol=1e-3, reg_covar=1e-6, max_iter=100,
+                                          tol=1e-3, reg_covar=_gmm_reg_covar(rec), max_iter=100,
                                           init_params="kmeans", n_init=1, warm_start=False,
                                           random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
@@ -1098,7 +1112,7 @@ def _build_sklearn(lane, D, rec, S):
     elif lane == "gmm":
         from sklearn.mixture import GaussianMixture
         make = lambda: GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full", tol=1e-3,  # noqa: E731
-                                       reg_covar=1e-6, max_iter=100, init_params="kmeans", n_init=1,
+                                       reg_covar=_gmm_reg_covar(rec), max_iter=100, init_params="kmeans", n_init=1,
                                        warm_start=False, random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
 
