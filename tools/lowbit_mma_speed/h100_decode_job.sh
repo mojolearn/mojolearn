@@ -1,5 +1,6 @@
 #!/bin/bash
-# THE DECODE KERNEL on the H100, one queue job (run 9):
+# THE DECODE KERNEL on the H100, one queue job (run 9), and the four-product
+# gate built on lane/lowbit-int15's real epilogue:
 #   1. the unit gate with its sabotage arms (the decode kernel on codes at
 #      every shape of m <= 16, the quantizer in its launch, and the new
 #      quantizer arm that must fail it);
@@ -18,6 +19,9 @@ export MOJOLEARN_LOWBIT_PRICE_ONLY=t1,t8
 red=0
 gate=0
 bash tools/lowbit_mma_speed/gate_job.sh unit || { red=1; gate=1; }
+# The four-product gate again: the FUSED form now calls lane/lowbit-int15's
+# int15_store_cell; its first build is here.
+bash tools/lowbit_mma_speed/gate_job.sh pieces || red=1
 bash tools/lowbit_mma_speed/ptx_probe.sh || red=1
 if [ "$gate" -eq 0 ]; then
     bash tools/lowbit_mma_speed/price_job.sh decode || red=1
