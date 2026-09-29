@@ -141,6 +141,38 @@ def scan_block_sums_kernel(
         running += v
 
 
+#: `scan_block_sums_parallel_kernel`'s one block
+comptime SCAN_SUMS_BLOCK = 256
+
+
+def scan_block_sums_parallel_kernel(
+    block_sums: MutPointer[Int32, MutAnyOrigin], n_blocks_in: Int32
+):
+    """`scan_block_sums_kernel` with `SCAN_SUMS_BLOCK` threads in ONE block
+    (lane/ordered-speed, 2026-09-29): thread `t` owns the contiguous stripe
+    `[t * per, (t + 1) * per)`, sums it, the block's exclusive
+    `prefix_sum` gives each stripe its carry, and each thread writes its
+    stripe's exclusive prefixes. Int32 sums, so the values are exactly the
+    serial scan's. The serial one walks `size / 512` entries with one thread
+    (16,000 dependent global round trips at 8.2M rows, most of an Ordered
+    level's split on the M2 Pro). Launch with `grid_dim=1,
+    block_dim=SCAN_SUMS_BLOCK`."""
+    var n = Int(n_blocks_in)
+    var tid = Int(thread_idx.x)
+    var per = (n + SCAN_SUMS_BLOCK - 1) // SCAN_SUMS_BLOCK
+    var lo = tid * per
+    var hi = min(lo + per, n)
+    var local = Int32(0)
+    for i in range(lo, hi):
+        local += block_sums.unsafe_load(i)
+    var carry = prefix_sum[block_size=SCAN_SUMS_BLOCK, exclusive=True](local)
+    var running = carry
+    for i in range(lo, hi):
+        var v = block_sums.unsafe_load(i)
+        block_sums.unsafe_store(i, running)
+        running += v
+
+
 def add_block_carry_kernel(
     offsets: MutPointer[Int32, MutAnyOrigin],
     block_sums: MutPointer[Int32, MutAnyOrigin],
