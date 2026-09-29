@@ -702,6 +702,32 @@ def _run_neural(env, *extra):
                    + base + list(extra))
 
 
+def test_nvidia_board_from_the_old_key_resumes_on_the_same_and_a_new_pod(env, monkeypatch):
+    """A board.json written before the NVIDIA key change (its box carries the
+    hostname, its races no `host`) resumes under the new key: on the same pod,
+    and on a new pod with the same GPU model, driver major and pins; a
+    different GPU model refuses."""
+    gpu = {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA A40", "driver": "580.159.04"}
+    monkeypatch.setattr(bb, "gpu_info", lambda vendor: dict(gpu))
+    assert _run_neural(env) == 0
+    p = env["out"] / "board.json"
+    res = json.loads(p.read_text())
+    host = res["box"]["host"]["hostname"]
+    for rec in res["races"].values():
+        rec.pop("host", None)                 # what the old code wrote
+    p.write_text(json.dumps(res))
+    env["calls"].write_text("")
+    assert _run_neural(env) == 0              # same pod: resumes, runs nothing
+    assert _calls(env) == []
+    assert host in (env["out"] / "BOARD.md").read_text()
+    monkeypatch.setattr(bb.platform, "node", lambda: "a-new-pod")
+    assert _run_neural(env) == 0              # a new pod, same GPU/driver/pins: resumes
+    assert _calls(env) == []
+    gpu["name"] = "NVIDIA GeForce RTX 4090"
+    with pytest.raises(SystemExit, match="different box"):
+        _run_neural(env)
+
+
 def test_neural_run_schema_quality_and_board(env):
     assert _run_neural(env) == 0
     res = json.loads((env["out"] / "board.json").read_text())
