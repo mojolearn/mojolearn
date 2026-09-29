@@ -76,6 +76,13 @@ from hdbscan.impl.prediction_data import (
 )
 from hdbscan.impl.detail.condense import _add_edge, _collapse, bfs_from_node
 from hdbscan.impl.detail.extract import do_labelling_on_host
+from hdbscan.impl.detail.sparse_mr import (
+    boruvka_rounds_on_tree,
+    mr_edge_weight,
+    sort_edges_total_order,
+    triple_less_i,
+)
+from cluster.host.host_cells import ftz_v, mul_add_v
 from hdbscan.impl.detail.stabilities import (
     stability_order_key_bits,
     stability_order_unkey_bits,
@@ -116,6 +123,18 @@ comptime HDBH_METRIC_L2_SQRT_EXPANDED = 1
 comptime HDBH_PAIRWISE_MAX_ROWS = 46340
 comptime HDBH_FLOAT32_MAX = Float32(3.4028234663852886e38)
 comptime HDBH_KEY_SENTINEL: Int32 = 0x7FFFFFFF
+
+comptime HDBH_GRAPH_AUTO = 0
+comptime HDBH_GRAPH_DENSE = 1
+comptime HDBH_GRAPH_SPARSE = 2
+"""`single_linkage.mojo`'s `MR_GRAPH_*`, the same values: auto is the
+dense graph up to HDBH_PAIRWISE_MAX_ROWS and the sparse walk past it
+(DEVIATION 1620)."""
+
+comptime HDBH_PRIM_CHUNK = 2048
+"""Vertices per task in one Prim step (`linkage_host.PRIM_CHUNK`)."""
+comptime HDBH_PRIM_W = 8
+"""Edges per SIMD group; lanes run across edges, never along a fold."""
 
 
 @fieldwise_init
@@ -778,6 +797,157 @@ def hdbh_boruvka(mr: List[Float32], m: Int) raises -> HdbscanHostMst:
     return HdbscanHostMst(src^, dst^, weights^, rounds)
 
 
+def hdbh_sparse_prim(
+    x: List[Float32], m: Int, n: Int, core: List[Float32], alpha: Float32
+) raises -> HdbscanHostMst:
+    """DEVIATION 1620 on the CPU: the dense graph's minimum spanning tree
+    under (weight key, lo, hi) with no m x m array, by Prim. Each edge's
+    weight is `hdbh_mutual_reachability`'s cell (`mr_edge_weight` over the
+    pinned chain; vectors run across eight edges, never along a fold). The
+    tree under a total order is unique, so it is `hdbh_boruvka`'s edge for
+    edge; returned sorted by (weight key, lo, hi) and oriented (lo, hi),
+    with the dense solver's round count replayed on the tree."""
+    var norms = host_row_norms_pinned(x, m, n)
+    var inv_alpha = identical_div(Float32(1.0), alpha)
+    var xt = List[Float32](length=m * n, fill=Float32(0.0))
+    for v in range(m):
+        for f in range(n):
+            xt[f * m + v] = ftz(x[v * n + f])
+    var in_tree = List[UInt8](length=m, fill=UInt8(0))
+    var bwk = List[Int32](length=m, fill=HDBH_KEY_SENTINEL)
+    var blo = List[Int32](length=m, fill=Int32(0x7FFFFFFF))
+    var bhi = List[Int32](length=m, fill=Int32(0x7FFFFFFF))
+    var bw = List[Float32](length=m, fill=Float32(0.0))
+    var n_chunks = (m + HDBH_PRIM_CHUNK - 1) // HDBH_PRIM_CHUNK
+    var ch_arg = List[Int](length=n_chunks, fill=-1)
+    var ch_bad = List[Int](length=n_chunks, fill=-1)
+    var xtp = host_list_ptr(xt)
+    var nrp = host_list_ptr(norms)
+    var crp = host_list_ptr(core)
+    var bwp = host_list_ptr(bw)
+    var itp = in_tree.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var wkp = bwk.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var lop = blo.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var hip = bhi.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var cap = ch_arg.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var cbp = ch_bad.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var lo = List[Int32](capacity=m)
+    var hi = List[Int32](capacity=m)
+    var w = List[Float32](capacity=m)
+    var tasks = host_predict_task_count(n_chunks)
+    if m * n < (1 << 14):
+        tasks = 1
+    var cur = 0
+    in_tree[0] = UInt8(1)
+    for _step in range(m - 1):
+        var cur_row = List[Float32](length=n, fill=Float32(0.0))
+        for f in range(n):
+            cur_row[f] = xt[f * m + cur]
+        var qp = host_list_ptr(cur_row)
+        var n_cur = norms[cur]
+        var c_cur = core[cur]
+
+        def _chunk(c: Int) {imm xtp, imm nrp, imm crp, imm bwp, imm itp, imm wkp, imm lop, imm hip, imm cap, imm cbp, imm qp, imm cur, imm n_cur, imm c_cur, imm m, imm n, imm inv_alpha}:
+            var v0 = c * HDBH_PRIM_CHUNK
+            var v1 = min(v0 + HDBH_PRIM_CHUNK, m)
+            var bad = -1
+            var v = v0
+            while v < v1:
+                var width = HDBH_PRIM_W if v + HDBH_PRIM_W <= v1 else 1
+                var acc = SIMD[DType.float32, HDBH_PRIM_W](0)
+                if width == HDBH_PRIM_W:
+                    for f in range(n):
+                        var q = SIMD[DType.float32, HDBH_PRIM_W](qp.unsafe_load(f))
+                        acc = ftz_v[HDBH_PRIM_W](mul_add_v[HDBH_PRIM_W](
+                            q, (xtp + f * m + v).load[width=HDBH_PRIM_W](), acc
+                        ))
+                else:
+                    var a1 = Float32(0.0)
+                    for f in range(n):
+                        a1 = ftz(identical_mul_add(qp.unsafe_load(f), xtp.unsafe_load(f * m + v), a1))
+                    acc[0] = a1
+                for l in range(width):
+                    var u = v + l
+                    if itp[u] != UInt8(0):
+                        continue
+                    var wt = mr_edge_weight(
+                        acc[l], n_cur, nrp.unsafe_load(u), c_cur,
+                        crp.unsafe_load(u), inv_alpha, HDB_SAB_NONE,
+                    )
+                    if (bitcast[DType.uint32](wt) & 0x7F800000) == 0x7F800000:
+                        if bad < 0:
+                            bad = u
+                        continue
+                    var wk = weight_order_key(wt)
+                    var a = Int32(cur if cur < u else u)
+                    var b = Int32(u if cur < u else cur)
+                    if triple_less_i(wk, Int(a), Int(b), wkp[u], Int(lop[u]), Int(hip[u])):
+                        wkp[u] = wk
+                        lop[u] = a
+                        hip[u] = b
+                        bwp.unsafe_store(u, wt)
+                v += width
+            var amin = -1
+            for u in range(v0, v1):
+                if itp[u] != UInt8(0):
+                    continue
+                if amin < 0 or triple_less_i(
+                    wkp[u], Int(lop[u]), Int(hip[u]),
+                    wkp[amin], Int(lop[amin]), Int(hip[amin]),
+                ):
+                    amin = u
+            cap[c] = amin
+            cbp[c] = bad
+
+        if tasks > 1:
+            host_parallelize(_chunk, n_chunks)
+        else:
+            for c in range(n_chunks):
+                _chunk(c)
+        _ = cur_row^
+        var nv = -1
+        for c in range(n_chunks):
+            if ch_bad[c] >= 0:
+                raise Error(
+                    "hdbscan.build_mr_linkage: the mutual reachability weight"
+                    " of rows " + String(cur) + " and " + String(ch_bad[c])
+                    + " is NaN or infinite; refused by name (DEVIATION 623 /"
+                    " 1607, IDENTITY_PATHS row 39)"
+                )
+            var u = ch_arg[c]
+            if u < 0:
+                continue
+            if nv < 0 or triple_less_i(
+                bwk[u], Int(blo[u]), Int(bhi[u]),
+                bwk[nv], Int(blo[nv]), Int(bhi[nv]),
+            ):
+                nv = u
+        lo.append(blo[nv])
+        hi.append(bhi[nv])
+        w.append(bw[nv])
+        in_tree[nv] = UInt8(1)
+        cur = nv
+    var order = sort_edges_total_order(lo, hi, w)
+    var slo = List[Int32](capacity=m)
+    var shi = List[Int32](capacity=m)
+    var sw = List[Float32](capacity=m)
+    for t in range(len(order)):
+        slo.append(lo[order[t]])
+        shi.append(hi[order[t]])
+        sw.append(w[order[t]])
+    var rounds = boruvka_rounds_on_tree(slo, shi, sw, m)
+    _ = xt^
+    _ = norms^
+    _ = in_tree^
+    _ = bwk^
+    _ = blo^
+    _ = bhi^
+    _ = bw^
+    _ = ch_arg^
+    _ = ch_bad^
+    return HdbscanHostMst(slo^, shi^, sw^, rounds)
+
+
 @fieldwise_init
 struct HdbscanHostDendrogram(Movable):
     var children: List[Int32]
@@ -1083,8 +1253,10 @@ def hdbh_fit(
     method: Int,
     cluster_selection_epsilon: Float32,
     metric: Int,
+    graph: Int = HDBH_GRAPH_AUTO,
 ) raises -> HdbscanHostFit:
-    """`hdbscan_fit_host` then `fit_hdbscan`, in their order."""
+    """`hdbscan_fit_host` then `fit_hdbscan`, in their order. `graph` as
+    `build_mr_linkage`'s (DEVIATION 1620)."""
     if m < 2:
         raise Error("hdbscan_fit_host needs n_rows >= 2, got " + String(m))
     if n < 1:
@@ -1116,11 +1288,20 @@ def hdbh_fit(
     var k = min_samples + 1
     if min_samples + 1 > m:
         k = m
-    if m > HDBH_PAIRWISE_MAX_ROWS:
+    var use_sparse = graph == HDBH_GRAPH_SPARSE or (
+        graph == HDBH_GRAPH_AUTO and m > HDBH_PAIRWISE_MAX_ROWS
+    )
+    if graph != HDBH_GRAPH_AUTO and graph != HDBH_GRAPH_DENSE and graph != HDBH_GRAPH_SPARSE:
+        raise Error(
+            "hdbscan.build_mr_linkage: graph=" + String(graph)
+            + " refused by name; 0 (auto), 1 (dense) or 2 (sparse)"
+        )
+    if m > HDBH_PAIRWISE_MAX_ROWS and not use_sparse:
         raise Error(
             "hdbscan.build_mr_linkage: n_rows=" + String(m) + " > "
             + String(HDBH_PAIRWISE_MAX_ROWS)
-            + "; the dense mutual reachability graph is m * m cells"
+            + "; the dense mutual reachability graph is m * m cells (the"
+            " dense arm was asked for by name; auto takes DEVIATION 1620)"
         )
     if not (alpha > Float32(0.0)) or alpha > HDBH_FLOAT32_MAX:
         raise Error(
@@ -1129,28 +1310,38 @@ def hdbh_fit(
         )
 
     var core = hdbh_core_distances(x, m, n, k)
-    var mr = hdbh_mutual_reachability(x, m, n, core, alpha)
-    var mst = hdbh_boruvka(mr, m)
-    _ = mr^
-
-    # coo_sort_by_weight, then the orientation.
     var n_edges = m - 1
-    var keys = List[UInt64](capacity=n_edges)
-    var order = List[Int](capacity=n_edges)
-    for i in range(n_edges):
-        var u = mst.src[i]
-        var v = mst.dst[i]
-        keys.append(pack_edge_key(weight_order_key(mst.weights[i]), edge_lo(u, v), edge_hi(u, v)))
-        order.append(i)
-    merge_sort_u64_with_index(keys, order)
     var lo = List[Int32](capacity=n_edges)
     var hi = List[Int32](capacity=n_edges)
     var w = List[Float32](capacity=n_edges)
-    for t in range(n_edges):
-        var i = order[t]
-        lo.append(edge_lo(mst.src[i], mst.dst[i]))
-        hi.append(edge_hi(mst.src[i], mst.dst[i]))
-        w.append(mst.weights[i])
+    var mst_rounds: Int
+    if use_sparse:
+        # DEVIATION 1620: already sorted by (weight key, lo, hi), oriented.
+        var sp = hdbh_sparse_prim(x, m, n, core, alpha)
+        mst_rounds = sp.rounds
+        lo = sp.src.copy()
+        hi = sp.dst.copy()
+        w = sp.weights.copy()
+    else:
+        var mr = hdbh_mutual_reachability(x, m, n, core, alpha)
+        var mst = hdbh_boruvka(mr, m)
+        _ = mr^
+        mst_rounds = mst.rounds
+
+        # coo_sort_by_weight, then the orientation.
+        var keys = List[UInt64](capacity=n_edges)
+        var order = List[Int](capacity=n_edges)
+        for i in range(n_edges):
+            var u = mst.src[i]
+            var v = mst.dst[i]
+            keys.append(pack_edge_key(weight_order_key(mst.weights[i]), edge_lo(u, v), edge_hi(u, v)))
+            order.append(i)
+        merge_sort_u64_with_index(keys, order)
+        for t in range(n_edges):
+            var i = order[t]
+            lo.append(edge_lo(mst.src[i], mst.dst[i]))
+            hi.append(edge_hi(mst.src[i], mst.dst[i]))
+            w.append(mst.weights[i])
 
     var dendro = hdbh_dendrogram(lo, hi, w, n_edges)
     var tree = hdbh_condense(
@@ -1195,6 +1386,6 @@ def hdbh_fit(
             inverse_label_map.append(Int32(i))
     var n_condensed = tree.n_clusters
     return HdbscanHostFit(
-        labels^, core^, n_selected, n_outliers, mst.rounds, n_condensed,
+        labels^, core^, n_selected, n_outliers, mst_rounds, n_condensed,
         tree^, inverse_label_map^,
     )
