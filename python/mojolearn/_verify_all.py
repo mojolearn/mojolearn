@@ -1514,6 +1514,9 @@ def _read_cells(doc, label):
         rows = []
     if not isinstance(rows, list):
         return out, states, problems + [f"{label}: `cells` is {type(rows).__name__}, expected a list"]
+    cross_rows, cross_problems = _cross_check_comparison_cells(doc.get('cross_check'), label)
+    rows = rows + cross_rows
+    problems.extend(cross_problems)
     for i, r in enumerate(rows):
         if not isinstance(r, dict):
             problems.append(f"{label}: cells[{i}] is {type(r).__name__}, expected an object")
@@ -1529,6 +1532,55 @@ def _read_cells(doc, label):
     return out, states, problems
 
 
+def _cross_check_comparison_cells(cross, label):
+    """Include both local devices and missing requested checks in document diffs."""
+    if cross is None:
+        return [], []  # older reports and scopes without a local cross-check
+    if not isinstance(cross, dict):
+        return [], [f'{label}: cross_check is not an object']
+    if cross.get('ran') is False and not cross.get('cells'):
+        return [], []
+    if cross.get('ran') is not True:
+        return [], [f'{label}: cross_check has results without ran=true']
+    axes = [cross.get('requested_lanes'), cross.get('requested_fixtures')]
+    if any(not isinstance(axis, list) or not axis or
+           any(not isinstance(x, str) or not x for x in axis) or len(set(axis)) != len(axis)
+           for axis in axes):
+        return [], [f'{label}: invalid cross_check requested scope']
+    expected = {(lane, fixture, part) for lane in axes[0] for fixture in axes[1]
+                for part in ('infer', 'batch')}
+    raw = cross.get('cells')
+    if not isinstance(raw, list):
+        return [], [f'{label}: cross_check.cells is not a list']
+    seen, problems = {}, []
+    for row in raw:
+        if not isinstance(row, dict):
+            problems.append(f'{label}: cross_check contains a non-object row')
+            continue
+        key = tuple(row.get(k) for k in ('lane', 'fixture', 'part'))
+        if any(not isinstance(k, str) for k in key) or key not in expected or key in seen:
+            problems.append(f'{label}: duplicate or unrequested cross_check cell {key}')
+            continue
+        seen[key] = row
+    rows = []
+    for lane, fixture, part in sorted(expected):
+        row = seen.get((lane, fixture, part), {})
+        gpu, cpu = row.get('gpu'), row.get('cpu')
+        # Derive disagreement from the values, never trust a summary's agree flag.
+        different = (_value_kind(gpu) in ('hash', 'n/a') and
+                     _value_kind(cpu) in ('hash', 'n/a') and gpu != cpu)
+        for device, value in (('gpu', gpu), ('cpu', cpu)):
+            rows.append(dict(lane=f'cross-check:{device}:{lane}', fixture=fixture,
+                             part=part, value=value,
+                             state=vref.DIVERGENT if different else
+                             vref.IDENTICAL if _value_kind(value) == 'hash' else
+                             vref.NA if _value_kind(value) == 'n/a' else vref.REFUSED))
+    if cross.get('complete') is not True or cross.get('passed') is not True or cross.get('skipped'):
+        rows.append(dict(lane='cross-check:execution', fixture='execution', part='status',
+                         value=None, state=vref.REFUSED))
+    return rows, problems
+
+
 def comparison_context_problems(a, b, keys):
     """Hash agreement is meaningful only under the same recorded input contract."""
     if not keys:
@@ -1540,6 +1592,12 @@ def comparison_context_problems(a, b, keys):
     if not ac.get('harness_sha256') or ac.get('harness_sha256') != bc.get('harness_sha256'):
         problems.append('different or missing harness digest')
     for lane, fixture, part in keys:
+        if lane == 'cross-check:execution':
+            continue  # operational refusal, not a numerical value
+        if lane.startswith('cross-check:'):
+            lane = lane.split(':', 2)[2]
+        elif lane.startswith('portable:'):
+            lane = lane.split(':', 1)[1]
         for field in ('fixtures', 'heldout'):
             av, bv = ac.get(field, {}).get(fixture), bc.get(field, {}).get(fixture)
             if not av or av != bv:
@@ -1551,6 +1609,30 @@ def comparison_context_problems(a, b, keys):
             if not av or av != bv:
                 problems.append(f'{part}: different or missing protocol')
     return sorted(set(problems))
+
+
+def portable_contract_inputs(harness, data, held, pkg_dir=None):
+    """Fingerprint every saved-model fixture without fitting or replaying a model."""
+    data, held = dict(data), dict(held)
+    path = os.path.join(pkg_dir or _pkg_dir(), vref.TABLE_DIR, MODELS_DIR, MODELS_MANIFEST)
+    fixtures = {'base'}
+    try:
+        with open(path, encoding='utf-8') as stream:
+            manifest = json.load(stream)
+        fixtures.update(m['fixture'] for m in manifest['models']
+                        if isinstance(m, dict) and isinstance(m.get('fixture'), str))
+    except (OSError, ValueError, TypeError, KeyError):
+        # run_models reports a broken manifest as a refusal. Do not hide it
+        # behind an unrelated metadata-collection exception here.
+        pass
+    for fixture in sorted(fixtures):
+        if fixture not in harness.FIXTURES:
+            continue
+        if fixture not in data:
+            data[fixture] = harness.fixture(fixture)
+        if fixture not in held:
+            held[fixture] = harness.heldout(fixture)
+    return data, held
 
 
 def verification_contract(harness, harness_file, data, held, extra_parts):
@@ -1615,7 +1697,7 @@ NONCE_BYTES = 16
 #: `compare_documents` actually reads, rather than a reader holding them
 #: against each other by eye.
 COMMITMENT_COVERS = ("format", "cells", "device", "verification_contract",
-                     "bindings", "verdict", "detail")
+                     "bindings", "verdict", "detail", "cross_check")
 
 #: Fields deliberately left OUT, with the reason, because "why is this not
 #: covered" is the question a later lane will ask.
@@ -1709,7 +1791,22 @@ def commitment_preimage(doc):
         verdict=doc.get("verdict"),
         detail=doc.get("detail"),
     )
-    assert tuple(covered) == COMMITMENT_COVERS, "COMMITMENT_COVERS no longer names what is covered"
+    # Old documents without this field retain their original commitment bytes.
+    # Cross-check reports now bind their values, requested scope and execution
+    # outcome as well; timing and row order remain irrelevant.
+    if 'cross_check' in doc:
+        cross = doc['cross_check']
+        if isinstance(cross, dict):
+            cross = {k: cross.get(k) for k in ('ran', 'requested_lanes', 'requested_fixtures',
+                                               'complete', 'passed', 'skipped', 'cells')}
+            if isinstance(cross['cells'], list):
+                cross['cells'] = sorted(
+                    ([r.get(k) for k in ('lane', 'fixture', 'part', 'gpu', 'cpu')]
+                     if isinstance(r, dict) else r for r in cross['cells']),
+                    key=lambda r: json.dumps(r, sort_keys=True, default=str))
+        covered['cross_check'] = cross
+    expected = COMMITMENT_COVERS if 'cross_check' in doc else COMMITMENT_COVERS[:-1]
+    assert tuple(covered) == expected, "COMMITMENT_COVERS no longer names what is covered"
     return json.dumps(covered, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=True, default=str).encode("utf-8")
 
@@ -2652,9 +2749,16 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
     # of an unreadable file produces a cell count, and a cell count next to a
     # complaint is exactly the shape a reader skims as a result.
     shared = [] if problems else sorted(set(ca) & set(cb), key=_sortkey)
-    context_problems = comparison_context_problems(a, b, shared) if not problems else []
-    if context_problems:
-        shared = []
+    compatible, incomparable = [], []
+    for key in shared:
+        reasons = comparison_context_problems(a, b, [key])
+        if reasons:
+            incomparable.append(dict(lane=key[0], fixture=key[1], part=key[2],
+                                     reasons=reasons))
+        else:
+            compatible.append(key)
+    context_problems = sorted({reason for row in incomparable for reason in row['reasons']})
+    shared = compatible
     agree, differ, moved, uncomputed, na, na_differ, agreed_div = [], [], [], [], [], [], []
     for key in shared:
         va_, vb_ = ca[key], cb[key]
@@ -2752,15 +2856,15 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
         verdict_, code = "CHALLENGE BROKEN", EXIT_MISMATCH
     elif same_document:
         verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
-    elif context_problems:
-        verdict_, code = "INCOMPARABLE", EXIT_CANNOT_RUN
     elif differ:
         verdict_, code = "MISMATCH", EXIT_MISMATCH
     elif moved:
         verdict_, code = "SELF-CONTRADICTED", EXIT_MISMATCH
     elif agreed_div:
         verdict_, code = "AGREED ON A DIVERGENT ANSWER", EXIT_MISMATCH
-    elif only_a or only_b or challenge_only_a or challenge_only_b or uncomputed or na_differ:
+    elif incomparable and not (agree or na or uncomputed or na_differ):
+        verdict_, code = "INCOMPARABLE", EXIT_CANNOT_RUN
+    elif incomparable or only_a or only_b or challenge_only_a or challenge_only_b or uncomputed or na_differ:
         verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
     elif agree:
         verdict_, code = "AGREE", EXIT_VERIFIED
@@ -2768,7 +2872,8 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
         verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
     return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
                 labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
-                context_problems=context_problems, commitment=commitment,
+                context_problems=context_problems, incomparable=len(incomparable),
+                incomparable_cells=incomparable, commitment=commitment,
                 challenge=challenge,
                 agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
                 uncomputed=len(uncomputed), n_a_differing=len(na_differ),
@@ -2866,6 +2971,13 @@ def format_compare(r):
                  f"{r['agreed_divergent']}")
     lines.append(f"  n/a agreed {r['n_a']}   n/a differing {r['n_a_differing']}   "
                  f"only in {la}: {len(r['only_in_a'])}   only in {lb}: {len(r['only_in_b'])}")
+    lines.append(f"  incompatible inputs/protocols {r.get('incomparable', 0)}")
+    if r.get('incomparable_cells'):
+        lines.append("\nINCOMPATIBLE CELLS (other shared cells were still compared):")
+        for row in r['incomparable_cells'][:40]:
+            lines.append(f"  {row['lane']}/{row['fixture']} {row['part']}: " + "; ".join(row['reasons']))
+        if len(r['incomparable_cells']) > 40:
+            lines.append(f"  ... and {len(r['incomparable_cells']) - 40} more; use --json for all")
     if r["differing"]:
         lines += _cell_lines("DIFFERING CELLS", r["differing"], la, lb)
     if r["agreed_divergent_cells"]:
@@ -2961,7 +3073,8 @@ def format_compare(r):
         lines.append("nothing to agree or disagree about.")
     else:
         missing = len(r["only_in_a"]) + len(r["only_in_b"])
-        lines.append("RESULT: INCOMPLETE. Absence is not agreement.")
+        lines.append(f"RESULT: INCOMPLETE. {r['agree']} shared cell parts match; coverage is partial.")
+        lines.append(f"{r.get('incomparable', 0)} cell parts have incompatible inputs or protocols.")
         lines.append(f"No cell differs, but {missing} cell part(s) appear in only one document, "
                      f"{r['uncomputed']}")
         lines.append(f"were computed by neither side, and {r['n_a_differing']} carry different n/a "
@@ -3000,6 +3113,13 @@ def _cmd_compare(args):
     except Exception as exc:                      # never let a crash exit 1 and read as MISMATCH
         return _compare_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
                                 f"comparing raised {type(exc).__name__}: {exc}")
+    if getattr(args, 'json_out', None):
+        try:
+            from ._verify_worker import atomic_json
+            atomic_json(args.json_out, r)
+        except OSError as exc:
+            return _compare_refusal(args, EXIT_CANNOT_RUN, 'CANNOT WRITE',
+                                    f'cannot write comparison report: {exc}')
     if getattr(args, "json", False):
         _emit(json.dumps(r, indent=1, sort_keys=True))
     else:
@@ -3736,8 +3856,8 @@ def cmd_verify_all(args):
     # obvious in the document (lane/expose-inference-surface, 2026-09-16).
     extra_parts = _extra_parts(args)
     contract_data, contract_held = dict(data), dict(held)
-    if not getattr(args, "no_models", False) and 'base' not in contract_data:
-        contract_data['base'], contract_held['base'] = harness.fixture('base'), harness.heldout('base')
+    if not getattr(args, "no_models", False):
+        contract_data, contract_held = portable_contract_inputs(harness, contract_data, contract_held)
     contract = verification_contract(harness, harness_file, contract_data, contract_held, extra_parts)
     timeout = getattr(args, "cell_timeout", 120.0)
     if not isinstance(timeout, (int, float)) or not 0 < timeout < float("inf"):

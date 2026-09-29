@@ -380,7 +380,7 @@ def test_compare_absence_is_never_agreement():
     assert r["differ"] == 0, "no cell actually differs"
     assert r["verdict"] == "INCOMPLETE" and r["exit"] == va.EXIT_CANNOT_RUN
     assert r["only_in_b"] == [["kde", "base", "train"]]
-    assert "Absence is not agreement" in va.format_compare(r)
+    assert "shared cell parts match; coverage is partial" in va.format_compare(r)
 
 
 def test_compare_warns_when_both_documents_are_the_same_device():
@@ -1458,7 +1458,7 @@ def test_cli_compare_exit_codes_are_what_a_stranger_scripts_against(tmp_path):
     cases = [
         ((a, same), va.EXIT_VERIFIED, "RESULT: AGREE"),
         ((a, diff), va.EXIT_MISMATCH, "ffff0000ffff0000"),
-        ((a, nulls), va.EXIT_CANNOT_RUN, "Absence is not agreement"),
+        ((a, nulls), va.EXIT_CANNOT_RUN, "shared cell parts match; coverage is partial"),
         ((a, a), va.EXIT_USAGE, "RESULT: SAME FILE"),
         ((a, copy_of_a), va.EXIT_CANNOT_RUN, "RESULT: SAME DOCUMENT"),
         ((a, str(junk)), va.EXIT_USAGE, "RESULT: CANNOT READ"),

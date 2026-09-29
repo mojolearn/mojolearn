@@ -303,7 +303,7 @@ def test_the_covered_list_is_pinned_so_a_change_has_to_be_deliberate():
     shrinking it silently changes that answer, so it is pinned here: a lane
     that edits it edits this line too and has to say why in the same diff."""
     assert va.COMMITMENT_COVERS == ("format", "cells", "device", "verification_contract",
-                                    "bindings", "verdict", "detail")
+                                    "bindings", "verdict", "detail", "cross_check")
 
 
 def test_innocent_reserialization_does_not_break_a_commitment():

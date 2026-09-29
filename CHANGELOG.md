@@ -24,6 +24,15 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ### Measured
 - The time of the complete 15-bit inference call over our own fp32.v1 call at the same 512-token rows, on the same box, in the same run: H100 0.43 to 0.50 (run 5); MI325X 0.19 to 0.30, with a stand-in recombination, one run; M3 Ultra 3.4 to 3.6, on the float unit, untuned.
 
+## 0.8.27 (unreleased)
+
+### Fixed
+- Verification reports now fingerprint every fixture used by bundled saved-model checks, including non-base fixtures in quick/default runs. Previously these missing fingerprints could make valid reports incomparable.
+- `verify --compare` compares the bundled GPU and CPU cross-check values as well as the main cell table. Missing rows, failed workers and same-answer local divergences cannot become a successful comparison. Cross-check values and execution scope are now covered by commitments.
+- Comparison tolerates different scopes: shared compatible checks are compared, missing checks are listed per side, and incompatible inputs are flagged per cell without discarding unrelated matches. Actual mismatches outrank incomplete coverage.
+- `verify --compare A B --json-out comparison.json` saves its result using the same output option as verification. Scope still comes from the input reports; comparison does not rerun algorithms.
+- Verifier-only update of 0.8.26: algorithm code, native binaries, fixtures and references are unchanged. Existing numerical runs remain valid for that unchanged payload.
+
 ## 0.8.26 (published 2026-09-29)
 
 ### Changed

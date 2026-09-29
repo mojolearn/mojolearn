@@ -626,6 +626,47 @@ If the hashes match, two people have demonstrated the claim **to each other**,
 with us entirely absent. That is stronger than anything we can publish about
 ourselves, and it needs no GPU, no bindings and no network to run.
 
+### Matching quick, default, full and neural scopes
+
+Choose verification scope on each machine and add `--json-out`:
+
+```sh
+python -m mojolearn verify --quick --json-out quick.json
+python -m mojolearn verify --json-out default.json
+python -m mojolearn verify --all --json-out all.json
+python -m mojolearn verify --neural-training --all --json-out neural.json
+python -m mojolearn verify --compare mac.json nvidia.json --json-out comparison.json
+```
+
+Comparison reads the scope recorded in the files; it does not execute algorithms
+or select a new quick/full/neural run. One comparison command handles all scopes:
+it compares shared cells with matching input and protocol fingerprints, lists
+cells present only in either file, and flags incompatible cells individually.
+Compatible matches remain visible even when other cells cannot be compared.
+Matching scope gives complete coverage; different scope can give useful partial
+coverage. Neural-training results remain separate from routine reports.
+
+`AGREE` (exit 0) means complete agreement. `INCOMPLETE` (exit 4) retains matches
+but identifies coverage gaps. `INCOMPARABLE` (exit 4) means no shared cells have
+compatible inputs. An actual mismatch takes precedence over gaps and returns
+`MISMATCH` (exit 1). Malformed documents and broken commitments still fail.
+
+Starting with 0.8.27, comparison includes both GPU and CPU values in the bundled
+local cross-check, derives disagreement from those values, and refuses to hide
+missing rows or failed workers. Saved-model fixture fingerprints are recorded
+even when the routine training selection uses only the base fixture, so quick
+and default reports have the metadata required for comparison. `--json-out`
+also saves the comparison result itself.
+
+Reports made by 0.8.26 quick/default verification can lack fingerprints for
+non-base saved-model fixtures; comparison refuses those missing inputs rather
+than inventing evidence, while still comparing other compatible cells. New
+reports from the corrected verifier include those fingerprints.
+Commitments now also bind the nested cross-check values, requested scope and
+execution status. Existing documents without that section retain their original
+commitment bytes; commitments for older documents containing that section must
+be regenerated and exchanged again because the old commitment did not cover it.
+
 ### If you have nobody to swap with
 
 `bench/results/verify_reports/` carries OUR OWN evidence documents, one per

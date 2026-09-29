@@ -357,7 +357,7 @@ def build_parser():
                    help="DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop. "
                         "Two people on different hardware each run "
                         "`verify --all --json-out mine.json`, swap files, and "
-                        "run this: it compares every cell hash, reports where "
+                        "run this: it compares every cell hash and bundled GPU/CPU result, reports where "
                         "they agree and differ, shows the two provenance blocks "
                         "side by side, and says whether the machines were "
                         "genuinely different. A cell present in only one "
