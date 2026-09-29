@@ -191,3 +191,17 @@ def test_cuml_pca_full_is_covariance_eigh_and_its_tol_is_an_exception():
     with pytest.raises(BP.ParamsRefused, match="svd_solver"):
         BP.enforce("pca", {"ours": ours, "cuml-gpu": cuml}, family="classical",
                    stream=io.StringIO())
+
+
+def test_cuml_tsvd_full_solver_ignores_n_iter_and_tol():
+    ours = _est("mojolearn.decomposition", "TruncatedSVD", n_components=10, algorithm="covariance_eigh",
+                n_iter=5, tol=0.0, random_state=7)
+    cuml = _est("cuml.decomposition.tsvd", "TruncatedSVD", n_components=10, algorithm="full",
+                n_iter=15, tol=1e-7, random_state=7)
+    rep = BP.enforce("tsvd", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    cuml._p["n_components"] = 12                           # a real difference still refuses
+    with pytest.raises(BP.ParamsRefused, match="n_components"):
+        BP.enforce("tsvd", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                   stream=io.StringIO())

@@ -301,6 +301,13 @@ EXCEPTIONS = [
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
      "runs 'arpack' at tol=0"),
     ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
+    ("tsvd", "n_iter", "cuml-gpu", "cuML TruncatedSVD's n_iter is read only by its 'jacobi' solver "
+     "(cuml/decomposition/tsvd.pyx: 'Used in Jacobi solver'); the raced 'full' solver, COV_EIG_DQ, "
+     "a covariance eigendecomposition, iterates nothing. cuML's own scikit-learn interop maps n_iter "
+     "5 to its 15"),
+    ("tsvd", "tol", "cuml-gpu", "cuML TruncatedSVD's tol is read only by its 'jacobi' solver "
+     "(cuml/decomposition/tsvd.pyx: 'Used if algorithm = \"jacobi\"'); the raced 'full' solver "
+     "has no tolerance. cuML's own scikit-learn interop maps tol 0.0 to its 1e-7"),
     ("spectral*", "gamma", "*", "affinity='nearest_neighbors' reads no gamma: ours refuses any "
      "value (None), scikit-learn holds its default (1.0 clustering, None embedding)"),
     ("spectral", "degree", "*", "affinity='nearest_neighbors' reads no degree: ours refuses any "

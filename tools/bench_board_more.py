@@ -706,6 +706,13 @@ def drop_constant_columns(D):
     return out
 
 
+def shape_desc(D):
+    """'X 100000x200; Xq ...' for the race record. Not every value is an array:
+    the gmm lane also carries its dropped-column count (an int)."""
+    return "; ".join("%s %s" % (k, "x".join(str(s) for s in v.shape) if hasattr(v, "shape") else v)
+                     for k, v in sorted(D.items()))
+
+
 def lane_arrays(lane, B):
     """The arrays one lane reads from its block, subsets taken by stride (the
     same rows for every arm and for the conductor's quality pass)."""
@@ -1738,7 +1745,7 @@ def race(args):
         rec = json.load(fh)
     with np.load(block + ".npz") as z:
         D = lane_arrays(lane, {k: z[k] for k in z.files})
-    shape = "; ".join("%s %s" % (k, "x".join(str(s) for s in v.shape)) for k, v in sorted(D.items()))
+    shape = shape_desc(D)
     result = {"lane": lane, "dataset": ds, "block": rec, "shape": shape, "arms": {},
               "lane_config": LANE_CONFIG[lane], "rounds_requested": args.rounds,
               "started": now_utc(), "script": "tools/bench_board_more.py",
