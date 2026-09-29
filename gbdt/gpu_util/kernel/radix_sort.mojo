@@ -85,8 +85,10 @@ from gbdt.gpu_util.copy import COPY_BLOCK, copy_u32_kernel
 from gbdt.gpu_util.kernel.reorder_one_bit import (
     REORDER_BLOCK,
     REORDER_UNROLL,
+    SCAN_SUMS_BLOCK,
     add_block_carry_kernel,
     scan_block_sums_kernel,
+    scan_block_sums_parallel_kernel,
 )
 
 
@@ -196,9 +198,9 @@ def _radix_pass(
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(),
         grid_dim=n_blocks, block_dim=REORDER_BLOCK,
     )
-    ctx.enqueue_function[scan_block_sums_kernel](
+    ctx.enqueue_function[scan_block_sums_parallel_kernel](
         block_sums.unsafe_ptr(), Int32(n_blocks),
-        grid_dim=1, block_dim=1,
+        grid_dim=1, block_dim=SCAN_SUMS_BLOCK,
     )
     ctx.enqueue_function[add_block_carry_kernel](
         offsets.unsafe_ptr(), block_sums.unsafe_ptr(), Int32(size),

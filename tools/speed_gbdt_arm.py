@@ -1828,6 +1828,14 @@ TASK_LANES = {
 TASK_LANES["gbdt-ordered"] = dict(
     task=("binary", "regression"), loss=None, grow_policy="SymmetricTree",
     boosting_type="Ordered", datasets=("taxi", "istella"),
+    # CatBoost's Ordered knobs, set EXPLICITLY on both arms (lane/ordered-speed,
+    # 2026-09-29): their defaults are device dependent -- fold_permutation_block
+    # is 64 on their GPU from 50,000 rows and 1 on their CPU -- and an unset
+    # value on the CatBoost arm is not a matched value. 64 is their GPU's (the
+    # algorithm ours restates, dynamic_boosting.h:115-128); 4 permutations and
+    # a fold growth of 2 are both devices' defaults (boosting_options.cpp:11-14).
+    ordered=dict(permutation_count=4, fold_len_multiplier=2.0,
+                 fold_permutation_block=64),
     objectives={"mojolearn": "Logloss (taxi) / RMSE (Istella-S)",
                 "catboost": "Logloss (taxi) / RMSE (Istella-S)"},
     mismatches=(
@@ -1836,6 +1844,9 @@ TASK_LANES["gbdt-ordered"] = dict(
         "Ordered requires (catboost_options.cpp:757-759)",
         "each library draws its fold permutations from its own generator seeded 7; the "
         "streams are not shared, so the fits differ by construction",
+        "approx_on_full_history: CatBoost CPU only (default False, refused on their GPU); "
+        "ours restates their GPU Ordered boosting, which has no full-history arm, so both "
+        "arms run the False behaviour",
     ))
 
 
@@ -2054,6 +2065,8 @@ def lane_config(lane, size):
                        mismatches=list(task["mismatches"]))
             if task.get("boosting_type"):
                 cfg["boosting_type"] = task["boosting_type"]
+            if task.get("ordered"):
+                cfg.update(task["ordered"])
             if task["grow_policy"] == "SymmetricTree" and lane != "gbdt-ordered":
                 # the opponents without an oblivious grower race their own
                 # at the same depth (TASK_LANES, "grower")
@@ -2276,6 +2289,14 @@ def catboost_tree_params(cfg, task_type):
         verbose=False,
         allow_writing_files=False,
     )
+    # the Ordered lane's knobs (TASK_LANES "ordered"). NOT permutation_count:
+    # CatBoostClassifier(permutation_count=...) raises TypeError (1.2.10, the
+    # constructor does not take it), so their arm runs its default 4
+    # (boosting_options.cpp:14), the value ours is given (bench_board_params
+    # EXCEPTIONS)
+    for k in ("fold_len_multiplier", "fold_permutation_block"):
+        if cfg.get(k) is not None:
+            p[k] = cfg[k]
     if task_type == "GPU":
         p["devices"] = "0"
     return p

@@ -197,13 +197,20 @@ ALIASES = {
                  "score_function": "score_function", "bootstrap_type": "bootstrap_type",
                  "leaf_estimation_method": "leaf_estimation_method",
                  "leaf_estimation_iterations": "leaf_estimation_iterations",
-                 "feature_border_type": "feature_border_type", "nan_mode": "nan_mode"},
+                 "feature_border_type": "feature_border_type", "nan_mode": "nan_mode",
+                 # Ordered boosting's knobs (read back as None when unset, below)
+                 "permutation_count": "permutation_count",
+                 "fold_len_multiplier": "fold_len_multiplier",
+                 "fold_permutation_block": "fold_permutation_block"},
     "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type",
                   "random_strength": "random_strength", "score_function": "score_function",
                   "bootstrap_type": "bootstrap_type",
                   "leaf_estimation_method": "leaf_estimation_method",
                   "leaf_estimation_iterations": "leaf_estimation_iterations",
                   "feature_border_type": "feature_border_type", "nan_mode": "nan_mode",
+                  "permutation_count": "permutation_count",
+                  "fold_len_multiplier": "fold_len_multiplier",
+                  "fold_permutation_block": "fold_permutation_block",
                   # the RF quantile bin count (cuML's n_bins) is a bin count
                   "n_bins": "max_bin",
                   # GradientBoosting's class weights as the positive-class weight
@@ -237,6 +244,9 @@ IGNORE = frozenset({
 #: arm glob, reason). A difference not listed here refuses the race.
 EXCEPTIONS = [
     # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+    ("gbdt-ordered", "permutation_count", "catboost-*", "CatBoost's Python constructor does not "
+     "take permutation_count (TypeError, 1.2.10), so their arm runs its default 4 "
+     "(boosting_options.cpp:14); ours is given 4 explicitly"),
     # ---- classical
     ("pca", "tol", "cuml-gpu", "cuML PCA's tol is read only by its 'jacobi' solver "
      "(cuml/decomposition/pca.pyx: 'Used if algorithm = \"jacobi\"'); the raced 'full' solver, "
@@ -431,6 +441,12 @@ def read_params(obj):
                      "border_count", "min_data_in_leaf", "max_leaves", "grow_policy",
                      "bootstrap_type", "subsample", "random_strength", "boosting_type"):
             got.setdefault(name, None)
+        if str(got.get("boosting_type")) == "Ordered":
+            # the Ordered knobs, whose unset defaults differ between their CPU
+            # and GPU (fold_permutation_block 1 vs 64): compared only there
+            for name in ("permutation_count", "fold_len_multiplier",
+                         "fold_permutation_block"):
+                got.setdefault(name, None)
         return lib, "get_params", got
     if hasattr(obj, "get_params"):
         try:

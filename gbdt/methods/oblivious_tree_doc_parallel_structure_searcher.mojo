@@ -102,6 +102,7 @@ from gbdt.methods.pointwise_optimization_subsets import (
     create_subsets,
     reset_subsets,
     split_subsets_from_desc,
+    update_subsets_stats,
 )
 from gbdt.methods.kernel.pointwise_split_resolve import (
     PW_SENTINEL_ID,
@@ -126,6 +127,7 @@ from gbdt.methods.oblivious_tree_fold_tasks import (
     make_fold_doc_indices,
     plan_fold_layout,
     plan_single_task_layout,
+    write_fold_based_initial_bins,
 )
 from gbdt.models.oblivious_model import (
     BIN_SPLIT_TAKE_BIN,
@@ -153,14 +155,18 @@ struct PointwiseTreeWorkspace(Movable):
     the first tree fills it, later trees hit the key check and reset
     instead.
 
-    ONLY THE SINGLE-TASK ARM POOLS. `fold_count > 1` (ordered boosting)
-    stores its fresh build here too -- one location for the `ref`
-    bindings -- but its key can never hit (`fold_count_key > 1` fails
-    the check), so every fold-arm tree constructs exactly as before.
-    Pooling that arm needs `write_fold_based_initial_bins` replayed
-    after the reset and a gate that holds it; neither exists yet, and
-    an arm that silently skipped its fold seeding would be
-    [[reached-but-inert]] in the worst way.
+    THE FOLD ARM POOLS TOO (lane/ordered-speed, 2026-09-29). An Ordered
+    fit's pool lives for that fit, whose fold layout is fixed, so a hit
+    on (doc_count, fold_count, ...) is the same layout. The hit replays
+    `create_fold_based_subsets`' state half in its order --
+    `reset_subsets` at the fold counters (bins zeroed, sequences, one
+    reduce), `write_fold_based_initial_bins`, the second reduce
+    (DEVIATION 125) -- so the subsets hold what a fresh build holds.
+    Fresh construction per tree plus the host `MakeDocIndices` over the
+    ~2n concatenated documents were most of the Ordered structure
+    search's host time at 4.1M rows. The fold doc ids are cached here
+    too, per `permutation_id` (the caller's name for a permutation fixed
+    for the fit); a pool rebuild drops them.
 
     The per-tree reset contract is CONSTRUCTOR POSTCONDITIONS
     (`reset_subsets` + `reset_for_tree`), held bit-exactly by
@@ -175,6 +181,9 @@ struct PointwiseTreeWorkspace(Movable):
     var max_depth_key: Int
     var n_features_key: Int
     var fold_count_key: Int
+    #: the fold arm's `MakeDocIndices` per caller permutation id
+    var doc_ids_keys: List[Int]
+    var doc_ids: List[DeviceBuffer[DType.uint32]]
 
     # ---- DEVIATION 207: the blind level loop's device state ----------
     # The winner fold slot (2 words + 2 floats), the per-level winner
@@ -216,6 +225,8 @@ struct PointwiseTreeWorkspace(Movable):
         self.max_depth_key = max_depth
         self.n_features_key = n_features
         self.fold_count_key = fold_count
+        self.doc_ids_keys = List[Int]()
+        self.doc_ids = List[DeviceBuffer[DType.uint32]]()
 
         self.d_best_ids = ctx.enqueue_create_buffer[DType.uint32](2)
         self.d_best_scores = ctx.enqueue_create_buffer[DType.float32](2)
@@ -287,9 +298,14 @@ def fit_oblivious_tree_structure_traced(
     bootstrapped_observations: Bool = False,
     folds: List[TFold] = List[TFold](),
     permutation: List[UInt32] = List[UInt32](),
+    permutation_id: Int = -1,
 ) raises -> List[TBinarySplit]:
     """`TDocParallelObliviousTreeSearcher::FitImpl` (`:12-160`), the
     structure half.
+
+    `permutation_id` (fold arm only): a caller id for `permutation`, fixed
+    for the span of `pool`; with it the fold doc ids are built once per id
+    and kept in the pool. -1 builds them every call.
 
     The weak target arrives as TWO buffers, which is `TL2Target` in the reference
     and is forced here besides: the histogram kernels take `target` and
@@ -369,15 +385,25 @@ def fit_oblivious_tree_structure_traced(
     # for why the fold arm can never hit.
     var pooled_hit = (
         len(pool) != 0
-        and fold_count == 1
-        and pool[0].fold_count_key == 1
+        and pool[0].fold_count_key == fold_count
         and pool[0].doc_count_key == doc_count
         and pool[0].n_rows_key == n_rows
         and pool[0].max_depth_key == max_depth
         and pool[0].n_features_key == len(layout.features)
     )
     if pooled_hit:
-        reset_subsets(ctx, pool[0].subsets, target)
+        if fold_count == 1:
+            reset_subsets(ctx, pool[0].subsets, target)
+        else:
+            # `create_fold_based_subsets`' state half, in its order
+            reset_subsets(
+                ctx, pool[0].subsets, target, fold_count,
+                fold_layout.fold_bits,
+            )
+            write_fold_based_initial_bins(
+                ctx, fold_layout, pool[0].subsets.bins
+            )
+            update_subsets_stats(ctx, target, pool[0].subsets)
         pool[0].calcer.reset_for_tree(ctx)
     else:
         pool.clear()
@@ -437,29 +463,41 @@ def fit_oblivious_tree_structure_traced(
     # `subsets.Indices` (DEVIATION 105); at N tasks it does not, and a
     # searcher that skipped it would read the compressed index at a
     # POSITION in the concatenated array instead of at a document id.
-    var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
-        fold_count > 1
-    ) else List[UInt32]()
-    var d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](
-        len(doc_ids_host) if fold_count > 1 else 1
-    )
-    var d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
-    if fold_count > 1:
-        if len(doc_ids_host) != doc_count:
-            raise Error(
-                "MakeDocIndices produced "
-                + String(len(doc_ids_host))
-                + " ids for "
-                + String(doc_count)
-                + " concatenated documents"
-            )
-        ctx.enqueue_copy(
-            dst_buf=d_doc_ids, src_ptr=doc_ids_host.unsafe_ptr()
+    var cached = -1
+    if fold_count > 1 and permutation_id >= 0:
+        for i in range(len(pool[0].doc_ids_keys)):
+            if pool[0].doc_ids_keys[i] == permutation_id:
+                cached = i
+    var d_doc_ids: DeviceBuffer[DType.uint32]
+    if cached >= 0:
+        d_doc_ids = pool[0].doc_ids[cached].copy()
+    else:
+        var doc_ids_host = make_fold_doc_indices(folds, permutation) if (
+            fold_count > 1
+        ) else List[UInt32]()
+        d_doc_ids = ctx.enqueue_create_buffer[DType.uint32](
+            len(doc_ids_host) if fold_count > 1 else 1
         )
-        ctx.synchronize()
-        # keep the host list alive across the queue: a raw pointer does not
-        # ([[mojo-buffer-freed-at-last-use]])
-        _ = doc_ids_host[0]
+        if fold_count > 1:
+            if len(doc_ids_host) != doc_count:
+                raise Error(
+                    "MakeDocIndices produced "
+                    + String(len(doc_ids_host))
+                    + " ids for "
+                    + String(doc_count)
+                    + " concatenated documents"
+                )
+            ctx.enqueue_copy(
+                dst_buf=d_doc_ids, src_ptr=doc_ids_host.unsafe_ptr()
+            )
+            ctx.synchronize()
+            # keep the host list alive across the queue: a raw pointer does
+            # not ([[mojo-buffer-freed-at-last-use]])
+            _ = doc_ids_host[0]
+            if permutation_id >= 0:
+                pool[0].doc_ids_keys.append(permutation_id)
+                pool[0].doc_ids.append(d_doc_ids.copy())
+    var d_observations = ctx.enqueue_create_buffer[DType.uint32](doc_count)
 
     var structure = List[TBinarySplit]()
 

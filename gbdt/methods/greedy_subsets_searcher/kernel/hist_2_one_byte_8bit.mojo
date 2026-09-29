@@ -56,11 +56,33 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_dither,
     hist2_quantize,
 )
-from checks.kernel_matrix import TARGET_COLUMN, lane_width_for
+from checks.kernel_matrix import (
+    APPLE_HIST2_SHARED_I32_BLOCK_CAP,
+    COLUMN_APPLE,
+    TARGET_COLUMN,
+    lane_width_for,
+)
 
-comptime H8_BLOCK = 512
+#: 512 threads, and on Apple `APPLE_HIST2_SHARED_I32_BLOCK_CAP` (256).
+#: FOUND 2026-09-29 (lane/ordered-speed): on the M2 Pro this kernel at 512
+#: threads WROTE NOTHING -- every one-byte column of a SymmetricTree fit's
+#: histogram read 0.0 (a traced taxi fit at 100k rows: 1186 of 1209
+#: bin-features zero at depth 0, the other 23 the sub-byte features, exact),
+#: so no split on a feature of more than 128 borders was ever taken and the
+#: fit scored AUC 0.556 on the M2 Pro against 0.610 on its own CPU column.
+#: The same silent dispatch drop the hist2 ladder's cap records
+#: (`kernel_matrix.APPLE_HIST2_SHARED_I32_BLOCK_CAP`): Metal drops a dispatch
+#: above the pipeline's `maxTotalThreadsPerThreadgroup`, which on a part
+#: without Dynamic Caching falls with register use. That cap reached the
+#: 5/6/7-bit ladder only; the fused 8-bit arm (>128 borders, every
+#: IDENTICAL two-stat fit at the default 254 borders) kept its literal 512.
+#: No bit moves with the block: the addends are position-dithered Int32 and
+#: every sum is an Int32 sum (one slice per 128 threads, `H8_SLICES` of them).
+comptime H8_BLOCK = (
+    APPLE_HIST2_SHARED_I32_BLOCK_CAP if TARGET_COLUMN == COLUMN_APPLE else 512
+)
 comptime H8_SLICE = 2048
-comptime H8_SLICES = 4
+comptime H8_SLICES = H8_BLOCK // 128
 comptime H8_SMEM = H8_SLICE * H8_SLICES
 comptime H8_LANE = 32
 comptime H8_UNROLL = 4

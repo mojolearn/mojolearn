@@ -1474,8 +1474,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-symmetric")
 def _(ml, X, yc, yr, Xh=None):
+    """Plus `borders254` (lane/ordered-speed, 2026-09-29): the same fit at
+    254 borders, the board's and CatBoost CPU's count. Above 128 borders a
+    two-stat one-byte block takes the FUSED 8-bit histogram arm, which no
+    lane reached at the default 128: on the M2 Pro that arm wrote nothing at
+    512 threads, every one-byte column read 0.0 and the Metal fit parted
+    from its CPU column at depth 1 (taxi, AUC 0.556 vs 0.610), with every
+    identity lane green. A fixture column with fewer than 129 distinct
+    values quantizes to fewer borders and does not reach the arm."""
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
+    w = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+              border_count=254).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     borders254=_h(w.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
