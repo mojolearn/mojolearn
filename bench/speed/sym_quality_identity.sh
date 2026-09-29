@@ -8,10 +8,12 @@
 # at this commit under MOJOLEARN_NUMERIC_MODE=identical (the steward's
 # --builds, with bindings/build.sh and build_core_host.sh), or pass `build` to run them here first (the NVIDIA and AMD
 # queues; MOJOLEARN_GPU_ARCHS must name the box's arch there). Clean: the Metal and CPU columns must AGREE on every lane.
-# Sabotage (-D MOJOLEARN_SNAP_SABOTAGE=1, device only): the off-grid
-# weighted lanes (gbdt-multiclass-offgrid against the CPU column,
-# gbdt-class-weights against the clean device column) must DISAGREE and
-# every unit-weight or dyadic-weight lane must still AGREE.
+# Every GBDT lane of tools/identity_break.py. Sabotage (-D
+# MOJOLEARN_SNAP_SABOTAGE=1, device only, the gradient snap keyed one row
+# off): every lane whose fit goes through the greedy searcher
+# (run_tree_layout / fit_non_symmetric_tree) must DISAGREE with the CPU
+# column; the pointwise and Ordered lanes, which the snap does not reach,
+# must still AGREE.
 set -u
 OUT=${1:?outdir}
 BK=${2:-metal}
@@ -34,7 +36,7 @@ R="pixi run -e default python -u"
 # recipe, as tools/algos_lane_check.py ensure_portable_math builds it
 case "$(uname)" in Darwin) PM=python/mojolearn/.dylibs/libMojolearnMath.dylib ;; *) PM=python/mojolearn/.libs/libMojolearnMath.so ;; esac
 [ -f "$PM" ] || PYTHONPATH=packaging/portable_math $R -c "import pathlib, stage; stage.build(pathlib.Path('$PM'))" > "$OUT/portable_math.log" 2>&1 || { echo "portable math build failed"; tail -20 "$OUT/portable_math.log"; }
-L=gbdt-class-weights,gbdt-multiclass-offgrid,gbdt-multiclass,gbdt-multiclass-defaults,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide
+L=gbdt-symmetric,gbdt-symmetric-eval,gbdt-depthwise,gbdt-lossguide,gbdt-class-weights,gbdt-multiclass-offgrid,gbdt-rmse,gbdt-ordered,gbdt-ordered-bayesian-noise,gbdt-binary-columns,gbdt-catboost-defaults,gbdt-stochastic-arms,gbdt-bfa-quantile,gbdt-border-types,gbdt-ordered-rmse,gbdt-feature-freq,gbdt-multiclass,gbdt-onevsall,gbdt-multiclass-defaults,gbdt-parametric-losses,gbdt-lossguide-newtoncosine,gbdt-pointwise-l2-bayesian-eval,gbdt-exact-mae,gbdt-categorical-ctr,gbdt-categorical-ctr-tables,gbdt-tensor-ctr-tables,gbdt-nan-modes,gbdt-adapter-clf,gbdt-adapter-reg,gbdt-ranking-defaults,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank,gbdt-adapter-score-weighted
 HOST="$HOSTD"
 rc=0
 $R tools/identity_break.py --lanes $L --json "$OUT/$BK.json" --require-backend $BK --vendor $BK-symq || rc=1
