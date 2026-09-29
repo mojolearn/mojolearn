@@ -2556,6 +2556,8 @@ def fit_with_test(
             opts.min_leaf_size = Float64(min_data_in_leaf)
             opts.min_split_gain = min_split_gain
             opts.min_child_hessian = min_child_hessian
+            # lane/sym-quality: see `snap_stats_to_grid_kernel`
+            opts.snap_stats = has_weights and not is_pair_logit
             # `options.RandomStrength *= randomStrengthMult`
             # (`greedy_subsets_searcher.h:76`), the same multiply the
             # greedy oblivious arm receives below
@@ -2854,6 +2856,14 @@ def fit_with_test(
                     noise_mult * Float64(random_strength)
                 ),
                 random_seed=tree_seed,
+                # lane/sym-quality: a WEIGHTED fit's search stats go onto the
+                # fixed-point grid before the first histogram, so the float
+                # partition totals and the quantized histograms agree and an
+                # empty side weighs exactly nothing (`snap_stats_to_grid_
+                # kernel`). Unit weights are on the grid already and keep
+                # their bits; PairLogit's per-row pair weights are left as
+                # they were (not measured by this lane).
+                snap_stats=has_weights and not is_pair_logit,
             )
             loop_times.stop_host("iter_tree_search", t_sym)
 
