@@ -1,0 +1,483 @@
+{
+ "cells": {
+  "par-graph-umap/base": {
+   "one_device_by_design": false,
+   "refusal": null,
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15309,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15401,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15488,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15548,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15605,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15693,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15750,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15840,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15897,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 15971,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16038,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16095,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16181,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16238,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16324,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16381,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16436,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16522,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16579,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16665,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16722,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16777,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16863,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 16922,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "native_sessions": 0,
+    "one_device_by_design": false,
+    "placement": "physical",
+    "pools": 24,
+    "workers": 24
+   }
+  }
+ },
+ "devices": [
+  0,
+  1
+ ],
+ "format": "mojolearn.par-witness-arm.v1",
+ "vendor": "cuda"
+}
