@@ -122,17 +122,31 @@ elif [ "$WHICH" = pieces ]; then
     done
 else
     PHASES="unit unit-sabotage unit-value-sabotage unit-unstated"
+    # The decode kernel (and its quantizer in the launch) is NVIDIA's only.
+    NV=0
+    if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then NV=1; fi
     run unit pass pixi run check-gemm-int8-mma-tuned
     must_pass unit check_tuned_plans_match_reference_flat_oracle
     must_pass unit check_tuned_planted_worst_cases
     must_pass unit check_tuned_dispatch_is_batch_invariant
+    [ "$NV" -eq 1 ] && must_pass unit check_decode_quant_in_launch
     run unit-sabotage fail pixi run check-gemm-int8-mma-tuned-sabotage
     must_name unit-sabotage check_tuned_plans_match_reference_flat_oracle
     must_name unit-sabotage check_tuned_planted_worst_cases
+    [ "$NV" -eq 1 ] && must_name unit-sabotage check_decode_quant_in_launch
+    if [ "$NV" -eq 1 ]; then
+        PHASES="$PHASES unit-quant-sabotage"
+        # The absmax butterfly's first level skipped: the quantizer in the
+        # launch must fail; the plans on codes must not.
+        run unit-quant-sabotage fail pixi run check-gemm-int8-mma-tuned-quant-sabotage
+        must_name unit-quant-sabotage check_decode_quant_in_launch
+        must_pass unit-quant-sabotage check_tuned_plans_match_reference_flat_oracle
+    fi
     run unit-value-sabotage fail pixi run check-gemm-int8-mma-tuned-value-sabotage
     must_name unit-value-sabotage check_tuned_plans_match_reference_flat_oracle
     must_name unit-value-sabotage check_tuned_planted_worst_cases
     must_name unit-value-sabotage check_tuned_dispatch_is_batch_invariant
+    [ "$NV" -eq 1 ] && must_name unit-value-sabotage check_decode_quant_in_launch
     run unit-unstated pass pixi run check-gemm-int8-mma-tuned-unstated
     must_pass unit-unstated check_tuned_plans_match_reference_flat_oracle
     must_pass unit-unstated check_tuned_planted_worst_cases

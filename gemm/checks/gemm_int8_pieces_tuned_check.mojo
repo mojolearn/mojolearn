@@ -60,7 +60,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_pieces_sabotage_name,
 )
 from gemm.checks.gemm_int8_mma_tuned_check import TUNED_SHAPE_COUNT, _tuned_shape
-from checks.numerics import ftz, identical_mul, pow2_f32
+from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
 from gemm.checks.gemm_lowbit_check import (
     MMA_SHAPE_COUNT,
     _download_f32,
@@ -142,25 +142,19 @@ def _exponents(count: Int, salt: Int) -> List[Int32]:
     return e^
 
 
-def fused_stub_host(
+def fused_host(
     sums: List[Int32], ea: List[Int32], eb: List[Int32], m: Int, n: Int
 ) -> List[Float32]:
-    """What the FUSED form stores per cell under the stand-in epilogue
-    (`gemm_int8_pieces_epilogue_stub.mojo`): the harness's stand-in
-    recombination of the host's three sums, scaled by `ea[i] + eb[j]`. When
-    lane/lowbit-int15's `int15_store_cell` replaces the stand-in, this
-    becomes its host form."""
+    """What the FUSED form stores per cell: lane/lowbit-int15's
+    `int15_store_cell` rule on the host's three sums, spelled with the same
+    seams (`int15_recombine`, `dequant_int15_pinned`), scaled by
+    `ea[i] + eb[j]`. No sabotage arm reaches it."""
     var out = List[Float32]()
     for i in range(m):
         for j in range(n):
             var at_ = 3 * (i * n + j)
-            var v = (
-                Int64(sums[at_]) * Int64(16384)
-                + Int64(sums[at_ + 1]) * Int64(128)
-                + Int64(sums[at_ + 2])
-            )
-            var e = Int(ea[i]) + Int(eb[j])
-            out.append(ftz(identical_mul(Float32(v), pow2_f32(e))))
+            var v = int15_recombine(sums[at_], sums[at_ + 1], sums[at_ + 2])
+            out.append(dequant_int15_pinned(v, Int(ea[i]) + Int(eb[j])))
     return out^
 
 
@@ -224,7 +218,7 @@ def _run_every_pieces_plan(
     var want = piece_sums_host(ah, al, bh, bl, m, n, k)
     var ea = _exponents(m, 733 + k)
     var eb = _exponents(n, 739 + k)
-    var fwant = fused_stub_host(want, ea, eb, m, n)
+    var fwant = fused_host(want, ea, eb, m, n)
     var dea = _upload_i32(ctx, ea)
     var deb = _upload_i32(ctx, eb)
     var dah = _upload_i8(ctx, ah)

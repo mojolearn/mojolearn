@@ -74,7 +74,13 @@ from gemm.checks.gemm_int8_apple_chunk_check import (
 )
 from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
 from gemm.checks.gemm_int8_mma_tuned import (
+    INT8_DECODE_AVAILABLE,
+    INT8_DECODE_MAX_M,
+    INT8_DECODE_PLAN_COUNT,
     INT8_DIRECT_PROBE_HOISTED,
+    identical_gemm_int8_mma_decode_quant_with_plan,
+    identical_gemm_int8_mma_decode_with_plan,
+    int8_decode_plan_name,
     INT8_TUNED_PLAN_COUNT,
     identical_gemm_int8_mma_direct_into,
     identical_gemm_int8_mma_tuned_into,
@@ -90,6 +96,7 @@ from gemm.checks.gemm_lowbit_check import (
     MMA_SHAPE_COUNT,
     SHAPE_COUNT,
     _download_f32,
+    _download_i32,
     _fill,
     _first_diff,
     _gate,
@@ -97,6 +104,7 @@ from gemm.checks.gemm_lowbit_check import (
     _poisoned,
     _shape,
     _show,
+    _upload_f32,
     _upload_i32,
     _upload_i8,
 )
@@ -218,6 +226,25 @@ def _run_every_plan(
                 got = ptag + ": " + String(e)
             tally.note(got)
             _ = dc
+    comptime if INT8_DECODE_AVAILABLE:
+        if m <= INT8_DECODE_MAX_M:
+            for plan in range(INT8_DECODE_PLAN_COUNT):
+                var ptag = tag + " " + int8_decode_plan_name(plan)
+                var dc = _poisoned(ctx, m * n)
+                var got: String
+                try:
+                    identical_gemm_int8_mma_decode_with_plan(
+                        ctx, dc, dqa, dea, dqb, deb, m, n, k, plan
+                    )
+                    ctx.synchronize()
+                    var out = _download_f32(ctx, dc, m * n, ptag)
+                    got = _diff(out, want, ptag + " (decode vs oracle)")
+                    if got.byte_length() == 0:
+                        got = _diff(out, ref_, ptag + " (decode vs reference unit plan)")
+                except e:
+                    got = ptag + ": " + String(e)
+                tally.note(got)
+                _ = dc
     _ = dqa
     _ = dea
     _ = dqb
@@ -269,6 +296,87 @@ def check_tuned_plans_match_reference_flat_oracle(ctx: DeviceContext) raises:
             print("   ok " + tag)
     print("   shapes: " + String(shapes))
     _verdict(tally, String("quantized-fixture"))
+
+
+#: The decode rows the quantizer-in-the-launch gate adds: m from 1 to 16,
+#: n off the 16-wide block, k off the 64-byte chunk, the 16-byte load and
+#: the 4-float load, and the profile's widest rows.
+comptime DECODE_SHAPE_COUNT = 9
+
+
+def _decode_shape(i: Int) -> Tuple[Int, Int, Int]:
+    if i == 0:
+        return (1, 257, 4096)
+    if i == 1:
+        return (2, 33, 63)
+    if i == 2:
+        return (7, 129, 4100)
+    if i == 3:
+        return (8, 300, 4104)
+    if i == 4:
+        return (15, 64, 4112)
+    if i == 5:
+        return (16, 513, 1000)
+    if i == 6:
+        return (1, 40, 14336)
+    if i == 7:
+        return (8, 17, 14338)
+    return (16, 96, 191)
+
+
+def check_decode_quant_in_launch(ctx: DeviceContext) raises:
+    """GATE: THE QUANTIZER IN THE PRODUCT'S LAUNCH. From float32 rows, every
+    decode plan returns the host oracle's cells on the host quantizer's
+    codes (the parallel quantizer's, by its own gate), and the exponents it
+    stores for the caller are the host quantizer's."""
+    var tally = Tally()
+    for s in range(DECODE_SHAPE_COUNT):
+        var sh = _decode_shape(s)
+        var m = sh[0]
+        var n = sh[1]
+        var k = sh[2]
+        var x = _fill(m * k, 911 + s)
+        var qa = quantize_rows_int8(x, m, k)
+        var qb = quantize_rows_int8(_fill(n * k, 919 + s), n, k)
+        var want = gemm_int8_oracle(qa.q, qa.e, qb.q, qb.e, m, n, k)
+        var dx = _upload_f32(ctx, x)
+        var dqb = _upload_i8(ctx, qb.q)
+        var deb = _upload_i32(ctx, qb.e)
+        var tag = "int8 decode, quantizer in the launch " + String(m) + "x" + String(n) + "x" + String(k)
+        var before = tally.failed
+        for plan in range(INT8_DECODE_PLAN_COUNT):
+            var ptag = tag + " " + int8_decode_plan_name(plan)
+            var dc = _poisoned(ctx, m * n)
+            var poison_e = List[Int32]()
+            for _ in range(m):
+                poison_e.append(Int32(-99999))
+            var dea = _upload_i32(ctx, poison_e)
+            var got: String
+            try:
+                identical_gemm_int8_mma_decode_quant_with_plan(
+                    ctx, dc, dx, dea, dqb, deb, m, n, k, plan
+                )
+                ctx.synchronize()
+                var out = _download_f32(ctx, dc, m * n, ptag)
+                got = _diff(out, want, ptag + " (vs oracle on the host quantizer's codes)")
+                var e_out = _download_i32(ctx, dea, m)
+                for r in range(m):
+                    if got.byte_length() == 0 and e_out[r] != qa.e[r]:
+                        got = (
+                            ptag + ": row " + String(r) + " exponent " + String(e_out[r])
+                            + ", the host quantizer's " + String(qa.e[r])
+                        )
+            except e:
+                got = ptag + ": " + String(e)
+            tally.note(got)
+            _ = dc
+            _ = dea
+        if tally.failed == before:
+            print("   ok " + tag)
+        _ = dx
+        _ = dqb
+        _ = deb
+    _verdict(tally, String("decode-quant"))
 
 
 comptime TUNED_PLANT_ZERO_ROWS = PLANT_COUNT
@@ -469,6 +577,12 @@ def main() raises:
                 _gate(String("check_tuned_planted_worst_cases"), ran, failed, String(""))
             except e:
                 _gate(String("check_tuned_planted_worst_cases"), ran, failed, String(e))
+            comptime if INT8_DECODE_AVAILABLE:
+                try:
+                    check_decode_quant_in_launch(ctx)
+                    _gate(String("check_decode_quant_in_launch"), ran, failed, String(""))
+                except e:
+                    _gate(String("check_decode_quant_in_launch"), ran, failed, String(e))
             try:
                 check_tuned_dispatch_is_batch_invariant(ctx)
                 _gate(String("check_tuned_dispatch_is_batch_invariant"), ran, failed, String(""))

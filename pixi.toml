@@ -1130,6 +1130,7 @@ check-gemm-int8-mma-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm
 check-gemm-int8-mma-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_SABOTAGE=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
 check-gemm-int8-mma-tuned-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
 check-gemm-int8-mma-tuned-unstated = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_UNSTATED=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
+check-gemm-int8-mma-tuned-quant-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_QUANT_PAR_SABOTAGE=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
 check-gemm-int8-pieces-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
 check-gemm-int8-pieces-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_PIECES_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
 check-gemm-int8-pieces-tuned-staging-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"

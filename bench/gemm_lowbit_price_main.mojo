@@ -90,17 +90,19 @@ arithmetic (`_pieces_fixture_kernel`), the same on every box:
     training.pieces.int8.tuned      quantizer, standing in for the
                                     fifteen-bit one, which is
                                     lane/lowbit-int15's), the four products
-                                    in one launch, and a recombination
+                                    in one launch, and a second launch
                                     (`_pieces_recombine_probe_kernel`) that
-                                    is A STAND-IN of the same work, NOT the
-                                    fifteen-bit profile's pinned seam: its
-                                    time is read, its digest is compared
-                                    between these two arms and with nothing
-                                    else.
+                                    reads the sums back and calls
+                                    lane/lowbit-int15's `int15_store_cell`
+                                    (the recombination, the pinned seam, the
+                                    scale) per cell. The planes are a
+                                    fixture, not the profile's split, so the
+                                    digest is compared between these arms
+                                    and with nothing else.
     inference.pieces.int8.fused     the inference arm's operation in ONE
-                                    launch: the stand-in epilogue
-                                    (`gemm_int8_pieces_epilogue_stub.mojo`,
-                                    the same arithmetic) fused into the
+                                    launch: lane/lowbit-int15's epilogue
+                                    (`int15_store_cell`, the same function
+                                    the second launch calls) fused into the
                                     four-product kernel's last step. Its
                                     digest must equal the inference arm's.
 
@@ -238,7 +240,7 @@ from bench.gemm_shapes import (
     gemm_shape_op,
 )
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
-from checks.numerics import ftz, identical_mul, pow2_f32
+from gemm.checks.gemm_int15_epilogue import int15_store_cell
 from checks.kernel_matrix import (
     COLUMN_APPLE,
     TARGET_COLUMN,
@@ -258,8 +260,15 @@ from gemm.checks.gemm_int8_apple_chunk import (
 )
 from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
 from gemm.checks.gemm_int8_mma_tuned import (
+    INT8_DECODE_AVAILABLE,
+    INT8_DECODE_MAX_M,
+    INT8_DECODE_PLAN_COUNT,
     INT8_DIRECT_AVAILABLE,
     INT8_DIRECT_COUNT,
+    identical_gemm_int8_mma_decode_quant_with_plan,
+    identical_gemm_int8_mma_decode_with_plan,
+    int8_decode_dispatch,
+    int8_decode_plan_name,
     INT8_PIECES_MAX_K,
     INT8_PIECES_PLAN_COUNT,
     INT8_TUNED_PLAN_COUNT,
@@ -348,9 +357,13 @@ comptime ARM_PIECES_BASE = ARM_PIECES_FLAT + 1
 comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_COUNT
 comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
 #: The same operation as ARM_INF_PIECES in ONE launch: the four products and
-#: the stand-in epilogue fused into their last step.
+#: lane/lowbit-int15's epilogue fused into their last step.
 comptime ARM_INF_PIECES_FUSED = ARM_TRAIN_PIECES + 1
-comptime ARM_COUNT = ARM_INF_PIECES_FUSED + 1
+#: THE DECODE KERNEL (m <= 16, NVIDIA): one arm per plan on the codes, and
+#: one per plan with the quantizer in the product's launch (float32 in).
+comptime ARM_DECODE_BASE = ARM_INF_PIECES_FUSED + 1
+comptime ARM_DECODE_QUANT_BASE = ARM_DECODE_BASE + INT8_DECODE_PLAN_COUNT
+comptime ARM_COUNT = ARM_DECODE_QUANT_BASE + INT8_DECODE_PLAN_COUNT
 
 #: What no sum of the four-product kernel is (its largest is 2147450880).
 comptime SUM_POISON = Int32(2147483647)
@@ -437,7 +450,13 @@ def _arm_name(arm: Int) -> String:
         return String("inference.pieces.int8.tuned")
     if arm == ARM_TRAIN_PIECES:
         return String("training.pieces.int8.tuned")
-    return String("inference.pieces.int8.fused")
+    if arm == ARM_INF_PIECES_FUSED:
+        return String("inference.pieces.int8.fused")
+    if arm < ARM_DECODE_QUANT_BASE:
+        return String("int8i32.v1.mma.") + int8_decode_plan_name(arm - ARM_DECODE_BASE)
+    return String("inference.int8i32.v1.quant-in-launch.") + int8_decode_plan_name(
+        arm - ARM_DECODE_QUANT_BASE
+    )
 
 
 def _arm_is_sums(arm: Int) -> Bool:
@@ -478,6 +497,8 @@ def _arm_runs(arm: Int) -> Bool:
         return HAS_APPLE_CHUNK
     if arm >= ARM_DIRECT_BASE and arm < ARM_INF_INT8_TUNED:
         return INT8_DIRECT_AVAILABLE
+    if arm >= ARM_DECODE_BASE:
+        return INT8_DECODE_AVAILABLE
     if arm == ARM_PIECES_FLAT:
         return True
     if arm >= ARM_TUNED_BASE and arm < ARM_DIRECT_BASE:
@@ -714,11 +735,10 @@ def _pieces_recombine_probe_kernel(
     m_in: Int32,
     n_in: Int32,
 ):
-    """A STAND-IN for the fifteen-bit profile's epilogue, one thread per
-    cell: the three sums recombined in Int64 (`HH 2^14 + MID 2^7 + LL`), the
-    BACKEND'S OWN conversion to float32, one multiply by the power of two,
-    the flush. The profile's pinned conversion is lane/lowbit-int15's and
-    is not this; the work is the same kind and the same size."""
+    """THE SECOND LAUNCH of the two-launch form, one thread per cell: the
+    three sums read back and handed to lane/lowbit-int15's
+    `int15_store_cell` (the recombination in Int64, the pinned seam, the
+    scale), the function the fused form calls at its last step."""
     var m = Int(m_in)
     var n = Int(n_in)
     var cell = Int(block_idx.x) * 256 + Int(thread_idx.x)
@@ -726,13 +746,9 @@ def _pieces_recombine_probe_kernel(
         return
     var i = cell // n
     var j = cell - i * n
-    var v = (
-        Int64(s.unsafe_load(3 * cell)) * Int64(16384)
-        + Int64(s.unsafe_load(3 * cell + 1)) * Int64(128)
-        + Int64(s.unsafe_load(3 * cell + 2))
+    int15_store_cell(
+        c, ea, eb, s.unsafe_load(3 * cell), s.unsafe_load(3 * cell + 1), s.unsafe_load(3 * cell + 2), i, j, m, n
     )
-    var e = Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j))
-    c.unsafe_store(cell, ftz(identical_mul(Float32(v), pow2_f32(e))))
 
 
 def _pieces_recombine_probe(
@@ -955,6 +971,16 @@ def _enqueue_arm(
                 ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k
             )
             _pieces_recombine_probe(ctx, sb.c, sb.ps, sb.ea, sb.eb, m, n)
+    elif arm >= ARM_DECODE_BASE and arm < ARM_DECODE_QUANT_BASE:
+        comptime if INT8_DECODE_AVAILABLE:
+            identical_gemm_int8_mma_decode_with_plan(
+                ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DECODE_BASE
+            )
+    elif arm >= ARM_DECODE_QUANT_BASE:
+        comptime if INT8_DECODE_AVAILABLE:
+            identical_gemm_int8_mma_decode_quant_with_plan(
+                ctx, sb.c, sb.a, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DECODE_QUANT_BASE
+            )
     elif arm == ARM_INF_PIECES_FUSED:
         comptime if HAS_INT8_MMA:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
@@ -1068,18 +1094,24 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
     if arm == ARM_INF_PIECES:
         return (
             String("quantize.a.par+four-products-one-staging.")
-            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+int15_store_cell,second-launch"
         )
     if arm == ARM_TRAIN_PIECES:
         return (
             String("quantize.a.par+pack.b.par+four-products-one-staging.")
-            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+int15_store_cell,second-launch"
         )
+    if arm >= ARM_DECODE_BASE and arm < ARM_DECODE_QUANT_BASE:
+        if arm - ARM_DECODE_BASE == int8_decode_dispatch(m, n, k):
+            return String("decode-kernel,the-launcher's-plan")
+        return String("decode-kernel")
+    if arm >= ARM_DECODE_QUANT_BASE:
+        return String("quantizer-in-the-launch+decode-kernel,ONE-launch")
     if arm == ARM_INF_PIECES_FUSED:
         return (
             String("quantize.a.par+four-products-one-staging.")
             + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k))
-            + "+stand-in-epilogue-FUSED,one-launch"
+            + "+int15_store_cell-FUSED,one-launch"
         )
     var plan_name = int8_tuned_plan_name(int8_tuned_dispatch(m, n, k))
     if arm == ARM_INF_INT8_TUNED:
@@ -1135,10 +1167,14 @@ def _time_shape(
         dig.append(UInt64(0))
         var runs = _arm_runs(arm) and _arm_asked(arms, _arm_name(arm))
         # The four-product kernel refuses a `k` above its own bound.
-        if arm >= ARM_PIECES_FLAT and k > INT8_PIECES_MAX_K:
+        var is_pieces = arm >= ARM_PIECES_FLAT and arm <= ARM_INF_PIECES_FUSED
+        if is_pieces and k > INT8_PIECES_MAX_K:
             runs = False
-        if arm >= ARM_PIECES_FLAT and runs:
+        if is_pieces and runs:
             pieces = True
+        # The decode kernel takes at most sixteen rows.
+        if arm >= ARM_DECODE_BASE and m > INT8_DECODE_MAX_M:
+            runs = False
         ran.append(runs)
         samples.append(List[Int]())
     var sb = ShapeBuffers(ctx, m, n, k, pieces)
@@ -1266,6 +1302,9 @@ def _time_shape(
     bad += _must_agree(ARM_INF_PIECES, ARM_TRAIN_PIECES, dig, ran, name)
     # The fused launch computes the two-launch operation's cells, bit for bit.
     bad += _must_agree(ARM_INF_PIECES, ARM_INF_PIECES_FUSED, dig, ran, name)
+    # The decode kernel, on codes and from floats, is the profile's product.
+    for arm in range(ARM_DECODE_BASE, ARM_COUNT):
+        bad += _must_agree(ARM_INT8_FLAT, arm, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^
