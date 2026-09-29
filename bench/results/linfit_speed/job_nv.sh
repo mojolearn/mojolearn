@@ -29,6 +29,13 @@ if [ "${STAGE:-gate}" = gate ]; then
   run "$LANE_DIR" new-tiny $G --lanes poisson --env MOJOLEARN_X_LINEAR_GW_STEPS=4096
   run "$LANE_DIR" new-team $G --lanes poisson --env MOJOLEARN_X_LINEAR_GLM_TEAM=1
   run "$BASE_DIR" base $G
+elif [ "${STAGE}" = probe ]; then
+  # where SGD's per-row time goes: the shuffle pipeline (shuffle off), the chain (d)
+  P="--max-iter ${PROBE_ITER:-3} --lanes sgd-reg"
+  run "$LANE_DIR" probe-new $P
+  run "$LANE_DIR" probe-new-noshuf $P --set shuffle=False
+  run "$BASE_DIR" probe-base $P
+  run "$BASE_DIR" probe-base-noshuf $P --set shuffle=False
 else
   run "$LANE_DIR" new --lanes "${LANES:-poisson,sgd-reg,sgd-clf}" --env MOJOLEARN_X_LINEAR_GW_TRACE=1
   [ "${SKIP_BASE:-0}" = 1 ] || run "$BASE_DIR" base --lanes "${LANES:-poisson,sgd-reg,sgd-clf}"
