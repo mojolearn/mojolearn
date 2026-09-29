@@ -2361,6 +2361,42 @@ def run_race(ctx, race):
     return rec
 
 
+#: --stop-at: a race is not started with less than this many seconds left
+STOP_MIN_LEFT_S = 600
+
+
+def _stop_ceiling(ctx, rec, ceiling):
+    """The race's process ceiling, clipped to the board's --stop-at (a job's
+    own time limit) so a race still running then is killed by the board and
+    RECORDED as a timeout by name, rather than cut by the job's stop with
+    nothing recorded and started again by every later copy. Notes the clip
+    in rec["stop_clipped"]."""
+    stop_at = ctx.get("stop_at")
+    if not stop_at:
+        return ceiling
+    left = int(stop_at - time.time())
+    if left < ceiling:
+        rec["stop_clipped"] = {"stop_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(stop_at)),
+                               "ceiling_s": max(left, 1), "race_ceiling_s": ceiling}
+        return max(left, 1)
+    return ceiling
+
+
+def stopped_cells(cells, clip):
+    """Cells of a race the board killed at --stop-at: every arm without a
+    result is a TIMEOUT naming the stop (not UNKNOWN), so the race is failed
+    by name and --skip-failed never runs it again in a loop."""
+    out = []
+    for c in cells:
+        st = str(c.get("status") or "")
+        if st.startswith("UNKNOWN") or not st:
+            c = dict(c, status="TIMEOUT(still running at the job's stop %s: the board's "
+                               "--stop-at clipped this race's %d s ceiling to %d s)"
+                               % (clip["stop_at"], clip["race_ceiling_s"], clip["ceiling_s"]))
+        out.append(c)
+    return out
+
+
 def _run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells)."""
     rec = {"id": race["id"], "family": race["family"], "lane": race["lane"],
@@ -2372,8 +2408,8 @@ def _run_race(ctx, race):
         log = os.path.join(ctx["out"], "raw", "trees", tag + ".log")
         if os.path.exists(log):
             os.replace(log, log + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900,
-                        nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log,
+                        _stop_ceiling(ctx, rec, ctx["race_deadline_s"] + 900), nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc)
         parsed = parse_tree_log(log)
         rec["notes"] = parsed["notes"]
@@ -2388,7 +2424,8 @@ def _run_race(ctx, race):
         jpath = neural_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log, _stop_ceiling(ctx, rec, ceiling),
+                        nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]), shape=race.get("shape"))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2404,7 +2441,8 @@ def _run_race(ctx, race):
         jpath = algos_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log, _stop_ceiling(ctx, rec, ceiling),
+                        nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2422,7 +2460,8 @@ def _run_race(ctx, race):
         jpath = more_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log, _stop_ceiling(ctx, rec, ceiling),
+                        nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2438,7 +2477,8 @@ def _run_race(ctx, race):
         jpath = classical_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_logged(cmd, child_env(ctx, extra), log, _stop_ceiling(ctx, rec, ceiling),
+                        nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2460,6 +2500,8 @@ def _run_race(ctx, race):
                         os.remove(os.path.join(work, f))
                     except OSError:
                         pass
+    if rc == 124 and rec.get("stop_clipped"):
+        cells = stopped_cells(cells, rec["stop_clipped"])
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
@@ -3122,6 +3164,11 @@ def build_parser():
     p.add_argument("--round-seconds", type=int, default=0,
                    help="classical per-round ceiling (0: per lane default)")
     p.add_argument("--nice", type=int, default=0)
+    p.add_argument("--stop-at", type=int, default=None, metavar="EPOCH_S",
+                   help="the job's own stop (UTC epoch seconds): each race's ceiling is clipped "
+                        "to it, so a race still running then is recorded as a TIMEOUT by name "
+                        "(and not retried under --skip-failed); no race starts with less than "
+                        "%d s left" % STOP_MIN_LEFT_S)
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
     p.add_argument("--no-infer", action="store_true",
@@ -3497,6 +3544,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
+           "stop_at": args.stop_at,
            "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
@@ -3573,6 +3621,11 @@ def main(argv=None):
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     for i, r in enumerate(todo):
+        if args.stop_at and args.stop_at - time.time() < STOP_MIN_LEFT_S:
+            print("bench_board: STOP: %d s left before --stop-at; %s and the %d races after it "
+                  "are not started" % (int(args.stop_at - time.time()), r["id"], len(todo) - i - 1),
+                  flush=True)
+            break
         print("bench_board: [%d/%d] %s arms=%s" % (i + 1, len(todo), r["id"], ",".join(r["arms"])),
               flush=True)
         t0 = time.time()
