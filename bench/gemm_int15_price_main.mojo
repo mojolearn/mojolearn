@@ -41,7 +41,13 @@ extent is above `INT15_MAX_K` is REFUSED by the profile; its fifteen-bit
 arms print a refusal line and `fp32.v1` is still timed.
 
 THE ARMS. Every arm of one row lives in this one binary and the timed loop
-ALTERNATES them call by call.
+ALTERNATES them call by call, in `_arm_at`'s order: `fp32.v1` first, the
+unit products next, the conversions, the complete operations, and the two
+one-thread-per-cell reference kernels LAST. They were fourth and third
+until run 2 on the H100, where the unit product, timed directly after the
+pieces kernel (a launch of 300 ms at the training rows), read ABOVE the
+complete call that contains it in two runs. A neighbor that long disturbs
+the arm after it; now no unit arm follows one.
 
     fp32.v1                    `identical_gemm_into`, the shipped plan, at
                                the row's own orientation
@@ -313,6 +319,20 @@ def _arm_is_inference(arm: Int) -> Bool:
 
 def _arm_is_apple_unit(arm: Int) -> Bool:
     return arm >= ARM_APPLE2
+
+
+def _arm_at(i: Int) -> Int:
+    """The `i`-th arm of the alternation (see THE ARMS)."""
+    var order: List[Int] = [
+        ARM_FP32, ARM_MMA, ARM_APPLE2, ARM_APPLE4,
+        ARM_QUANTIZE_A, ARM_QUANTIZE_A_PAR, ARM_PLANES_A_PAR, ARM_SPLIT_A,
+        ARM_QUANTIZE_B, ARM_QUANTIZE_B_PAR, ARM_PLANES_B_PAR, ARM_SPLIT_B,
+        ARM_INF_APPLE2, ARM_INF_APPLE4, ARM_TRAIN_APPLE2, ARM_TRAIN_APPLE4,
+        ARM_INF_PLANES, ARM_INF_CODES, ARM_INF_ROWQUANT,
+        ARM_TRAIN_PLANES, ARM_TRAIN_CODES, ARM_TRAIN_ROWQUANT,
+        ARM_FLAT, ARM_PIECES,
+    ]
+    return order[i]
 
 
 def _arm_is_product(arm: Int) -> Bool:
@@ -785,7 +805,8 @@ def _time_row(
     # Untimed warm-up of every arm, its output poisoned first where the
     # output is float32 and read back after, so an arm that launches
     # without writing cannot turn in a time.
-    for arm in range(ARM_COUNT):
+    for at_ in range(ARM_COUNT):
+        var arm = _arm_at(at_)
         if why[arm].byte_length() > 0:
             continue
         var tag = String("int15.") + name + "." + _arm_name(arm)
@@ -797,7 +818,8 @@ def _time_row(
         dig[arm] = _arm_digest(ctx, rb, arm, m, n, k, tag)
 
     for _ in range(0 if identity_only else repeats):
-        for arm in range(ARM_COUNT):
+        for at_ in range(ARM_COUNT):
+            var arm = _arm_at(at_)
             if why[arm].byte_length() > 0:
                 continue
             var t0 = perf_counter_ns()
