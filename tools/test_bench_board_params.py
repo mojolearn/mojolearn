@@ -10,6 +10,7 @@ reads the library the way it does on a box.
 """
 import importlib.util
 import io
+import json
 import os
 import types
 
@@ -173,3 +174,20 @@ def test_worker_records_are_checked_like_objects():
     arms["catboost-cpu"]["params"]["depth"] = 4
     with pytest.raises(BP.ParamsRefused, match="max_depth"):
         BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
+
+
+def test_cuml_pca_full_is_covariance_eigh_and_its_tol_is_an_exception():
+    ours = _est("mojolearn.decomposition", "PCA", n_components=10, svd_solver="covariance_eigh",
+                tol=0.0, whiten=False, random_state=7)
+    cuml = _est("cuml.decomposition.pca", "PCA", n_components=10, svd_solver="full", tol=1e-7,
+                whiten=False)
+    rep = BP.enforce("pca", {"ours": ours, "cuml-gpu": cuml}, family="classical",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    assert rep["arms"]["cuml-gpu"]["params"]["svd_solver"] == "covariance_eigh"
+    assert "tol" in json.dumps(rep["exceptions"])
+    # jacobi is another algorithm: still refused
+    cuml._p["svd_solver"] = "jacobi"
+    with pytest.raises(BP.ParamsRefused, match="svd_solver"):
+        BP.enforce("pca", {"ours": ours, "cuml-gpu": cuml}, family="classical",
+                   stream=io.StringIO())
