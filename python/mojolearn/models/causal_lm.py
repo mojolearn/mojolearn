@@ -636,6 +636,12 @@ class CausalLM:
         if int15 and not (_exports(ext, "causal_lm_session_open_int15")
                           and _exports(ext, "transformer_decode_session_open_int15")):
             return None
+        # Gated on NVIDIA only (the 4090 and the H100, lane/lowbit-default:
+        # resident == per-layer bit for bit, two sabotage arms). AMD and Apple
+        # keep the per-layer route under the profile, which their boxes
+        # gated, until the resident session is run there.
+        if int15 and _backend.vendor() != "cuda":
+            return None
         b, l = int(ids.shape[0]), int(ids.shape[1])
         state = self.allocate_state(b, total)
         sessions = []
