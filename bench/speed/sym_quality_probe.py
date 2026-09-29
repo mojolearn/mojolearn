@@ -26,6 +26,9 @@ import speed_gbdt_arm as spec  # noqa: E402
 
 
 def _val(v):
+    if v.startswith("["):
+        import ast
+        return ast.literal_eval(v)
     for cast in (int, float):
         try:
             return cast(v)
