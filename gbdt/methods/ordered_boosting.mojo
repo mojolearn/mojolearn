@@ -1246,7 +1246,7 @@ def fit_ordered(
             scale, opts.score_function, pool, no_trace, times,
             String("tree"), opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
-            folds=folds, permutation=perms[learn_p],
+            folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
         )
         times.end(ctx, "ord.structure")
         times.begin(ctx)
