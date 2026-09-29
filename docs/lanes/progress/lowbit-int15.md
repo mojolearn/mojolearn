@@ -232,5 +232,4 @@ It is another arithmetic than the one whose perplexity was measured for
 - LANE F'S AMD FUSED COLUMN (patch int15_tuned_amd_fused_column.patch, via
   a9c13231d, Lane F's job 7 GREEN) merged at 5f209cd4b: both gates GREEN on
   the H100 (nvc3-0042) and the MI325X (1790662046184). The M2 Pro's build
-  (1790662042389) is queued behind Lane G's job; if it fails, the merge is
-  undone by a new commit.
+  (1790662042389) GREEN: gate, and the patched tuned file builds and runs (no unit there, so its gates say NOT RUN). THE PATCH IS CLEARED.
