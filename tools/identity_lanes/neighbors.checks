@@ -14,6 +14,7 @@ x_neighbors/checks/model_check.mojo	x_neighbors/checks/sabotage/5202_svd_flip_la
 x_neighbors/checks/sketch_check.mojo	x_neighbors/checks/sabotage/5203_pcs_shift_reversed.patch
 x_neighbors/checks/sketch_check.mojo	x_neighbors/checks/sabotage/5213_sech_factor_split.patch
 x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5214_laplacian_divide_wi_first.patch
+x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5214_laplacian_deg_divide_wi_first.patch
 x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5215_donor_tie_high.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5216_pagerank_fold_reversed.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5216_pagerank_dangling_follows_p.patch
