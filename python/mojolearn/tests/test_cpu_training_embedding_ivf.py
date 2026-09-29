@@ -54,7 +54,7 @@ from mojolearn import _backend, host_surface
 ROOT = Path(__file__).resolve().parents[3]
 
 EMB_LANES = ("embedding", "embedding-sort")
-IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend")
+IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")
 #: par-ivf joined the ivf family on 2026-09-19 (lane/laneless-public-classes):
 #: DistributedIVFIndex over the same host binding, through the
 #: `ivf_flat_partial_search` and `ivf_finalize_distances` entries that lane

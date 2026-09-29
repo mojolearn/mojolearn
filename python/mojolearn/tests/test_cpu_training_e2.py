@@ -69,7 +69,7 @@ def test_accuracy_host_uses_pointer_parallel_count():
     binding = _read("bindings/_mojolearn_metrics_host.mojo")
     oracle = _read(METRICS_ORACLE)
     assert "host_accuracy_score_ptr(yt, yp, n)" in binding
-    assert "sync_parallelize(_rows, tasks)" in oracle
+    assert "host_parallelize(_rows, tasks)" in oracle
 
 
 def test_confusion_host_uses_pointer_parallel_counts():
@@ -77,7 +77,7 @@ def test_confusion_host_uses_pointer_parallel_counts():
     oracle = _read("metrics/host/classification_oracle.mojo")
     assert "host_confusion_matrix_ptr(y, p, n, k, normalization)" in binding
     assert "def host_confusion_counts_ptr(" in oracle
-    assert "sync_parallelize(_rows, tasks)" in oracle
+    assert "host_parallelize(_rows, tasks)" in oracle
 
 
 def test_binding_registers_kmeans_fit():

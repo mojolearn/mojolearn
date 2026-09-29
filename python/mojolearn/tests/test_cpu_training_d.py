@@ -88,7 +88,7 @@ STATEMENTS = {
          "var half = ftz(identical_mul(Float32(-0.5), inner))"),
         ("mixture/checks/estep.mojo", "s + ftz(identical_exp(ftz(wlp.unsafe_load(base + k) - max_exp)))",
          "s + ftz(identical_exp(ftz(wlp[base + k] - max_exp)))"),
-        ("mixture/checks/mstep.mojo", "nk.unsafe_store(k, ftz(acc + ten_eps))", "nk[k] = ftz(acc + ten_eps)"),
+        ("mixture/checks/mstep.mojo", "nk.unsafe_store(k, ftz(acc + ten_eps))", "nkp.unsafe_store(k, ftz(acc + ten_eps))"),
         ("mixture/estimator.mojo", "resp.append(ftz(row[k] / s))", "resp.append(ftz(row[k] / s))"),
     ),
     "hdbscan": (
@@ -159,13 +159,13 @@ def test_oracles_spell_the_device_statements():
             assert _squash(restated) in oracle, f"{ORACLES[fam]} does not spell {restated!r}"
 
 
-def test_gmm_scoring_parallelizes_components_not_numeric_folds():
-    """Fit and scoring may schedule components, never split a cell fold."""
+def test_gmm_scoring_parallelizes_rows_not_numeric_folds():
+    """Fit and scoring schedule rows inside each component, never split a cell fold."""
     text = _read(ORACLES["mixture"])
     estep = text[text.index("def gmmh_e_step("):text.index("def _collapse_message(")]
-    assert "host_predict_task_count(ncomp)" in estep
-    assert "parallel_components and n * d >= 1024" in estep
-    assert "sync_parallelize(_components, component_tasks)" in estep
+    assert "for kc in range(ncomp):" in estep
+    assert "def _rows(i: Int)" in estep
+    assert "host_cells(_rows, n, 3 * d)" in estep
     assert "mahalp.unsafe_store(i * ncomp + kc, acc)" in estep
     # The complete feature fold stays inside one component worker, ascending.
     assert "for j in range(d):" in estep
@@ -178,11 +178,11 @@ def test_hdbscan_parallelizes_vertex_scans_not_mst_folds():
     """Each dense graph row is independent; color and union folds stay serial."""
     text = _read(ORACLES["hdbscan"])
     boruvka = text[text.index("def hdbh_boruvka("):text.index("struct HdbscanHostDendrogram")]
-    assert "sync_parallelize(_vertex_min, tasks)" in boruvka
+    assert "host_parallelize(_vertex_min, tasks)" in boruvka
     assert "host_predict_task_count(m)" in boruvka
     assert "if m * m < (1 << 14):\n        tasks = 1\n    var chunk" in boruvka
     assert "candp.unsafe_store(u, best)" in boruvka
-    launch = boruvka.index("sync_parallelize(_vertex_min, tasks)")
+    launch = boruvka.index("host_parallelize(_vertex_min, tasks)")
     color_fold = boruvka.index("# Preserve min_edge_per_color", launch)
     union_fold = boruvka.index("# label_prop:", color_fold)
     assert launch < color_fold < union_fold

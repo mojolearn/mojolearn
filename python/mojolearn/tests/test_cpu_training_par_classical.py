@@ -202,7 +202,7 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "        return _fit_score_fold(state, *args)\n" in worker
     wanted.update(("cross_val_fold", "worker_identity"))
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
-    assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
+    assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update", "resample"}
     cooperative = set()
     for rel in ("python/mojolearn/parallel_classical.py", "python/mojolearn/parallel_preprocessing.py"):
         for body in re.split(r"^def ", _read(rel), flags=re.M):

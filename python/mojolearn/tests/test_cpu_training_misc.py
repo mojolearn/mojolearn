@@ -225,7 +225,7 @@ def test_manifest_covers_the_resample_lanes():
         assert f'("{name}")' in src and f'("{name}")' in gpu, name
         assert name in fam["exports"], name
     assert '("resample_ranges_parallel_available")' in gpu
-    assert "resample_ranges_parallel_available" not in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
+    assert "resample_ranges_parallel_available" in re.findall(r'def_function\[\w+\]\("(\w+)"\)', src)
     assert (ROOT / host_surface.build_shim("resample")).is_file()
 
 

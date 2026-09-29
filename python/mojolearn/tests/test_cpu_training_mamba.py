@@ -102,7 +102,8 @@ def test_generated_passes_are_host_only():
 
 def test_shim_gemm_is_the_oracle_and_carries_the_sabotage():
     shim = _read("mamba/host/device_shim.mojo")
-    assert "gemm_oracle(" in shim
+    assert "gemm_host_rows(" in shim
+    assert "from gemm.host.gemm_host_rows import gemm_host_rows" in shim
     assert "MOJOLEARN_HOST_SABOTAGE" in _read("gemm/host/gemm_oracle.mojo")
     assert "gemm/host/gemm_oracle.mojo" in _family()["host_modules"]
 

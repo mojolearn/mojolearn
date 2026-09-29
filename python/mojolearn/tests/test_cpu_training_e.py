@@ -69,10 +69,9 @@ def test_binding_registers_the_four_fits():
     for name in FITS_E:
         assert f'("{name}")' in src, f"the estimators host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name}"
-    # pca_fit_full (the pca-full-whiten lane) and qn_fit (batch 2) are
-    # registered now; inverse_transform stays absent.
-    for absent in ("inverse_transform",):
-        assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
+    # The host PCA inverse was added with the public transform surface.
+    assert '("inverse_transform")' in src
+    assert "inverse_transform" in exports
 
 
 def test_core_host_carries_the_centering_helpers():

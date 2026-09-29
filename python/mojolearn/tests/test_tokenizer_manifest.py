@@ -123,10 +123,10 @@ def test_binding_source_reads_the_sabotage_define():
 def test_batch_encoder_parallelizes_whole_documents_only():
     src = _read("bindings/_mojolearn_tokenizer_host.mojo")
     body = src[src.index("def bpe_encode_batch_binding("):src.index("def bpe_decode_binding(")]
-    assert "sync_parallelize(_documents, tasks)" in body
+    assert "host_parallelize(_documents, tasks)" in body
     assert "host_predict_task_count(n_docs) if n >= 16384 else 1" in body
     assert "stagep.unsafe_store(a + j" in body
-    join = body.index("sync_parallelize(_documents, tasks)")
+    join = body.index("host_parallelize(_documents, tasks)")
     compact = body.index("all_ids.append(Int(staged[a + j]))")
     assert join < compact, "document results must be compacted in input order after the join"
 

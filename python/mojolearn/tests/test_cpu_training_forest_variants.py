@@ -113,7 +113,8 @@ def test_rf_oracle_carries_the_new_arms():
     assert "no host restatement yet (ensemble/host/rf_oracle.mojo)" not in text
     assert "if weight_cdf[mid] <= d:" in text, "the weighted draw is an upper_bound over the CDF"
     assert "run += Float64(weights[i])" in text
-    assert "class weights without bootstrap" in text, "weights without a bootstrap refuse by name"
+    assert "var weighted_obj = len(weights) > 0 and not p.bootstrap" in text
+    assert "weighted_obj" in text[text.index("def rf_host_fit"):], "weighted objectives must reach the fit"
     assert "h = h + UInt32(1)" in text, "the sabotage arm does not move the column sample"
 
 

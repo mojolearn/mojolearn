@@ -158,11 +158,11 @@ class UMAPSurfaceTests(unittest.TestCase):
                 with self.subTest(name=name, value=value):
                     with self.assertRaises(ValueError):
                         UMAP(**{name: value})
-        for kwargs in ({"n_components": 4}, {"n_neighbors": 1},
+        for kwargs in ({"n_components": 33}, {"n_neighbors": 1},
                        {"n_neighbors": 2.5}, {"n_epochs": 0},
                        {"n_epochs": True}, {"random_state": -1},
-                       {"random_state": 1 << 63}, {"local_connectivity": 2},
-                       {"metric": "cosine"}, {"init": "random"},
+                       {"random_state": 1 << 63}, {"local_connectivity": -1},
+                       {"metric": "unknown"}, {"init": "unknown"},
                        {"spread": 0}, {"spread": 1e-100},
                        {"min_dist": 2}, {"set_op_mix_ratio": -1}):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
@@ -174,14 +174,25 @@ class UMAPSurfaceTests(unittest.TestCase):
                 self.estimator().fit(x)
         with self.assertRaisesRegex(ValueError, "exceeds"):
             UMAP().fit(self.x)
-        with self.assertRaisesRegex(ValueError, "supervised"):
-            self.estimator().fit(self.x, np.zeros(8))
+        with self.assertRaises(ValueError):
+            self.estimator().fit(self.x, np.zeros(7))
         model = self.estimator()
-        model.n_components = 4
+        model.n_components = 33
         with self.assertRaises(ValueError):
             model.fit(self.x)
         with self.assertRaisesRegex(ValueError, "successful fit"):
             self.estimator().transform(self.x)
+
+    def test_supported_option_controls_and_supervision(self):
+        for kwargs in ({"n_components": 4}, {"local_connectivity": 2},
+                       {"metric": "cosine"}, {"init": "random"}):
+            with self.subTest(kwargs=kwargs):
+                model = self.estimator(**kwargs)
+                for key, value in kwargs.items():
+                    self.assertEqual(getattr(model, key), value)
+        model = self.estimator().fit(self.x, np.zeros(8))
+        self.assertEqual(model.embedding_.shape, (8, 2))
+        self.assertTrue(np.isfinite(model.embedding_).all())
 
 
 if __name__ == "__main__":
