@@ -47,6 +47,18 @@ off. That makes it strict FP32 BY DEFAULT rather than by assertion, and an
 XF32 arm is OWED there. Only `strict` is emitted on both, and the reason is
 printed rather than left as a missing row.
 
+THE bf16 ARM (lane/lowbit-units, 2026-09-29) IS COMPARISON ONLY
+===============================================================
+`--bf16` adds a third arm: both operands cast to `torch.bfloat16` before the
+timed region and the product taken in bf16, which is the vendor's own bf16
+matrix unit where the library has one. Its internal rounding is the vendor's
+and undocumented, so it carries NO identity claim and no hash is taken; it is
+a denominator for the low-bit plans' times and nothing else. A backend that
+refuses the dtype prints FAILED for that arm and the other arms continue.
+
+`--only a,b` keeps the rows whose name contains one of the given substrings
+(the low-bit timing reads the transformer rows only: `--only llama8b`).
+
 IT REFUSES RATHER THAN FALLING BACK
 ====================================
 A CPU torch on a rented GPU box would produce a perfectly good millisecond
@@ -182,7 +194,7 @@ def pick_device(torch):
     )
 
 
-def time_matmul(torch, dev, sh, repeats, warmup):
+def time_matmul(torch, dev, sh, repeats, warmup, dtype=None):
     """One shape, median of `repeats` timed calls after `warmup` untimed ones.
 
     Operands are built in the orientation the row asks for, so the library is
@@ -194,17 +206,22 @@ def time_matmul(torch, dev, sh, repeats, warmup):
     m, n, k = sh["m"], sh["n"], sh["k"]
     op = sh["op"]
     g = torch.Generator(device="cpu").manual_seed(0x5EED0000 + sh["i"])
+    # `dtype` (the bf16 arm): the operands are generated as float32, as every
+    # arm's are, and cast ON THE DEVICE before the timed region, so the cast
+    # is not in the time.
+    def cast(t):
+        return t if dtype is None else t.to(dtype)
     if op == OP_NT:
-        a = torch.rand(m, k, generator=g, dtype=torch.float32).to(dev)
-        b = torch.rand(n, k, generator=g, dtype=torch.float32).to(dev)
+        a = cast(torch.rand(m, k, generator=g, dtype=torch.float32).to(dev))
+        b = cast(torch.rand(n, k, generator=g, dtype=torch.float32).to(dev))
         call = lambda: torch.matmul(a, b.t())
     elif op == OP_TN:
-        a = torch.rand(k, m, generator=g, dtype=torch.float32).to(dev)
-        b = torch.rand(k, n, generator=g, dtype=torch.float32).to(dev)
+        a = cast(torch.rand(k, m, generator=g, dtype=torch.float32).to(dev))
+        b = cast(torch.rand(k, n, generator=g, dtype=torch.float32).to(dev))
         call = lambda: torch.matmul(a.t(), b)
     else:
-        a = torch.rand(m, k, generator=g, dtype=torch.float32).to(dev)
-        b = torch.rand(k, n, generator=g, dtype=torch.float32).to(dev)
+        a = cast(torch.rand(m, k, generator=g, dtype=torch.float32).to(dev))
+        b = cast(torch.rand(k, n, generator=g, dtype=torch.float32).to(dev))
         call = lambda: torch.matmul(a, b)
 
     def sync():
@@ -233,6 +250,10 @@ def main():
     ap.add_argument("--out", default="")
     ap.add_argument("--max-macs", type=float, default=0.0,
                     help="skip (and REPORT) rows above this many MACs; 0 = no cap")
+    ap.add_argument("--bf16", action="store_true",
+                    help="add the bf16 arm (both operands torch.bfloat16); COMPARISON ONLY")
+    ap.add_argument("--only", default="",
+                    help="comma separated substrings; keep the rows whose name contains one")
     args = ap.parse_args()
 
     try:
@@ -242,17 +263,28 @@ def main():
 
     dev, libname, devname, build = pick_device(torch)
     shapes = load_shapes()
+    table_rows = len(shapes)
+    only = [x for x in args.only.split(",") if x]
+    if only:
+        shapes = [sh for sh in shapes if any(x in sh["name"] for x in only)]
+        if not shapes:
+            raise SystemExit("vendor_gemm_price: --only %s matches no row of %s" % (args.only, SHAPES_MOJO))
 
     arms = [("strict", False)]
     tf32_applies = dev == "cuda" and getattr(torch.version, "hip", None) is None
     if tf32_applies:
         arms.append(("tf32", True))
+    if args.bf16:
+        arms.append(("bf16", False))
 
     print("== tools/vendor_gemm_price.py ==")
     print("  device      : %s (%s)" % (devname, dev))
     print("  library     : %s" % libname)
     print("  build       : %s, torch %s" % (build, torch.__version__))
-    print("  shapes      : %d, parsed from bench/gemm_shapes.mojo" % len(shapes))
+    print("  shapes      : %d of %d, parsed from bench/gemm_shapes.mojo%s"
+          % (len(shapes), table_rows, (" (--only " + args.only + ")") if only else ""))
+    print("  COMPARISON ONLY: a vendor library's arithmetic is the vendor's; no arm")
+    print("                here carries an identity claim and none is hashed.")
     print("  repeats     : %d timed, %d warm-up, median reported" % (args.repeats, args.warmup))
     if tf32_applies:
         print("  arms        : strict (allow_tf32=False, true FP32) and tf32 (allow_tf32=True,")
@@ -263,6 +295,8 @@ def main():
         print("                matrix mode that the same allow_tf32 switch reaches, so")
         print("                this is strict FP32 by default rather than by assertion.")
         print("                An XF32 arm is OWED here the way tf32 is measured on CUDA.")
+    if args.bf16:
+        print("  bf16 arm    : both operands torch.bfloat16, product in bf16 (allow_tf32 off).")
     print()
 
     rows = []
@@ -279,8 +313,9 @@ def main():
                 torch.backends.cuda.matmul.allow_tf32 = tf32
                 torch.backends.cudnn.allow_tf32 = tf32
             try:
-                med, best = time_matmul(torch, dev, sh, args.repeats, args.warmup)
-            except RuntimeError as e:
+                med, best = time_matmul(torch, dev, sh, args.repeats, args.warmup,
+                                        torch.bfloat16 if armname == "bf16" else None)
+            except (RuntimeError, TypeError) as e:
                 rec[armname] = None
                 rec[armname + "_error"] = str(e)[:160]
                 print("  FAILED  %-32s arm=%s  %s" % (sh["name"], armname, str(e)[:100]))

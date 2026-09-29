@@ -60,8 +60,11 @@ print("[vendor-torch] torch", torch.__version__,
       "available", torch.cuda.is_available())
 PY
 
+# VENDOR_EXTRA_ARGS (lane/lowbit-units): more arguments for the price tool,
+# word-split on purpose (e.g. "--bf16 --only llama8b").
+# shellcheck disable=SC2086
 "$VENV/bin/python" tools/vendor_gemm_price.py \
-  --repeats "$REPEATS" --warmup 3 --max-macs "$MAXMACS" \
+  --repeats "$REPEATS" --warmup 3 --max-macs "$MAXMACS" ${VENDOR_EXTRA_ARGS:-} \
   --out "${VENDOR_PRICE_OUT:-$(ls -td bench/results/e1/*/ 2>/dev/null | head -1)vendor_price.json}"
 rc=$?
 echo "[vendor-torch] vendor_gemm_price exit=$rc"
