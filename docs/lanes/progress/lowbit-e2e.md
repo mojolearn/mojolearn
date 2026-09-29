@@ -57,4 +57,26 @@ One speed job per physical box. No builds/tests/benchmarks on the laptop.
 
 ## Status
 
-Created runner and plan. Submission IDs and results will be recorded here.
+Submitted public API probe at 4c875f5ba:
+
+- H100 NVL existing pod nvc3: job `nvc3-0031`, cap 45 minutes, exclusive
+  one-GPU FIFO behind the existing kernel jobs.
+- Existing MI325X steward: `1790658242761-speed-lowbit-e2e-4c875f5ba3`.
+- Remote syntax compilation of the Python runner and shell parsing passed
+  on the H100 host before submission. No local tests were run.
+
+Prepared `tools/lowbit_e2e/model_probe.py` for the committed integration
+revision. It records all prefill/decode logits on fixed token contexts,
+checks repeat identity, alternates profiles, and times the actual stateful
+step API. A disabled profile writes BLOCKED_NOT_INTEGRATED and exits 3.
+Its model execution remains untested/unsubmitted until integration lands.
+It deliberately avoids the older harness's generate-minus-prefill estimate.
+Example after integration and staging, on a queued box:
+
+```
+PYTHONPATH=python pixi run -e test python tools/lowbit_e2e/model_probe.py \
+  --model /root/models/SmolLM2-360M --prompts bench/model/prompts.txt \
+  --out-dir /root/ev-lowbit-e2e/model-run-1
+```
+
+No profile default changed; no machine rented, extended, or released.
