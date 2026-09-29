@@ -1381,3 +1381,12 @@ def test_neural_full_shape_gives_a_compile_its_warmup():
     race["shape"] = "small"
     cmd, _, _ = bb.neural_cmd(ctx, race)
     assert cmd[cmd.index("--warmup-seconds") + 1] == cmd[cmd.index("--round-seconds") + 1]
+
+
+def test_store_never_reuses_an_opponent_the_race_refused():
+    ok = {"cell": {"status": "ok"}}
+    own = {"cell": {"status": "REFUSED(timeout: null)"}}
+    race = {"cell": {"status": 'REFUSED(params_refused: "parameters do not match (2): cuml-gpu: ...")'}}
+    assert bb.STORE.reusable(ok) and bb.STORE.reusable(own)
+    assert not bb.STORE.reusable(race)
+    assert not bb.STORE.reusable({"cell": {"status": "PARTIAL(1 of 3 rounds)"}})

@@ -31,8 +31,9 @@ stored):
 
 Provenance kept beside it: measured_at, commit, the arm's canonical
 parameters from the BOARD-PARAMS check, the full cell. A capped, refused or
-failed opponent is stored as what it was; a PARTIAL or UNKNOWN one is never
-reused. Standard library only.
+failed opponent is stored as what it was; a PARTIAL or UNKNOWN one, or one
+refused by the race (RACE_LEVEL: the parameter check refuses every arm when
+any one differs), is never reused. Standard library only.
 """
 import hashlib
 import json
@@ -89,9 +90,18 @@ def append(path, record):
         fh.write(json.dumps(record, sort_keys=True, default=str) + "\n")
 
 
+#: A race-level refusal says nothing about the opponent: the parameter check
+#: refuses EVERY arm of a race when any one arm differs (2026-09-29 L40S:
+#: torch-gpu stored REFUSED(params_refused) from a cuml-gpu mismatch was
+#: reused on the rerun after the fix, so torch-gpu was never measured).
+RACE_LEVEL = ("params_refused",)
+
+
 def reusable(record):
     status = str((record.get("cell") or {}).get("status") or "")
-    return not (status.startswith("PARTIAL") or status.startswith("UNKNOWN"))
+    if status.startswith("PARTIAL") or status.startswith("UNKNOWN"):
+        return False
+    return not any(("(%s" % r) in status for r in RACE_LEVEL)
 
 
 def lookup(store, key):
