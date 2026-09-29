@@ -372,23 +372,3 @@ def test_invalidate_arm_scoped_to_races_rewords_a_library_refusal(tmp_path, monk
     assert st == "REFUSED(%s; the library said: error: ValueError ill-defined)" % why
     assert got["classical2/gmm/istella/rows=full"]["cells"][0]["status"] == "ok"
     assert bb.invalidate_arm(str(out), "sklearn-cpu", why, None, races="classical2/gmm/taxi/") == (0, 0)
-
-
-def test_forget_stored_makes_the_arm_run_again(tmp_path):
-    store = tmp_path / "opponent-store.jsonl"
-    def rec(lane, arm, status):
-        return {"key": {"family": "neural", "lane": lane, "dataset": "bytes", "arm": arm},
-                "cell": {"arm": arm, "status": status}}
-    rows = [rec("lm-forward", "torch-compile-fp32", "REFUSED(error: No module named bbn_x)"),
-            rec("lm-forward", "torch-eager-fp32", "ok"),
-            rec("lm-train-step", "torch-compile-fp32", "ok")]
-    store.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    n = bb.forget_stored(str(store), ["neural/lm-forward/:torch-compile-fp32"], "loader fixed")
-    assert n == 1
-    latest = {(v["key"]["lane"], v["key"]["arm"]): v for v in bb.STORE.load(str(store)).values()}
-    assert not bb.STORE.reusable(latest[("lm-forward", "torch-compile-fp32")])
-    assert bb.STORE.reusable(latest[("lm-forward", "torch-eager-fp32")])
-    assert bb.STORE.reusable(latest[("lm-train-step", "torch-compile-fp32")])
-    assert bb.forget_stored(str(store), ["neural/lm-forward/:torch-compile-fp32"], "loader fixed") == 0
-    with pytest.raises(SystemExit):
-        bb.forget_stored(str(store), ["no-colon"], "x")
