@@ -1,0 +1,8 @@
+deviation=2910
+started=2026-09-29T02:28:57Z
+root=/root/mojolearn-lowbit-units
+vendor=nvidia gpu_archs=unset column=unset
+   column: nvidia  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   column: nvidia  int8 dispatch: flat (MOJOLEARN_INT8_FORCE_FLAT)
+finished=2026-09-29T02:31:53Z
+verdict=GREEN every expected outcome held (see status.tsv)

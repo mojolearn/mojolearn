@@ -1,0 +1,13 @@
+diff --git a/gemm/host/gemm_int15_oracle.mojo b/gemm/host/gemm_int15_oracle.mojo
+index 850aa90c6..05d42b062 100644
+--- a/gemm/host/gemm_int15_oracle.mojo
++++ b/gemm/host/gemm_int15_oracle.mojo
+@@ -245,7 +245,7 @@ def gemm_int15_oracle_cell(
+     the whole product on the host (a 512 x 4096 x 14336 product is 3e10
+     steps). The arithmetic and the sabotage arm of `gemm_int15_oracle`."""
+     var v = dequant_int15_pinned(int15_dot_cell(qa, qb, i, j, k), Int(ea[i]) + Int(eb[j]))
+-    comptime if GEMM_ORACLE_HOST_SABOTAGE:
++    comptime if True:  # SABOTAGE (int15 seam arm): the host oracle's value arm at its use site
+         v = gemm_oracle_sabotage_value_flip(v)
+     return v
+ 

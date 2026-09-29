@@ -80,6 +80,16 @@ from gemm.host.gemm_lowbit_oracle import (
     widen_bf16,
 )
 from bindings.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
+from gemm.host.gemm_int15_oracle import (
+    INT15_MAX_K,
+    INT15_PROFILE_VERSION,
+    Int15Rows,
+    dequantize_rows_int15,
+    gemm_int15_oracle,
+    join_int15,
+    quantize_rows_int15,
+    split_int15,
+)
 
 
 #: Cells per output, so `m * n` and `m * k` stay far from any Int edge.
@@ -602,6 +612,112 @@ def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonO
     return PythonObject(n_cols)
 
 
+# ===========================================================================
+# THE FIFTEEN-BIT PROFILE, on the host (lane/lowbit-int15, 2026-09-29)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6. The GPU binding's names, the
+# oracle's arithmetic; `addrs` and `params` orders mirrored word for word.
+# An operand crosses the boundary as its two int8 PLANES (clause W-3) and
+# its int32 row exponents: the package's Array has no int16.
+# ===========================================================================
+
+
+def int15_profile_version_binding() raises -> PythonObject:
+    return PythonObject(INT15_PROFILE_VERSION)
+
+
+def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`addrs`: 0 c, 1 a hi, 2 a lo, 3 a exponents, 4 b hi, 5 b lo,
+    6 b exponents. `params`: 0 m, 1 n, 2 k. OP_NT only."""
+    if len(addrs) != 7:
+        raise Error("gemm_int15: addrs must contain 7 addresses (c, a hi, a lo, a exponents, b hi, b lo, b exponents), got " + String(len(addrs)))
+    if len(params) != 3:
+        raise Error("gemm_int15: params must contain 3 values (m, n, k), got " + String(len(params)))
+    var cp = f32_ptr(_index(addrs[0]))
+    var ah_address = _index(addrs[1])
+    var al_address = _index(addrs[2])
+    var ea_address = _index(addrs[3])
+    var bh_address = _index(addrs[4])
+    var bl_address = _index(addrs[5])
+    var eb_address = _index(addrs[6])
+    var m = _index(params[0])
+    var n = _index(params[1])
+    var k = _index(params[2])
+    if m <= 0 or n <= 0 or k <= 0:
+        raise Error("gemm_int15: m, n and k must all be positive, got m=" + String(m) + " n=" + String(n) + " k=" + String(k))
+    if k > INT15_MAX_K:
+        raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
+    if m > LINALG_HOST_MAX_EXTENT or n > LINALG_HOST_MAX_EXTENT:
+        raise Error("gemm_int15: m and n must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var qa = join_int15(read_i8(ah_address, m * k), read_i8(al_address, m * k))
+        var ea = read_i32(ea_address, m)
+        var qb = join_int15(read_i8(bh_address, n * k), read_i8(bl_address, n * k))
+        var eb = read_i32(eb_address, n)
+        var c = gemm_int15_oracle(qa, ea, qb, eb, m, n, k)
+        for i in range(m * n):
+            cp[i] = c[i]
+        wrote = m * n
+    return PythonObject(wrote)
+
+
+def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`addrs`: 0 hi, 1 lo, 2 exponents, 3 x. `params`: 0 rows, 1 cols."""
+    if len(addrs) != 4:
+        raise Error("quantize_int15: addrs must contain 4 addresses (hi, lo, exponents, x), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("quantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var hp = i8_ptr(_index(addrs[0]))
+    var lp = i8_ptr(_index(addrs[1]))
+    var ep = i32_ptr(_index(addrs[2]))
+    var x_address = _index(addrs[3])
+    var rows = _index(params[0])
+    var cols = _index(params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    if rows > LINALG_HOST_MAX_EXTENT or cols > LINALG_HOST_MAX_EXTENT:
+        raise Error("quantize_int15: rows and cols must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var x = read_f32(x_address, rows * cols)
+        var qr = quantize_rows_int15(x, rows, cols)
+        var planes = split_int15(qr.q)
+        for i in range(rows * cols):
+            hp[i] = planes.hi[i]
+            lp[i] = planes.lo[i]
+        for r in range(rows):
+            ep[r] = qr.e[r]
+        wrote = rows * cols
+    return PythonObject(wrote)
+
+
+def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`addrs`: 0 y, 1 hi, 2 lo, 3 exponents. `params`: 0 rows, 1 cols."""
+    if len(addrs) != 4:
+        raise Error("dequantize_int15: addrs must contain 4 addresses (y, hi, lo, exponents), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("dequantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var yp = f32_ptr(_index(addrs[0]))
+    var h_address = _index(addrs[1])
+    var l_address = _index(addrs[2])
+    var e_address = _index(addrs[3])
+    var rows = _index(params[0])
+    var cols = _index(params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    if rows > LINALG_HOST_MAX_EXTENT or cols > LINALG_HOST_MAX_EXTENT:
+        raise Error("dequantize_int15: rows and cols must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var q = join_int15(read_i8(h_address, rows * cols), read_i8(l_address, rows * cols))
+        var e = read_i32(e_address, rows)
+        var y = dequantize_rows_int15(Int15Rows(q^, e^, rows, cols))
+        for i in range(rows * cols):
+            yp[i] = y[i]
+        wrote = rows * cols
+    return PythonObject(wrote)
+
+
 @export
 def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
     try:
@@ -622,6 +738,10 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[gemm_int8_binding]("gemm_int8")
         module.def_function[quantize_int8_binding]("quantize_int8")
         module.def_function[dequantize_int8_binding]("dequantize_int8")
+        module.def_function[int15_profile_version_binding]("int15_profile_version")
+        module.def_function[gemm_int15_binding]("gemm_int15")
+        module.def_function[quantize_int15_binding]("quantize_int15")
+        module.def_function[dequantize_int15_binding]("dequantize_int15")
         module.def_function[to_bf16_binding]("to_bf16")
         module.def_function[from_bf16_binding]("from_bf16")
         module.def_function[qr_r_binding]("qr_r")

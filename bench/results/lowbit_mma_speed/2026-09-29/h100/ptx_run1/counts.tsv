@@ -1,0 +1,12 @@
+label	mma.sync	bar.sync	loads and stores by kind
+direct_aligned_loads	2	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+direct_reference_loads	2	0	ld.global.b8=16 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+direct_scalar_acc	2	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+probe_loads_hoisted	2	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+quantize_par_256	0	2	ld.global.b32=16 ld.param.b32=2 ld.param.b64=3 ld.shared.b32=3 st.global.b32=2 st.global.b8=4 st.shared.b32=2 
+quantize_reference	0	0	ld.global.b32=2 ld.param.b32=1 ld.param.b64=3 ld.param.s32=1 st.global.b32=1 st.global.b8=1 
+reference	2	0	ld.global.b8=16 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+staged_w16_b32_k32_l4	2	2	ld.global.b32=4 ld.global.b8=16 ld.global.s32=8 ld.local.b32=4 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=8 st.global.b32=4 st.local.b32=8 st.shared.b32=4 
+staged_w64_b128_k32_l4	32	2	ld.global.b32=16 ld.global.b8=64 ld.global.s32=8 ld.local.b32=4 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=128 st.shared.b32=16 
+staged_w64_b128_k64_l16	64	2	ld.global.b8=128 ld.global.s32=8 ld.global.v4.b32=8 ld.local.b32=4 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=64 st.global.b32=4 st.local.b32=128 st.shared.v4.b32=8 
+staged_w64_b128x256_k64_l16	64	2	ld.global.b8=96 ld.global.s32=8 ld.global.v4.b32=6 ld.local.b32=4 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=64 st.global.b32=4 st.local.b32=128 st.shared.v4.b32=6 

@@ -1,0 +1,6 @@
+box=h100 gate=quant
+started=2026-09-29T03:38:29Z
+tree_head=a4b906e81e351b0c6e56b1dd3e7c1482e9285321 dirty_files=19
+machine=NVIDIA H100 NVL, 580.159.04
+finished=2026-09-29T03:39:10Z
+verdict=GREEN every expected outcome held (see status.tsv)

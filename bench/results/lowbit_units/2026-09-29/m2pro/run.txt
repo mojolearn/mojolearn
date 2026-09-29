@@ -1,0 +1,8 @@
+box=m2pro
+started=2026-09-29T02:57:42Z
+tree_head=304d94f72d461e12a6ed9806af81e2222e0a1820 dirty_files=31
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:00:38Z

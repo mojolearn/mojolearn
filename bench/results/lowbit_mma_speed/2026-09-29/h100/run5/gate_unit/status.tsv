@@ -1,0 +1,3 @@
+unit	0	20s	expected=pass	held=yes
+unit-sabotage	1	20s	expected=fail	held=yes
+unit-value-sabotage	1	22s	expected=fail	held=yes
