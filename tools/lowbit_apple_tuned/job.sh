@@ -39,7 +39,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 9
 [ $# -ge 1 ] || { echo "job.sh <box>" >&2; exit 2; }
 BOX=$1
-PHASES=${MOJOLEARN_TUNED_JOB_PHASES:-probe gate price}
+PHASES=${MOJOLEARN_TUNED_JOB_PHASES:-devprobe probe gate price}
 OUT="$PWD/bench/results/lowbit_apple_tuned/$BOX"
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -125,9 +125,11 @@ for phase in $PHASES; do
             echo "devload-probe$sp exit=$?" >> "$OUT/job.txt"
             grep -E '^DEVLOAD ' "$OUT/devload_probe$sp.log" >> "$OUT/job.txt"
         done
-        if grep -q '^DEVLOAD 1 transposed equal' "$OUT/devload_probe1.log"; then
-            echo "devload: spelling 1 (as committed)" >> "$OUT/job.txt"
-        elif grep -q '^DEVLOAD 2 transposed equal' "$OUT/devload_probe2.log"; then
+        # Since job 4 the dev module is spelling 2 as committed (job 3's
+        # finding); only its failure turns the dev variants off.
+        if grep -q '^DEVLOAD 2 transposed equal' "$OUT/devload_probe2.log"; then
+            echo "devload: spelling 2 (as committed)" >> "$OUT/job.txt"
+        elif false; then
             DEVSAVED="$OUT/dev_module.committed"
             cp "$DEVFILE" "$DEVSAVED"
             python3 -c 'import sys; p=sys.argv[1]; s=open(p).read(); s=s.replace("    var q = p\n", "    var q = p.address_space_cast[AddressSpace.GLOBAL]()\n"); s=s.replace("from std.ffi import external_call\n", "from std.ffi import external_call\nfrom max.gpu.memory import AddressSpace\n", 1); open(p, "w").write(s)' "$DEVFILE"

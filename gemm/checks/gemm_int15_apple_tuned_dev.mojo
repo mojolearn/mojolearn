@@ -32,9 +32,11 @@ once per weight; the left operand's are made every call, and the clock
 times that conversion inside the complete call.
 
 THE DEVICE LOAD. Nothing else in the repository loads a fragment from
-device memory. `_dev_load_t` is spelled as `gemm/checks/
-gemm_apple_devload_probe1.mojo` spells it; the job runs that probe (and
-spelling 2) first.
+device memory. Job 3 (d69b5917b, M2 Pro) probed two spellings: the generic
+kernel pointer passed as it is (probe 1) fails in the Metal compiler
+("failed to compile metallib"); the pointer cast to AddressSpace.GLOBAL
+first (probe 2) compiles and loads, transposed and plain, what the
+threadgroup load loads. `_dev_load_t` is spelling 2.
 
 THE SABOTAGE ARMS are the tuned kernel's defines:
 `-D MOJOLEARN_INT15_APPLE_TUNED_CHUNK_SABOTAGE=1` (FOUR's accumulators run
@@ -47,6 +49,7 @@ compiles.
 """
 
 from std.ffi import external_call
+from max.gpu.memory import AddressSpace
 from std.gpu import block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
@@ -118,7 +121,7 @@ def _pad(x: Int, p: Int) -> Int:
 @always_inline
 def _dev_load_t(p: MutPointer[Float32, MutAnyOrigin], stride: Int) -> _AMMA_M64:
     """Fragment M[r][c] = p[c * stride + r], from DEVICE memory."""
-    var q = p
+    var q = p.address_space_cast[AddressSpace.GLOBAL]()
     comptime if simdgroup_load_legacy_air():
         return external_call["air.simdgroup_matrix_8x8_load.v64f32.p1f32", _AMMA_M64](
             q, Int64(stride), _AMMA_V2(0, 0), True

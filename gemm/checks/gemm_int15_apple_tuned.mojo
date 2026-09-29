@@ -212,7 +212,14 @@ comptime TUNED_F2D_W64_KB16_B128 = 18
 comptime TUNED_F4_ROW_KB16 = 19
 comptime TUNED_F3_ROW64_KB16 = 20
 comptime TUNED_F2D_ROW64_KB16 = 21
-comptime TUNED_VARIANT_COUNT = 22
+comptime TUNED_F2_T32_KB8 = 22
+comptime TUNED_F2_T32X64_KB16 = 23
+comptime TUNED_F2_T64X32_KB16 = 24
+comptime TUNED_F2_SG8_KB16 = 25
+comptime TUNED_F2_T16_KB16 = 26
+comptime TUNED_F2_T32_KB16_B128 = 27
+comptime TUNED_F2_ROW64_KB16 = 28
+comptime TUNED_VARIANT_COUNT = 29
 
 
 def int15_apple_tuned_sabotage_name() -> String:
@@ -232,7 +239,10 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
     fragment each; t32x16 a 32 x 16 tile of 2 x 2 simdgroups with 2 x 1
     fragments; w64 a 64 x 64 tile of 2 x 2 simdgroups with 4 x 4 fragments;
     row an 8 x 128 tile and row64 an 8 x 64 tile of 1 x 4 simdgroups, for
-    the decode rows. Every tile has 128 threads. `.b128` declares that
+    the decode rows; t32x64 32 x 64 (2 x 4 fragments), t64x32 64 x 32
+    (4 x 2); sg8 4 x 2 simdgroups of 2 x 2 fragments (64 x 32, 256
+    threads); kb8 a window of one step of the unit. Every other tile has
+    128 threads. `.b128` declares that
     launch bound to the compiler (`identical_gemm_int15_apple_tuned_kernel_b128`)."""
     if variant == TUNED_F4_T32_KB32:
         return String("f4.t32.kb32")
@@ -278,13 +288,27 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
         return String("f3.row64.kb16")
     if variant == TUNED_F2D_ROW64_KB16:
         return String("f2d.row64.kb16")
+    if variant == TUNED_F2_T32_KB8:
+        return String("f2.t32.kb8")
+    if variant == TUNED_F2_T32X64_KB16:
+        return String("f2.t32x64.kb16")
+    if variant == TUNED_F2_T64X32_KB16:
+        return String("f2.t64x32.kb16")
+    if variant == TUNED_F2_SG8_KB16:
+        return String("f2.sg8.kb16")
+    if variant == TUNED_F2_T16_KB16:
+        return String("f2.t16.kb16")
+    if variant == TUNED_F2_T32_KB16_B128:
+        return String("f2.t32.kb16.b128")
+    if variant == TUNED_F2_ROW64_KB16:
+        return String("f2.row64.kb16")
     return String("unknown")
 
 
 def int15_apple_tuned_chunk_steps(variant: Int) -> Int:
     """The steps of `k` in one chunk of the variant's form: the steps the
     float accumulators run before they are carried."""
-    if variant == TUNED_F2_T32_KB16 or variant == TUNED_F2_T32_KB32 or variant == TUNED_F2D_T32_KB16 or variant == TUNED_F2D_T32_KB32 or variant == TUNED_F2_W64_KB16 or variant == TUNED_F2D_T16_KB32 or variant == TUNED_F2D_T32X16_KB32 or variant == TUNED_F2D_T32_KB32_B128 or variant == TUNED_F2D_W64_KB16_B128 or variant == TUNED_F2D_ROW64_KB16:
+    if variant == TUNED_F2_T32_KB16 or variant == TUNED_F2_T32_KB32 or variant == TUNED_F2D_T32_KB16 or variant == TUNED_F2D_T32_KB32 or variant == TUNED_F2_W64_KB16 or variant == TUNED_F2D_T16_KB32 or variant == TUNED_F2D_T32X16_KB32 or variant == TUNED_F2D_T32_KB32_B128 or variant == TUNED_F2D_W64_KB16_B128 or variant == TUNED_F2D_ROW64_KB16 or variant == TUNED_F2_T32_KB8 or variant == TUNED_F2_T32X64_KB16 or variant == TUNED_F2_T64X32_KB16 or variant == TUNED_F2_SG8_KB16 or variant == TUNED_F2_T16_KB16 or variant == TUNED_F2_T32_KB16_B128 or variant == TUNED_F2_ROW64_KB16:
         return INT15_TUNED2_CHUNK_STEPS
     if variant == TUNED_F3_T32_KB16 or variant == TUNED_F3R_T32_KB16 or variant == TUNED_F3R_T32_KB32 or variant == TUNED_F3R_T16_KB32 or variant == TUNED_F3_ROW64_KB16:
         return INT15_TUNED3_CHUNK_STEPS
@@ -900,6 +924,34 @@ def identical_gemm_int15_apple_tuned_into(
             )
         elif variant == TUNED_F2D_ROW64_KB16:
             _launch_tuned[1, 4, 1, 2, 16, INT15_TUNED_FORM_TWO, False, False, True, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32_KB8:
+            _launch_tuned[2, 2, 2, 2, 8, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32X64_KB16:
+            _launch_tuned[2, 2, 2, 4, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T64X32_KB16:
+            _launch_tuned[2, 2, 4, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_SG8_KB16:
+            _launch_tuned[4, 2, 2, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T16_KB16:
+            _launch_tuned[2, 2, 1, 1, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32_KB16_B128:
+            _launch_tuned[2, 2, 2, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, True](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_ROW64_KB16:
+            _launch_tuned[1, 4, 1, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
                 ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
             )
         else:
