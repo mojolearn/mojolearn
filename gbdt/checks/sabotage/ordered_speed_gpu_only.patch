@@ -24,10 +24,10 @@ index 2a61a9d70..a463e5b3e 100644
      else:
          pool.clear()
 diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
-index bdc54ecbe..ab737b1e2 100644
+index 83a094318..b5994f41b 100644
 --- a/gbdt/methods/ordered_boosting.mojo
 +++ b/gbdt/methods/ordered_boosting.mojo
-@@ -473,7 +473,8 @@ def _ord_segment_rows_kernel(
+@@ -495,7 +495,8 @@ def _ord_segment_rows_kernel(
                  hi = mid - 1
          var off = Int(table.unsafe_load(3 * lo))
          var seg = Int(table.unsafe_load(3 * lo + 2))
@@ -36,4 +36,4 @@ index bdc54ecbe..ab737b1e2 100644
 +        row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + cnt - 1 - (i - off)))
  
  
- def _grid(n: Int) -> Int:
+ def _ord_stage_in_p_kernel(
