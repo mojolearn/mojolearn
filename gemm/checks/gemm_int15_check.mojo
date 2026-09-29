@@ -1324,7 +1324,7 @@ def check_int15_unit_loads_state_their_alignment(ctx: DeviceContext) raises:
         var a = ctx.enqueue_create_buffer[DType.int8](sizes[i])
         var b = ctx.enqueue_create_buffer[DType.int8](sizes[i])
         ctx.synchronize()
-        if not mma_operands_aligned(a.unsafe_ptr(), b.unsafe_ptr()):
+        if not mma_operands_aligned(Int(a.unsafe_ptr()), Int(b.unsafe_ptr())):
             raise Error(
                 "two int8 buffers of " + String(sizes[i]) + " codes have the bases "
                 + String(Int(a.unsafe_ptr())) + " and " + String(Int(b.unsafe_ptr()))
@@ -1336,9 +1336,7 @@ def check_int15_unit_loads_state_their_alignment(ctx: DeviceContext) raises:
     var work = Int15Workspace(ctx)
     work.ensure(ctx, 12345, 54321)
     ctx.synchronize()
-    if not mma_operands_aligned(work.ah.unsafe_ptr(), work.al.unsafe_ptr()) or not mma_operands_aligned(
-        work.bh.unsafe_ptr(), work.bl.unsafe_ptr()
-    ):
+    if not mma_operands_aligned(Int(work.ah.unsafe_ptr()), Int(work.al.unsafe_ptr())) or not mma_operands_aligned(Int(work.bh.unsafe_ptr()), Int(work.bl.unsafe_ptr())):
         raise Error("a workspace plane has a base that is not a multiple of 8")
     seen += 4
     _ = work^

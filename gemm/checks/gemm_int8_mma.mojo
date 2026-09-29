@@ -144,13 +144,12 @@ def int8_mma_admits(m: Int, n: Int, k: Int) -> Bool:
 # ===========================================================================
 
 
-def mma_operands_aligned[
-    origin_a: Origin, origin_b: Origin
-](a: MutPointer[Int8, origin_a], b: MutPointer[Int8, origin_b]) -> Bool:
+def mma_operands_aligned(a_address: Int, b_address: Int) -> Bool:
     """Whether the BASES of two operand buffers are both multiples of 8
-    bytes, read off the pointers the launch is about to pass. The fragment
-    loads state an alignment only when this is true (DEVIATION 2975)."""
-    return ((Int(a) | Int(b)) & 7) == 0
+    bytes, given as the addresses of the pointers the launch is about to
+    pass (`Int(buffer.unsafe_ptr())`). The fragment loads state an
+    alignment only when this is true (DEVIATION 2975)."""
+    return ((a_address | b_address) & 7) == 0
 
 
 @always_inline
@@ -428,7 +427,7 @@ def identical_gemm_int8_mma_into(
         var grid_y = (m + INT8_MMA_BLOCK_TILE_M - 1) // INT8_MMA_BLOCK_TILE_M
         var aligned = Int32(0)
         comptime if not INT8_MMA_UNSTATED_LOADS:
-            if mma_operands_aligned(qa.unsafe_ptr(), qb.unsafe_ptr()):
+            if mma_operands_aligned(Int(qa.unsafe_ptr()), Int(qb.unsafe_ptr())):
                 aligned = Int32(1)
         ctx.enqueue_function[identical_gemm_int8_mma_kernel](
             c.unsafe_ptr(),

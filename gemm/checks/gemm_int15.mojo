@@ -1027,9 +1027,7 @@ def identical_gemm_int15_mma_into(
         # when the bases of ALL FOUR planes are aligned, read here.
         var aligned = Int32(0)
         comptime if not INT8_MMA_UNSTATED_LOADS:
-            if mma_operands_aligned(ah.unsafe_ptr(), al.unsafe_ptr()) and mma_operands_aligned(
-                bh.unsafe_ptr(), bl.unsafe_ptr()
-            ):
+            if mma_operands_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr())) and mma_operands_aligned(Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr())):
                 aligned = Int32(1)
         ctx.enqueue_function[identical_gemm_int15_mma_kernel](
             c.unsafe_ptr(),
