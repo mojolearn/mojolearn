@@ -501,6 +501,31 @@ def params_record(obj):
     return rec
 
 
+def params_only_exit(result, workers, arms, lane_id, family, path):
+    """--params-only: every arm is constructed (its worker is ready) and its
+    parameters read back; write the check's report and each arm's info to
+    `path`, stop every worker, and return 0 before any warm-up. The board
+    keys its opponent store by this read-back (tools/bench_board_store.py)."""
+    BP = _bp()
+    records = {a: result["arms"][a].get("params_record") for a in arms
+               if workers[a].alive and result["arms"][a].get("params_record") is not None}
+    result["params_check"] = BP.check(lane_id, records, family=family) if records else None
+    result["params_only"] = True
+    for arm in arms:
+        w = workers[arm]
+        if w.alive:
+            w.kill("params_only", None)
+        try:
+            w.log.close()
+        except Exception:  # noqa: BLE001
+            pass
+    result["finished"] = now_utc()
+    with open(path, "w") as fh:
+        json.dump(result, fh, indent=2, sort_keys=True, default=str)
+    print("PARAMS-ONLY %s" % path, flush=True)
+    return 0
+
+
 def enforce_params(lane, family, records, result, tag):
     """BP.enforce over the arms that came up. Returns the refusal text, or
     None when every arm matched. The report goes into the race JSON either way."""
@@ -2186,6 +2211,8 @@ def worker(args):
         traceback.print_exc()
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
+    if isinstance(runner.info, dict):   # the arm's own library version and GPU (the store's key)
+        runner.info.update(_probe().library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"))
@@ -2699,6 +2726,9 @@ def race(args):
     print("CTD-SETTINGS lane=%s dataset=%s %s" % (lane, ds, CONFIG[lane]["params"]), flush=True)
     for mm in CONFIG[lane]["mismatches"]:
         print("CTD-MISMATCH lane=%s dataset=%s %s" % (lane, ds, mm), flush=True)
+    if getattr(args, "params_only", False):
+        return params_only_exit(result, workers, arms, lane, "classical",
+                                os.path.join(args.out, tag + ".params.json"))
     records = {a: result["arms"][a].get("params_record") for a in arms
                if workers[a].alive and result["arms"][a].get("params_record") is not None}
     refused = enforce_params(lane, "classical", records, result, "CTD")
@@ -2920,6 +2950,9 @@ def main():
     r.add_argument("--ours-python", default="pixi run python3")
     r.add_argument("--theirs-python", default=sys.executable)
     r.add_argument("--ready-seconds", type=float, default=600.0)
+    r.add_argument("--params-only", action="store_true",
+                   help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
+                        "and stop before the warm-up (the board's opponent-store lookup)")
     r.add_argument("--warmup-seconds", type=float, default=600.0)
     r.add_argument("--round-seconds", type=float, default=300.0)
     r.add_argument("--pause", type=float, default=0.5)
