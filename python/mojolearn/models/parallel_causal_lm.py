@@ -122,6 +122,12 @@ class ParallelCausalLM(CausalLM):
     explicitly or use a context manager. Calls and states must not be used
     concurrently. Output and state mathematics are the ordinary CausalLM path.
     """
+    def _generate_resident(self, ids, n_new, total):
+        # Blocks and decode handles belong to remote worker processes. The
+        # parent's single-process resident loop cannot consume those handles;
+        # generate must use the existing per-layer RPC forward/step route.
+        return None
+
     def __init__(self, plan, weights, *, layer_devices, **kwargs):
         self.layer_devices = tuple(layer_devices)
         if (len(self.layer_devices) != plan.n_layers or
