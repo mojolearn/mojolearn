@@ -1,0 +1,11 @@
+gpuq: job 0053 lane=lowbit-default-h100 gpus=0 cap=240min started 2026-09-29T08:15:39Z
+gpuq: script /root/mojolearn-lowbit-default-h100/tools/lowbit_default/split_job.sh sha256 at submit 83c199f4291bb2f2ea2a11d7ff61f762abe2ec1a00b7306c9b90cfe84db2494d, now 83c199f4291bb2f2ea2a11d7ff61f762abe2ec1a00b7306c9b90cfe84db2494d
+RESULT generate box=90d2c7e3d6aa-new1 arm=default route=resident prompt=512 new=1 median 335.1 ms (335.09 ms/token) runs 447.1 363.6 299.7 339.6 327.2 335.1 326.8 ids AGREE 68977b85a90043f1
+RESULT generate box=90d2c7e3d6aa-new1 arm=fp32_v1 route=resident prompt=512 new=1 median 454.3 ms (454.34 ms/token) runs 456.6 385.0 454.3 465.9 477.2 432.1 451.9 ids AGREE 68977b85a90043f1
+RESULT generate box=90d2c7e3d6aa-new1 default/fp32_v1 = 0.738 (default QUICKER)
+DEFAULT GATE GREEN
+RESULT generate box=90d2c7e3d6aa-new32 arm=default route=resident prompt=512 new=32 median 1151.4 ms (35.98 ms/token) runs 1109.4 1250.3 1193.4 1151.9 1151.4 1122.5 1114.3 ids AGREE 2077bb0591d060ce
+RESULT generate box=90d2c7e3d6aa-new32 arm=fp32_v1 route=resident prompt=512 new=32 median 1338.8 ms (41.84 ms/token) runs 1857.5 1704.3 1439.1 1338.5 1338.8 1226.3 1317.6 ids AGREE 2077bb0591d060ce
+RESULT generate box=90d2c7e3d6aa-new32 default/fp32_v1 = 0.860 (default QUICKER)
+DEFAULT GATE GREEN
+gpuq: job 0053 done exit=0 at 2026-09-29T08:16:19Z after 40s
