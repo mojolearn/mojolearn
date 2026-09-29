@@ -1,0 +1,20 @@
+######## phase amd-cross-build on mi325x, started 2026-09-29T05:49:14Z
+box=mi325x started=2026-09-29T05:49:14Z tree_head=a9c13231dc01611101ca186de19d491cf09a7dd1
+gemm/checks/gemm_int8_mma_amd_check.mojo column=nvidia exit=0 3s
+gemm/checks/gemm_int8_mma_amd_check.mojo column=apple exit=0 3s
+gemm/checks/gemm_int8_mma_amd_check.mojo column=cpu exit=0 2s
+bench/gemm_lowbit_amd_price_main.mojo column=nvidia exit=0 20s
+bench/gemm_lowbit_amd_price_main.mojo column=apple exit=1 12s
+/root/mojolearn-wt/steward-do-amd/bench/gemm_lowbit_amd_price_main.mojo:1:1: error: Metal Compiler failed to compile metallib. Please submit a bug report.
+/root/mojolearn-wt/steward-do-amd/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+bench/gemm_lowbit_amd_price_main.mojo column=cpu exit=0 14s
+gemm/checks/gemm_int15_tuned_check.mojo column=nvidia exit=0 6s
+gemm/checks/gemm_int15_tuned_check.mojo column=apple exit=0 2s
+gemm/checks/gemm_int15_tuned_check.mojo column=cpu exit=0 3s
+bench/gemm_int15_price_main.mojo column=nvidia exit=0 17s
+bench/gemm_int15_price_main.mojo column=apple exit=1 11s
+/root/mojolearn-wt/steward-do-amd/bench/gemm_int15_price_main.mojo:1:1: error: Metal Compiler failed to compile metallib. Please submit a bug report.
+/root/mojolearn-wt/steward-do-amd/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+bench/gemm_int15_price_main.mojo column=cpu exit=0 14s
+finished=2026-09-29T05:51:01Z red=0 (an Apple build that fails off macOS is listed and not counted)
+######## phase amd-cross-build on mi325x exit=0, finished 2026-09-29T05:51:01Z
