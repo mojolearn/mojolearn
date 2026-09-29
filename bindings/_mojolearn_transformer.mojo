@@ -129,6 +129,7 @@ from gemm.checks.gemm_int15 import (
     INT15_QUANT_SABOTAGE,
     INT15_SABOTAGE,
 )
+from gemm.checks.gemm_int15_tuned import INT15_EPILOGUE_SABOTAGE
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -2293,6 +2294,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         or INT15_SABOTAGE
         or INT15_PIECE_SABOTAGE
         or INT15_QUANT_SABOTAGE
+        or INT15_EPILOGUE_SABOTAGE
     ):
         abort(
             String(

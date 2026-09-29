@@ -3,8 +3,9 @@
 # modeling_llama); (2) THE CPU HOST PATH: the model's full logits under the
 # profile with MOJOLEARN_VENDOR=cpu (host bindings only), device cpu;
 # (3) THE WHOLE-MODEL SABOTAGE ARM: a copy of this tree with
-# gemm/checks/sabotage/int15_device_value_flip.patch applied (every cell the
-# int15 kernels store flipped), linalg and transformer rebuilt there, the same
+# gemm/checks/sabotage/int15_device_value_flip.patch and
+# tools/lowbit_blocks/int15_tuned_epilogue_flip.patch applied (every cell the
+# int15 reference kernels and the tuned epilogue store flipped), linalg and transformer rebuilt there, the same
 # identity run: its profile hash MUST differ from the clean one and its
 # fp32_v1 hash MUST equal the clean one.
 set -u
@@ -22,8 +23,8 @@ echo "== sabotage tree"
 S=/root/lb/sabtree
 rm -rf "$S"; mkdir -p "$S"
 tar --exclude=./.pixi --exclude=./bench/results --exclude=./.git -cf - . | tar -xf - -C "$S"
-(cd "$S" && patch -p1 < gemm/checks/sabotage/int15_device_value_flip.patch) || { echo "patch failed"; exit 4; }
-grep -c "comptime if True:  # SABOTAGE" "$S/gemm/checks/gemm_int15.mojo" | sed 's/^/sabotage sites in the copy: /'
+(cd "$S" && patch -p1 < gemm/checks/sabotage/int15_device_value_flip.patch && patch -p1 < tools/lowbit_blocks/int15_tuned_epilogue_flip.patch) || { echo "patch failed"; exit 4; }
+cat "$S/gemm/checks/gemm_int15.mojo" "$S/gemm/checks/gemm_int15_tuned.mojo" | grep -c "comptime if True:  # SABOTAGE" | sed 's/^/sabotage sites in the copy: /'
 for b in build_linalg build_transformer; do
     (cd "$S" && env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/sab_$b.log" 2>&1); echo "sab build $b exit $?"
 done

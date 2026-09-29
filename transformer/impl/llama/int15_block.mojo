@@ -36,6 +36,7 @@ THE ENTRY POINTS are Lane C's (`gemm/checks/gemm_int15.mojo`):
 `identical_gemm_int15_planes_into`. This file adds no arithmetic.
 """
 
+from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.step_phase import step_count_device_alloc, step_count_sync
@@ -44,7 +45,30 @@ from gemm.checks.gemm_int15 import (
     identical_gemm_int15_planes_into,
     quantize_planes_int15_parallel_device,
 )
+from gemm.checks.gemm_int15_tuned import (
+    INT15_TUNED_AVAILABLE,
+    Int15SumsWorkspace,
+    identical_gemm_int15_tuned_into,
+)
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
+
+# WHICH PLAN (clause W-8, W-13: every plan is the same bits, so this is
+# scheduling). Where the column has an integer matrix unit (NVIDIA, AMD) the
+# products run Lane C's TUNED plan (`identical_gemm_int15_tuned_into`: the
+# sums kernel with one staging, then the shared epilogue; the reference unit
+# plan at k = 65536); elsewhere, and under
+# `-D MOJOLEARN_LLAMA_INT15_REFERENCE_PLAN=1`, `identical_gemm_int15_planes_into`
+# (the reference unit plan, Apple's float-unit plan or the pieces plan).
+comptime LLAMA_INT15_TUNED = INT15_TUNED_AVAILABLE and not is_defined[
+    "MOJOLEARN_LLAMA_INT15_REFERENCE_PLAN"
+]()
+
+
+def llama_int15_plan_name() -> String:
+    comptime if LLAMA_INT15_TUNED:
+        return "tuned"
+    else:
+        return "reference"
 
 # The projections, in the binding's weight order (q, k, v, o, gate, up, down).
 comptime LLAMA_PROJ_Q = 0
@@ -224,6 +248,7 @@ struct LlamaInt15Stage(Movable):
     var bl: DeviceBuffer[DType.int8]
     var eb: DeviceBuffer[DType.int32]
     var quant: Int15QuantWorkspace
+    var sums: Int15SumsWorkspace
 
     def __init__(out self, ctx: DeviceContext) raises:
         step_count_device_alloc()
@@ -239,6 +264,7 @@ struct LlamaInt15Stage(Movable):
         step_count_device_alloc()
         self.eb = ctx.enqueue_create_buffer[DType.int32](1)
         self.quant = Int15QuantWorkspace(ctx)
+        self.sums = Int15SumsWorkspace(ctx)
 
     def ensure_a(mut self, ctx: DeviceContext, codes: Int, rows: Int) raises:
         if codes > len(self.ah) or rows > len(self.ea):
@@ -291,7 +317,10 @@ def llama_int15_proj(
     var bh = w.hi.copy()
     var bl = w.lo.copy()
     var eb = w.e.copy()
-    identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, m, n, k)
+    comptime if LLAMA_INT15_TUNED:
+        identical_gemm_int15_tuned_into(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, st.sums, m, n, k)
+    else:
+        identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, m, n, k)
 
 
 def llama_int15_scores(
@@ -312,4 +341,9 @@ def llama_int15_scores(
     st.ensure_b(ctx, s * hd, s)
     quantize_planes_int15_parallel_device(ctx, st.ah, st.al, st.ea, q, st.quant, l, hd, False)
     quantize_planes_int15_parallel_device(ctx, st.bh, st.bl, st.eb, kmat, st.quant, s, hd, False)
-    identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, l, s, hd)
+    comptime if LLAMA_INT15_TUNED:
+        identical_gemm_int15_tuned_into(
+            ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, st.sums, l, s, hd
+        )
+    else:
+        identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, l, s, hd)

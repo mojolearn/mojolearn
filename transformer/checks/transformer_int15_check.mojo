@@ -75,6 +75,7 @@ from transformer.impl.llama.int15_block import (
     Int15Planes,
     LlamaInt15Weights,
     int15_planes_from_f32,
+    llama_int15_plan_name,
 )
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_int15 import Int15QuantWorkspace, int15_sabotage_name
@@ -366,7 +367,10 @@ def phase_batch(ctx: DeviceContext) raises -> Int:
 
 
 def main() raises:
-    print("int15 block check (lane/lowbit-blocks): sabotage=" + int15_sabotage_name())
+    print(
+        "int15 block check (lane/lowbit-blocks): sabotage=" + int15_sabotage_name()
+        + " plan=" + llama_int15_plan_name()
+    )
     var ctx = DeviceContext()
     var fails = 0
     print("phase default (no planes; fp32.v1 against its host oracle)")
