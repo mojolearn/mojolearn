@@ -1,0 +1,23 @@
+{
+  "files": {
+    "mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl": "bf037d7689c00be961a0a058fd6bf2d6e76d6708f8fc0d986b91354795473289"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "eb00b02458c7942b79b5f5bec2f04328e4e3d927",
+        "message": "Merge HDBSCAN sparse mutual-reachability MST: no m*m graph above 46,340 rows, exact tie order (identity PASS: NVIDIA A40, m2pro Metal+CPU, AMD MI325X; 70k card hashes identical on all three), scikit-learn min_samples matched on the board\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      },
+      {
+        "commit": "2c4dc12b1123bcd932b9ec209db9e8b4cf92ae64",
+        "message": "Merge Nystroem basis sort: a stable radix sort replaces the O(n^2) counting rank, so the 4096-row pool bound is gone (identity PASS: NVIDIA A40, m2pro, AMD MI325X; re-gated at 100,000 rows)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "614ad2acd65e7a580841602d683a923ad952eea5"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.31"
+}
