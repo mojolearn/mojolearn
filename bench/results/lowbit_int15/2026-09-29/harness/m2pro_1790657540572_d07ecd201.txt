@@ -1,0 +1,92 @@
+profile=mojolearn.identical.gemm.int15i64.v1 lane=gemm-int15
+box=m2pro
+started=2026-09-29T04:58:06Z
+tree_head=d07ecd201eb68db26cdb8079f6bb8b97b4f6c876 dirty_files=34
+lane-check exit=0 340s: RESULT: PASS (AGREE, then DISAGREE under the sabotage, then AGREE after reversal, on gemm-int15)
+neighbors exit=0 66s: RESULT: PASS (AGREE on gemm-int8,gemm-bf16)
+verify exit=4 6s (recorded, not this job's verdict)
+finished=2026-09-29T05:04:58Z
+verdict=GREEN the lane check passed with its sabotage seen, and the neighbor lanes agree
+== lane-check (every line the check printed)
+[lane-check 04:58:08] ip-172-31-40-10.ec2.internal arm64 backend=metal lanes=gemm-int15 out=/Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_int15/m2pro/harness/lane_check
+[lane-check 04:58:58] gemm-int15 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+[lane-check 04:58:59] _mojolearn_gp: its sources changed since it was built
+[lane-check 04:58:59] build _mojolearn_gp (bindings/build_gp.sh)
+[lane-check 04:59:26] built _mojolearn_gp in 27s
+[lane-check 04:59:26] _mojolearn_linalg: its sources changed since it was built
+[lane-check 04:59:26] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 04:59:44] built _mojolearn_linalg in 18s
+[lane-check 04:59:44] _mojolearn_linalg_host: its sources changed since it was built
+[lane-check 04:59:44] build _mojolearn_linalg_host (bindings/build_linalg_host.sh)
+[lane-check 04:59:50] built _mojolearn_linalg_host in 6s
+[lane-check 04:59:50] _mojolearn_x_decomp: its sources changed since it was built
+[lane-check 04:59:50] build _mojolearn_x_decomp (bindings/build_x_decomp.sh)
+[lane-check 05:00:05] built _mojolearn_x_decomp in 15s
+[lane-check 05:00:05] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:00:23] seam sabotage gemm/checks/sabotage/int15_device_value_flip.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_device_value_flip.patch (exit 1), PASS after reversal
+[lane-check 05:01:00] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:01:17] seam sabotage gemm/checks/sabotage/int15_piece_hi_clamp.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_piece_hi_clamp.patch (exit 1), PASS after reversal
+[lane-check 05:01:55] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:02:12] seam sabotage gemm/checks/sabotage/int15_quant_tail_dropped.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_quant_tail_dropped.patch (exit 1), PASS after reversal
+[lane-check 05:02:50] seam check gemm/checks/gemm_int15_sim_check.mojo
+[lane-check 05:02:52] seam sabotage gemm/checks/sabotage/int15_host_value_flip.patch applied; gemm/checks/gemm_int15_sim_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_sim_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_host_value_flip.patch (exit 1), PASS after reversal
+CLEAN: gemm-int15: AGREE: compared train 9 (metal column vs CPU column cpu-apple-m2-pro)
+[lane-check 05:03:06] sabotage applied: gemm/checks/gemm_int15.mojo
+[lane-check 05:03:07] sabotage makes stale: _mojolearn_linalg
+[lane-check 05:03:07] _mojolearn_linalg: its sources changed since it was built
+[lane-check 05:03:07] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 05:03:26] built _mojolearn_linalg in 18s
+SABOTAGED: gemm-int15: DISAGREE: compared train 9; differ: gemm-int15/base train; gemm-int15/denormal train; gemm-int15/denormal_ftz train; gemm-int15/dupes train; gemm-int15/hashed train; gemm-int15/negative train (+3 more)
+[lane-check 05:03:33] sabotage reversed (git apply -R)
+[lane-check 05:03:33] _mojolearn_linalg: its sources changed since it was built
+[lane-check 05:03:33] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 05:03:38] built _mojolearn_linalg in 5s
+RESTORED: gemm-int15: AGREE: compared train 9 (metal column vs CPU column cpu-apple-m2-pro)
+RESULT: PASS (AGREE, then DISAGREE under the sabotage, then AGREE after reversal, on gemm-int15)
+== neighbors
+[lane-check 05:03:46] ip-172-31-40-10.ec2.internal arm64 backend=metal lanes=gemm-int8,gemm-bf16 out=/Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_int15/m2pro/harness/neighbors
+[lane-check 05:04:37] gemm-int8 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+[lane-check 05:04:37] gemm-bf16 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+CLEAN: gemm-int8: AGREE: compared train 9 (metal column vs CPU column cpu-apple-m2-pro)
+CLEAN: gemm-bf16: AGREE: compared train 9 (metal column vs CPU column cpu-apple-m2-pro)
+RESULT: PASS (AGREE on gemm-int8,gemm-bf16)
+== verify (last 40)
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: metal (apple), 1 lanes x 1 fixtures, harness checkout, table /Users/ec2-user/mojolearn-wt/steward-m2pro/python/mojolearn/verify_reference/table.json
+# incremental evidence: /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_int15/m2pro/harness/verify.json.cells.jsonl; progress: /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_int15/m2pro/harness/verify.json.progress.json
+# comparator self-test preflight (fresh process)
+  [1/1] gemm-int15/base
+    0.5s: verified 0 of 5 cell parts (0 divergent, 1 owed, 0 refused, 4 n/a)
+# python -m mojolearn verify --all
+# mojolearn 0.8.25  commit d07ecd201eb68db26cdb8079f6bb8b97b4f6c876 (WORKING TREE DIRTY) (git checkout beside the package)
+# mode identical  vendor metal (class apple)  device Apple M2 Pro / Mac14,12
+# cpu Apple M2 Pro  macOS-26.7-arm64-arm-64bit-Mach-O  python 3.13.15  numpy 2.5.2
+# reference table /Users/ec2-user/mojolearn-wt/steward-m2pro/python/mojolearn/verify_reference/table.json (sha256 405022e18414abbd, 1683 records)
+# depth base: 1 lanes x 1 fixtures, 2 repeat(s), 58 portable model(s)
+# note: this harness is not the one the table was generated with; a lane added or changed since then reads OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| linalg          |     1 |         0 |         0 |    1 |       0 |   4 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    11 |       116 |         0 |    1 |       0 |   4 |
+
+LANE ACCOUNTING: 505 of 505 harness lanes accounted for; 0 VERIFIED, 505 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (445): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 439 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establi
+  OWED (1): gemm-int15
+      no committed record carries a reference for a part of it
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 1 lanes, 0 VERIFIED, 0 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=58, DIVERGENT=0, OWED=0, REFUSED=0, N/A=1
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: CANNOT RUN (verified 116 of 121 cell parts (0 divergent, 1 owed, 0 refused, 4 n/a); 0 verified, 0 not applicable, 1 owed, 0 held, of 1 lanes). 5.0s. exit 4
+# evidence written to /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_int15/m2pro/harness/verify.json

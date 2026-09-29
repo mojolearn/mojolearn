@@ -1,0 +1,136 @@
+gpuq: job 0029 lane=lowbit-int15 gpus=0 cap=240min started 2026-09-29T04:52:16Z
+gpuq: script /root/mojolearn-lowbit-int15/tools/lowbit_int15/harness_job_h100.sh sha256 at submit 73fbdc7cac29520cdcc308b9cbb7d9429d56eab3c910065f6ee0f2ea69aa273a, now 73fbdc7cac29520cdcc308b9cbb7d9429d56eab3c910065f6ee0f2ea69aa273a
+profile=mojolearn.identical.gemm.int15i64.v1 lane=gemm-int15
+box=h100
+started=2026-09-29T04:52:16Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=59
+lane-check exit=0 850s: RESULT: PASS (AGREE, then DISAGREE under the sabotage, then AGREE after reversal, on gemm-int15)
+neighbors exit=0 86s: RESULT: PASS (AGREE on gemm-int8,gemm-bf16)
+verify exit=1 2s (recorded, not this job's verdict)
+finished=2026-09-29T05:07:54Z
+verdict=GREEN the lane check passed with its sabotage seen, and the neighbor lanes agree
+== lane-check (every line the check printed)
+[lane-check 04:52:17] 90d2c7e3d6aa x86_64 backend=cuda lanes=gemm-int15 out=/root/mojolearn-lowbit-int15/bench/results/lowbit_int15/h100/harness/lane_check
+[lane-check 04:53:23] gemm-int15 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+[lane-check 04:53:23] build python/mojolearn/.libs/libMojolearnMath.so (packaging/portable_math/stage.py)
+[lane-check 04:53:23] _mojolearn: not built
+[lane-check 04:53:23] build _mojolearn (bindings/build.sh)
+[lane-check 04:54:57] built _mojolearn in 94s
+[lane-check 04:54:57] _mojolearn_arima: not built
+[lane-check 04:54:57] build _mojolearn_arima (bindings/build_arima.sh)
+[lane-check 04:55:20] built _mojolearn_arima in 23s
+[lane-check 04:55:20] _mojolearn_arima_host: not built
+[lane-check 04:55:20] build _mojolearn_arima_host (bindings/build_arima_host.sh)
+[lane-check 04:55:35] built _mojolearn_arima_host in 15s
+[lane-check 04:55:35] _mojolearn_byte_lm_host: not built
+[lane-check 04:55:35] build _mojolearn_byte_lm_host (bindings/build_byte_lm_host.sh)
+[lane-check 04:55:53] built _mojolearn_byte_lm_host in 18s
+[lane-check 04:55:53] _mojolearn_core_host: not built
+[lane-check 04:55:53] build _mojolearn_core_host (bindings/build_core_host.sh)
+[lane-check 04:56:20] built _mojolearn_core_host in 27s
+[lane-check 04:56:20] _mojolearn_forecast_host: not built
+[lane-check 04:56:20] build _mojolearn_forecast_host (bindings/build_forecast_host.sh)
+[lane-check 04:56:34] built _mojolearn_forecast_host in 14s
+[lane-check 04:56:34] _mojolearn_forest_host: not built
+[lane-check 04:56:34] build _mojolearn_forest_host (bindings/build_forest_host.sh)
+[lane-check 04:56:48] built _mojolearn_forest_host in 14s
+[lane-check 04:56:48] _mojolearn_gp: not built
+[lane-check 04:56:48] build _mojolearn_gp (bindings/build_gp.sh)
+[lane-check 04:57:52] built _mojolearn_gp in 64s
+[lane-check 04:57:52] _mojolearn_gp_host: not built
+[lane-check 04:57:52] build _mojolearn_gp_host (bindings/build_gp_host.sh)
+[lane-check 04:58:10] built _mojolearn_gp_host in 17s
+[lane-check 04:58:10] _mojolearn_linalg: not built
+[lane-check 04:58:10] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 04:59:01] built _mojolearn_linalg in 52s
+[lane-check 04:59:01] _mojolearn_linalg_host: not built
+[lane-check 04:59:01] build _mojolearn_linalg_host (bindings/build_linalg_host.sh)
+[lane-check 04:59:14] built _mojolearn_linalg_host in 12s
+[lane-check 04:59:14] _mojolearn_tsa: not built
+[lane-check 04:59:14] build _mojolearn_tsa (bindings/build_tsa.sh)
+[lane-check 04:59:34] built _mojolearn_tsa in 20s
+[lane-check 04:59:34] _mojolearn_tsa_host: not built
+[lane-check 04:59:34] build _mojolearn_tsa_host (bindings/build_tsa_host.sh)
+[lane-check 04:59:47] built _mojolearn_tsa_host in 13s
+[lane-check 04:59:47] _mojolearn_x_decomp: not built
+[lane-check 04:59:47] build _mojolearn_x_decomp (bindings/build_x_decomp.sh)
+[lane-check 05:00:25] built _mojolearn_x_decomp in 38s
+[lane-check 05:00:25] _mojolearn_x_decomp_host: not built
+[lane-check 05:00:25] build _mojolearn_x_decomp_host (bindings/build_x_decomp_host.sh)
+[lane-check 05:00:49] built _mojolearn_x_decomp_host in 24s
+[lane-check 05:00:49] _mojolearn_x_sequence: not built
+[lane-check 05:00:49] build _mojolearn_x_sequence (bindings/build_x_sequence.sh)
+[lane-check 05:01:34] built _mojolearn_x_sequence in 45s
+[lane-check 05:01:34] _mojolearn_x_sequence_host: not built
+[lane-check 05:01:34] build _mojolearn_x_sequence_host (bindings/build_x_sequence_host.sh)
+[lane-check 05:02:03] built _mojolearn_x_sequence_host in 29s
+[lane-check 05:02:03] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:02:16] seam sabotage gemm/checks/sabotage/int15_device_value_flip.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_device_value_flip.patch (exit 1), PASS after reversal
+[lane-check 05:02:50] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:03:00] seam sabotage gemm/checks/sabotage/int15_piece_hi_clamp.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_piece_hi_clamp.patch (exit 1), PASS after reversal
+[lane-check 05:03:33] seam check gemm/checks/gemm_int15_check.mojo
+[lane-check 05:03:43] seam sabotage gemm/checks/sabotage/int15_quant_tail_dropped.patch applied; gemm/checks/gemm_int15_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_quant_tail_dropped.patch (exit 1), PASS after reversal
+[lane-check 05:04:19] seam check gemm/checks/gemm_int15_sim_check.mojo
+[lane-check 05:04:35] seam sabotage gemm/checks/sabotage/int15_host_value_flip.patch applied; gemm/checks/gemm_int15_sim_check.mojo must build, run and FAIL
+SEAM: gemm/checks/gemm_int15_sim_check.mojo: PASS, FAIL under gemm/checks/sabotage/int15_host_value_flip.patch (exit 1), PASS after reversal
+CLEAN: gemm-int15: AGREE: compared train 9 (cuda column vs CPU column cpu-intel-r-xeon-r-platinum-8452y)
+[lane-check 05:05:08] sabotage applied: gemm/checks/gemm_int15.mojo
+[lane-check 05:05:09] sabotage makes stale: _mojolearn_linalg
+[lane-check 05:05:10] _mojolearn_linalg: its sources changed since it was built
+[lane-check 05:05:10] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 05:05:52] built _mojolearn_linalg in 42s
+SABOTAGED: gemm-int15: DISAGREE: compared train 9; differ: gemm-int15/base train; gemm-int15/denormal train; gemm-int15/denormal_ftz train; gemm-int15/dupes train; gemm-int15/hashed train; gemm-int15/negative train (+3 more)
+[lane-check 05:06:02] sabotage reversed (git apply -R)
+[lane-check 05:06:03] _mojolearn_linalg: its sources changed since it was built
+[lane-check 05:06:03] build _mojolearn_linalg (bindings/build_linalg.sh)
+[lane-check 05:06:13] built _mojolearn_linalg in 10s
+RESTORED: gemm-int15: AGREE: compared train 9 (cuda column vs CPU column cpu-intel-r-xeon-r-platinum-8452y)
+RESULT: PASS (AGREE, then DISAGREE under the sabotage, then AGREE after reversal, on gemm-int15)
+== neighbors
+[lane-check 05:06:27] 90d2c7e3d6aa x86_64 backend=cuda lanes=gemm-int8,gemm-bf16 out=/root/mojolearn-lowbit-int15/bench/results/lowbit_int15/h100/harness/neighbors
+[lane-check 05:07:31] gemm-int8 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+[lane-check 05:07:31] gemm-bf16 runs: _mojolearn, _mojolearn_arima, _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gp, _mojolearn_gp_host, _mojolearn_linalg, _mojolearn_linalg_host, _mojolearn_tsa, _mojolearn_tsa_host, _mojolearn_x_decomp, _mojolearn_x_decomp_host, _mojolearn_x_sequence, _mojolearn_x_sequence_host
+CLEAN: gemm-int8: AGREE: compared train 9 (cuda column vs CPU column cpu-intel-r-xeon-r-platinum-8452y)
+CLEAN: gemm-bf16: AGREE: compared train 9 (cuda column vs CPU column cpu-intel-r-xeon-r-platinum-8452y)
+RESULT: PASS (AGREE on gemm-int8,gemm-bf16)
+== verify (last 40)
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: cuda (nvidia), 1 lanes x 1 fixtures, harness checkout, table /root/mojolearn-lowbit-int15/python/mojolearn/verify_reference/table.json
+# incremental evidence: /root/mojolearn-lowbit-int15/bench/results/lowbit_int15/h100/harness/verify.json.cells.jsonl; progress: /root/mojolearn-lowbit-int15/bench/results/lowbit_int15/h100/harness/verify.json.progress.json
+# comparator self-test preflight (fresh process)
+# STOPPED: comparator self-test did not pass
+# python -m mojolearn verify --all
+# mojolearn 0.8.25  commit d07ecd201eb68db26cdb8079f6bb8b97b4f6c876 (MOJOLEARN_COMMIT)
+# mode identical  vendor cuda (class nvidia)  device NVIDIA NVIDIA H100 NVL, 580.159.04
+# cpu Intel(R) Xeon(R) Platinum 8452Y  Linux-6.8.0-136-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn-lowbit-int15/python/mojolearn/verify_reference/table.json (sha256 405022e18414abbd, 1683 records)
+# depth base: 1 lanes x 1 fixtures, 2 repeat(s), 0 portable model(s)
+
+| family | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|--------|-------|-----------|-----------|------|---------|-----|
+| linalg |     1 |         0 |         0 |    0 |       5 |   0 |
+| all    |     1 |         0 |         0 |    0 |       5 |   0 |
+
+REFUSED (5):
+  gemm-int15 train: not run after interruption: comparator self-test did not pass
+
+LANE ACCOUNTING: 505 of 505 harness lanes accounted for; 0 VERIFIED, 505 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (445): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 439 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establi
+  REFUSED (1)  [not checked]: gemm-int15
+      a part raised, so it did not run
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 1 lanes, 0 VERIFIED, 0 not applicable, 1 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (1):
+  gemm-int15: REFUSED: a part raised, so it did not run
+Batch invariance: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=1, N/A=0
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: MISMATCH (verified 0 of 5 cell parts (0 divergent, 0 owed, 5 refused, 0 n/a); 0 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 1 lanes; stopped: comparator self-test did not pass; comparator self-test failed). 1.2s. exit 1
+# evidence written to /root/mojolearn-lowbit-int15/bench/results/lowbit_int15/h100/harness/verify.json

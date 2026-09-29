@@ -1,0 +1,1559 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-intel-r-xeon-r-platinum-8452y",
+ "commit": "d07ecd201eb68db26cdb8079f6bb8b97b4f6c876",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gemm-int15/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4acf07c065e8d3c3"
+   ],
+   "parts": [
+    {
+     "planes": "5143c917fe466ada",
+     "exps": "8dc226ab2b508aa7",
+     "product": "29ae73d04ddf303f",
+     "onecall": "29ae73d04ddf303f",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "9e32b3ef0ec63e22"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.010841848328709602,
+    "stages": {
+     "repeat=1/train": 0.009939033538103104,
+     "repeat=1/infer-save-reload": 1.3786368072032928e-05,
+     "repeat=1/batch": 0.00014968961477279663,
+     "repeat=1/batchgrad": 0.00012521259486675262,
+     "repeat=1/batchscale": 0.00012188032269477844,
+     "repeat=1/ragged": 0.00011658668518066406,
+     "repeat=1/stepfull": 0.00012281164526939392
+    }
+   }
+  },
+  "gemm-int15/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a2e0d59494470683"
+   ],
+   "parts": [
+    {
+     "planes": "98f700561a3c22ec",
+     "exps": "3c98592c8c2adef5",
+     "product": "925749a17d475996",
+     "onecall": "925749a17d475996",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "46e8dc624864bffb"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007107721641659737,
+    "stages": {
+     "repeat=1/train": 0.006422312930226326,
+     "repeat=1/infer-save-reload": 9.329989552497864e-06,
+     "repeat=1/batch": 0.00019000377506017685,
+     "repeat=1/batchgrad": 8.43266025185585e-05,
+     "repeat=1/batchscale": 7.675401866436005e-05,
+     "repeat=1/ragged": 7.466413080692291e-05,
+     "repeat=1/stepfull": 7.250532507896423e-05
+    }
+   }
+  },
+  "gemm-int15/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "46c9bc9693683cd0"
+   ],
+   "parts": [
+    {
+     "planes": "25fe6de893fac0dd",
+     "exps": "1b95f3af20843969",
+     "product": "ae49ef178aa6b107",
+     "onecall": "ae49ef178aa6b107",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "6f1be430774071df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0067383842542767525,
+    "stages": {
+     "repeat=1/train": 0.006177438423037529,
+     "repeat=1/infer-save-reload": 5.824491381645203e-06,
+     "repeat=1/batch": 0.0001248680055141449,
+     "repeat=1/batchgrad": 7.91521742939949e-05,
+     "repeat=1/batchscale": 7.396284490823746e-05,
+     "repeat=1/ragged": 7.313955575227737e-05,
+     "repeat=1/stepfull": 7.234979420900345e-05
+    }
+   }
+  },
+  "gemm-int15/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "39ae7d168143f0a5"
+   ],
+   "parts": [
+    {
+     "planes": "f2b4ca4d02bbd731",
+     "exps": "93e4aa7757e4bb5b",
+     "product": "91d38253fb7ef0e3",
+     "onecall": "91d38253fb7ef0e3",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "12bfd71f83dc1808"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0064791105687618256,
+    "stages": {
+     "repeat=1/train": 0.0058933449909091,
+     "repeat=1/infer-save-reload": 5.902722477912903e-06,
+     "repeat=1/batch": 0.00013151299208402634,
+     "repeat=1/batchgrad": 8.21966677904129e-05,
+     "repeat=1/batchscale": 7.678382098674774e-05,
+     "repeat=1/ragged": 7.570628076791763e-05,
+     "repeat=1/stepfull": 7.409323006868362e-05
+    }
+   }
+  },
+  "gemm-int15/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d4c52be5290302be"
+   ],
+   "parts": [
+    {
+     "planes": "7f304e4f7896f435",
+     "exps": "5e523a6f80c06ad7",
+     "product": "b618e138254bf6ca",
+     "onecall": "b618e138254bf6ca",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "d84b5f411cfa5484"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006650116294622421,
+    "stages": {
+     "repeat=1/train": 0.006091433577239513,
+     "repeat=1/infer-save-reload": 5.587004125118256e-06,
+     "repeat=1/batch": 0.00012572389096021652,
+     "repeat=1/batchgrad": 7.945578545331955e-05,
+     "repeat=1/batchscale": 7.365457713603973e-05,
+     "repeat=1/ragged": 7.204245775938034e-05,
+     "repeat=1/stepfull": 7.153768092393875e-05
+    }
+   }
+  },
+  "gemm-int15/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d4c52be5290302be"
+   ],
+   "parts": [
+    {
+     "planes": "7f304e4f7896f435",
+     "exps": "5e523a6f80c06ad7",
+     "product": "b618e138254bf6ca",
+     "onecall": "b618e138254bf6ca",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "d84b5f411cfa5484"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00664351973682642,
+    "stages": {
+     "repeat=1/train": 0.0060583557933568954,
+     "repeat=1/infer-save-reload": 5.9586018323898315e-06,
+     "repeat=1/batch": 0.00012098904699087143,
+     "repeat=1/batchgrad": 8.903257548809052e-05,
+     "repeat=1/batchscale": 7.953308522701263e-05,
+     "repeat=1/ragged": 7.918942719697952e-05,
+     "repeat=1/stepfull": 7.752329111099243e-05
+    }
+   }
+  },
+  "gemm-int15/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "69abba907fe41023"
+   ],
+   "parts": [
+    {
+     "planes": "33c0db69706a6336",
+     "exps": "57187097b3b76d95",
+     "product": "90756743a1e5b768",
+     "onecall": "90756743a1e5b768",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "e154f57e92556282"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006564127281308174,
+    "stages": {
+     "repeat=1/train": 0.005975987762212753,
+     "repeat=1/infer-save-reload": 6.007961928844452e-06,
+     "repeat=1/batch": 0.00011807959526777267,
+     "repeat=1/batchgrad": 9.133480489253998e-05,
+     "repeat=1/batchscale": 7.98860564827919e-05,
+     "repeat=1/ragged": 7.842201739549637e-05,
+     "repeat=1/stepfull": 7.740408182144165e-05
+    }
+   }
+  },
+  "gemm-int15/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "168cfb2fe0b17e8d"
+   ],
+   "parts": [
+    {
+     "planes": "0c81e0843a714d02",
+     "exps": "bc488e17ad5c216a",
+     "product": "bc822dca6e33ea44",
+     "onecall": "bc822dca6e33ea44",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "150d3cd7e1901787"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006441130302846432,
+    "stages": {
+     "repeat=1/train": 0.006069217808544636,
+     "repeat=1/infer-save-reload": 5.360692739486694e-06,
+     "repeat=1/batch": 0.00010647624731063843,
+     "repeat=1/batchgrad": 4.948023706674576e-05,
+     "repeat=1/batchscale": 3.2218173146247864e-05,
+     "repeat=1/ragged": 3.0661001801490784e-05,
+     "repeat=1/stepfull": 2.9748305678367615e-05
+    }
+   }
+  },
+  "gemm-int15/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "90f95213ddff8853"
+   ],
+   "parts": [
+    {
+     "planes": "86c3bc9e1b745542",
+     "exps": "618a2cd1dc50e319",
+     "product": "84f3257317a9ec8f",
+     "onecall": "84f3257317a9ec8f",
+     "flags": "6c75ad5450ef691e",
+     "dequant": "c3aa4da6234c0f33"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:profile lane; the products are hashed whole"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006151283159852028,
+    "stages": {
+     "repeat=1/train": 0.005598096176981926,
+     "repeat=1/infer-save-reload": 5.521811544895172e-06,
+     "repeat=1/batch": 0.00011766888201236725,
+     "repeat=1/batchgrad": 7.950421422719955e-05,
+     "repeat=1/batchscale": 7.386412471532822e-05,
+     "repeat=1/ragged": 7.232185453176498e-05,
+     "repeat=1/stepfull": 7.167179137468338e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "x-metrics-regression": "metrics-undefined-weighted-score-1",
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "tsvd": "explained-variance-train-contract-1",
+  "umap": "save-option-extras-contract-2",
+  "par-graph-umap": "save-option-extras-contract-2",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+  "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "Intel(R) Xeon(R) Platinum 8452Y",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host",
+   "_mojolearn_x_linear": "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster": "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors": "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp": "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep": "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence": "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees": "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn": "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann": "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics": "_mojolearn_x_metrics_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host",
+   "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "pca-inverse",
+   "pca-whiten-inverse",
+   "tsvd-inverse",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-multiclass-defaults",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-binary-columns",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-ranking-defaults",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "resample-bca",
+   "resample-unpaired",
+   "resample-perm-samples",
+   "resample-utils",
+   "optim-sgd",
+   "optim-adam-clip",
+   "optim-maximize",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "gemm-int15",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation",
+   "x-sgd-clf",
+   "x-sgd-reg",
+   "x-glm-poisson",
+   "x-glm-gamma",
+   "x-glm-tweedie",
+   "x-huber",
+   "x-bayes-ridge",
+   "x-ard",
+   "x-lars",
+   "x-lasso-lars",
+   "x-quantile",
+   "x-perceptron",
+   "x-pa-clf",
+   "x-pa-reg",
+   "x-sgd-ocsvm",
+   "x-ridge-clf",
+   "x-ridge-cv",
+   "x-lasso-cv",
+   "x-enet-cv",
+   "x-logistic-cv",
+   "x-isotonic",
+   "x-glm-poisson-sw",
+   "x-huber-sw",
+   "x-quantile-sw",
+   "x-sgd-clf-w",
+   "x-sgd-reg-sw",
+   "x-ridge-clf-w",
+   "x-ridge-cv-sw",
+   "x-bayes-ridge-sw",
+   "x-logistic-cv-w",
+   "x-lasso-lars-pos",
+   "x-lasso-cv-pos",
+   "x-cluster-minibatch-kmeans",
+   "x-cluster-bisecting-kmeans",
+   "x-cluster-meanshift",
+   "x-cluster-optics",
+   "x-cluster-affinity-propagation",
+   "x-cluster-bgmm",
+   "x-cluster-minibatch-options",
+   "x-cluster-bisecting-options",
+   "x-cluster-meanshift-binned",
+   "x-cluster-optics-metrics",
+   "x-cluster-ap-precomputed",
+   "x-cluster-bgmm-inits",
+   "x-cluster-bgmm-covtypes",
+   "x-cluster-minibatch-partial",
+   "x-cluster-gmm-options",
+   "x-cluster-dbscan-metrics",
+   "x-cluster-hdbscan-epsilon",
+   "x-cluster-kmeans-init",
+   "x-cluster-agglo-linkages",
+   "x-cluster-agglo-connectivity",
+   "x-cluster-spectral-affinities",
+   "x-neighbors-lof",
+   "x-neighbors-nearest-centroid",
+   "x-neighbors-ocsvm",
+   "x-neighbors-kpca",
+   "x-neighbors-poly-sketch",
+   "x-neighbors-additive-chi2",
+   "x-neighbors-skewed-chi2",
+   "x-neighbors-label-propagation",
+   "x-neighbors-label-spreading",
+   "x-neighbors-knn-imputer",
+   "x-neighbors-pagerank",
+   "x-neighbors-connected-components",
+   "x-neighbors-louvain",
+   "x-neighbors-svgp",
+   "x-neighbors-gamma-scale",
+   "x-neighbors-svm-weights",
+   "x-neighbors-svc-sigmoid",
+   "x-neighbors-svr-kernels",
+   "x-neighbors-svc-multiclass",
+   "x-neighbors-krr-options",
+   "x-neighbors-svm-precomputed",
+   "x-neighbors-km-kernels",
+   "x-neighbors-gp-cov",
+   "x-neighbors-metrics",
+   "x-neighbors-svc-probability",
+   "x-decomp-umap-options",
+   "x-decomp-pca-randomized",
+   "x-decomp-als",
+   "x-decomp-robust-cov",
+   "x-decomp-manifold",
+   "x-decomp-lda",
+   "x-decomp-sparse-pca",
+   "x-decomp-dict-learning",
+   "x-decomp-pls",
+   "x-decomp-lstsq-rsvd",
+   "x-decomp-lu",
+   "x-decomp-spectral-rbf",
+   "x-decomp-factor-analysis",
+   "x-decomp-fastica",
+   "x-decomp-nmf",
+   "x-decomp-ipca",
+   "x-decomp-grp",
+   "x-decomp-srp",
+   "x-prep-robust-scaler",
+   "x-prep-maxabs-scaler",
+   "x-prep-ordinal-encoder",
+   "x-prep-onehot-encoder",
+   "x-prep-target-encoder",
+   "x-prep-simple-imputer",
+   "x-prep-kbins",
+   "x-prep-gaussian-nb",
+   "x-prep-multinomial-nb",
+   "x-prep-bernoulli-nb",
+   "x-prep-lda",
+   "x-prep-qda",
+   "x-prep-quantile-transformer",
+   "x-prep-power-transformer",
+   "x-prep-normalizer",
+   "x-prep-polynomial-features",
+   "x-prep-spline-transformer",
+   "x-prep-binarizer",
+   "x-prep-label-encoder",
+   "x-prep-label-binarizer",
+   "x-prep-multilabel-binarizer",
+   "x-prep-iterative-imputer",
+   "x-prep-variance-threshold",
+   "x-prep-select-kbest",
+   "x-prep-mutual-info",
+   "x-prep-rfe",
+   "x-prep-complement-nb",
+   "x-prep-categorical-nb",
+   "x-prep-priors",
+   "x-prep-robust-scaler-unit-variance",
+   "x-prep-simple-imputer-indicator",
+   "x-prep-inverse-transforms",
+   "x-prep-encoder-options",
+   "x-prep-da-solvers",
+   "x-prep-nb-weights",
+   "x-prep-encoder-categories",
+   "x-prep-user-objects",
+   "x-prep-label-binarizer-multilabel",
+   "x-prep-infrequent",
+   "x-prep-nb-partial",
+   "x-prep-kbins-methods",
+   "x-prep-score-edges",
+   "x-prep-mi-discrete",
+   "x-prep-kbins-weights",
+   "x-prep-spline-options",
+   "x-prep-iterative-options",
+   "x-prep-scaler-options",
+   "sequence-lstm",
+   "sequence-gru",
+   "sequence-rmsprop",
+   "sequence-adagrad",
+   "sequence-autoarima",
+   "sequence-stl",
+   "sequence-var",
+   "sequence-mlp",
+   "sequence-rnn",
+   "sequence-lion",
+   "sequence-adafactor",
+   "sequence-lamb",
+   "sequence-adamax",
+   "sequence-nadam",
+   "sequence-lr-schedulers",
+   "sequence-layernorm",
+   "sequence-theta",
+   "sequence-croston",
+   "sequence-ets",
+   "sequence-garch",
+   "sequence-prophet",
+   "sequence-moe",
+   "trees-dt-clf",
+   "trees-dt-reg",
+   "trees-dt-random",
+   "trees-rf-weighted",
+   "trees-et-deviance",
+   "trees-gbdt-multirmse",
+   "trees-bagging-clf",
+   "trees-bagging-reg",
+   "trees-adaboost-clf",
+   "trees-adaboost-reg",
+   "trees-dart-reg",
+   "trees-dart-clf",
+   "trees-dart-options",
+   "trees-random-embedding",
+   "trees-voting-clf",
+   "trees-voting-reg",
+   "trees-stacking-clf",
+   "trees-stacking-reg",
+   "trees-multioutput",
+   "trees-onevsrest",
+   "trees-calibrated",
+   "trees-oob-cv-link",
+   "trees-shap-tree",
+   "trees-shap-kernel",
+   "trees-shap-permutation",
+   "x-cnn-conv2d",
+   "x-cnn-conv1d",
+   "x-cnn-pool",
+   "x-cnn-trainer",
+   "x-cnn-batchnorm",
+   "x-cnn-dropout2d",
+   "x-cnn-globalpool",
+   "x-cnn-resnet-block",
+   "x-cnn-gcn",
+   "x-cnn-sage",
+   "x-cnn-conv-options",
+   "x-cnn-pool-options",
+   "x-cnn-bn-options",
+   "x-cnn-gnn-options",
+   "x-cnn-trainer-options",
+   "x-ann-ivf-pq",
+   "x-ann-tsne",
+   "x-ann-tsne-pca",
+   "x-ann-cagra",
+   "x-ann-ivf-sq",
+   "x-ann-refine",
+   "x-ann-filter",
+   "x-ann-ivf-rabitq",
+   "ivf-filter",
+   "x-ann-cagra-filter",
+   "x-ann-refine-euclidean",
+   "x-metrics-classification",
+   "x-metrics-regression",
+   "x-metrics-ranking",
+   "x-metrics-cluster",
+   "x-metrics-splitters",
+   "x-metrics-search"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "a72e63b8476b71b6c167e11f432f7e4607ff1770692d9ea7ae9a46da40ff0a21",
+    "size": 440464,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "7b248120dcd0eda8969c2ac7a54329f32c3b4ea179ba753ff08abc3c3ef79ab9",
+    "size": 711616,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "38e89bec4a006ccb9374e47002265fb02dacbc3568b670de660a6bb47dde2735",
+    "size": 1231272,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "29177c98cbb16d938af0a926bcfef196c90772756f581c7241b3db633e647f4f",
+    "size": 403368,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "5f952c5a698da1b2de37f7825a003fe7f9c9e3130610da4488cae7131cb190c9",
+    "size": 543080,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "065eca93b3ea8e6cbd2ba1879291259bd22f8777d2a14e91ed62cd824c548602",
+    "size": 532392,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "d3847158be30fbc125682d82c71386eecfb20031af86873d03555e34a9dd04b6",
+    "size": 378776,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "bc98fa68458b4d02dcee2c82b74b46dd5ad4a5c7f8eef9a0ca3973123e6bfd79",
+    "size": 371688,
+    "sabotage": false
+   },
+   "_mojolearn_x_decomp_host": {
+    "column": "cpu",
+    "sha256": "98f4a4a32184ec33ddbc64ac6df753390063100e5f399d2ec667db61efc45692",
+    "size": 602368,
+    "sabotage": false
+   },
+   "_mojolearn_x_sequence_host": {
+    "column": "cpu",
+    "sha256": "7bfcaa5d69a5181e33e2b9d5f9972b55c92f0af790ff2fcb6944e24008c4a2db",
+    "size": 1695304,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.25",
+  "package_dir": "/root/mojolearn-lowbit-int15/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "9b36e72222c41ece6b64b8f80627b8e4b3bebd1a391d6eec0feacd1bc65b3ec1",
+  "options": {
+   "require_backend": "cpu",
+   "require_cpu": true,
+   "fail_on_refused": true,
+   "jobs": 1,
+   "lanes": "gemm-int15",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "6bf3b59bb91e6eb8777b959306cada3141c524e189342766db5e55d20dd5821c",
+  "provenance": {
+   "commit": "d07ecd201eb68db26cdb8079f6bb8b97b4f6c876",
+   "mode": "identical",
+   "vendor": "cpu-intel-r-xeon-r-platinum-8452y",
+   "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
