@@ -55,9 +55,6 @@ def cmd_ids(a):
 def cmd_score(a):
     import numpy as np
     sys.path.insert(0, os.path.join(HERE, "..", "..", "python"))
-    from mojolearn import _numeric_profile as NP
-    if a.profile == "fixed15_v1":
-        NP.PROFILES["fixed15_v1"]["inference"] = True  # THIS PROCESS ONLY
     from mojolearn.models import CausalLM
     from mojolearn._array import Array
     from mojolearn._bufcheck import flat_view

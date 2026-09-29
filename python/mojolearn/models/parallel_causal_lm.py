@@ -160,7 +160,8 @@ class ParallelCausalLM(CausalLM):
         from .. import _numeric_profile
         from .config import HFConfig, plan_for
         from .safetensors import Checkpoint
-        numeric_profile = _numeric_profile.resolve(numeric_profile, 'mojolearn.models.ParallelCausalLM.load numeric_profile')
+        if numeric_profile is not None:  # None: the model's family decides (CausalLM.__init__)
+            numeric_profile = _numeric_profile.resolve(numeric_profile, 'mojolearn.models.ParallelCausalLM.load numeric_profile')
         if weight_format not in ('float32', 'bfloat16', 'int8'):
             raise ValueError('unsupported weight_format')
         layer_devices = tuple(layer_devices)

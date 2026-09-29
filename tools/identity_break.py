@@ -5667,7 +5667,10 @@ def _(ml, X, yc, yr, Xh=None):
             cfg, tensors = fx.family_fixture(arch, tied)
             root = fx._write_checkpoint(os.path.join(d, f"{arch}-{int(tied)}"), cfg, tensors)
             roots.append(root)
-            models.append(ml.models.causal_lm.CausalLM.load(root))
+            # fp32_v1 BY NAME: this lane's references were recorded under it
+            # (the inference default became fixed15_v1 on 2026-09-29; a
+            # fixed15_v1 lane is owed, with its own four columns)
+            models.append(ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1"))
         every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
         llama, m = roots[0], models[0]
         mamba = models[-2]  # ("mamba", True): the tied head, no lm_head.weight
@@ -8665,7 +8668,8 @@ def _(ml, X, yc, yr, Xh=None):
     cfg, tensors = fx.family_fixture("llama", False)
     with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-") as d:
         root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
-        plain = ml.models.causal_lm.CausalLM.load(root)
+        # fp32_v1 BY NAME: the lane's references were recorded under it
+        plain = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1")
         want = np.ascontiguousarray(np.asarray(plain.forward(A(ids))))
         n_layers = plain.plan.n_layers
         # ONE DEVICE INDEX PER LAYER, cycling the pool so a two-device column
@@ -8674,7 +8678,7 @@ def _(ml, X, yc, yr, Xh=None):
         # which the class documents as allowed and which is exactly the
         # degenerate case `_par_devices` describes.
         owners = tuple(dev[i % len(dev)] for i in range(n_layers))
-        with ParallelCausalLM.load(root, layer_devices=owners) as par:
+        with ParallelCausalLM.load(root, layer_devices=owners, numeric_profile="fp32_v1") as par:
             got = np.ascontiguousarray(np.asarray(par.forward(A(ids))))
             params = np.concatenate([_hf_bytes(w) for _, w in sorted(par.parameters().items())])
             names_match = sorted(par.parameters()) == sorted(plain.parameters())
@@ -9837,9 +9841,10 @@ def _batch_par_causal_lm(ml, e, Xh):
     cfg, tensors = fx.family_fixture("llama", False)
     with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-batch-") as d:
         root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
-        n_layers = ml.models.causal_lm.CausalLM.load(root).plan.n_layers
+        n_layers = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").plan.n_layers
         par = ParallelCausalLM.load(
-            root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers)))
+            root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers)),
+            numeric_profile="fp32_v1")
         _BATCH_CLOSE.append(par.close)
 
     def fwd(rows):

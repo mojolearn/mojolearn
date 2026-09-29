@@ -64,18 +64,20 @@ numeric_mode = _backend.numeric_mode
 #: estimator under a `fast` default raises rather than silently upgrading.
 set_numeric_mode = _backend.set_default_mode
 
-#: `numeric_profile`: THE NUMBER FORMAT OF THE MATRIX PRODUCTS, OPT IN. Its
-#: own parameter, beside `numeric_mode` and independent of it: the mode is
-#: the promise (identical, deterministic, fast), the profile is what the
-#: products compute in. The default is `fp32_v1` and does not move; another
-#: profile runs only where the caller names it, one that no model class
-#: computes under yet is refused by name and never replaced by the default,
-#: and one that was measured and failed quality is not offered at all.
+#: `numeric_profile`: THE NUMBER FORMAT OF THE MATRIX PRODUCTS. Its own
+#: parameter, beside `numeric_mode` and independent of it: the mode is the
+#: promise (identical, deterministic, fast), the profile is what the
+#: products compute in. Since 2026-09-29 the INFERENCE default is
+#: `fixed15_v1` for the transformer models of `mojolearn.models`; every
+#: other family (the Mamba models, a bare TransformerBlock) and every
+#: trainer compute `fp32_v1` when the caller names nothing, and say so. A
+#: profile named where it cannot compute is refused by name, never replaced;
+#: one that was measured and failed quality is not offered at all.
 #: `weight_format=` is how weights are STORED; this is how the products are
 #: COMPUTED. See `_numeric_profile.py`.
 #:
 #:     mojolearn.numeric_profiles()                   # every registered row
-#:     mojolearn.set_numeric_profile("fp32_v1")       # process default
+#:     mojolearn.set_numeric_profile("fp32_v1")       # the arithmetic before 2026-09-29
 #:     mojolearn.models.CausalLM.load(path, numeric_profile="fp32_v1")
 from . import _numeric_profile as _numeric_profile
 

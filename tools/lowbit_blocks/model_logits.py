@@ -6,11 +6,8 @@
     python3 tools/lowbit_blocks/model_logits.py --model /root/models/SmolLM2-360M \
         --profile fixed15_v1 --device auto --out <dir> [--phases identity,decode,batch,time]
 
-THE GATE IS OPENED IN THIS PROCESS ONLY. `fixed15_v1`'s row has
-`inference: False` in `mojolearn._numeric_profile` (the orchestrator owns
-that field and flips it). This script sets it True in its own process,
-before the model is built, when `--profile fixed15_v1` is asked for; nothing
-a user installs reads anything this script sets.
+`fixed15_v1`'s row has `inference: True` since lane/lowbit-default
+(2026-09-29), so this script no longer opens it in its own process.
 
 PHASES (each prints `RESULT <name> ...` lines and writes JSON to --out):
   identity  B=2 rows of L=64 fixed token ids (splitmix64, seed 0x6c6f7762):
@@ -74,9 +71,6 @@ def main():
     os.makedirs(args.out, exist_ok=True)
 
     import mojolearn
-    from mojolearn import _numeric_profile as NP
-    if args.profile == "fixed15_v1":
-        NP.PROFILES["fixed15_v1"]["inference"] = True  # THIS PROCESS ONLY (see header)
     from mojolearn.models import CausalLM
     from mojolearn._array import Array
 

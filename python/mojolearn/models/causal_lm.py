@@ -266,7 +266,13 @@ class CausalLM:
         self.plan = plan
         self.config = plan.config
         self.weight_format = weight_format
-        self.numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM numeric_profile")
+        # lane/lowbit-default (2026-09-29): the profile follows the model's
+        # FAMILY. Naming none, a transformer model gets the inference default
+        # (fixed15_v1) and a Mamba model fp32_v1, which `numeric_profile`
+        # then reports; naming one the family does not compute is refused
+        # by name (`_numeric_profile.resolve`).
+        self.numeric_profile = _numeric_profile.resolve(
+            numeric_profile, "mojolearn.models.CausalLM numeric_profile", family=plan.kind)
         self.device = _route(device)
         self.d_model = int(plan.d_model)
         self.vocab_size = int(plan.vocab_size)
@@ -321,12 +327,13 @@ class CausalLM:
         kwargs = _block_kwargs(plan, cls) if plan.kind == "transformer" else dict(plan.block_kwargs)
         if plan.kind == "transformer":
             kwargs["n_heads"] = int(plan.n_heads)
-        # lane/lowbit-blocks (2026-09-29): a profile other than the default
-        # reaches the transformer block as its keyword; under the default no
+        # lane/lowbit-blocks (2026-09-29): a profile other than fp32_v1
+        # reaches the transformer block as its keyword; under fp32_v1 no
         # keyword is passed, so the model builds exactly as before. The head
-        # is packed below. Mamba blocks do not compute under a profile yet.
-        if self.numeric_profile != _numeric_profile.DEFAULT:
-            if plan.kind != "transformer":
+        # is packed below. Mamba blocks do not compute under a profile
+        # (resolve above gave them fp32_v1 or refused the name).
+        if self.numeric_profile != _numeric_profile.BASELINE:
+            if plan.kind != "transformer":  # resolve refuses this first; kept as the backstop
                 raise NotImplementedError(
                     f"mojolearn.models.CausalLM: numeric_profile={self.numeric_profile!r} is implemented for "
                     f"transformer models only; model_type {plan.model_type!r} is {plan.kind!r}. It is never "
@@ -347,7 +354,7 @@ class CausalLM:
         # vocabulary row, along d_model), `mojolearn.linalg.matmul_int15`
         # per call (the activation quantized per token by the binding).
         self._head_int15 = None
-        if self.numeric_profile != _numeric_profile.DEFAULT:
+        if self.numeric_profile != _numeric_profile.BASELINE:
             from .._linalg_impl import quantize_int15
             self._head_int15 = quantize_int15(self._head)
 
@@ -361,14 +368,21 @@ class CausalLM:
         `model.safetensors.index.json` and its shards)."""
         if weight_format not in _lowbit.FORMATS:
             raise ValueError(f"mojolearn.models.CausalLM.load: weight_format must be one of {_lowbit.FORMATS}, got {weight_format!r}")
-        # refuse a profile no model computes under BEFORE reading gigabytes
-        numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile")
+        # refuse a NAMED profile no model computes under BEFORE reading
+        # gigabytes; None stays None, so the family decides in __init__
+        if numeric_profile is not None:
+            numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile")
         path = os.fspath(path)
         if not os.path.isdir(path):
             raise FileNotFoundError(f"mojolearn.models.CausalLM.load: {path} is not a directory")
         config = HFConfig.from_json(path)
         plan = plan_for(config)
         route = _route(device)
+        # a named profile the family does not compute (a Mamba model) is
+        # refused here too, before the weights are read
+        if numeric_profile is not None:
+            _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile",
+                                     family=plan.kind)
         # refuse an option the live block cannot take BEFORE reading gigabytes
         if plan.kind == "transformer":
             _block_kwargs(plan, _block_classes(route)[plan.kind])
@@ -599,7 +613,7 @@ class CausalLM:
         # lane/lowbit-blocks: the resident session computes fp32_v1 only;
         # under another profile the per-layer route below is the one that
         # computes it (owed: the resident session under the profile).
-        if self.numeric_profile != _numeric_profile.DEFAULT:
+        if self.numeric_profile != _numeric_profile.BASELINE:
             return None
         ext = self._blocks[0]._extension()
         if not (_exports(ext, "causal_lm_session_run")

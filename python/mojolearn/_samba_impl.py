@@ -616,7 +616,7 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
         # A state written under another numeric profile is refused by name; a
         # state with no field is fp32_v1, which is what this stack computes.
-        _numeric_profile.check_saved(state, _numeric_profile.DEFAULT, "mojolearn.SambaStack state")
+        _numeric_profile.check_saved(state, _numeric_profile.TRAINING_DEFAULT, "mojolearn.SambaStack state")
         p = _buffers.as_f32_c(state['parameters'], ndim=1, name='parameters')[0]
         if p.shape != (self.n_total,):
             raise ValueError("mojolearn.SambaStack: parameters hold %d floats, "

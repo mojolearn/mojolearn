@@ -885,10 +885,15 @@ class TransformerBlock(NumericModeMixin):
         # contract W-9), and kept as private (hi, lo, exponents) arrays that
         # nothing outside this object sees or writes; `_call` sends them to
         # the binding's profile entry, which keeps them on the device.
+        # lane/lowbit-default (2026-09-29): a bare block naming no profile
+        # stays fp32_v1 (the inference default reaches the models, not this
+        # building block, which the trainers also build and whose backward
+        # and decode session compute fp32_v1 only); `mojolearn.models` passes
+        # its profile by name.
         self.numeric_profile = _numeric_profile.resolve(
-            numeric_profile, f"mojolearn {what} numeric_profile")
+            numeric_profile, f"mojolearn {what} numeric_profile", family="transformer_block")
         self._int15 = None
-        if self.numeric_profile != _numeric_profile.DEFAULT:
+        if self.numeric_profile != _numeric_profile.BASELINE:
             if self.numeric_profile != "fixed15_v1":
                 raise NotImplementedError(
                     f"mojolearn {what}: numeric_profile={self.numeric_profile!r} has no block "
