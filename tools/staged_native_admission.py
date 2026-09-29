@@ -70,6 +70,21 @@ def inventory_delta(original, current):
     return changed
 
 
+def math_source_receipt(manifest, source_root=None):
+    math=manifest.get('portable_math',{})
+    build=math.get('build',{})
+    require(math.get('helper')=='libMojolearnMath.so'
+            and all(valid_sha(build.get(k)) for k in ('source_sha256','constants_sha256','output_sha256')),
+            'Missing portable math source/build receipt')
+    libs={r['name']:r['sha256'] for r in manifest.get('staged_libs',[])}
+    require(build['output_sha256']==libs.get('libMojolearnMath.so'), 'Portable math output SHA differs')
+    if source_root is not None:
+        for name,key in [('portable_math.c','source_sha256'),('powers_of_ten.h','constants_sha256')]:
+            require(sha((Path(source_root)/'packaging/portable_math'/name).read_bytes())==build[key],
+                    'Portable math source/constants changed: '+name)
+    return {k:build[k] for k in ('source_sha256','constants_sha256')}
+
+
 def validate_staged(proof, source_root=None):
     require(proof.get('schema') == SCHEMA and proof.get('action') == 'stage-validated-native'
             and proof.get('complete') is True, 'Incomplete staged admission')
@@ -117,6 +132,7 @@ def validate_staged(proof, source_root=None):
     manifest = decoded(proof.get('stage_manifest_witness'))
     require(len(manifest.get('extensions',[]))==len(expected) and {r['path']:r['sha256'] for r in manifest.get('extensions',[])}
             == {r['relative']:r['staged_sha256'] for r in outputs}, 'Original stage manifest SHA mismatch')
+    math_source=math_source_receipt(manifest,source_root)
     libraries = {r['name']:r['sha256'] for r in manifest.get('staged_libs',[])}
     require(libraries and len(libraries)==len(manifest.get('staged_libs',[])) and all(valid_sha(v) for v in libraries.values()), 'Missing runtime manifest')
     if 'canonical_host_stage_witness' in proof:
@@ -130,6 +146,7 @@ def validate_staged(proof, source_root=None):
         require(len(crows)==len(expected) and {r.get('relative') for r in crows}==set(expected), 'Incomplete canonical host stage')
         crows = {r['relative']:r for r in crows}
         cm = decoded(proof.get('canonical_host_manifest_witness'))
+        require(math_source_receipt(cm,source_root)==math_source, 'Canonical math has different source/constants')
         require(len(cm.get('extensions',[]))==len(expected) and {r['path']:r['sha256'] for r in cm.get('extensions',[])}
                 == {r['relative']:r['staged_sha256'] for r in crows.values()}, 'Canonical stage manifest SHA mismatch')
         composition = decoded(proof.get('composition_witness'))

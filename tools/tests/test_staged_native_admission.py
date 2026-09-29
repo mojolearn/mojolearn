@@ -15,6 +15,9 @@ def w(value):
     return {'utf8':text,'sha256':a.sha(text.encode())}
 
 
+def mathmeta(output):
+    return dict(helper='libMojolearnMath.so',build=dict(source_sha256='a'*64,constants_sha256='b'*64,output_sha256=output))
+
 def fixture():
     inventory=[['source.py',a.sha(b'source')]]; outputs=[];results=[];stamps={}
     for rel,tier in a.expected_outputs().items():
@@ -32,7 +35,7 @@ def fixture():
                source_inventory=inventory,source_sha256=a.sha(json.dumps(inventory,separators=(',',':')).encode()))
     build=dict(manifest=w(dict(source_commit='a'*40,compiler=stage['compiler'],arch='gfx942')),results=w(results))
     manifest=dict(extensions=[dict(path=r['relative'],sha256=r['staged_sha256']) for r in outputs],
-                  staged_libs=[dict(name='libMojolearnMath.so',sha256='e'*64)])
+                  staged_libs=[dict(name='libMojolearnMath.so',sha256='e'*64)],portable_math=mathmeta('e'*64))
     proof=dict(schema=a.SCHEMA,action='stage-validated-native',complete=True,source_commit='c'*40,
                source_inventory=inventory,source_sha256=stage['source_sha256'],stage_witness=w(stage),
                stage_manifest_witness=w(manifest),native_builds=[build],runtime_libraries={'libMojolearnMath.so':'e'*64},
@@ -62,7 +65,7 @@ def canonicalize(proof):
         if row['relative'].startswith('host/'):
             proof['output_witnesses'][row['relative']]=dict(stamp=w(row['original_stamp']),build_results_sha256=native['results']['sha256'])
     proof['canonical_host_stage_witness']=w(canonical)
-    proof['canonical_host_manifest_witness']=w(dict(extensions=[dict(path=r['relative'],sha256=r['staged_sha256']) for r in canonical['outputs']],staged_libs=[dict(name='libMojolearnMath.so',sha256='f'*64)]))
+    proof['canonical_host_manifest_witness']=w(dict(extensions=[dict(path=r['relative'],sha256=r['staged_sha256']) for r in canonical['outputs']],staged_libs=[dict(name='libMojolearnMath.so',sha256='f'*64)],portable_math=mathmeta('f'*64)))
     overrides.append(dict(relative='.libs/libMojolearnMath.so',original_hip_sha256='e'*64,canonical_cuda_sha256='f'*64))
     proof['composition_witness']=w(dict(schema='mojolearn.canonical-host-assembly.v1',package_source=proof['source_commit'],overrides=overrides,sources=dict(device_manifest_sha256=proof['stage_manifest_witness']['sha256'],canonical_manifest_sha256=proof['canonical_host_manifest_witness']['sha256'])))
     proof['runtime_libraries']['libMojolearnMath.so']='f'*64
@@ -144,6 +147,19 @@ class Admission(unittest.TestCase):
         for name in ['core.mojo','pixi.lock','bindings/build.sh']:
             with self.assertRaisesRegex(ValueError,'native/build/toolchain'):
                 a.inventory_delta([[name,'a'*64]],[[name,'b'*64]])
+
+    def test_math_receipt_and_changed_constants_are_refused(self):
+        m=a.decoded(self.proof['stage_manifest_witness'])
+        m['portable_math']['build']['output_sha256']='0'*64
+        self.proof['stage_manifest_witness']=w(m);self.refused()
+        m=a.decoded(fixture()['stage_manifest_witness'])
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);(root/'packaging/portable_math').mkdir(parents=True)
+            (root/'packaging/portable_math/portable_math.c').write_bytes(b'C')
+            (root/'packaging/portable_math/powers_of_ten.h').write_bytes(b'constants')
+            m['portable_math']['build']['source_sha256']=a.sha(b'C')
+            with self.assertRaisesRegex(ValueError,'constants changed'):
+                a.math_source_receipt(m,root)
 
     def test_current_source_inventory_must_match(self):
         with patch('check_linux_release_qualification.tracked_native_inventory',return_value=[['changed.py','f'*64]]):
