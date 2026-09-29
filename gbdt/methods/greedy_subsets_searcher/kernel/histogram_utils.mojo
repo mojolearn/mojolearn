@@ -24,6 +24,7 @@ happened here.
 from std.atomic import Atomic, Ordering
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import floor
+from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -195,6 +196,13 @@ def snap_stats_to_grid_kernel(
     var pos = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     while pos < n_rows:
         var u = hist2_dither(pos)
+        # THE SABOTAGE ARM (`-D MOJOLEARN_SNAP_SABOTAGE=1`, never in a
+        # release build): the dither keyed one row off, on the device only,
+        # so a column whose host oracle restates the snap must DISAGREE on
+        # every weighted lane the snap reaches (gbdt-class-weights,
+        # gbdt-multiclass, gbdt-multiclass-defaults).
+        comptime if is_defined["MOJOLEARN_SNAP_SABOTAGE"]():
+            u = hist2_dither(pos + 1)
         for s in range(stat_count):
             var q = hist2_quantize(
                 stats.unsafe_load(s * line + pos), fixed_scale, u
