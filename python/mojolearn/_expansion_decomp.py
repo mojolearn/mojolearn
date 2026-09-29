@@ -3417,6 +3417,128 @@ class MDS(_Base):
         return self
 
 
+#: LocallyLinearEmbedding's iterative route for eigen_solver='auto', taken
+#: under sklearn's own ARPACK policy (n > 200 and n_components + 1 < 10).
+#: The dense route is the one-sided Jacobi SVD of the whole n x n factor:
+#: O(n^3) per sweep in ONE threadgroup on the GPU (3.2 s at 250 rows, 22 s
+#: at 500, past the board's 600 s ceiling at 2,000 on the M3 Ultra).
+_LLE_ITER_MIN_N = 200
+_LLE_ITER_MAX_K = 10
+#: The triangular inverse's leaf size (the LU solve against the identity).
+_LLE_TRI_LEAF = 64
+#: Converged: the sine of the largest principal angle between two successive
+#: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
+#: _LLE_STALL_TOL, it stopped shrinking (float32's floor for this factor).
+_LLE_SUBSPACE_TOL = 1e-5
+_LLE_STALL_TOL = 1e-2
+#: The deflation guard: the dropped direction's |F 1| / sqrt(n) must be at
+#: most this fraction of the smallest kept singular value.
+_LLE_NULL_GUARD = 1e-3
+
+
+def _lle_tri_inv(k, R):
+    """The inverse of an upper triangular R (zeros below the diagonal), by
+    blocks: [[A, B], [0, D]]^-1 = [[A^-1, -A^-1 B D^-1], [0, D^-1]], split
+    at n // 2; a leaf of at most _LLE_TRI_LEAF rows is the LU solve against
+    the identity with the identity pivot (L's unit diagonal and R's zero
+    lower part: plain back substitution, sums ascending)."""
+    n = R.r
+    if n <= _LLE_TRI_LEAF:
+        return k.lu_solve(R, array.array("i", range(n)), _eye(n))
+    h = n // 2
+    w = n - h
+    top = R.rows(0, h)
+    Ai = _lle_tri_inv(k, top.cols(0, h))
+    Di = _lle_tri_inv(k, R.rows(h, n).cols(h, n))
+    Bi = k.ew("scale", k.mm(Ai, k.mm(top.cols(h, n), Di)), s=-1.0)
+    a, b, d = Ai.s, Bi.s, Di.s
+    out = _M.zeros(n, n)
+    s = out.s
+    for i in range(h):
+        s[i * n:i * n + h] = a[i * h:(i + 1) * h]
+        s[i * n + h:(i + 1) * n] = b[i * w:(i + 1) * w]
+    for i in range(w):
+        s[(h + i) * n + h:(h + i + 1) * n] = d[i * w:(i + 1) * w]
+    return out
+
+
+def _lle_smallest(k, F, nc, max_iter, seed=0):
+    """The nc smallest right singular pairs of the LLE factor F (m x n, M =
+    F^T F) past its null vector, the constant: (V n x nc, unit columns,
+    ascending singular value, each signed so its largest-|.| entry is
+    positive; S 1 x nc). None when the route does not apply (the caller
+    runs the dense SVD).
+
+    The constant is deflated exactly: H, the Householder reflector taking
+    1 / sqrt(n) to e_{n-1}, and F^ = F H[:, :n-1], F restricted to the
+    constant's complement (its last column F 1 / sqrt(n) is dropped). R^ is
+    the Householder QR of F^ (so F^T F^ = R^T R^ without forming M, whose
+    small eigenvalues sit under float32 resolution) and K = R^-1 by blocks.
+    Subspace iteration on K K^T = (F^T F^)^-1 (sklearn's shift-invert at
+    sigma = 0) with p = max(2 nc + 1, 20) columns (ARPACK's ncv), each step
+    column-normalized, orthonormalized and rotated to the Ritz vectors of
+    R^ (the one-sided Jacobi SVD of R^ X, p columns), until the wanted Ritz
+    subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
+    Every product is a kit cell, the stopping test is on their outputs:
+    the same iterations on every vendor. Not converged in max_iter steps
+    raises (an unconverged answer is not returned as one)."""
+    n = F.c
+    n1 = n - 1
+    p = min(n1, max(2 * nc + 1, 20))
+    if p <= nc:
+        return None
+    rn = 1.0 / math.sqrt(n)
+    hv = [rn] * n
+    hv[n - 1] = rn - 1.0
+    coef = 2.0 / _dsum(v * v for v in hv)
+    h = _M.of(hv, n, 1)
+    Fh = k.mm(F, h)
+    Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, _M.of([rn] * n1, 1, n1)), s=coef))
+    Fu = k.mm(F, _M.of([rn] * n, n, 1))
+    g = math.sqrt(_dsum(float(v) * float(v) for v in Fu.s))
+    R = k.qr_r(Fhat)
+    rs = R.s
+    zero = array.array("f", [0.0]) * n1
+    for i in range(1, n1):
+        rs[i * n1:i * n1 + i] = zero[:i]
+    if any(rs[i * n1 + i] == 0.0 for i in range(n1)):
+        return None
+    K = _lle_tri_inv(k, R)
+    X = k.orth(k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
+    want = list(range(p - 1, p - 1 - nc, -1))
+    prev, e_prev = None, None
+    for _ in range(max(1, int(max_iter))):
+        Z = k.mm(K, k.mm(K, X, ta=True))
+        norms = k.ew("sqrt", k.colsum(k.ew("sq", Z)))
+        Z = k.ew("mul", Z, k.ew("recip", norms))
+        X = k.orth(Z)
+        S, Vt = k.svd(k.mm(R, X))
+        X = k.mm(X, Vt, tb=True)
+        Y = X.take_cols(want)
+        if prev is not None:
+            E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
+            e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
+            if e <= _LLE_SUBSPACE_TOL or (e <= _LLE_STALL_TOL and e >= e_prev):
+                break
+            e_prev = e
+        else:
+            e_prev = float("inf")
+        prev = Y
+    else:
+        raise RuntimeError(
+            f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
+            f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
+            "An unconverged embedding is not returned as if it were one.")
+    sv = S.take_cols(want)
+    if not (g <= _LLE_NULL_GUARD * float(sv.s[0])):
+        return None
+    # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
+    t = k.mm(_M.of([rn] * n1, 1, n1), Y)
+    full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
+    V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
+    return V.neg_cols(k.absmax_flags(V, True)), sv
+
+
 class LocallyLinearEmbedding(_Base):
     """sklearn.manifold.LocallyLinearEmbedding, method='standard' (reference:
     scikit-learn `manifold/_locally_linear.py`: `barycenter_kneighbors_graph`,
@@ -3473,11 +3595,19 @@ class LocallyLinearEmbedding(_Base):
         # float32 resolution next to M's largest, so the dense eigh of M
         # cannot order them; the one-sided Jacobi SVD of I - W resolves its
         # small singular values to high RELATIVE accuracy.
-        S, Vt = k.svd(IW)
-        rows = list(range(n - 2, n - 2 - nc, -1))
-        self.embedding_m_ = Vt.take_rows(rows).T
+        got = None
+        if self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
+            got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
+        if got is not None:
+            self.embedding_m_, sv = got
+        else:
+            # eigen_solver='dense', a small n, or the iterative route's guard
+            # refused: the full SVD of I - W (O(n^3) per Jacobi sweep)
+            S, Vt = k.svd(IW)
+            rows = list(range(n - 2, n - 2 - nc, -1))
+            self.embedding_m_ = Vt.take_rows(rows).T
+            sv = S.take_cols(rows)
         self.embedding_ = self.embedding_m_.out()
-        sv = S.take_cols(rows)
         self.reconstruction_error_ = _dsum(v * v for v in sv.s)
         self._fit_X, self._knn = M, nn
         self.n_features_in_ = M.c
