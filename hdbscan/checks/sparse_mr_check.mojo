@@ -32,7 +32,10 @@ chain, so (1)-(4) are REPORTED, not asserted (no cross-arm claim in FAST).
 
 SABOTAGE (tools/identity_lanes/cluster.checks): the device kernel's
 strict `<` made `<=` (a tie keeps the HIGHER j), and the CPU walk's
-(lo, hi) tie order swapped to (hi, lo). Each must fail this driver.
+per-vertex update taking an equal key from ANY later tree vertex (the
+triple dropped for `<=` on the key alone). Each must fail this driver.
+(A first CPU arm swapped (lo, hi) to (hi, lo) and was INERT, measured on
+the A40: for one vertex u both read its edges {c, u} in ascending c.)
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext

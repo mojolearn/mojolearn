@@ -1,5 +1,5 @@
 diff --git a/hdbscan/host/hdbscan_host_oracle.mojo b/hdbscan/host/hdbscan_host_oracle.mojo
-index 1bc4fed12..203415328 100644
+index 1bc4fed12..8a1cf6d13 100644
 --- a/hdbscan/host/hdbscan_host_oracle.mojo
 +++ b/hdbscan/host/hdbscan_host_oracle.mojo
 @@ -881,7 +881,7 @@ def hdbh_sparse_prim(
@@ -7,7 +7,7 @@ index 1bc4fed12..203415328 100644
                      var a = Int32(cur if cur < u else u)
                      var b = Int32(u if cur < u else cur)
 -                    if triple_less_i(wk, Int(a), Int(b), wkp[u], Int(lop[u]), Int(hip[u])):
-+                    if triple_less_i(wk, Int(b), Int(a), wkp[u], Int(hip[u]), Int(lop[u])):
++                    if wk <= wkp[u]:
                          wkp[u] = wk
                          lop[u] = a
                          hip[u] = b
