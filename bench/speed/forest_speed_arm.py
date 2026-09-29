@@ -1021,9 +1021,12 @@ def main(argv=None):
                    % (",".join(devices), "auto" if devices_auto else "explicit",
                       policy))
     opponents = []
+    # --arms: only the wanted builders run (an unwanted one's refusal would
+    # otherwise reach the board as a cell it never planned)
+    wanted = [n.strip() for n in (args.arms or "").split(",") if n.strip()] or None
     if not args.ours_only and args.opponents_first:
         print("FSPEED-IMPORT-ORDER lane=%s first=opponents" % lane, flush=True)
-        opponents = spec.build_opponents(lane, cfg, data, devices)
+        opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
     arms = build_ours(lane, cfg, data)
     if args.ours_ab:
         import ast
@@ -1041,9 +1044,8 @@ def main(argv=None):
         arms.extend(proxies)
     if not args.ours_only:
         if not args.opponents_first:
-            opponents = spec.build_opponents(lane, cfg, data, devices)
+            opponents = spec.build_opponents(lane, cfg, data, devices, wanted)
         if args.arms:
-            wanted = [n.strip() for n in args.arms.split(",") if n.strip()]
             have = {a.name for a in opponents}
             for name in wanted:
                 if name not in have:

@@ -2295,12 +2295,19 @@ def lightgbm_arms(lane, cfg, data, devices):
             bagging_fraction=1.0,            # DEVIATION 1833
             feature_fraction=1.0,
         )
-        if cfg.get("task"):
-            # the task lanes: at min_child_weight 0 LightGBM 4.7.0 aborts
-            # the first multiclass and categorical tree ("Check failed:
-            # (best_split_info.left_count) > (0)", Apple board smoke
-            # 2026-09-26), so both stay at LightGBM's defaults (TASK_LANES)
-            p.update(min_child_samples=20, min_child_weight=1e-3)
+        # At min_child_weight 0 LightGBM 4.7.0 aborts a boosted tree ("Check
+        # failed: (best_split_info.left_count) > (0)"): the first multiclass
+        # and categorical tree (Apple board smoke 2026-09-26) and, at full
+        # size, the binary gbdt-lossguide warm-up on taxi AND Istella-S (M3
+        # Ultra board 2026-09-29, both cells REFUSED). So every boosted
+        # LightGBM arm keeps LightGBM's defaults, and a non-task lane says so
+        # in a mismatch line (the task lanes carry it in TASK_LANES).
+        p.update(min_child_samples=20, min_child_weight=1e-3)
+        if not cfg.get("task"):
+            emit_note(lane, ["lightgbm-*"], "mismatch", 1.0,
+                      "LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its "
+                      "defaults: at 0 (the other arms' value) LightGBM 4.7.0 aborts the "
+                      "first tree (Check failed: best_split_info.left_count > 0)")
     # MOJOLEARN_SPEED_LGBM_PARAMS=name=value,... (lane trees-hotaisle,
     # 2026-09-11): LightGBM 4.7.0 refused every AMD cell with "Check failed:
     # (best_split_info.left_count) > (0)" under min_child_weight=0.0, so ONE
@@ -3360,13 +3367,21 @@ def resolve_devices(requested, lane=None):
     return want, auto
 
 
-def build_opponents(lane, cfg, data, devices):
+def build_opponents(lane, cfg, data, devices, wanted=None):
     """Run every builder inside its own `try` and turn a failure into
     refusals. Nothing here may take the process down: an opponent that will
-    not install on a rented box is the NORMAL case, not the exception."""
+    not install on a rented box is the NORMAL case, not the exception.
+
+    `wanted` (the --arms list): a builder none of whose arms is wanted is not
+    run at all. Before 2026-09-29 every builder ran and --arms filtered
+    afterwards, so an unwanted builder's refusal (cuML on a Mac) still
+    printed FSPEED-REFUSED and the bench board recorded a REFUSED cell for an
+    arm it never planned."""
     arms = []
     allow_cpu = "cpu" in devices
     for names, thunk in opponent_builders(lane, cfg, data, devices):
+        if wanted is not None and not set(names) & set(wanted):
+            continue
         # THE CHOKEPOINT FOR THE GPU-PATH-ONLY RULE, and it is here rather
         # than in each builder because two of the forest builders --
         # `sklearn_forest_arm` and `sklearn_iforest_arm` -- never took
