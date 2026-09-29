@@ -64,7 +64,15 @@ def first_reach(run, target):
 
 T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262}
 FINALIST = {"int15-both+attn": "F1", "F2-int15proj-int8attn": "F2"}
-WIDTHS = ("int8", "int10", "int12", "int15")
+WIDTHS = ("bf16", "int8", "int10", "int12", "int15")
+DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+
+
+def is_dropped(row_or_run):
+    spec = row_or_run.get("spec") or {}
+    kinds = [spec.get("weight_kind", ""), spec.get("activation_kind", "")]
+    kinds += [k for pair in (spec.get("overrides") or {}).values() for k in pair]
+    return any(k.startswith("int8") for k in kinds)
 OPERANDS = (("Gt_rows_along_m", "G^T, the weight-gradient GEMM's left operand (rows over the tokens)"),
             ("At_rows_along_m", "A^T, the weight-gradient GEMM's right operand (rows over the tokens)"),
             ("G_rows_along_n", "G, the input-gradient GEMM's left operand (one row per token)"),
@@ -85,6 +93,9 @@ def zero_code_tables(runs, step):
                 cell["n"] += 1
                 cell["exact"] += ops[op]["exactly_zero_fraction"]
                 for w in WIDTHS:
+                    if w not in ops[op]:  # a record written before bf16 was recorded
+                        cell[w] = cell[w + "_nz"] = float("nan")
+                        continue
                     cell[w] += ops[op][w]["zero_code_fraction"]
                     cell[w + "_nz"] += ops[op][w]["zero_code_fraction_of_nonzero"]
     out = {}
@@ -154,6 +165,7 @@ def main(argv=None):
                or not math.isfinite(at(r, n_eq))]
         good = [r for r in rs if r["seed"] not in bad]
         row = dict(arm=arm, profile=rs[0]["profile_name"], mode=mode, attention_products=attn,
+                   spec=rs[0]["spec"], dropped=DROPPED_NOTE if is_dropped(rs[0]) else None,
                    seeds=sorted(r["seed"] for r in rs), nonfinite_seeds=sorted(bad),
                    nonfinite_at_step={r["seed"]: r["nonfinite_at_step"] for r in rs if r["seed"] in bad},
                    noise_floor_nats=floor, noise_floor_rel_ppl=math.expm1(floor))
@@ -198,6 +210,8 @@ def main(argv=None):
         else:
             row["verdict"] = "UNDERPOWERED"
             row["reason"] = "the seeds do not separate this arm from 1 percent"
+        if row["dropped"]:
+            row["verdict"] += "; " + DROPPED_NOTE
         table["arms"].append(row)
     with open(os.path.join(args.out, "training.json"), "w") as fh:
         json.dump(table, fh, indent=1)
@@ -229,9 +243,25 @@ def main(argv=None):
     table["baseline_gradient_zero_codes"] = dict(step=n_eq - 1, seeds=sorted(complete), products=zc)
     with open(os.path.join(args.out, "training.json"), "w") as fh:
         json.dump(table, fh, indent=1)
+    text_zc = zero_code_markdown(zc, "## Zero codes of the backward operands: fp32.v1 baseline, step %d, mean over seeds %s"
+                                 % (n_eq - 1, sorted(complete)))
+    table["arm_gradient_zero_codes"] = {}
+    for (attn, arm, mode), rs in sorted(groups.items(), key=lambda kv: (not kv[0][0], kv[0][1], kv[0][2])):
+        if mode != "fwdbwd" or arm not in ("c", "e"):
+            continue
+        rs = [r for r in rs if r["nonfinite_at_step"] is None]
+        z = zero_code_tables(rs, n_eq - 1)
+        if not z:
+            continue
+        name = rs[0]["profile_name"]
+        table["arm_gradient_zero_codes"][name] = dict(step=n_eq - 1, seeds=sorted(r["seed"] for r in rs), products=z)
+        text_zc += "\n" + zero_code_markdown(
+            z, "## Zero codes of the backward operands: %s, forward and backward, step %d, mean over seeds %s"
+            % (name, n_eq - 1, sorted(r["seed"] for r in rs)))
+    with open(os.path.join(args.out, "training.json"), "w") as fh:
+        json.dump(table, fh, indent=1)
     with open(os.path.join(args.out, "training_zero_codes.md"), "w") as fh:
-        fh.write(zero_code_markdown(zc, "## Zero codes of the backward operands: fp32.v1 baseline, step %d, mean over seeds %s"
-                                    % (n_eq - 1, sorted(complete))))
+        fh.write(text_zc)
     text = "\n".join(lines) + "\n"
     with open(os.path.join(args.out, "training.md"), "w") as fh:
         fh.write(text)

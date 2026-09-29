@@ -248,6 +248,18 @@ def product_nt(A, B, kind_a, kind_b, acc64=False):
     return product_prepared(prepare(A, kind_a), prepare(B, kind_b), acc64=acc64)
 
 
+#: ANDREW, 2026-09-29: int8 is dropped as a model's arithmetic, and so is the
+#: int8-attention mix (finalist F2). The kinds stay defined, because the
+#: measured rows stay in the tables and the int8 PRODUCT stays as the piece
+#: product of the 15-bit profile; no arm that codes an operand in 8 bits is
+#: run again.
+DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+
+
+def is_dropped_kind(kind):
+    return kind.startswith("int8")
+
+
 class Spec:
     """One arm: which kind each operand of each product takes.
 
@@ -280,7 +292,13 @@ class Spec:
             return (self.a, self.a) if self.attn else ("fp32", "fp32")
         return (self.a, self.w)
 
+    def dropped(self):
+        """Whether any operand of any product of this arm is coded in 8 bits."""
+        kinds = [self.w, self.a] + [k for pair in self.overrides.values() for k in pair]
+        return any(is_dropped_kind(k) for k in kinds)
+
     def describe(self):
         return dict(name=self.name, weight_kind=self.w, activation_kind=self.a,
                     attention_products=self.attn, acc64=self.acc64,
+                    dropped=DROPPED_NOTE if self.dropped() else None,
                     overrides={k: list(v) for k, v in self.overrides.items()}, note=self.note)

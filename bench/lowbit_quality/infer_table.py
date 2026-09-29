@@ -44,6 +44,14 @@ def load(paths):
     return first, by_name
 
 
+DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+
+
+def is_dropped(spec):
+    kinds = [spec["weight_kind"], spec["activation_kind"]] + [k for pair in spec["overrides"].values() for k in pair]
+    return any(k.startswith("int8") for k in kinds)
+
+
 def passes(c):
     return bool(c["finite_logits"] and c["rel_ppl_change"] < 0.01 and c["rel_ppl_change_hi"] < 0.01)
 
@@ -102,6 +110,8 @@ def main(argv=None):
             verdict = "PASS"
         if all(c.get("bit_equal_nll_to_baseline") for c in have) and len(have) == len(texts):
             verdict += ", bit-equal to the baseline"
+        if is_dropped(s):
+            verdict += "; " + DROPPED_NOTE
         over = ", ".join("%s=%s" % (k, "/".join(v)) for k, v in s["overrides"].items())
         attn = "yes" if s["attention_products"] else ("no" if not over else "no; " + over)
         print("| %s | %s | %s | %s | %s | %s |" % (
@@ -123,13 +133,17 @@ def main(argv=None):
         row = []
         for a in WIDTHS:
             n = "int%dw-int%da" % (w, a)
-            cells = [arms.get(n) for _, (_, arms) in texts.items()]
+            same = {"int8w-int8a": "int8i32.v1", "int15w-int15a": "int15-both"}.get(n)  # the lettered arm of that cell
+            cells = [arms.get(n) or (arms.get(same) if same else None) for _, (_, arms) in texts.items()]
             have = [c for c in cells if c is not None]
             products = pieces(w) * pieces(a)
+            eight = w == 8 or a == 8
             if not have:
-                row.append("%d products; not measured" % products)
+                row.append("%d products; not measured%s" % (products, "; " + DROPPED_NOTE if eight else ""))
                 continue
             verdict = "MISS" if any(not passes(c) for c in have) else ("PASS" if len(have) == len(texts) else "OWED")
+            if eight:
+                verdict += "; " + DROPPED_NOTE
             row.append("%dx%d = %d product%s; %s; %s" % (
                 pieces(w), pieces(a), products, "" if products == 1 else "s",
                 "; ".join("%s %+.3f%% (%+.3f%%)" % (t, 100 * c["rel_ppl_change"], 100 * c["rel_ppl_change_hi"])
@@ -137,7 +151,7 @@ def main(argv=None):
             sweep[n] = dict(weight_bits=w, activation_bits=a, products=products, verdict=verdict)
         print("| %d bits (%d piece%s) | " % (w, pieces(w), "" if pieces(w) == 1 else "s") + " | ".join(row) + " |")
     passing = sorted((v["products"], v["weight_bits"] + v["activation_bits"], k) for k, v in sweep.items()
-                     if v["verdict"] == "PASS")
+                     if v["verdict"] == "PASS")  # a dropped cell's verdict carries the note and is never "PASS"
     print()
     if passing:
         least = passing[0][0]

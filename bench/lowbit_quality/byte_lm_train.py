@@ -101,14 +101,18 @@ ARMS = {
 #: floor first, then the arms in the order their verdicts are wanted.
 #: (arm, mode, attention products)
 ORDER = (
-    [("e", "fwd", False), ("e", "fwdbwd", False), ("c", "fwdbwd", False), ("c", "fwd", False),
-     ("d", "fwd", False), ("d", "fwdbwd", False),
-     ("int12", "fwd", False), ("int12", "fwdbwd", False), ("int10", "fwd", False), ("int10", "fwdbwd", False),
-     ("f", "fwd", False), ("f", "fwdbwd", False),
-     ("int8w-int15a", "fwd", False), ("int8w-int15a", "fwdbwd", False),
-     ("b", "fwd", False), ("b", "fwdbwd", False),
-     ("e", "fwd", True), ("e", "fwdbwd", True), ("c", "fwdbwd", True), ("c", "fwd", True),
-     ("d", "fwd", True), ("d", "fwdbwd", True)])
+    # Andrew, 2026-09-29: native bf16 on the matrix units is the first priority, so whether bf16
+    # survives training comes first: bf16 on both operands, forward and backward, then forward
+    # only; then 15-bit the same way. Complete configurations (attention included) before the
+    # projections alone. Then the mid widths and bf16 weights.
+    [("c", "fwdbwd", True), ("c", "fwd", True), ("e", "fwdbwd", True), ("e", "fwd", True),
+     ("c", "fwdbwd", False), ("c", "fwd", False), ("e", "fwdbwd", False), ("e", "fwd", False),
+     ("int12", "fwdbwd", False), ("int12", "fwd", False), ("int10", "fwdbwd", False), ("int10", "fwd", False),
+     ("b", "fwdbwd", False), ("b", "fwd", False)])
+
+#: Andrew, 2026-09-29: int8 is dropped as a model's arithmetic and so is finalist F2. Their
+#: definitions stay, because measured rows stay in the table; `plan` refuses to start one.
+DROPPED_ARMS = ("d", "f", "int8w-int15a", "int8w-fp32a", "int8m-both", "int8w-int12a", "F2")
 
 #: The widths a gradient operand is coded under for the zero-code record.
 ZERO_CODE_WIDTHS = ("int8", "int10", "int12", "int15")
@@ -127,6 +131,11 @@ def zero_code_record(x):
     nonzero = x != 0
     n, nz = x.numel(), int(nonzero.sum().item())
     out = dict(entries=n, exactly_zero_fraction=1.0 - nz / n)
+    # bf16 keeps an exponent PER VALUE, so only a value below the smallest normal (flushed by the
+    # narrowing seam, L-2) rounds to zero, whatever the rest of its row holds.
+    bzero = arith.round_bf16(x) == 0
+    out["bf16"] = dict(zero_code_fraction=float(bzero.double().mean().item()),
+                       zero_code_fraction_of_nonzero=(float((bzero & nonzero).sum().item()) / nz) if nz else 0.0)
     for kind in ZERO_CODE_WIDTHS:
         codes, _ = arith.quantize_rows(x, kind)
         zero = codes == 0
@@ -446,9 +455,11 @@ def plan(args):
     if args.only:
         for item in args.only.split(","):
             arm, mode, where = item.split(":")
+            if arm in DROPPED_ARMS:
+                raise SystemExit(f"arm {arm} is dropped (2026-09-29, Andrew); it is not run")
             runs += [(arm, mode, where == "attn", s) for s in range(args.seeds)]
         return runs
-    wanted = set(a for a in args.arms.split(",") if a)
+    wanted = set(a for a in args.arms.split(",") if a and a not in DROPPED_ARMS)
     for arm, mode, attn in ORDER:
         if arm in wanted:
             runs += [(arm, mode, attn, s) for s in range(args.seeds)]
@@ -478,9 +489,9 @@ def self_test(args, corpus, device):
     out["forward_only_path"] = one("fwd")
     out["forward_backward_path"] = one("fwdbwd")
     out["sabotage_negated_weight_gradient"] = one("sabotage")
-    # the quantized backward at 15 bits must sit close to float32 and the int8 one further: a
+    # the backward products at 15 bits and in bf16, attention included, against float32: a
     # direction check on the orientation of the backward products, reported, not gated
-    for arm in ("e", "d"):
+    for arm in ("e", "c"):
         got, _ = gradient_of(model, rows, make_spec(arm, True), "fwdbwd")
         out[f"arm_{arm}_fwdbwd_attn_gradient"] = dict(cosine=cosine(ref, got),
                                                      norm_ratio=(got.norm() / ref.norm()).item())
@@ -496,11 +507,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--arms", default="e,c,d,int12,int10,f,int8w-int15a,b")
+    ap.add_argument("--arms", default="c,e,int12,int10,b")
     ap.add_argument("--only", default=None,
                     help="an explicit list in place of the plan: arm:mode:proj|attn, comma separated")
     ap.add_argument("--baseline-seeds", type=int, default=5)
-    ap.add_argument("--seeds", type=int, default=3)
+    ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--equal-steps", type=int, default=4000)
     ap.add_argument("--steps", type=int, default=6000)
     ap.add_argument("--eval-every", type=int, default=100)
