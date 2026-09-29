@@ -41,6 +41,18 @@ block of one arm and then a block of another measures the drift).
     int8i32.v1.applechunk    `identical_gemm_int8_apple_chunk_into`, the
                              exact-chunk PROBE on Apple's float matrix unit
 
+lane/lowbit-mma-speed (2026-09-29) adds the PARALLEL QUANTIZER
+(`gemm/checks/quantize_int8_par.mojo`) as arms beside the reference
+quantizer's, each with the digest of its codes and exponents, which must
+equal the reference's:
+
+    convert.int8.quantize.a.par     the activations, a block of threads per row
+    convert.int8.pack.b.par         the weights, the same
+    inference.int8i32.v1.parq       parallel quantize A, the dispatched product
+    training.int8i32.v1.parq        parallel quantize A and B, the product
+    inference.int8i32.v1.applechunk.parq   the same two with the Apple probe
+    training.int8i32.v1.applechunk.parq    as the product (Apple only)
+
 THE CONVERSIONS ARE THEIR OWN ROWS, because a low-bit product's operands do
 not arrive low-bit for free:
 
@@ -134,6 +146,12 @@ ENVIRONMENT.
     MOJOLEARN_LOWBIT_PRICE_ONLY        comma separated substrings of shape
                                        names; unset runs every OP_NT
                                        transformer row
+    MOJOLEARN_LOWBIT_PRICE_ARMS        comma separated arm names, whole
+                                       names and not substrings; unset runs
+                                       every arm the column has. An arm left
+                                       out prints a LOWBIT-NOT-RUN line. The
+                                       in-run comparisons need both of their
+                                       arms and say nothing when one is out.
 
 WHAT MAY NOT BE CONCLUDED. One call and one synchronize per sample, so a
 decode row's time is mostly launch and wait, not arithmetic. No arm here is
@@ -185,6 +203,11 @@ from gemm.checks.gemm_int8_apple_chunk import (
     int8_apple_chunk_sabotage_name,
 )
 from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
+from gemm.checks.quantize_int8_par import (
+    quantize_par_block,
+    quantize_par_sabotage_name,
+    quantize_rows_int8_par_device,
+)
 from gemm.checks.gemm_lowbit import (
     BF16W_FUSED_MAX_CELLS,
     LowbitWorkspace,
@@ -227,7 +250,15 @@ comptime ARM_INF_INT8_APPLE_CHUNK = 13
 comptime ARM_TRAIN_BF16 = 14
 comptime ARM_TRAIN_INT8 = 15
 comptime ARM_TRAIN_INT8_APPLE_CHUNK = 16
-comptime ARM_COUNT = 17
+#: lane/lowbit-mma-speed: the parallel quantizer, alone and in the complete
+#: operations.
+comptime ARM_QUANTIZE_A_PAR = 17
+comptime ARM_INT8_PACK_B_PAR = 18
+comptime ARM_INF_INT8_PARQ = 19
+comptime ARM_TRAIN_INT8_PARQ = 20
+comptime ARM_INF_INT8_APPLE_CHUNK_PARQ = 21
+comptime ARM_TRAIN_INT8_APPLE_CHUNK_PARQ = 22
+comptime ARM_COUNT = 23
 
 #: The arm of the digest and the comparison: one bit of one cell of every
 #: arm's output is flipped before the digest. Off in every build that does
@@ -272,12 +303,26 @@ def _arm_name(arm: Int) -> String:
         return String("training.bf16f32.v1")
     if arm == ARM_TRAIN_INT8:
         return String("training.int8i32.v1")
-    return String("training.int8i32.v1.applechunk")
+    if arm == ARM_TRAIN_INT8_APPLE_CHUNK:
+        return String("training.int8i32.v1.applechunk")
+    if arm == ARM_QUANTIZE_A_PAR:
+        return String("convert.int8.quantize.a.par")
+    if arm == ARM_INT8_PACK_B_PAR:
+        return String("convert.int8.pack.b.par")
+    if arm == ARM_INF_INT8_PARQ:
+        return String("inference.int8i32.v1.parq")
+    if arm == ARM_TRAIN_INT8_PARQ:
+        return String("training.int8i32.v1.parq")
+    if arm == ARM_INF_INT8_APPLE_CHUNK_PARQ:
+        return String("inference.int8i32.v1.applechunk.parq")
+    return String("training.int8i32.v1.applechunk.parq")
 
 
 def _arm_is_product(arm: Int) -> Bool:
     """Whether the arm's output is the product `C` (a plan alone, or a
     complete operation that ends in one)."""
+    if arm == ARM_QUANTIZE_A_PAR or arm == ARM_INT8_PACK_B_PAR:
+        return False
     return arm <= ARM_INT8_APPLE_CHUNK or arm >= ARM_INF_BF16
 
 
@@ -290,6 +335,8 @@ def _arm_runs(arm: Int) -> Bool:
         arm == ARM_INT8_APPLE_CHUNK
         or arm == ARM_INF_INT8_APPLE_CHUNK
         or arm == ARM_TRAIN_INT8_APPLE_CHUNK
+        or arm == ARM_INF_INT8_APPLE_CHUNK_PARQ
+        or arm == ARM_TRAIN_INT8_APPLE_CHUNK_PARQ
     ):
         return HAS_APPLE_CHUNK
     return True
@@ -416,6 +463,32 @@ def _digest_u16(
     return d
 
 
+def _poison_codes(
+    ctx: DeviceContext,
+    mut q: DeviceBuffer[DType.int8],
+    mut e: DeviceBuffer[DType.int32],
+    codes: Int,
+    rows: Int,
+) raises:
+    """An int8 store filled with what no quantizer writes: the code -128
+    (contract L-4 clamps to [-127, 127]) and an exponent no float32 row
+    takes. `_digest_codes` refuses a code that is still -128."""
+    _whole(len(q), codes, String("an int8 code buffer"))
+    _whole(len(e), rows, String("an int8 exponent buffer"))
+    var hq = ctx.enqueue_create_host_buffer[DType.int8](codes)
+    var he = ctx.enqueue_create_host_buffer[DType.int32](rows)
+    ctx.synchronize()
+    for i in range(codes):
+        hq.unsafe_ptr().unsafe_store(i, Int8(-128))
+    for i in range(rows):
+        he.unsafe_ptr().unsafe_store(i, Int32(-987654))
+    ctx.enqueue_copy(dst_buf=q, src_ptr=hq.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=e, src_ptr=he.unsafe_ptr())
+    ctx.synchronize()
+    _ = hq
+    _ = he
+
+
 def _digest_codes(
     ctx: DeviceContext,
     mut q: DeviceBuffer[DType.int8],
@@ -436,6 +509,11 @@ def _digest_codes(
     ctx.synchronize()
     var d = UInt64(0xCBF29CE484222325)
     for i in range(rows * cols):
+        if hq.unsafe_ptr().unsafe_load(i) == Int8(-128):
+            raise Error(
+                "bench/gemm_lowbit_price_main: POISON SURVIVED at code " + String(i)
+                + ": -128 is no code of the profile (contract L-4)"
+            )
         d = _fnv(
             d,
             _sabotage_word(UInt64(Int(hq.unsafe_ptr().unsafe_load(i)) & 0xFF), i, rows * cols),
@@ -543,10 +621,30 @@ def _enqueue_arm(
         quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
         quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
         identical_gemm_int8_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
-    else:
+    elif arm == ARM_TRAIN_INT8_APPLE_CHUNK:
         comptime if HAS_APPLE_CHUNK:
             quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
             quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+            identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_QUANTIZE_A_PAR:
+        quantize_rows_int8_par_device(ctx, sb.qsa, sb.esa, sb.a, m, k)
+    elif arm == ARM_INT8_PACK_B_PAR:
+        quantize_rows_int8_par_device(ctx, sb.qsb, sb.esb, sb.b, n, k)
+    elif arm == ARM_INF_INT8_PARQ:
+        quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+        identical_gemm_int8_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_TRAIN_INT8_PARQ:
+        quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+        quantize_rows_int8_par_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+        identical_gemm_int8_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_INF_INT8_APPLE_CHUNK_PARQ:
+        comptime if HAS_APPLE_CHUNK:
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    else:
+        comptime if HAS_APPLE_CHUNK:
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            quantize_rows_int8_par_device(ctx, sb.qb, sb.eb, sb.b, n, k)
             identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
 
 
@@ -564,9 +662,9 @@ def _arm_digest(
     if _arm_is_product(arm):
         _sabotage_f32(ctx, sb.c, m * n)
         return _digest_f32(ctx, sb.c, m * n, tag)
-    if arm == ARM_QUANTIZE_A:
+    if arm == ARM_QUANTIZE_A or arm == ARM_QUANTIZE_A_PAR:
         return _digest_codes(ctx, sb.qsa, sb.esa, m, k)
-    if arm == ARM_INT8_PACK_B:
+    if arm == ARM_INT8_PACK_B or arm == ARM_INT8_PACK_B_PAR:
         return _digest_codes(ctx, sb.qsb, sb.esb, n, k)
     if arm == ARM_BF16_PACK_B:
         return _digest_u16(ctx, sb.hs, n * k)
@@ -612,7 +710,19 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         return String("pack.b+product")
     if arm == ARM_TRAIN_INT8:
         return String("quantize.a+pack.b+product")
-    return String("quantize.a+pack.b+probe")
+    if arm == ARM_TRAIN_INT8_APPLE_CHUNK:
+        return String("quantize.a+pack.b+probe")
+    if arm == ARM_QUANTIZE_A_PAR:
+        return String("per-call,block=") + String(quantize_par_block(k))
+    if arm == ARM_INT8_PACK_B_PAR:
+        return String("once-per-weight,block=") + String(quantize_par_block(k))
+    if arm == ARM_INF_INT8_PARQ:
+        return String("quantize.a.par+product")
+    if arm == ARM_TRAIN_INT8_PARQ:
+        return String("quantize.a.par+pack.b.par+product")
+    if arm == ARM_INF_INT8_APPLE_CHUNK_PARQ:
+        return String("quantize.a.par+probe")
+    return String("quantize.a.par+pack.b.par+probe")
 
 
 def _must_agree(
@@ -640,6 +750,7 @@ def _time_shape(
     capped: Bool,
     repeats: Int,
     identity_only: Bool,
+    arms: String,
 ) raises -> String:
     """Every arm at one shape. Returns the plan disagreements found (empty
     when there are none); `main` raises on them after every shape has
@@ -669,7 +780,7 @@ def _time_shape(
     var samples = List[List[Int]]()
     for arm in range(ARM_COUNT):
         dig.append(UInt64(0))
-        ran.append(_arm_runs(arm))
+        ran.append(_arm_runs(arm) and _arm_asked(arms, _arm_name(arm)))
         samples.append(List[Int]())
 
     # Untimed warm-up of every arm, its output poisoned first where the
@@ -683,6 +794,13 @@ def _time_shape(
             _poison_f32(ctx, sb.c, m * n, tag)
         elif arm == ARM_BF16_WIDEN_B or arm == ARM_INT8_DEQUANT_B:
             _poison_f32(ctx, sb.work.wide, n * k, tag)
+        elif arm == ARM_QUANTIZE_A_PAR:
+            # The reference quantizer's arm ran before this one and left
+            # its codes in the same scratch: without a poison a parallel
+            # quantizer that wrote nothing would turn in the right digest.
+            _poison_codes(ctx, sb.qsa, sb.esa, m * k, m)
+        elif arm == ARM_INT8_PACK_B_PAR:
+            _poison_codes(ctx, sb.qsb, sb.esb, n * k, n)
         _enqueue_arm(ctx, sb, arm, m, n, k)
         ctx.synchronize()
         dig[arm] = _arm_digest(ctx, sb, arm, m, n, k, tag)
@@ -700,10 +818,16 @@ def _time_shape(
     for arm in range(ARM_COUNT):
         var arm_name = _arm_name(arm)
         if not ran[arm]:
-            print(
-                "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
-                "this column does not have the unit the arm runs on",
-            )
+            if _arm_runs(arm):
+                print(
+                    "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
+                    "not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)",
+                )
+            else:
+                print(
+                    "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
+                    "this column does not have the unit the arm runs on",
+                )
             continue
         if identity_only:
             print(
@@ -720,7 +844,7 @@ def _time_shape(
         if not _arm_is_product(arm):
             unit = String("Gelem/s")
             count = Float64(n) * Float64(k)
-            if arm == ARM_QUANTIZE_A:
+            if arm == ARM_QUANTIZE_A or arm == ARM_QUANTIZE_A_PAR:
                 count = Float64(m) * Float64(k)
         _report_device(String("lowbit.") + name + "." + arm_name + ".device", med)
         print(
@@ -741,10 +865,30 @@ def _time_shape(
     bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8_APPLE_CHUNK, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_APPLE_CHUNK, dig, ran, name)
+    # lane/lowbit-mma-speed: the parallel quantizer's codes and exponents
+    # are the reference quantizer's, and the operations that use it end in
+    # the profile's product.
+    bad += _must_agree(ARM_QUANTIZE_A, ARM_QUANTIZE_A_PAR, dig, ran, name)
+    bad += _must_agree(ARM_INT8_PACK_B, ARM_INT8_PACK_B_PAR, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8_PARQ, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_PARQ, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8_APPLE_CHUNK_PARQ, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_APPLE_CHUNK_PARQ, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^
     return bad
+
+
+def _arm_asked(arms: String, name: String) -> Bool:
+    """Whether `MOJOLEARN_LOWBIT_PRICE_ARMS` names the arm: whole names,
+    since one arm's name is the start of another's."""
+    if arms == "":
+        return True
+    for part in arms.split(","):
+        if String(part) == name:
+            return True
+    return False
 
 
 def _wanted(only: String, name: String) -> Bool:
@@ -770,6 +914,7 @@ def main() raises:
             budget = Int(atol(bs))
         var only = String(getenv("MOJOLEARN_LOWBIT_PRICE_ONLY"))
         var identity_only = String(getenv("MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY")) == "1"
+        var arms = String(getenv("MOJOLEARN_LOWBIT_PRICE_ARMS"))
 
         print("== bench/gemm_lowbit_price_main.mojo [" + _mode() + "] ==")
         print("column", column_name(TARGET_COLUMN))
@@ -778,8 +923,9 @@ def main() raises:
         print(
             "sabotage: price", price_sabotage_name(), " lowbit", lowbit_sabotage_name(),
             " apple chunk", int8_apple_chunk_sabotage_name(),
+            " parallel quantizer", quantize_par_sabotage_name(),
         )
-        print("repeats", repeats, " mac budget", budget, " only", only)
+        print("repeats", repeats, " mac budget", budget, " only", only, " arms", arms)
         if identity_only:
             print(
                 "IDENTITY ONLY: every arm runs once for its digest and NOTHING",
@@ -813,7 +959,7 @@ def main() raises:
                     dm = cap[0]
                     dn = cap[1]
                 bad += _time_shape(
-                    ctx, i, name, dm, dn, k, dm != m or dn != n, repeats, identity_only
+                    ctx, i, name, dm, dn, k, dm != m or dn != n, repeats, identity_only, arms
                 )
                 shapes += 1
 
