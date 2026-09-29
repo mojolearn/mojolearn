@@ -107,6 +107,12 @@ def main():
         if a.train_auc and d.task == "binary":
             xt = d._ours_X[:500000]
             train = (d.y_train[:500000], np.asarray(m.predict_proba(xt))[:, 1])
+        mh = hashlib.sha256(str(getattr(m, "model_", "")).encode()).hexdigest()[:16]
+        print(f"ORD-PROFILE model_hash={mh}", flush=True)
+        dump = os.environ.get("ORD_PROFILE_DUMP_MODEL", "")
+        if dump:
+            with open(dump, "w") as fh:
+                fh.write(str(getattr(m, "model_", "")))
         _report("ours", ms, np.asarray(m.get_tree_leaf_counts()), d, pred, train)
 
     if a.catboost_cpu:
