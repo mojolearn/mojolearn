@@ -282,3 +282,11 @@ def test_bayesian_gmm_reg_covar_per_dataset(tmp_path, monkeypatch):
 
 def test_no_other_lane_has_dataset_params():
     assert sorted(k for k, s in A.LANES.items() if s.get("dataset_params")) == ["bayesian-gmm"]
+
+
+def test_lars_sets_eps_on_every_arm():
+    """cuML's Lars eps defaults to None (unset); ours and scikit-learn default to
+    float64 machine eps. Every arm gets the value explicitly."""
+    s = A.LANES["lars"]
+    assert s["params"]["eps"] == float(np.finfo(np.float64).eps)
+    assert s["cuml_params"]["eps"] == s["params"]["eps"]
