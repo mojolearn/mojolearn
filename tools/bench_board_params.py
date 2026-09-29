@@ -163,6 +163,9 @@ ALIASES = {
         "assign_labels": "assign_labels", "start_periods": "start_periods",
         # gbm-bench's binary classification weight (tools/bench_board_harness.py)
         "scale_pos_weight": ("scale_pos_weight", _unit_if_none),
+        # the cuML benchmark's KMeans cuml_args, TargetEncoder and MBSGD values
+        "oversampling_factor": "oversampling_factor", "smooth": "smooth", "cv": "cv",
+        "eta0": "eta0",
     },
     # XGBoost's `gamma` is the minimum split loss reduction
     "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
@@ -186,7 +189,7 @@ ALIASES = {
                   "n_bins": "max_bin",
                   # GradientBoosting's class weights as the positive-class weight
                   "class_weights": ("scale_pos_weight", _pos_over_neg)},
-    "cuml": {"n_bins": "max_bin"},
+    "cuml": {"n_bins": "max_bin", "n_folds": "cv"},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
 }
@@ -228,11 +231,11 @@ EXCEPTIONS = [
 ] + [
     (lane, "min_child_weight", "*", "ours takes min_child_hessian on Depthwise and Lossguide only; "
      "on the symmetric grower it is unset (no hessian floor, as CatBoost; XGBoost 0)")
-    for lane in ("gbdt-symmetric", "gbdt-rank-*", "gbdt-multiclass")
+    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass")
 ] + [
     (lane, "min_split_gain", "*", "ours takes min_split_gain on Depthwise and Lossguide only; on "
      "the symmetric grower it is unset (CatBoost has none; XGBoost gamma 0, LightGBM 0)")
-    for lane in ("gbdt-symmetric", "gbdt-rank-*", "gbdt-multiclass")
+    for lane in ("gbdt-symmetric*", "gbdt-rank-*", "gbdt-multiclass")
 ] + [
     (lane, "grow_policy", "xgboost-*", "ours and CatBoost fit this loss on the symmetric grower "
      "only; XGBoost has none and runs depthwise at the same depth")
@@ -260,7 +263,7 @@ EXCEPTIONS = [
      "draws nothing); scikit-learn and cuML get 7"),
     ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
     ("dbscan", "algorithm", "sklearn-cpu*", "an exact eps search on every arm: ours 'rbc' (its "
-     "default), scikit-learn has no 'rbc' and runs 'auto' (a tree on taxi, brute on Istella-S)"),
+     "default), scikit-learn has no 'rbc' and runs 'brute' (the cuML benchmark's cpu_args)"),
     ("dbscan", "algorithm", "cuml-gpu", "an exact eps search on every arm: ours 'rbc', cuml-gpu "
      "'brute' (cuml-gpu-rbc races 'rbc')"),
     ("hdbscan", "max_cluster_size", "sklearn-cpu*", "no limit on every arm: ours and cuML spell "
@@ -327,12 +330,10 @@ EXCEPTIONS = [
      "start; ours and scikit-learn start from the same seed-7 array"),
     ("algos/tsne", "learning_rate", "cuml-gpu", "cuML names its rate schedule "
      "learning_rate_method='adaptive'; ours and scikit-learn learning_rate='auto'"),
-    ("algos/sgd-clf", "learning_rate", "cuml-gpu", "cuML MBSGD has no 'optimal' schedule and runs "
-     "'constant' eta0=0.001"),
-    ("algos/sgd-clf", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=20, not max_iter"),
+    ("algos/sgd-clf", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=100, not max_iter"),
     ("algos/sgd-clf", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
-    ("algos/sgd-reg", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=20, not max_iter"),
+    ("algos/sgd-reg", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=100, not max_iter"),
     ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
      "and scikit-learn tol=None"),
     ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
