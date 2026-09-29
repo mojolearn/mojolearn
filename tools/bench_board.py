@@ -2033,13 +2033,13 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
-            cfg = next((c.get("settings", {}).get("config") for c in rr.get("cells") or []
+            src = next((c.get("settings", {}).get("config") for c in rr.get("cells") or []
                         if c.get("settings", {}).get("config")), None)
-            if cfg:
+            if src:
                 L.append("")
-                L.append("config: %s" % clean(cfg if isinstance(cfg, str) else
-                                              "%s, %s (%s)" % (cfg.get("harness"), cfg.get("entry"),
-                                                               cfg.get("url"))))
+                L.append("config: %s" % clean(src if isinstance(src, str) else
+                                              "%s, %s (%s)" % (src.get("harness"), src.get("entry"),
+                                                               src.get("url"))))
             L.extend(render_params(rr))
             L.extend(INFER.render_race(_bb(), rr))
             L.append("")
