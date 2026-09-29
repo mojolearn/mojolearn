@@ -1,0 +1,15 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index cbffeab89..188f1bfc2 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -940,8 +940,8 @@ def ls_laplacian_deg_item(t: Int, a: FP, deg: FP, res: FP, n: Int):
+     var dj = deg.unsafe_load(j)
+     var wi = ftz(identical_sqrt(di)) if di != Float32(0) else Float32(1)
+     var wj = ftz(identical_sqrt(dj)) if dj != Float32(0) else Float32(1)
+-    var v = ftz(identical_div(ftz(a.unsafe_load(t)), wj))
+-    res.unsafe_store(t, ftz(identical_div(v, wi)))
++    var v = ftz(identical_div(ftz(a.unsafe_load(t)), wi))
++    res.unsafe_store(t, ftz(identical_div(v, wj)))
+ 
+ 
+ def row_all_zero_item(t: Int, a: IP, res: IP, n: Int, m: Int):
