@@ -704,15 +704,15 @@ def host_dbscan_fit(
             for p in range(len(rows[q])):
                 col_ind.append(rows[q][p])
             row_ptr[q + 1] = len(col_ind)
-        if len(col_ind) > Int(MAX_LABEL):
-            raise Error(
-                "dbscan: the ball-cover neighbourhood has "
-                + String(len(col_ind))
-                + " edges in one batch, which does not fit the int32 CSR"
-                " this implementation uses. cuML requires int64 labels for RBC"
-                " (runner.cuh:143-150) for exactly this reason. Use a"
-                " smaller eps, a smaller batch, or the BRUTE_FORCE arm."
-            )
+        # NO int32 EDGE BOUND HERE (lane dbscan-int64, 2026-09-29). The
+        # device's bound is its int32 CSR offsets, and the device now meets
+        # it by splitting the batch rather than refusing. This CSR's offsets
+        # are `row_ptr: List[Int]` (64-bit) and its column ids are row
+        # numbers below `n_rows`, so no edge count can wrap it; the refusal
+        # that stood here was inherited from the device and bound nothing
+        # real. What does bind is MEMORY: this host fit holds the WHOLE
+        # graph, 4 bytes per edge in `col_ind` (plus the per-row lists while
+        # it is laid out), where the device holds one batch's columns.
     else:
         var thresh = host_metric_threshold(metric, eps)
         # DEVIATION 5113: the device's unit rows, by the same host code.
