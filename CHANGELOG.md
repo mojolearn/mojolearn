@@ -4,6 +4,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.30 (published 2026-09-29)
+
+- Ship the merged LLE iterative route above 200 rows and bounded dense QR/Jacobi SVD launches with poisoned read-back on Metal.
+- Reuse the completed AMD MI325X, NVIDIA A40 and M2 Pro checks across 18 decomposition lanes. No fresh numerical verification or installed wheel smoke is run for this release.
+
 ## 0.8.29 (published 2026-09-29)
 
 - Ship the merged Bayesian Gaussian mixture covariance fix: deterministic GEMM accumulation replaces the long float32 sum. The lane passed Apple, NVIDIA and AMD identity checks before merging.
