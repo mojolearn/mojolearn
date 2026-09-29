@@ -65,6 +65,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--data", required=True, help="where prep writes the reg block")
     ap.add_argument("--skip-prep", action="store_true", help="the block is already in --data")
+    ap.add_argument("--repo-python", action="store_true",
+                    help="import mojolearn from the checkout's python/ (built bindings) instead of "
+                         "the interpreter's installed wheel")
     args = ap.parse_args()
     import numpy as np
     more = _load("bench_board_more")
@@ -84,14 +87,18 @@ def main():
     bkw = dict(n_components=8, covariance_type="full", max_iter=100, tol=1e-3, reg_covar=1e-6,
                init_params="kmeans", random_state=more.SEED, n_init=1,
                weight_concentration_prior_type="dirichlet_process")
-    from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
-    sys.path.insert(0, os.path.join(REPO, "python"))
+    # ours first, then scikit-learn (imported only after ours ran, so an
+    # interpreter without it still reports ours)
+    if args.repo_python:
+        sys.path.insert(0, os.path.join(REPO, "python"))
     try:
         import mojolearn as ml
+        say("OURS-MODULE", path=ml.__file__, version=getattr(ml, "__version__", None))
         fit("ours", lambda: ml.GaussianMixture(**kw), X)
         fit("ours-bgmm", lambda: ml.BayesianGaussianMixture(**bkw), X)
     except ImportError as exc:
         say("ours", ok=False, error="import mojolearn: %s" % exc)
+    from sklearn.mixture import BayesianGaussianMixture, GaussianMixture
     fit("sk-f32", lambda: GaussianMixture(**kw), X)
     fit("sk-f64", lambda: GaussianMixture(**kw), X.astype(np.float64))
     fit("sk-bgmm-f32", lambda: BayesianGaussianMixture(**bkw), X)
