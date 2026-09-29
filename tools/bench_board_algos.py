@@ -4201,7 +4201,8 @@ def worker(args):
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
-    mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
+    mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
+        library=(runner.info or {}).get("library") or "?")
     last = None
     for line in sys.stdin:
         parts = line.split()
