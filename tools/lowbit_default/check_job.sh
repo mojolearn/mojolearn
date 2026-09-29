@@ -76,6 +76,26 @@ phase build-byte-lm pass env MOJOLEARN_GPU_ARCHS=$ARCH sh bindings/build_byte_lm
 # the portable math library SambaStack's optimizer dlopens (the tree's own
 # recipe, as tools/gap_column_leg.sh builds it); without it the Samba tests skip
 phase build-portable-math pass env PYTHONPATH=$PWD/packaging/portable_math pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('$PWD/python/mojolearn/.libs/libMojolearnMath.so'))"
+# THE WHOLE SUITE NEEDS EVERY BINDING (orchestrator, 2026-09-29): every
+# other IDENTICAL GPU binding and every host binding, four at a time, each
+# with its own log; one phase line per binding that fails.
+build_one() {  # script
+    b=$(basename "$1" .sh); log="$OUT/all_$b.log"
+    case "$b" in
+        *_host) f=${b#build_}; rm -f "python/mojolearn/host/_mojolearn_${f}.so"
+                env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_SKIP_BUILD_GATE=1 sh "$1" > "$log" 2>&1 ;;
+        *)      env MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_SKIP_BUILD_GATE=1 sh "$1" > "$log" 2>&1 ;;
+    esac
+    echo "$b $?"
+}
+export -f build_one; export OUT ARCH
+ls bindings/build_*.sh | grep -v build_host_family.sh \
+    | grep -vE '/build(_linalg|_linalg_host|_training|_transformer|_mamba|_byte_lm|_core_host|_neural_host|_transformer_host|_mamba_host|_training_host|_tokenizer_host|_byte_lm_host)?\.sh$' \
+    | xargs -P 4 -I{} bash -c 'build_one {}' > "$OUT/build_all.tsv"
+while read -r b rc; do
+    if [ "$rc" = 0 ]; then :; else printf 'PHASE %-44s exit=%-3s expected=pass BROKEN\n' "all-$b" "$rc"; red=1; tail -15 "$OUT/all_$b.log" | sed 's/^/    | /'; fi
+done < "$OUT/build_all.tsv"
+echo "built $(awk '$2==0' "$OUT/build_all.tsv" | wc -l) of $(wc -l < "$OUT/build_all.tsv") further bindings"
 for f in core linalg neural transformer mamba training tokenizer byte_lm; do
     [ "$f" = linalg ] && continue  # built above
     rm -f "python/mojolearn/host/_mojolearn_${f}_host.so"
@@ -97,16 +117,11 @@ phase gate-transformer pass pixi run check-transformer
 phase gate-transformer-int15 pass pixi run check-transformer-int15
 phase gate-transformer-int15-sabotage fail pixi run check-transformer-int15-sabotage
 
-tests=""
-for t in test_numeric_profile test_linalg_lowbit test_linalg_int15 test_linalg_identity test_host_surface test_models_loader test_training_primitives_surface \
-         test_parallel_causal_lm test_verify_causal_lm test_safetensors_f16_py310 test_lowbit_weights test_neural_inference test_decode_sessions_cpu_route \
-         test_transformer_surface test_transformer_options test_cpu_training_transformer test_cpu_training_samba test_samba_attention_wiring \
-         test_byte_lm_surface test_byte_lm_host_trainer test_byte_lm_trainer_logits test_optim_maximize_seam test_training_surface; do
-    [ -f python/mojolearn/tests/$t.py ] && tests="$tests mojolearn/tests/$t.py"
-done
-phase python-tests pass sh -c "cd python && pixi run -e test python -m pytest -q -rs -p no:cacheprovider $tests"
+# THE WHOLE SUITE, not a list (orchestrator, 2026-09-29)
+phase python-tests pass sh -c "cd python && pixi run -e test python -m pytest -q -rsfE -p no:cacheprovider mojolearn/tests"
 grep -E 'passed|failed|error|skipped' "$OUT/python-tests.log" | tail -3 | sed 's/^/    | /'
-grep -E '^SKIPPED' "$OUT/python-tests.log" | cut -c1-200 | head -40 | sed 's/^/    | /'
+grep -E '^SKIPPED' "$OUT/python-tests.log" | cut -c1-300 | sed 's/^/    | /'
+grep -E '^(FAILED|ERROR)' "$OUT/python-tests.log" | cut -c1-300 | sed 's/^/    | /'
 # the default lane's own tests must RUN here, not skip
 phase profile-tests-ran fail grep -E '^SKIPPED.*test_numeric_profile' "$OUT/python-tests.log"
 
