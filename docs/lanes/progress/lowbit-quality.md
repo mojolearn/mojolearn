@@ -1,27 +1,83 @@
 # lane/lowbit-quality: progress
 
-Brief: `~/mojolearn-evidence/lowbit-units/brief.md`, section Lane B and its
-updates of 02:50Z, 03:25Z and 03:35Z. Plan: `docs/lanes/LOWBIT_UNITS_PLAN.md`.
+Brief in force: `~/mojolearn-evidence/lowbit-units/brief_current.md` (history: `brief.md`). Plan: `docs/lanes/LOWBIT_UNITS_PLAN.md`.
 Lane files: `~/mojolearn-evidence/lowbit-quality/`. Records:
 `bench/results/lowbit_quality/2026-09-29_nvc1-rtx4090/`.
 Box: shared pod nvc1 (2x RTX 4090), lane `lowbit-quality`. Nothing runs on
 the laptop; it edits files, talks to the pod and formats JSON records.
 
-## State (2026-09-29T03:40Z)
+## State (2026-09-29T05:00Z, new agent after the handover; brief in force: `~/mojolearn-evidence/lowbit-units/brief_current.md`)
 
 | Step | State |
 |---|---|
-| Model and both texts staged from R2 onto nvc1, pins checked on the box | done (`stage.log`) |
-| Host binding `_mojolearn_linalg_host` built on the pod | done, `/root/lowbit-quality-work/host` |
-| Quantizer cross-check | PASS in job nvc1-0006 (FAILED once in nvc1-0005, cause below) |
-| This forward against `transformers` | PASS, sabotage arm fails |
-| Inference, six arms and the attention switch, enwik8 | done, job nvc1-0006 |
-| Inference, six arms and the attention switch, pile_github | done, job nvc1-0008 step 1 |
-| Width sweep, both texts | running, job nvc1-0008 steps 2 and 3 |
-| Training plan (noise floor, then arms) | running, job nvc1-0007 |
-| Finalists F1 and F2, both texts, then their training arms | queued, job nvc1-0010 |
-| F1 and bf16 inference, then bf16 and 15-bit training at five seeds | queued, job nvc1-0011 |
-| Task evaluation of the finalists | OWED: the R2 store holds no task set (below) |
+| Model and both texts staged from R2, pins checked on the box | done |
+| Quantizer cross-check, forward against `transformers` | PASS (nvc1-0006) |
+| Inference, six arms, attention switch, follow-up rows, both texts | done (nvc1-0006, nvc1-0008) |
+| Width sweep, both texts | done, complete (nvc1-0008) |
+| F1-pv32 (the configuration that ships), inference on both texts | done, PASS (nvc2-0010) |
+| F1-pv32 training, five seeds, forward and forward + backward | done, PASS (nvc2-0010, nvc2-0011) |
+| 15-bit training, complete configuration, five seeds | done, PASS (nvc2-0007, nvc2-0008) |
+| Backward vectors, step 50 and step 4000 | done (nvc2 CPU, nvc2-0009) |
+| Training plan on nvc1 (bf16, int8, int10, int12, int15w-int8a arms) | still running, nvc1-0007; landed runs committed, interim table `2026-09-29_nvc1-rtx4090/train/training_interim_0455Z.md` |
+| 15-bit training second copy on nvc1 | still running, nvc1-0012 (duplicate of nvc2-0007/0008, which already gave the five-seed table) |
+| nvc1-0009, nvc1-0010, nvc1-0011 (finalists, F1 and bf16) | cancelled: 0009 at 03:32Z (below); 0010 and 0011 at 03:40Z by the previous agent, cause not recorded; F1-pv32 on nvc2 replaced their F1 arms, and F2 and bf16 are dropped |
+| Task evaluation of the finalists | OWED: the R2 store holds no language task set |
+
+## F1-pv32: THE CONFIGURATION THAT SHIPS
+
+15-bit codes on both operands of every projection, of the LM head and of
+Q.K^T; the attention product P.V in fp32.v1. Records:
+`bench/results/lowbit_quality/2026-09-29_nvc2-rtx4090/` (`f1_pv32_enwik8/`,
+`f1_pv32_github/`, `inference_table.md`, `train_int15/training_f1_pv32.md`).
+
+Inference (job nvc2-0010, commit 9093cb633, same windows and interval as every other arm):
+
+| Text | Change | Interval | Top-1 agreement | Verdict |
+|---|---|---|---|---|
+| enwik8 | -0.0020% | -0.0067% to +0.0027% | 0.9979 | PASS |
+| pile_github | +0.0034% | -0.0010% to +0.0078% | 0.9989 | PASS |
+
+Training (byte LM, five seeds paired with the five baseline seeds; baseline
+spread 0.0085 nats, 0.853%, at step 4000):
+
+| Mode | Change at step 4000 | Interval | Change at step 6000 | Interval | Steps to the baseline's final loss | Min gradient cosine | Verdict |
+|---|---|---|---|---|---|---|---|
+| Forward only | -0.102% | -0.661% to +0.460% | +0.006% | -0.470% to +0.484% | median 4000 | 1.000000 | PASS |
+| Forward and backward | -0.297% | -0.698% to +0.106% | -0.344% | -1.312% to +0.633% | median 4000 | 0.999997 | PASS |
+
+nvc2-0011 (part 1) printed its own table when it ended, before part 0 had
+finished: forward and backward at two seeds, UNDERPOWERED. That table is
+superseded by the five-seed table above (`training_f1_pv32.md`, written at
+the end of part 0).
+
+## VERDICT TABLE, every profile measured
+
+Inference, the full table on both texts (every row, every dropped row with
+its numbers, the width sweep): `2026-09-29_nvc1-rtx4090/inference_table.md`.
+Summary of the profiles:
+
+| Profile | enwik8 change (upper end) | pile_github change (upper end) | Training, step 4000 (seeds) | Verdict |
+|---|---|---|---|---|
+| F1-pv32: 15-bit projections, head, Q.K^T; P.V fp32 | -0.0020% (+0.0027%) | +0.0034% (+0.0078%) | fwd -0.102%, fwd+bwd -0.297% (5) | PASS; SHIPS |
+| 15-bit both, attention products 15-bit (F1) | -0.0015% (+0.0033%) | +0.0055% (+0.0099%) | fwd +0.298%, fwd+bwd +0.146% (5) | PASS (P.V on 15 bits is not in version 1) |
+| 15-bit both, projections only | -0.0027% (+0.0017%) | +0.0046% (+0.0089%) | fwd -0.229%, fwd+bwd -0.184% (3, underpowered) | PASS inference |
+| `bf16f32.v1` (bf16 weights) | 0, bit-equal | 0, bit-equal | fwd -0.203% (3) | PASS |
+| bf16 both | +0.0093% (+0.0168%) | +0.0000% (+0.0061%) | fwd +0.043%, fwd+bwd +0.001% (3) | PASS; dropped (native bf16 on the matrix units) |
+| bf16 both + attention | +0.0085% (+0.0179%) | +0.0127% (+0.0224%) | fwd+bwd +0.412% (1, still running) | PASS inference; dropped |
+| `int8i32.v1` | +32.18% (+34.62%) | +28.89% (+31.86%) | fwd -0.282%; fwd+bwd +3175% (3) | MISS; dropped |
+| `int8i32.v1` + attention | +31.61% (+33.91%) | +27.89% (+30.68%) | | MISS; dropped |
+| 15-bit weights, int8 activations | +27.28% (+29.30%) | +22.59% (+24.85%) | fwd -0.143% (3) | MISS; dropped |
+| int8 weights, fp32 activations | +1.59% (+1.71%) | +1.06% (+1.16%) | | MISS; dropped |
+| int8 weights, 15-bit activations | +1.59% (+1.71%) | +1.06% (+1.16%) | fwd -0.599% (3) | MISS; dropped |
+| int8-attention mix (F2: projections fp32, QK and PV int8) | +0.595% (+0.666%) | not measured | | one text only; dropped |
+| projections fp32, QK and PV 15-bit | +0.0011% (+0.0020%) | not measured | | one text only |
+| 12-bit both | +0.180% (+0.216%) | +0.124% (+0.161%) | fwd +0.025%, fwd+bwd +0.158% (3) | PASS |
+| 10-bit both | +2.35% (+2.52%) | +2.29% (+2.46%) | fwd -0.159%, fwd+bwd +44.3% (3) | MISS |
+| 12-bit weights, 15-bit activations | +0.0082% (+0.0159%) | -0.0064% (+0.0004%) | | PASS |
+| 10-bit weights, 15-bit activations | +0.071% (+0.102%) | +0.068% (+0.090%) | | PASS |
+
+Training numbers of three seeds come from nvc1-0007 as it stood at 04:55Z
+(`train/training_interim_0455Z.md`); arms still running there are marked.
 
 ## Decisions that bind this lane (Andrew, through the brief)
 
@@ -350,12 +406,14 @@ validation under the profile by 5e-7 nats (forward and backward arm).
 
 ## Owed
 
-- A TASK EVALUATION of the finalists. The R2 store holds corpora
-  (enwik8, pile_github, fineweb-edu), tabular and ANN benchmark sets, the
-  model and opponent wheels. It holds NO language task set. Nothing was
-  downloaded onto the pod. The orchestrator stages one.
-- The second text for every arm that is under the bar on enwik8, the width
-  table on both texts, the finalists on both texts, and the training table:
-  running or queued.
-- Vectors exported from this simulation for Lane C's host oracle cross-check
-  (the brief's Lane C gate 6): not asked of this lane yet, not done.
+- A TASK EVALUATION of F1-pv32. The R2 store holds corpora (enwik8,
+  pile_github, fineweb-edu), tabular and ANN benchmark sets, the model and
+  opponent wheels. It holds NO language task set. Nothing was downloaded
+  onto a pod. The orchestrator stages one.
+- The training plan nvc1-0007 and the second 15-bit copy nvc1-0012 are still
+  running; their remaining runs are read and committed when they land. No
+  verdict depends on them: F1-pv32 and the complete 15-bit configuration
+  already have five seeds on nvc2.
+- Second text for three one-text rows (15-bit weights with fp32
+  activations, fp32 weights with 15-bit activations, projections fp32 with
+  QK and PV 15-bit): not run, not planned (no new arms).

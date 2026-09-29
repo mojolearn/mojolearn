@@ -1,0 +1,27 @@
+{
+ "source": "/root/lowbit-quality-work/out/f1_pv32_enwik8",
+ "format": "npz: nll float64 (per scored position), top uint16 (the arm's top-1 id)",
+ "arms": {
+  "arm_F1-pv32.npz": {
+   "positions": 102200,
+   "mean_nll": 2.071528661294068,
+   "nll_sha256": "7daed1a3a5dd0fe6d517f5b71d489d784f05682a3416977289ab7f0f6c7983de",
+   "top_sha256": "f523aa960533d9023054ebec1c0da74ffe2ffbe65d4cb5e40d250812c5731b60",
+   "bytes": 898536
+  },
+  "arm_a.npz": {
+   "positions": 102200,
+   "mean_nll": 2.071548699423855,
+   "nll_sha256": "6c54eeeb2422eb289a7845765077f9b03c359dc137766ee52dc3ccf6718047fa",
+   "top_sha256": "cda503dae72eada8d0e59d5789cec1a0a47d86d24a4573da5ee431e54c29f007",
+   "bytes": 898537
+  },
+  "arm_floor.npz": {
+   "positions": 102200,
+   "mean_nll": 2.071548709357561,
+   "nll_sha256": "a2b44fb80d98791227aedc4f14ca06080b89fd391b27a0e899064bf1ede7fee0",
+   "top_sha256": "cda503dae72eada8d0e59d5789cec1a0a47d86d24a4573da5ee431e54c29f007",
+   "bytes": 898510
+  }
+ }
+}

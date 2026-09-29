@@ -1,0 +1,7 @@
+F1-pv32.fwd.attn.s2 step 1000 train 1.5927 val 1.6442
+F1-pv32.fwd.attn.s2 step 2000 train 1.5921 val 1.5427
+F1-pv32.fwd.attn.s2 step 3000 train 1.5758 val 1.5006
+F1-pv32.fwd.attn.s2 step 4000 train 1.4097 val 1.4696
+F1-pv32.fwd.attn.s2 step 5000 train 1.5231 val 1.4542
+F1-pv32.fwd.attn.s2 step 6000 train 1.3662 val 1.4413
+DONE F1-pv32.fwd.attn.s2 val@4000 1.469642499706811 val@6000 1.4413100153695342 nonfinite None seconds 689.3

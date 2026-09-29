@@ -1,0 +1,27 @@
+{
+ "source": "/root/lowbit-quality-work/out/f1_pv32_github",
+ "format": "npz: nll float64 (per scored position), top uint16 (the arm's top-1 id)",
+ "arms": {
+  "arm_F1-pv32.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125672929142168,
+   "nll_sha256": "2da203a05788e8434d7aa6046f1075dbdecae7baed9706af49a5a6d6c789f0ab",
+   "top_sha256": "ad39daf6675a081fdb315bce899297ecc24665b92b9d138378fcf2292b6cb8ba",
+   "bytes": 852808
+  },
+  "arm_a.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125332145410692,
+   "nll_sha256": "28b2d9c9459eb20c2a7aa09d12081b4ed15edc6d2d0f9de3ca86767e6d02fe4f",
+   "top_sha256": "9d3dc0916cd7a0988d2c676706833d90b1742205399e972ca300b31d256c8344",
+   "bytes": 852790
+  },
+  "arm_floor.npz": {
+   "positions": 102200,
+   "mean_nll": 1.2125332357176597,
+   "nll_sha256": "c09b25565a87b4bc786b2e0b8dd5949a0107ccd9f3a1b2c11c4f7f0530708fa6",
+   "top_sha256": "9d3dc0916cd7a0988d2c676706833d90b1742205399e972ca300b31d256c8344",
+   "bytes": 852855
+  }
+ }
+}

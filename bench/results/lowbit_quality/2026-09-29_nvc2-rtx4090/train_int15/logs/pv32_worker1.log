@@ -1,0 +1,8 @@
+have a.fwd.proj.s1
+F1-pv32.fwdbwd.attn.s3 step 1000 train 1.82 val 1.6752
+F1-pv32.fwdbwd.attn.s3 step 2000 train 1.4894 val 1.5635
+F1-pv32.fwdbwd.attn.s3 step 3000 train 1.4237 val 1.5121
+F1-pv32.fwdbwd.attn.s3 step 4000 train 1.4021 val 1.477
+F1-pv32.fwdbwd.attn.s3 step 5000 train 1.5089 val 1.47
+F1-pv32.fwdbwd.attn.s3 step 6000 train 1.5728 val 1.4481
+DONE F1-pv32.fwdbwd.attn.s3 val@4000 1.4769663114085434 val@6000 1.448090797925846 nonfinite None seconds 1257.5

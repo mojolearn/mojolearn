@@ -1,0 +1,5 @@
+gpuq: job 0012 lane=lowbit-quality gpus=0 cap=240min started 2026-09-29T04:20:52Z
+gpuq: script /root/mojolearn-lowbit-quality/bench/lowbit_quality/jobs/train_int15.sh sha256 at submit 47f86eb6d9fc2bd38ccfd684f94dfbd60538e2584001d8754049c6a8c5593984, now 47f86eb6d9fc2bd38ccfd684f94dfbd60538e2584001d8754049c6a8c5593984
+job=0012 lane=lowbit-quality gpus=0 commit=d44962ac36c74977788bc44f733712edb84ff2a6 started=2026-09-29T04:20:52Z
+job=0012 lane=lowbit-quality gpus=0 commit=d44962ac36c74977788bc44f733712edb84ff2a6 started=2026-09-29T04:20:52Z
+self_test {"gate": {"min_cosine": 0.999999, "max_rel_norm_error": 0.0001}, "forward_only_path": {"cosine": 0.9999999999999999, "rel_norm_error": 0.0, "loss_delta": 0.0}, "forward_backward_path": {"cosine": 0.9999999999999897, "rel_norm_error": 1.4223491450202805e-07, "loss_delta": 0.0}, "sabotage_negated_weight_gradient": {"cosine": -0.059617841879667934, "rel_norm_error": 1.3819059227608612, "loss_delta": 0.0}, "arm_e_fwdbwd_attn_gradient": {"cosine": 0.999999988746548, "norm_ratio": 1.0000170446648537}, "verdict": "PASS"}
