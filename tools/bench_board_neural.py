@@ -443,7 +443,7 @@ def lane_settings(lane):
          "clock": "host inputs to the device, the call, the result back on the host, "
                   "synchronized" + ("; training state device-resident on both sides; round r "
                                     "is step r+1" if lane in TRAIN_LANES else "")}
-    s["seed"] = ("seed %d: every parameter and input of every arm comes from the conductor's "
+    s["seed_rule"] = ("seed %d: every parameter and input of every arm comes from the conductor's "
                  "default_rng(%d) file; torch arms also call torch.manual_seed(%d); ours' neural "
                  "classes take no seed argument (nothing in them draws)" % (SEED, SEED, SEED))
     s["explicit_params"] = _lane_params(lane)
