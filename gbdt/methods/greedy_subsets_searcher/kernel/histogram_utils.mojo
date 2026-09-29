@@ -148,6 +148,64 @@ def hist2_level_quantize_kernel(
         k += stripe
 
 
+def snap_stats_to_grid_kernel(
+    stats: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    stat_line_size_in: Int32,
+    stat_count_in: Int32,
+    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
+):
+    """lane/sym-quality (2026-09-29): every search stat, in place, ONTO the
+    tree's fixed-point grid: `v <- dequant(hist2_quantize(v, scale,
+    hist2_dither(pos)))`, the SAME dither key, rule and dequantization
+    (`fixed_to_float_kernel`'s `Float32(Int(q)) / scale`) the histograms
+    already apply. NO CATBOOST COUNTERPART (their histograms add floats).
+
+    WHY. The fixed-point histograms dither each row onto the grid, while the
+    partition totals the score subtracts them from (`sumRight = partStat -
+    sumLeft`, `compute_scores.mojo`) are FLOAT sums of the unquantized
+    stats. With unit weights the weight plane is already on the grid (a
+    power-of-two scale times 1.0 is an integer), so an empty side weighs
+    exactly zero. With class or sample weights it is not (1.3101 x 128 =
+    167.7): every leaf total then carries sqrt(rows) units of dither
+    mismatch in BOTH planes, an empty or near-empty side gets a phantom
+    weight of a few units and a phantom gradient near 1, and at l2 = 1 that
+    scores `S^2 / (W + l2)`, as large as a real split's gain once the
+    ensemble has converged. Measured on gbm-bench taxi (scale_pos_weight
+    1.31): 156,448 of 256,000 leaves at 1000 trees, the extra trees fitting
+    nothing (AUC 0.6213 at 500 and at 1000 trees, CatBoost 0.6303/0.6316).
+
+    After the snap every stat is an integer multiple of `1 / scale`, so
+    every histogram arm quantizes it EXACTLY (an integral `v * scale` is
+    unchanged by any dither), the float partition totals are exact sums of
+    the same values while they stay under 2^24 units, and `right = total -
+    left` is consistent to float rounding. The snap is idempotent, the
+    grid does not move within a tree, and the dither is zero mean, so the
+    stats move by at most one grid unit per row, unbiased.
+
+    Called once per tree at depth 0, where the storage position is the row
+    (the root is pre-split and the index is the identity), so the key is
+    the one the depth-0 direct kernels use. Only weighted fits call it: a
+    unit-weight fit keeps its bits (its weight plane is already exact)."""
+    var n_rows = Int(n_rows_in)
+    var line = Int(stat_line_size_in)
+    var stat_count = Int(stat_count_in)
+    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    var pos = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while pos < n_rows:
+        var u = hist2_dither(pos)
+        for s in range(stat_count):
+            var q = hist2_quantize(
+                stats.unsafe_load(s * line + pos), fixed_scale, u
+            )
+            var v = Float32(0.0)
+            if q != Int32(0):
+                v = ftz(Float32(Int(q)) / fixed_scale)
+            stats.unsafe_store(s * line + pos, v)
+        pos += stride
+
+
 def hist2_smem_add[
     dt: DType
 ](
