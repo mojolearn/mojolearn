@@ -80,13 +80,11 @@ STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
 # Comma-separated; RunPod places the pod on whichever of these has stock.
 # Identity needs any NVIDIA; speed is judged before/after on the SAME pod.
 # Andrew 2026-09-28: 13 H100s at $3.49/h emptied the account in four hours. Identity work
-# needs no H100: the default list stops at the cheap cards, and an H200/A100/B200 in
+# needs no H100: the default list stops at the cheap cards, and an H100/H200/A100/B200 in
 # MOJOLEARN_DEVPOD_GPUS is refused unless MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1 (Andrew's OK only).
-# Andrew 2026-09-29: an H100 is no longer refused ("i don't want to refuse h100"). It is
-# still not in the default list, and the pod cap and the lease cap below still bound the spend.
 NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA RTX A6000,NVIDIA A40}"
-case "$NV_GPUS" in *H200*|*A100*|*B200*)
-    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
+case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
+    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
 esac
 # At most this many live RunPod pods on the account, counted from the API at every up.
 MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
@@ -244,19 +242,60 @@ i=0; while [ \$i -lt 15 ] && [ ! -s $HA_GUARD/watchdog.pid ]; do sleep 1; i=\$((
 # R6: the box's /root/mojolearn is a git tree whose HEAD is <sha>. HEAD and the
 # index move to <sha> (fetched shallow when absent); the files are NOT touched,
 # so a synced lane diff survives; `git status` on the box is the lane's diff.
+ship_commit() {  # <full sha>: the Mac hands the box the commit GitHub would not
+    # GitHub refuses an anonymous fetch from some rented addresses ("could not
+    # read Username", 2026-09-29, nvc1) although the repository is public. The
+    # commit and its tree then travel from this checkout as one pack over the
+    # ssh the box already trusts, less whatever the box's own HEAD holds, and
+    # the commit is recorded as a shallow root, as `fetch --depth=1` records it.
+    git -C "$ROOT" cat-file -e "$1^{commit}" 2>/dev/null || die "this checkout does not hold $1 either"
+    _have=$(bx 120 "cd $BOX_DIR 2>/dev/null && git rev-parse -q --verify HEAD 2>/dev/null || true" < /dev/null 2>/dev/null | tr -d '\r' | grep -E '^[0-9a-f]{40}$' | head -1 || true)
+    # What travels is the commit and every object of its tree that the tree of
+    # the box's HEAD does not already hold. A set difference of the two trees,
+    # never `--not <HEAD>`: when the wanted commit is an ANCESTOR of the box's
+    # HEAD that excludes the commit itself and ships nothing (seen 2026-09-29).
+    git -C "$ROOT" rev-list --objects --no-walk "$1" | cut -d' ' -f1 | LC_ALL=C sort -u > "$TMPD/ship.want"
+    : > "$TMPD/ship.have"
+    if [ -n "$_have" ] && git -C "$ROOT" cat-file -e "$_have^{commit}" 2>/dev/null; then
+        git -C "$ROOT" rev-list --objects --no-walk "$_have" | cut -d' ' -f1 | LC_ALL=C sort -u > "$TMPD/ship.have"
+    else
+        _have=""
+    fi
+    LC_ALL=C comm -23 "$TMPD/ship.want" "$TMPD/ship.have" > "$TMPD/ship.send"
+    grep -qx "$1" "$TMPD/ship.send" || die "the pack for $1 would not hold the commit itself"
+    say "GitHub refused the box; shipping $1 from this checkout: $(wc -l < "$TMPD/ship.send" | tr -d ' ') objects (less the tree of the HEAD the box holds: ${_have:-none})"
+    # The box records the shallow root only AFTER every object of the tree is
+    # seen present, so a short pack never leaves a root that names nothing.
+    git -C "$ROOT" pack-objects --stdout -q < "$TMPD/ship.send" \
+        | bx 1800 "set -e; mkdir -p $BOX_DIR && cd $BOX_DIR
+[ -d .git ] || { git init -q . && git remote add origin $REPO_URL; }
+git unpack-objects -q
+git cat-file -e $1^{commit}
+[ \"\$(git ls-tree -r -t $1 | awk '{print \$3}' | git cat-file --batch-check | grep -c ' missing\$' || true)\" = 0 ]
+grep -qx $1 .git/shallow 2>/dev/null || echo $1 >> .git/shallow" || die "could not ship $1 to the box"
+}
+
 seed_git() {  # <full sha>
+    TMPD_SEED="$TMPD/seed.err"
+    _seed_git "$1" 2> "$TMPD_SEED" && return 0
+    grep -q SEED_FETCH_FAILED "$TMPD_SEED" || grep -q 'could not read Username' "$TMPD_SEED" || { cat "$TMPD_SEED" >&2; die "could not seed the box's git tree at $1"; }
+    ship_commit "$1"
+    _seed_git "$1" 2> "$TMPD_SEED" || { cat "$TMPD_SEED" >&2; die "could not seed the box's git tree at $1 after shipping it"; }
+}
+
+_seed_git() {  # <full sha>; returns 1 with the reason on stderr
     _out=$(bx 900 "set -e; command -v git > /dev/null || { export DEBIAN_FRONTEND=noninteractive; apt-get update -qq > /dev/null && apt-get install -y -qq git > /dev/null; }
 mkdir -p $BOX_DIR && cd $BOX_DIR
 [ -d .git ] || { git init -q . && git remote add origin $REPO_URL; }
 git config --global --add safe.directory $BOX_DIR 2>/dev/null || true
 grep -qx '.devpod_manifest' .git/info/exclude 2>/dev/null || printf '.devpod_manifest\n.devpod_manifest.prev\n' >> .git/info/exclude
 if [ \"\$(git rev-parse -q --verify HEAD 2>/dev/null)\" != $1 ]; then
-    git cat-file -e $1^{commit} 2>/dev/null || git fetch -q --depth=1 $REPO_URL $1
+    git cat-file -e $1^{commit} 2>/dev/null || git fetch -q --depth=1 $REPO_URL $1 || { echo SEED_FETCH_FAILED >&2; exit 1; }
     git update-ref HEAD $1
     git read-tree HEAD
     git update-index -q --refresh > /dev/null || true
 fi
-echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >&2; die "could not seed the box's git tree at $1"; }
+echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >&2; return 1; }
     printf '%s\n' "$_out" | grep -qx "HEAD=$1" || { printf '%s\n' "$_out" >&2; die "the box's HEAD is not $1 after seeding"; }
 }
 
