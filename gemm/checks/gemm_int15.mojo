@@ -41,6 +41,27 @@ two int8 PLANES and the same exponents (what the pieces and the matrix
 unit read). `split_int15_device` makes the second from the first. A weight
 is split once and kept; an activation is split per call.
 
+A LAUNCH ON APPLE IS BOUNDED IN WORK (DEVIATION 2979, clause W-14)
+-------------------------------------------------------------------
+macOS aborts a Metal command buffer that holds the GPU for seconds
+(`kIOGPUCommandBufferCallbackErrorImpactingInteractivity`). The cells
+written before the abort stay, the rest keep what the buffer held, and the
+wait returns as if the launch had finished: a product that is partly
+another product, and nothing says so. Measured on the M2 Pro, 2026-09-29
+(request 1790655769241): the pieces kernel at 512 x 4096 x 14336, one
+launch of 3e10 multiply-accumulates, left cells unwritten in two runs of
+three, at a different cell each time.
+So on the Apple column the two one-thread-per-cell plans launch their cells
+in SLICES of at most `INT15_APPLE_SLICE_MAC` multiply-accumulates and wait
+between slices, and the dispatchers send a product above
+`INT15_APPLE_UNIT_MIN_MAC` to the float-unit plan
+(`gemm/checks/gemm_int15_apple.mojo`), whose launches take milliseconds.
+Which cells a launch covers is SCHEDULING: a cell is computed by one thread
+from its own two rows whatever the slice. The gate runs the row that failed.
+The wait between slices makes these two launches SYNCHRONOUS on Apple when
+they are sliced; on every other column they are one launch and asynchronous
+as before.
+
 THE CONVERSIONS, AND TWO SCHEDULES OF ONE QUANTIZER (DEVIATION 2974)
 --------------------------------------------------------------------
   ROWS      `quantize_rows_int15_kernel` and `quantize_cols_int15_kernel`:
@@ -85,6 +106,7 @@ from std.sys.info import is_amd_gpu, is_nvidia_gpu
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import (
+    COLUMN_APPLE,
     TARGET_COLUMN,
     column_name,
     lib_int8_matrix_unit_for,
@@ -113,6 +135,12 @@ from gemm.checks.gemm_int8_mma import (
     _pack8,
     mma_operands_aligned,
 )
+from gemm.checks.gemm_int15_apple import (
+    INT15_APPLE_FORM_FOUR,
+    INT15_APPLE_FORM_TWO,
+    INT15_APPLE_ROW_MAX_M,
+    identical_gemm_int15_apple_into,
+)
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 
@@ -138,6 +166,26 @@ comptime INT15_FORCE_FLAT = is_defined["MOJOLEARN_INT15_FORCE_FLAT"]()
 #: is `int8i32.v1`'s: the unit is the same unit.
 comptime INT15_MMA_ENABLED = lib_int8_matrix_unit_for[TARGET_COLUMN]() and not INT15_FORCE_FLAT
 
+#: DEVIATION 2979: whether this build bounds the work of a launch of the
+#: one-thread-per-cell plans (the Apple column), and the bound: 2^30
+#: multiply-accumulates, a fraction of a second on the slowest Apple box
+#: this tree runs on. `-D MOJOLEARN_INT15_ONE_LAUNCH=1` is the arm that
+#: launches every cell at once, as the kernels did until 2026-09-29.
+comptime INT15_BOUNDED_LAUNCHES = TARGET_COLUMN == COLUMN_APPLE and not is_defined["MOJOLEARN_INT15_ONE_LAUNCH"]()
+comptime INT15_APPLE_SLICE_MAC = 1073741824
+
+#: DEVIATION 2979: on Apple the dispatchers send a product above this many
+#: multiply-accumulates to the float-unit plan (2^28; below it the
+#: one-thread-per-cell kernels took less time on the M3 Ultra, run 2).
+#: `-D MOJOLEARN_INT15_NO_APPLE_UNIT=1` keeps the dispatchers off the unit.
+#: SCHEDULING.
+comptime INT15_APPLE_UNIT_ENABLED = (
+    TARGET_COLUMN == COLUMN_APPLE
+    and not INT15_FORCE_FLAT
+    and not is_defined["MOJOLEARN_INT15_NO_APPLE_UNIT"]()
+)
+comptime INT15_APPLE_UNIT_MIN_MAC = 268435456
+
 #: Threads per block for every one-thread-per-element kernel in this file.
 #: SCHEDULING; no value crosses a thread boundary in any of them.
 comptime INT15_TPB = 256
@@ -149,8 +197,38 @@ def int15_plan_dispatch_name() -> String:
         return String("flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)")
     elif lib_int8_matrix_unit_for[TARGET_COLUMN]():
         return String("mma (lib_int8_matrix_unit_for)")
+    elif INT15_APPLE_UNIT_ENABLED:
+        return String("flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)")
     else:
         return String("flat and pieces (no int8 matrix unit on this column)")
+
+
+def int15_slice_cells(m: Int, n: Int, k: Int) -> Int:
+    """Cells per launch of a one-thread-per-cell plan: every cell where
+    launches are not bounded, else whole blocks of at most
+    `INT15_APPLE_SLICE_MAC` multiply-accumulates (one block at least)."""
+    comptime if INT15_BOUNDED_LAUNCHES:
+        var cells = ((INT15_APPLE_SLICE_MAC // k) // INT15_TPB) * INT15_TPB
+        if cells < INT15_TPB:
+            cells = INT15_TPB
+        return cells
+    else:
+        return m * n
+
+
+def int15_apple_takes_unit(m: Int, n: Int, k: Int) -> Bool:
+    """Whether the Apple dispatchers send the shape to the float-unit
+    plan. Reads the shape and may: every plan returns the same bits."""
+    return m * n * k > INT15_APPLE_UNIT_MIN_MAC
+
+
+def int15_apple_form(m: Int) -> Int:
+    """The form of the float-unit plan the dispatchers take: TWO for the
+    decode rows, FOUR above them (M3 Ultra, run 2: at the wide decode rows
+    TWO took less time, at the training rows FOUR)."""
+    if m <= INT15_APPLE_ROW_MAX_M:
+        return INT15_APPLE_FORM_TWO
+    return INT15_APPLE_FORM_FOUR
 
 
 def int15_sabotage_name() -> String:
@@ -701,16 +779,18 @@ def identical_gemm_int15_flat_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    cell0_in: Int32,
+    cell1_in: Int32,
 ):
     """One thread per cell, OP_NT, one Int32 product per step, the sum in
     Int64, `p` ascending, then the dequantization seam. The accumulator
     sees additions only: no 64-bit multiply and no 64-bit division is asked
-    of any backend."""
+    of any backend. The launch covers the cells `[cell0, cell1)`."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * n:
+    var cell = Int(cell0_in) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(cell1_in):
         return
     var i = cell // n
     var j = cell - i * n
@@ -738,14 +818,17 @@ def identical_gemm_int15_pieces_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    cell0_in: Int32,
+    cell1_in: Int32,
 ):
     """One thread per cell, OP_NT, the four piece products of each step
-    into `HH`, `HL + LH` and `LL` in Int32, then clause W-5 and the seam."""
+    into `HH`, `HL + LH` and `LL` in Int32, then clause W-5 and the seam.
+    The launch covers the cells `[cell0, cell1)`."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
-    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= m * n:
+    var cell = Int(cell0_in) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= Int(cell1_in):
         return
     var i = cell // n
     var j = cell - i * n
@@ -951,20 +1034,35 @@ def identical_gemm_int15_flat_into(
     n: Int,
     k: Int,
 ) raises:
-    """The FLAT plan, always. Asynchronous."""
+    """The FLAT plan, always. Asynchronous where it is one launch; on
+    Apple a product of more than one slice waits between slices (DEVIATION
+    2979)."""
     _refuse(m, n, k, String("identical_gemm_int15"))
-    ctx.enqueue_function[identical_gemm_int15_flat_kernel](
-        c.unsafe_ptr(),
-        qa.unsafe_ptr(),
-        ea.unsafe_ptr(),
-        qb.unsafe_ptr(),
-        eb.unsafe_ptr(),
-        Int32(m),
-        Int32(n),
-        Int32(k),
-        grid_dim=((m * n + INT15_TPB - 1) // INT15_TPB, 1, 1),
-        block_dim=(INT15_TPB, 1, 1),
-    )
+    var total = m * n
+    var per = int15_slice_cells(m, n, k)
+    var cell0 = 0
+    while cell0 < total:
+        var cell1 = cell0 + per
+        if cell1 > total:
+            cell1 = total
+        ctx.enqueue_function[identical_gemm_int15_flat_kernel](
+            c.unsafe_ptr(),
+            qa.unsafe_ptr(),
+            ea.unsafe_ptr(),
+            qb.unsafe_ptr(),
+            eb.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(cell0),
+            Int32(cell1),
+            grid_dim=((cell1 - cell0 + INT15_TPB - 1) // INT15_TPB, 1, 1),
+            block_dim=(INT15_TPB, 1, 1),
+        )
+        cell0 = cell1
+        if cell0 < total:
+            step_count_sync()
+            ctx.synchronize()
 
 
 def identical_gemm_int15_pieces_into(
@@ -980,22 +1078,38 @@ def identical_gemm_int15_pieces_into(
     n: Int,
     k: Int,
 ) raises:
-    """The PIECES plan, always. Asynchronous."""
+    """The PIECES plan, always. Asynchronous where it is one launch; on
+    Apple a product of more than one slice waits between slices (DEVIATION
+    2979). A slice is a quarter of the FLAT plan's: a step is four
+    products."""
     _refuse(m, n, k, String("identical_gemm_int15_pieces"))
-    ctx.enqueue_function[identical_gemm_int15_pieces_kernel](
-        c.unsafe_ptr(),
-        ah.unsafe_ptr(),
-        al.unsafe_ptr(),
-        ea.unsafe_ptr(),
-        bh.unsafe_ptr(),
-        bl.unsafe_ptr(),
-        eb.unsafe_ptr(),
-        Int32(m),
-        Int32(n),
-        Int32(k),
-        grid_dim=((m * n + INT15_TPB - 1) // INT15_TPB, 1, 1),
-        block_dim=(INT15_TPB, 1, 1),
-    )
+    var total = m * n
+    var per = int15_slice_cells(m, n, 4 * k)
+    var cell0 = 0
+    while cell0 < total:
+        var cell1 = cell0 + per
+        if cell1 > total:
+            cell1 = total
+        ctx.enqueue_function[identical_gemm_int15_pieces_kernel](
+            c.unsafe_ptr(),
+            ah.unsafe_ptr(),
+            al.unsafe_ptr(),
+            ea.unsafe_ptr(),
+            bh.unsafe_ptr(),
+            bl.unsafe_ptr(),
+            eb.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(cell0),
+            Int32(cell1),
+            grid_dim=((cell1 - cell0 + INT15_TPB - 1) // INT15_TPB, 1, 1),
+            block_dim=(INT15_TPB, 1, 1),
+        )
+        cell0 = cell1
+        if cell0 < total:
+            step_count_sync()
+            ctx.synchronize()
 
 
 def identical_gemm_int15_mma_into(
@@ -1103,10 +1217,19 @@ def identical_gemm_int15_planes_into(
     """**THE ENTRY POINT of `mojolearn.identical.gemm.int15i64.v1` for
     operands held as planes**, OP_NT: `C[m x n] = Q_a[m x k] . Q_b[n x k]^T`
     dequantized. The MMA plan when the column's row says True and the build
-    does not force the flat plans; the PIECES plan otherwise. Both are the
-    profile (clause W-8). Asynchronous."""
+    does not force the flat plans; on Apple the float-unit plan above
+    `INT15_APPLE_UNIT_MIN_MAC`; the PIECES plan otherwise. All are the
+    profile (clause W-8). Asynchronous, but see DEVIATION 2979."""
     comptime if INT15_MMA_ENABLED:
         identical_gemm_int15_mma_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+    elif INT15_APPLE_UNIT_ENABLED:
+        _refuse(m, n, k, String("identical_gemm_int15"))
+        if int15_apple_takes_unit(m, n, k):
+            identical_gemm_int15_apple_into(
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, int15_apple_form(m)
+            )
+        else:
+            identical_gemm_int15_pieces_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
     else:
         identical_gemm_int15_pieces_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
 
@@ -1125,9 +1248,11 @@ def identical_gemm_int15_into(
 ) raises:
     """**THE ENTRY POINT of `mojolearn.identical.gemm.int15i64.v1` for
     operands held as codes**, OP_NT. On a column that has the unit: both
-    operands split into `work`'s planes, then the MMA plan. On any other
-    column, and under `MOJOLEARN_INT15_FORCE_FLAT`: the FLAT plan on the
-    codes, no split. Asynchronous: the caller owns `work` and waits."""
+    operands split into `work`'s planes, then the MMA plan. On Apple above
+    `INT15_APPLE_UNIT_MIN_MAC`: the split, then the float-unit plan. On any
+    other column or shape, and under `MOJOLEARN_INT15_FORCE_FLAT`: the FLAT
+    plan on the codes, no split. Asynchronous (but see DEVIATION 2979): the
+    caller owns `work` and waits."""
     _refuse(m, n, k, String("identical_gemm_int15"))
     comptime if INT15_MMA_ENABLED:
         work.ensure(ctx, m * k, n * k)
@@ -1136,6 +1261,16 @@ def identical_gemm_int15_into(
         identical_gemm_int15_mma_into(
             ctx, c, work.ah, work.al, ea, work.bh, work.bl, eb, m, n, k
         )
+    elif INT15_APPLE_UNIT_ENABLED:
+        if int15_apple_takes_unit(m, n, k):
+            work.ensure(ctx, m * k, n * k)
+            split_int15_device(ctx, work.ah, work.al, qa, m * k)
+            split_int15_device(ctx, work.bh, work.bl, qb, n * k)
+            identical_gemm_int15_apple_into(
+                ctx, c, work.ah, work.al, ea, work.bh, work.bl, eb, m, n, k, int15_apple_form(m)
+            )
+        else:
+            identical_gemm_int15_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
     else:
         identical_gemm_int15_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
 
@@ -1171,17 +1306,32 @@ def identical_gemm_int15_from_f32(
         ctx.synchronize()
         _ = work^
     else:
-        step_count_device_alloc()
-        var qa = ctx.enqueue_create_buffer[DType.int16](m * k)
-        step_count_device_alloc()
-        var qb = ctx.enqueue_create_buffer[DType.int16](n * k)
-        quantize_int15_parallel_device(ctx, qa, ea, a, quant, m, k, False)
-        quantize_int15_parallel_device(ctx, qb, eb, b, quant, n, k, False)
-        identical_gemm_int15_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
-        step_count_sync()
-        ctx.synchronize()
-        _ = qa
-        _ = qb
+        var unit = False
+        comptime if INT15_APPLE_UNIT_ENABLED:
+            unit = int15_apple_takes_unit(m, n, k)
+        if unit:
+            var work = Int15Workspace(ctx)
+            work.ensure(ctx, m * k, n * k)
+            quantize_planes_int15_parallel_device(ctx, work.ah, work.al, ea, a, quant, m, k, False)
+            quantize_planes_int15_parallel_device(ctx, work.bh, work.bl, eb, b, quant, n, k, False)
+            identical_gemm_int15_planes_into(
+                ctx, c, work.ah, work.al, ea, work.bh, work.bl, eb, m, n, k
+            )
+            step_count_sync()
+            ctx.synchronize()
+            _ = work^
+        else:
+            step_count_device_alloc()
+            var qa = ctx.enqueue_create_buffer[DType.int16](m * k)
+            step_count_device_alloc()
+            var qb = ctx.enqueue_create_buffer[DType.int16](n * k)
+            quantize_int15_parallel_device(ctx, qa, ea, a, quant, m, k, False)
+            quantize_int15_parallel_device(ctx, qb, eb, b, quant, n, k, False)
+            identical_gemm_int15_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
+            step_count_sync()
+            ctx.synchronize()
+            _ = qa
+            _ = qb
     _ = ea
     _ = eb
     _ = quant^
