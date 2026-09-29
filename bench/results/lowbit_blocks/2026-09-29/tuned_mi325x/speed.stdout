@@ -1,0 +1,51 @@
+model /root/models/SmolLM2-360M
+== build build
+build build exit 0
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+== build build_linalg
+build build_linalg exit 0
+                   ^
+built python/mojolearn/identical/_mojolearn_linalg.so (kernel-launch smoke skipped; binary checks ran)
+== build build_training
+build build_training exit 0
+                       ^
+built python/mojolearn/identical/_mojolearn_training.so (kernel-launch smoke skipped; binary checks ran)
+== build build_transformer
+build build_transformer exit 0
+                  ^
+built python/mojolearn/identical/_mojolearn_transformer.so (kernel-launch smoke skipped; binary checks ran)
+== build build_byte_lm
+build build_byte_lm exit 0
+                       ^
+built python/mojolearn/identical/_mojolearn_byte_lm.so; attention_memory_profile=estash; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence
+== run fixed15_v1 auto identity,decode,batch
+model SmolLM2-360M profile fixed15_v1 device gpu vendor hip load 1.1 s
+RESULT identity box=do-amd profile=fixed15_v1 B=2 L=64 logits_sha256=d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f row0=84f2acb4afc784b6 row1=c909ff3765277b96
+RESULT batch row 0 alone vs in B=2: EQUAL
+RESULT batch row 1 alone vs in B=2: EQUAL
+RESULT decode prefix 1: 63 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 7: 57 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 63: 1 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fixed15_v1_gpu.json
+== run fp32_v1 auto identity
+model SmolLM2-360M profile fp32_v1 device gpu vendor hip load 0.8 s
+RESULT identity box=do-amd profile=fp32_v1 B=2 L=64 logits_sha256=833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d row0=ca3de3baf31bbcb1 row1=19022a95c923d2da
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fp32_v1_gpu.json
+== run fp32_v1 auto time
+model SmolLM2-360M profile fp32_v1 device gpu vendor hip load 0.8 s
+RESULT time box=do-amd profile=fp32_v1 prefill512 269.1 ms decode 160.16 ms/token
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fp32_v1_gpu.json
+== run fixed15_v1 auto time
+model SmolLM2-360M profile fixed15_v1 device gpu vendor hip load 1.1 s
+RESULT time box=do-amd profile=fixed15_v1 prefill512 250.8 ms decode 106.42 ms/token
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fixed15_v1_gpu.json
+== run fp32_v1 auto time
+model SmolLM2-360M profile fp32_v1 device gpu vendor hip load 0.8 s
+RESULT time box=do-amd profile=fp32_v1 prefill512 268.2 ms decode 160.05 ms/token
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fp32_v1_gpu.json
+== run fixed15_v1 auto time
+model SmolLM2-360M profile fixed15_v1 device gpu vendor hip load 1.1 s
+RESULT time box=do-amd profile=fixed15_v1 prefill512 253.2 ms decode 107.82 ms/token
+wrote /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model/model_do-amd_fixed15_v1_gpu.json
+out /root/mojolearn-wt/steward-do-amd/bench/results/lowbit_blocks/do-amd/model

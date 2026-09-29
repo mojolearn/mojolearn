@@ -131,6 +131,7 @@ from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
 from . import _backend
 from . import lowbit as _lowbit
+from . import _numeric_profile
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
@@ -699,7 +700,7 @@ class TransformerBlock(NumericModeMixin):
                  rope_dim=None, max_positions=8192, qkv_bias=False,
                  o_bias=False, norm="rmsnorm", norm_eps=1e-6,
                  norm_bias=False, mlp="swiglu", mlp_bias=False,
-                 qk_norm=False, attn_softcap=None):
+                 qk_norm=False, attn_softcap=None, numeric_profile=None):
         self._runtime_lock = threading.RLock()
         self._native_session = None
         self._session_binding = None
@@ -875,6 +876,25 @@ class TransformerBlock(NumericModeMixin):
                                               what, name, opt_shapes[name]))
             else:
                 self._wopt.append(None)
+        # lane/lowbit-blocks (2026-09-29): `numeric_profile=`. None is the
+        # process default. Under `fp32_v1` nothing below runs and the block
+        # is the one it was. Under `fixed15_v1` (inference only) the seven
+        # projection weights are quantized ONCE, here, by
+        # `mojolearn.linalg.quantize_int15` (one scale per output feature,
+        # along the input features, the contracted extent of Y = X W^T,
+        # contract W-9), and kept as private (hi, lo, exponents) arrays that
+        # nothing outside this object sees or writes; `_call` sends them to
+        # the binding's profile entry, which keeps them on the device.
+        self.numeric_profile = _numeric_profile.resolve(
+            numeric_profile, f"mojolearn {what} numeric_profile")
+        self._int15 = None
+        if self.numeric_profile != _numeric_profile.DEFAULT:
+            if self.numeric_profile != "fixed15_v1":
+                raise NotImplementedError(
+                    f"mojolearn {what}: numeric_profile={self.numeric_profile!r} has no block "
+                    "implementation; it is never replaced by 'fp32_v1' silently")
+            from ._linalg_impl import quantize_int15
+            self._int15 = [None if a is None else quantize_int15(a) for a in self._w[2:9]]
 
     def _weight_addrs(self):
         """The nine base weight addresses in the binding's order; the gate
@@ -956,6 +976,9 @@ class TransformerBlock(NumericModeMixin):
         what = "TransformerBlock.step" if step else "TransformerBlock.forward"
         x = _batch_tokens(x, what, self.d_model, step)
         ext = self._extension()
+        if getattr(self, "_int15", None) is not None:
+            with self._runtime_lock:
+                return self._call_int15(x, state, step, ext, what)
         reuse = (_exports(ext, "transformer_session_forward")
                  and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1")
         if not reuse and self._native_session is None:
@@ -1058,6 +1081,63 @@ class TransformerBlock(NumericModeMixin):
         state.cached_tokens = int(new_len)
         return y
 
+    def _call_int15(self, x, state, step, ext, what):
+        """`_call_impl` under `numeric_profile="fixed15_v1"` (lane/lowbit-blocks).
+        A GPU binding: `transformer_session_forward_int15` on this block's
+        retained session, the planes sent by address (kept on the device by
+        the session after its first call). A CPU host binding:
+        `transformer_forward_int15`, the float32 weights (the host oracle
+        quantizes them by the same rule). Either way both option tails are
+        sent. A binding with neither entry is refused by name; there is no
+        silent fp32 route."""
+        b, l = int(x.shape[0]), int(x.shape[1])
+        if state is None:
+            state = self.allocate_state(b, l)
+        _refuse_resident(state, what)
+        if state.batch_size != b:
+            raise ValueError(
+                f"mojolearn {what}: the state was allocated for batch_size {state.batch_size} "
+                f"but x has B = {b} (allocate_state(B, max_tokens) makes a matching one)")
+        if int(getattr(state, "window", 0)) != self.window:
+            raise ValueError(
+                f"mojolearn {what}: the state was allocated for window "
+                f"{getattr(state, 'window', 0)} but this block has window {self.window}")
+        smax = int(state.max_tokens)
+        n = b * self.n_kv_heads * state.capacity * self.head_dim
+        kc = _state_buf(state.k_cache, what, "k_cache", (n,))
+        vc = _state_buf(state.v_cache, what, "v_cache", (n,))
+        s0 = int(state.cached_tokens)
+        y = empty((b, l, self.d_model), "<f4")
+        w = self._w
+        wopt = self._wopt  # noqa: F841  (keeps the optional arrays alive)
+        planes = self._int15  # noqa: F841  (keeps the planes alive)
+        params = ([b, l, self.d_model, self.n_heads, self.n_kv_heads, self.head_dim,
+                   self.intermediate, smax, s0, self.window] + list(self._opts_tail))
+        if _exports(ext, "transformer_session_forward_int15"):
+            addrs = ([addr_ro(x, name="x"), addr_ro(w[0], name="weight"), addr_ro(w[1], name="weight")]
+                     + [0] * 7
+                     + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")]
+                     + self._tail_addrs())
+            for trip in planes:
+                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]
+            if self._native_session is None:
+                self._native_session = ext.transformer_session_create()
+                self._session_binding = ext
+            new_len = ext.transformer_session_forward_int15(self._native_session, addrs, params)
+        elif _exports(ext, "transformer_forward_int15"):
+            addrs = ([addr_ro(x, name="x")]
+                     + [0 if a is None else addr_ro(a, name="weight") for a in w]
+                     + [addr(kc, name="k_cache"), addr(vc, name="v_cache"), addr(y, name="y")]
+                     + self._tail_addrs())
+            new_len = ext.transformer_forward_int15(addrs, params)
+        else:
+            raise NotImplementedError(
+                f"mojolearn {what}: numeric_profile='fixed15_v1' needs a transformer binding "
+                "with the profile entry (transformer_session_forward_int15 or "
+                "transformer_forward_int15); rebuild it. It is never run as 'fp32_v1'.")
+        state.cached_tokens = int(new_len)
+        return y
+
     def _extension(self):
         """The `_mojolearn_transformer` binding for THIS block's tier,
         with the binary's own compile-time answer cross-checked against
@@ -1136,6 +1216,11 @@ class TransformerBlock(NumericModeMixin):
         gradient is a sum over this call's `B*L` tokens. IDENTICAL tier
         only; no incoming-cache or carried-state cotangent."""
         what = "TransformerBlock.backward"
+        if getattr(self, "_int15", None) is not None:
+            # Training is not in the profile's first version: every trainer
+            # refuses it by name (`_numeric_profile` row `training` False).
+            _numeric_profile.resolve(self.numeric_profile, f"mojolearn {what} numeric_profile",
+                                     use="training")
         if getattr(self, "_extended", False):
             # lane/block-options: the backward chains spell the frozen
             # profile's seams and none of the options'.
@@ -1218,6 +1303,11 @@ class TransformerBlock(NumericModeMixin):
         use and which rereads the weights and the caller's cache on every
         call. The decode session owns its own context and its entry points
         are `transformer_decode_session_*`; the two coexist on one block."""
+        if getattr(self, "_int15", None) is not None:
+            raise NotImplementedError(
+                "mojolearn TransformerBlock.decode_session: the resident decode session does "
+                "not compute under numeric_profile='fixed15_v1' yet; use forward/step (the "
+                "profile's session entry keeps the planes on the device)")
         return TransformerDecodeSession(self, state)
 
     __call__ = forward

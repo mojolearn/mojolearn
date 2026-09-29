@@ -1,0 +1,19 @@
+{
+ "box": "447c5c6d4d39-sabotage",
+ "profile": "fixed15_v1",
+ "device": "gpu",
+ "vendor": "cuda",
+ "model": "SmolLM2-360M",
+ "load_s": 2.3748431764543056,
+ "commit": "",
+ "identity": {
+  "B": 2,
+  "L": 64,
+  "vocab": 49152,
+  "sha256": "703b7e2158a0e140ccb3daa5d8db6fe9db54312a196c9c1f24694f3341e81f99",
+  "rows": [
+   "55a93475a64cd43e9abdf0a683f7140677efec487e236d7f00f1d002b8f1b001",
+   "94862fa2637faa2f2b66478c5cd146fa76c1670b6aaca85114fdf379bbb61bfc"
+  ]
+ }
+}

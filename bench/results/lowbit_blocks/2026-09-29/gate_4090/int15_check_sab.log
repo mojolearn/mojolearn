@@ -1,0 +1,48 @@
+int15 block check (lane/lowbit-blocks): sabotage=LOWBIT_VALUE_FLIP
+phase default (no planes; fp32.v1 against its host oracle)
+  default case 0 base_b1_l4_nrep1 B=1 L=4 dm=32 inter=64 hd=16  device bc28e697430b082c host bc28e697430b082c  30/30 stages bit-identical
+  int15 default digest case 0 bc28e697430b082c
+  default case 1 base_b2_l4_nrep2 B=2 L=4 dm=32 inter=64 hd=16  device 9426dee4eb4e24cf host 9426dee4eb4e24cf  30/30 stages bit-identical
+  int15 default digest case 1 9426dee4eb4e24cf
+  default case 2 base_b1_l1_nrep2 B=1 L=1 dm=32 inter=64 hd=16  device 7f3572c803fab44b host 7f3572c803fab44b  30/30 stages bit-identical
+  int15 default digest case 2 7f3572c803fab44b
+  default case 3 base_b3_l16_nrep2 B=3 L=16 dm=32 inter=64 hd=16  device 84d2bbfe6008e246 host 84d2bbfe6008e246  30/30 stages bit-identical
+  int15 default digest case 3 84d2bbfe6008e246
+  default case 4 wide_inter300 B=1 L=4 dm=32 inter=300 hd=16  device 9cddea63c1907867 host 9cddea63c1907867  30/30 stages bit-identical
+  int15 default digest case 4 9cddea63c1907867
+  default case 5 odd_head_dim_24 B=1 L=4 dm=48 inter=64 hd=24  device a48288cddf2ff966 host a48288cddf2ff966  30/30 stages bit-identical
+  int15 default digest case 5 a48288cddf2ff966
+  default case 7 long_l64 B=1 L=64 dm=32 inter=64 hd=16  device 76402c38605a515f host 76402c38605a515f  30/30 stages bit-identical
+  int15 default digest case 7 76402c38605a515f
+  default case 15 win4_b1_l16_nrep2 B=1 L=16 dm=32 inter=64 hd=16  device 7717bb91784c82b7 host 7717bb91784c82b7  30/30 stages bit-identical
+  int15 default digest case 15 7717bb91784c82b7
+  default case 16 win3_b2_l8_nrep1 B=2 L=8 dm=32 inter=64 hd=16  device aa74ed3e22c9bae6 host aa74ed3e22c9bae6  30/30 stages bit-identical
+  int15 default digest case 16 aa74ed3e22c9bae6
+  default case 17 win5_b1_l12_hd24 B=1 L=12 dm=48 inter=64 hd=24  device b04185c2d58405cb host b04185c2d58405cb  30/30 stages bit-identical
+  int15 default digest case 17 b04185c2d58405cb
+  default case 18 win20_b1_l16_nrep2 B=1 L=16 dm=32 inter=64 hd=16  device 3f98ab806f1365b0 host 3f98ab806f1365b0  30/30 stages bit-identical
+  int15 default digest case 18 3f98ab806f1365b0
+phase profile (fixed15_v1: projections and S11 int15, P.V fp32)
+  profile case 0 base_b1_l4_nrep1 B=1 L=4 dm=32 inter=64 hd=16  device fb094a274712f380 host 68c8656169f8b604  24 of 30 stages MOVED, first at q_proj.out on 128 of 128 cells
+  profile case 1 base_b2_l4_nrep2 B=2 L=4 dm=32 inter=64 hd=16  device a23c1ad23a7332d8 host dc76df7e9b008feb  24 of 30 stages MOVED, first at q_proj.out on 256 of 256 cells
+  profile case 2 base_b1_l1_nrep2 B=1 L=1 dm=32 inter=64 hd=16  device beef16c1d2e840c7 host 34e3bc9cc876f75f  21 of 30 stages MOVED, first at q_proj.out on 32 of 32 cells
+  profile case 3 base_b3_l16_nrep2 B=3 L=16 dm=32 inter=64 hd=16  device a272296be540cce1 host d09d5ffbfe584624  24 of 30 stages MOVED, first at q_proj.out on 1536 of 1536 cells
+  profile case 4 wide_inter300 B=1 L=4 dm=32 inter=300 hd=16  device 4ad5e1f4554e7c18 host 74b428ba5de35eab  23 of 30 stages MOVED, first at q_proj.out on 128 of 128 cells
+  profile case 5 odd_head_dim_24 B=1 L=4 dm=48 inter=64 hd=24  device ea97e7d87f75c96d host 8277da8422164ced  24 of 30 stages MOVED, first at q_proj.out on 192 of 192 cells
+  profile case 7 long_l64 B=1 L=64 dm=32 inter=64 hd=16  device daab16946212601c host e4ba62c48348b584  24 of 30 stages MOVED, first at q_proj.out on 2048 of 2048 cells
+  profile case 15 win4_b1_l16_nrep2 B=1 L=16 dm=32 inter=64 hd=16  device 37a276d7f99665a6 host 97a40f20adc3824a  24 of 30 stages MOVED, first at q_proj.out on 512 of 512 cells
+  profile case 16 win3_b2_l8_nrep1 B=2 L=8 dm=32 inter=64 hd=16  device 70614586196e8643 host 02f7f7a321ff5357  24 of 30 stages MOVED, first at q_proj.out on 512 of 512 cells
+  profile case 17 win5_b1_l12_hd24 B=1 L=12 dm=48 inter=64 hd=24  device cc35649e3e63fec8 host da8fcfbc985ba7df  24 of 30 stages MOVED, first at q_proj.out on 576 of 576 cells
+  profile case 18 win20_b1_l16_nrep2 B=1 L=16 dm=32 inter=64 hd=16  device b80fa34d4eb64856 host 6d9b5578797d8b96  24 of 30 stages MOVED, first at q_proj.out on 512 of 512 cells
+phase decode (prefill of p tokens then decode, p in 1, 7, L-1)
+  decode case 3 base_b3_l16_nrep2 prefix 1: device prefill+decode vs device prefill 0 cells differ, vs host oracle 990  digest 064a41386011eb4e  MOVED
+  decode case 3 base_b3_l16_nrep2 prefix 7: device prefill+decode vs device prefill 0 cells differ, vs host oracle 990  digest 064a41386011eb4e  MOVED
+  decode case 3 base_b3_l16_nrep2 prefix 15: device prefill+decode vs device prefill 0 cells differ, vs host oracle 990  digest 064a41386011eb4e  MOVED
+  decode case 15 win4_b1_l16_nrep2 prefix 1: device prefill+decode vs device prefill 0 cells differ, vs host oracle 345  digest 8f542edd84c2202b  MOVED
+  decode case 15 win4_b1_l16_nrep2 prefix 7: device prefill+decode vs device prefill 0 cells differ, vs host oracle 345  digest 8f542edd84c2202b  MOVED
+  decode case 15 win4_b1_l16_nrep2 prefix 15: device prefill+decode vs device prefill 0 cells differ, vs host oracle 345  digest 8f542edd84c2202b  MOVED
+phase batch (B=3 against each row alone)
+  batch case 3 row 0 of B=3 against B=1: 0 cells differ  EQUAL
+  batch case 3 row 1 of B=3 against B=1: 0 cells differ  EQUAL
+  batch case 3 row 2 of B=3 against B=1: 0 cells differ  EQUAL
+int15 block check: 17 failures

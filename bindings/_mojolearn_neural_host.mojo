@@ -363,6 +363,7 @@ def transformer_forward_fresh_binding(
 def _run_forward(
     a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
     it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+    int15: Bool = False,
 ) raises -> Int:
     """`a` is the device binding's thirteen: x, the nine weights, k_cache,
     v_cache, y_out, then the eleven optional addresses (zeros when
@@ -385,7 +386,7 @@ def _run_forward(
     var k_in = read_f32(a[10], cache_n)
     var v_in = read_f32(a[11], cache_n)
     var x = read_f32(a[0], b * l * dm)
-    var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in)
+    var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in, int15=int15)
     _write(a[12], out.y, b * l * dm)
     _write(a[10], out.k_cache, cache_n)
     _write(a[11], out.v_cache, cache_n)
@@ -424,6 +425,29 @@ def transformer_forward_binding(
     var out_len = 0
     with GILReleased(Python()):
         out_len = _run_forward(a, b, l, dm, nh, nkv, hd, it, smax, s0, window, opts)
+    return PythonObject(out_len)
+
+
+def transformer_forward_int15_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`transformer_forward` under numeric_profile="fixed15_v1"
+    (lane/lowbit-blocks, 2026-09-29): the seven projections and the score
+    product S11 on gemm.int15i64.v1's host oracle, both operands quantized
+    row by row along the contracted extent (the weights by the same rule
+    that packs them on a GPU, so the same codes), P.V on fp32. The same
+    lists as `transformer_forward`, the float32 weights included, and the
+    two option tails ALWAYS sent: 24 addresses, 27 params. Returns the
+    post-call cached_tokens."""
+    var what = String("transformer_forward_int15")
+    if Int(py=len(addrs)) != 13 + BLOCK_OPTION_ADDRS or Int(py=len(params)) != 10 + BLOCK_OPTION_PARAMS:
+        raise Error(what + ": addrs must hold 24 addresses and params 27 values (both tails always)")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    var p = _params_tail(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    var out_len = 0
+    with GILReleased(Python()):
+        out_len = _run_forward(a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts, True)
     return PythonObject(out_len)
 
 
@@ -905,6 +929,7 @@ def PyInit__mojolearn_neural_host() abi("C") -> PythonObject:
         module.def_function[mlp_forward_logits_binding]("mlp_forward_logits")
         module.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         module.def_function[transformer_forward_binding]("transformer_forward")
+        module.def_function[transformer_forward_int15_binding]("transformer_forward_int15")
         module.def_function[transformer_decode_step_binding]("transformer_decode_step")
         module.def_function[mamba1_forward_fresh_binding]("mamba1_forward_fresh")
         module.def_function[mamba1_forward_binding]("mamba1_forward")

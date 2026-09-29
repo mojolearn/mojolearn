@@ -1,0 +1,15 @@
+gpuq: job 0043 lane=lowbit-blocks-h100 gpus=0 cap=45min started 2026-09-29T06:13:42Z
+RESULT identity box=h100-nvc3 profile=fixed15_v1 B=2 L=64 logits_sha256=d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f row0=84f2acb4afc784b6 row1=c909ff3765277b96
+RESULT batch row 0 alone vs in B=2: EQUAL
+RESULT batch row 1 alone vs in B=2: EQUAL
+RESULT decode prefix 1: 63 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 7: 57 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 63: 1 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT identity box=h100-nvc3 profile=fp32_v1 B=2 L=64 logits_sha256=833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d row0=ca3de3baf31bbcb1 row1=19022a95c923d2da
+RESULT time box=h100-nvc3 profile=fp32_v1 prefill512 399.2 ms decode 290.09 ms/token
+RESULT time box=h100-nvc3 profile=fixed15_v1 prefill512 281.5 ms decode 131.16 ms/token
+RESULT time box=h100-nvc3 profile=fp32_v1 prefill512 399.2 ms decode 287.80 ms/token
+RESULT time box=h100-nvc3 profile=fixed15_v1 prefill512 287.6 ms decode 131.50 ms/token
+gpuq: job 0043 done exit=0 at 2026-09-29T06:23:13Z after 571s
+
+[exited with code 0]

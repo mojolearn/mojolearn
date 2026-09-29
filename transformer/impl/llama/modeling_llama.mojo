@@ -300,6 +300,21 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from gemm.checks.gemm_identical import GemmWorkspace
+# lane/lowbit-blocks (2026-09-29): the block's products under
+# `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
+from transformer.impl.llama.int15_block import (
+    LLAMA_PROJ_DOWN,
+    LLAMA_PROJ_GATE,
+    LLAMA_PROJ_K,
+    LLAMA_PROJ_O,
+    LLAMA_PROJ_Q,
+    LLAMA_PROJ_UP,
+    LLAMA_PROJ_V,
+    LlamaInt15Stage,
+    LlamaInt15Weights,
+    llama_int15_proj,
+    llama_int15_scores,
+)
 
 # ORIENTATION NUMBERING: these are `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. They are NOT `bench/gemm_shapes.mojo`'s
@@ -1003,6 +1018,11 @@ struct LlamaDeviceWeights(Movable):
     var b_gate: DeviceBuffer[DType.float32]  # [intermediate]       mlp_bias, gated
     var qn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
     var kn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
+    var int15: Optional[LlamaInt15Weights]
+    """lane/lowbit-blocks: the seven projections' planes under
+    `numeric_profile="fixed15_v1"` (the profile constructor below), None in
+    every other constructor. With planes, the seven float32 projection
+    fields above are one-element placeholders that no call reads."""
 
     def __init__(
         out self,
@@ -1092,6 +1112,89 @@ struct LlamaDeviceWeights(Movable):
         self.b_gate = b_gate^
         self.qn_w = qn_w^
         self.kn_w = kn_w^
+        self.int15 = None
+        self._validate_finite(ctx)
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        dims: LlamaDims,
+        opts: BlockOptions,
+        var norm1_w: DeviceBuffer[DType.float32],
+        var norm2_w: DeviceBuffer[DType.float32],
+        var int15: LlamaInt15Weights,
+        var b_q: DeviceBuffer[DType.float32],
+        var b_k: DeviceBuffer[DType.float32],
+        var b_v: DeviceBuffer[DType.float32],
+        var b_o: DeviceBuffer[DType.float32],
+        var norm1_b: DeviceBuffer[DType.float32],
+        var norm2_b: DeviceBuffer[DType.float32],
+        var b_up: DeviceBuffer[DType.float32],
+        var b_down: DeviceBuffer[DType.float32],
+        var b_gate: DeviceBuffer[DType.float32],
+        var qn_w: DeviceBuffer[DType.float32],
+        var kn_w: DeviceBuffer[DType.float32],
+    ) raises:
+        """THE PROFILE CONSTRUCTOR (lane/lowbit-blocks,
+        `numeric_profile="fixed15_v1"`, inference only): the options
+        constructor with the seven float32 projection weights replaced by
+        their planes. The planes are checked against the block's shapes BY
+        NAME; the float32 projection fields are one-element placeholders,
+        never read (every projection goes through `llama_proj`, which takes
+        the planes when they are present)."""
+        dims.validate()
+        opts.validate(dims.head_dim)
+        self.dims = dims.copy()
+        self.opts = opts.copy()
+        self.eps = opts.norm_eps
+        var dm = dims.d_model
+        var qw = dims.q_width()
+        var kw = dims.kv_width()
+        var it = dims.intermediate
+        var hd = dims.head_dim
+        _expect_len("norm1.weight", len(norm1_w), dm)
+        _expect_len("norm2.weight", len(norm2_w), dm)
+        if int15.gated != opts.gated():
+            raise Error(
+                "llama int15: the planes say gated=" + String(int15.gated)
+                + " and the options record says gated=" + String(opts.gated())
+            )
+        int15.check_shapes(dm, qw, kw, it)
+        _expect_optional("q_proj.bias", len(b_q), qw, opts.qkv_bias)
+        _expect_optional("k_proj.bias", len(b_k), kw, opts.qkv_bias)
+        _expect_optional("v_proj.bias", len(b_v), kw, opts.qkv_bias)
+        _expect_optional("o_proj.bias", len(b_o), dm, opts.o_bias)
+        _expect_optional("input_layernorm.bias", len(norm1_b), dm, opts.norm_bias)
+        _expect_optional(
+            "post_attention_layernorm.bias", len(norm2_b), dm, opts.norm_bias
+        )
+        _expect_optional("up_proj.bias", len(b_up), it, opts.mlp_bias)
+        _expect_optional("down_proj.bias", len(b_down), dm, opts.mlp_bias)
+        _expect_optional("gate_proj.bias", len(b_gate), it, opts.has_gate_bias())
+        _expect_optional("q_norm.weight", len(qn_w), hd, opts.qk_norm)
+        _expect_optional("k_norm.weight", len(kn_w), hd, opts.qk_norm)
+        var ph = _zeros(ctx, 1)
+        self.norm1_w = norm1_w^
+        self.norm2_w = norm2_w^
+        self.w_q = ph.copy()
+        self.w_k = ph.copy()
+        self.w_v = ph.copy()
+        self.w_o = ph.copy()
+        self.w_gate = ph.copy()
+        self.w_up = ph.copy()
+        self.w_down = ph^
+        self.b_q = b_q^
+        self.b_k = b_k^
+        self.b_v = b_v^
+        self.b_o = b_o^
+        self.norm1_b = norm1_b^
+        self.norm2_b = norm2_b^
+        self.b_up = b_up^
+        self.b_down = b_down^
+        self.b_gate = b_gate^
+        self.qn_w = qn_w^
+        self.kn_w = kn_w^
+        self.int15 = int15^
         self._validate_finite(ctx)
 
     def __init__(
@@ -1182,6 +1285,7 @@ struct LlamaDeviceWeights(Movable):
         self.b_gate = ph.copy()
         self.qn_w = ph.copy()
         self.kn_w = ph^
+        self.int15 = None
         self._validate_finite(ctx)
 
 
@@ -1244,6 +1348,7 @@ struct LlamaDeviceWeights(Movable):
         self.b_gate = ph.copy()
         self.qn_w = ph.copy()
         self.kn_w = ph^
+        self.int15 = None
         self._validate_finite(ctx)
 
 
@@ -1539,6 +1644,14 @@ struct LlamaDeviceStages(Movable):
     is `M * n_heads` floats and a conditional field is a second struct
     shape to get wrong."""
     var gemm_workspace: GemmWorkspace
+    var int15: Optional[LlamaInt15Stage]
+    """lane/lowbit-blocks: the profile's per-call scratch, created by the
+    first call whose weights carry planes; None on the default path, which
+    therefore allocates nothing new."""
+    var int15_on: Bool
+    """lane/lowbit-blocks: THIS call runs under `fixed15_v1` (its weights
+    carry planes). Set by `llama_decoder_layer_forward_planted` on every
+    call; read by S11 and by the attention path choice."""
     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
     var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
     var attn_fused_off: Bool
@@ -1595,6 +1708,8 @@ struct LlamaDeviceStages(Movable):
         if window < 0:
             raise Error("llama: stages window must be >= 0 (0 = full causal)")
         self.gemm_workspace = GemmWorkspace(ctx)
+        self.int15 = None
+        self.int15_on = False
         self.b = b
         self.l = l
         self.s_max = s_max
@@ -1733,6 +1848,35 @@ struct LlamaDeviceStages(Movable):
         self.attn_estash_cells = 0
         step_count_sync()
         ctx.synchronize()
+
+
+def llama_proj(
+    ctx: DeviceContext,
+    mut gw: GemmWorkspace,
+    mut st15: Optional[LlamaInt15Stage],
+    w15: Optional[LlamaInt15Weights],
+    which: Int,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut wf: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """ONE projection, `C[m x n] = A[m x k] . W[n x k]^T` (OP_NT).
+
+    Weights WITHOUT planes (every block but the profile's): exactly the call
+    that stood at each site before lane/lowbit-blocks, `gw.run[False](ctx, c,
+    a, wf, m, n, k, OP_NT)`, gemm.fp32.v1. Weights WITH planes
+    (`numeric_profile="fixed15_v1"`): `A` quantized per token by the
+    parallel quantizer, the weight's kept planes, gemm.int15i64.v1
+    (`int15_block.mojo`); `wf` is then a placeholder and is not read."""
+    if w15:
+        if not st15:
+            st15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
+        llama_int15_proj(ctx, st15.value(), c, a, w15.value().get(which), m, n, k)
+    else:
+        gw.run[False](ctx, c, a, wf, m, n, k, _gemm_op_nt())
 
 
 def ensure_attention_stage_capacity(
@@ -3700,6 +3844,12 @@ def eager_attention_forward(
         choice = ATTN_PATH_EAGER
     if softcap != Float32(0.0):
         choice = ATTN_PATH_EAGER
+    # lane/lowbit-blocks: under `fixed15_v1` the fused kernels would compute
+    # Q.K^T in fp32 inside themselves, so the profile FORCES the eager
+    # kernels, whose S11 is the profile's product and whose S19 (P.V) is
+    # the pinned fp32 chain the profile keeps.
+    if stages.int15_on:
+        choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     var status = -1
     # DEVIATION 2652: nothing kept until this call keeps it.
@@ -3889,16 +4039,28 @@ def attention_eager_core(
                 grid_dim=(_grid(s * hd), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
-            stages.gemm_workspace.run[False](
-                ctx,
-                stages.sbh,
-                stages.qbh,
-                stages.kbh,
-                l,
-                s,
-                hd,
-                _gemm_op_nt(),
-            )
+            # lane/lowbit-blocks: under `fixed15_v1` the score product is
+            # gemm.int15i64.v1, one scale per query row and one per key row,
+            # each over head_dim (`int15_block.mojo`); otherwise the call
+            # that stood here.
+            if stages.int15_on:
+                if not stages.int15:
+                    stages.int15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
+                llama_int15_scores(
+                    ctx, stages.int15.value(), stages.sbh, stages.qbh,
+                    stages.kbh, l, s, hd,
+                )
+            else:
+                stages.gemm_workspace.run[False](
+                    ctx,
+                    stages.sbh,
+                    stages.qbh,
+                    stages.kbh,
+                    l,
+                    s,
+                    hd,
+                    _gemm_op_nt(),
+                )
             step_count_launch()
             ctx.enqueue_function[scatter_scores_kernel](
                 stages.scores.unsafe_ptr(),
@@ -4226,8 +4388,9 @@ def llama_attention_forward(
     # TF32 projections, exceeding the block's unchanged accuracy contract.
     # IDENTICAL already uses this plan; its arithmetic remains unchanged.
     var opts = w.opts.copy()
-    stages.gemm_workspace.run[False](
-        ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt()
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_Q,
+        stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm,
     )
     # DEVIATION 2934 (lane/block-options), `qkv_bias`: one plain add per
     # cell after the GEMM, in place, BEFORE the stage is recorded so the
@@ -4265,8 +4428,9 @@ def llama_attention_forward(
         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
     )
     pc.tick(ctx, "fwd.q_proj", "proj_fwd")
-    stages.gemm_workspace.run[False](
-        ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_K,
+        stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm,
     )
     if opts.qkv_bias:
         step_count_launch()
@@ -4289,8 +4453,9 @@ def llama_attention_forward(
         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
     )
     pc.tick(ctx, "fwd.k_proj", "proj_fwd")
-    stages.gemm_workspace.run[False](
-        ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_V,
+        stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm,
     )
     if opts.qkv_bias:
         step_count_launch()
@@ -4501,8 +4666,9 @@ def llama_attention_forward(
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
     #      bias=attention_bias)`; the bias under `o_bias` (DEVIATION 2935).
     #      C[M, dm] = ctx[M, qw] . w_o[dm, qw]^T, `k = n_heads*head_dim`.
-    stages.gemm_workspace.run[False](
-        ctx, stages.o_proj, stages.ctxv, w.w_o, m, dm, qw, _gemm_op_nt()
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_O,
+        stages.o_proj, stages.ctxv, w.w_o, m, dm, qw,
     )
     if opts.o_bias:
         step_count_launch()
@@ -4564,15 +4730,9 @@ def llama_mlp_forward(
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
     if gated:
-        stages.gemm_workspace.run[False](
-            ctx,
-            stages.gate_proj,
-            stages.norm2_out,
-            w.w_gate,
-            m,
-            it,
-            dm,
-            _gemm_op_nt(),
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_GATE,
+            stages.gate_proj, stages.norm2_out, w.w_gate, m, it, dm,
         )
         if bias_silu_fused:
             step_count_launch()
@@ -4609,15 +4769,9 @@ def llama_mlp_forward(
         var no_gate = List[Float32]()
         trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
-    stages.gemm_workspace.run[False](
-        ctx,
-        stages.up_proj,
-        stages.norm2_out,
-        w.w_up,
-        m,
-        it,
-        dm,
-        _gemm_op_nt(),
+    llama_proj(
+        ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_UP,
+        stages.up_proj, stages.norm2_out, w.w_up, m, it, dm,
     )
     if bias_gelu_fused and not gated:
         step_count_launch()
@@ -4719,26 +4873,14 @@ def llama_mlp_forward(
     #      Without that fixture the tree sits unexercised inside the block.
     #      An ungated MLP feeds the activation itself.
     if gated:
-        stages.gemm_workspace.run[False](
-            ctx,
-            stages.down_proj,
-            stages.gated,
-            w.w_down,
-            m,
-            dm,
-            it,
-            _gemm_op_nt(),
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_DOWN,
+            stages.down_proj, stages.gated, w.w_down, m, dm, it,
         )
     else:
-        stages.gemm_workspace.run[False](
-            ctx,
-            stages.down_proj,
-            stages.silu_out,
-            w.w_down,
-            m,
-            dm,
-            it,
-            _gemm_op_nt(),
+        llama_proj(
+            ctx, stages.gemm_workspace, stages.int15, w.int15, LLAMA_PROJ_DOWN,
+            stages.down_proj, stages.silu_out, w.w_down, m, dm, it,
         )
     if opts.mlp_bias:
         step_count_launch()
@@ -4930,6 +5072,9 @@ def llama_decoder_layer_forward_planted(
     # thirteen names for anyone who wants them in one call.
     llama_refuse_bad_call(ctx, w, rope, x, kv, b, l)
     pc.tick(ctx, "fwd.refuse_call")
+    # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
+    # weights carry planes.
+    stages.int15_on = Bool(w.int15)
 
     trace.record_device[DType.float32](ctx, prefix + ".input.x", x, m * dm)
 

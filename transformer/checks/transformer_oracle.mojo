@@ -108,6 +108,8 @@ from std.memory import bitcast
 
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
+# lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
+from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
 from core.host_parallel import host_parallelize
 from core.host_lanes import (
     host_row_tasks,
@@ -1419,6 +1421,22 @@ def _apply_plant(
 # ===========================================================================
 
 
+def _oracle_product(
+    a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, int15: Bool
+) raises -> List[Float32]:
+    """`C = A . B^T` (OP_NT). Under the default, gemm.fp32.v1's host rows,
+    exactly the call that stood at every site before lane/lowbit-blocks.
+    With `int15` (`numeric_profile="fixed15_v1"`), gemm.int15i64.v1's host
+    oracle: both operands quantized row by row along `k` by
+    `quantize_rows_int15` (clause W-9; a weight's codes are a function of
+    its own rows, so quantizing it here per call gives the codes a caller
+    packs once), then the exact integer sum. The block's P.V (S19) is not a
+    call of this function and stays fp32 under both."""
+    if int15:
+        return gemm_int15_from_f32_oracle(a, b, m, n, k)
+    return gemm_host_rows(a, b, OP_NT, m, n, k)
+
+
 def transformer_block_oracle(
     w: TransformerWeights,
     x: List[Float32],
@@ -1427,6 +1445,7 @@ def transformer_block_oracle(
     mut cache: TransformerKVCache,
     rope: RopeTable,
     plant: ScorePlant,
+    int15: Bool = False,
 ) raises -> TransformerStages:
     """One `LlamaDecoderLayer.forward` (modeling_llama.py:295-324), stage by
     stage, through the seams.
@@ -1583,9 +1602,9 @@ def transformer_block_oracle(
     # must move `q_proj.out` and it exists because the op numbering is three
     # bare integers (gemm_oracle.mojo:194-198) and a transposed read of a
     # square-ish weight produces a plausible number.
-    st.q_proj_out = gemm_host_rows(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
-    st.k_proj_out = gemm_host_rows(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
-    st.v_proj_out = gemm_host_rows(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
+    st.q_proj_out = _oracle_product(st.norm1_out, w.w_q, m, qw, dm, int15)
+    st.k_proj_out = _oracle_product(st.norm1_out, w.w_k, m, kw, dm, int15)
+    st.v_proj_out = _oracle_product(st.norm1_out, w.w_v, m, kw, dm, int15)
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
     # the card keeps its thirty tags.
@@ -1732,7 +1751,7 @@ def transformer_block_oracle(
             for j in range(s):
                 for d in range(hd):
                     kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
-            var cell = gemm_host_rows(qmat, kmat, OP_NT, l, s, hd)
+            var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
             var sbase = (bb * nh + h) * l * s
             if not opts.has_softcap():
                 span_scale(cell, 0, l * s, scale, scores, sbase)
@@ -1980,7 +1999,7 @@ def transformer_block_oracle(
     st.attn_ctx = actx^
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
-    st.o_proj_out = gemm_host_rows(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
+    st.o_proj_out = _oracle_product(st.attn_ctx, w.w_o, m, dm, qw, int15)
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
         var ob = st.o_proj_out.copy()
@@ -2023,12 +2042,12 @@ def transformer_block_oracle(
     # the activation of `up_proj.out` and feeds `down_proj` directly.
     var gated = opts.gated()
     if gated:
-        st.gate_proj_out = gemm_host_rows(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
+        st.gate_proj_out = _oracle_product(st.norm2_out, w.w_gate, m, inter, dm, int15)
         if opts.mlp_bias:
             var gb = st.gate_proj_out.copy()
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
-    st.up_proj_out = gemm_host_rows(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
+    st.up_proj_out = _oracle_product(st.norm2_out, w.w_up, m, inter, dm, int15)
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
         add_bias_into(ub, w.b_up, m, inter)
@@ -2064,13 +2083,9 @@ def transformer_block_oracle(
     if gated:
         st.mlp_gated = List[Float32](length=m * inter, fill=Float32(0.0))
         span_mul(st.silu_out, 0, st.up_proj_out, 0, m * inter, st.mlp_gated, 0)
-        st.down_proj_out = gemm_host_rows(
-            st.mlp_gated, w.w_down, OP_NT, m, dm, inter
-        )
+        st.down_proj_out = _oracle_product(st.mlp_gated, w.w_down, m, dm, inter, int15)
     else:
-        st.down_proj_out = gemm_host_rows(
-            st.silu_out, w.w_down, OP_NT, m, dm, inter
-        )
+        st.down_proj_out = _oracle_product(st.silu_out, w.w_down, m, dm, inter, int15)
     if opts.mlp_bias:
         var db = st.down_proj_out.copy()
         add_bias_into(db, w.b_down, m, dm)
