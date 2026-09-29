@@ -12,8 +12,9 @@ produces bitwise-identical results across verified Apple, NVIDIA and AMD GPUs
 and x86-64 and Arm CPUs. Results agree bit for bit, not merely within a
 numerical tolerance.
 
-- **57 machine-learning algorithms in 12 families**, from decision trees to
-  neural networks, with training and inference for every one of them.
+- **100+ machine-learning algorithms and model components across 13 families**,
+  from tree ensembles and classical models to CNNs, recurrent networks and
+  state-space models.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
 - **Move training between vendors.** A training run can be handed off from
@@ -62,20 +63,23 @@ math routines wherever their results would depend on the backend.
 
 ## Algorithms
 
-| family | algorithms |
+The table shows representative methods, with related estimator variants grouped together.
+
+| family | algorithms and components |
 |---|---|
-| gradient boosting | symmetric-tree, depth-wise and loss-guided boosting, ordered boosting |
-| forests | random forest, extremely randomized trees, isolation forest |
-| clustering | k-means, DBSCAN, HDBSCAN, agglomerative, spectral, Gaussian mixture |
-| neighbors, density and search | nearest neighbors, k-NN prediction, radius neighbors, random ball cover, IVF-Flat, kernel density |
-| linear models | least squares, ridge, lasso, elastic net, logistic regression |
-| kernel methods and Gaussian processes | support vector machines, kernel ridge, Gaussian process regression and classification, Nystroem, random Fourier features |
-| decomposition and manifold | PCA, truncated SVD, UMAP |
-| time series | ARIMA, Holt-Winters exponential smoothing, KPSS test |
-| preprocessing and resampling | standard and min-max scalers, bootstrap, permutation test, Monte Carlo integration |
-| neural blocks and optimizers | transformer, Mamba-1, Mamba-2, Mamba-3, Samba hybrid stack, MLP, Adam, AdamW, SGD with momentum |
-| language model and tokenizer | decoder language model, byte-level BPE tokenizer |
-| linear algebra | matrix product, Cholesky, QR, symmetric eigendecomposition, singular values |
+| boosting | symmetric-tree, depth-wise, loss-guided and ordered boosting; AdaBoost, DART |
+| trees and ensembles | decision trees, random forests, Extra Trees, isolation forests, bagging, voting, stacking |
+| clustering | k-means, mini-batch and bisecting k-means, DBSCAN, HDBSCAN, agglomerative, spectral, mean shift, OPTICS, affinity propagation, Gaussian and Bayesian Gaussian mixtures |
+| neighbors, density and search | nearest neighbors, k-NN, radius neighbors, kernel density, local outlier factor, label propagation, IVF-Flat, IVF-PQ, CAGRA |
+| linear models | least squares, ridge, lasso, elastic net, logistic regression, SGD, Huber, Poisson, Gamma, Tweedie, Bayesian ridge, ARD, Lars, quantile and isotonic regression |
+| kernel methods and Gaussian processes | SVMs, kernel ridge, Gaussian process regression and classification, sparse variational GP, Nystroem, random Fourier and chi-square features |
+| decomposition and manifold | PCA, incremental and kernel PCA, truncated SVD, NMF, ICA, factor analysis, PLS, CCA, dictionary learning, sparse PCA, LDA, UMAP, t-SNE, Isomap, MDS, LLE |
+| time series | ARIMA, AutoARIMA, Holt-Winters, ETS, STL, VAR, Theta, Croston, GARCH, Prophet-style forecasting, KPSS |
+| preprocessing, probabilistic models and resampling | scalers, encoders, imputers, discretization, feature selection, naive Bayes, discriminant analysis, bootstrap, permutation tests, Monte Carlo integration |
+| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
+| convolutional and graph networks | 1-D and 2-D convolutions, pooling, batch normalization, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
+| language models and tokenization | decoder language models, byte-level BPE tokenization |
+| linear algebra | matrix products, Cholesky, QR, LU, eigendecomposition, SVD, least squares |
 
 Also provided are evaluation metrics, cross-validation, CPU training and
 inference, Hugging Face checkpoint loading and decoding, BF16 and INT8
@@ -106,13 +110,10 @@ weaker.
 pip install mojolearn   # Mac: Apple GPU; Linux: NVIDIA or AMD GPU, or CPU
 ```
 
-Version <!--fact:published_version-->0.8.25<!--/fact--> is on PyPI as a
-macOS arm64 wheel (Apple Metal) and a Linux x86-64 wheel carrying NVIDIA
-CUDA and AMD HIP together. Both wheels train and predict on the CPU as well.
-
-On Linux, later releases ship the GPU binaries as the packages
-`mojolearn-nvidia` and `mojolearn-amd`; `pip install mojolearn` installs both
-automatically and uses the one for the GPU it finds.
+macOS arm64 wheels include Apple Metal support. In 0.8.25 on Linux x86-64,
+`pip install mojolearn` automatically installs the `mojolearn-nvidia` and
+`mojolearn-amd` GPU packages and selects the backend for the GPU it finds.
+Both platforms also support CPU training and inference.
 
 ```sh
 mojolearn doctor
@@ -144,9 +145,9 @@ predictions are the same bits.
 The wheel ships the reference results recorded on Apple, NVIDIA, AMD and
 CPU, and a verifier that checks your machine against them.
 
-Install NumPy for verification (`python -m pip install numpy` on the published
-0.8.24 release). The next release provides `python -m pip install "mojolearn[verify]"`:
-the same library plus its optional verification dependency.
+In 0.8.25, install verification support with
+`python -m pip install "mojolearn[verify]"`: the same library plus its optional
+verification dependency. On 0.8.24, use `python -m pip install numpy`.
 Optional ANN, CNN and sequence APIs that use NumPy are supported by
 `mojolearn[numpy]`; the verification extra includes that same dependency.
 The base install does not require NumPy. See [verification support](docs/VERIFY.md).
@@ -156,7 +157,7 @@ python -m mojolearn verify --quick   # one lane per family
 python -m mojolearn verify --all     # every available lane on the base fixture; --full adds all nine
 ```
 
-On current main, `--all` also includes applicable gradient, batch-size,
+In 0.8.25, `--all` also includes applicable gradient, batch-size,
 ragged-batch and sampler/replay checks. On 0.8.24, add `--batch-checks` for
 those probes. `--quick` keeps its smaller scope.
 
