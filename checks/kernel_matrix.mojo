@@ -778,6 +778,12 @@ def block_size_for[kernel: Int, column: Int]() -> Int:
     comptime limit = budget // (floats * 4)
     comptime by_smem = limit if limit < cap else cap
     comptime hard = column_max_block_size(column)
+    # DIAGNOSTIC (lane/ordered-speed-m2diag): the sub-byte families at 256
+    # on Apple, as APPLE_HIST2_SHARED_I32_BLOCK_CAP does for hist2
+    comptime if column == COLUMN_APPLE and (
+        kernel == K_HIST_BINARY or kernel == K_HIST_HALF_BYTE
+    ):
+        return 256
     return by_smem if by_smem < hard else hard
 
 
