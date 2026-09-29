@@ -176,6 +176,7 @@ def _search(
     sabotage: Int32,
     mut pk: List[Int32],
     mut pj: List[Int32],
+    launch_macs: Int,
 ) raises -> Int:
     """Exact cheapest other-component edge of every point in `todo`, into
     `pk` / `pj`. Returns the number of launches."""
@@ -189,7 +190,7 @@ def _search(
     var bk = List[Int32](length=n_todo, fill=WEIGHT_KEY_SENTINEL)
     var bj = List[Int32](length=n_todo, fill=SMR_NONE_J)
     var dd = d if d > 0 else 1
-    var span = SPARSE_MR_LAUNCH_MACS // (n_todo * dd)
+    var span = launch_macs // (n_todo * dd)
     if span < 1:
         span = 1
     var want_s = (SPARSE_MR_TARGET_THREADS + n_todo - 1) // n_todo
@@ -273,10 +274,13 @@ def sparse_mr_mst(
     d: Int,
     inv_alpha: Float32,
     sabotage: Int32 = HDB_SAB_NONE,
+    launch_macs: Int = SPARSE_MR_LAUNCH_MACS,
 ) raises -> SparseMst:
     """The dense arm's `build_sorted_mst` result on the mutual reachability
     graph, with no m x m array: edges sorted by (weight key, lo, hi),
-    oriented (lo, hi), weights bit for bit, and the round count."""
+    oriented (lo, hi), weights bit for bit, and the round count.
+    `launch_macs` bounds one launch's work; the check lowers it so small
+    inputs take many launches and slices, which may move no bit."""
     # `pairwise_distances`'s norms: the same kernel, the same launch.
     var norms_d = ctx.enqueue_create_buffer[DType.float32](m)
     ctx.enqueue_function[row_norm_kernel](
@@ -356,7 +360,7 @@ def sparse_mr_mst(
                 deferred.append(Int32(i))
         _ = _search(
             ctx, sb, xt_d, x, norms_d, core_d, comp_d, todo_a, m, d,
-            inv_alpha, sabotage, pk, pj,
+            inv_alpha, sabotage, pk, pj, launch_macs,
         )
         if len(deferred) > 0:
             for t in range(len(todo_a)):
@@ -373,7 +377,7 @@ def sparse_mr_mst(
                     todo_b.append(Int32(i))
             _ = _search(
                 ctx, sb, xt_d, x, norms_d, core_d, comp_d, todo_b, m, d,
-                inv_alpha, sabotage, pk, pj,
+                inv_alpha, sabotage, pk, pj, launch_macs,
             )
         # Each component's cheapest edge under (key, lo, hi).
         for i in range(m):
