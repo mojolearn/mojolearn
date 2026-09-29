@@ -1,0 +1,27 @@
+diff --git a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
+index 873011118..550cb1efe 100644
+--- a/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
++++ b/gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_8bit.mojo
+@@ -185,7 +185,7 @@ def h8_reduce_and_flush(
+             @parameter
+             for stat in range(2):
+                 var q = smem[(fold << 3) + (fid << 1) + stat]
+-                if q != Int32(0):
++                if q != Int32(0) and fold != 1:
+                     var dst_base = (
+                         device_offset
+                         + Int(block_idx.y) * entries_per_leaf
+diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
+index 9f1a9aacd..4ec59ceba 100644
+--- a/gbdt/methods/ordered_boosting.mojo
++++ b/gbdt/methods/ordered_boosting.mojo
+@@ -411,7 +411,8 @@ def _ord_segment_rows_kernel(
+                 hi = mid - 1
+         var off = Int(table.unsafe_load(3 * lo))
+         var seg = Int(table.unsafe_load(3 * lo + 2))
+-        row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + i - off))
++        var cnt = Int(table.unsafe_load(3 * lo + 1))
++        row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + cnt - 1 - (i - off)))
+ 
+ 
+ def _grid(n: Int) -> Int:
