@@ -74,6 +74,7 @@ OPTIMIZER = dict(kind="AdamW", lr=0.003, beta1=0.9, beta2=0.999, eps=1e-8, weigh
 TRAIN_END = 90_000_000
 VAL_START = 95_000_000
 VAL_WINDOWS = 512
+CLAIM_STALE_SECONDS = 3600
 SEED_XOR_DEFAULT = 0x42595445
 INIT_ID = "u32-avalanche-index-xor-42595445-top8-centered128-div1024-norm1.v1"
 
@@ -104,15 +105,16 @@ ORDER = (
     # Andrew, 2026-09-29: native bf16 on the matrix units is the first priority, so whether bf16
     # survives training comes first: bf16 on both operands, forward and backward, then forward
     # only; then 15-bit the same way. Complete configurations (attention included) before the
-    # projections alone. Then the mid widths and bf16 weights.
+    # projections alone. Then finalist F2, the mid widths, and every arm that was already
+    # planned: int8 and the mixes are not offered by the flag, and are still measured to the end.
     [("c", "fwdbwd", True), ("c", "fwd", True), ("e", "fwdbwd", True), ("e", "fwd", True),
      ("c", "fwdbwd", False), ("c", "fwd", False), ("e", "fwdbwd", False), ("e", "fwd", False),
+     ("F2", "fwd", True), ("F2", "fwdbwd", True),
      ("int12", "fwdbwd", False), ("int12", "fwd", False), ("int10", "fwdbwd", False), ("int10", "fwd", False),
-     ("b", "fwdbwd", False), ("b", "fwd", False)])
-
-#: Andrew, 2026-09-29: int8 is dropped as a model's arithmetic and so is finalist F2. Their
-#: definitions stay, because measured rows stay in the table; `plan` refuses to start one.
-DROPPED_ARMS = ("d", "f", "int8w-int15a", "int8w-fp32a", "int8m-both", "int8w-int12a", "F2")
+     ("d", "fwd", False), ("d", "fwdbwd", False), ("f", "fwd", False), ("f", "fwdbwd", False),
+     ("int8w-int15a", "fwd", False), ("int8w-int15a", "fwdbwd", False),
+     ("b", "fwdbwd", False), ("b", "fwd", False),
+     ("d", "fwd", True), ("d", "fwdbwd", True)])
 
 #: The widths a gradient operand is coded under for the zero-code record.
 ZERO_CODE_WIDTHS = ("int8", "int10", "int12", "int15")
@@ -383,6 +385,19 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
     if os.path.exists(path):
         print("have", tag, flush=True)
         return
+    # Two jobs may hold the same run. The first to start it claims it; a claim older than
+    # CLAIM_STALE_SECONDS with no record is a run that died, and is taken over.
+    claim = os.path.join(args.out, f"run_{tag}.claim")
+    try:
+        if os.path.exists(claim) and time.time() - os.path.getmtime(claim) > CLAIM_STALE_SECONDS:
+            os.remove(claim)
+        fd = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, ("job=%s pid=%d utc=%s\n" % (os.environ.get("NVQ_JOB_ID"), os.getpid(),
+                                                  time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))).encode())
+        os.close(fd)
+    except FileExistsError:
+        print("claimed by another worker, not repeated:", tag, open(claim).read().strip(), flush=True)
+        return
     shape = dict(SHAPE)
     spec = make_spec(arm, attn)
     init, total, init_sha = initialize(shape, seed_xor_of(seed))
@@ -455,11 +470,9 @@ def plan(args):
     if args.only:
         for item in args.only.split(","):
             arm, mode, where = item.split(":")
-            if arm in DROPPED_ARMS:
-                raise SystemExit(f"arm {arm} is dropped (2026-09-29, Andrew); it is not run")
             runs += [(arm, mode, where == "attn", s) for s in range(args.seeds)]
         return runs
-    wanted = set(a for a in args.arms.split(",") if a and a not in DROPPED_ARMS)
+    wanted = set(a for a in args.arms.split(",") if a)
     for arm, mode, attn in ORDER:
         if arm in wanted:
             runs += [(arm, mode, attn, s) for s in range(args.seeds)]
@@ -507,7 +520,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--arms", default="c,e,int12,int10,b")
+    ap.add_argument("--arms", default="c,e,F2,int12,int10,d,f,int8w-int15a,b")
     ap.add_argument("--only", default=None,
                     help="an explicit list in place of the plan: arm:mode:proj|attn, comma separated")
     ap.add_argument("--baseline-seeds", type=int, default=5)

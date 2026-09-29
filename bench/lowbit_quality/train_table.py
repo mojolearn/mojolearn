@@ -65,7 +65,7 @@ def first_reach(run, target):
 T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262}
 FINALIST = {"int15-both+attn": "F1", "F2-int15proj-int8attn": "F2"}
 WIDTHS = ("bf16", "int8", "int10", "int12", "int15")
-DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+DROPPED_NOTE = "dropped 2026-09-29, Andrew (not offered by the flag)"
 
 
 def is_dropped(row_or_run):

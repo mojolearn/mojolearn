@@ -44,7 +44,7 @@ def load(paths):
     return first, by_name
 
 
-DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+DROPPED_NOTE = "dropped 2026-09-29, Andrew (not offered by the flag)"
 
 
 def is_dropped(spec):

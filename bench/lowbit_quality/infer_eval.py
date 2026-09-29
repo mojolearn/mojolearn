@@ -80,8 +80,8 @@ def _arms():
                    note="FINALIST F1: 15-bit codes on every projection and on every attention product (QK, PV)"), "F1")
     add("F2", Spec("F2-int15proj-int8attn", w="int15", a="int15", attn=True,
                    overrides={"attn_qk": ("int8", "int8"), "attn_pv": ("int8", "int8")},
-                   note="FINALIST F2, DROPPED 2026-09-29 (Andrew) before it was run: 15-bit codes on every "
-                        "projection, int8 codes (int8i32.v1's rule) on every attention product (QK, PV)"), "F2")
+                   note="FINALIST F2: 15-bit codes on every projection, int8 codes (int8i32.v1's rule) on "
+                        "every attention product (QK, PV)"), "F2")
     # ---- follow-up arms: their own names, their own rows
     add("int8w-fp32a", Spec("int8w-fp32a", w="int8",
                             note="int8 weight codes materialized (what weight_format='int8' ships), fp32 activations"), "-")
@@ -372,12 +372,9 @@ def main(argv=None):
             raise SystemExit(f"unknown arm {a!r}; one of {sorted(ARMS)}")
     if names[0] != "a":
         names.insert(0, "a")
-    # Andrew, 2026-09-29: no arm that codes an operand in 8 bits is run again. An arm list written
-    # before that decision is read through it: the dropped arms are SKIPPED and named in the record.
-    skipped = [a for a in names if ARMS[a].dropped()]
-    names = [a for a in names if not ARMS[a].dropped()]
-    for a in skipped:
-        print("SKIPPED", a, "(%s): %s" % (ARMS[a].name, DROPPED_NOTE), flush=True)
+    # Andrew, 2026-09-29: int8 and the int8-attention mix are not offered by the flag. Their
+    # measurement is still finished: nothing is skipped here, the record carries the note.
+    skipped = []
 
     cfg = load_config(args.model)
     ids, evalset = evaluation_ids(args.corpus, os.path.join(args.model, "tokenizer.json"),

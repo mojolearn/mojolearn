@@ -249,11 +249,11 @@ def product_nt(A, B, kind_a, kind_b, acc64=False):
 
 
 #: ANDREW, 2026-09-29: int8 is dropped as a model's arithmetic, and so is the
-#: int8-attention mix (finalist F2). The kinds stay defined, because the
-#: measured rows stay in the tables and the int8 PRODUCT stays as the piece
-#: product of the 15-bit profile; no arm that codes an operand in 8 bits is
-#: run again.
-DROPPED_NOTE = "dropped 2026-09-29, Andrew"
+#: int8-attention mix (finalist F2). DROPPED MEANS ONLY THIS: the flag does
+#: not offer them. It does not stop a measurement: every arm that was planned
+#: or queued is run to the end and reported with its numbers, and carries
+#: this note in the tables. No NEW int8 rescue arm is added.
+DROPPED_NOTE = "dropped 2026-09-29, Andrew (not offered by the flag)"
 
 
 def is_dropped_kind(kind):
