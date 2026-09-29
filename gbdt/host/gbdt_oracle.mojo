@@ -536,6 +536,25 @@ def _hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
     return q
 
 
+def _snap_gradients(
+    mut stats: List[Float32], n_rows: Int, stat_count: Int, fixed_scale: Float32
+):
+    """`snap_gradients_to_scale_kernel` (`kernel/histogram_utils.mojo`,
+    lane/sym-quality): every gradient plane (1 .. stat_count - 1, line
+    `n_rows`) onto the tree's fixed-point grid, keyed on the depth-0
+    position (the row), dequantized as `fixed_to_float_kernel` does. The
+    device launches it right after the tree's scale and before the score
+    std dev and the first histogram; every host twin calls this there."""
+    for pos in range(n_rows):
+        var u = _hist2_dither(pos)
+        for st in range(1, stat_count):
+            var q = _hist2_quantize(stats[st * n_rows + pos], fixed_scale, u)
+            var v = Float32(0.0)
+            if q != Int32(0):
+                v = ftz(Float32(Int(q)) / fixed_scale)
+            stats[st * n_rows + pos] = v
+
+
 # ===========================================================================
 # THE GRID: borders, NaN treatment, the compressed index
 # ===========================================================================
@@ -2311,6 +2330,7 @@ def gbdt_host_boost(
             mags[0] = bm[0]
             mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        _snap_gradients(stats, n_rows, 2, fixed_scale)  # lane/sym-quality
         # `run_tree_layout`'s ScoreStdDev (`greedy_search_helper.mojo:
         # 5038-5051`) over the bootstrapped planes, and its level stream
         var score_std_dev = Float32(0.0)
