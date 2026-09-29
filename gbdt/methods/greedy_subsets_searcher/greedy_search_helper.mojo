@@ -63,6 +63,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
+    snap_stats_to_grid_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -1925,6 +1926,27 @@ def enqueue_level_quantize(
         stats.unsafe_ptr(), qstats.unsafe_ptr(),
         Int32(n_rows), Int32(stat_count), fixed_scale,
         grid_dim=(replicas, n_live, 1),
+        block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+    )
+
+
+def enqueue_snap_stats(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    stat_count: Int,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """lane/sym-quality: `snap_stats_to_grid_kernel` over every row of
+    every stat plane (line `n_rows`), after the tree's scale is on the
+    device and before its first histogram. Row-parallel, one thread per
+    row, no reduction, so the geometry cannot reach a bit."""
+    if n_rows < 1:
+        return
+    ctx.enqueue_function[snap_stats_to_grid_kernel](
+        stats.unsafe_ptr(), Int32(n_rows), Int32(n_rows),
+        Int32(stat_count), fixed_scale,
+        grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
         block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
     )
 
@@ -4735,6 +4757,10 @@ def run_tree_layout_traced[
     var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
+    # lane/sym-quality: put the search stats on the fixed-point grid before
+    # the first histogram (`snap_stats_to_grid_kernel`). The boosting loop
+    # sets it for weighted fits only; False keeps every caller's bits.
+    snap_stats: Bool = False,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -4990,6 +5016,14 @@ def run_tree_layout_traced[
         ctx.enqueue_copy(
             dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
         )
+
+    # lane/sym-quality: the weighted fit's stats onto the fixed-point grid,
+    # so the float partition totals and the quantized histograms agree (see
+    # `snap_stats_to_grid_kernel`). Only where a histogram quantizes at
+    # all (`_ACC_LIVE`); a float-flush build has no grid to snap to.
+    comptime if _ACC_LIVE:
+        if snap_stats:
+            enqueue_snap_stats(ctx, stats, n_rows, stat_count, fixed_scale)
 
     # ================================================================
     # Their `TGreedyTreeLikeStructureSearcher::FitImpl`
@@ -5948,6 +5982,10 @@ def run_tree_layout[
     var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
+    # lane/sym-quality: put the search stats on the fixed-point grid before
+    # the first histogram (`snap_stats_to_grid_kernel`). The boosting loop
+    # sets it for weighted fits only; False keeps every caller's bits.
+    snap_stats: Bool = False,
 ) raises -> List[Int]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `run_tree_layout_traced` with BOTH instruments off.
@@ -5984,6 +6022,7 @@ def run_tree_layout[
         dynamic_cindex=dynamic_cindex^,
         dynamic_fold_counts=dynamic_fold_counts,
         dynamic_one_hot=dynamic_one_hot,
+        snap_stats=snap_stats,
     )
 
 
