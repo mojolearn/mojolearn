@@ -63,7 +63,7 @@ def first_reach(run, target):
 
 
 T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262}
-FINALIST = {"int15-both+attn": "F1", "F2-int15proj-int8attn": "F2"}
+FINALIST = {"int15-both+attn": "F1", "F2-int15proj-int8attn": "F2", "F1-pv32": "the one that would ship"}
 WIDTHS = ("bf16", "int8", "int10", "int12", "int15")
 DROPPED_NOTE = "dropped 2026-09-29, Andrew (not offered by the flag)"
 
@@ -273,7 +273,7 @@ def main(argv=None):
                                  % (n_eq - 1, sorted(complete)))
     table["arm_gradient_zero_codes"] = {}
     for (attn, arm, mode), rs in sorted(groups.items(), key=lambda kv: (not kv[0][0], kv[0][1], kv[0][2])):
-        if arm != "e":
+        if arm not in ("e", "F1-pv32"):
             continue
         rs = [r for r in rs if r["nonfinite_at_step"] is None]
         z = zero_code_tables(rs, n_eq - 1)

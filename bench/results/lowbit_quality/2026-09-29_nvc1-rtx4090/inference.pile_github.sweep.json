@@ -1,0 +1,2046 @@
+{
+ "schema": "mojolearn.lowbit_quality.inference.v2",
+ "commit": "35aba5c06962049d3cd9fdf4abbfe523ebac1c8a",
+ "stamp_utc": "2026-09-29T03:52:44Z",
+ "model": {
+  "key": "models/SmolLM2-360M",
+  "path": "/root/models/SmolLM2-360M",
+  "weights_sha256": "7aaff6661428bed033abba9522bec81938678642cca3181fe752b6ca9e1e540f",
+  "stored_dtypes": [
+   "torch.bfloat16"
+  ],
+  "config": {
+   "architectures": [
+    "LlamaForCausalLM"
+   ],
+   "attention_bias": false,
+   "attention_dropout": 0.0,
+   "bos_token_id": 0,
+   "eos_token_id": 0,
+   "hidden_act": "silu",
+   "hidden_size": 960,
+   "initializer_range": 0.02,
+   "intermediate_size": 2560,
+   "is_llama_config": true,
+   "max_position_embeddings": 8192,
+   "model_type": "llama",
+   "num_attention_heads": 15,
+   "num_hidden_layers": 32,
+   "num_key_value_heads": 5,
+   "pretraining_tp": 1,
+   "rms_norm_eps": 1e-05,
+   "rope_interleaved": false,
+   "rope_scaling": null,
+   "rope_theta": 100000,
+   "tie_word_embeddings": true,
+   "torch_dtype": "bfloat16",
+   "transformers_version": "4.40.1",
+   "use_cache": true,
+   "vocab_size": 49152
+  }
+ },
+ "source_sha256": {
+  "arith.py": "21aa6185cc6e5f0c8dbcb8dcdc26498521842e5157bf2f8d1ab7c0d8432971a4",
+  "llama_sim.py": "bebc6ffa7bd479212673a0b369bac31182f8cf7ac8cf2a6262aa4c6392ae0eef",
+  "infer_eval.py": "acae0fa43bee48d79678d184eb364a1ea280491525bf64c1a2338e1dd60895ca"
+ },
+ "skipped_arms": {},
+ "evaluation_set": {
+  "corpus_key": "corpus/pile_github/input.txt",
+  "corpus_bytes": 97124565,
+  "corpus_sha256": "52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df",
+  "decoding": "UTF-8; an invalid byte is one U+FFFD to the tokenizer",
+  "invalid_bytes_in_tail": 0,
+  "invalid_bytes_in_used": 0,
+  "tail_from": 96000000,
+  "byte_start": 96000030,
+  "byte_end": 97124565,
+  "tail_bytes": 1124535,
+  "tail_sha256": "caeb445cb22ab55f6c345c465cb47994feb9249eba2115c9962b88fccd5865d4",
+  "tail_ids": 405408,
+  "used_byte_start": 96000030,
+  "used_byte_end": 96240053,
+  "used_bytes_sha256": "91cc52d4b375dd0b7a8b0a256f1b5b5261967eba025a44ce3b6072633e3919ef",
+  "windows": 200,
+  "length": 512,
+  "ids_used": 102400,
+  "ids_sha256": "2d337ff1deeb3846125e558b8521f9f47f92e51abf03396d083255a9827a2f86",
+  "scored_positions": 102200,
+  "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+  "rule": "non-overlapping windows; every position but the first of a window is scored from the ids before it in the same window; no special token added"
+ },
+ "limit_windows": null,
+ "batch": 8,
+ "library": {
+  "torch": "2.4.1+cu124",
+  "cuda": "12.4",
+  "device_name": "NVIDIA GeForce RTX 4090",
+  "matmul_allow_tf32": false,
+  "float32_matmul_precision": "highest"
+ },
+ "threshold": {
+  "rel_ppl_change_max": 0.01,
+  "rel_ppl_change_hi_max": 0.01,
+  "rule": "the change and the upper end of its interval both under 1 percent, on two texts"
+ },
+ "arms": {
+  "a": {
+   "mean_nll": 1.2125332145410692,
+   "perplexity": 3.36199051767609,
+   "delta_nll": 0.0,
+   "delta_nll_se": 0.0,
+   "rel_ppl_change": 0.0,
+   "rel_ppl_change_lo": 0.0,
+   "rel_ppl_change_hi": 0.0,
+   "top1_agreement": 1.0,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "fp32.v1",
+    "weight_kind": "fp32",
+    "activation_kind": "fp32",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "baseline: float32 operands, torch float32 accumulation"
+   },
+   "letter": "a",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7047071396822339e-07,
+     "max": 2.3468324921949868e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045808388693348e-07,
+     "max": 1.6581599287541967e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 4.932356587233933e-07,
+     "max": 7.256111513708853e-07,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 2.7301779811431096e-07,
+     "max": 3.1211860423846226e-07,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 2.4811275176443145e-07,
+     "max": 3.141868333710657e-07,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 7.690791595671314e-07,
+     "max": 7.690791595671314e-07,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 3.1067402801794933e-07,
+     "max": 4.2803190945816567e-07,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 2.45638079758538e-07,
+     "max": 2.889378843485701e-07,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 3.1548573630341013e-07,
+     "max": 3.375374552997908e-07,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 3.249301359515872e-07,
+     "max": 3.773504421186083e-07,
+     "n": 32
+    }
+   },
+   "seconds": 7.230701446533203,
+   "scored_positions": 102200
+  },
+  "sweep-w8-a15": {
+   "mean_nll": 1.2230527145200767,
+   "perplexity": 3.3975436495832114,
+   "delta_nll": 0.010519499979007429,
+   "delta_nll_se": 0.0005109155133705351,
+   "rel_ppl_change": 0.010575024444654559,
+   "rel_ppl_change_lo": 0.009563546796678316,
+   "rel_ppl_change_hi": 0.011587515488009032,
+   "top1_agreement": 0.9629256360078278,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int15a",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 8-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7071333207761936e-07,
+     "max": 2.357712620834885e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2048965081634708e-07,
+     "max": 1.661398352367709e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.013364171886609095,
+     "max": 0.016669197840412365,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.009872988870983167,
+     "max": 0.011641439237933598,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.007854665219296543,
+     "max": 0.009632976002309558,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.06874086774358626,
+     "max": 0.06874086774358626,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013816635996647472,
+     "max": 0.021865160721067853,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009651380114591504,
+     "max": 0.013144164566476185,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014189433935256712,
+     "max": 0.04309424604771828,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.022355025931085234,
+     "max": 0.027563639167586054,
+     "n": 32
+    }
+   },
+   "seconds": 73.38151454925537,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w8-a12": {
+   "mean_nll": 1.2237814933612983,
+   "perplexity": 3.400020609975687,
+   "delta_nll": 0.011248278820228741,
+   "delta_nll_se": 0.00052916504694088,
+   "rel_ppl_change": 0.011311778572737746,
+   "rel_ppl_change_lo": 0.01026342666710671,
+   "rel_ppl_change_hi": 0.012361218354747388,
+   "top1_agreement": 0.9625146771037182,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int12a",
+    "weight_kind": "int8",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 8-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7068634857811702e-07,
+     "max": 2.340660774989902e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2055135060536643e-07,
+     "max": 1.662415639946307e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.013865007625933365,
+     "max": 0.017056980963734328,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.010036887435846095,
+     "max": 0.011745162704912167,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.00815112925324173,
+     "max": 0.009984640310804448,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.06913617430965092,
+     "max": 0.06913617430965092,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013929791903396245,
+     "max": 0.021981456564241077,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009976714838816583,
+     "max": 0.01336242179096091,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014591506644136125,
+     "max": 0.04977060034026698,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.023140845292967078,
+     "max": 0.028674949128067957,
+     "n": 32
+    }
+   },
+   "seconds": 73.35339546203613,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w8-a10": {
+   "mean_nll": 1.2446304482207702,
+   "perplexity": 3.47165160722015,
+   "delta_nll": 0.03209723367970089,
+   "delta_nll_se": 0.0009658656286364717,
+   "rel_ppl_change": 0.03261790566258382,
+   "rel_ppl_change_lo": 0.030664909371714566,
+   "rel_ppl_change_hi": 0.03457460266595183,
+   "top1_agreement": 0.9566340508806263,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int10a",
+    "weight_kind": "int8",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 8-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.712636920475177e-07,
+     "max": 2.345663029863965e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2052705562466104e-07,
+     "max": 1.6626912704161915e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.019869380000240078,
+     "max": 0.02628979233549535,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.012121933047887666,
+     "max": 0.018288122527311896,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.01166523224705789,
+     "max": 0.017882223494120265,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.07659027035655055,
+     "max": 0.07659027035655055,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.015459414168988519,
+     "max": 0.024286752064208616,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.013896852995508014,
+     "max": 0.02085541629012108,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.019094024262751703,
+     "max": 0.11003483553585215,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.03276312350942362,
+     "max": 0.05061846165004408,
+     "n": 32
+    }
+   },
+   "seconds": 73.37056422233582,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w8-a8": {
+   "mean_nll": 1.4663592723797547,
+   "perplexity": 4.3334295499422595,
+   "delta_nll": 0.2538260578386853,
+   "delta_nll_se": 0.011588329957727274,
+   "rel_ppl_change": 0.288947582439244,
+   "rel_ppl_change_lo": 0.26000152480019567,
+   "rel_ppl_change_hi": 0.318558618839311,
+   "top1_agreement": 0.850146771037182,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int8a",
+    "weight_kind": "int8",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 8-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7529993335523774e-07,
+     "max": 2.47893278839933e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2232757729669715e-07,
+     "max": 1.7004492884757938e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05562356807829139,
+     "max": 0.08246149565801417,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02896536844207185,
+     "max": 0.05087590434054353,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03550607631432368,
+     "max": 0.06190246960092974,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.1554729096473519,
+     "max": 0.1554729096473519,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.0301632607526867,
+     "max": 0.047473547772662814,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.04109981702852186,
+     "max": 0.07479429501169446,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.047367440800349644,
+     "max": 0.29957274544814044,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.10239835314387863,
+     "max": 0.18610104456048202,
+     "n": 32
+    }
+   },
+   "seconds": 73.36102557182312,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w10-a15": {
+   "mean_nll": 1.213213238622664,
+   "perplexity": 3.3642775297137004,
+   "delta_nll": 0.0006800240815947958,
+   "delta_nll_se": 0.00011150339540579213,
+   "rel_ppl_change": 0.0006802553503903828,
+   "rel_ppl_change_lo": 0.0004615839236884445,
+   "rel_ppl_change_hi": 0.0008989745722237127,
+   "top1_agreement": 0.9902152641878669,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int10w-int15a",
+    "weight_kind": "int10",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7052844785266006e-07,
+     "max": 2.3551135440789434e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2046591283928174e-07,
+     "max": 1.6596701872390822e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.003406721494489029,
+     "max": 0.004247238781396965,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0024496130754918482,
+     "max": 0.002949110505392265,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0019591716360135387,
+     "max": 0.002433022839217229,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.017867248262133758,
+     "max": 0.017867248262133758,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.003504923407958143,
+     "max": 0.005498777757434038,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0024643953225618027,
+     "max": 0.0035080349039220684,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0036031695210678697,
+     "max": 0.011213602144814924,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.005656234141666452,
+     "max": 0.0068990098658472145,
+     "n": 32
+    }
+   },
+   "seconds": 73.3563871383667,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w10-a12": {
+   "mean_nll": 1.21471813887071,
+   "perplexity": 3.3693442432956995,
+   "delta_nll": 0.0021849243296407743,
+   "delta_nll_se": 0.00023350791392247235,
+   "rel_ppl_change": 0.0021873130161868806,
+   "rel_ppl_change_lo": 0.001728741371806337,
+   "rel_ppl_change_hi": 0.0026460945856143403,
+   "top1_agreement": 0.9870939334637965,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int10w-int12a",
+    "weight_kind": "int10",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7079207361528557e-07,
+     "max": 2.3499740297240634e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2050453973719046e-07,
+     "max": 1.6601950819600974e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0051191943394437054,
+     "max": 0.006596106295443591,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.003023998767263027,
+     "max": 0.004164896601354947,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.002901503692363145,
+     "max": 0.004473914787930581,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.01965213698213551,
+     "max": 0.01965213698213551,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.003914184432033019,
+     "max": 0.006116314704482746,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0035011593700695572,
+     "max": 0.005223881777743095,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.004794957699506068,
+     "max": 0.027271938613343982,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.008208825544902355,
+     "max": 0.012655219453977776,
+     "n": 32
+    }
+   },
+   "seconds": 73.3778862953186,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w10-a10": {
+   "mean_nll": 1.23520059075677,
+   "perplexity": 3.4390682968336996,
+   "delta_nll": 0.022667376215700766,
+   "delta_nll_se": 0.0008234683410650584,
+   "rel_ppl_change": 0.02292623335859022,
+   "rel_ppl_change_lo": 0.021276564155963972,
+   "rel_ppl_change_hi": 0.024578567273767025,
+   "top1_agreement": 0.9722113502935421,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int10w-int10a",
+    "weight_kind": "int10",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7164271697373277e-07,
+     "max": 2.3578616263883587e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2053575791889046e-07,
+     "max": 1.6603275157866714e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.014968680520147304,
+     "max": 0.02273378637865162,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.00725704696119522,
+     "max": 0.016564926530394482,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.008799100807194383,
+     "max": 0.015954148073188568,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.03774189558191738,
+     "max": 0.03774189558191738,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.007734189722413105,
+     "max": 0.012089816859040637,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.010229716093947893,
+     "max": 0.01870013022471577,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0125770426247369,
+     "max": 0.10090529418803504,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.024456352254497892,
+     "max": 0.04496318867511969,
+     "n": 32
+    }
+   },
+   "seconds": 73.3571515083313,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w10-a8": {
+   "mean_nll": 1.4194062085245158,
+   "perplexity": 4.134664582606746,
+   "delta_nll": 0.2068729939834464,
+   "delta_nll_se": 0.00943423929526615,
+   "rel_ppl_change": 0.22982636651359487,
+   "rel_ppl_change_lo": 0.20729447493520875,
+   "rel_ppl_change_hi": 0.25277877367342383,
+   "top1_agreement": 0.8630039138943248,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int10w-int8a",
+    "weight_kind": "int10",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 10-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7398477861825366e-07,
+     "max": 2.525830456440103e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2240204676005605e-07,
+     "max": 1.6991229595912156e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05397213624288634,
+     "max": 0.08102692687002896,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.027051901983297953,
+     "max": 0.049932770335937654,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03446726250496775,
+     "max": 0.06088612388262046,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.14009807231243127,
+     "max": 0.14009807231243127,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.02708249933658425,
+     "max": 0.04334054042260053,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.03971755033268965,
+     "max": 0.07346592538906743,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04471414408169181,
+     "max": 0.2937616083585135,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09879120601445762,
+     "max": 0.1823615258689765,
+     "n": 32
+    }
+   },
+   "seconds": 73.37114000320435,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w12-a15": {
+   "mean_nll": 1.2124695813106865,
+   "perplexity": 3.3617765901654555,
+   "delta_nll": -6.36332303826628e-05,
+   "delta_nll_se": 3.4271667773434745e-05,
+   "rel_ppl_change": -6.363120583160147e-05,
+   "rel_ppl_change_lo": -0.00013079714452612578,
+   "rel_ppl_change_hi": 3.5392447163811076e-06,
+   "top1_agreement": 0.9972994129158512,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int12w-int15a",
+    "weight_kind": "int12",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.702959051807055e-07,
+     "max": 2.3590743398566755e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2046053299888928e-07,
+     "max": 1.6575109768492947e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0007812303774487281,
+     "max": 0.00108728359058691,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0004449626378074514,
+     "max": 0.0005623499824481238,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0004419705582846516,
+     "max": 0.0006194753431087598,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.004013608391756788,
+     "max": 0.004013608391756788,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.0006329121208925765,
+     "max": 0.0009700374643615433,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0005601960049269484,
+     "max": 0.0007691694940719638,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0007378608261929157,
+     "max": 0.0041172046584388505,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0014798081310834468,
+     "max": 0.001955207529925879,
+     "n": 32
+    }
+   },
+   "seconds": 73.36336612701416,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w12-a12": {
+   "mean_nll": 1.2137746948465715,
+   "perplexity": 3.366166954636768,
+   "delta_nll": 0.0012414803055022612,
+   "delta_nll_se": 0.00018816695987348376,
+   "rel_ppl_change": 0.0012422512611858256,
+   "rel_ppl_change_lo": 0.0008730539540780819,
+   "rel_ppl_change_hi": 0.0016115847560458894,
+   "top1_agreement": 0.9919667318982387,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int12w-int12a",
+    "weight_kind": "int12",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7080103779426697e-07,
+     "max": 2.3562845847604214e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2051597030783156e-07,
+     "max": 1.658081108502268e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0038455860018862214,
+     "max": 0.005732261429038802,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0017478281262892138,
+     "max": 0.0040806191296340446,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.002169765287936462,
+     "max": 0.003970949562320283,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.009078909065786936,
+     "max": 0.009078909065786936,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.0018212773603621505,
+     "max": 0.002872834628899148,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.002524973452474596,
+     "max": 0.0046615938145287234,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.003058551142407666,
+     "max": 0.025174164103554067,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.006080871927354535,
+     "max": 0.011292111824030646,
+     "n": 32
+    }
+   },
+   "seconds": 73.36472201347351,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w12-a10": {
+   "mean_nll": 1.2355217929882607,
+   "perplexity": 3.4401731106697273,
+   "delta_nll": 0.02298857844719146,
+   "delta_nll_se": 0.0007334909593347394,
+   "rel_ppl_change": 0.023254852321142085,
+   "rel_ppl_change_lo": 0.02178483481477493,
+   "rel_ppl_change_hi": 0.024726984706684774,
+   "top1_agreement": 0.9748825831702544,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int12w-int10a",
+    "weight_kind": "int12",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7135368321727833e-07,
+     "max": 2.3567664193808594e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2051540106948957e-07,
+     "max": 1.6593035611576095e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.01455371453589727,
+     "max": 0.022629387745183853,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.006805835170086064,
+     "max": 0.0165369508553858,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.008574729206718954,
+     "max": 0.0158470839602698,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.03348162506458067,
+     "max": 0.03348162506458067,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.006888729895378899,
+     "max": 0.010844630328609614,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009928132108693541,
+     "max": 0.018543417746099775,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.011976905570797603,
+     "max": 0.10039440165541538,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.02380894419332335,
+     "max": 0.04466548462245841,
+     "n": 32
+    }
+   },
+   "seconds": 73.36543154716492,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w12-a8": {
+   "mean_nll": 1.4132609217121055,
+   "perplexity": 4.109333795067918,
+   "delta_nll": 0.20072770717103638,
+   "delta_nll_se": 0.009083343737680636,
+   "rel_ppl_change": 0.22229190518610215,
+   "rel_ppl_change_lo": 0.2007235740435684,
+   "rel_ppl_change_hi": 0.24424766347534163,
+   "top1_agreement": 0.8653816046966731,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int12w-int8a",
+    "weight_kind": "int12",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 12-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.740364168808238e-07,
+     "max": 2.482423315389349e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.224606209504021e-07,
+     "max": 1.697792292171383e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05389490310957972,
+     "max": 0.08121193940380975,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.026957542379593868,
+     "max": 0.04999857555926361,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03440130048201089,
+     "max": 0.06105107330836113,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.13861730156816324,
+     "max": 0.13861730156816324,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.02685657000910212,
+     "max": 0.04290612151394341,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.03964611283330028,
+     "max": 0.07367778776098209,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04461191109341893,
+     "max": 0.29444353181416716,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09866704298368421,
+     "max": 0.18264424349435243,
+     "n": 32
+    }
+   },
+   "seconds": 73.36346960067749,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w15-a15": {
+   "mean_nll": 1.212579295232772,
+   "perplexity": 3.362145444094174,
+   "delta_nll": 4.608069170298228e-05,
+   "delta_nll_se": 2.1696656788044714e-05,
+   "rel_ppl_change": 4.608175343436457e-05,
+   "rel_ppl_change_lo": 3.5552507183034977e-06,
+   "rel_ppl_change_hi": 8.861006464742924e-05,
+   "top1_agreement": 0.9986203522504893,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int15w-int15a",
+    "weight_kind": "int15",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 15-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.704688420868989e-07,
+     "max": 2.3545283034913113e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2045614637430537e-07,
+     "max": 1.6574182191165554e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0004879555153032304,
+     "max": 0.000897437941637729,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.00021368455052747423,
+     "max": 0.0005102066127264871,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.0002681295306881387,
+     "max": 0.0004951459721952909,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.0010565840453902202,
+     "max": 0.0010565840453902202,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.00021656124644935335,
+     "max": 0.00034356671290335404,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0003108830784532175,
+     "max": 0.0005800714970742132,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.00037477243638970285,
+     "max": 0.0031284191588955915,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0007491207682330001,
+     "max": 0.0014069455943804367,
+     "n": 32
+    }
+   },
+   "seconds": 73.36873173713684,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w15-a12": {
+   "mean_nll": 1.2136651251058947,
+   "perplexity": 3.3657981448020418,
+   "delta_nll": 0.0011319105648255564,
+   "delta_nll_se": 0.00018344708879764466,
+   "rel_ppl_change": 0.0011325514173620478,
+   "rel_ppl_change_lo": 0.0007726526131456929,
+   "rel_ppl_change_hi": 0.0014925796487254555,
+   "top1_agreement": 0.9921428571428571,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int15w-int12a",
+    "weight_kind": "int15",
+    "activation_kind": "int12",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 12-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.709524821615241e-07,
+     "max": 2.3482120493827722e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2049898584537517e-07,
+     "max": 1.6583059782642092e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.003791416548995751,
+     "max": 0.0056953533422401306,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.0017016141536294398,
+     "max": 0.004081254265877577,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.002141164414016769,
+     "max": 0.003952451737238016,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.008210803232630298,
+     "max": 0.008210803232630298,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.001716843902489428,
+     "max": 0.002722333277880353,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.002479897071996402,
+     "max": 0.0046340971011662605,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.002986740286395986,
+     "max": 0.02505084521131096,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.005941587395219448,
+     "max": 0.0112222485137196,
+     "n": 32
+    }
+   },
+   "seconds": 73.36370182037354,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "sweep-w15-a10": {
+   "mean_nll": 1.2352208534668594,
+   "perplexity": 3.4391379823835826,
+   "delta_nll": 0.022687638925789972,
+   "delta_nll_se": 0.0007381846802101635,
+   "rel_ppl_change": 0.022946960826296034,
+   "rel_ppl_change_lo": 0.021467988404692155,
+   "rel_ppl_change_hi": 0.02442807463602827,
+   "top1_agreement": 0.9742857142857143,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int15w-int10a",
+    "weight_kind": "int15",
+    "activation_kind": "int10",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": null,
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 10-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7138810745745588e-07,
+     "max": 2.3486388259791855e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.205219812739489e-07,
+     "max": 1.658919490198056e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.014572250583965968,
+     "max": 0.02258851969806924,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.006792736547648729,
+     "max": 0.016531489732724194,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.008569835510618733,
+     "max": 0.015862594722032802,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.03318606278471946,
+     "max": 0.03318606278471946,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.00686295027966853,
+     "max": 0.01081448390173627,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.00992096989075393,
+     "max": 0.018558582657736383,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.011957043374177087,
+     "max": 0.10032019683921937,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.023785356692756207,
+     "max": 0.044673175543350846,
+     "n": 32
+    }
+   },
+   "seconds": 73.37263703346252,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "sweep-w15-a8": {
+   "mean_nll": 1.416223977880045,
+   "perplexity": 4.121528039108707,
+   "delta_nll": 0.20369076333897593,
+   "delta_nll_se": 0.009327865097389665,
+   "rel_ppl_change": 0.22591899573757077,
+   "rel_ppl_change_lo": 0.2037096312569544,
+   "rel_ppl_change_hi": 0.2485381400004738,
+   "top1_agreement": 0.864774951076321,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int15w-int8a",
+    "weight_kind": "int15",
+    "activation_kind": "int8",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "width sweep: 15-bit weight codes, 8-bit activation codes, same scale rule"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7463520820389075e-07,
+     "max": 2.4879010327696743e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.224843974761482e-07,
+     "max": 1.6977326064068994e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.05386648598524831,
+     "max": 0.08104949504887993,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.02696381036261707,
+     "max": 0.04995203789712713,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.03441449853745657,
+     "max": 0.061004987719054084,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.13834698175641622,
+     "max": 0.13834698175641622,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.026814023220261277,
+     "max": 0.0431651911631019,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.039661975008715614,
+     "max": 0.0736822997795923,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.04461455249831044,
+     "max": 0.2938801880047614,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09874545538439457,
+     "max": 0.18237415504193516,
+     "n": 32
+    }
+   },
+   "seconds": 73.36422824859619,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "int8mw-int15a": {
+   "mean_nll": 1.2173769953900453,
+   "perplexity": 3.378314766585264,
+   "delta_nll": 0.004843780848976107,
+   "delta_nll_se": 0.0003298185180860804,
+   "rel_ppl_change": 0.004855530919360872,
+   "rel_ppl_change_lo": 0.004206157708065882,
+   "rel_ppl_change_hi": 0.005505324049976523,
+   "top1_agreement": 0.9757827788649707,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8mw-int15a",
+    "weight_kind": "int8m",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "int8 weight codes on the finer scale that is NOT a power of two (row absmax maps to exactly 127), 15-bit activation codes"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7060511450959686e-07,
+     "max": 2.3649418449903627e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2041496604537327e-07,
+     "max": 1.653552793439898e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.009266300255705247,
+     "max": 0.011633983732693564,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.006264911666309391,
+     "max": 0.007214787705388998,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.005379559358682311,
+     "max": 0.0066473278069393415,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.04654732333288542,
+     "max": 0.04654732333288542,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.009114499493755274,
+     "max": 0.01305143791059631,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.006571722718151859,
+     "max": 0.008652306425338931,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.009229230245977722,
+     "max": 0.027248517384187734,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.015015048661121785,
+     "max": 0.01899811585141213,
+     "n": 32
+    }
+   },
+   "seconds": 69.91303396224976,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "int8s1w-int15a": {
+   "mean_nll": 1.7889386812791959,
+   "perplexity": 5.98309912041205,
+   "delta_nll": 0.5764054667381268,
+   "delta_nll_se": 0.019565988911209132,
+   "rel_ppl_change": 0.7796299807971352,
+   "rel_ppl_change_lo": 0.7126744052872596,
+   "rel_ppl_change_hi": 0.849203128612651,
+   "top1_agreement": 0.7520743639921722,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8s1w-int15a",
+    "weight_kind": "int8s1",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "int8 weight codes on the saturating scale (row absmax to [128, 256), clamp at 127), 15-bit activation codes"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7596712887319384e-07,
+     "max": 2.534256127126081e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2100403606427624e-07,
+     "max": 1.5732322150402028e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.08658111505633835,
+     "max": 0.40652458126096896,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.07448594860888144,
+     "max": 0.11725223583127002,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.1261209287244256,
+     "max": 0.19812679826769014,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.12373701804571284,
+     "max": 0.12373701804571284,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.09465626210451868,
+     "max": 0.24721403707960232,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.08681409267368646,
+     "max": 0.15567437431940973,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.06871043176069962,
+     "max": 0.11736348697661159,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.09400995474021324,
+     "max": 0.18106870367339262,
+     "n": 32
+    }
+   },
+   "seconds": 73.36419248580933,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "int8w-int15a-fp32head": {
+   "mean_nll": 1.2178308812299223,
+   "perplexity": 3.3798484838604113,
+   "delta_nll": 0.0052976666888530895,
+   "delta_nll_se": 0.0003654730727519216,
+   "rel_ppl_change": 0.005311724137956535,
+   "rel_ppl_change_lo": 0.004591849846321919,
+   "rel_ppl_change_hi": 0.006032114279879838,
+   "top1_agreement": 0.978091976516634,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int15a-fp32head",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {
+     "lm_head": [
+      "fp32",
+      "fp32"
+     ]
+    },
+    "note": "int8 weights, 15-bit activations, the LM head product kept fp32"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7071333207761936e-07,
+     "max": 2.357712620834885e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2048965081634708e-07,
+     "max": 1.661398352367709e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.013364171886609095,
+     "max": 0.016669197840412365,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.009872988870983167,
+     "max": 0.011641439237933598,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.007854665219296543,
+     "max": 0.009632976002309558,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 7.700188642143619e-07,
+     "max": 7.700188642143619e-07,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013816635996647472,
+     "max": 0.021865160721067853,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009651380114591504,
+     "max": 0.013144164566476185,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014189433935256712,
+     "max": 0.04309424604771828,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.022355025931085234,
+     "max": 0.027563639167586054,
+     "n": 32
+    }
+   },
+   "seconds": 64.63258838653564,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "int8w-int15a-int15head": {
+   "mean_nll": 1.217848205574414,
+   "perplexity": 3.37990703802708,
+   "delta_nll": 0.0053149910333448016,
+   "delta_nll_se": 0.00036535741522899465,
+   "rel_ppl_change": 0.0053291406554514965,
+   "rel_ppl_change_lo": 0.004609481625995362,
+   "rel_ppl_change_hi": 0.006049315217687434,
+   "top1_agreement": 0.9780821917808219,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int15a-int15head",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {
+     "lm_head": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights, 15-bit activations, the LM head (the tied table) on 15-bit codes"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7071333207761936e-07,
+     "max": 2.357712620834885e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2048965081634708e-07,
+     "max": 1.661398352367709e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.013364171886609095,
+     "max": 0.016669197840412365,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.009872988870983167,
+     "max": 0.011641439237933598,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.007854665219296543,
+     "max": 0.009632976002309558,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.0010589216959301932,
+     "max": 0.0010589216959301932,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013816635996647472,
+     "max": 0.021865160721067853,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009651380114591504,
+     "max": 0.013144164566476185,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014189433935256712,
+     "max": 0.04309424604771828,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.022355025931085234,
+     "max": 0.027563639167586054,
+     "n": 32
+    }
+   },
+   "seconds": 73.35496878623962,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "int8w-int15a-int15mlp": {
+   "mean_nll": 1.2189430966881425,
+   "perplexity": 3.3836096948413745,
+   "delta_nll": 0.006409882147073218,
+   "delta_nll_se": 0.0004357991067949474,
+   "rel_ppl_change": 0.006430469405436697,
+   "rel_ppl_change_lo": 0.0055711775074989145,
+   "rel_ppl_change_hi": 0.007290495595070957,
+   "top1_agreement": 0.9679647749510764,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int15a-int15mlp",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {
+     "gate_proj": [
+      "int15",
+      "int15"
+     ],
+     "up_proj": [
+      "int15",
+      "int15"
+     ],
+     "down_proj": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights on the four attention projections and the head, 15-bit weights on the three SwiGLU products, 15-bit activations"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.703230083549911e-07,
+     "max": 2.3500556883829628e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2052000380025797e-07,
+     "max": 1.6619547442719727e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.0004874948449611512,
+     "max": 0.0008915157718519157,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.00021340526274160932,
+     "max": 0.0005141212731872243,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.007860622240960327,
+     "max": 0.009621491038554838,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.06853589383563162,
+     "max": 0.06853589383563162,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.013819725047537791,
+     "max": 0.021932056703306092,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.009655710730204289,
+     "max": 0.013147204153394827,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.0003749054531254525,
+     "max": 0.003155621995959434,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0223409026539243,
+     "max": 0.027572229408150194,
+     "n": 32
+    }
+   },
+   "seconds": 73.34946608543396,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "PASS"
+  },
+  "int8w-int15a-int15attnproj": {
+   "mean_nll": 1.2221241031397923,
+   "perplexity": 3.3943901163152486,
+   "delta_nll": 0.009590888598723105,
+   "delta_nll_se": 0.00044859986595335773,
+   "rel_ppl_change": 0.009637028560554773,
+   "rel_ppl_change_lo": 0.008749689566750827,
+   "rel_ppl_change_hi": 0.010525148095357213,
+   "top1_agreement": 0.9649902152641878,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8w-int15a-int15attnproj",
+    "weight_kind": "int8",
+    "activation_kind": "int15",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {
+     "q_proj": [
+      "int15",
+      "int15"
+     ],
+     "k_proj": [
+      "int15",
+      "int15"
+     ],
+     "v_proj": [
+      "int15",
+      "int15"
+     ],
+     "o_proj": [
+      "int15",
+      "int15"
+     ]
+    },
+    "note": "int8 weights on the SwiGLU products and the head, 15-bit weights on the four attention projections, 15-bit activations"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7064219222653508e-07,
+     "max": 2.355137842178134e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2043470806607024e-07,
+     "max": 1.658775677955187e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.01336162203751645,
+     "max": 0.016674047591836428,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.009870698903137444,
+     "max": 0.011629446781700834,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.00026775387996906774,
+     "max": 0.0004946435263074505,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.0689454451287351,
+     "max": 0.0689454451287351,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.00021615095293920817,
+     "max": 0.000343690972708069,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0003105766972820849,
+     "max": 0.0005798081560659921,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.014192045543803645,
+     "max": 0.04298884188810634,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.0007493762980105796,
+     "max": 0.0014072685210167089,
+     "n": 32
+    }
+   },
+   "seconds": 73.34894895553589,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  },
+  "int8m-both": {
+   "mean_nll": 1.259468293817011,
+   "perplexity": 3.523547497213133,
+   "delta_nll": 0.046935079275941725,
+   "delta_nll_se": 0.001265516048193654,
+   "rel_ppl_change": 0.04805396644863711,
+   "rel_ppl_change_lo": 0.04545758276645351,
+   "rel_ppl_change_hi": 0.05065679822430268,
+   "top1_agreement": 0.9316536203522505,
+   "top1_agreement_is": "the share of scored positions, each with the TRUE context supplied, where the arm's top token equals the baseline's; not a rate of changed tokens in generated text, which diverges from the first changed token on",
+   "interval": "the per-position difference of nll (arm minus baseline) is averaged within each window; the interval is the mean over the windows plus and minus 1.96 standard errors of those window means (sample standard deviation over the windows divided by the root of their number), a normal approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or about tasks.",
+   "spec": {
+    "name": "int8m-both",
+    "weight_kind": "int8m",
+    "activation_kind": "int8m",
+    "attention_products": false,
+    "acc64": false,
+    "dropped": "dropped 2026-09-29, Andrew (not offered by the flag)",
+    "overrides": {},
+    "note": "int8 both, a finer scale that is NOT a power of two: row absmax maps to exactly 127"
+   },
+   "letter": "-",
+   "finite_logits": true,
+   "product_relative_error": {
+    "attn_pv": {
+     "mean": 1.7243499607163803e-07,
+     "max": 2.3891168526319165e-07,
+     "n": 32
+    },
+    "attn_qk": {
+     "mean": 1.2075823793223145e-07,
+     "max": 1.6720097329735774e-07,
+     "n": 32
+    },
+    "down_proj": {
+     "mean": 0.039414943678671724,
+     "max": 0.06066782603444529,
+     "n": 32
+    },
+    "gate_proj": {
+     "mean": 0.019523268013275627,
+     "max": 0.03523660717873511,
+     "n": 32
+    },
+    "k_proj": {
+     "mean": 0.02386814717764228,
+     "max": 0.038802382555307276,
+     "n": 32
+    },
+    "lm_head": {
+     "mean": 0.09997381119210412,
+     "max": 0.09997381119210412,
+     "n": 1
+    },
+    "o_proj": {
+     "mean": 0.02081996447959946,
+     "max": 0.033760851841670284,
+     "n": 32
+    },
+    "q_proj": {
+     "mean": 0.0277659866746188,
+     "max": 0.045587377648724094,
+     "n": 32
+    },
+    "up_proj": {
+     "mean": 0.032384868695338256,
+     "max": 0.2130062793555461,
+     "n": 32
+    },
+    "v_proj": {
+     "mean": 0.06694308379595917,
+     "max": 0.11164976165479328,
+     "n": 32
+    }
+   },
+   "seconds": 70.25946569442749,
+   "scored_positions": 102200,
+   "bit_equal_nll_to_baseline": false,
+   "verdict": "MISS"
+  }
+ }
+}

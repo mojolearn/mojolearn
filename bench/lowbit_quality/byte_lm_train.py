@@ -94,6 +94,9 @@ ARMS = {
     # every attention product, as ONE configuration. FINALIST F1 is arm e with the attention switch on.
     "F2": dict(name="F2-int15proj-int8attn", w="int15", a="int15",
                overrides={"attn_qk": ("int8", "int8"), "attn_pv": ("int8", "int8")}),
+    # THE CONFIGURATION THAT WOULD SHIP (orchestrator, 2026-09-29): 15-bit codes on both operands of
+    # every projection, of the head and of Q.K^T; P.V in fp32, forward and backward.
+    "F1-pv32": dict(name="F1-pv32", w="int15", a="int15", overrides={"attn_pv": ("fp32", "fp32")}),
     "int12": dict(name="int12-both", w="int12", a="int12"),
     "int10": dict(name="int10-both", w="int10", a="int10"),
 }

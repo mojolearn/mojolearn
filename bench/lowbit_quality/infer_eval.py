@@ -82,6 +82,13 @@ def _arms():
                    overrides={"attn_qk": ("int8", "int8"), "attn_pv": ("int8", "int8")},
                    note="FINALIST F2: 15-bit codes on every projection, int8 codes (int8i32.v1's rule) on "
                         "every attention product (QK, PV)"), "F2")
+    # ---- THE CONFIGURATION THAT WOULD SHIP (orchestrator, 2026-09-29): P.V under a per-row scale
+    # depends on the key span, so a decode would not equal a prefill; the profile's first version
+    # keeps P.V on fp32. Every projection, the head and Q.K^T on 15-bit codes; P.V in fp32.
+    add("F1-pv32", Spec("F1-pv32", w="int15", a="int15", attn=True, overrides={"attn_pv": FP},
+                        note="THE CONFIGURATION THAT WOULD SHIP: 15-bit codes on both operands of every "
+                             "projection, of the head and of Q.K^T; P.V in fp32 as the block computes it today"),
+        "F1-pv32")
     # ---- follow-up arms: their own names, their own rows
     add("int8w-fp32a", Spec("int8w-fp32a", w="int8",
                             note="int8 weight codes materialized (what weight_format='int8' ships), fp32 activations"), "-")
