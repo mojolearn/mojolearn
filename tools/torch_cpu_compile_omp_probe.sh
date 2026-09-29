@@ -26,6 +26,11 @@ TORCH_LOGS=output_code DYLD_PRINT_LIBRARIES=1 "$PY" "$D/bare.py" > "$D/bare.log"
 echo "exit $?"
 grep -i -E "omp|Error|bare compile" "$D/bare.log" | sort | uniq -c | head -40
 grep -o -E "(clang|c\+\+|g\+\+)[^']*-o [^ ]*\.so[^']*" "$D/bare.log" | head -2 | cut -c1-2000
+echo "== bare torch.compile on the CPU with OMP_PREFIX = torch's own prefix (the board's fix)"
+TP="$("$PY" -c "import os, torch; print(os.path.dirname(torch.__file__))" 2>/dev/null)"
+OMP_PREFIX="$TP" DYLD_PRINT_LIBRARIES=1 "$PY" "$D/bare.py" > "$D/bare2.log" 2>&1
+echo "exit $?"
+grep -i -E "libomp|OMP: Error|bare compile" "$D/bare2.log" | sed 's/^dyld\[[0-9]*\]: //' | sort | uniq -c | head -20
 echo "== the board's worker: neural/mamba2-infer, shape small, torch-cpu-compile-fp32"
 DYLD_PRINT_LIBRARIES=1 "$PY" tools/bench_board_neural.py race --lane mamba2-infer --shape small \
     --arms torch-cpu-compile-fp32 --rounds 1 --out "$D/out" --work "$D/work" > "$D/race.log" 2>&1
@@ -33,7 +38,7 @@ echo "exit $?"
 grep -E "^NEURAL" "$D/race.log" | cut -c1-300
 for f in "$D"/out/*.log; do
     echo "-- $f"
-    grep -i -E "omp|Error" "$f" | sort | uniq -c | head -40
+    grep -i -E "libomp|OMP: Error|Error" "$f" | sed "s/^dyld\[[0-9]*\]: //" | sort | uniq -c | head -20
 done
 echo "== the inductor build of the worker (cpp_builder, the link flags)"
 "$PY" - <<'EOF' 2>&1 | tail -20

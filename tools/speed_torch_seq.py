@@ -592,6 +592,14 @@ class LlamaEager:
         qp = self.t.arange(c["ctx"], c["ctx"] + L, device=self.dev).view(L, 1)
         kp = self.t.arange(S, device=self.dev).view(1, S)
         mask = (kp <= qp).view(1, 1, L, S)
+        # One dtype for q, k and v, the one autocast gives SDPA's inputs (v is
+        # a linear's output, so bf16 under a bf16 autocast; RoPE by the float32
+        # cos/sin table promoted q and k to float32). Eager autocast casts all
+        # three itself; torch.compile's SDPA decomposition does not, and the
+        # compiled bf16 arms refused with "self and mat2 must have the same
+        # dtype, but got Float and BFloat16" (do-amd, torch 2.6, 2026-09-29).
+        # With no autocast all three already share the dtype: a no-op.
+        q, krep = q.to(vrep.dtype), krep.to(vrep.dtype)
         o = self.t.nn.functional.scaled_dot_product_attention(
             q, krep, vrep, attn_mask=mask, scale=self.scale)
         return o.transpose(1, 2).reshape(B * L, H * hd)
@@ -631,10 +639,17 @@ class LlamaEager:
         ctxv = (self.attention_sdpa(q, kfull, vfull, B, L) if sdpa
                 else self.attention_eager(q, kfull, vfull, B, L))
         o = F.linear(ctxv, self.W["o_proj.weight"])
-        r1 = x + o
+        # The residual adds promote explicitly. Under a bf16 autocast o and dn
+        # are bf16 and x is float32: eager promotes the sum to float32, and
+        # `.to(x.dtype)` is that same exact widening. Written implicitly,
+        # torch 2.6's inductor folds `x + linear(...)` into one addmm with the
+        # float32 x as its bias and the bf16 operands, which refuses with
+        # "self and mat2 must have the same dtype" (do-amd, 2026-09-29, the
+        # transformer torch-compile-bf16 arms). With no autocast, a no-op.
+        r1 = x + o.to(x.dtype)
         h2 = self._rms(r1, self.W["norm2.weight"])
         dn = self.mlp(h2)
-        return r1 + dn, o, dn, h, h2
+        return r1 + dn.to(r1.dtype), o, dn, h, h2
 
 
 # ---------------------------------------------------------------------------
