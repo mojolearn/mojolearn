@@ -1238,7 +1238,20 @@ def _refuse_cell(cell, reason):
     cell["rounds"] = 0
 
 
-def invalidate_arm(out, arm, reason, store_path=None, vendor=None):
+def _arm_cell_hit(c, arm, reason, scoped):
+    """Should this cell be refused now? Unscoped: a cell of the arm not yet
+    refused. Scoped to named races: also a cell the library already refused,
+    whose reason is then replaced by `reason` (the library's words kept after
+    it), unless it already carries `reason`."""
+    if c.get("arm") != arm:
+        return False
+    st = str(c.get("status", ""))
+    if st.startswith("REFUSED(%s" % reason):
+        return False
+    return scoped or not st.startswith("REFUSED")
+
+
+def invalidate_arm(out, arm, reason, store_path=None, vendor=None, races=None):
     """Mark every finished cell of `arm` (fit and inference, run or stored) as
     REFUSED(reason): its times and quality are withdrawn (kept under
     `withdrawn`), the rest of the race stays, and the ratios are recomputed
@@ -1252,17 +1265,18 @@ def invalidate_arm(out, arm, reason, store_path=None, vendor=None):
     if result is None:
         raise SystemExit("--invalidate-arm: no board.json under %s" % out)
     n_board = 0
+    scope = [x.strip() for x in (races or "").split(",") if x.strip()]
     for rid, rec in (result.get("races") or {}).items():
+        if scope and not any(rid.startswith(x) for x in scope):
+            continue
         hit = False
-        for c in rec.get("cells") or []:
-            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
-                _refuse_cell(c, reason)
-                n_board += 1
-                hit = True
         infer = rec.get("infer_cells") or []
-        for c in infer:
-            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
+        for c in list(rec.get("cells") or []) + list(infer):
+            if _arm_cell_hit(c, arm, reason, bool(scope)):
+                old = str(c.get("status", ""))
                 _refuse_cell(c, reason)
+                if old.startswith("REFUSED("):
+                    c["status"] = "REFUSED(%s; the library said: %s" % (reason, old[len("REFUSED("):])
                 n_board += 1
                 hit = True
         if hit:
@@ -1274,8 +1288,10 @@ def invalidate_arm(out, arm, reason, store_path=None, vendor=None):
         for r in STORE.load(store_path).values():
             k = r.get("key") or {}
             cell = r.get("cell") or {}
+            rid = "%s/%s/%s" % (k.get("family"), k.get("lane"), k.get("dataset"))
             if k.get("arm") != arm or (vendor and k.get("vendor") != vendor) \
-                    or str(cell.get("status", "")).startswith("REFUSED"):
+                    or (scope and not any(rid.startswith(x) for x in scope)) \
+                    or not _arm_cell_hit(cell, arm, reason, bool(scope)):
                 continue
             fixed = json.loads(json.dumps(r))
             _refuse_cell(fixed["cell"], reason)
@@ -3070,6 +3086,10 @@ def build_parser():
                         "of this arm REFUSED(--invalidate-arm-reason), times withdrawn and ratios "
                         "recomputed, for an arm that did not run what its name says (repeatable)")
     p.add_argument("--invalidate-arm-reason", default=None)
+    p.add_argument("--invalidate-arm-races", default=None, metavar="PREFIXES",
+                   help="with --invalidate-arm: only the races whose id starts with one of these "
+                        "(comma list); a cell the library already refused there gets this reason "
+                        "(the library's words kept after it)")
     p.add_argument("--invalidate-fixed-at", default=None, metavar="COMMIT")
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
@@ -3291,7 +3311,8 @@ def main(argv=None):
             args.opponent_store or os.path.join(os.path.dirname(iout), "opponent-store.jsonl")))
         for arm in args.invalidate_arm:
             nb, ns = invalidate_arm(iout, arm, args.invalidate_arm_reason, store,
-                                    vendor=None if args.vendor == "auto" else args.vendor)
+                                    vendor=None if args.vendor == "auto" else args.vendor,
+                                    races=args.invalidate_arm_races)
             print("bench_board: --invalidate-arm %s: refused %d cells on the board, %d opponent-store "
                   "records" % (arm, nb, ns), flush=True)
 

@@ -350,3 +350,25 @@ def test_invalidate_arm_refuses_its_cells_and_recomputes_ratios(tmp_path, monkey
     latest = {v["key"]["vendor"]: v for v in bb.STORE.load(str(store)).values()}
     assert latest["amd"]["cell"]["status"].startswith("REFUSED(") and latest["nvidia"]["cell"]["median_ms"] == 7.0
     assert bb.invalidate_arm(str(out), "xgboost-gpu", why, str(store), vendor="amd") == (0, 0)
+
+
+def test_invalidate_arm_scoped_to_races_rewords_a_library_refusal(tmp_path, monkeypatch):
+    """--invalidate-arm-races: only the named races; a cell the library
+    already refused there gets the board's reason, the library's words kept."""
+    def cell(arm, status="ok", ms=5.0):
+        return {"arm": arm, "library": "x", "mode": "opponent", "status": status, "median_ms": ms,
+                "times_ms": [ms] if ms else [], "rounds": 1}
+    races = {"classical2/gmm/taxi/rows=full": {"status": "done", "cells": [
+                 cell("ours"), cell("sklearn-cpu", "REFUSED(error: ValueError ill-defined)", None)]},
+             "classical2/gmm/istella/rows=full": {"status": "done", "cells": [cell("sklearn-cpu")]}}
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "board.json").write_text(json.dumps({"races": races}))
+    monkeypatch.setattr(bb, "write_board", lambda o, r: None)
+    why = "scikit-learn on OpenBLAS collapses a component at reg_covar 1e-6 on this box"
+    assert bb.invalidate_arm(str(out), "sklearn-cpu", why, None, races="classical2/gmm/taxi/") == (1, 0)
+    got = json.loads((out / "board.json").read_text())["races"]
+    st = got["classical2/gmm/taxi/rows=full"]["cells"][1]["status"]
+    assert st == "REFUSED(%s; the library said: error: ValueError ill-defined)" % why
+    assert got["classical2/gmm/istella/rows=full"]["cells"][0]["status"] == "ok"
+    assert bb.invalidate_arm(str(out), "sklearn-cpu", why, None, races="classical2/gmm/taxi/") == (0, 0)
