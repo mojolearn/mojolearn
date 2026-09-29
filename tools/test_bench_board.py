@@ -389,12 +389,12 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    # the 95 races before the algorithm expansion (93, and gbdt-symmetric-1000
-    # on two datasets since 2026-09-29); the algos family adds its own
+    # the 101 races before the algorithm expansion (93, gbdt-symmetric-1000 and
+    # gbdt-ordered on two datasets each, and four neural lanes since 2026-09-29); the algos family adds its own
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
-    assert len(before) == 95 and sum(len(r["arms"]) for r in before) == 342
-    assert "TOTAL races=%d cells=%d" % (95 + len(algos), 342 + sum(len(r["arms"]) for r in algos)) in text
+    assert len(before) == 101 and sum(len(r["arms"]) for r in before) == 362
+    assert "TOTAL races=%d cells=%d" % (101 + len(algos), 362 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -402,7 +402,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert algo_lines and all("[in source]" in ln or "not built yet: SKIPPED" in ln
                               for ln in algo_lines)
     assert "ours-cpu: off (--no-cpu-arm)" in text
-    assert "family neural     races=16 cells=76" in text
+    assert "family neural     races=20 cells=90" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -613,16 +613,16 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 342, 134, 76),
-                                                      ("nvidia", 284, 94, 95),
-                                                      ("amd", 274, 90, 76)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 362, 134, 90),
+                                                      ("nvidia", 304, 94, 111),
+                                                      ("amd", 292, 90, 90)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=95 cells=%d" % cells in text
+    assert "TOTAL races=101 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=16 cells=%d" % neural in text
+    assert "family neural     races=20 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text
     # what is left off the plan is printed by name, never dropped silently
     assert "neural not planned: torch-compile-* on mamba1-forward" in text
