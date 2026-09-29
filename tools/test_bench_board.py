@@ -936,6 +936,9 @@ def test_classical2_pins_installed_per_vendor(tmp_path, monkeypatch):
 
 # --- the opponent store (tools/bench_board_store.py) -------------------------
 
+READBACK = {"max_depth": 8, "n_estimators": 500, "seed": 7}
+
+
 def _store_ctx(tmp_path):
     data_root = tmp_path / "data"
     (data_root / "taxi").mkdir(parents=True)
@@ -943,30 +946,46 @@ def _store_ctx(tmp_path):
     box = {"host": {"hostname": "m3ultra-b", "cpu_model": "Apple M3 Ultra", "machine": "arm64"},
            "os": {"platform": "macOS-26-arm64"},
            "gpu": {"vendor": "apple", "name": "Apple M3 Ultra"},
-           "packages": {"catboost": "1.2.8", "scikit-learn": "1.7.2"},
            "mojolearn": {"version": "0.8.22", "wheel": {"sha256": "ab" * 32}}}
     ctx = {"vendor": "apple", "rounds": 1, "data_root": str(data_root), "box": box,
            "store_path": str(tmp_path / "opponent-store.jsonl"), "retime": False,
            "python": "py", "tree_driver": "drv", "arm_budget_s": 60, "race_deadline_s": 600,
-           "infer": False, "commit": "c0ffee"}
+           "infer": False, "commit": "c0ffee", "out": str(tmp_path / "out"), "nice": 0}
     race = bb.plan_races("apple", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"],
                          None, cpu_arm=False)[0]
     return ctx, race
 
 
-def _stored_record(ctx, race, arm, status="ok", **key_over):
+def _key(ctx, race, arm, params=READBACK, version="1.2.8", device_name=None, **over):
     key = bb.opponent_key(ctx["box"], race, arm, bb.race_settings(ctx, race),
-                          bb.race_data_sha(ctx, race, ctx["box"]), ctx["rounds"])
-    key.update(key_over)
+                          bb.race_data_sha(ctx, race, ctx["box"]), ctx["rounds"],
+                          params=params, version=version, device_name=device_name)
+    key.update(over)
+    return key
+
+
+def _stored_record(ctx, race, arm, status="ok", **over):
     cell = dict(bb.base_cell(ctx, race, arm, None), status=status, median_ms=1000.0,
                 times_ms=[1000.0], rounds=1)
-    return bb.STORE.record(key, cell, measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
+    return bb.STORE.record(_key(ctx, race, arm, **over), cell,
+                           measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
 
 
-def test_store_hit_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
+def _probe_returns(monkeypatch, result):
+    calls = []
+
+    def fake(ctx, race, arms):
+        calls.append(list(arms))
+        return {a: dict(result) for a in arms}
+    monkeypatch.setattr(bb, "params_probe", fake)
+    return calls
+
+
+def test_store_hit_constructs_then_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
     ctx, race = _store_ctx(tmp_path)
     assert race["opponents"] == ["catboost-cpu"]
     bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    probes = _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
     seen = {}
 
     def fake(ctx_, race_):
@@ -976,6 +995,7 @@ def test_store_hit_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
         return {"cells": cells, "status": "done", "rc": 0, "finished": "now"}
     monkeypatch.setattr(bb, "_run_race", fake)
     rec = bb.run_race(ctx, race)
+    assert probes == [["catboost-cpu"]]          # constructed and read back first
     assert seen["race"]["opponents"] == [] and "catboost-cpu" not in seen["race"]["arms"]
     cmd, _env = bb.tree_cmd(ctx, seen["race"])
     assert "--ours-only" in cmd and "--arms" not in cmd
@@ -985,9 +1005,27 @@ def test_store_hit_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
     assert rec["stored_arms"] == ["catboost-cpu"] and rec["stored_now"] == 0
 
 
+def test_store_reuses_only_the_same_read_back_version_and_device(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    _probe_returns(monkeypatch, {"params": dict(READBACK, max_depth=6), "version": "1.2.8"})
+    assert bb.stored_opponents(ctx, race) == {}          # a parameter changed
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.9"})
+    assert bb.stored_opponents(ctx, race) == {}          # a new library version
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+    # an arm that did not construct runs normally
+    monkeypatch.setattr(bb, "params_probe", lambda c, r, a: {})
+    assert bb.stored_opponents(ctx, race) == {}
+    # nothing stored that could match: nothing is constructed
+    calls = _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+    assert bb.stored_opponents(dict(ctx, store_path=str(tmp_path / "empty.jsonl")), race) == {}
+    assert calls == []
+
+
 def test_store_miss_when_any_key_field_differs(tmp_path):
     ctx, race = _store_ctx(tmp_path)
-    base = _stored_record(ctx, race, "catboost-cpu")["key"]
+    base = _key(ctx, race, "catboost-cpu")
     for field in bb.STORE.KEY_FIELDS:
         rec = _stored_record(ctx, race, "catboost-cpu", **{field: "something else"})
         store = {bb.STORE.key_id(rec["key"]): rec}
@@ -996,51 +1034,84 @@ def test_store_miss_when_any_key_field_differs(tmp_path):
     assert bb.STORE.lookup(store, base) is not None
     # a key with a missing field neither hits nor is stored
     assert bb.STORE.lookup(store, dict(base, library_version=None)) is None
-    assert "library_version" in bb.STORE.missing(dict(base, library_version=None))
+    assert "params_sha256" in bb.STORE.missing(_key(ctx, race, "catboost-cpu", params=None))
 
 
 def test_store_retime_partial_and_measured_cells(tmp_path, monkeypatch):
     ctx, race = _store_ctx(tmp_path)
     bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
-    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
     assert bb.stored_opponents(dict(ctx, retime=True), race) == {}
-    # a PARTIAL cell is stored as what it was but never reused
     part = tmp_path / "partial.jsonl"
     bb.STORE.append(str(part), _stored_record(ctx, race, "catboost-cpu", status="PARTIAL(0/1 rounds)"))
     assert bb.stored_opponents(dict(ctx, store_path=str(part)), race) == {}
 
     def fake(ctx_, race_):
         cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)), status="ok",
-                      median_ms=700.0, times_ms=[700.0], rounds=1) for a in race_["arms"]]
+                      median_ms=700.0, times_ms=[700.0], rounds=1,
+                      library_version=None if a == "ours" else "1.2.8") for a in race_["arms"]]
         return {"cells": cells, "status": "done", "rc": 0, "finished": "2026-09-29T13:00:00Z",
-                "params": {"arms": {"catboost-cpu": {"params": {"max_depth": 8}}}}}
+                "params": {"arms": {"catboost-cpu": {"params": READBACK}}}}
     monkeypatch.setattr(bb, "_run_race", fake)
     rec = bb.run_race(dict(ctx, retime=True), race)
     cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
     assert cat["source"] == "measured this run" and rec["stored_now"] == 1
-    latest = bb.STORE.lookup(bb.STORE.load(ctx["store_path"]),
-                             _stored_record(ctx, race, "catboost-cpu")["key"])
+    latest = bb.STORE.lookup(bb.STORE.load(ctx["store_path"]), _key(ctx, race, "catboost-cpu"))
     assert latest["measured_at"] == "2026-09-29T13:00:00Z"
-    assert latest["params"] == {"params": {"max_depth": 8}}
+    assert latest["params"] == {"params": READBACK}
 
 
-def test_backfill_store_imports_and_skips(tmp_path):
+def test_backfill_store_imports_and_counts_skips_by_reason(tmp_path, monkeypatch):
     ctx, race = _store_ctx(tmp_path)
-    cell = dict(bb.base_cell(ctx, race, "catboost-cpu", None), status="ok", median_ms=900.0)
+    cell = dict(bb.base_cell(ctx, race, "catboost-cpu", None), status="ok", median_ms=900.0,
+                library_version="1.2.8")
     ours = dict(bb.base_cell(ctx, race, "ours", "identical"), status="ok", median_ms=450.0)
     sha = bb.race_data_sha(ctx, race, ctx["box"])
-    board = {"box": ctx["box"],
+    params = {"arms": {"catboost-cpu": {"params": READBACK}}}
+    board = {"box": ctx["box"], "created": "2026-09-29T10:00:00Z",
              "config": {"rounds": 1, "data_root": ctx["data_root"],
                         "data": {"taxi": {"size_ok": True, "pinned_sha256": sha}}},
              "races": {race["id"]: {"family": "trees", "lane": race["lane"], "dataset": "taxi",
                                     "rows": None, "finished": "2026-09-29T11:00:00Z",
-                                    "cells": [ours, cell]},
+                                    "params": params, "cells": [ours, cell]},
                        "trees/gbdt-symmetric/istella/rows=full": {
                            "family": "trees", "lane": "gbdt-symmetric", "dataset": "istella",
-                           "rows": None, "cells": [dict(cell, dataset="istella")]}}}
+                           "rows": None, "params": params, "cells": [dict(cell, dataset="istella")]},
+                       "trees/gbdt-depthwise/taxi/rows=full": {
+                           "family": "trees", "lane": "gbdt-depthwise", "dataset": "taxi",
+                           "rows": None, "params": params,
+                           "cells": [dict(cell, library_version=None, lane="gbdt-depthwise")]}}}
     path = tmp_path / "board.json"
     path.write_text(json.dumps(board))
     store = tmp_path / "store.jsonl"
-    assert bb.backfill_store(str(path), str(store)) == (1, 1)     # istella: no data hash
+    imported, skipped = bb.backfill_store(str(path), str(store))
+    assert imported == 1 and sum(skipped.values()) == 2
+    assert any(w.startswith("no sha256 for istella") for w in skipped)
+    assert any(w.startswith("library version: no recorded venv") for w in skipped)
     ctx["store_path"] = str(store)
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
     assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+
+
+def test_backfill_corpus_pin_and_venv_version(tmp_path, monkeypatch):
+    # a corpus key takes its manifest pin when the staged file has the pinned size
+    corpus = tmp_path / "input.txt"
+    corpus.write_bytes(b"x" * 11)
+    monkeypatch.setattr(bb, "_manifest_pins", lambda: {"corpus/enwik8/input.txt": (11, "cd" * 32)})
+    monkeypatch.setattr(bb.ALGOS, "corpus_path", lambda key: str(corpus))
+    race = {"family": "algos", "lane": "bpe-encode", "dataset": "enwik8", "rows": None}
+    ctx = {"data_root": str(tmp_path), "data_sha": {}}
+    files = bb.race_data_files(ctx, race)
+    assert files == [("corpus/enwik8/input.txt", str(corpus))]
+    # the venv version: only a dist-info written before the board started
+    site = tmp_path / "venv" / "lib" / "python3.11" / "site-packages"
+    dist = site / "catboost-1.2.8.dist-info"
+    dist.mkdir(parents=True)
+    (dist / "METADATA").write_text("Metadata-Version: 2.1\nName: catboost\nVersion: 1.2.8\n")
+    py = str(tmp_path / "venv" / "bin" / "python")
+    os.utime(str(dist), (1_700_000_000, 1_700_000_000))
+    assert bb._venv_version(py, "catboost", "2026-09-29T10:00:00Z") == ("1.2.8", None)
+    v, why = bb._venv_version(py, "catboost", "2023-01-01T00:00:00Z")
+    assert v is None and "changed in the venv after the board started" in why
+    v, why = bb._venv_version(py, "xgboost", "2026-09-29T10:00:00Z")
+    assert v is None and "not in the recorded venv" in why
