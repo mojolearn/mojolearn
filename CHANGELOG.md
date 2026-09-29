@@ -4,6 +4,13 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.29 (published 2026-09-29)
+
+- Ship the merged Bayesian Gaussian mixture covariance fix: deterministic GEMM accumulation replaces the long float32 sum. The lane passed Apple, NVIDIA and AMD identity checks before merging.
+- Ship the merged DBSCAN edge-count fix: keep exact 64-bit totals and halve batches when their CSR would exceed int32 capacity. The lane passed Apple, NVIDIA and AMD identity checks, including the five-billion-edge case.
+- Build from current main, retaining the shipped verifier/compare improvements and LabelBinarizer inverse-transform correction. Reuse completed lane qualification; do not repeat numerical certification for merged fixes.
+
+
 ### Added
 - `mojolearn.linalg.matmul_int15`, with `quantize_int15` and `dequantize_int15`: a 15-bit integer matrix product under the contract `mojolearn.identical.gemm.int15i64.v1`. Each row of each operand is quantized from its float32 values to 15-bit integer codes with one power-of-two scale, split into two int8 planes, and multiplied on the integer matrix units with exact integer sums, so the result is the same bits on NVIDIA, AMD, Apple and the CPU. A contracted extent above `linalg.INT15_MAX_K` (65536) is refused by name. The same bits were recorded on an H100, an MI325X, an M3 Ultra and an M2 Pro over 178 cases, and every sabotage arm of its gates was seen failing. The technique is an application of known work (the Ozaki scheme on integer matrix units, and fixed-point arithmetic); nothing here is new.
 - The tuned integer matrix unit kernels behind it, a parallel quantizer, their gates (`pixi run check-gemm-int15`, `check-gemm-lowbit`, `check-gemm-int8-mma-tuned`, `check-gemm-int8-pieces-tuned`, each with an arm that must fail), and the timing harnesses and their results under `bench/results/`.
@@ -23,12 +30,6 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ### Measured
 - The time of the complete 15-bit inference call over our own fp32.v1 call at the same 512-token rows, on the same box, in the same run: H100 0.43 to 0.50 (run 5); MI325X 0.19 to 0.30, with a stand-in recombination, one run; M3 Ultra 3.4 to 3.6, on the float unit, untuned.
-
-## 0.8.29 (published 2026-09-29)
-
-- Ship the merged Bayesian Gaussian mixture covariance fix: deterministic GEMM accumulation replaces the long float32 sum. The lane passed Apple, NVIDIA and AMD identity checks before merging.
-- Ship the merged DBSCAN edge-count fix: keep exact 64-bit totals and halve batches when their CSR would exceed int32 capacity. The lane passed Apple, NVIDIA and AMD identity checks, including the five-billion-edge case.
-- Build from current main, retaining the shipped verifier/compare improvements and LabelBinarizer inverse-transform correction. Reuse completed lane qualification; do not repeat numerical certification for merged fixes.
 
 ## 0.8.28 (published 2026-09-29)
 

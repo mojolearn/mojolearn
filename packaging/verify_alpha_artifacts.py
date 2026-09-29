@@ -178,9 +178,9 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
             # reach the light route only as an overlay inheriting native bytes,
             # so a release with native changes had no light path on macOS. It is
             # admitted only as the released version, only with a macOS smoke
-            # receipt in the manifest, and only when its source witness names the
-            # commit that receipt was taken from (tools/check_light_release.py
-            # then ties the receipt to this exact wheel's SHA256).
+            # receipt or explicit preverified-source contract in the manifest, and
+            # only when its source witness matches. A preverified contract
+            # reuses merged-lane checks and never claims a fresh wheel smoke.
             require(version == released and release_profile == 'alpha-api',
                     'a fresh macOS build is admitted only as the released alpha-api version')
             require(macos_smoke_source is not None,
