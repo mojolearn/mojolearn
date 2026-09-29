@@ -250,6 +250,8 @@ def _(ml, X, yc, yr, Xh=None):
     emb = md.fit_transform(S[:100])
     mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
     lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+    # past 200 rows: the shift-invert subspace iteration (eigen_solver='auto')
+    li = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, random_state=0).fit(X[:300])
     lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
     he = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="hessian").fit(S[:80])
     mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
@@ -265,7 +267,7 @@ def _(ml, X, yc, yr, Xh=None):
     cc = ml.ClassicalMDS(n_components=2, metric="chebyshev").fit(S[:80])
     return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
                      cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
-                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), lt=_h(lt.embedding_),
+                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), li=_h(li.embedding_, np.float64(li.reconstruction_error_)), lt=_h(lt.embedding_),
                      he=_h(he.embedding_), mo=_h(mo.embedding_, np.float64(mo.reconstruction_error_)),
                      ir=_h(ir.embedding_, ir.dist_matrix_, ir.transform(S[:32])),
                      nm=_h(nemb, np.float64(nm.stress_), np.int32(nm.n_iter_)),
