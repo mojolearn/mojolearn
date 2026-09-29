@@ -1,0 +1,9 @@
+gpuq: job 0020 lane=lowbit-blocks gpus=0,1 cap=60min started 2026-09-29T05:37:28Z
+gpuq: script /root/mojolearn-lowbit-blocks/tools/lowbit_blocks/time_job.sh sha256 at submit 39c18585531a15128c43c93f722c8bf7554fc3c53ab62af00f40197b406f8ab8, now 39c18585531a15128c43c93f722c8bf7554fc3c53ab62af00f40197b406f8ab8
+0, NVIDIA GeForce RTX 4090, 0 %, 1 MiB
+1, NVIDIA GeForce RTX 4090, 0 %, 1 MiB
+RESULT time box=447c5c6d4d39 profile=fp32_v1 prefill512 1234.8 ms decode 296.35 ms/token
+RESULT time box=447c5c6d4d39 profile=fixed15_v1 prefill512 423.1 ms decode 94.09 ms/token
+RESULT time box=447c5c6d4d39 profile=fp32_v1 prefill512 1342.6 ms decode 289.59 ms/token
+RESULT time box=447c5c6d4d39 profile=fixed15_v1 prefill512 535.8 ms decode 88.09 ms/token
+gpuq: job 0020 done exit=0 at 2026-09-29T05:40:48Z after 200s

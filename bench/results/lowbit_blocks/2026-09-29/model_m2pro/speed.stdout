@@ -1,0 +1,49 @@
+model /Users/ec2-user/models/SmolLM2-360M
+== build build
+build build exit 0
+ld: warning: object file (/private/var/folders/m5/mhddkc2d6c5_3f_vljmqvq_40000gn/T/mojo_archive-e930b9b.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+== build build_linalg
+build build_linalg exit 0
+ld: warning: object file (/private/var/folders/m5/mhddkc2d6c5_3f_vljmqvq_40000gn/T/mojo_archive-c88774b.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built python/mojolearn/identical/_mojolearn_linalg.so (kernel-launch smoke skipped; binary checks ran)
+== build build_training
+build build_training exit 0
+    core               2
+built python/mojolearn/identical/_mojolearn_training.so (kernel-launch smoke skipped; binary checks ran)
+== build build_transformer
+build build_transformer exit 0
+    checks             0
+built python/mojolearn/identical/_mojolearn_transformer.so (kernel-launch smoke skipped; binary checks ran)
+== build build_byte_lm
+build build_byte_lm exit 2
+byte LM: output already exists; choose a fresh output directory
+== build build_core_host
+build build_core_host exit 2
+core host: output already exists; choose a fresh output directory
+== build build_linalg_host
+build build_linalg_host exit 2
+linalg host: output already exists; choose a fresh output directory
+== build build_neural_host
+build build_neural_host exit 2
+neural host: output already exists; choose a fresh output directory
+== build build_transformer_host
+build build_transformer_host exit 2
+transformer host: output already exists; choose a fresh output directory
+== build build_tokenizer_host
+build build_tokenizer_host exit 2
+tokenizer host: output already exists; choose a fresh output directory
+== run fixed15_v1 auto identity,decode,batch
+model SmolLM2-360M profile fixed15_v1 device gpu vendor metal load 1.7 s
+RESULT identity box=m2pro profile=fixed15_v1 B=2 L=64 logits_sha256=d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f row0=84f2acb4afc784b6 row1=c909ff3765277b96
+RESULT batch row 0 alone vs in B=2: EQUAL
+RESULT batch row 1 alone vs in B=2: EQUAL
+RESULT decode prefix 1: 63 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 7: 57 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+RESULT decode prefix 63: 1 decode steps; 0 of 64 positions differ from the full prefill  EQUAL
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fixed15_v1_gpu.json
+== run fp32_v1 auto identity
+model SmolLM2-360M profile fp32_v1 device gpu vendor metal load 0.8 s
+RESULT identity box=m2pro profile=fp32_v1 B=2 L=64 logits_sha256=833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d row0=ca3de3baf31bbcb1 row1=19022a95c923d2da
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fp32_v1_gpu.json
+out /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model

@@ -31,9 +31,11 @@ elif command -v rocminfo > /dev/null 2>&1; then
 fi
 if [ "${LB_BUILD:-1}" = 1 ]; then
     for b in ${LB_GPU_BUILDS-build build_linalg build_training build_transformer build_byte_lm}; do
-        echo "== build $b"; A=""; [ "$b" = build_byte_lm ] && [ -n "$ARCH" ] && A="MOJOLEARN_GPU_ARCHS=$ARCH"; env $A MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
+        echo "== build $b"; [ "$b" = build_byte_lm ] && rm -f python/mojolearn/identical/_mojolearn_byte_lm.so; A=""; [ "$b" = build_byte_lm ] && [ -n "$ARCH" ] && A="MOJOLEARN_GPU_ARCHS=$ARCH"; env $A MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
     done
     for b in ${LB_HOST_BUILDS-build_core_host build_linalg_host build_neural_host build_transformer_host build_tokenizer_host}; do
+        # the host builds refuse an existing output (build_host_family.sh): the stale one goes first
+        f=${b#build_}; rm -f "python/mojolearn/host/_mojolearn_${f}.so"
         echo "== build $b"; env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/$b.sh > "$OUT/build_$b.log" 2>&1; echo "build $b exit $?"; tail -2 "$OUT/build_$b.log"
     done
 fi
