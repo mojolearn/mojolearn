@@ -50,6 +50,7 @@ from gemm.checks.gemm_int15_tuned import (
     Int15SumsWorkspace,
     identical_gemm_int15_tuned_into,
 )
+from gemm.checks.gemm_int8_mma_tuned import INT8_DECODE_AVAILABLE, INT8_DECODE_MAX_M
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 
 # WHICH PLAN (clause W-8, W-13: every plan is the same bits, so this is
@@ -62,16 +63,52 @@ from gemm.host.gemm_int15_oracle import INT15_MAX_K
 # not faster on any box (4090 nvc2-0021 within noise; H100 nvc3-0043 prefill
 # 0.71 to 0.72 of fp32_v1 against 0.64 to 0.68 on the reference plan; MI325X
 # 0.93 to 0.94 against 0.85 to 0.89), so the reference plan is the default.
+#
+# THE DECODE ROWS (lane/lowbit-default, 2026-09-29). Where the column has
+# Lane D's four-product decode kernel (NVIDIA, `m <= INT8_DECODE_MAX_M`),
+# a product of at most that many rows takes the tuned entry, whose launcher
+# dispatches that kernel with Lane C's epilogue fused; every other shape
+# keeps the reference plan measured above. Same bits (W-13); the resident
+# gate (tools/lowbit_default/resident_gate.py) holds the model to it.
 comptime LLAMA_INT15_TUNED = INT15_TUNED_AVAILABLE and is_defined[
     "MOJOLEARN_LLAMA_INT15_TUNED"
 ]()
+comptime LLAMA_INT15_DECODE_TUNED = INT15_TUNED_AVAILABLE and INT8_DECODE_AVAILABLE
 
 
 def llama_int15_plan_name() -> String:
     comptime if LLAMA_INT15_TUNED:
         return "tuned"
+    elif LLAMA_INT15_DECODE_TUNED:
+        return "reference, tuned at m <= " + String(INT8_DECODE_MAX_M)
     else:
         return "reference"
+
+
+def _llama_int15_gemm(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    mut sums: Int15SumsWorkspace,
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """The plan choice above, one place for the projections and S11."""
+    comptime if LLAMA_INT15_TUNED:
+        identical_gemm_int15_tuned_into(ctx, c, ah, al, ea, bh, bl, eb, sums, m, n, k)
+    elif LLAMA_INT15_DECODE_TUNED:
+        if m <= INT8_DECODE_MAX_M:
+            identical_gemm_int15_tuned_into(ctx, c, ah, al, ea, bh, bl, eb, sums, m, n, k)
+        else:
+            identical_gemm_int15_planes_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+    else:
+        identical_gemm_int15_planes_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
 
 # The projections, in the binding's weight order (q, k, v, o, gate, up, down).
 comptime LLAMA_PROJ_Q = 0
@@ -320,10 +357,7 @@ def llama_int15_proj(
     var bh = w.hi.copy()
     var bl = w.lo.copy()
     var eb = w.e.copy()
-    comptime if LLAMA_INT15_TUNED:
-        identical_gemm_int15_tuned_into(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, st.sums, m, n, k)
-    else:
-        identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, m, n, k)
+    _llama_int15_gemm(ctx, c, st.ah, st.al, st.ea, bh, bl, eb, st.sums, m, n, k)
 
 
 def llama_int15_scores(
@@ -344,9 +378,4 @@ def llama_int15_scores(
     st.ensure_b(ctx, s * hd, s)
     quantize_planes_int15_parallel_device(ctx, st.ah, st.al, st.ea, q, st.quant, l, hd, False)
     quantize_planes_int15_parallel_device(ctx, st.bh, st.bl, st.eb, kmat, st.quant, s, hd, False)
-    comptime if LLAMA_INT15_TUNED:
-        identical_gemm_int15_tuned_into(
-            ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, st.sums, l, s, hd
-        )
-    else:
-        identical_gemm_int15_planes_into(ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, l, s, hd)
+    _llama_int15_gemm(ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, st.sums, l, s, hd)
