@@ -59,6 +59,7 @@ phase gate-lowbit pass pixi run check-gemm-lowbit
 phase gate-lowbit-sabotage fail pixi run check-gemm-lowbit-sabotage
 phase gate-int15 pass pixi run check-gemm-int15
 phase gate-int15-sabotage fail pixi run check-gemm-int15-sabotage
+phase gate-int15-tuned pass pixi run check-gemm-int15-tuned
 phase gate-int8-mma-tuned pass pixi run check-gemm-int8-mma-tuned
 phase gate-int8-mma-tuned-sabotage fail pixi run check-gemm-int8-mma-tuned-sabotage
 phase gate-int8-pieces-tuned pass pixi run check-gemm-int8-pieces-tuned
