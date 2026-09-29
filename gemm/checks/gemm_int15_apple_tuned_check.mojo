@@ -74,6 +74,11 @@ from gemm.checks.gemm_int15_apple_tuned import (
     int15_apple_tuned_sabotage_name,
     int15_apple_tuned_variant_name,
 )
+from gemm.checks.gemm_int15_apple_tuned_dev import (
+    TUNED_DEV_COUNT,
+    identical_gemm_int15_apple_dev_from_pieces_into,
+    int15_apple_tuned_dev_variant_name,
+)
 from gemm.checks.gemm_int15_check import (
     SHAPE_COUNT,
     _digest,
@@ -133,13 +138,20 @@ def _variants_on_planes(
     ran it, the flat kernel. Every variant runs before anything is raised;
     the failures come back as one string."""
     var failures = String("")
-    for v in range(TUNED_VARIANT_COUNT):
+    for v in range(TUNED_VARIANT_COUNT + TUNED_DEV_COUNT):
         var vn = String("tuned.") + int15_apple_tuned_variant_name(v)
+        if v >= TUNED_VARIANT_COUNT:
+            vn = String("tuned.") + int15_apple_tuned_dev_variant_name(v - TUNED_VARIANT_COUNT)
         var dc = _poisoned(ctx, m * n)
         try:
-            identical_gemm_int15_apple_tuned_into(
-                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, v, slice_macs
-            )
+            if v < TUNED_VARIANT_COUNT:
+                identical_gemm_int15_apple_tuned_into(
+                    ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, v, slice_macs
+                )
+            else:
+                identical_gemm_int15_apple_dev_from_pieces_into(
+                    ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, v - TUNED_VARIANT_COUNT, slice_macs
+                )
             ctx.synchronize()
             var got = _download_cells(ctx, dc, m * n, name + " " + vn)
             print("   DIGEST " + name + " " + vn + " " + _digest(got))
@@ -500,7 +512,7 @@ def main() raises:
         + "  host sabotage: " + String(GEMM_ORACLE_HOST_SABOTAGE) + " =="
     )
     print("   profile: mojolearn.identical.gemm.int15i64.v1, the tuned Apple float-unit plans")
-    print("   column: " + column_name(TARGET_COLUMN) + "  variants: " + String(TUNED_VARIANT_COUNT))
+    print("   column: " + column_name(TARGET_COLUMN) + "  variants: " + String(TUNED_VARIANT_COUNT) + " staged + " + String(TUNED_DEV_COUNT) + " device-fragment")
     comptime if not IS_APPLE:
         raise Error("gemm_int15_apple_tuned_check: this column is not Apple; NOTHING RAN, which is not a pass")
     else:

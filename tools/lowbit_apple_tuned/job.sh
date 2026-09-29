@@ -49,6 +49,11 @@ if [ "$(uname -s)" != Darwin ]; then
     exit 9
 fi
 red=0
+# Extra defines for every build of this job; the devprobe phase may add
+# -D MOJOLEARN_TUNED_NO_DEV=1 (no spelling of the device load works).
+XDEF=""
+DEVFILE=gemm/checks/gemm_int15_apple_tuned_dev.mojo
+DEVSAVED=""
 {
     echo "profile=mojolearn.identical.gemm.int15i64.v1 (the tuned Apple float-unit plans)"
     echo "box=$BOX phases=$PHASES"
@@ -108,13 +113,39 @@ show() {
 for phase in $PHASES; do
     echo "######## phase $phase on $BOX, started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     case "$phase" in
+    devprobe)
+        # Job 3: which spelling of the fragment load from DEVICE memory
+        # compiles and loads what the threadgroup load loads. Spelling 1 is
+        # the dev module's as committed; spelling 2 is patched in for this
+        # job only (the file is put back at the end); neither: the dev
+        # variants are not built (-D MOJOLEARN_TUNED_NO_DEV=1). Recorded,
+        # never a verdict by itself.
+        for sp in 1 2; do
+            pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_apple_devload_probe$sp.mojo > "$OUT/devload_probe$sp.log" 2>&1
+            echo "devload-probe$sp exit=$?" >> "$OUT/job.txt"
+            grep -E '^DEVLOAD ' "$OUT/devload_probe$sp.log" >> "$OUT/job.txt"
+        done
+        if grep -q '^DEVLOAD 1 transposed equal' "$OUT/devload_probe1.log"; then
+            echo "devload: spelling 1 (as committed)" >> "$OUT/job.txt"
+        elif grep -q '^DEVLOAD 2 transposed equal' "$OUT/devload_probe2.log"; then
+            DEVSAVED="$OUT/dev_module.committed"
+            cp "$DEVFILE" "$DEVSAVED"
+            python3 -c 'import sys; p=sys.argv[1]; s=open(p).read(); s=s.replace("    var q = p\n", "    var q = p.address_space_cast[AddressSpace.GLOBAL]()\n"); s=s.replace("from std.ffi import external_call\n", "from std.ffi import external_call\nfrom max.gpu.memory import AddressSpace\n", 1); open(p, "w").write(s)' "$DEVFILE"
+            echo "devload: spelling 2 PATCHED IN for this job: $(grep -c address_space_cast "$DEVFILE") line(s)" >> "$OUT/job.txt"
+        else
+            XDEF="-D MOJOLEARN_TUNED_NO_DEV=1"
+            echo "devload: NO SPELLING WORKED; the device-fragment variants are not built in this job" >> "$OUT/job.txt"
+        fi
+        echo "== devload probes"
+        for sp in 1 2; do grep -E '^DEVLOAD |error:' "$OUT/devload_probe$sp.log" | cut -c1-400 | head -12; done
+        ;;
     probe)
         # Why the 512-thread tiles never wrote on the M2 Pro (job 1). Not a
         # verdict of the profile: its exit is recorded, never red.
         PROBE=gemm/checks/gemm_int15_apple_tuned_threads_probe.mojo
-        pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$PROBE" > "$OUT/probe_threads.log" 2>&1
+        pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -I . "$PROBE" > "$OUT/probe_threads.log" 2>&1
         echo "probe-threads exit=$?" >> "$OUT/job.txt"
-        MTL_DEBUG_LAYER=1 MTL_DEBUG_LAYER_ERROR_MODE=nslog pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$PROBE" > "$OUT/probe_threads_validation.log" 2>&1
+        MTL_DEBUG_LAYER=1 MTL_DEBUG_LAYER_ERROR_MODE=nslog pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -I . "$PROBE" > "$OUT/probe_threads_validation.log" 2>&1
         echo "probe-threads-validation exit=$?" >> "$OUT/job.txt"
         echo "== probe_threads.log"
         grep -E '^THREADS |error:|Error' "$OUT/probe_threads.log" | cut -c1-400 | head -40
@@ -122,12 +153,12 @@ for phase in $PHASES; do
         grep -v -E 'warning:|^ *\^|^ *~|note:|Imported from|^ +[A-Za-z_]|^ *Pointer|^$' "$OUT/probe_threads_validation.log" | cut -c1-600 | head -60
         ;;
     gate)
-        run gate pass pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$CHECK"
-        run gate-chunk-sabotage fail pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_APPLE_TUNED_CHUNK_SABOTAGE=1 -I . "$CHECK"
+        run gate pass pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -I . "$CHECK"
+        run gate-chunk-sabotage fail pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -D MOJOLEARN_INT15_APPLE_TUNED_CHUNK_SABOTAGE=1 -I . "$CHECK"
         must_name gate-chunk-sabotage check_tuned_planted_worst_cases
         must_name gate-chunk-sabotage check_tuned_chunk_boundaries
         must_pass gate-chunk-sabotage check_tuned_shapes_inside_one_chunk
-        run gate-value-sabotage fail pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . "$CHECK"
+        run gate-value-sabotage fail pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . "$CHECK"
         must_name gate-value-sabotage check_tuned_shapes_inside_one_chunk
         must_name gate-value-sabotage check_tuned_shapes_across_chunks
         must_name gate-value-sabotage check_tuned_planted_worst_cases
@@ -143,7 +174,7 @@ for phase in $PHASES; do
         ;;
     price)
         t0=$(date +%s)
-        pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . "$BENCH" -o "$OUT/tuned_price" > "$OUT/build.log" 2>&1
+        pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -I . "$BENCH" -o "$OUT/tuned_price" > "$OUT/build.log" 2>&1
         rc=$?
         echo "build exit=$rc $(( $(date +%s) - t0 ))s" >> "$OUT/job.txt"
         if [ "$rc" -ne 0 ]; then
@@ -169,7 +200,7 @@ for phase in $PHASES; do
                 red=1
             fi
             MOJOLEARN_TUNED_PRICE_ONLY=${MOJOLEARN_TUNED_PRICE_SABOTAGE_ONLY:-qkv} MOJOLEARN_TUNED_PRICE_IDENTITY_ONLY=1 MOJOLEARN_TUNED_PRICE_FLAT=0 \
-                pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . "$BENCH" > "$OUT/price_sabotage.log" 2>&1
+                pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 $XDEF -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . "$BENCH" > "$OUT/price_sabotage.log" 2>&1
             echo "price-sabotage exit=$? (identity only)" >> "$OUT/job.txt"
             grep -E '^DIGEST price-.* (tuned|inference\.tuned|training\.tuned)\.' "$OUT/price_sabotage.log" > "$OUT/price_sabotage_digests.tsv"
             grep -E '^DIGEST price-.* (tuned|inference\.tuned|training\.tuned)\.' "$OUT/price.log" > "$OUT/price_tuned_digests.tsv"
@@ -194,6 +225,10 @@ for phase in $PHASES; do
     esac
     echo "######## phase $phase on $BOX finished $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 done
+if [ -n "$DEVSAVED" ]; then
+    cp "$DEVSAVED" "$DEVFILE"
+    echo "devload: the dev module put back as committed" >> "$OUT/job.txt"
+fi
 if [ -f "$OUT/gate_digests.tsv" ]; then
     echo "== gate digests (the clean run)"
     cat "$OUT/gate_digests.tsv"

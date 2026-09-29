@@ -34,6 +34,10 @@ THE ARMS of one row, in the order the timed loop alternates them:
                                     (forward rows only)
     training.tuned.<variant>        A and B straight to planes, then the
                                     product: THE COMPLETE OPERATION
+    tuned.dev.<variant>             job 3: the device-fragment plans
+    inference.tuned.dev.<variant>   (gemm/checks/gemm_int15_apple_tuned_dev.mojo);
+    training.tuned.dev.<variant>    the float32 planes of the operands the
+                                    call converts are made inside the call
     int15i64.v1.flat                identity only and only under
                                     MOJOLEARN_TUNED_PRICE_FLAT=1: the flat
                                     kernel, one thread per cell, never timed
@@ -114,6 +118,15 @@ from gemm.checks.gemm_int15 import (
     quantize_int15_parallel_device,
     quantize_planes_int15_parallel_device,
 )
+from gemm.checks.gemm_int15_apple_tuned_dev import (
+    Int15DevPlanes,
+    TUNED_DEV_COUNT,
+    dev_variant_whole_left,
+    identical_gemm_int15_apple_dev_into,
+    int15_apple_tuned_dev_variant_name,
+    int15_dev_planes_left,
+    int15_dev_planes_right,
+)
 from gemm.checks.gemm_int15_apple import (
     INT15_APPLE_FORM_FOUR,
     identical_gemm_int15_apple_into,
@@ -146,7 +159,16 @@ comptime ARM_FIRST_TUNED = 5
 comptime PART_PRODUCT = 0
 comptime PART_INFERENCE = 1
 comptime PART_TRAINING = 2
-comptime ARM_COUNT = ARM_FIRST_TUNED + 3 * TUNED_VARIANT_COUNT
+#: Every variant: the staged ones, then the device-fragment ones
+#: (`gemm/checks/gemm_int15_apple_tuned_dev.mojo`, none when not built).
+comptime ALL_VARIANTS = TUNED_VARIANT_COUNT + TUNED_DEV_COUNT
+comptime ARM_COUNT = ARM_FIRST_TUNED + 3 * ALL_VARIANTS
+
+
+def _vname(v: Int) -> String:
+    if v < TUNED_VARIANT_COUNT:
+        return int15_apple_tuned_variant_name(v)
+    return int15_apple_tuned_dev_variant_name(v - TUNED_VARIANT_COUNT)
 
 #: The kind of a row.
 comptime ROW_FORWARD = 0
@@ -175,7 +197,7 @@ def _arm_name(arm: Int) -> String:
         return String("convert.int15.planes.b.parallel")
     if arm == ARM_FLAT:
         return String("int15i64.v1.flat")
-    var vn = int15_apple_tuned_variant_name(_arm_variant(arm))
+    var vn = _vname(_arm_variant(arm))
     if _arm_part(arm) == PART_PRODUCT:
         return String("tuned.") + vn
     if _arm_part(arm) == PART_INFERENCE:
@@ -190,8 +212,8 @@ def _arm_at(i: Int) -> Int:
     if i < ARM_FLAT:
         return i
     var j = i - ARM_FLAT
-    if j < 3 * TUNED_VARIANT_COUNT:
-        return ARM_FIRST_TUNED + 3 * (j % TUNED_VARIANT_COUNT) + j // TUNED_VARIANT_COUNT
+    if j < 3 * ALL_VARIANTS:
+        return ARM_FIRST_TUNED + 3 * (j % ALL_VARIANTS) + j // ALL_VARIANTS
     return ARM_FLAT
 
 
@@ -222,7 +244,7 @@ def _why_not(arm: Int, kind: Int, k: Int, variants: String, flat: Bool) -> Strin
     if arm == ARM_FLAT and not flat:
         return String("not-asked-for:MOJOLEARN_TUNED_PRICE_FLAT")
     if arm >= ARM_FIRST_TUNED:
-        if not _wanted(variants, int15_apple_tuned_variant_name(_arm_variant(arm))):
+        if not _wanted(variants, _vname(_arm_variant(arm))):
             return String("not-asked-for:MOJOLEARN_TUNED_PRICE_VARIANTS")
         if _arm_part(arm) == PART_INFERENCE and kind != ROW_FORWARD:
             return String("inference-has-no-backward-product")
@@ -289,6 +311,7 @@ struct TunedRowBuffers(Movable):
     var sbh: DeviceBuffer[DType.int8]
     var sbl: DeviceBuffer[DType.int8]
     var quant: Int15QuantWorkspace
+    var dev: Int15DevPlanes
 
     def __init__(out self, ctx: DeviceContext, m: Int, n: Int, k: Int, codes: Bool) raises:
         var nws = identical_gemm_workspace_max_floats(m, n, k)
@@ -315,6 +338,9 @@ struct TunedRowBuffers(Movable):
         self.sbl = ctx.enqueue_create_buffer[DType.int8](n * k)
         self.quant = Int15QuantWorkspace(ctx)
         self.quant.ensure(ctx, (m if m > n else n) * int15_quant_chunks(k))
+        self.dev = Int15DevPlanes(ctx)
+        if TUNED_DEV_COUNT > 0 and k <= INT15_MAX_K:
+            self.dev.ensure(ctx, m, n, k)
         ctx.synchronize()
 
 
@@ -377,10 +403,23 @@ def _enqueue_arm(
                 quantize_planes_int15_parallel_device(
                     ctx, rb.bh, rb.bl, rb.eb, rb.b, rb.quant, n, k, _b_transposed(kind)
                 )
-            identical_gemm_int15_apple_tuned_into(
-                ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k,
-                _arm_variant(arm), slice_macs,
-            )
+            var v = _arm_variant(arm)
+            if v < TUNED_VARIANT_COUNT:
+                identical_gemm_int15_apple_tuned_into(
+                    ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k,
+                    v, slice_macs,
+                )
+            else:
+                # THE DEVICE-FRAGMENT PLANS: the planes of the operands the
+                # call converts are made inside the call, and timed.
+                var dv = v - TUNED_VARIANT_COUNT
+                if part != PART_PRODUCT:
+                    int15_dev_planes_left(ctx, rb.dev, rb.ah, rb.al, m, k, dev_variant_whole_left(dv))
+                if part == PART_TRAINING:
+                    int15_dev_planes_right(ctx, rb.dev, rb.bh, rb.bl, n, k)
+                identical_gemm_int15_apple_dev_into(
+                    ctx, rb.c, rb.dev, rb.ea, rb.eb, m, n, k, dv, slice_macs
+                )
 
 
 def _checked_call(
@@ -446,6 +485,11 @@ def _time_row(
         quantize_planes_int15_parallel_device(
             ctx, rb.bh, rb.bl, rb.eb, rb.b, rb.quant, n, k, _b_transposed(kind)
         )
+        comptime if TUNED_DEV_COUNT > 0:
+            # The float32 planes the device-fragment product arms read.
+            int15_dev_planes_left(ctx, rb.dev, rb.ah, rb.al, m, k, True)
+            int15_dev_planes_left(ctx, rb.dev, rb.ah, rb.al, m, k, False)
+            int15_dev_planes_right(ctx, rb.dev, rb.bh, rb.bl, n, k)
         if flat:
             quantize_int15_parallel_device(
                 ctx, rb.qa, rb.esa, rb.a, rb.quant, m, k, _a_transposed(kind)
