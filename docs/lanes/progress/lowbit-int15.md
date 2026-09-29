@@ -181,3 +181,15 @@ It is another arithmetic than the one whose perplexity was measured for
   `gemm/checks/gemm_int15_epilogue.mojo` with `int15_store_cell`; Lane D's
   sums kernel takes `FUSED: Bool` and calls it at its store). Nothing written
   until approved.
+- THE LAUNCH BOUND IS KEPT (orchestrator): the unbounded-launch arm did not
+  reproduce the abort in the 99ae7bb66 jobs, so the bound's need rests on the
+  earlier reproduction (d4c9d8a34, 2 runs of 3 on the M2 Pro).
+- THE M3 ULTRA IS RELEASED TONIGHT (orchestrator, Andrew): nothing new to
+  m3ultra-b; Apple jobs go to m2pro only. The harness request 1790657536591
+  was queued there before the word; not cancelled.
+- EPILOGUE FOLD APPROVED; this lane's half pushed: `gemm_int15_epilogue.mojo`
+  (`int15_store_cell`), the fused path in `gemm_int15_tuned.mojo` (a STUB,
+  `INT15_FUSED_IS_STUB`, until Lane D pushes
+  `identical_gemm_int8_pieces_tuned_fused_with_plan`), the two-launch arms in
+  the gate and the price harness, the exponent sabotage arm. Jobs:
+  `fold_gate_job_h100.sh` (the gate on the stub), `run6_job_h100.sh`.
