@@ -52,18 +52,24 @@ full contract. In short:
 
 An opponent is measured once per key and reused. Every finished opponent cell
 is appended to `--opponent-store` (JSONL, default `<out>/../opponent-store.jsonl`)
-with its key: box and machine model, vendor, device, OS, library and exact
-version, lane, dataset, rows, the race's settings (sha256), the data file it
-read (sha256) and the rounds, plus the measurement time, the commit and the
-arm's parameters from the BOARD-PARAMS check. Before a race runs, an opponent
-whose key is in the store is not run: its stored cell joins the race and
+with its key: box and machine model, vendor, device (and the GPU name its
+worker reported), OS, library and the exact version its worker imported,
+lane, dataset, rows, the arm's parameters read back from the constructed
+object (BOARD-PARAMS, sha256), the race's settings (sha256), the data file it
+read (sha256) and the rounds, plus the measurement time and the commit.
+Before a race runs, each opponent that could match is constructed through its
+driver (`--params-only`: no fit, no timed round) and read back; an opponent
+whose full key, read-back included, is in the store is not run (one that does
+not construct runs normally): its stored cell joins the race and
 BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
 measured in this run is marked `measured this run`. When every opponent is
 stored, only our arms run. Any key field that differs means a new
 measurement. A refused or failed opponent is stored as what it was; a
 PARTIAL one is never reused. `--retime-opponents` measures every opponent
 again, and `--backfill-store <board.json>` imports an existing board's
-opponent cells (a cell whose key cannot be completed is skipped and counted)
+opponent cells, a corpus by its manifest pin when the staged file has the
+pinned size and a missing version from the board's venv when its dist-info
+predates the board, and prints the skipped cells by reason
 (tools/bench_board_store.py).
 
 ## NVIDIA's harnesses
