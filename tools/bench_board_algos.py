@@ -165,21 +165,23 @@ def _add(slug, **spec):
 
 
 # ---- lane linear ----------------------------------------------------------
-_SGD = dict(penalty="l2", alpha=1e-4, max_iter=20, tol=None, shuffle=True, random_state=SEED)
+# cuML benchmark MBSGDClassifier / MBSGDRegressor cuml_args eta0=0.005, epochs=100
+# (tools/bench_board_harness.py), on every arm: max_iter=100 is epochs=100, and
+# learning_rate is pinned 'constant' (cuML's default, the schedule eta0 sets)
+_SGD = dict(penalty="l2", alpha=1e-4, max_iter=100, tol=None, shuffle=True, random_state=SEED,
+            learning_rate="constant", eta0=0.005)
 _add("sgd-clf", xlane="linear", ours="SGDClassifier", task="clf", block="cls",
      sk="sklearn.linear_model:SGDClassifier", params=dict(_SGD, loss="hinge"),
      cuml="cuml.linear_model:MBSGDClassifier",
-     cuml_params=dict(loss="hinge", penalty="l2", alpha=1e-4, epochs=20, batch_size=4096,
-                      learning_rate="constant", eta0=0.001, tol=0.0, shuffle=True),
+     cuml_params=dict(loss="hinge", penalty="l2", alpha=1e-4, epochs=100, batch_size=4096,
+                      learning_rate="constant", eta0=0.005, tol=0.0, shuffle=True),
      mism=["cuML MBSGD is mini-batch SGD (batch_size 4096); scikit-learn and ours are "
-           "per-sample SGD (the reference)", "cuML reads epochs, not max_iter",
-           "learning rate: scikit-learn and ours 'optimal' (1 / (alpha (t + t0))); cuML has no "
-           "'optimal' schedule and runs 'constant' eta0=0.001 (its default)"])
+           "per-sample SGD (the reference)", "cuML reads epochs=100, the others max_iter=100"])
 _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
      cuml="cuml.linear_model:MBSGDRegressor",
-     cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=20,
-                      batch_size=4096, learning_rate="invscaling", eta0=0.01, power_t=0.25,
+     cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=100,
+                      batch_size=4096, learning_rate="constant", eta0=0.005,
                       tol=0.0, shuffle=True),
      mism=["cuML MBSGD is mini-batch SGD (batch_size 4096)"])
 for _slug, _cls, _kw, _why in (
@@ -351,18 +353,18 @@ _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp
 # ---- lane decomp + linalg -------------------------------------------------
 _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform", block="tsvd",
      quality="pca", sk="sklearn.decomposition:IncrementalPCA",
-     params=dict(n_components=8, batch_size=65536),
-     cuml="cuml.decomposition:IncrementalPCA", cuml_params=dict(n_components=8, batch_size=65536))
+     params=dict(n_components=10, batch_size=65536),     # cuML benchmark IncrementalPCA
+     cuml="cuml.decomposition:IncrementalPCA", cuml_params=dict(n_components=10, batch_size=65536))
 _add("gaussian-rp", xlane="decomp", ours="GaussianRandomProjection", task="transform",
      block="tsvd", quality="distortion", sk="sklearn.random_projection:GaussianRandomProjection",
-     params=dict(n_components="half", random_state=SEED),
+     params=dict(n_components=10, random_state=SEED),   # cuML benchmark GaussianRandomProjection
      cuml="cuml.random_projection:GaussianRandomProjection",
-     notes=["n_components = d // 2 (taxi 5, Istella 110)"])
+     notes=["n_components = 10, the cuML benchmark's"])
 _add("sparse-rp", xlane="decomp", ours="SparseRandomProjection", task="transform", block="tsvd",
      quality="distortion", sk="sklearn.random_projection:SparseRandomProjection",
-     params=dict(n_components="half", density="auto", random_state=SEED),
+     params=dict(n_components=10, density="auto", random_state=SEED),  # cuML benchmark
      cuml="cuml.random_projection:SparseRandomProjection",
-     notes=["n_components = d // 2"])
+     notes=["n_components = 10, the cuML benchmark's"])
 _add("nmf", xlane="decomp", ours="NMF", task="transform", block="nonneg", quality="nmf",
      sk="sklearn.decomposition:NMF",
      params=dict(n_components=8, init="nndsvda", solver="mu", max_iter=200, tol=1e-4,
@@ -541,11 +543,15 @@ for _slug, _cls, _kw, _blk, _cu in (
              "'averaged_inverted_cdf')"] if _slug == "kbins" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
      quality="vs-sklearn", sk="sklearn.preprocessing:TargetEncoder",
-     params=dict(target_type="binary", cv=5, shuffle=True, random_state=SEED),
-     cuml="cuml.preprocessing:TargetEncoder", cuml_params=dict(n_folds=5, smooth=0, seed=SEED,
-                                                               split_method="random"),
-     mism=["cuML TargetEncoder smooths with a fixed `smooth`, scikit-learn with its empirical-Bayes "
-           "shrinkage; their fold assignment is each library's own"])
+     # cuML benchmark TargetEncoder: shared smooth=0.0; cpu_args cv=4, random_state=42;
+     # cuml_args n_folds=4, seed=42, split_method='interleaved',
+     # multi_feature_mode='independent' (the lane's seed is 42, bench_board_params.LANE_SEED)
+     params=dict(target_type="binary", smooth=0.0, cv=4, shuffle=True, random_state=42),
+     cuml="cuml.preprocessing:TargetEncoder",
+     cuml_params=dict(n_folds=4, smooth=0.0, seed=42, split_method="interleaved",
+                      multi_feature_mode="independent"),
+     mism=["fold assignment: cuML 'interleaved' (row i in fold i mod 4, the cuML benchmark's "
+           "cuml_args); scikit-learn and ours a KFold shuffled by seed 42 (its cpu_args)"])
 _add("simple-imputer", xlane="prep", ours="SimpleImputer", task="impute", block="raw",
      sk="sklearn.impute:SimpleImputer", params=dict(strategy="median"),
      cuml="cuml.preprocessing:SimpleImputer",
