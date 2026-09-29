@@ -1728,9 +1728,10 @@ class FactorAnalysis(_Base):
 # ================================================================ TruncatedSVD explained variance
 def _exact_eigen_solver(name, who):
     """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
-    solve, which is what runs. 'arpack' (a Lanczos) is a different algorithm
-    and is refused by name rather than run as the exact solve (a silent
-    substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
+    solve, which is what runs (LLE's 'auto' past 200 rows: shift-invert
+    subspace iteration to convergence, `_lle_smallest`). 'arpack' (a
+    Lanczos) is a different algorithm and is refused by name rather than run
+    as another solve (a silent substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
     if name == "arpack":
         raise NotImplementedError(
             f"{who}: eigen_solver='arpack' is not implemented; the exact solve "
@@ -3433,11 +3434,16 @@ _LLE_TRI_LEAF = 64
 #: _LLE_STALL_TOL, it stopped shrinking (float32's floor for this factor).
 _LLE_SUBSPACE_TOL = 1e-5
 _LLE_STALL_TOL = 1e-2
-#: The deflation guard: the dropped direction's |F 1| / sqrt(n) must be at
-#: most this fraction of the smallest kept singular value (the constant is
-#: then clearly the null vector sklearn drops; its coupling into a kept
-#: vector is about that ratio, float32's rounding of the unit weight sums).
-_LLE_NULL_GUARD = 0.1
+#: The deflation guard: F's rms row sum |F 1| / sqrt(n) (float32's rounding
+#: of the weights' unit sums) must be at most this fraction of its rms row
+#: norm, or the constant is not F's null vector and the dense route runs.
+_LLE_NULL_GUARD = 1e-3
+#: A wanted Ritz singular value at most this many float32 epsilons times the
+#: rms row norm is numerically zero: the kNN graph has several components
+#: (taxi's near-duplicate rows at 2,000), M's null space is wider than the
+#: constant, and any basis of it is the answer (sklearn's ARPACK returns
+#: its own); the iteration stops there from its third step.
+_LLE_NULL_FLOOR = 8.0
 
 
 def _lle_tri_inv(k, R):
@@ -3490,10 +3496,10 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     u = 1 / sqrt(n) to e_{n-1}, and F^ = F H[:, :n-1], F restricted to the
     constant's complement (its last column F u is dropped; F u is float32
     rounding of the weights' unit sums, and the guard below checks it is
-    far under the kept singular values). F0 = [F^ | u] is square and, when
+    far under its rms row norm). F0 = [F^ | u] is square and, when
     u is not orthogonal to z (the unit left null vector of F^), nonsingular:
-    ONE LU (the device's parallel right-looking getrf), U^-1 and L^-1 by
-    blocks. z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
+    ONE LU (the device's parallel right-looking getrf; a pivot under float32
+    resolution is set to eps times the largest), U^-1 and L^-1 by blocks. z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
     (F^T F^)^-1 x = the first n - 1 entries of F0^-1 (P_z F0^-T [x; 0]),
     P_z = I - z z^T: F0^-T [x; 0] solves F^^T y = x, P_z takes its
     minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
@@ -3504,7 +3510,11 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
     Every product is a kit cell and the stopping test reads their outputs:
     the same iterations on every vendor. Not settled in max_iter steps
-    raises (an unconverged answer is not returned as one)."""
+    raises (an unconverged answer is not returned as one). Wanted singular
+    values under _LLE_NULL_FLOOR float32 epsilons (a null space wider than
+    the constant) stop it from the third step on (each step has shrunk
+    the rest by (sigma / sigma_next)^2): any basis of that space is the
+    answer, to float32's resolution of |F^ x|."""
     n = F.c
     if F.r != n:
         return None
@@ -3523,13 +3533,25 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
     Fu = k.mm(F, un)
     g = math.sqrt(_dsum(float(v) * float(v) for v in Fu.s))
+    rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
+    if not (g <= _LLE_NULL_GUARD * rms):
+        return None
+    floor = _LLE_NULL_FLOOR * _F32_EPS * rms
     F0 = _hstack(Fhat, un)
-    lu, piv, info = k.lu(F0)
-    if info:
-        return None
+    lu, piv, _ = k.lu(F0)
     ls = lu.s
-    if any(ls[i * n + i] == 0.0 for i in range(n)):
+    # a pivot under float32 resolution (an exactly zero one skipped its
+    # step) is set to eps times the largest: inverse iteration's usual
+    # perturbation (LAPACK's stein/hsein); the factor is only the spectral
+    # transform, the Rayleigh-Ritz step below uses F^ itself
+    big = max(abs(ls[i * n + i]) for i in range(n))
+    if not (big > 0.0 and math.isfinite(big)):
         return None
+    tiny = _f32(_F32_EPS * big)
+    for i in range(n):
+        d = ls[i * n + i]
+        if abs(d) < tiny:
+            ls[i * n + i] = -tiny if d < 0 else tiny
     Ui = _lle_tri_inv(k, _lle_upper(ls, n))              # U^-1
     LiT = _lle_tri_inv(k, _lle_upper(lu.T.s, n, True))   # (L^T)^-1 = (L^-1)^T
     perm = list(range(n))
@@ -3562,13 +3584,15 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     X = k.orth(k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
     want = list(range(p - 1, p - 1 - nc, -1))
     prev, e_prev = None, float("inf")
-    for _ in range(max(1, int(max_iter))):
+    for it in range(max(1, int(max_iter))):
         Z = op(X)
         norms = k.ew("sqrt", k.colsum(k.ew("sq", Z)))
         X = k.orth(k.ew("mul", Z, k.ew("recip", norms)))
         S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
+        if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
+            break
         if prev is not None:
             E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
             e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
@@ -3582,8 +3606,6 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
             f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
             "An unconverged embedding is not returned as if it were one.")
     sv = S.take_cols(want)
-    if not (g <= _LLE_NULL_GUARD * float(sv.s[0])):
-        return None
     # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
     t = k.mm(hrow, Y)
     full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
@@ -3599,7 +3621,10 @@ class LocallyLinearEmbedding(_Base):
     `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
     n_components + 1 smallest eigenvectors, the first dropped.
     method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
-    factor (M = B^T B) and take the same SVD route."""
+    factor (M = B^T B) and take the same SVD route. eigen_solver='auto'
+    with method='standard' past 200 rows (sklearn's ARPACK policy) takes
+    `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
+    'dense' (and every other case) the full one-sided Jacobi SVD."""
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
