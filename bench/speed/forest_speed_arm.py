@@ -149,6 +149,8 @@ OUR_ENTRY_POINTS = {
                        " grow_policy='SymmetricTree') -> gbdt/ via _mojolearn_gbdt",
     "gbdt-categorical": "mojolearn.GradientBoosting(grow_policy='Lossguide',"
                         " cat_features=[...]) -> gbdt/ via _mojolearn_gbdt",
+    "gbdt-ordered": "mojolearn.GradientBoosting(grow_policy='SymmetricTree',"
+                    " boosting_type='Ordered') -> gbdt/ via _mojolearn_gbdt",
 }
 
 
@@ -451,6 +453,7 @@ OUR_BUILDERS = {
     "gbdt-rank-pairlogit": our_gbdt_arm,
     "gbdt-multiclass": our_gbdt_arm,
     "gbdt-categorical": our_gbdt_arm,
+    "gbdt-ordered": our_gbdt_arm,
     "gbdt-symmetric": our_gbdt_arm,
     "gbdt-symmetric-1000": our_gbdt_arm,
     "gbdt-depthwise": our_gbdt_arm,
@@ -1020,12 +1023,13 @@ def main(argv=None):
     if task:
         # A task lane runs its own task only: a dataset of another task would
         # time a different problem under the lane's name.
-        if data.task != task["task"]:
+        if data.task not in spec.task_names(task):
             spec.emit_refused(lane, "all", "dataset %s is a %s task; lane %s races %s "
-                              "(its datasets: %s)" % (data.name, data.task, lane, task["task"],
+                              "(its datasets: %s)" % (data.name, data.task, lane,
+                                                     "/".join(spec.task_names(task)),
                                                      ",".join(task["datasets"])))
             return 1
-        if task["task"] == "binary" and not data.cat_idx:
+        if lane == "gbdt-categorical" and not data.cat_idx:
             spec.emit_refused(lane, "all", "dataset %s declares no categorical column; lane %s "
                               "races the categorical path (its datasets: %s)"
                               % (data.name, lane, ",".join(task["datasets"])))
