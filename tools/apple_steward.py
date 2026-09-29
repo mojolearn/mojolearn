@@ -139,7 +139,9 @@ import time
 from pathlib import Path
 
 import re
+import signal
 import threading
+import uuid
 
 REG = Path(os.environ.get("MOJOLEARN_CLOUDMAC_REG", Path.home() / "mojolearn-evidence" / "cloudmacs.tsv"))
 
@@ -840,16 +842,106 @@ def status(a):
 
 
 # --------------------------------------------------------------- a cloud Mac
+#: Every job process carries this variable (a tag unique to the job). A job's
+#: processes are its process group plus every process whose environment holds
+#: the tag, so a driver that left the group (setsid) or was reparented to init
+#: when its parent died is still found. 2026-09-29: a timed-out lowbit speed
+#: job on do-amd left its grandchildren spinning on the GPU for 7 h 46 min,
+#: because subprocess.run's timeout killed only the `sh -c` child.
+JOB_TAG_VAR = "MOJOLEARN_STEWARD_JOB"
+
+
+def _job_pids(tag, pgid):
+    """The live (not zombie) processes of the job tagged `tag` whose group is `pgid`."""
+    pids = set()
+    ps = subprocess.run(["ps", "-A", "-o", "pid=,pgid=,stat="], capture_output=True, text=True).stdout
+    for line in ps.splitlines():
+        f = line.split()
+        if len(f) >= 3 and f[1] == str(pgid) and not f[2].startswith("Z"):
+            pids.add(int(f[0]))
+    proc = Path("/proc")
+    if proc.is_dir():                     # Linux (do-amd): the environment tag
+        needle = f"{JOB_TAG_VAR}={tag}".encode()
+        for d in proc.iterdir():
+            if not d.name.isdigit():
+                continue
+            try:
+                if needle in (d / "environ").read_bytes().split(b"\0"):
+                    pids.add(int(d.name))
+            except OSError:
+                continue
+    elif sys.platform == "darwin":        # a Mac: `ps -E` shows the environment of our own processes
+        ps = subprocess.run(["ps", "-A", "-E", "-ww", "-o", "pid=,stat=,command="],
+                            capture_output=True, text=True).stdout
+        needle = f"{JOB_TAG_VAR}={tag}"
+        for line in ps.splitlines():
+            f = line.split(None, 2)
+            if len(f) == 3 and not f[1].startswith("Z") and needle in f[2].split():
+                pids.add(int(f[0]))
+    pids.discard(os.getpid())
+    return pids
+
+
+def _kill_job(tag, pgid, proc=None):
+    """TERM, then KILL, every process of the job; returns the pids that were
+    alive when it started and the ones that survived (empty unless the kernel
+    refused)."""
+    found = sorted(_job_pids(tag, pgid))
+    for sig, grace in ((signal.SIGTERM, 10), (signal.SIGKILL, 10)):
+        pids = _job_pids(tag, pgid)
+        if not pids:
+            break
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except (ProcessLookupError, PermissionError):
+                pass
+        end = time.time() + grace
+        while time.time() < end:
+            if proc is not None:
+                proc.poll()               # reap the direct child so it is not counted as alive
+            if not _job_pids(tag, pgid):
+                break
+            time.sleep(0.2)
+    if proc is not None:
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    return found, sorted(_job_pids(tag, pgid))
+
+
+def _run_job(cmd, timeout, cwd=None, env=None, stdout=None, stderr=None):
+    """Run a job command in its own session with a job tag. On a timeout, and
+    after any exit, every process of the job still alive is killed (a speed job
+    is exclusive: nothing of it may keep the GPU). Returns (rc, record): rc 124
+    on a timeout; record names what was killed ({} when nothing was left)."""
+    tag = f"{os.getpid()}-{uuid.uuid4().hex[:12]}"
+    env = dict(os.environ if env is None else env)
+    env[JOB_TAG_VAR] = tag
+    p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
+    try:
+        rc = p.wait(timeout=timeout)
+        timed_out = False
+    except subprocess.TimeoutExpired:
+        rc, timed_out = 124, True
+    found, survivors = _kill_job(tag, p.pid, p)
+    record = {}
+    if found or timed_out:
+        record = {"timed_out": timed_out, "killed": found, "survivors": survivors}
+    return rc, record
+
+
 def _run(cmd, cwd, log, timeout, env=None):
     with open(log, "a") as f:
         f.write(f"\n$ {' '.join(cmd)}\n")
         f.flush()
-        try:
-            return subprocess.run(cmd, cwd=cwd, stdout=f, stderr=subprocess.STDOUT, timeout=timeout,
-                                  env=env).returncode
-        except subprocess.TimeoutExpired:
+        rc, record = _run_job(cmd, timeout, cwd=cwd, env=env, stdout=f, stderr=subprocess.STDOUT)
+        if record.get("timed_out"):
             f.write(f"TIMEOUT after {timeout}s\n")
-            return 124
+        if record:
+            f.write(f"steward killed the job's processes: {json.dumps(record)}\n")
+        return rc
 
 
 def _draining(idle):
@@ -1049,9 +1141,10 @@ def speed(req, wt, out, log, verdict, finish):
             f.write(f"\n$ MOJOLEARN_GPU_ARCHS={benv.get('MOJOLEARN_GPU_ARCHS', '')} pixi run -e default sh {script}\n")
             f.flush()
             # in the pixi default environment, as tools/algos_lane_check.sh builds
-            rc = subprocess.run([_pixi(), "run", "-e", "default", "sh", script], cwd=wt, env=benv, stdout=f,
-                                stderr=subprocess.STDOUT, timeout=3 * 3600).returncode
-        timing["builds"].append({"script": script, "rc": rc, "wall_s": round(time.time() - t0, 3)})
+            rc, killed = _run_job([_pixi(), "run", "-e", "default", "sh", script], 3 * 3600, cwd=wt, env=benv,
+                                  stdout=f, stderr=subprocess.STDOUT)
+        timing["builds"].append({"script": script, "rc": rc, "wall_s": round(time.time() - t0, 3),
+                                 **({"killed": killed} if killed else {})})
         if rc:
             timing["builds_wall_s"] = round(time.time() - t_all, 3)
             return finish("FAIL", f"build {script} exited {rc}")
@@ -1062,13 +1155,11 @@ def speed(req, wt, out, log, verdict, finish):
     stdout, stderr = out / "speed.stdout", out / "speed.stderr"
     with open(stdout, "w") as fo, open(stderr, "w") as fe:
         t0 = time.time()
-        try:
-            rc = subprocess.run(["sh", "-c", req["cmd"]], cwd=wt, env=env, stdout=fo, stderr=fe,
-                                timeout=3 * 3600).returncode
-        except subprocess.TimeoutExpired:
-            rc = 124
+        rc, killed = _run_job(["sh", "-c", req["cmd"]], 3 * 3600, cwd=wt, env=env, stdout=fo, stderr=fe)
         timing["cmd_wall_s"] = round(time.time() - t0, 3)
     timing["cmd_rc"] = rc
+    if killed:
+        timing["killed"] = killed
     verdict["stdout"], verdict["stderr"] = str(stdout), str(stderr)
     verdict["stdout_tail"] = stdout.read_text(errors="replace").splitlines()[-40:]
     after = _metal_busy()
