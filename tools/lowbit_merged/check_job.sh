@@ -5,7 +5,8 @@
 # The profile's identity was closed on four boxes by its own lanes and is not
 # re-argued here.
 #
-#   1. the two bindings the merge changed build (linalg, device and host);
+#   1. the two bindings the merge changed build (linalg, device and host),
+#      and the base binding the loader tests import;
 #   2. the gates of what the merge adds or touches pass on this box;
 #   3. fp32.v1 did not move: no file of the fp32 profile is in the merge's
 #      diff, and the fp32 identity check passes;
@@ -38,6 +39,10 @@ phase install-test pass pixi install -e test
 export MOJOLEARN_NUMERIC_MODE=identical
 phase build-linalg pass sh bindings/build_linalg.sh
 phase build-linalg-host pass sh bindings/build_linalg_host.sh
+# The base binding (_mojolearn.so) is not in the merge's diff, but the loader
+# and trainer tests below import it; without it they fail on ImportError
+# (nvc2-0012) instead of running. Built here so they really run.
+phase build-base pass sh bindings/build.sh
 
 phase gate-gemm-identity pass pixi run check-gemm-identity
 phase gate-lowbit pass pixi run check-gemm-lowbit
