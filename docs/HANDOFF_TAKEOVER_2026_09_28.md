@@ -1,3 +1,52 @@
+# September 29, 00:13 UTC — latest takeover checkpoint
+
+This section supersedes conflicting older state below. Refresh live processes; do not restart, cancel, or duplicate jobs. User now explicitly authorizes completing all verification and publishing the next PyPI release, and obtaining RunPod/AMD capacity as needed. **Nothing has been published.** Keep M2 and M3 host; no Apple instance restart or host release.
+
+## Source and release
+
+Integration checkout `/Users/andrewhendel/mojolearn-wt/apple3-takeover`, branch `integration/apple3-takeover`; origin/main and integration both `816ea79c6`. Suitable Apple lanes already integrated. Native final source remains `3dded3bd47b9db2928ed3b7919f502b20c576e9c`. Release package frozen at `b7154e9cd0399d3416098c6f9c3921b4ae8b898c`, version0.8.25; metadata date2026-09-29 is prepared metadata, not evidence of publication. Subsequent816 commit changes only CUDA packaging audit tooling. Preserve native original provenance and validate closures; never relabel compiled commits.
+
+Official state `/Users/andrewhendel/mojolearn-evidence/release/0.8.25/state.json` has only freeze steps completed. Rehearsal's eight non-GPU steps passed; full Python suite remains owed. Do not invoke the full release command blindly: it could launch duplicate builds/rentals. Admit exact existing artifacts and genuine receipts to the release workflow.
+
+Evidence base E=`/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28`. Current machine-readable state `E/takeover/resume-2026-09-28.json`; owner handoffs `E/RUNNER_HANDOFF.md` (read final supplements), packaging-preparation agent handoffs. Root original cwd is dirty user worktree; leave untouched.
+
+Changes since older checkpoint: NumPy is optional (`mojolearn[numpy]` or `[verify]`, >=1.26.4), base dependencies empty, lazy actionable guard; QR preserves published default mode=r while verifier explicitly requests reduced; optional API platform math routes through owned helpers, narrowly guarded CPython fsum remains; Metal structural-code audit and explicit tree-glue delegation audits repaired. Focused tests passed. No native numerical change after3dded. Remaining source fixes must be assessed for refreeze/wheel rebuild; tooling-only corrections can remain separate.
+
+## Completed and running verification
+
+- Original NVIDIA campaign nvc1-0016 completed445/445 at00:02:07. Saved three-vendor comparison445/445 PASS,1671 numeric matches,2354 structural N/A,425 explicitly unrecorded parts. `E/reports/three-vendor-445.json`. This is old repaired-source evidence, NOT final frozen-wheel qualification.
+- AMD final3dded campaign completed445/445 AGREE at00:09:46,39m34s, zero failures. Full raw corpus `E/packaging-preparation/amd-final-3dded3bd4/completed-records/qualification-base/clean_0of1`;59 structural exclusions explicit. Missing9 packaging compile queued1790640653331; then bounded x86 primitive differential and Linux staging. Native101 already pass.
+- Metal native110 all complete;92 exact closure/hash reuses plus final repairs/missing9; raw failures preserved. Staged110 ISA/macOSfloor pass;66 real GPU-code objects+2 explicit delegates.
+- macOS wheel built fromb715: `E/packaging-preparation/metal-wheel-candidate-0.8.25/source/python/dist/mojolearn-0.8.25-py3-none-macosx_11_0_arm64.whl`,66981632bytes, SHA256 `4aee0c707086aa578129d064facd0e243d284a0622536389b330628229808283`. Clean no-NumPy import/Array/help/missing-extra guidance pass. Same wheel[verify] installed; CPU clean IDENTICAL / one-ULP DIVERGENT self-test passed2.27s.
+- ONE installed-wheel Metal445 running PID30986 under mac_slot, output `E/packaging-preparation/metal-wheel-candidate-0.8.25/installed-metal-base445`,120s/cell,1CPUthread. Do not start another full Metal run. Agent integration_audit then owns positional local-wheel expanded qualifier and full installed-wheel Python suite. Expanded qualifier is complementary bounded LM/bundled-model/API/property coverage; do not synthesize its PASSED receipt from current partial gates.
+- Remaining batch scope clarified:57 revised declarations comprise41 actual batch probes × remaining8 fixtures and16 explicit mathematical N/A. Keep all16 reasons visible; do not repeat nonexistent batch operations. Applicability prepares exact scoped plan for all vendors. Reference promotion requires cross-vendor evidence.
+
+At00:14UTC the installed Metal sweep reported two real mismatches against committed historical references: tsvd/train and umap/model. Other parts in those cells match. Integration_audit is comparing exact raw final AMD/original three-vendor records and source revisions. These are unresolved release blockers, NOT yet proven stale references. The deliberate one-ULP self-test perturbation is unrelated and correctly rejected; user asked and root clarified this.
+
+## Fleet — preserve all inherited work
+
+**M2:** i-03767a9dc13829e2f,13.218.17.191,hosth-090bd2cd97ac3537a, access `bash tools/cloudmac.sh ssh m2pro ...`. Steward81201/caffeinate81204 alive. Prior benchmark51484 finished naturally; current inherited kern_bench.py PID94675, parent94664,99.6%CPU,7m55 at00:10UTC. Output `~/mojolearn-evidence/py-consolidated/0928-2137`. Existing decomposition/trees/apple3-merged queue retained. NO cancellation, bypass, or new duplicate final job.
+
+**M3:** hosth-04545dd0c2d7a2870 available/retained, ReleaseTime null, no instance. Originali-0db106c6d4a3243ac terminated before takeover. NEVER restart instance or release host. AWSprofilemambik/us-east-1.
+
+**AMD:** DO droplet604130031,root@162.243.49.62,MI325Xgfx942,$3.80/h. `bash tools/do_amd_steward.sh ssh ...`. Host deadline1790645017 (01:23:37UTC); owner applicability monitors/extends and must refresh both host/local backup. Final445 done, nine-only packaging next. No extra AMD rental needed currently.
+
+**nvc1:** RunPod ayjqqutlqcebzt,2A40sm86,$0.98/h,root@194.68.245.114:22162. SSH/provider status flaps; jobs survive. Deletion watcher59301/session16812 is SIGSTOP under preservation directive, DO NOT resume connectivity-triggered deletion. Dispatcher leases extend activity. Job0022 physical2GPU running since00:02, currently inherited cold binding builds, output `/root/ev-par-harness/0929-0002`;0024 RF-taxi repair queued.0016 original445 done.
+
+**nvc2:** rskm7jvoh3z8wo,2RTX4090sm89,$1.48/h,root@103.196.86.97:18705,localwatcher76545,lease extends activity. Inherited0001 still running sabotage/remaining phases since22:12. Its3 CPU model_selection failures are missing optional x_metrics export already fixed in final source; GPU pytest failed collection because sklearn absent. Raw logs `E/inherited-cuda/py-current`.0002 strict physical parGMM queued;0003 final445 queued behind it at `/root/combined-3dded3bd47b9/numeric445`,75binding closures/hashes verified. Preserve queue.
+
+CUDA native110sm89 complete. Package checkout `/root/cuda-package-0.8.25` b715; copied stage `/root/cuda-sm89-stage-b7154e9cd`. Cubin conversion passed actual device objects; device-free x_trees audit corrected by tooling816. Runner restages/audits without changing original natives.
+
+**nvc3 Hopper:** ggsb85k40x5i87,1H100NVL,$3.19/h,root@216.81.245.23:33015,watcher3050,central lease active. Source `/root/mojolearn-hopper-final`3dded; receipts `/root/hopper-3dded3bd47b9`, localsession86700,68GPU-mode compiles max2CPUworkers;42host artifacts closure/hash reused. Latest41/68PASS0fail at00:10. State `E/packaging-preparation/hopper-state.json`. Old0.8.24sm90a had zero valid native reuse. After compile, runner prepares one targeted clean/sabotaged/restored tiny tSNE proof: inherited patch reversed tiles but n60 has one tile; final c019fea7d patch reverses within-tile j and must be proved. No production-code fix needed. No duplicate final445 scheduled on Hopper.
+
+## Agent ownership and remaining gate list
+
+Existing `/root/runner`: NVIDIA fleet/queues/Hopper/CUDA packaging/negative control. `/root/applicability`: AMD/staging/x86 primitive differential/scoped batch plan. `/root/integration_audit`: macOS wheel/current445/expanded qualifier/Python suite. Root: integration/push/release workflow/receipt admission/fleet M2+M3/handoffs. Reuse these agents, do not create conflicting workers.
+
+Outstanding: final NVIDIA445, installed Metal445, full Python suite, expanded installed-wheel qualifier, physical2GPU/GMM, tSNE negative-control proof, scoped batch fixtures, Hopper architecture qualification, Linux packaging and installed smoke/joint diff, publication and post-index finish-line. Do not claim ready or publish until gates resolve. No arXiv email authorized.
+
+---
+
 # Read first after compaction: active MojoLearn takeover
 
 Snapshot: September 28, 2026, approximately 23:23 UTC. This file supersedes older
@@ -20,7 +69,7 @@ the directive.
 
 Keep M2 alive and its workload unchanged. Retain M3 dedicated host; NEVER restart
 its terminated instance or release its host. Do not allocate another Apple Mac.
-No PyPI publication, version bump, release, or arXiv email is authorized here.
+SUPERSEDED: the September29 update below records explicit authorization to finish verification and release0.8.25. No arXiv email is authorized.
 Normal main integration/push is authorized; never force-push main. Preserve dirty
 worktrees and raw failed evidence. Do not reset running snapshots to newer main.
 
