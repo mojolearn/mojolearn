@@ -502,7 +502,7 @@ def _shuffle_drawn(idx: IP, n: Int, dr: IP):
         comptime for u in range(FY_B):
             nxt[u] = Int(dr.unsafe_load(u))
     while tt + FY_B <= n - 1:
-        var js = nxt
+        var js = nxt.copy()
         if tt + 2 * FY_B <= n - 1:
             comptime for u in range(FY_B):
                 nxt[u] = Int(dr.unsafe_load(tt + FY_B + u))

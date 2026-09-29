@@ -267,20 +267,22 @@ struct GW(Movable):
         var into_b = False
         while r0 < self.n:
             var rows = min(self.n - r0, per)
-            var src = self.dcb.unsafe_ptr() if into_b else self.dca.unsafe_ptr()
-            var dst = self.dca.unsafe_ptr() if into_b else self.dcb.unsafe_ptr()
+            var grid = (self.cells + GW_TPB - 1) // GW_TPB
             if into_b:
                 self.dca.enqueue_fill(_poison())
-            else:
-                self.dcb.enqueue_fill(_poison())
-            ctx.enqueue_function[gw_cells_kernel](
-                self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), src, dst,
-                Int32(r0), Int32(rows), Int32(self.n), Int32(self.d), Int32(self.m), Int32(1 if first else 0),
-                grid_dim=(self.cells + GW_TPB - 1) // GW_TPB, block_dim=GW_TPB,
-            )
-            if into_b:
+                ctx.enqueue_function[gw_cells_kernel](
+                    self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), self.dcb.unsafe_ptr(), self.dca.unsafe_ptr(),
+                    Int32(r0), Int32(rows), Int32(self.n), Int32(self.d), Int32(self.m), Int32(1 if first else 0),
+                    grid_dim=grid, block_dim=GW_TPB,
+                )
                 ctx.enqueue_copy(dst_buf=self.hc, src_buf=self.dca)
             else:
+                self.dcb.enqueue_fill(_poison())
+                ctx.enqueue_function[gw_cells_kernel](
+                    self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), self.dca.unsafe_ptr(), self.dcb.unsafe_ptr(),
+                    Int32(r0), Int32(rows), Int32(self.n), Int32(self.d), Int32(self.m), Int32(1 if first else 0),
+                    grid_dim=grid, block_dim=GW_TPB,
+                )
                 ctx.enqueue_copy(dst_buf=self.hc, src_buf=self.dcb)
             ctx.synchronize()
             var hp = FP(unsafe_from_address=Int(self.hc.unsafe_ptr()))
