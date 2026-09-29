@@ -3505,7 +3505,7 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
     Subspace iteration on that operator (sklearn's shift-invert at
     sigma = 0) with p = max(2 nc + 1, 20) columns (ARPACK's ncv), each step
-    column-normalized, orthonormalized and rotated to the Ritz vectors of F^
+    column-scaled by its 1-norm, orthonormalized and rotated to the Ritz vectors of F^
     (the one-sided Jacobi SVD of F^ X, n x p), until the wanted Ritz
     subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
     Every product is a kit cell and the stopping test reads their outputs:
@@ -3586,8 +3586,10 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     prev, e_prev = None, float("inf")
     for it in range(max(1, int(max_iter))):
         Z = op(X)
-        norms = k.ew("sqrt", k.colsum(k.ew("sq", Z)))
-        X = k.orth(k.ew("mul", Z, k.ew("recip", norms)))
+        # each column scaled by its 1-norm, not its 2-norm: the operator
+        # reaches 1 / sigma^2 (1e18 on a null space at float32 resolution)
+        # and the squares would overflow to inf (every column then 0)
+        X = k.orth(k.ew("mul", Z, k.ew("recip", k.colsum(k.ew("abs", Z)))))
         S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
