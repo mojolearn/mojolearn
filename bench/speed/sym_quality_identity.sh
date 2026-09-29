@@ -28,6 +28,11 @@ if [ "${3:-}" = build ] || [ "${3:-}" = hostbuild ]; then
     env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
 fi
 R="pixi run -e default python -u"
+# libMojolearnMath, which `_portable_math` dlopens on the CPU arm (the
+# Bayesian bootstrap of gbdt-multiclass-defaults reaches it): the tree's own
+# recipe, as tools/algos_lane_check.py ensure_portable_math builds it
+case "$(uname)" in Darwin) PM=python/mojolearn/.dylibs/libMojolearnMath.dylib ;; *) PM=python/mojolearn/.libs/libMojolearnMath.so ;; esac
+[ -f "$PM" ] || PYTHONPATH=packaging/portable_math $R -c "import pathlib, stage; stage.build(pathlib.Path('$PM'))" > "$OUT/portable_math.log" 2>&1 || { echo "portable math build failed"; tail -20 "$OUT/portable_math.log"; }
 L=gbdt-class-weights,gbdt-multiclass,gbdt-multiclass-defaults,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide
 HOST="$HOSTD"
 rc=0
