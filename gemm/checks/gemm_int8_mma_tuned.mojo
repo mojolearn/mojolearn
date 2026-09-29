@@ -129,7 +129,19 @@ comptime INT8_TUNED_PLAN_K64 = 5  #: PACK with 64 k steps per window
 comptime INT8_TUNED_PLAN_K128 = 6  #: PACK with 128 k steps per window
 comptime INT8_TUNED_PLAN_WIDE_K64 = 7  #: WIDE with 16-byte loads and KB 64
 comptime INT8_TUNED_PLAN_ROW = 8  #: 16x64 per warp, 1x4 warps: the decode rows
-comptime INT8_TUNED_PLAN_COUNT = 9
+#: The second round (2026-09-29, after the first timing): the SAME block
+#: cut into MORE WARPS. At the 512-token rows a 128 x 128 block is about one
+#: block per multiprocessor of the H100, so four warps a block leave the
+#: unit idle most of the time.
+comptime INT8_TUNED_PLAN_SMALL_K64 = 9  #: STAGED with 16-byte loads and KB 64
+comptime INT8_TUNED_PLAN_FRAG2_K64 = 10  #: FRAG2 with 16-byte loads and KB 64
+comptime INT8_TUNED_PLAN_WARPS16 = 11  #: 32x32 per warp, 4x4 warps: block 128x128
+comptime INT8_TUNED_PLAN_WARPS32 = 12  #: 16x32 per warp, 8x4 warps: block 128x128
+comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13  #: 32x32 per warp, 4x8 warps: block 128x256
+comptime INT8_TUNED_PLAN_COUNT = 14
+
+#: The most threads a block may hold on the columns that have the unit.
+comptime INT8_TUNED_MAX_TPB = 1024
 
 #: Outputs of at most this many rows take the ROW plan: a 128-row block
 #: would multiply 112 rows of zero codes for them.
@@ -172,11 +184,32 @@ def int8_tuned_plan_name(plan: Int) -> String:
         return String("staged.w64x64.b128x128.k128.l16")
     if plan == INT8_TUNED_PLAN_WIDE_K64:
         return String("staged.w64x64.b128x256.k64.l16")
-    return String("staged.w16x64.b16x256.k64.l16")
+    if plan == INT8_TUNED_PLAN_ROW:
+        return String("staged.w16x64.b16x256.k64.l16")
+    if plan == INT8_TUNED_PLAN_SMALL_K64:
+        return String("staged.w16x16.b32x32.k64.l16")
+    if plan == INT8_TUNED_PLAN_FRAG2_K64:
+        return String("staged.w32x32.b64x64.k64.l16")
+    if plan == INT8_TUNED_PLAN_WARPS16:
+        return String("staged.w32x32.b128x128.k64.l16")
+    if plan == INT8_TUNED_PLAN_WARPS32:
+        return String("staged.w16x32.b128x128.k64.l16")
+    return String("staged.w32x32.b128x256.k64.l16")
+
+
+def int8_tuned_plan_available(plan: Int) -> Bool:
+    """Whether the column can launch the plan. The two 32-warp plans are
+    1024 threads a block where a warp is 32 lanes (NVIDIA) and would be
+    2048 where it is 64 (AMD CDNA), above a block's limit; they are NOT RUN
+    there, by name, and a plan that is not run is not a plan that agreed."""
+    if plan == INT8_TUNED_PLAN_WARPS32 or plan == INT8_TUNED_PLAN_WARPS32_WIDE:
+        return 32 * WARP_SIZE <= INT8_TUNED_MAX_TPB
+    return plan >= 0 and plan < INT8_TUNED_PLAN_COUNT
 
 
 def int8_direct_name(which: Int) -> String:
-    """No spaces. A PROBE's product is wrong on purpose."""
+    """No spaces. A PROBE's product is wrong on purpose, and the caller
+    that prints its name says `probe` before it."""
     if which == INT8_DIRECT_REFERENCE_LOADS:
         return String("direct.reference-loads")
     if which == INT8_DIRECT_ALIGNED_LOADS:
@@ -184,10 +217,10 @@ def int8_direct_name(which: Int) -> String:
     if which == INT8_DIRECT_SCALAR_ACC:
         return String("direct.aligned-loads.scalar-acc")
     if which == INT8_DIRECT_PROBE_HOISTED:
-        return String("probe.loads-hoisted")
+        return String("loads-hoisted")
     if which == INT8_DIRECT_PROBE_ONE_HALF:
-        return String("probe.one-half")
-    return String("probe.raw-store")
+        return String("one-half")
+    return String("raw-store")
 
 
 def int8_direct_is_probe(which: Int) -> Bool:
@@ -372,9 +405,12 @@ def _direct_warp_tile[WHICH: Int](
             var gj = jc + h * 8 + (e & 1)
             comptime if WHICH == INT8_DIRECT_PROBE_RAW_STORE:
                 # PROBE: no seam and no exponent loads; the backend's own
-                # conversion of the Int32.
+                # conversion of the Int32, and a half added, so that no
+                # cell stored is an integer: the timing harness poisons
+                # its output with one (-987654.0), and a sum of codes can
+                # be that integer (nvc3-0016: a cell of mlp_down.t512 was).
                 if gi < m and gj < n:
-                    c.unsafe_store(gi * n + gj, Float32(acc))
+                    c.unsafe_store(gi * n + gj, Float32(acc) + Float32(0.5))
             else:
                 _store_cell_tuned(c, ea, eb, acc, gi, gj, m, n)
 
@@ -590,7 +626,7 @@ def identical_gemm_int8_mma_tuned_kernel[
     comptime assert LW == 4 or LW == 8 or LW == 16, (
         "identical_gemm_int8_mma_tuned_kernel: a staging load is 4, 8 or 16 bytes"
     )
-    comptime assert NT <= 1024, (
+    comptime assert NT <= INT8_TUNED_MAX_TPB, (
         "identical_gemm_int8_mma_tuned_kernel: a block is at most 1024 threads"
     )
     comptime assert (BM + BN) * SS <= column_shared_limit(TARGET_COLUMN), (
@@ -809,6 +845,24 @@ def identical_gemm_int8_mma_tuned_with_plan(
             _launch_tuned[4, 4, 2, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
         elif plan == INT8_TUNED_PLAN_ROW:
             _launch_tuned[1, 4, 1, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_SMALL_K64:
+            _launch_tuned[1, 1, 2, 2, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_FRAG2_K64:
+            _launch_tuned[2, 2, 2, 2, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_WARPS16:
+            _launch_tuned[2, 2, 4, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_WARPS32 or plan == INT8_TUNED_PLAN_WARPS32_WIDE:
+            comptime if 32 * WARP_SIZE <= INT8_TUNED_MAX_TPB:
+                if plan == INT8_TUNED_PLAN_WARPS32:
+                    _launch_tuned[1, 2, 8, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+                else:
+                    _launch_tuned[2, 2, 4, 8, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+            else:
+                raise Error(
+                    "identical_gemm_int8_mma_tuned: plan " + int8_tuned_plan_name(plan)
+                    + " is 32 warps a block, above a block's 1024 threads on column "
+                    + column_name(TARGET_COLUMN)
+                )
         else:
             raise Error("identical_gemm_int8_mma_tuned: no plan " + String(plan))
 

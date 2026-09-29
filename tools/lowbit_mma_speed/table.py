@@ -18,6 +18,13 @@ lowbit.tsv). The line format and its reader are lane/lowbit-units'
         ran must carry the same digest. Exits 0 only when every one agreed
         and at least one was compared.
 
+    table.py --across BOX=lowbit.tsv --across BOX=lowbit.tsv [...]
+        the digests of one arm and shape across boxes: per arm, the boxes
+        that ran it and AGREE n of n or DISAGREE with the shapes. A probe
+        is compared too: a wrong product is still a function of the
+        operands, and the same on every box that computes it the same way.
+        Exits 1 on any disagreement or when nothing was compared.
+
 EVERY RATIO HERE IS A TIME OVER A TIME at the same shape on the same box.
 Above 1 the numerator took longer. An arm named `probe.*` computes a wrong
 product on purpose, to time a part of a kernel alone; it has a time and no
@@ -57,6 +64,49 @@ def same_digests(a_path, b_path):
         return 1
     print("VERDICT: the two runs agree at every arm and shape compared")
     return 0
+
+
+def across(boxes):
+    data = [(box, read_lowbit(path)[0]) for box, path in boxes]
+    arms = []
+    for _, rows in data:
+        for (_, arm) in rows:
+            if arm not in arms:
+                arms.append(arm)
+    compared = bad = 0
+    print("| arm | boxes that ran it | verdict |")
+    print("|---|---|---|")
+    for arm in arms:
+        ran = [box for box, rows in data if any(a == arm for (_, a) in rows)]
+        if len(ran) < 2:
+            print(f"| {arm} | {', '.join(ran)} | ONE BOX, nothing to compare |")
+            continue
+        shapes = []
+        for _, rows in data:
+            for (shape, a) in rows:
+                if a == arm and shape not in shapes:
+                    shapes.append(shape)
+        agree, differ = 0, []
+        for shape in shapes:
+            got = {box: rows[(shape, arm)] for box, rows in data if (shape, arm) in rows}
+            if len(got) < 2:
+                continue
+            extents = {(r["m"], r["n"], r["k"]) for r in got.values()}
+            if len(extents) != 1:
+                differ.append(f"{shape} (the boxes ran different extents)")
+                continue
+            if len({r["digest"] for r in got.values()}) == 1:
+                agree += 1
+            else:
+                differ.append(shape + " (" + ", ".join(f"{b} {r['digest']}" for b, r in got.items()) + ")")
+        compared += agree + len(differ)
+        bad += len(differ)
+        verdict = f"AGREE {agree} of {agree + len(differ)}"
+        if differ:
+            verdict = f"DISAGREE {len(differ)} of {agree + len(differ)}: " + "; ".join(differ)
+        print(f"| {arm} | {', '.join(ran)} | {verdict} |")
+    print(f"\ncompared {compared}, disagree {bad}")
+    return 1 if bad or compared == 0 else 0
 
 
 def is_unit_plan(arm):
@@ -139,12 +189,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--levers", action="append", default=[], metavar="BOX=lowbit.tsv")
     ap.add_argument("--same-digests", nargs=2, metavar=("A", "B"))
+    ap.add_argument("--across", action="append", default=[], metavar="BOX=lowbit.tsv")
     ap.add_argument("--out")
     args = ap.parse_args()
     if args.same_digests:
         return same_digests(*args.same_digests)
+    if args.across:
+        return across([tuple(spec.split("=", 1)) for spec in args.across])
     if not args.levers:
-        ap.error("give --levers BOX=lowbit.tsv or --same-digests A B")
+        ap.error("give --levers BOX=lowbit.tsv, --across BOX=lowbit.tsv twice or more, or --same-digests A B")
     boxes = []
     for spec in args.levers:
         if "=" not in spec:

@@ -81,6 +81,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_mma_tuned_with_plan,
     int8_direct_name,
     int8_tuned_dispatch,
+    int8_tuned_plan_available,
     int8_tuned_plan_name,
     int8_tuned_sabotage_name,
 )
@@ -180,6 +181,8 @@ def _run_every_plan(
     tally.note(_diff(flat, want, tag + " (flat vs oracle)"))
     tally.note(_diff(ref_, want, tag + " (reference unit plan vs oracle)"))
     for plan in range(INT8_TUNED_PLAN_COUNT):
+        if not int8_tuned_plan_available(plan):
+            continue
         var ptag = tag + " " + int8_tuned_plan_name(plan)
         var dc = _poisoned(ctx, m * n)
         identical_gemm_int8_mma_tuned_with_plan(ctx, dc, dqa, dea, dqb, deb, m, n, k, plan)
@@ -445,7 +448,14 @@ def main() raises:
         var ctx = DeviceContext()
         comptime if HAS_UNIT:
             for plan in range(INT8_TUNED_PLAN_COUNT):
-                print("   plan " + String(plan) + ": " + int8_tuned_plan_name(plan))
+                if int8_tuned_plan_available(plan):
+                    print("   plan " + String(plan) + ": " + int8_tuned_plan_name(plan))
+                else:
+                    print(
+                        "   plan " + String(plan) + ": " + int8_tuned_plan_name(plan)
+                        + "  NOT RUN on this column (a block of it is above 1024 threads),"
+                        + " which is not a pass"
+                    )
             try:
                 check_tuned_plans_match_reference_flat_oracle(ctx)
                 _gate(String("check_tuned_plans_match_reference_flat_oracle"), ran, failed, String(""))

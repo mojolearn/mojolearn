@@ -236,6 +236,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_direct_is_probe,
     int8_direct_name,
     int8_tuned_dispatch,
+    int8_tuned_plan_available,
     int8_tuned_plan_name,
     int8_tuned_sabotage_name,
 )
@@ -410,6 +411,8 @@ def _arm_runs(arm: Int) -> Bool:
         return HAS_APPLE_CHUNK
     if arm >= ARM_DIRECT_BASE and arm < ARM_INF_INT8_TUNED:
         return INT8_DIRECT_AVAILABLE
+    if arm >= ARM_TUNED_BASE and arm < ARM_DIRECT_BASE:
+        return HAS_INT8_MMA and int8_tuned_plan_available(arm - ARM_TUNED_BASE)
     if arm >= ARM_TUNED_BASE:
         return HAS_INT8_MMA
     return True
@@ -936,7 +939,7 @@ def _time_shape(
             else:
                 print(
                     "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
-                    "this column does not have the unit the arm runs on",
+                    "this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)",
                 )
             continue
         if identity_only:
