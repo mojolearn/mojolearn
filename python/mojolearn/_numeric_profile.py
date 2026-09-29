@@ -66,7 +66,11 @@ A CHECKPOINT CARRIES ITS PROFILE. `state_field` is what a writer stores and
 under `fp32_v1` (every state before this module), and a writer under the
 default stores no field, so the bytes of a default checkpoint do not change.
 
-WHAT A ROW MUST SHOW BEFORE `models` IS TRUE (docs/lanes/
+INFERENCE AND TRAINING ARE SEPARATE GATES. A row says `inference` and
+`training` apart. Every trainer refuses a profile whose `training` is False,
+by name, even when the process default is a profile that inference accepts.
+
+WHAT A ROW MUST SHOW BEFORE `inference` IS TRUE (docs/lanes/
 LOWBIT_UNITS_PLAN.md, the three gates): identity on three vendors with a
 sabotage arm seen failing; the relative change in held-out perplexity
 against `fp32_v1`, measured as ONE complete configuration on two texts,
@@ -79,15 +83,20 @@ import os
 __all__ = ["DEFAULT", "ENV", "PROFILES", "REJECTED", "MEASURED",
            "NumericProfileSpeedWarning", "canonical", "default_profile",
            "set_default_profile", "resolve", "profiles", "measured",
-           "state_field", "check_saved", "STATE_KEY"]
+           "state_field", "check_saved", "STATE_KEY", "USES",
+           "require_training"]
 
 DEFAULT = "fp32_v1"
 ENV = "MOJOLEARN_NUMERIC_PROFILE"
 STATE_KEY = "numeric_profile"
 
 #: name -> row.
-#:   products  product family -> the GEMM profile it runs (the contract name)
-#:   models    True when the model classes compute under the profile
+#:   products   product family -> the GEMM profile it runs (the contract name)
+#:   inference  True when the inference classes compute under the profile
+#:   training   True when the trainers do. A SEPARATE gate: a profile that
+#:              passed for inference is refused by every trainer until its
+#:              training gates pass too (backward products, a training
+#:              step's identity, quality over seeds)
 #:   quality   text -> the measured relative change in held-out perplexity
 #:             against fp32_v1, as a fraction, the WHOLE configuration at
 #:             once; empty when not measured
@@ -96,7 +105,7 @@ PROFILES = {
         "status": "default",
         "products": {"projections": "mojolearn.identical.gemm.fp32.v1",
                      "attention": "mojolearn.identical.gemm.fp32.v1"},
-        "models": True,
+        "inference": True, "training": True,
         "quality": {},
         "quality_note": "the baseline every other profile is measured against",
         "note": "the default; every identity record of the package",
@@ -105,7 +114,7 @@ PROFILES = {
         "status": "experimental",
         "products": {"projections": "mojolearn.identical.gemm.int15i64.v1",
                      "attention": "mojolearn.identical.gemm.int15i64.v1"},
-        "models": False,
+        "inference": False, "training": False,
         "quality": {"enwik8, last 1 MB": -0.000015, "pile_github": 0.000055},
         "quality_note": "SmolLM2-360M, inference, 2026-09-29 (lane/lowbit-quality); "
                         "training and a task evaluation are owed",
@@ -195,12 +204,19 @@ def _warn_if_slow_here(key, vendor=None):
     return msg
 
 
-def _refuse_unavailable(key, what):
+USES = ("inference", "training")
+
+
+def _refuse_unavailable(key, what, use="inference"):
+    if use not in USES:
+        raise ValueError(f"mojolearn: use must be one of {USES}, got {use!r}")
     row = PROFILES[key]
-    if not row["models"]:
+    if not row[use]:
+        other = "inference" if use == "training" else "training"
+        also = f" It is available for {other}." if row[other] else ""
         raise NotImplementedError(
-            f"mojolearn: {what}={key!r} is registered ({row['note']}) and is refused here; "
-            f"it is never replaced by {DEFAULT!r} silently. Use numeric_profile={DEFAULT!r}.")
+            f"mojolearn: {what}={key!r} is registered ({row['note']}) and is refused for {use}; "
+            f"it is never replaced by {DEFAULT!r} silently.{also} Use numeric_profile={DEFAULT!r}.")
     return key
 
 
@@ -223,12 +239,22 @@ def set_default_profile(name):
     return prev
 
 
-def resolve(name=None, what="numeric_profile"):
-    """What a model class calls with its keyword: None is the process
-    default, a name is validated and refused by name when unavailable."""
-    key = default_profile() if name is None else _refuse_unavailable(canonical(name, what), what)
+def resolve(name=None, what="numeric_profile", use="inference"):
+    """What a class calls with its keyword: None is the process default, a
+    name is validated, and either is refused by name when the profile is
+    not available for `use`. A trainer passes `use="training"`, so a process
+    default that is fine for inference still cannot train until the
+    profile's training gates have passed."""
+    key = default_profile() if name is None else canonical(name, what)
+    _refuse_unavailable(key, what, use)
     _warn_if_slow_here(key)
     return key
+
+
+def require_training(what):
+    """One line for a trainer's constructor: the process default must be a
+    profile that is available for training."""
+    return resolve(None, what, use="training")
 
 
 def profiles():

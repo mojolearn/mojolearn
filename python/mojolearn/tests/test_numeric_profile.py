@@ -34,7 +34,7 @@ def _fresh(monkeypatch, env=None):
 
 
 def _unavailable(g):
-    names = [k for k, v in g.PROFILES.items() if not v["models"]]
+    names = [k for k, v in g.PROFILES.items() if not v["inference"]]
     assert names, "this test must have a profile to refuse; when every profile is available, plant one"
     return names
 
@@ -44,7 +44,7 @@ def test_default_is_fp32_v1_and_is_available(monkeypatch):
     assert g.DEFAULT == "fp32_v1"
     assert g.default_profile() == "fp32_v1"
     assert g.resolve(None) == "fp32_v1"
-    assert g.PROFILES["fp32_v1"]["models"] is True
+    assert g.PROFILES["fp32_v1"]["inference"] is True and g.PROFILES["fp32_v1"]["training"] is True
     assert [r["name"] for r in g.profiles() if r["default"]] == ["fp32_v1"]
     assert list(g.PROFILES)[0] == "fp32_v1"
 
@@ -146,11 +146,40 @@ def test_refusal_follows_the_row_not_the_name(monkeypatch):
     is not a list of names frozen in the test."""
     g = _fresh(monkeypatch)
     name = _unavailable(g)[0]
-    g.PROFILES[name] = dict(g.PROFILES[name], models=True)
+    g.PROFILES[name] = dict(g.PROFILES[name], inference=True, training=True)
     assert g.resolve(name) == name
     prev = g.set_default_profile(name)
     assert prev == "fp32_v1" and g.default_profile() == name
     assert g.resolve(None) == name
+
+
+def test_training_is_its_own_gate(monkeypatch):
+    g = _fresh(monkeypatch)
+    name = _unavailable(g)[0]
+    # passed for inference, not for training: inference accepts, every trainer refuses
+    g.PROFILES[name] = dict(g.PROFILES[name], inference=True, training=False)
+    assert g.resolve(name) == name
+    assert g.resolve(name, use="inference") == name
+    with pytest.raises(NotImplementedError) as e:
+        g.resolve(name, use="training")
+    assert name in str(e.value) and "refused for training" in str(e.value)
+    assert "available for inference" in str(e.value)
+    # a process default that inference accepts still cannot train
+    assert g.set_default_profile(name) == "fp32_v1"
+    assert g.resolve(None) == name
+    with pytest.raises(NotImplementedError):
+        g.require_training("a trainer")
+    # the default profile trains
+    g.set_default_profile("fp32_v1")
+    assert g.require_training("a trainer") == "fp32_v1"
+    # the sabotage arm: open the training gate and the same call passes
+    g.PROFILES[name] = dict(g.PROFILES[name], training=True)
+    assert g.resolve(name, use="training") == name
+    with pytest.raises(ValueError):
+        g.resolve(name, use="fine-tuning")
+    for row in g.PROFILES.values():
+        assert isinstance(row["inference"], bool) and isinstance(row["training"], bool)
+        assert row["inference"] or not row["training"], "nothing trains that cannot infer"
 
 
 def test_the_environment_sets_only_the_starting_value(monkeypatch):
@@ -206,7 +235,7 @@ def test_measured_rows_are_only_what_was_measured(monkeypatch):
 def test_a_profile_measured_slower_here_warns_once_and_still_resolves(monkeypatch):
     g = _fresh(monkeypatch)
     name = _unavailable(g)[0]
-    g.PROFILES[name] = dict(g.PROFILES[name], models=True)
+    g.PROFILES[name] = dict(g.PROFILES[name], inference=True, training=True)
     g.MEASURED[name] = {
         "cuda": {"over": (2.0, 4.0), "box": "a box", "what": "w", "source": "s"},
         "metal": {"over": (0.5, 0.7), "box": "a Mac", "what": "w", "source": "s"},
@@ -259,6 +288,22 @@ def test_the_package_exports_the_selector_and_it_is_not_the_mode():
     # and a profile name is not a mode, nor a mode a profile
     with pytest.raises(ValueError):
         ml.set_numeric_profile(before)
+
+
+def test_a_trainer_refuses_a_profile_that_has_not_passed_for_training(monkeypatch):
+    ml = _package()
+    from mojolearn import _numeric_profile as g
+    from mojolearn import _training_impl as T
+    name = _unavailable(g)[0]
+    monkeypatch.setitem(g.PROFILES, name, dict(g.PROFILES[name], inference=True, training=False))
+    prev = ml.set_numeric_profile(name)
+    try:
+        with pytest.raises(NotImplementedError) as e:
+            T._Optimizer([], "AdamW")
+        assert name in str(e.value) and "refused for training" in str(e.value)
+    finally:
+        ml.set_numeric_profile(prev)
+    assert ml.numeric_profile() == "fp32_v1"
 
 
 def test_the_loader_refuses_a_profile_before_it_reads_the_path(tmp_path):

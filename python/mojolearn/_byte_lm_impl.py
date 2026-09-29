@@ -41,6 +41,7 @@ from ._array import Array as _Array
 import hashlib
 import json
 from . import _portable_math as math
+from . import _numeric_profile
 import operator
 import os
 from pathlib import Path
@@ -497,6 +498,8 @@ class SmallByteLanguageModelTrainer:
 
     def __init__(self, parameters, *, data_schedule, lr=1e-3, betas=(.9, .999),
                  eps=1e-8, weight_decay=.01, shape=None, resident=False, step_result=None):
+        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
+        _numeric_profile.require_training("mojolearn.SmallByteLanguageModelTrainer")
         if type(resident) is not bool:
             raise TypeError("resident must be a bool")
         if step_result is None:

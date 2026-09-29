@@ -102,6 +102,7 @@ than hidden, and both have a cheaper device-side form that is OWED.
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from . import _portable_math as math
+from . import _numeric_profile
 from fractions import Fraction
 
 import ctypes
@@ -423,6 +424,8 @@ class _Optimizer(NumericModeMixin):
 
     def __init__(self, params, where, lr_schedule=None, accumulation_steps=1):
         self._where = where
+        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
+        _numeric_profile.require_training("mojolearn.%s" % where)
         self.params = _as_seq(params, "params", where)
         #: A schedule object with `lr_at(t)` (t ONE-BASED), or None. When set,
         #: `step` overwrites `self.lr` with `lr_at(self.t)` before the call,
