@@ -254,6 +254,26 @@ reads it); its blob is now c60a455c. Backward vectors are exported by
 real training step, with the operands exactly as `QMatmulNT` hands them to
 the three products.
 
+EXPORTED, 2026-09-29T04:00Z, on nvc2 (CPU, torch 2.4.1):
+`~/mojolearn-evidence/lowbit-quality/backward_vectors/int15_backward_vectors.q15`,
+884,750 words, sha256
+8e8c6824315b7f9aad894c08c42bf269dadbc6973caaeab3ce5183ca8f04df79; manifest
+`bench/results/lowbit_quality/2026-09-29_nvc1-rtx4090/int15_backward_vectors.json`.
+18 cases: forward, weight gradient and input gradient of `block0.w_q`,
+`block1.w_gate`, `block3.w_down`, `lm_head`, `block1.attn_qk` and
+`block2.attn_pv`, at training step 50 of seed 0. Operands are cut to 12 rows
+each; the contracted extent is whole (4096 tokens in a projection's weight
+gradient). `C` is cut from the tensor the training step used.
+- Recomputing each product from its cut operands gives the same bits in all
+  18 cases; with the rounding sabotaged it differs in every case.
+- THE OTHER RULE IS TOLD APART: codes carried from the forward product and
+  transposed give 312 different cells over the six input gradients (84 of
+  144 in `lm_head`, 84 in `attn_qk`, 144 in `attn_pv`). In the three
+  projections it gives the same bits, because at step 50 every row of those
+  weights still has the same exponent (-16), so the two rules coincide
+  there. Vectors from a later step would separate them everywhere; these
+  separate them in three of six.
+
 ## Failures, with cause
 
 | What | Cause | State |
