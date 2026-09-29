@@ -1,0 +1,195 @@
+✨ Pixi task (check-gemm-int8-mma-tuned-unstated in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_UNSTATED=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo
+517184 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30ec40000000, nodemask=1)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned_check.mojo:77:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:777:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned_check.mojo:271:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned_check.mojo:270:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned_check.mojo:269:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+== gemm/checks/gemm_int8_mma_tuned_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the tuned unit plans
+   column: nvidia
+   plan 0: staged.w16x16.b32x32.k32.l4
+   plan 1: staged.w32x32.b64x64.k32.l4
+   plan 2: staged.w64x64.b128x128.k32.l4
+   plan 3: staged.w64x64.b128x256.k32.l4
+   plan 4: staged.w64x64.b128x128.k32.l16
+   plan 5: staged.w64x64.b128x128.k64.l16
+   plan 6: staged.w64x64.b128x128.k128.l16
+   plan 7: staged.w64x64.b128x256.k64.l16
+   plan 8: staged.w16x64.b16x256.k64.l16
+   plan 9: staged.w16x16.b32x32.k64.l16
+   plan 10: staged.w32x32.b64x64.k64.l16
+   plan 11: staged.w32x32.b128x128.k64.l16
+   plan 12: staged.w16x32.b128x128.k64.l16
+   plan 13: staged.w16x32.b64x256.k64.l16  NOT RUN on this column (a block of it is above 1024 threads), which is not a pass
+   plan 14: staged.w32x32.b256x64.k64.l16
+   plan 15: staged.w32x32.b512x32.k64.l16
+   plan 16: staged.w32x16.b512x16.k64.l16
+   ok int8 tuned 1x32x32
+   ok int8 tuned 1x64x128
+   ok int8 tuned 2x96x127
+   ok int8 tuned 7x33x129
+   ok int8 tuned 16x64x1000
+   ok int8 tuned 129x129x256
+   ok int8 tuned 1x4096x512
+   ok int8 tuned 3x5x17
+   ok int8 tuned 17x33x31
+   ok int8 tuned 33x17x33
+   ok int8 tuned 1x47x100
+   ok int8 tuned 50x70x1000
+   ok int8 tuned 13x21x4097
+   ok int8 tuned 2x16x32
+   ok int8 tuned 100x3x64
+   ok int8 tuned 65x129x63
+   ok int8 tuned 63x127x65
+   ok int8 tuned 129x65x127
+   ok int8 tuned 127x257x129
+   ok int8 tuned 130x255x191
+   ok int8 tuned 17x300x4100
+   ok int8 tuned 1x257x4104
+   ok int8 tuned 16x513x4112
+   ok int8 tuned 8x128x4096
+   ok int8 tuned 128x128x256
+   ok int8 tuned 64x256x1000
+   ok int8 tuned 200x40x96
+   shapes: 27
+   quantized-fixture: 606 cases, 0 failed
+ok check_tuned_plans_match_reference_flat_oracle
+   ok int8 tuned planted all-positive 9x7x1024
+   ok int8 tuned planted all-negative 9x7x1024
+   ok int8 tuned planted cancel-halves 9x7x1024
+   ok int8 tuned planted odd-windows 9x7x1024
+   ok int8 tuned planted checkerboard 9x7x1024
+   ok int8 tuned planted zero-rows 9x7x1024
+   ok int8 tuned planted lone-last-step 9x7x1024
+   ok int8 tuned planted all-positive 9x7x1025
+   ok int8 tuned planted all-negative 9x7x1025
+   ok int8 tuned planted cancel-halves 9x7x1025
+   ok int8 tuned planted odd-windows 9x7x1025
+   ok int8 tuned planted checkerboard 9x7x1025
+   ok int8 tuned planted zero-rows 9x7x1025
+   ok int8 tuned planted lone-last-step 9x7x1025
+   ok int8 tuned planted all-positive 3x5x1040
+   ok int8 tuned planted all-negative 3x5x1040
+   ok int8 tuned planted cancel-halves 3x5x1040
+   ok int8 tuned planted odd-windows 3x5x1040
+   ok int8 tuned planted checkerboard 3x5x1040
+   ok int8 tuned planted zero-rows 3x5x1040
+   ok int8 tuned planted lone-last-step 3x5x1040
+   ok int8 tuned planted all-positive 3x5x1041
+   ok int8 tuned planted all-negative 3x5x1041
+   ok int8 tuned planted cancel-halves 3x5x1041
+   ok int8 tuned planted odd-windows 3x5x1041
+   ok int8 tuned planted checkerboard 3x5x1041
+   ok int8 tuned planted zero-rows 3x5x1041
+   ok int8 tuned planted lone-last-step 3x5x1041
+   ok int8 tuned planted all-positive 70x9x2081
+   ok int8 tuned planted all-negative 70x9x2081
+   ok int8 tuned planted cancel-halves 70x9x2081
+   ok int8 tuned planted odd-windows 70x9x2081
+   ok int8 tuned planted checkerboard 70x9x2081
+   ok int8 tuned planted zero-rows 70x9x2081
+   ok int8 tuned planted lone-last-step 70x9x2081
+   ok int8 tuned planted all-positive 65x67x4096
+   ok int8 tuned planted all-negative 65x67x4096
+   ok int8 tuned planted cancel-halves 65x67x4096
+   ok int8 tuned planted odd-windows 65x67x4096
+   ok int8 tuned planted checkerboard 65x67x4096
+   ok int8 tuned planted zero-rows 65x67x4096
+   ok int8 tuned planted lone-last-step 65x67x4096
+   ok int8 tuned planted all-positive 1x130x4097
+   ok int8 tuned planted all-negative 1x130x4097
+   ok int8 tuned planted cancel-halves 1x130x4097
+   ok int8 tuned planted odd-windows 1x130x4097
+   ok int8 tuned planted checkerboard 1x130x4097
+   ok int8 tuned planted zero-rows 1x130x4097
+   ok int8 tuned planted lone-last-step 1x130x4097
+   ok int8 tuned planted all-positive 8x129x14336
+   ok int8 tuned planted all-negative 8x129x14336
+   ok int8 tuned planted cancel-halves 8x129x14336
+   ok int8 tuned planted odd-windows 8x129x14336
+   ok int8 tuned planted checkerboard 8x129x14336
+   ok int8 tuned planted zero-rows 8x129x14336
+   ok int8 tuned planted lone-last-step 8x129x14336
+   ok int8 tuned planted all-positive 2x3x131072
+   ok int8 tuned planted all-negative 2x3x131072
+   ok int8 tuned planted cancel-halves 2x3x131072
+   ok int8 tuned planted odd-windows 2x3x131072
+   ok int8 tuned planted checkerboard 2x3x131072
+   ok int8 tuned planted zero-rows 2x3x131072
+   ok int8 tuned planted lone-last-step 2x3x131072
+   ok int8 tuned planted all-positive 3x5x1042
+   ok int8 tuned planted all-negative 3x5x1042
+   ok int8 tuned planted cancel-halves 3x5x1042
+   ok int8 tuned planted odd-windows 3x5x1042
+   ok int8 tuned planted checkerboard 3x5x1042
+   ok int8 tuned planted zero-rows 3x5x1042
+   ok int8 tuned planted lone-last-step 3x5x1042
+   ok int8 tuned planted all-positive 1x1x1041
+   ok int8 tuned planted all-negative 1x1x1041
+   ok int8 tuned planted cancel-halves 1x1x1041
+   ok int8 tuned planted odd-windows 1x1x1041
+   ok int8 tuned planted checkerboard 1x1x1041
+   ok int8 tuned planted zero-rows 1x1x1041
+   ok int8 tuned planted lone-last-step 1x1x1041
+   ok int8 tuned planted all-positive 129x257x96
+   ok int8 tuned planted all-negative 129x257x96
+   ok int8 tuned planted cancel-halves 129x257x96
+   ok int8 tuned planted odd-windows 129x257x96
+   ok int8 tuned planted checkerboard 129x257x96
+   ok int8 tuned planted zero-rows 129x257x96
+   ok int8 tuned planted lone-last-step 129x257x96
+   ok int8 tuned planted all-positive 65x130x161
+   ok int8 tuned planted all-negative 65x130x161
+   ok int8 tuned planted cancel-halves 65x130x161
+   ok int8 tuned planted odd-windows 65x130x161
+   ok int8 tuned planted checkerboard 65x130x161
+   ok int8 tuned planted zero-rows 65x130x161
+   ok int8 tuned planted lone-last-step 65x130x161
+   ok int8 tuned planted all-positive 17x33x4100
+   ok int8 tuned planted all-negative 17x33x4100
+   ok int8 tuned planted cancel-halves 17x33x4100
+   ok int8 tuned planted odd-windows 17x33x4100
+   ok int8 tuned planted checkerboard 17x33x4100
+   ok int8 tuned planted zero-rows 17x33x4100
+   ok int8 tuned planted lone-last-step 17x33x4100
+   ok int8 tuned planted all-positive 3x300x4112
+   ok int8 tuned planted all-negative 3x300x4112
+   ok int8 tuned planted cancel-halves 3x300x4112
+   ok int8 tuned planted odd-windows 3x300x4112
+   ok int8 tuned planted checkerboard 3x300x4112
+   ok int8 tuned planted zero-rows 3x300x4112
+   ok int8 tuned planted lone-last-step 3x300x4112
+   ok int8 tuned planted all-positive 131x5x33
+   ok int8 tuned planted all-negative 131x5x33
+   ok int8 tuned planted cancel-halves 131x5x33
+   ok int8 tuned planted odd-windows 131x5x33
+   ok int8 tuned planted checkerboard 131x5x33
+   ok int8 tuned planted zero-rows 131x5x33
+   ok int8 tuned planted lone-last-step 131x5x33
+   planted: 2562 cases, 0 failed
+ok check_tuned_planted_worst_cases
+   ok int8 decode, quantizer in the launch 1x257x4096
+   ok int8 decode, quantizer in the launch 2x33x63
+   ok int8 decode, quantizer in the launch 7x129x4100
+   ok int8 decode, quantizer in the launch 8x300x4104
+   ok int8 decode, quantizer in the launch 15x64x4112
+   ok int8 decode, quantizer in the launch 16x513x1000
+   ok int8 decode, quantizer in the launch 1x40x14336
+   ok int8 decode, quantizer in the launch 8x17x14338
+   ok int8 decode, quantizer in the launch 16x96x191
+   decode-quant: 27 cases, 0 failed
+ok check_decode_quant_in_launch
+   ok 40 rows agree with their single-row calls; plans staged.w32x32.b128x128.k64.l16 and staged.w16x16.b32x32.k64.l16
+ok check_tuned_dispatch_is_batch_invariant
+== 4 gates, 0 failed ==

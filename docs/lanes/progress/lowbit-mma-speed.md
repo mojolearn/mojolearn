@@ -40,7 +40,7 @@ Nothing went to m3ultra-b or to do-amd.
 | unit gate + the decode kernel on codes at every shape m <= 16 + `check_decode_quant_in_launch` (quantizer in the launch, planted row maxima) | GREEN runs 9, 10, 11 | not run (no unit) |
 | its arms: staging pad (both sides), value flip, quantizer butterfly skipped (new `check-gemm-int8-mma-tuned-quant-sabotage`) | seen failing runs 10, 11 (run 9: two not seen, Failures 9) | |
 | int8 flat plan sliced on Apple: check-gemm-lowbit 9/9, its value arm; sliced flat at mlp_up/mlp_down/lm_head t512 equal to the Apple chunk probe and to the unsliced digests | | GREEN (1790658996404) |
-| lane/lowbit-int15's check-gemm-int15-tuned on this tree | every plan equal to the oracle where it ran; `check_int15_tuned_refuses` fails on origin/main's stale copy (the branch has the fix); run 11's two further failures were this lane's (Failures 10), fixed, run 12 confirms | |
+| lane/lowbit-int15's check-gemm-int15-tuned on this tree | every plan equal to the oracle where it ran; `check_int15_tuned_refuses` fails on origin/main's stale copy (the branch has the fix); run 11's two further failures were this lane's (Failures 10), fixed, run 12 GREEN on both | |
 | timing runs: cold vs record digests, harness sabotage | every run GREEN (66/66, 57/57, all) | GREEN (9/9, 120 compared) |
 
 ### The table of time after each lever, H100, median ms (over fp32.v1)
@@ -98,9 +98,11 @@ Decode rows, t1 / t8, ms (over fp32.v1), runs 10 and 11:
 
 ### Still owed
 
-- Run 12 (nvc3-0041): the gates after Failures 10's fix, and lane/lowbit-int15's
-  gate on this tree (its refusal check is expected to fail until main takes
-  lane/lowbit-int15's fix).
+- lane/lowbit-int15's `check_int15_tuned_refuses` on origin/main's copy of its
+  gate fails on this tree until main takes lane/lowbit-int15's fix (71db5bb26).
+  Run 12 (nvc3-0041, `h100/run12`): this lane's two gates GREEN with every arm
+  seen failing after Failures 10's fix; lane/lowbit-int15's matches_oracle and
+  planted checks pass on this tree again, the refusal check is the one failure.
 - The decode kernels and the two-page plans are NVIDIA's; AMD (Lane F) has
   neither; the AMD launchers still take the staged plans, and the decode
   kernels refuse there by name.

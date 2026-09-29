@@ -1,0 +1,5 @@
+check-gemm-int15-tuned exit=1 (lane/lowbit-int15's gate on this tree)
+ok check_int15_tuned_matches_oracle
+ok check_int15_tuned_planted_worst_cases
+!! GATE FAILED: check_int15_tuned_refuses
+== 3 gates, 1 failed ==
