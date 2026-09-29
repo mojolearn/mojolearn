@@ -129,11 +129,11 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
     CTRs (`update_feature_weights.cpp:14-22`)."""
 
     var snap_stats: Bool
-    """lane/sym-quality, NO CATBOOST COUNTERPART: put the search stats on
-    the fixed-point grid before the first histogram
-    (`kernel/histogram_utils.snap_stats_to_grid_kernel`), so the float
-    partition totals agree with the quantized histograms. The boosting loop
-    sets it for weighted fits; False (the default) keeps every bit."""
+    """lane/sym-quality, NO CATBOOST COUNTERPART: put the weight plane on
+    an exact dyadic grid before the first histogram
+    (`kernel/histogram_utils.snap_weights_to_grid_kernel`), so an empty
+    side of a split weighs exactly zero. The boosting loop sets it for
+    weighted fits; False (the default) keeps every bit."""
 
     def __init__(out self):
         """Their aggregate defaults, field for field."""
