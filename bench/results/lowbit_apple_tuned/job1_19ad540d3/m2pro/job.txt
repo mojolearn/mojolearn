@@ -1,0 +1,24 @@
+profile=mojolearn.identical.gemm.int15i64.v1 (the tuned Apple float-unit plans)
+box=m2pro phases=gate price
+started=2026-09-29T04:43:52Z
+tree_head=19ad540d3d7d008b0f54cba788cfc6f21f06e0b5 dirty_files=34
+machine=Apple M2 Pro macOS 26.7
+only=all variants=all repeats=default slice=default flat=0
+reach: gate-chunk-sabotage failed check_tuned_planted_worst_cases, as it must
+reach: gate-chunk-sabotage failed check_tuned_chunk_boundaries, as it must
+reach: gate-chunk-sabotage did not leave check_tuned_shapes_inside_one_chunk passing
+reach: gate-value-sabotage failed check_tuned_shapes_inside_one_chunk, as it must
+reach: gate-value-sabotage failed check_tuned_shapes_across_chunks, as it must
+reach: gate-value-sabotage failed check_tuned_planted_worst_cases, as it must
+reach: gate-value-sabotage failed check_tuned_chunk_boundaries, as it must
+reach: gate-value-sabotage failed check_tuned_launch_in_slices, as it must
+reach: gate-value-sabotage failed check_tuned_simulation_vectors, as it must
+gate digests=3451
+build exit=0 13s
+warm exit=1 116s (untimed, every arm once)
+price exit=1 659s
+warm-and-timed: the two runs printed the same digests (589)
+price-sabotage exit=1 (identity only)
+price-sabotage-comparison exit=0 (0: every sabotaged tuned digest differed from the clean one)
+finished=2026-09-29T04:58:05Z
+verdict=RED an expected outcome did not hold

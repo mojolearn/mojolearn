@@ -1,0 +1,3 @@
+gate	1	14s	expected=pass	held=no
+gate-chunk-sabotage	1	14s	expected=fail	held=yes
+gate-value-sabotage	1	14s	expected=fail	held=yes
