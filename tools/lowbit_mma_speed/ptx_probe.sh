@@ -78,6 +78,8 @@ add staged_w64_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 4
 add staged_w32_b64_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 2, 2, 64, 16]"
 add staged_w32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 4, 64, 16]"
 add staged_w16x32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 8, 4, 64, 16]"
+add refused_w16x32_b64x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 4, 8, 64, 16]"
+add refused_w32_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 8, 64, 16]"
 add quantize_reference "quantize_rows_int8_kernel"
 add quantize_par_256 "quantize_rows_int8_par_kernel[256]"
 echo 'def main() raises:'

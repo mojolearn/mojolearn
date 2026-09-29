@@ -137,11 +137,13 @@ comptime INT8_TUNED_PLAN_SMALL_K64 = 9  #: STAGED with 16-byte loads and KB 64
 comptime INT8_TUNED_PLAN_FRAG2_K64 = 10  #: FRAG2 with 16-byte loads and KB 64
 comptime INT8_TUNED_PLAN_WARPS16 = 11  #: 32x32 per warp, 4x4 warps: block 128x128
 comptime INT8_TUNED_PLAN_WARPS32 = 12  #: 16x32 per warp, 8x4 warps: block 128x128
-#: 16x32 per warp, 4x8 warps: block 64x256. (32x32 per warp in 4x8 warps,
-#: block 128x256, was this plan in job nvc3-0018 and the H100 REFUSED every
-#: launch of it, CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES: 1024 threads of 63
-#: registers and more are above one multiprocessor's register file. A plan
-#: of 1024 threads has 64 registers a thread to spend and no more.)
+#: 16x32 per warp, 4x8 warps: block 64x256. NOT LAUNCHED ANYWHERE: the H100
+#: refused every launch of it (job nvc3-0019) and of the plan it replaced,
+#: 32x32 per warp in 4x8 warps (job nvc3-0018), with
+#: CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, while the 8x4 plan of the same 1024
+#: threads launches. The cause is NOT ESTABLISHED; the PTX counter prints
+#: the kernel's register count so that it can be. The plan keeps its number
+#: and `int8_tuned_plan_available` answers False for it.
 comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13
 comptime INT8_TUNED_PLAN_COUNT = 14
 
@@ -203,11 +205,14 @@ def int8_tuned_plan_name(plan: Int) -> String:
 
 
 def int8_tuned_plan_available(plan: Int) -> Bool:
-    """Whether the column can launch the plan. The two 32-warp plans are
-    1024 threads a block where a warp is 32 lanes (NVIDIA) and would be
-    2048 where it is 64 (AMD CDNA), above a block's limit; they are NOT RUN
-    there, by name, and a plan that is not run is not a plan that agreed."""
-    if plan == INT8_TUNED_PLAN_WARPS32 or plan == INT8_TUNED_PLAN_WARPS32_WIDE:
+    """Whether the column can launch the plan. The 32-warp plan is 1024
+    threads a block where a warp is 32 lanes (NVIDIA) and would be 2048
+    where it is 64 (AMD CDNA), above a block's limit; it is NOT RUN there,
+    by name, and a plan that is not run is not a plan that agreed. The wide
+    32-warp plan is refused by the one device that tried it."""
+    if plan == INT8_TUNED_PLAN_WARPS32_WIDE:
+        return False
+    if plan == INT8_TUNED_PLAN_WARPS32:
         return 32 * WARP_SIZE <= INT8_TUNED_MAX_TPB
     return plan >= 0 and plan < INT8_TUNED_PLAN_COUNT
 
