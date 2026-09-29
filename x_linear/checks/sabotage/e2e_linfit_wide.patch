@@ -1,0 +1,37 @@
+diff --git a/x_linear/glm_wide.mojo b/x_linear/glm_wide.mojo
+index 7698198e0..7e84e716a 100644
+--- a/x_linear/glm_wide.mojo
++++ b/x_linear/glm_wide.mojo
+@@ -301,7 +301,9 @@ def _objective(
+     lead's fold (rows ascending) and penalty, here on the host."""
+     b.upload(ctx, theta, toff, power)
+     var lt = b.rows(ctx, 0, link)
+-    var acc = fold_fa(lt, 0, 1, b.n)
++    var acc = Float32(0)  # SABOTAGE e2e: the wide GLM's objective folds its loss terms descending
++    for i in range(b.n):
++        acc = fa(acc, ld(lt, b.n - 1 - i))
+     var reg = Float32(0)
+     for j in range(b.d):
+         var w = ld(theta, toff + j)
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index a6e221ec4..ffedba4d9 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -416,7 +416,7 @@ def _warp_row_dot_spec[K: Int](
+             comptime for l in range(W):
+                 var xj = shuffle_idx(xr[kk], UInt32(l))
+                 var wj = shuffle_idx(wr[kk], UInt32(l))
+-                acc = xmad(xj, wj, acc)
++                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
+                 bad = bad | _is_subnormal(acc)
+         elif kk * W < d:
+             comptime for l in range(W):
+@@ -424,7 +424,7 @@ def _warp_row_dot_spec[K: Int](
+                 var live = j < d
+                 var xj = shuffle_idx(xr[kk], UInt32(l))
+                 var wj = shuffle_idx(wr[kk], UInt32(l))
+-                var a2 = xmad(xj, wj, acc)
++                var a2 = fa(fm(xj, wj), acc)  # SABOTAGE e2e (the partial chunk)
+                 acc = a2 if live else acc
+                 bad = bad | _is_subnormal(acc)
+     if bad:
