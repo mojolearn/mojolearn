@@ -158,7 +158,17 @@ SEASON_FIT, SEASON_H = SEASON_PERIOD * 60, 48
 K_TRUST = 15
 N_CLUSTERS = 8
 KNN_K = 10
-TSVD_COMPONENTS = 8
+#: cuML benchmark tSVD shared_args n_components=10 (tools/bench_board_harness.py)
+TSVD_COMPONENTS = 10
+#: cuML benchmark SpectralClustering shared_args: n_init=1, random_state=42
+#: (the board's seed for this lane, bench_board_params.LANE_SEED)
+SPECTRAL_N_INIT = 1
+SPECTRAL_SEED = 42
+#: cuML benchmark ElasticNet shared_args alpha=0.1, l1_ratio=0.5
+ENET_ALPHA = 0.1
+#: cuML benchmark UMAP shared_args n_neighbors=5, n_epochs=500
+UMAP_NEIGHBORS = 5
+UMAP_EPOCHS = 500
 GMM_COMPONENTS = 8
 IVF_NLIST, IVF_NPROBE, IVF_K = 1024, 32, 10
 ARIMA_ORDER = (1, 0, 1)
@@ -279,7 +289,8 @@ _STD = "standardized by the fit rows"
 LANE_CONFIG = {
     "umap": {
         "rows": "%d stride rows of the train split, %s" % (MANIFOLD_ROWS, _STD),
-        "params": "n_neighbors=15, n_components=2, min_dist=0.1, spread=1.0, n_epochs=200, "
+        "params": "n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, "
+                  "min_dist=0.1, spread=1.0, "
                   "metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, "
                   "negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7",
         "timed": "fit (ours fit_transform) from host rows to the embedding",
@@ -352,8 +363,9 @@ LANE_CONFIG = {
     },
     "elasticnet": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
-        "params": "alpha=0.01, l1_ratio=0.5, fit_intercept=True, max_iter=1000, tol=1e-4, "
-                  "selection='cyclic', precompute=False, positive=False; ours and cuML solver='cd'",
+        "params": "alpha=0.1, l1_ratio=0.5 (the cuML benchmark's ElasticNet), fit_intercept=True, "
+                  "max_iter=1000, tol=1e-4, selection='cyclic', precompute=False, positive=False; "
+                  "ours and cuML solver='cd'",
         "timed": "fit", "quality": "held-out R2 and RMSE",
         "mismatches": ["seed: ours refuses random_state (it selects nothing with "
                        "selection='cyclic'), cuML has none; scikit-learn random_state=7",
@@ -373,7 +385,8 @@ LANE_CONFIG = {
     },
     "tsvd": {
         "rows": "%d stride rows of the train split, raw (sentinel cleaned, not scaled)" % TSVD_ROWS,
-        "params": "n_components=8, tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+        "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, "
+                  "n_oversamples=10, random_state=7",
         "timed": "fit",
         "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative "
                    "reconstruction error",
@@ -394,8 +407,9 @@ LANE_CONFIG = {
     },
     "spectral": {
         "rows": "%d stride rows of the cls block (%s); O(n^2) affinity" % (CLUSTER_ROWS, _STD),
-        "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, "
-                  "assign_labels='kmeans', n_init=10, n_components=8, random_state=7",
+        "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, n_init=1, "
+                  "random_state=42 (the cuML benchmark's SpectralClustering), "
+                  "assign_labels='kmeans', n_components=8",
         "timed": "fit", "quality": "cluster count, silhouette, ARI vs ours",
         "mismatches": ["eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn "
                        "arpack eigen_tol='auto'; each library's own k-means on the embedding",
@@ -882,7 +896,8 @@ def build(lane, arm, D, rec):
 
 
 def _umap_kw():
-    return dict(n_neighbors=15, n_components=2, min_dist=0.1, spread=1.0, n_epochs=200,
+    return dict(n_neighbors=UMAP_NEIGHBORS, n_components=2, min_dist=0.1, spread=1.0,
+                n_epochs=UMAP_EPOCHS,
                 metric="euclidean", init="spectral", learning_rate=1.0, repulsion_strength=1.0,
                 negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0)
 
@@ -934,8 +949,9 @@ def _build_ours(lane, D, rec, S):
     elif lane in ("spectral", "agglomerative"):
         if lane == "spectral":
             make = lambda: ml.SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
-                                                 n_neighbors=10, assign_labels="kmeans", n_init=10,
-                                                 n_components=N_CLUSTERS, random_state=SEED)
+                                                 n_neighbors=10, assign_labels="kmeans",
+                                                 n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
+                                                 random_state=SPECTRAL_SEED)
         else:
             make = lambda: ml.AgglomerativeClustering(n_clusters=N_CLUSTERS, metric="euclidean",  # noqa: E731
                                                       connectivity="pairwise", linkage="single",
@@ -1016,7 +1032,7 @@ def _build_ours(lane, D, rec, S):
             "lasso": lambda: ml.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
                                       selection="cyclic", solver="cd", precompute=False,
                                       positive=False, warm_start=False),
-            "elasticnet": lambda: ml.ElasticNet(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
+            "elasticnet": lambda: ml.ElasticNet(alpha=ENET_ALPHA, l1_ratio=0.5, fit_intercept=True,
                                                 max_iter=1000, tol=1e-4, selection="cyclic",
                                                 solver="cd", precompute=False, positive=False,
                                                 warm_start=False),
@@ -1081,8 +1097,9 @@ def _build_sklearn(lane, D, rec, S):
         if lane == "spectral":
             from sklearn.cluster import SpectralClustering
             make = lambda: SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
-                                              n_neighbors=10, assign_labels="kmeans", n_init=10,
-                                              n_components=N_CLUSTERS, random_state=SEED, n_jobs=-1)
+                                              n_neighbors=10, assign_labels="kmeans",
+                                              n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
+                                              random_state=SPECTRAL_SEED, n_jobs=-1)
         else:
             from sklearn.cluster import AgglomerativeClustering
             make = lambda: AgglomerativeClustering(n_clusters=N_CLUSTERS, linkage="single",  # noqa: E731
@@ -1134,7 +1151,7 @@ def _build_sklearn(lane, D, rec, S):
             "lasso": lambda: lm.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
                                       selection="cyclic", precompute=False, positive=False,
                                       warm_start=False, random_state=SEED),
-            "elasticnet": lambda: lm.ElasticNet(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
+            "elasticnet": lambda: lm.ElasticNet(alpha=ENET_ALPHA, l1_ratio=0.5, fit_intercept=True,
                                                 max_iter=1000, tol=1e-4, selection="cyclic",
                                                 precompute=False, positive=False,
                                                 warm_start=False, random_state=SEED),
@@ -1279,8 +1296,8 @@ def _build_cuml(lane, D, rec, S):
         if lane == "spectral":
             from cuml.cluster import SpectralClustering
             make = tolerant(SpectralClustering, n_clusters=N_CLUSTERS, affinity="nearest_neighbors",
-                            n_neighbors=10, n_init=10, n_components=N_CLUSTERS,
-                            random_state=SEED)
+                            n_neighbors=10, n_init=SPECTRAL_N_INIT, n_components=N_CLUSTERS,
+                            random_state=SPECTRAL_SEED)
         else:
             from cuml.cluster import AgglomerativeClustering
             make = tolerant(AgglomerativeClustering, n_clusters=N_CLUSTERS, metric="euclidean",
@@ -1336,7 +1353,7 @@ def _build_cuml(lane, D, rec, S):
             "ridge": (lm.Ridge, dict(alpha=1.0, fit_intercept=True, solver="eig")),
             "lasso": (lm.Lasso, dict(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
                                      selection="cyclic", solver="cd")),
-            "elasticnet": (lm.ElasticNet, dict(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
+            "elasticnet": (lm.ElasticNet, dict(alpha=ENET_ALPHA, l1_ratio=0.5, fit_intercept=True,
                                                max_iter=1000, tol=1e-4, selection="cyclic",
                                                solver="cd")),
             "linearsvr": (svm.LinearSVR, dict(epsilon=0.0, penalty="l2", loss="epsilon_insensitive",
