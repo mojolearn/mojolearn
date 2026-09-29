@@ -503,6 +503,37 @@ def test_resume_refuses_a_different_box(env):
         _run(env)
 
 
+def _git(repo, *a):
+    import subprocess
+    return subprocess.run(["git", "-C", str(repo)] + list(a), check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def test_repo_commit_names_the_patch_synced_commit_not_the_pods_base(tmp_path):
+    repo = tmp_path / "tree"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "a.txt").write_text("a")
+    _git(repo, "add", "a.txt")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "a.txt").write_text("patched")        # the applied patch
+    # no sync record: the tree's own HEAD, dirty
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+    assert bb.repo_sync(str(repo)) is None
+    synced = "c" * 40
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=0\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced
+    assert bb.repo_sync(str(repo))["patch_sha256"] == "d" * 64
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=1\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced + "-dirty"
+    # a record whose base is not HEAD (the tree moved since) is ignored
+    (repo / ".git" / "devpod_synced").write_text("commit=%s\nbase=%s\n" % (synced, "e" * 40))
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+
+
 def _nv_box(host="pod-a", gpu="NVIDIA A40", driver="580.159.04", cuml="26.8.0"):
     return {"host": {"hostname": host}, "gpu": {"vendor": "nvidia", "name": gpu, "driver": driver},
             "mojolearn": {"version": "0.8.25", "wheel": {"sha256": "ab"}},
