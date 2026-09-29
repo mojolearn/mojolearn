@@ -1,0 +1,17 @@
+diff --git a/neighbors/impl/ball_cover/scan.mojo b/neighbors/impl/ball_cover/scan.mojo
+index 1193aee92..0de1c2a73 100644
+--- a/neighbors/impl/ball_cover/scan.mojo
++++ b/neighbors/impl/ball_cover/scan.mojo
+@@ -99,10 +99,8 @@ def rbc_exact_edge_total(mut ia: HostBuffer[DType.int32], n: Int) -> Int:
+     pass already reads back, so no kernel and no vendor is involved.
+     """
+     var p = ia.unsafe_ptr()
+-    var total = 0
+-    for i in range(n):
+-        total += Int(p.unsafe_load(i + 1) - p.unsafe_load(i))
+-    return total
++    # SABOTAGE (check-only): the wrapped int32 tail, as before the fix.
++    return Int(p.unsafe_load(n))
+ 
+ 
+ def rbc_max_reduce_kernel(
