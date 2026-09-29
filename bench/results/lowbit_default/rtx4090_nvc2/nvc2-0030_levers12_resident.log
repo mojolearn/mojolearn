@@ -1,0 +1,127 @@
+gpuq: job 0030 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T07:55:06Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/resident_job.sh sha256 at submit 2c2a57dea71b3030f0ab89b7670e25c2d1c0aa48e6c0b606ac4c8428f00c76af, now 2c2a57dea71b3030f0ab89b7670e25c2d1c0aa48e6c0b606ac4c8428f00c76af
+0, NVIDIA GeForce RTX 4090, 580.126.20
+1, NVIDIA GeForce RTX 4090, 580.126.20
+build build exit 0
+build build_linalg exit 0
+build build_training exit 0
+build build_transformer exit 0
+GATE check-gemm-int15-heads exit=0 expected=pass held
+   ok b1.nh15.nkv5.l1.s37.k64: one quantizer launch == host rule; one product launch == oracle == reference plan per head (555 cells)
+   ok b2.nh4.nkv2.l3.s19.k24: one quantizer launch == host rule; one product launch == oracle == reference plan per head (456 cells)
+   ok b2.nh6.nkv3.l16.s70.k64: one quantizer launch == host rule; one product launch == oracle == reference plan per head (13440 cells)
+   ok b2.nh4.nkv4.l1.s9.k16: one quantizer launch == host rule; one product launch == oracle == reference plan per head (72 cells)
+   ok b3.nh4.nkv1.l7.s13.k40: one quantizer launch == host rule; one product launch == oracle == reference plan per head (1092 cells)
+   ok the entry refuses a non-multiple n_rep, l above the decode rows and a short buffer by name
+== 6 gates, 0 failed ==
+GATE check-gemm-int15-heads-sabotage exit=1 expected=fail held
+FAIL b1.nh15.nkv5.l1.s37.k64 heads vs oracle: 555 of 555 cells differ; first at 0 got 20.012976 want 20.012974
+FAIL b2.nh4.nkv2.l3.s19.k24 heads vs oracle: 456 of 456 cells differ; first at 0 got 3.8466303 want 3.84663
+FAIL b2.nh6.nkv3.l16.s70.k64 heads vs oracle: 13440 of 13440 cells differ; first at 0 got 12.547456 want 12.547455
+FAIL b2.nh4.nkv4.l1.s9.k16 heads vs oracle: 72 of 72 cells differ; first at 0 got 3.4626272 want 3.462627
+FAIL b3.nh4.nkv1.l7.s13.k40 heads vs oracle: 1092 of 1092 cells differ; first at 0 got 11.337137 want 11.337136
+   ok the entry refuses a non-multiple n_rep, l above the decode rows and a short buffer by name
+== 6 gates, 5 failed ==
+GATE check-gemm-int15-heads-epilogue-sabotage exit=1 expected=fail held
+FAIL b1.nh15.nkv5.l1.s37.k64 heads vs oracle: 555 of 555 cells differ; first at 0 got 8.94315 want 20.012974
+FAIL b2.nh4.nkv2.l3.s19.k24 heads vs oracle: 456 of 456 cells differ; first at 0 got 10.257275 want 3.84663
+FAIL b2.nh6.nkv3.l16.s70.k64 heads vs oracle: 13440 of 13440 cells differ; first at 0 got 27.411713 want 12.547455
+FAIL b2.nh4.nkv4.l1.s9.k16 heads vs oracle: 72 of 72 cells differ; first at 0 got -14.140888 want 3.462627
+FAIL b3.nh4.nkv1.l7.s13.k40 heads vs oracle: 1092 of 1092 cells differ; first at 0 got -16.707296 want 11.337136
+   ok the entry refuses a non-multiple n_rep, l above the decode rows and a short buffer by name
+== 6 gates, 5 failed ==
+GATE check-gemm-int15-heads-exponent-sabotage exit=1 expected=fail held
+FAIL b1.nh15.nkv5.l1.s37.k64 heads vs oracle: 435 of 555 cells differ; first at 1 got -20.864342 want -10.432171
+FAIL b2.nh4.nkv2.l3.s19.k24 heads vs oracle: 360 of 456 cells differ; first at 1 got -5.897806 want -2.948903
+FAIL b2.nh6.nkv3.l16.s70.k64 heads vs oracle: 10752 of 13440 cells differ; first at 1 got -20.449764 want -10.224882
+FAIL b2.nh4.nkv4.l1.s9.k16 heads vs oracle: 55 of 72 cells differ; first at 1 got 3.3966916 want 1.6983458
+FAIL b3.nh4.nkv1.l7.s13.k40 heads vs oracle: 864 of 1092 cells differ; first at 1 got 17.010916 want 8.505458
+   ok the entry refuses a non-multiple n_rep, l above the decode rows and a short buffer by name
+== 6 gates, 5 failed ==
+GATE check-gemm-int15-heads-host-sabotage exit=1 expected=fail held
+FAIL b1.nh15.nkv5.l1.s37.k64 heads vs oracle: 555 of 555 cells differ; first at 0 got 20.012974 want 20.012976
+FAIL b2.nh4.nkv2.l3.s19.k24 heads vs oracle: 456 of 456 cells differ; first at 0 got 3.84663 want 3.8466303
+FAIL b2.nh6.nkv3.l16.s70.k64 heads vs oracle: 13440 of 13440 cells differ; first at 0 got 12.547455 want 12.547456
+FAIL b2.nh4.nkv4.l1.s9.k16 heads vs oracle: 72 of 72 cells differ; first at 0 got 3.462627 want 3.4626272
+FAIL b3.nh4.nkv1.l7.s13.k40 heads vs oracle: 1092 of 1092 cells differ; first at 0 got 11.337136 want 11.337137
+   ok the entry refuses a non-multiple n_rep, l above the decode rows and a short buffer by name
+== 6 gates, 5 failed ==
+GATE check-transformer-int15 exit=0 expected=pass held
+GATE check-transformer-int15-sabotage exit=1 expected=fail held
+GATE check-gemm-int15-tuned exit=0 expected=pass held
+   ok 11 tuned plans fused and two-launch, the dispatched one on both, flat and the reference unit plan equal the oracle on 15 shapes
+   ok 143 planted cases, every tuned plan equal to the oracle
+   ok every tuned plan, fused and two-launch, equal to the oracle with 7 and 5 distinct row exponents
+   ok 6 launches refuse the first extent above their bound (sums kernel 65536, profile 65536)
+== 4 gates, 0 failed ==
+== resident gate (clean tree), MUST exit 0
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: HELD
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE GREEN
+resident gate clean exit 0
+== generate timing
+default model reports numeric_profile=fixed15_v1; named model fp32_v1; device gpu
+RESULT generate box=447c5c6d4d39 arm=default route=resident prompt=512 new=32 median 1222.9 ms (38.21 ms/token) runs 1222.9 1175.3 1243.2 ids AGREE 2077bb0591d060ce
+RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1400.7 ms (43.77 ms/token) runs 1475.4 1400.7 1267.6 ids AGREE 2077bb0591d060ce
+RESULT generate box=447c5c6d4d39 default/fp32_v1 = 0.873 (default QUICKER)
+wrote /root/mojolearn-lowbit-default/bench/results/lowbit_default/447c5c6d4d39/resident/default_gate_447c5c6d4d39.json
+DEFAULT GATE GREEN
+sabotage sites in blocks copy: 12
+sab blocks build exit 0
+== resident gate, sabotage arm blocks, MUST exit 1
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (4638f317e25dbd7f): BROKEN
+RESULT check fixed15_v1 resident decode prefix 1: 64 of 64 positions differ: BROKEN
+RESULT check fixed15_v1 resident decode prefix 7: 64 of 64 positions differ: BROKEN
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (a869747803f2b2ae): BROKEN
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: BROKEN
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE RED: fixed15_v1 resident prefill == per-layer (4638f317e25dbd7f); fixed15_v1 resident decode prefix 1: 64 of 64 positions differ; fixed15_v1 resident decode prefix 7: 64 of 64 positions differ; fixed15_v1 resident generate ids == per-layer (a869747803f2b2ae); fixed15_v1 resident last-pass logits == per-layer forward at position 542
+resident gate sabotage blocks exit 1
+sabotage sites in head copy: 12
+sab head build exit 0
+== resident gate, sabotage arm head, MUST exit 1
+== fixed15_v1 (no keyword), device gpu
+RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fixed15_v1 the resident route ran: HELD
+RESULT check fixed15_v1 resident generate ids == per-layer (a29debb7c9c24280): BROKEN
+RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: BROKEN
+== fp32_v1 (named), device gpu
+RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+RESULT check fp32_v1 the resident route ran: HELD
+RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+RESIDENT GATE RED: fixed15_v1 resident generate ids == per-layer (a29debb7c9c24280); fixed15_v1 resident last-pass logits == per-layer forward at position 542
+resident gate sabotage head exit 1
+out /root/mojolearn-lowbit-default/bench/results/lowbit_default/447c5c6d4d39/resident
+RESIDENT JOB GREEN
+gpuq: job 0030 done exit=0 at 2026-09-29T08:07:27Z after 741s
