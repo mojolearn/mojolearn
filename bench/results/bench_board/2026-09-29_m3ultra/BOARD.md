@@ -121,6 +121,8 @@ memory, cuml-et-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=et arms=lightgbm-cpu,ours,ours-ab,sklearn-et-cpu leaves=lightgbm-cpu:146262,ours:1029236,ours-ab:1029236,sklearn-et-cpu:999969 spread=0.8579 verdict=NOT-COMPARABLE`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -162,6 +164,8 @@ memory, cuml-et-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=et arms=lightgbm-cpu,ours,ours-ab,sklearn-et-cpu leaves=lightgbm-cpu:3538,ours:881399,ours-ab:881399,sklearn-et-cpu:916826 spread=0.9961 verdict=NOT-COMPARABLE`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -200,6 +204,8 @@ memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_ph
 
 FSPEED-FIT-VERDICT: `lane=gbdt-depthwise arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:6351,ours:6345,ours-ab:6255,xgboost-cpu:6296 spread=0.0151 verdict=COMPARABLE`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -237,6 +243,8 @@ memory, ours, ours-ab: host macOS proc_pid_rusage ri_interval_max_phys_footprint
 memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
 FSPEED-FIT-VERDICT: `lane=gbdt-depthwise arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:5749,ours:5903,ours-ab:5582,xgboost-cpu:3911 spread=0.3375 verdict=NOT-COMPARABLE`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
@@ -278,6 +286,8 @@ memory, catboost-cpu, xgboost-cpu: host macOS proc_pid_rusage ri_interval_max_ph
 memory, lightgbm-cpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=gbdt-lossguide arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:6366,ours:6396,ours-ab:6395,xgboost-cpu:6296 spread=0.0156 verdict=COMPARABLE`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
@@ -322,6 +332,8 @@ memory, lightgbm-cpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=gbdt-lossguide arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:5743,ours:6239,ours-ab:6224,xgboost-cpu:3911 spread=0.3731 verdict=NOT-COMPARABLE`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -361,6 +373,8 @@ memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint 
 
 FSPEED-FIT-VERDICT: `lane=gbdt-symmetric arms=catboost-cpu,ours,ours-ab leaves=catboost-cpu:6400,ours:6400,ours-ab:6400 spread=0.0000 verdict=COMPARABLE`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -393,6 +407,8 @@ memory, ours, ours-ab: host macOS proc_pid_rusage ri_interval_max_phys_footprint
 memory, catboost-cpu: host macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it); GPU cpu arm: no device memory
 
 FSPEED-FIT-VERDICT: `lane=gbdt-symmetric arms=catboost-cpu,ours,ours-ab leaves=catboost-cpu:6352,ours:6400,ours-ab:6400 spread=0.0075 verdict=COMPARABLE`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
@@ -430,6 +446,8 @@ memory, cuml-iforest-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=iforest arms=ours,ours-ab,sklearn-iforest-cpu leaves=sklearn-iforest-cpu:4534 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one`
 
+parameters: NOT CHECKED
+
 Inference (each arm predicts with its own model from the fit rounds above):
 
 | arm | batch | rows | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | quality | hash stable | comparability | status |
@@ -465,6 +483,8 @@ memory, sklearn-iforest-cpu: host macOS proc_pid_rusage ri_interval_max_phys_foo
 memory, cuml-iforest-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=iforest arms=ours,ours-ab,sklearn-iforest-cpu leaves=sklearn-iforest-cpu:6131 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
@@ -502,6 +522,8 @@ memory, sklearn-rf-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max
 memory, cuml-rf-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=rf arms=lightgbm-cpu,ours,ours-ab,sklearn-rf-cpu leaves=lightgbm-cpu:1569514,ours:1550974,ours-ab:1550974,sklearn-rf-cpu:1426068 spread=0.0914 verdict=COMPARABLE`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
@@ -541,6 +563,8 @@ memory, sklearn-rf-cpu, lightgbm-cpu: host macOS proc_pid_rusage ri_interval_max
 memory, cuml-rf-gpu: host not sampled; GPU not sampled
 
 FSPEED-FIT-VERDICT: `lane=rf arms=lightgbm-cpu,ours,ours-ab,sklearn-rf-cpu leaves=lightgbm-cpu:463191,ours:1718168,ours-ab:1718168,sklearn-rf-cpu:1260387 spread=0.7304 verdict=NOT-COMPARABLE`
+
+parameters: NOT CHECKED
 
 Inference (each arm predicts with its own model from the fit rounds above):
 
