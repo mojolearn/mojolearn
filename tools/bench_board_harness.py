@@ -190,12 +190,12 @@ NOT_COVERED = {
 #: Work settings the harness leaves at each library's default, where the
 #: defaults differ between libraries: ONE value on every arm, with the reason.
 PINNED = [
-    ("seed", "7 (42 where cuML's benchmark sets 42: spectral, target-encoder)",
+    ("seed", "7 (42 on spectral and target-encoder, where cuML's benchmark sets 42)",
      "gbm-bench sets none and most cuML pairs set none; each library's default differs "
      "(XGBoost 0, CatBoost 0, LightGBM its own, scikit-learn and cuML None)"),
     ("bins", "254 borders = 255 bins on every boosted arm",
-     "defaults differ: ours 128, CatBoost CPU 254 borders, CatBoost GPU 128, XGBoost 256, "
-     "LightGBM 255 bins"),
+     "defaults differ (ours 128, CatBoost CPU 254 borders, CatBoost GPU 128, XGBoost 256, "
+     "LightGBM 255 bins)"),
     ("row and column sampling", "none (CatBoost and ours bootstrap_type 'No', subsample 1.0 "
      "and colsample 1.0 elsewhere)",
      "CatBoost's default bootstrap samples rows; the others do not"),
