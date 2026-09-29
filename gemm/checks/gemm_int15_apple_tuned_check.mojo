@@ -66,6 +66,7 @@ from gemm.checks.gemm_int15 import (
     split_int15_device,
 )
 from gemm.checks.gemm_int15_apple_tuned import (
+    INT15_TUNED2_CHUNK_STEPS,
     INT15_TUNED3_CHUNK_STEPS,
     INT15_TUNED4_CHUNK_STEPS,
     TUNED_VARIANT_COUNT,
@@ -331,11 +332,17 @@ def check_tuned_planted_worst_cases(ctx: DeviceContext) raises:
 
 
 def _boundary_k(i: Int) -> Int:
-    """The `k` of the chunk-boundary cases: around THREE's boundary (256),
+    """The `k` of the chunk-boundary cases: around TWO's boundary (8, one
+    step of the unit; 512 is also where the deferred carry of f2d flushes),
+    around THREE's boundary (256),
     around FOUR's (512), around the second boundary of each, and odd `k`
     past the points where an unbroken sum passes 2^24 (263 for `PP`, 523
     for `MID`, 1041 for `HH` and `LL`)."""
     var ks: List[Int] = [
+        INT15_TUNED2_CHUNK_STEPS - 1,
+        INT15_TUNED2_CHUNK_STEPS,
+        INT15_TUNED2_CHUNK_STEPS + 1,
+        2 * INT15_TUNED2_CHUNK_STEPS + 1,
         INT15_TUNED3_CHUNK_STEPS - 1,
         INT15_TUNED3_CHUNK_STEPS,
         INT15_TUNED3_CHUNK_STEPS + 1,
@@ -354,7 +361,7 @@ def _boundary_k(i: Int) -> Int:
     return ks[i]
 
 
-comptime BOUNDARY_K_COUNT = 14
+comptime BOUNDARY_K_COUNT = 18
 comptime BOUNDARY_PAIR_COUNT = 7
 
 
