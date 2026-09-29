@@ -28,7 +28,8 @@ sys.path.insert(0, os.path.join(REPO, "python"))
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", required=True)
+    ap.add_argument("--data", default="", help="the board's prep blocks (or --synthetic)")
+    ap.add_argument("--synthetic", default="", help="N,D: seeded synthetic data instead of --data")
     ap.add_argument("--lanes", default="poisson,sgd-reg,sgd-clf")
     ap.add_argument("--datasets", default="taxi,istella")
     ap.add_argument("--rows", type=int, default=0, help="first N fit rows (0 = all)")
@@ -55,9 +56,20 @@ def main():
             k, v = kv.split("=", 1)
             params[k] = ast.literal_eval(v)
         for ds in [x for x in a.datasets.split(",") if x]:
-            with np.load(os.path.join(a.data, "%s-%s.npz" % (s["block"], ds))) as z:
-                X = np.ascontiguousarray(z["X"], dtype=np.float32)
-                y = np.ascontiguousarray(z["y"])
+            if a.synthetic:
+                sn, sd = (int(v) for v in a.synthetic.split(","))
+                rng = np.random.default_rng(7 + len(ds))
+                X = rng.standard_normal((sn, sd)).astype(np.float32)
+                w = (rng.standard_normal(sd) / np.sqrt(sd)).astype(np.float32)
+                z = X @ w
+                if s["task"] == "reg":
+                    y = (np.exp(0.5 * z) if s.get("target") else z + 0.1 * rng.standard_normal(sn)).astype(np.float32)
+                else:
+                    y = (z > 0).astype(np.int64)
+            else:
+                with np.load(os.path.join(a.data, "%s-%s.npz" % (s["block"], ds))) as z:
+                    X = np.ascontiguousarray(z["X"], dtype=np.float32)
+                    y = np.ascontiguousarray(z["y"])
             if s.get("target") in ("poisson", "tweedie"):
                 y = np.maximum(y, 0)
             if a.rows:
