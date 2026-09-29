@@ -22,7 +22,7 @@ bit, NaN cells as NaN.
 THE VECTORS. `bench/lowbit_quality/int15_export.py` writes them on a box
 that has PyTorch; its header says the format. The file is read from
 `MOJOLEARN_INT15_SIM_VECTORS`, default
-`bench/results/lowbit_int15/sim/int15_vectors.bin`. The header carries the
+`gemm/checks/vectors/int15_sim_vectors.q15`. The header carries the
 git blob hash of the `arith.py` that produced it, and the check prints it,
 so a record says which arithmetic it was held to.
 
@@ -351,7 +351,7 @@ def main() raises:
     print("   column: " + column_name(TARGET_COLUMN) + "  int15 dispatch: " + int15_plan_dispatch_name())
     var path = String(getenv("MOJOLEARN_INT15_SIM_VECTORS"))
     if path.byte_length() == 0:
-        path = String("bench/results/lowbit_int15/sim/int15_vectors.bin")
+        path = String("gemm/checks/vectors/int15_sim_vectors.q15")
     var ran = 0
     var failed = 0
     var cases = List[SimCase]()

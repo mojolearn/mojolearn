@@ -21,7 +21,7 @@ set -u
 cd "$(dirname "$0")/../.." || exit 9
 BOX=${MOJOLEARN_LOWBIT_BOX:-$(hostname -s)}
 OUT="$PWD/bench/results/lowbit_int15/$BOX/sim"
-VEC="$PWD/bench/results/lowbit_int15/sim/int15_vectors.bin"
+VEC="$PWD/gemm/checks/vectors/int15_sim_vectors.q15"
 rm -rf "$OUT"
 mkdir -p "$OUT" "$(dirname "$VEC")"
 export PATH="$HOME/.pixi/bin:$PATH"
