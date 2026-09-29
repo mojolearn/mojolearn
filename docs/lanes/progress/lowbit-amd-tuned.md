@@ -283,9 +283,27 @@ NVIDIA decode kernel does it; no AMD form exists).
 
 ## Owed
 
-1. Second run of record on the MI325X.
-2. The plan choice for a 64-wide wavefront, as an AMD column of the launcher.
-3. The AMD form of the many-warps-per-block lever.
-4. The complete operation with AMD's best plan per row, over fp32.v1, twelve rows.
-5. The 15-bit profile's tuned plan on the MI325X (merge `origin/lane/lowbit-int15`).
-6. The decode rows.
+Tasks 1 to 6 of the takeover are done (above). What is still owed:
+
+1. THE DECODE ROWS OF THE FIFTEEN-BIT CALL: over fp32.v1 at qkv.t1, qkv.t8
+   and mlp_down.t8 (1.33, 1.32, 1.04) with AMD's fused launcher. The
+   fifteen-bit quantizer to planes alone is 0.74 to 0.88 of fp32.v1 at the
+   qkv decode rows. The lever is the quantizer inside the product's launch
+   (an AMD form of Lane D's NVIDIA decode kernel, with Lane C's quantizer):
+   not written.
+2. Lane C to merge the fused-column patch
+   (`int15_tuned_amd_fused_column.patch`, verified at a9c13231d, job
+   1790660726998). The Apple build of `bench/gemm_int15_price_main.mojo` with
+   it is NOT SHOWN (the Linux cross-build is refused by the Metal compiler);
+   the M2 Pro must build it before the merge.
+3. Lane D to decide the launch-bound patch (`lane_d_launch_bound.patch`,
+   verified on AMD, job 1790661410124); its effect on the H100 is not
+   measured.
+4. THE FAULT'S MECHANISM is not established: three faults, the traced two at
+   the first launch of the spilling direct kernel; none since no kernel of
+   this lane spills (70 stress runs and every gate since); a probe with no
+   mojolearn code did not reproduce it in 300 processes.
+5. Rows between 17 and 511 tokens: no AMD plan is measured there.
+6. Every AMD number is one box, one run per job; the plan choice rests on
+   jobs 1790660119759 and 1790660726998 (two runs of the same arms, which
+   agree within 0.01 to 0.02 of fp32.v1 at the chosen plans).
