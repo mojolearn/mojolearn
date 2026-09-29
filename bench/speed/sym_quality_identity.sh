@@ -6,7 +6,7 @@
 #
 # Expects bindings/build_gbdt.sh and bindings/build_gbdt_host.sh already run
 # at this commit under MOJOLEARN_NUMERIC_MODE=identical (the steward's
-# --builds), or pass `build` to run them here first (the NVIDIA and AMD
+# --builds, with bindings/build.sh and build_core_host.sh), or pass `build` to run them here first (the NVIDIA and AMD
 # queues; MOJOLEARN_GPU_ARCHS must name the box's arch there). Clean: the Metal and CPU columns must AGREE on every lane.
 # Sabotage (-D MOJOLEARN_SNAP_SABOTAGE=1, device only): the weighted lanes
 # the CPU column carries (gbdt-multiclass, gbdt-multiclass-defaults) must
@@ -17,6 +17,8 @@ BK=${2:-metal}
 mkdir -p "$OUT"
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$PWD/python"
 if [ "${3:-}" = build ]; then
+    pixi run -e default sh bindings/build.sh > "$OUT/build_base.log" 2>&1 || { echo "base build failed"; tail -40 "$OUT/build_base.log"; exit 1; }
+    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_core_host.sh > "$OUT/build_core_host.log" 2>&1 || { echo "core host build failed"; tail -40 "$OUT/build_core_host.log"; exit 1; }
     pixi run -e default sh bindings/build_gbdt.sh > "$OUT/build.log" 2>&1 || { echo "build failed"; tail -40 "$OUT/build.log"; exit 1; }
     env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
 fi
