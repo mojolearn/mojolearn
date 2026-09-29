@@ -53,14 +53,17 @@ from gemm.checks.gemm_int15_tuned import (
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 
 # WHICH PLAN (clause W-8, W-13: every plan is the same bits, so this is
-# scheduling). Where the column has an integer matrix unit (NVIDIA, AMD) the
-# products run Lane C's TUNED plan (`identical_gemm_int15_tuned_into`: the
-# sums kernel with one staging, then the shared epilogue; the reference unit
-# plan at k = 65536); elsewhere, and under
-# `-D MOJOLEARN_LLAMA_INT15_REFERENCE_PLAN=1`, `identical_gemm_int15_planes_into`
-# (the reference unit plan, Apple's float-unit plan or the pieces plan).
-comptime LLAMA_INT15_TUNED = INT15_TUNED_AVAILABLE and not is_defined[
-    "MOJOLEARN_LLAMA_INT15_REFERENCE_PLAN"
+# scheduling). By default `identical_gemm_int15_planes_into`: the reference
+# unit plan on NVIDIA and AMD, Apple's float-unit plan above 2^28
+# multiply-accumulates, the pieces plan elsewhere. Lane C's TUNED plan
+# (`identical_gemm_int15_tuned_into`) is the arm
+# `-D MOJOLEARN_LLAMA_INT15_TUNED=1` on a column with the int8 unit. MEASURED
+# at the model (SmolLM2-360M, whole forward, 2026-09-29): the tuned plan was
+# not faster on any box (4090 nvc2-0021 within noise; H100 nvc3-0043 prefill
+# 0.71 to 0.72 of fp32_v1 against 0.64 to 0.68 on the reference plan; MI325X
+# 0.93 to 0.94 against 0.85 to 0.89), so the reference plan is the default.
+comptime LLAMA_INT15_TUNED = INT15_TUNED_AVAILABLE and is_defined[
+    "MOJOLEARN_LLAMA_INT15_TUNED"
 ]()
 
 
