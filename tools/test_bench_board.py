@@ -559,7 +559,9 @@ NEURAL_IDS = [
     "neural/mamba3-forward/gaussian/shape=full", "neural/mamba3-infer/gaussian/shape=full",
     "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
     "neural/samba-infer/bytes/shape=full",
-    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full"]
+    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full",
+    "neural/lm-infer/bytes/shape=full", "neural/lm-host-train-step/bytes/shape=full",
+    "neural/gemm-bf16/gaussian/shape=full", "neural/gemm-int8/gaussian/shape=full"]
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
                "torch-eager-bf16", "torch-compile-bf16"],
@@ -577,15 +579,20 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
-        want = CPU_ARMS if r["lane"].endswith("-infer") else GPU_ARMS[vendor]
+        cpu_lane = r["lane"].endswith("-infer") or r["lane"] == "lm-host-train-step"
+        want = CPU_ARMS if cpu_lane else GPU_ARMS[vendor]
+        if r["lane"] == "gemm-bf16":
+            want = [a for a in want if a.endswith("bf16")]
+        if r["lane"] == "gemm-int8":
+            want = ["torch-eager-int8", "torch-compile-int8"] if vendor == "nvidia" else []
         if r["lane"].startswith("mamba1-"):
             # the per-token reference scan is not a compile target (named in NOT_PLANNED)
             want = [a for a in want if "-compile-" not in a]
         assert r["opponents"] == want, r["id"]
         assert r["arms"] == ["ours"] + want
         # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
-        assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia"
-                                                      and not r["lane"].endswith("-infer"))
+        assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia" and not cpu_lane
+                                                      and not r["lane"].startswith("gemm-"))
     for arm in GPU_ARMS["nvidia"]:
         assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "gpu"
     for arm in CPU_ARMS:
@@ -593,8 +600,8 @@ def test_plan_neural_identical_only_on_every_vendor(vendor):
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
     cells = sum(len(r["arms"]) for r in races)
-    assert cells == {"apple": 76, "amd": 76, "nvidia": 95}[vendor]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 16, "cells": cells}}
+    assert cells == {"apple": 90, "amd": 90, "nvidia": 111}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 20, "cells": cells}}
 
 
 def test_fast_refused_for_neural_by_name(env):
