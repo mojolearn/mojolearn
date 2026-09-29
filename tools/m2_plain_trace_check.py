@@ -83,6 +83,50 @@ def main():
         print("  device:", None if dev is None else dev.tolist())
         print("  host counts:", cnt.tolist())
         print("  host sum(y-0.5):", [round(v, 3) for v in g.tolist()])
+        hrec = next((r for r in recs if r[1].endswith(".depth%02d.hist" % depth)), None)
+        hbin = None if hrec is None else "%s.%s.%s.bin" % (trace, hrec[0], hrec[1])
+        if depth > 1 or hbin is None or not os.path.exists(hbin):
+            continue
+        hist = np.fromfile(hbin, dtype="<f4")
+        feats = sorted(borders)
+        nbf = sum(len(borders[f]) for f in feats)
+        # host: per leaf, per binFeature (feature-major, border order), rows
+        # strictly above the border (count, sum g)
+        host = np.zeros((n_leaves, 2, nbf))
+        col = 0
+        for f in feats:
+            for bb in borders[f]:
+                above = x[:, f] > bb
+                for lf in range(n_leaves):
+                    m = above & (leaf == lf)
+                    host[lf, 0, col] = m.sum()
+                    host[lf, 1, col] = (y[m] - 0.5).sum()
+                col += 1
+        devh = hist.reshape(-1, 2, nbf)
+        print("  hist device shape", devh.shape, "binFeatures", nbf)
+        for lf in range(devh.shape[0]):
+            for st in range(2):
+                dv = devh[lf, st]
+                best = None
+                for hl in range(n_leaves):
+                    for form in ("above", "below"):
+                        ref = host[hl, st] if form == "above" else (
+                            (cnt[hl] if st == 0 else g[hl]) - host[hl, st])
+                        bad = int(np.sum(np.abs(dv - ref) > 1e-3 * (1 + np.abs(ref))))
+                        if best is None or bad < best[0]:
+                            best = (bad, hl, form)
+                col = 0
+                worst = []
+                for f in feats:
+                    for bi in range(len(borders[f])):
+                        worst.append((f, bi))
+                        col += 1
+                bad, hl, form = best
+                ref = host[hl, st] if form == "above" else ((cnt[hl] if st == 0 else g[hl]) - host[hl, st])
+                idx = np.nonzero(np.abs(dv - ref) > 1e-3 * (1 + np.abs(ref)))[0]
+                print("  dev leaf", lf, "stat", st, "best host leaf", hl, form,
+                      "mismatched cells", bad, "first:",
+                      [(worst[i], float(dv[i]), float(ref[i])) for i in idx[:6]])
 
 
 if __name__ == "__main__":
