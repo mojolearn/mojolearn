@@ -295,16 +295,16 @@ def verify_split_wheel(path, version, released, release_profile, qualification_r
         require(not stray, 'the split core carries a GPU set member: ' + (stray[0] if stray else ''))
         # `pip install mojolearn` WORKS FOR EVERYONE (2026-09-26): the core
         # requires EVERY plugin at its own version exactly (no marker, no
-        # GPU extra); the verify extra is allowed. Each plugin pins the core back
+        # GPU extra); the numpy and verify extras are allowed. Each plugin pins the core back
         # (checked below on the plugin)
         plugin_names = {r['distribution'] for r in GPU_PLUGINS.PLUGINS.values()}
         on_plugin = [r for r in requires
                      if r.split(';')[0].split('=')[0].split('[')[0].split('<')[0].split('>')[0]
                      .split('!')[0].split('~')[0].strip().lower().replace('_', '-') in plugin_names]
         want = GPU_PLUGINS.core_requirements(version)
-        require(not (set(metadata.get_all('Provides-Extra', [])) - {'verify'})
+        require(not (set(metadata.get_all('Provides-Extra', [])) - {'numpy', 'verify'})
                 and sorted(on_plugin) == sorted(want) and len(on_plugin) == len(set(on_plugin)),
-                'the split core must declare no extras other than verify and require exactly ' + ', '.join(want)
+                'the split core must declare no extras other than numpy and verify and require exactly ' + ', '.join(want)
                 + ' (found ' + repr(on_plugin) + ')')
         require(decode(small(dist + GPU_PLUGINS.CORE_MARKER)) == GPU_PLUGINS.core_marker(version),
                 'split core marker disagrees with gpu_plugins.py')
