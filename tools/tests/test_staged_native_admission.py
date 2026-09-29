@@ -130,11 +130,20 @@ class Admission(unittest.TestCase):
         self.refused()
         self.proof['native_source_admission']=dict(schema='mojolearn.native-source-equivalence.v1',
             original_staged_source_commit='c'*40,admitted_source_commit='9'*40,
-            stage_witness_sha256=original['sha256'],source_sha256=self.proof['source_sha256'],closure_output_count=110)
+            stage_witness_sha256=original['sha256'],original_source_sha256=self.proof['source_sha256'],
+            source_sha256=self.proof['source_sha256'],changed_python_inventory=[],closure_output_count=110)
         self.assertTrue(a.validate_staged(self.proof))
         self.assertEqual(self.proof['stage_witness'],original)
         self.proof['native_source_admission']['original_staged_source_commit']='8'*40
         self.refused()
+
+    def test_python_overlay_delta_is_exact_and_native_changes_refused(self):
+        before=[['python/mojolearn/api.py','a'*64],['core.mojo','b'*64]]
+        after=[['python/mojolearn/api.py','c'*64],['core.mojo','b'*64]]
+        self.assertEqual(a.inventory_delta(before,after),[dict(path='python/mojolearn/api.py',original_sha256='a'*64,admitted_sha256='c'*64)])
+        for name in ['core.mojo','pixi.lock','bindings/build.sh']:
+            with self.assertRaisesRegex(ValueError,'native/build/toolchain'):
+                a.inventory_delta([[name,'a'*64]],[[name,'b'*64]])
 
     def test_current_source_inventory_must_match(self):
         with patch('check_linux_release_qualification.tracked_native_inventory',return_value=[['changed.py','f'*64]]):

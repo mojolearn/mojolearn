@@ -54,6 +54,22 @@ def expected_outputs():
     return rows
 
 
+def inventory_delta(original, current):
+    """Only Python overlays can be admitted; all native closures stay exact.
+
+    This does not qualify changed Python behavior. Installed-wheel checks must
+    qualify the final Python source independently of native compilation.
+    """
+    before,after=dict(original),dict(current)
+    changed=[]
+    for name in sorted(set(before)|set(after)):
+        if before.get(name)==after.get(name):continue
+        require(name.endswith('.py') and name.startswith(('python/mojolearn/','packaging/linux/')),
+                'Fresh admission changes native/build/toolchain inventory: '+name)
+        changed.append(dict(path=name,original_sha256=before.get(name),admitted_sha256=after.get(name)))
+    return changed
+
+
 def validate_staged(proof, source_root=None):
     require(proof.get('schema') == SCHEMA and proof.get('action') == 'stage-validated-native'
             and proof.get('complete') is True, 'Incomplete staged admission')
@@ -65,26 +81,31 @@ def validate_staged(proof, source_root=None):
             and admission.get('status') == 'STAGED', 'Missing successful staging receipt')
     staged_source = admission.get('admitted_package_source_commit')
     require(valid_sha(staged_source,40), 'Invalid original staged source')
-    if staged_source != source:
-        transition = proof.get('native_source_admission',{})
-        require(transition == dict(schema='mojolearn.native-source-equivalence.v1',
-                original_staged_source_commit=staged_source, admitted_source_commit=source,
-                stage_witness_sha256=proof['stage_witness']['sha256'],
-                source_sha256=proof.get('source_sha256'), closure_output_count=len(expected_outputs())),
-                'Missing explicit fresh native source admission')
-    else:
-        require('native_source_admission' not in proof, 'Unnecessary native source transition')
     require(valid_sha(admission.get('qualified_source_commit'), 40), 'Invalid qualified source')
     compiler = compiler_identity(admission.get('compiler'))
     vendor, arch = admission.get('vendor'), admission.get('arch')
     require(vendor in ('cuda','hip') and isinstance(arch,str)
             and re.fullmatch('sm_[0-9]+[a-z]*' if vendor=='cuda' else 'gfx[0-9a-f]+',arch), 'Invalid vendor/architecture')
     inventory = proof.get('source_inventory')
-    require(isinstance(inventory,list) and inventory and inventory == admission.get('source_inventory'), 'Wrong source inventory')
+    require(isinstance(inventory,list) and inventory, 'Wrong source inventory')
     require(len(inventory)==len({r[0] for r in inventory}), 'Duplicate source inventory')
     for rel, digest in inventory:
         require(not PurePosixPath(rel).is_absolute() and '..' not in PurePosixPath(rel).parts and valid_sha(digest), 'Unsafe source inventory')
-    require(sha(json.dumps(inventory,separators=(',',':')).encode()) == proof.get('source_sha256') == admission.get('source_sha256'), 'Wrong source inventory SHA')
+    require(sha(json.dumps(inventory,separators=(',',':')).encode()) == proof.get('source_sha256'), 'Wrong source inventory SHA')
+    original_inventory=admission.get('source_inventory')
+    require(isinstance(original_inventory,list) and original_inventory
+            and len(original_inventory)==len({r[0] for r in original_inventory})
+            and sha(json.dumps(original_inventory,separators=(',',':')).encode())==admission.get('source_sha256'), 'Invalid original stage inventory')
+    if staged_source != source:
+        delta=inventory_delta(original_inventory,inventory)
+        require(proof.get('native_source_admission') == dict(schema='mojolearn.native-source-equivalence.v1',
+                original_staged_source_commit=staged_source, admitted_source_commit=source,
+                stage_witness_sha256=proof['stage_witness']['sha256'],
+                original_source_sha256=admission['source_sha256'],source_sha256=proof['source_sha256'],
+                changed_python_inventory=delta,closure_output_count=len(expected_outputs())),
+                'Missing explicit fresh native source admission')
+    else:
+        require(inventory==original_inventory and 'native_source_admission' not in proof, 'Unexpected source transition')
     if source_root is not None:
         from check_linux_release_qualification import tracked_native_inventory
         require(tracked_native_inventory(source_root)==inventory, 'Current source differs from admitted source inventory')
@@ -102,7 +123,7 @@ def validate_staged(proof, source_root=None):
         canonical = decoded(proof['canonical_host_stage_witness'])
         require(canonical.get('schema')==admission['schema'] and canonical.get('status')=='STAGED'
                 and canonical.get('admitted_package_source_commit')==staged_source
-                and canonical.get('source_inventory')==inventory and canonical.get('source_sha256')==proof['source_sha256']
+                and canonical.get('source_inventory')==original_inventory and canonical.get('source_sha256')==admission['source_sha256']
                 and compiler_identity(canonical.get('compiler'))==compiler and canonical.get('vendor')=='cuda'
                 and isinstance(canonical.get('arch'),str) and re.fullmatch('sm_[0-9]+[a-z]*',canonical['arch']), 'Canonical host source/compiler differs')
         crows = canonical.get('outputs',[])
@@ -263,9 +284,16 @@ def adapt(admission_path, stamps, set_root, source_root, native_builds, raw_root
                                 check=True,capture_output=True,text=True,timeout=30).stdout.strip()
         require(actual==admitted_source_commit, 'Fresh admission checkout is not requested source')
         if admitted_source_commit != proof['source_commit']:
+            from check_linux_release_qualification import tracked_native_inventory
+            current_inventory=tracked_native_inventory(source_root)
+            delta=inventory_delta(proof['source_inventory'],current_inventory)
+            original_source_sha=proof['source_sha256']
+            proof['source_inventory']=current_inventory
+            proof['source_sha256']=sha(json.dumps(current_inventory,separators=(',',':')).encode())
             proof['native_source_admission']=dict(schema='mojolearn.native-source-equivalence.v1',
                 original_staged_source_commit=proof['source_commit'], admitted_source_commit=admitted_source_commit,
-                stage_witness_sha256=stage['sha256'],source_sha256=proof['source_sha256'],
+                stage_witness_sha256=stage['sha256'],original_source_sha256=original_source_sha,
+                source_sha256=proof['source_sha256'],changed_python_inventory=delta,
                 closure_output_count=len(expected_outputs()))
             proof['source_commit']=admitted_source_commit
     validate_staged(proof,source_root)
