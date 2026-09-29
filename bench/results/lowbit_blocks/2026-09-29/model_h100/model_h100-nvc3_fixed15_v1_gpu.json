@@ -1,0 +1,40 @@
+{
+ "box": "h100-nvc3",
+ "profile": "fixed15_v1",
+ "device": "gpu",
+ "vendor": "cuda",
+ "model": "SmolLM2-360M",
+ "load_s": 2.5211726911365986,
+ "commit": "61a9f08f5",
+ "identity": {
+  "B": 2,
+  "L": 64,
+  "vocab": 49152,
+  "sha256": "d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f",
+  "rows": [
+   "84f2acb4afc784b6f53e9b0e54b75ecf07b1eaf995f0e140beca5b735457164e",
+   "c909ff3765277b96292574d5647abbd6b379c5ab8ece9932e151040c9222c7b5"
+  ]
+ },
+ "batch": [
+  true,
+  true
+ ],
+ "decode": {
+  "1": {
+   "equal": true,
+   "positions_differing": 0,
+   "first": []
+  },
+  "7": {
+   "equal": true,
+   "positions_differing": 0,
+   "first": []
+  },
+  "63": {
+   "equal": true,
+   "positions_differing": 0,
+   "first": []
+  }
+ }
+}
