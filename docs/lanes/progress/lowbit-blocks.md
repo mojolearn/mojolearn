@@ -134,6 +134,42 @@ logs in `bench/results/lowbit_blocks/2026-09-29/gate_4090/`:
   the card's own path. The check's own default phase: 11 cases fp32 device ==
   fp32 host oracle, digests printed (`int15 default digest`).
 
+### (d) whole-model identity, SmolLM2-360M, B=2 x L=64 fixed ids, full logits (B x L x 49152 float32)
+
+`tools/lowbit_blocks/model_logits.py` through `CausalLM.load(path, numeric_profile=...)`;
+records in `bench/results/lowbit_blocks/2026-09-29/`.
+
+| Box | Job | fixed15_v1 sha256 | fp32_v1 sha256 | decode == prefill (1, 7, 63) | batch |
+|---|---|---|---|---|---|
+| RTX 4090 (nvc2) | nvc2-0017 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
+| H100 NVL (nvc3) | nvc3-0035 | d37c2ea81d13743a... | 833c9a8947bdd619... | EQUAL x3 | EQUAL x2 |
+| CPU host path (nvc2's x86-64 host, MOJOLEARN_VENDOR=cpu, device cpu) | nvc2-0018 | d37c2ea81d13743a... | 833c9a8947bdd619... | | |
+| M2 Pro | steward, pending | | | | |
+| MI325X | steward, pending | | | | |
+| SABOTAGE: 4090, tree copy with `int15_device_value_flip.patch`, linalg and transformer rebuilt | nvc2-0018 | 703b7e2158a0e140... MOVED | 833c9a8947bdd619... unmoved | | |
+
+The M3 Ultra is not in the table: it was released (orchestrator, 2026-09-29).
+
+### (e) quality correspondence (nvc2-0019)
+
+Lane B's protocol and texts; our ids' sha256 equal Lane B's recorded ones
+(enwik8 d5be2324..., pile_github 2d337ff1...). Our change is fixed15_v1 over
+our own fp32_v1 from the same windows (interval: window means, 1.96 standard
+errors, exp(x) - 1, as Lane B).
+
+| Text | our fp32_v1 ppl | our fixed15_v1 ppl | our change (interval) | top-1 agreement | Lane B baseline ppl | Lane B F1-pv32 ppl | Lane B change (interval) |
+|---|---|---|---|---|---|---|---|
+| enwik8 | 7.937085 | 7.937129 | +0.0006% (-0.0044% to +0.0055%) | 0.9981 | 7.937106 | 7.936947 | -0.0020% (-0.0067% to +0.0027%) |
+| pile_github | 3.361989 | 3.362101 | +0.0033% (-0.0010% to +0.0076%) | 0.9987 | 3.361991 | 3.362105 | +0.0034% (-0.0010% to +0.0078%) |
+
+The absolute perplexities agree to five significant digits (7.9371, 3.3620
+and 3.3621), which is what two different spellings of the non-product seams
+(ours: the block's pinned fp32 seams; Lane B's: a float64-accumulated
+simulation) can share. On pile_github the change agrees to two digits;
+on enwik8 our change lies inside Lane B's interval and Lane B's inside ours,
+and the two differ in sign: the change there is below either run's
+resolution. Both are far under the 1 percent bar.
+
 ## Failures
 
 (none yet)
