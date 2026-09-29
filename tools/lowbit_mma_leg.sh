@@ -64,8 +64,11 @@
 #
 # POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.
 set -u
-ROOT=/root/mojolearn
-OUT=/root/gemm_leg_out/lowbit-mma
+# MOJOLEARN_LOWBIT_LEG_ROOT and MOJOLEARN_LOWBIT_LEG_OUT move the tree and the
+# output folder for a box where the lane has its own tree (the shared NVIDIA
+# pods and the stewards' boxes); unset, the two leg runners' paths hold.
+ROOT=${MOJOLEARN_LOWBIT_LEG_ROOT:-/root/mojolearn}
+OUT=${MOJOLEARN_LOWBIT_LEG_OUT:-/root/gemm_leg_out/lowbit-mma}
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH"
