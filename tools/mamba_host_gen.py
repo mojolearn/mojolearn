@@ -124,6 +124,30 @@ SUBSTITUTIONS = (
      "\nfrom mamba.host.mamba3_s16_host import mamba3_s16_qkv_backward_host, mamba3_s17_reverse_state_host\nfrom mamba.checks.mamba3_fixture import "),
 )
 
+
+# These GPU entry points accept an existing process-lifetime device context.
+# The host shim owns no GPU queues; retain its ordinary DeviceContext fallback.
+# Explicit substitutions keep the already-qualified generated host sources byte
+# identical and fail closed if the upstream lifecycle spelling changes again.
+_CONTEXT_SOURCES = (
+    "mamba/impl/modules/mamba2_prefill_backward.mojo",
+    "mamba/impl/modeling/modeling_mamba_prefill_backward.mojo",
+    "mamba/impl/modules/mamba3_prefill_backward.mojo",
+)
+_CONTEXT_RULES = (
+    (r'from core\.neural_context import process_ctx\n'
+     r'from checks\.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL\n\n'
+     r"#: This binding's ONE process-lifetime DeviceContext \(core/neural_context\.mojo,\n"
+     r'#: lane/devctx-lifetime\): a context per call exhausts Metal command queues\.\n'
+     r'comptime _DEVCTX_SLOT = "MojoNeuralMambaContextIdentical" if _DEVCTX_MODE == _DEVCTX_IDENTICAL else "MojoNeuralMambaContextFast"\n\n', ''),
+    (r'\bprocess_ctx\[_DEVCTX_SLOT\]\(\)', 'DeviceContext()'),
+    (r'# Direct callers also reuse that context when none is supplied\.',
+     '# Same kernels, same launches, same order: no bit moves.'),
+)
+SUBSTITUTIONS += tuple((src, pattern, replacement)
+                       for src in _CONTEXT_SOURCES
+                       for pattern, replacement in _CONTEXT_RULES)
+
 #: Verbatim top-level blocks lifted out of a device file whose other
 #: definitions are device-only: (source, output basename, names, header
 #: imports, substitutions inside the lifted text).
@@ -148,7 +172,7 @@ CELL_RE = re.compile(
     r"|Int\(\s*block_dim\.x\s*\)\s*\*\s*Int\(\s*block_idx\.x\s*\))"
     r"\s*\+\s*Int\(\s*thread_idx\.x\s*\)\s*(;.*)?$"
 )
-DEVICE_ONLY = re.compile(r"\b(block_idx|thread_idx|grid_dim\.|block_dim\.|barrier|AddressSpace|block_sum|stack_allocation)\b")
+DEVICE_ONLY = re.compile(r"\b(block_idx|thread_idx|grid_dim\.|block_dim\.|barrier|AddressSpace|block_sum|stack_allocation|process_ctx|_DEVCTX_SLOT)\b")
 
 
 class GenError(Exception):
