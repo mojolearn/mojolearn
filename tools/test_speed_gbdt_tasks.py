@@ -8,6 +8,7 @@ the loaders on tiny data. numpy only; no library is fitted here.
 """
 import os
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -336,7 +337,7 @@ def test_xgboost_gpu_refuses_without_the_vendor_backend(monkeypatch, capsys, ven
     assert (spec._xgb_gpu_refusal(fake) is not None) is refused
     monkeypatch.setitem(sys.modules, "xgboost", fake)
     cfg = {"xgboost_grow_policy": "depthwise", "grow_policy": "Depthwise"}
-    arms = spec.xgboost_arms("gbdt-depthwise", cfg, None, ["cpu", "gpu"])
+    arms = spec.xgboost_arms("gbdt-depthwise", cfg, types.SimpleNamespace(cat_idx=None), ["cpu", "gpu"])
     names = [a.name for a in arms]
     out = capsys.readouterr().out
     assert "xgboost-cpu" in names
