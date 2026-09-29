@@ -257,8 +257,15 @@ from gemm.checks.gemm_int8_apple_chunk import (
 )
 from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
 from gemm.checks.gemm_int8_mma_tuned import (
+    INT8_DECODE_AVAILABLE,
+    INT8_DECODE_MAX_M,
+    INT8_DECODE_PLAN_COUNT,
     INT8_DIRECT_AVAILABLE,
     INT8_DIRECT_COUNT,
+    identical_gemm_int8_mma_decode_quant_with_plan,
+    identical_gemm_int8_mma_decode_with_plan,
+    int8_decode_dispatch,
+    int8_decode_plan_name,
     INT8_PIECES_MAX_K,
     INT8_PIECES_PLAN_COUNT,
     INT8_TUNED_PLAN_COUNT,
@@ -349,7 +356,11 @@ comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
 #: The same operation as ARM_INF_PIECES in ONE launch: the four products and
 #: the stand-in epilogue fused into their last step.
 comptime ARM_INF_PIECES_FUSED = ARM_TRAIN_PIECES + 1
-comptime ARM_COUNT = ARM_INF_PIECES_FUSED + 1
+#: THE DECODE KERNEL (m <= 16, NVIDIA): one arm per plan on the codes, and
+#: one per plan with the quantizer in the product's launch (float32 in).
+comptime ARM_DECODE_BASE = ARM_INF_PIECES_FUSED + 1
+comptime ARM_DECODE_QUANT_BASE = ARM_DECODE_BASE + INT8_DECODE_PLAN_COUNT
+comptime ARM_COUNT = ARM_DECODE_QUANT_BASE + INT8_DECODE_PLAN_COUNT
 
 #: What no sum of the four-product kernel is (its largest is 2147450880).
 comptime SUM_POISON = Int32(2147483647)
@@ -436,7 +447,13 @@ def _arm_name(arm: Int) -> String:
         return String("inference.pieces.int8.tuned")
     if arm == ARM_TRAIN_PIECES:
         return String("training.pieces.int8.tuned")
-    return String("inference.pieces.int8.fused")
+    if arm == ARM_INF_PIECES_FUSED:
+        return String("inference.pieces.int8.fused")
+    if arm < ARM_DECODE_QUANT_BASE:
+        return String("int8i32.v1.mma.") + int8_decode_plan_name(arm - ARM_DECODE_BASE)
+    return String("inference.int8i32.v1.quant-in-launch.") + int8_decode_plan_name(
+        arm - ARM_DECODE_QUANT_BASE
+    )
 
 
 def _arm_is_sums(arm: Int) -> Bool:
@@ -477,6 +494,8 @@ def _arm_runs(arm: Int) -> Bool:
         return HAS_APPLE_CHUNK
     if arm >= ARM_DIRECT_BASE and arm < ARM_INF_INT8_TUNED:
         return INT8_DIRECT_AVAILABLE
+    if arm >= ARM_DECODE_BASE:
+        return INT8_DECODE_AVAILABLE
     if arm == ARM_PIECES_FLAT:
         return True
     if arm >= ARM_TUNED_BASE and arm < ARM_DIRECT_BASE:
@@ -954,6 +973,16 @@ def _enqueue_arm(
                 ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k
             )
             _pieces_recombine_probe(ctx, sb.c, sb.ps, sb.ea, sb.eb, m, n)
+    elif arm >= ARM_DECODE_BASE and arm < ARM_DECODE_QUANT_BASE:
+        comptime if INT8_DECODE_AVAILABLE:
+            identical_gemm_int8_mma_decode_with_plan(
+                ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DECODE_BASE
+            )
+    elif arm >= ARM_DECODE_QUANT_BASE:
+        comptime if INT8_DECODE_AVAILABLE:
+            identical_gemm_int8_mma_decode_quant_with_plan(
+                ctx, sb.c, sb.a, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DECODE_QUANT_BASE
+            )
     elif arm == ARM_INF_PIECES_FUSED:
         comptime if HAS_INT8_MMA:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
@@ -1074,6 +1103,12 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
             String("quantize.a.par+pack.b.par+four-products-one-staging.")
             + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
         )
+    if arm >= ARM_DECODE_BASE and arm < ARM_DECODE_QUANT_BASE:
+        if arm - ARM_DECODE_BASE == int8_decode_dispatch(m, n, k):
+            return String("decode-kernel,the-launcher's-plan")
+        return String("decode-kernel")
+    if arm >= ARM_DECODE_QUANT_BASE:
+        return String("quantizer-in-the-launch+decode-kernel,ONE-launch")
     if arm == ARM_INF_PIECES_FUSED:
         return (
             String("quantize.a.par+four-products-one-staging.")
@@ -1134,10 +1169,14 @@ def _time_shape(
         dig.append(UInt64(0))
         var runs = _arm_runs(arm) and _arm_asked(arms, _arm_name(arm))
         # The four-product kernel refuses a `k` above its own bound.
-        if arm >= ARM_PIECES_FLAT and k > INT8_PIECES_MAX_K:
+        var is_pieces = arm >= ARM_PIECES_FLAT and arm <= ARM_INF_PIECES_FUSED
+        if is_pieces and k > INT8_PIECES_MAX_K:
             runs = False
-        if arm >= ARM_PIECES_FLAT and runs:
+        if is_pieces and runs:
             pieces = True
+        # The decode kernel takes at most sixteen rows.
+        if arm >= ARM_DECODE_BASE and m > INT8_DECODE_MAX_M:
+            runs = False
         ran.append(runs)
         samples.append(List[Int]())
     var sb = ShapeBuffers(ctx, m, n, k, pieces)
@@ -1265,6 +1304,9 @@ def _time_shape(
     bad += _must_agree(ARM_INF_PIECES, ARM_TRAIN_PIECES, dig, ran, name)
     # The fused launch computes the two-launch operation's cells, bit for bit.
     bad += _must_agree(ARM_INF_PIECES, ARM_INF_PIECES_FUSED, dig, ran, name)
+    # The decode kernel, on codes and from floats, is the profile's product.
+    for arm in range(ARM_DECODE_BASE, ARM_COUNT):
+        bad += _must_agree(ARM_INT8_FLAT, arm, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^
