@@ -261,7 +261,7 @@ def test_tree_mem_lines_parse_into_cells(tmp_path):
     assert isinstance(f["peak_host_mb"], float) and f["memory"]["rounds_sampled"] == 2
 
 
-def test_invalidate_memory_withdraws_only_torch_counter_figures(tmp_path):
+def test_invalidate_memory_withdraws_only_torch_counter_figures(tmp_path, monkeypatch):
     """--invalidate-memory: a non-torch GPU arm whose figure came from torch's
     allocator loses the figure (times untouched); a torch arm, a CPU arm and
     a driver-counter figure keep theirs; the store gets a corrected copy; a
@@ -291,7 +291,10 @@ def test_invalidate_memory_withdraws_only_torch_counter_figures(tmp_path):
     key = {"family": "trees", "lane": "gbdt-symmetric", "dataset": "taxi", "arm": "xgboost-gpu",
            "box": "b", "machine": "m", "vendor": "amd", "device": "gpu"}
     store.write_text(json.dumps({"key": key, "cell": cell("xgboost-gpu", "xgboost", "gpu", torch_m)}) + "\n")
+    rendered = []
+    monkeypatch.setattr(bb, "write_board", lambda o, r: rendered.append(o))   # the records here are minimal
     nb, ns = bb.invalidate_memory(str(out), "trees/,neural/", "wrong counter", "abc123", str(store))
+    assert rendered == [str(out)]
     assert (nb, ns) == (2, 1)
     got = json.loads((out / "board.json").read_text())["races"]
     t = {c["arm"]: c for c in got["trees/gbdt-symmetric/taxi/rows=full"]["cells"]}
