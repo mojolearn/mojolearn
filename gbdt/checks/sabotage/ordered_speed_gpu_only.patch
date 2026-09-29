@@ -11,11 +11,23 @@ index 873011118..550cb1efe 100644
                      var dst_base = (
                          device_offset
                          + Int(block_idx.y) * entries_per_leaf
+diff --git a/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo b/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
+index 2a61a9d70..a463e5b3e 100644
+--- a/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
++++ b/gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo
+@@ -403,7 +403,6 @@ def fit_oblivious_tree_structure_traced(
+             write_fold_based_initial_bins(
+                 ctx, fold_layout, pool[0].subsets.bins
+             )
+-            update_subsets_stats(ctx, target, pool[0].subsets)
+         pool[0].calcer.reset_for_tree(ctx)
+     else:
+         pool.clear()
 diff --git a/gbdt/methods/ordered_boosting.mojo b/gbdt/methods/ordered_boosting.mojo
-index 9f1a9aacd..4ec59ceba 100644
+index bdc54ecbe..ab737b1e2 100644
 --- a/gbdt/methods/ordered_boosting.mojo
 +++ b/gbdt/methods/ordered_boosting.mojo
-@@ -411,7 +411,8 @@ def _ord_segment_rows_kernel(
+@@ -473,7 +473,8 @@ def _ord_segment_rows_kernel(
                  hi = mid - 1
          var off = Int(table.unsafe_load(3 * lo))
          var seg = Int(table.unsafe_load(3 * lo + 2))
