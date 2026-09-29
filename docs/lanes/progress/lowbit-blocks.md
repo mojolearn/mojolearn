@@ -174,42 +174,109 @@ resolution. Both are far under the 1 percent bar.
 
 ### (f) whole-forward time, SmolLM2-360M, fixed15_v1 against fp32_v1, same box, same job
 
-`tools/lowbit_blocks/time_job.sh` / `model_logits.py --phases time`: prefill of
-512 tokens at B=1 (one untimed call, then the median of 5); decode per token
-(a 512-token prefill, then 32 `step` calls; one untimed run, median of 5). The
+`tools/lowbit_blocks/model_logits.py --phases time`: prefill of 512 tokens at
+B=1 (one untimed call, then the median of 5); decode per token (a 512-token
+prefill, then 32 `step` calls; one untimed run, then the median of 5). The
 two profiles alternate twice in one job; both medians are given. The job held
 every GPU of its box (nvc2: both slots; nvc3: its one; steward: alone).
+EVERY TIMED OUTPUT IS CHECKED (rule 10): the sha256 of every timed prefill's
+logits and of every decode run's 32 logits rows; within each run they agree,
+and ACROSS THE FOUR GPU BOXES they are the same (fixed15_v1 prefill512
+c55e4ce6d5e155d9..., decode32 1c2876958e46b7d3...; fp32_v1 da9825e377588fcb...,
+2887098d1f90cd1d...), which is also the whole-model identity at 512 tokens.
+Reference plan (the default). Records `bench/results/lowbit_blocks/2026-09-29/time_checked/`.
 
-| Box | Job | Plan | Prefill 512, fixed15 / fp32 (ms) | over | Decode, fixed15 / fp32 (ms/token) | over |
-|---|---|---|---|---|---|---|
-| RTX 4090 | nvc2-0020 | reference | 423 / 1235, 536 / 1343 | 0.34, 0.40 | 94.1 / 296.4, 88.1 / 289.6 | 0.32, 0.30 |
-| RTX 4090 | nvc2-0021 | tuned | 442 / 1262, 600 / 1055 | 0.35, 0.57 | 115.7 / 297.3, 109.0 / 231.8 | 0.39, 0.47 |
-| H100 NVL | nvc3-0038 | reference | 270 / 397, 271 / 421 | 0.68, 0.64 | 143.3 / 299.9, 134.7 / 320.1 | 0.48, 0.42 |
-| H100 NVL | nvc3-0043 | tuned | 282 / 399, 288 / 399 | 0.71, 0.72 | 131.2 / 290.1, 131.5 / 287.8 | 0.45, 0.46 |
-| MI325X | 1790660933293 | reference | 227 / 269, 228 / 256 | 0.85, 0.89 | 103.5 / 159.7, 103.5 / 163.5 | 0.65, 0.63 |
-| MI325X | 1790662265717 | tuned | 251 / 269, 253 / 268 | 0.93, 0.94 | 106.4 / 160.2, 107.8 / 160.1 | 0.66, 0.67 |
-| M2 Pro | 1790660930020 | reference (float unit) | pending | | | |
+| Box | Job | Prefill 512, fixed15 / fp32 (ms) | over | Decode, fixed15 / fp32 (ms/token) | over |
+|---|---|---|---|---|---|
+| RTX 4090 | nvc2-0024 | 583.7 / 641.6, 409.9 / 1446.7 | 0.91, 0.28 | 117.2 / 221.2, 89.8 / 303.2 | 0.53, 0.30 |
+| H100 NVL | nvc3-0045 | 266.9 / 413.9, 272.0 / 454.7 | 0.64, 0.60 | 133.9 / 281.8, 135.2 / 285.4 | 0.48, 0.47 |
+| MI325X | 1790664369046 | MI325X_PREFILL | | MI325X_DECODE | |
+| M2 Pro | 1790664365442 | 4863.8 / 1077.7, 4884.3 / 1074.4 | 4.51, 4.55 | 1470.3 / 579.3, 1505.1 / 574.8 | 2.54, 2.62 |
 
-The reference plan is the default (the tuned plan was not faster at the
-model on any box); the numbers of record are the reference rows.
+The 4090's fp32_v1 prefill swings by 2x between the two runs of one job (641.6
+and 1446.7 ms; earlier jobs 1055 to 1343 ms); the fixed15_v1 runs are steadier.
+The 4090 is a shared pod whose host is busy with other lanes' CPU work; the
+H100 and the MI325X are the boxes to judge by.
+
+Earlier runs, kept as columns beside: nvc2-0020 and nvc3-0038 (unchecked
+outputs; 4090 0.34 to 0.40 prefill, H100 0.64 to 0.68), nvc2-0021, nvc3-0043
+and 1790662265717 (the tuned plan: not faster at the model on any box, so the
+reference plan is the default), the M2 Pro's 1790660930020 (UNCHECKED
+outputs) and 1790663712754, and nvc2-0023, nvc3-0044, 1790663724684
+(CONTAMINATED: the hash of the 100 MB of logits was inside the timed interval;
+Failures 4).
 
 WHAT THESE TIMES ARE. The per-layer Python route (`CausalLM.forward`,
-`step`), the route every identity run above used. On it fp32_v1 uploads and
+`step`), the route every identity run used. On it fp32_v1 uploads and
 validates every float32 weight of every layer and the head on every call,
 while the profile's planes stay resident in the block's session; the profile
-also forces the eager attention path (per (batch, head) launches) where
-fp32_v1 runs the fused one. So the over-ratios mix arithmetic with weight
-residency and attention scheduling, and decode per token is mostly per-call
-overhead on both. Against a product alone (Lane C: complete 15-bit call over
-fp32.v1 0.44 to 0.56 on the H100, 0.19 to 0.30 on the MI325X) the model gains
-less on the MI325X (0.85 to 0.89) and about as much on the H100 (0.64 to 0.68).
-The resident fp32 generate session was not timed against the profile (the
-profile has no resident session yet).
+also forces the eager attention path (per (batch, head) launches, one
+synchronize per layer) where fp32_v1 runs the fused kernels. So the ratios
+mix arithmetic with weight residency and attention scheduling, and decode
+per token is mostly per-call overhead on both. A model gains less than a
+product does: Lane C's complete 15-bit call over fp32.v1 was 0.44 to 0.56 on
+the H100 and 0.19 to 0.30 on the MI325X; the whole forward reads 0.60 to 0.64
+on the H100. On the M2 Pro the profile costs 4.5 times fp32_v1's prefill.
 
 ## Failures
 
-(none yet)
+1. build_byte_lm exited 2 on the 4090 (nvc2-0017): off Apple it needs one
+   explicit arch. My job script's fault; the job now passes
+   MOJOLEARN_GPU_ARCHS from nvidia-smi or rocminfo. Rebuilt in nvc2-0018.
+2. The steward boxes' byte_lm and host builds exited 2, "output already
+   exists": those scripts refuse to overwrite an existing .so and the
+   steward worktree keeps outputs. The job now removes the stale output
+   first. The GPU identity runs there used freshly built linalg and
+   transformer bindings (both exit 0), so their verdicts stand.
+3. The model was not staged on do-amd (first request exited 3, MODEL NOT
+   STAGED) nor on the M2 Pro: staged from R2 on do-amd, and the pinned files
+   copied to the M2 Pro (sha256 equal to the manifest).
+4. The first checked time runs hashed each timed prefill's 100 MB of logits
+   INSIDE the timed interval (nvc2-0023, nvc3-0044, 1790663712754,
+   1790663724684): a fixed cost added to every timed prefill. Fixed in
+   model_logits.py; all four boxes re-timed.
+5. The first gate job read its default gate as "OUTPUT DIFFERS": the only
+   differing lines were tcmalloc's mbind warning and the card's own path.
+   The filter now drops those two; the cards were identical throughout.
+6. In the progress file I first wrote an invented commit id for the gate
+   run; replaced by the real one (013429062).
+
+## What the blocks compute under the profile, and what they do not
+
+UNDER fixed15_v1 (gemm.int15i64.v1, on every box and the CPU): the seven
+projections of every transformer block (weights packed ONCE at load by
+`quantize_int15`, kept as planes, resident on the device in the block's
+session; activations quantized per call by the parallel quantizer), the
+score product Q.K^T (one scale per query and per key over head_dim, per
+call), and the head (`matmul_int15` on head planes packed once at load).
+NOT: P.V (`attn_context_kernel`, fp32.v1's pinned ascending chain, by
+decision), RMSNorm, RoPE, the softmax, SiLU, the residuals, the embedding
+gather (fp32 seams, unchanged); training (every trainer and
+`TransformerBlock.backward` refuse the profile by name); the resident decode
+session and `CausalLM.generate`'s resident route (the per-layer route
+computes the profile instead); Mamba blocks (refused by name).
+
+The gate is opened in the lane's tests only: `model_logits.py` and `ppl.py`
+set `_numeric_profile.PROFILES["fixed15_v1"]["inference"] = True` in their own
+process. No shipped file reads an environment variable or define for it.
 
 ## Owed
 
-Everything above.
+- The orchestrator: flip `inference` for fixed15_v1 and give its `products`
+  the families (projections and head, attention_qk: int15i64.v1;
+  attention_pv: fp32.v1); a `MEASURED` row from the time table above.
+- A resident session under the profile (`TransformerDecodeSession`,
+  `CausalLMSession`): generate under the profile runs the per-layer route.
+- The head's planes are uploaded per call (as the fp32 head is today); the
+  head should keep them on the device as the blocks do.
+- The CPU host path quantizes the weights per call (the same codes, by the
+  same rule); it should read the planes packed at load.
+- The profile forces the eager attention path; a fused Q.K^T under the
+  profile would remove the per-(batch, head) launches.
+- Apple: 4.5 times fp32_v1 at the model's prefill on the M2 Pro; where the
+  time goes is not measured (Lane G's float-unit tuning; the eager path's
+  per-head launches; the synchronous sliced launches of clause W-14).
+- The repo's harness (`bench/model/harness.py`, `tools/model_leg/`,
+  `tools/identity_break.py` lanes) does not carry a profile yet; the lane's
+  own scripts produced every number here.
+- The block's backward under the profile (training, version 2).
