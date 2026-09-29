@@ -68,7 +68,10 @@ def ours(args):
 def sk(args):
     from sklearn.cluster import HDBSCAN
     X = _rows(args)
-    est = HDBSCAN(max_cluster_size=None, n_jobs=-1, **KW)
+    # scikit-learn's min_samples counts the point itself; ours (cuML's
+    # runner.h) does not: +1 selects the SAME k-th neighbour
+    # (tools/classical_two_datasets.py SKLEARN_HDBSCAN_KW).
+    est = HDBSCAN(max_cluster_size=None, n_jobs=-1, **dict(KW, min_samples=KW["min_samples"] + 1))
     t0 = time.perf_counter()
     est.fit(X)
     wall = time.perf_counter() - t0

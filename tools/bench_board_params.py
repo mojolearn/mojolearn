@@ -88,6 +88,10 @@ def _plus1(v):
     return None if v is None else v + 1
 
 
+def _minus1(v):
+    return None if v is None else v - 1
+
+
 def _cuml_pca_solver(v):
     """cuML PCA's svd_solver 'full' is the eigendecomposition of the
     covariance matrix (cuml/decomposition/pca.pyx: 'auto' and 'full' both set
@@ -210,6 +214,13 @@ ALIASES = {
     "statsmodels": {"seasonal": ("seasonal", _hw_component), "trend": ("trend", _hw_component)},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
+    # scikit-learn's HDBSCAN counts the point itself in min_samples
+    # (hdbscan.py: kneighbors(X, min_samples)[:, -1]; its Notes: "must be 1
+    # greater than ... scikit-learn-contrib/hdbscan"). Ours and cuML's do not
+    # (cuML runner.h:68-80 runs the k-NN at min_samples + 1). The canonical
+    # value is the count WITHOUT the point, so scikit-learn's 11 reads 10 and
+    # a real mismatch (scikit-learn 10 against ours 10) still refuses.
+    "sklearn/HDBSCAN": {"min_samples": ("min_samples", _minus1)},
 }
 
 #: Execution-only settings: never compared (they choose where and how verbosely
@@ -378,12 +389,20 @@ class ParamsRefused(RuntimeError):
 # Reading back what an arm really got
 # ---------------------------------------------------------------------------
 
+#: An ESTIMATOR whose parameter means something else than the same name in
+#: the rest of its library gets its own ALIASES key, "<library>/<class>".
+#: scikit-learn's HDBSCAN counts the point itself in min_samples; its DBSCAN
+#: does too, but so do ours and cuML's DBSCAN, so only HDBSCAN is keyed.
+ESTIMATOR_LIBRARY = {("sklearn", "HDBSCAN"): "sklearn/HDBSCAN"}
+
+
 def library_of(obj):
     mod = type(obj).__module__ or ""
     top = mod.split(".")[0]
-    return {"sklearn": "sklearn", "xgboost": "xgboost", "lightgbm": "lightgbm",
-            "catboost": "catboost", "mojolearn": "mojolearn", "torch": "torch",
-            "umap": "umap-learn", "faiss": "faiss", "statsmodels": "statsmodels"}.get(top, top or "?")
+    lib = {"sklearn": "sklearn", "xgboost": "xgboost", "lightgbm": "lightgbm",
+           "catboost": "catboost", "mojolearn": "mojolearn", "torch": "torch",
+           "umap": "umap-learn", "faiss": "faiss", "statsmodels": "statsmodels"}.get(top, top or "?")
+    return ESTIMATOR_LIBRARY.get((lib, type(obj).__name__), lib)
 
 
 def _scalar(v):
