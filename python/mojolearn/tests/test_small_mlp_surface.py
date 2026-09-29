@@ -211,13 +211,16 @@ def test_host_rejects_invalid_inputs_before_device_calls(host):
 def test_host_mode_change_refuses_without_switching_it(host, monkeypatch):
     model = trainer()
     before = state_bytes(model)
-    monkeypatch.setattr(impl._backend, 'default_mode', lambda: 'fast')
-    with pytest.raises(RuntimeError, match='process-selected'):
-        model.train_step(*batch())
+    with monkeypatch.context() as changed:
+        changed.setattr(impl._backend, 'default_mode', lambda: 'fast')
+        with pytest.raises(RuntimeError, match='process-selected'):
+            model.train_step(*batch())
+        with pytest.raises(RuntimeError, match='process-selected'):
+            trainer()
     assert host.calls == []
+    # State serialization also requires a consistent process mode. Restore
+    # that mode before checking that the refused operation left state intact.
     assert state_bytes(model) == before
-    with pytest.raises(RuntimeError, match='process-selected'):
-        trainer()
 
 
 @pytest.mark.parametrize('options', [dict(lr=0), dict(eps=0), dict(weight_decay=-1),

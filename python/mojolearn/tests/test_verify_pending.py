@@ -104,7 +104,12 @@ def test_resample_extensions_have_cpu_routes_without_claiming_reference_admissio
     assert names <= set(surface.covered_lanes())
     assert {'bootstrap_unpaired', 'permutation_samples', 'resample_indices'} <= set(family['exports'])
     exposure = surface.lane_exposure(sorted(names), 'cpu')
-    assert all(row['status'] == surface.LANE_OWED for row in exposure.values())
+    assert all(row['status'] == surface.LANE_EXPOSED for row in exposure.values())
+    # A declared executable route is not numerical evidence. Removing the
+    # references still leaves every computed part OWED, never IDENTICAL.
+    rows = [dict(lane=name, fixture='base', part='train', value='0' * 16)
+            for name in sorted(names)]
+    assert all(row['state'] == vr.OWED for row in va.judge_rows(rows, {'cells': {}}))
     h = va.load_harness()
     selected, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', sorted(names), True)
     assert set(selected) == names

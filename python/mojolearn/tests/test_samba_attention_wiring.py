@@ -119,6 +119,7 @@ class TransformerBackwardWiring(unittest.TestCase):
                 norm = np.full((32,), 9, np.float32)
                 with patch.object(st, '_forward', return_value=acts), \
                      patch.object(st, '_block', side_effect=block_at), \
+                     patch.object(S.T, '_optional_samba_head', return_value=None), \
                      patch.object(S.T, 'cross_entropy', return_value=(2.5, np.zeros((6, 11), np.float32))), \
                      patch.object(S.T, 'linear_backward', return_value=(np.zeros((6, 32), np.float32), head)), \
                      patch.object(S.T, 'rms_norm_backward', return_value=(np.full(shape, 100, np.float32), norm)), \
