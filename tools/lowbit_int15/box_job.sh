@@ -22,7 +22,7 @@ red=0
 summary=""
 for phase in "$@"; do
     case "$phase" in
-        gate|sim|price|int8_gate|harness) ;;
+        gate|sim|price|int8_gate|harness|tuned_gate) ;;
         *) echo "box_job.sh: unknown phase $phase" >&2; exit 2 ;;
     esac
     echo "######## phase $phase on $MOJOLEARN_LOWBIT_BOX, started $(date -u +%Y-%m-%dT%H:%M:%SZ)"

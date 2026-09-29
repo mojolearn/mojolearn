@@ -55,6 +55,11 @@ the arm after it; now no unit arm follows one.
     int15i64.v1.pieces         the product alone, on planes, no unit
     int15i64.v1.mma            the product alone, on planes, on the integer
                                matrix unit (NVIDIA, AMD): FOUR unit products
+    int15i64.v1.tuned          the product alone, on planes, on the integer
+                               matrix unit, lane/lowbit-mma-speed's four
+                               products with ONE staging and then this
+                               profile's epilogue as a launch of its own
+                               (contract W-13). Not dispatched.
     int15i64.v1.apple.two      the product alone, on planes, on Apple's
                                FLOAT matrix unit: TWO unit products, the
                                left operand whole, carried into integers
@@ -104,6 +109,12 @@ not a sum of medians.
         training.int15i64.v1.planes.rowquant
                                        the planes arm with the reference
                                        quantizer and the splits
+
+    ON A COLUMN WITH THE INTEGER UNIT each complete operation is measured
+    on the tuned plan too:
+        inference.int15i64.v1.tuned    A straight to planes, the tuned plan
+        training.int15i64.v1.tuned     A and B straight to planes, the
+                                       tuned plan
 
     ON APPLE each complete operation is measured on the float unit too:
         inference.int15i64.v1.apple.two, .apple.four
@@ -210,6 +221,10 @@ from gemm.checks.gemm_int15_apple import (
     INT15_APPLE_FORM_TWO,
     identical_gemm_int15_apple_into,
 )
+from gemm.checks.gemm_int15_tuned import (
+    Int15SumsWorkspace,
+    identical_gemm_int15_tuned_into,
+)
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN
 
@@ -244,7 +259,10 @@ comptime ARM_INF_APPLE2 = 20
 comptime ARM_INF_APPLE4 = 21
 comptime ARM_TRAIN_APPLE2 = 22
 comptime ARM_TRAIN_APPLE4 = 23
-comptime ARM_COUNT = 24
+comptime ARM_TUNED = 24
+comptime ARM_INF_TUNED = 25
+comptime ARM_TRAIN_TUNED = 26
+comptime ARM_COUNT = 27
 
 #: The kinds of row.
 comptime ROW_FORWARD = 0
@@ -302,7 +320,13 @@ def _arm_name(arm: Int) -> String:
         return String("inference.int15i64.v1.apple.four")
     if arm == ARM_TRAIN_APPLE2:
         return String("training.int15i64.v1.apple.two")
-    return String("training.int15i64.v1.apple.four")
+    if arm == ARM_TRAIN_APPLE4:
+        return String("training.int15i64.v1.apple.four")
+    if arm == ARM_TUNED:
+        return String("int15i64.v1.tuned")
+    if arm == ARM_INF_TUNED:
+        return String("inference.int15i64.v1.tuned")
+    return String("training.int15i64.v1.tuned")
 
 
 def _arm_is_left(arm: Int) -> Bool:
@@ -313,20 +337,25 @@ def _arm_is_left(arm: Int) -> Bool:
 def _arm_is_inference(arm: Int) -> Bool:
     return (
         arm == ARM_INF_PLANES or arm == ARM_INF_CODES or arm == ARM_INF_ROWQUANT
-        or arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4
+        or arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4 or arm == ARM_INF_TUNED
     )
 
 
 def _arm_is_apple_unit(arm: Int) -> Bool:
-    return arm >= ARM_APPLE2
+    return arm >= ARM_APPLE2 and arm <= ARM_TRAIN_APPLE4
+
+
+def _arm_is_tuned(arm: Int) -> Bool:
+    return arm >= ARM_TUNED
 
 
 def _arm_at(i: Int) -> Int:
     """The `i`-th arm of the alternation (see THE ARMS)."""
     var order: List[Int] = [
-        ARM_FP32, ARM_MMA, ARM_APPLE2, ARM_APPLE4,
+        ARM_FP32, ARM_MMA, ARM_TUNED, ARM_APPLE2, ARM_APPLE4,
         ARM_QUANTIZE_A, ARM_QUANTIZE_A_PAR, ARM_PLANES_A_PAR, ARM_SPLIT_A,
         ARM_QUANTIZE_B, ARM_QUANTIZE_B_PAR, ARM_PLANES_B_PAR, ARM_SPLIT_B,
+        ARM_INF_TUNED, ARM_TRAIN_TUNED,
         ARM_INF_APPLE2, ARM_INF_APPLE4, ARM_TRAIN_APPLE2, ARM_TRAIN_APPLE4,
         ARM_INF_PLANES, ARM_INF_CODES, ARM_INF_ROWQUANT,
         ARM_TRAIN_PLANES, ARM_TRAIN_CODES, ARM_TRAIN_ROWQUANT,
@@ -355,7 +384,7 @@ def _why_not(arm: Int, kind: Int, k: Int) -> String:
             String("REFUSED-BY-THE-PROFILE:k=") + String(k) + ">INT15_MAX_K="
             + String(INT15_MAX_K)
         )
-    if arm == ARM_MMA and not HAS_UNIT:
+    if (arm == ARM_MMA or _arm_is_tuned(arm)) and not HAS_UNIT:
         return String("this-column-has-no-integer-matrix-unit")
     if _arm_is_apple_unit(arm) and not IS_APPLE:
         return String("this-column-is-not-apple")
@@ -497,6 +526,7 @@ struct RowBuffers(Movable):
     var sbl: DeviceBuffer[DType.int8]
     var work: Int15Workspace
     var quant: Int15QuantWorkspace
+    var sums: Int15SumsWorkspace
 
     def __init__(out self, ctx: DeviceContext, m: Int, n: Int, k: Int) raises:
         var nws = identical_gemm_workspace_max_floats(m, n, k)
@@ -524,6 +554,9 @@ struct RowBuffers(Movable):
         self.sbl = ctx.enqueue_create_buffer[DType.int8](n * k)
         self.work = Int15Workspace(ctx)
         self.work.ensure(ctx, m * k, n * k)
+        self.sums = Int15SumsWorkspace(ctx)
+        comptime if HAS_UNIT:
+            self.sums.ensure(ctx, m * n)
         self.quant = Int15QuantWorkspace(ctx)
         var chunks = int15_quant_chunks(k)
         self.quant.ensure(ctx, (m if m > n else n) * chunks)
@@ -666,6 +699,15 @@ def _enqueue_arm(
         split_int15_device(ctx, rb.ah, rb.al, rb.qa, m * k)
         split_int15_device(ctx, rb.bh, rb.bl, rb.qb, n * k)
         identical_gemm_int15_planes_into(ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k)
+    elif _arm_is_tuned(arm):
+        comptime if HAS_UNIT:
+            if arm != ARM_TUNED:
+                _planes_par(ctx, rb.ah, rb.al, rb.ea, rb.a, rb.quant, _a_transposed(kind), m, k)
+            if arm == ARM_TRAIN_TUNED:
+                _planes_par(ctx, rb.bh, rb.bl, rb.eb, rb.b, rb.quant, _b_transposed(kind), n, k)
+            identical_gemm_int15_tuned_into(
+                ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, rb.sums, m, n, k
+            )
     else:
         comptime if IS_APPLE:
             var form = INT15_APPLE_FORM_TWO
@@ -753,7 +795,13 @@ def _arm_note(arm: Int, kind: Int, m: Int, n: Int, k: Int) -> String:
         return String("not-dispatched,float-unit,four-products,carry-every-512-steps")
     if arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4:
         return String("planes.a.parallel+float-unit-product")
-    return String("planes.a.parallel+planes.b.parallel+float-unit-product")
+    if arm == ARM_TRAIN_APPLE2 or arm == ARM_TRAIN_APPLE4:
+        return String("planes.a.parallel+planes.b.parallel+float-unit-product")
+    if arm == ARM_TUNED:
+        return String("not-dispatched,four-products-one-staging+epilogue")
+    if arm == ARM_INF_TUNED:
+        return String("planes.a.parallel+four-products-one-staging+epilogue")
+    return String("planes.a.parallel+planes.b.parallel+four-products-one-staging+epilogue")
 
 
 def _time_row(

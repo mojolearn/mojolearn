@@ -36,6 +36,9 @@ import sys
 INF = ("inference.int15i64.v1.planes", "inference.int15i64.v1.codes", "inference.int15i64.v1.planes.rowquant")
 TRAIN = ("training.int15i64.v1.planes", "training.int15i64.v1.codes", "training.int15i64.v1.planes.rowquant")
 PRODUCTS = ("int15i64.v1.mma", "int15i64.v1.flat", "int15i64.v1.pieces")
+#: The TUNED plan (clause W-13), present only in a run that has it. It is
+#: NEVER mixed into another plan's column: it has columns of its own.
+TUNED = ("int15i64.v1.tuned", "inference.int15i64.v1.tuned", "training.int15i64.v1.tuned")
 #: Apple's float-unit plans (clause W-12), present only in a run on Apple
 #: that has them.
 APPLE_PRODUCTS = ("int15i64.v1.apple.two", "int15i64.v1.apple.four")
@@ -113,6 +116,64 @@ def table(label, path):
                        "four products carried every 512). Each cell names the plan that took the least "
                        "time at that row; the float-unit plans are not dispatched yet." if apple_unit else ".")),
             ""]
+    if any(TUNED[0] in row["arms"] for row in rows.values()):
+        out += ["### The tuned plan beside the reference unit plan", "",
+                "Reference: one warp one tile, fragments read from device memory, the epilogue in the "
+                "kernel. Tuned: lane/lowbit-mma-speed's four products with one staging, then the epilogue "
+                "as a launch of its own. Complete = the operands to planes by the parallel quantizer, "
+                "then the product (inference: the left operand; training shapes: both).", "",
+                "| row | fp32.v1 ms | reference product ms | over | tuned product ms | over | "
+                "reference complete ms | over | tuned complete ms | over |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for r in order:
+            row = rows[r]
+            base = row["arms"]["fp32.v1"][0]
+            fwd_row = ".bwd_" not in r
+            pairs = [("int15i64.v1.mma", TUNED[0])]
+            if fwd_row and ".t512" not in r:
+                pairs.append(("inference.int15i64.v1.planes", TUNED[1]))
+            else:
+                pairs.append(("training.int15i64.v1.planes", TUNED[2]))
+            cells = []
+            for ref_arm, tuned_arm in pairs:
+                for arm in (ref_arm, tuned_arm):
+                    got = row["arms"].get(arm)
+                    cells.append(f"{ms(got[0])} | {over(got[0], base)}" if got else "refused | refused")
+            kind = "inference" if (fwd_row and ".t512" not in r) else "both operands converted"
+            out.append(f"| {r.replace('llama8b.', '')} ({kind}) | {ms(base)} | " + " | ".join(cells) + " |")
+        out += ["", "#### Inference at the training rows, the tuned plan", "",
+                "| row | fp32.v1 ms | reference complete call ms | over | tuned complete call ms | over |",
+                "|---|---:|---:|---:|---:|---:|"]
+        for r in order:
+            if ".bwd_" in r or ".t512" not in r:
+                continue
+            row = rows[r]
+            base = row["arms"]["fp32.v1"][0]
+            cells = []
+            for arm in ("inference.int15i64.v1.planes", TUNED[1]):
+                got = row["arms"].get(arm)
+                cells.append(f"{ms(got[0])} | {over(got[0], base)}" if got else "refused | refused")
+            out.append(f"| {r.replace('llama8b.', '')} | {ms(base)} | " + " | ".join(cells) + " |")
+        out += ["", "#### Three products of one layer, each timed alone and added, the tuned plan", "",
+                "| layer | fp32.v1 ms | reference plan ms | over | tuned plan ms | over |",
+                "|---|---:|---:|---:|---:|---:|"]
+        for r in order:
+            if ".bwd_" in r or ".t512" not in r:
+                continue
+            parts = [r, r + ".bwd_dx", r + ".bwd_dw"]
+            if any(p not in rows for p in parts):
+                continue
+            b = sum(rows[p]["arms"]["fp32.v1"][0] for p in parts)
+            cells = []
+            for arm in ("training.int15i64.v1.planes", TUNED[2]):
+                got = [rows[p]["arms"].get(arm) for p in parts]
+                if any(g is None for g in got):
+                    cells.append("refused (k above 65536) | refused")
+                else:
+                    t = sum(g[0] for g in got)
+                    cells.append(f"{ms(t)} | {over(t, b)}")
+            out.append(f"| {r.replace('llama8b.', '')} | {ms(b)} | " + " | ".join(cells) + " |")
+        out.append("")
     if apple_unit:
         out += ["### The Apple float unit: the two forms beside the flat kernel, the product alone", "",
                 "| row | fp32.v1 ms | flat ms | over | two products ms | over | four products ms | over |",
