@@ -107,6 +107,14 @@ def fit_device(
         if n >= XB_MIN_ROWS and gram_handles(algo):
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        # lane/linfit-speed: the GLM's row passes over the whole GPU, its
+        # control on the host, the one-block fit's bits (x_linear/glm_wide.mojo)
+        from x_linear.glm_wide import glm_fit_wide, use_glm_wide
+
+        if algo == 2 and use_glm_wide():
+            glm_fit_wide(ctx, x, n_x, y, n_y, n, d, ip, fp, res)
+            return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
     var dip = ctx.enqueue_create_buffer[DType.int32](max(len(ip), 1))

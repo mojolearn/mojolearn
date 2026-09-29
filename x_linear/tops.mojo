@@ -174,11 +174,13 @@ def chain_fmad(a: FP, aoff: Int, astep: Int, b: FP, boff: Int, bstep: Int, n: In
 
 
 @always_inline
-def chain_fmad_scaled(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int) -> Float32:
+def chain_fmad_scaled(h: FP, x: FP, j: Int, k: Int, d: Int, n: Int,
+                      init: Float32 = Float32(0)) -> Float32:
     """acc = fmad(fm(h[i], x[i*d + j]), x[i*d + k], acc), i ascending (a
-    weighted Gram cell)."""
+    weighted Gram cell). `init` continues a chain another call stopped
+    (x_linear/glm_wide.mojo): it is an earlier acc, already flushed."""
     comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
-    var acc = Float32(0)
+    var acc = _fz(init)
     var i = 0
     while i + U <= n:
         var ph = SIMD[DType.float32, U]()
