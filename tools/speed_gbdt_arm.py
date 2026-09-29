@@ -2289,9 +2289,14 @@ def catboost_tree_params(cfg, task_type):
         verbose=False,
         allow_writing_files=False,
     )
-    for k in ("permutation_count", "fold_len_multiplier", "fold_permutation_block"):
+    # the Ordered lane's knobs (TASK_LANES "ordered"). NOT permutation_count:
+    # CatBoostClassifier(permutation_count=...) raises TypeError (1.2.10, the
+    # constructor does not take it), so their arm runs its default 4
+    # (boosting_options.cpp:14), the value ours is given (bench_board_params
+    # EXCEPTIONS)
+    for k in ("fold_len_multiplier", "fold_permutation_block"):
         if cfg.get(k) is not None:
-            p[k] = cfg[k]      # the Ordered lane's knobs (TASK_LANES "ordered")
+            p[k] = cfg[k]
     if task_type == "GPU":
         p["devices"] = "0"
     return p
