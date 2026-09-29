@@ -49,8 +49,9 @@ from gemm.checks.gemm_int15_check import (
     _fill,
     _first_diff,
     _planted_rows,
+    _distinct_exponents,
     _poisoned,
-    _pow2,
+    _row_scaled,
     _shape,
     _tag,
     _upload,
@@ -250,20 +251,6 @@ def check_int15_tuned_planted_worst_cases(ctx: DeviceContext) raises:
     print("   ok " + String(cases) + " planted cases, every tuned plan equal to the oracle")
 
 
-def _distinct(e: List[Int32]) -> Int:
-    """How many distinct values a list of row exponents holds."""
-    var seen = List[Int32]()
-    for i in range(len(e)):
-        var found = False
-        for j in range(len(seen)):
-            if seen[j] == e[i]:
-                found = True
-                break
-        if not found:
-            seen.append(e[i])
-    return len(seen)
-
-
 def check_int15_tuned_row_scales(ctx: DeviceContext) raises:
     """GATE (clause W-7, the scale `2^(ea[i] + eb[j])`): operands whose rows
     carry DIFFERENT exponents, so a cell scaled by any exponent but its own
@@ -277,18 +264,10 @@ def check_int15_tuned_row_scales(ctx: DeviceContext) raises:
     var m = 37
     var n = 41
     var k = 300
-    var fa = _fill(m * k, 311)
-    var fb = _fill(n * k, 313)
-    for r in range(m):
-        for p in range(k):
-            fa[r * k + p] = fa[r * k + p] * _pow2((r % 7) - 3)
-    for c in range(n):
-        for p in range(k):
-            fb[c * k + p] = fb[c * k + p] * _pow2(2 - (c % 5))
-    var qa = quantize_rows_int15(fa, m, k)
-    var qb = quantize_rows_int15(fb, n, k)
-    var da = _distinct(qa.e)
-    var db = _distinct(qb.e)
+    var qa = quantize_rows_int15(_row_scaled(m, k, 311, 7, 3, 1), m, k)
+    var qb = quantize_rows_int15(_row_scaled(n, k, 313, 5, 2, -1), n, k)
+    var da = _distinct_exponents(qa.e)
+    var db = _distinct_exponents(qb.e)
     if da < 5 or db < 5:
         raise Error(
             "the fixture is blind: " + String(da) + " distinct row exponents in A and "

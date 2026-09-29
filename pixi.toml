@@ -1106,6 +1106,7 @@ check-gemm-int15-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D 
 check-gemm-int15-tuned-pieces-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_PIECES_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
 check-gemm-int15-tuned-epilogue-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EPILOGUE_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
 check-gemm-int15-tuned-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+check-gemm-int15-exponent-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-tuned-exponent-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
 # DEVIATION 2975: the matrix-unit fragment loads as they were before their alignment was stated; every gate passes, same digests.
 check-gemm-int15-unstated-loads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1 -I . gemm/checks/gemm_int15_check.mojo"

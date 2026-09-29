@@ -1114,6 +1114,62 @@ def check_int15_device_matches_oracle(ctx: DeviceContext) raises:
         print("   ok " + tag + "  c[0]=" + _show(got[0]))
 
 
+def _row_scaled(rows: Int, k: Int, salt: Int, modulus: Int, shift: Int, sign: Int) -> List[Float32]:
+    """`_fill`, row `r` scaled by `2^(sign * ((r mod modulus) - shift))`: an
+    operand whose rows carry different exponents."""
+    var v = _fill(rows * k, salt)
+    for r in range(rows):
+        var s = _pow2(sign * ((r % modulus) - shift))
+        for p in range(k):
+            v[r * k + p] = v[r * k + p] * s
+    return v^
+
+
+def _distinct_exponents(e: List[Int32]) -> Int:
+    var seen = List[Int32]()
+    for i in range(len(e)):
+        var found = False
+        for j in range(len(seen)):
+            if seen[j] == e[i]:
+                found = True
+                break
+        if not found:
+            seen.append(e[i])
+    return len(seen)
+
+
+def check_int15_row_scales(ctx: DeviceContext) raises:
+    """GATE (clause W-7, the scale `2^(ea[i] + eb[j])`): every plan on
+    operands whose rows carry DIFFERENT exponents, so a cell scaled by any
+    exponent but its own row's and its own column's is seen. `_fill` gives
+    nearly every row of an operand the same exponent (the top binade of
+    eight is reached in almost every row), so no other gate can see an
+    exponent read at the wrong index (run 6's finding on the tuned gate,
+    2026-09-29). The fixture is held to at least 5 distinct exponents per
+    operand before any plan runs, so the gate cannot pass by being blind.
+    Two geometries: one below the Apple float unit's dispatch threshold and
+    one above the unit plans' tile, ragged."""
+    for g in range(2):
+        var m = 37
+        var n = 41
+        var k = 300
+        if g == 1:
+            m = 70
+            n = 67
+            k = 1000
+        var qa = quantize_rows_int15(_row_scaled(m, k, 311 + g, 7, 3, 1), m, k)
+        var qb = quantize_rows_int15(_row_scaled(n, k, 313 + g, 5, 2, -1), n, k)
+        var da = _distinct_exponents(qa.e)
+        var db = _distinct_exponents(qb.e)
+        if da < 5 or db < 5:
+            raise Error(
+                "the fixture is blind: " + String(da) + " distinct row exponents in A and "
+                + String(db) + " in B, 5 each required"
+            )
+        _every_plan_equals(ctx, qa, qb, m, n, k, "row-scales-" + _tag(m, n, k))
+    print("   ok every plan equals the oracle on operands whose rows carry 5 or more exponents")
+
+
 def check_int15_plans_agree(ctx: DeviceContext) raises:
     """GATE (W-8): every plan this column has returns the oracle's bits on
     every shape, the ragged ones included, so every plan returns every
@@ -1635,6 +1691,11 @@ def main() raises:
             _gate(String("check_int15_plans_agree"), ran, failed, String(""))
         except e:
             _gate(String("check_int15_plans_agree"), ran, failed, String(e))
+        try:
+            check_int15_row_scales(ctx)
+            _gate(String("check_int15_row_scales"), ran, failed, String(""))
+        except e:
+            _gate(String("check_int15_row_scales"), ran, failed, String(e))
         try:
             check_int15_planted_worst_cases(ctx)
             _gate(String("check_int15_planted_worst_cases"), ran, failed, String(""))

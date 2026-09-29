@@ -1,11 +1,11 @@
 diff --git a/gemm/checks/gemm_int15.mojo b/gemm/checks/gemm_int15.mojo
-index 0925ba0f0..d0caffddc 100644
+index 2d2e083..624a361 100644
 --- a/gemm/checks/gemm_int15.mojo
 +++ b/gemm/checks/gemm_int15.mojo
-@@ -760,7 +760,7 @@ def _store_cell15(
-     if i >= m or j >= n:
-         return
-     var out = dequant_int15_pinned(acc, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(j)))
+@@ -766,7 +766,7 @@ def _store_cell15(
+         # column exponent read at the row index.
+         jb = i % n
+     var out = dequant_int15_pinned(acc, Int(ea.unsafe_load(i)) + Int(eb.unsafe_load(jb)))
 -    comptime if INT15_SABOTAGE:
 +    comptime if True:  # SABOTAGE (int15 seam arm): INT15_SABOTAGE at its use site, every stored cell flipped
          out = gemm_oracle_sabotage_value_flip(out)
