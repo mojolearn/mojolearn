@@ -120,7 +120,8 @@ for phase in "$@"; do
         amd-gate) bash tools/lowbit_mma_speed/gate_job.sh amd ;;
         amd-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$AMD_ARMS} MOJOLEARN_LOWBIT_PRICE_MAIN=bench/gemm_lowbit_amd_price_main.mojo bash tools/lowbit_mma_speed/price_job.sh amd ;;
         amd-fault-repro) bash tools/lowbit_amd_tuned/fault_repro.sh 4 3 ;;
-        amd-fault-stress) bash tools/lowbit_amd_tuned/fault_stress.sh 25 ;;
+        amd-fault-stress) bash tools/lowbit_amd_tuned/fault_stress.sh ${MOJOLEARN_AMD_STRESS_RUNS:-25} ;;
+        amd-scratch-first) bash tools/lowbit_amd_tuned/scratch_first.sh ${MOJOLEARN_AMD_SCRATCH_RUNS:-150} ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
         apple-gates) apple_gates ;;
         flat-slices) MOJOLEARN_LOWBIT_PRICE_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.applechunk" MOJOLEARN_LOWBIT_PRICE_ONLY="mlp_up.t512,mlp_down.t512,lm_head.t512" bash tools/lowbit_mma_speed/price_job.sh flatslices ;;

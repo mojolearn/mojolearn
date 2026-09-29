@@ -34,6 +34,15 @@ holds and whether a code waits in threadgroup memory. The only floating
 steps stay `dequant_int8_pinned` (L-5, L-6) through the tuned file's
 `_store_cell_tuned`, called with the reference's arguments.
 
+THE LAUNCH BOUND. Every kernel here states its block's thread count
+(`MAX_THREADS_PER_BLOCK_METADATA`, `rocdl.flat_work_group_size`). Without
+it the compiler assumes 1024 threads, which on gfx942 caps a lane at 128
+vector registers: the 64x64-per-wave and tall plans SPILLED (92 to 206
+registers, 36 to 372 bytes of scratch a lane; MI325X job 1790659453776),
+and the process's first launch of a kernel that uses scratch is where the
+device fault of jobs 1790657510941, 1790659053624 and 1790659453776 struck
+(three faults in some fifty runs). SCHEDULING: which register holds a code moves no bit.
+
 THE PADDING RULE is the reference's: a step at or beyond `k`, and a row at
 or beyond `m` or `n`, are the ZERO CODE, and cells beyond `m`, `n` are
 masked at the store. A unit tile that lies WHOLLY beyond `m` or `n` is
@@ -98,10 +107,11 @@ THE SABOTAGE ARMS.
       (DEVIATION 2908), through the tuned file's epilogue.
 """
 
-from std.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
+from std.gpu import MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE, block_idx, lane_id, thread_idx
 from std.memory import bitcast
 from std.sys import is_defined
 from std.sys.info import is_amd_gpu
+from std.utils import StaticTuple
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, column_name
@@ -389,6 +399,9 @@ def _lane_words[STATED: Bool, KU: Int](
 # ===========================================================================
 
 
+@__llvm_metadata(
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(WM * WN * WARP_SIZE))
+)
 def identical_gemm_int8_mma_amd_direct_kernel[
     FM: Int, FN: Int, WM: Int, WN: Int, STATED: Bool, KU: Int, KW: Int
 ](
@@ -638,6 +651,9 @@ def identical_gemm_int8_mma_amd_into(
 # ===========================================================================
 
 
+@__llvm_metadata(
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(WM * WN * WARP_SIZE))
+)
 def identical_gemm_int8_pieces_amd_direct_kernel[
     FUSED: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KU: Int, KW: Int
 ](
