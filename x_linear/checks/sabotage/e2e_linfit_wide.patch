@@ -1,8 +1,8 @@
 diff --git a/x_linear/glm_wide.mojo b/x_linear/glm_wide.mojo
-index 3181cc8b6..2415cbbcc 100644
+index beec65373..72364713d 100644
 --- a/x_linear/glm_wide.mojo
 +++ b/x_linear/glm_wide.mojo
-@@ -490,7 +490,9 @@ def _objective(
+@@ -498,7 +498,9 @@ def _objective(
      lead's fold (rows ascending) and penalty, here on the host."""
      b.upload(ctx, theta, toff, power)
      var lt = b.rows(ctx, 0, link)
@@ -14,24 +14,15 @@ index 3181cc8b6..2415cbbcc 100644
      for j in range(b.d):
          var w = ld(theta, toff + j)
 diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
-index 7afe8619f..a90f55f71 100644
+index cad6511c5..289a04869 100644
 --- a/x_linear/sgd.mojo
 +++ b/x_linear/sgd.mojo
-@@ -413,7 +413,7 @@ def _warp_row_dot_spec[K: Int](
+@@ -411,7 +411,7 @@ def _warp_row_dot_spec[K: Int](
              comptime for l in range(W):
                  var xj = shuffle_idx(xr[kk], UInt32(l))
                  var wj = shuffle_idx(wr[kk], UInt32(l))
 -                acc = xmad(xj, wj, acc)
 +                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
-                 bad = bad | (abs(acc) < MIN_NORMAL)
-         elif kk * W < d:
-             # the last chunk: only its d - kk * W live slots (no dead slot
-@@ -421,7 +421,7 @@ def _warp_row_dot_spec[K: Int](
-             for l in range(d - kk * W):
-                 var xj = shuffle_idx(xr[kk], UInt32(l))
-                 var wj = shuffle_idx(wr[kk], UInt32(l))
--                acc = xmad(xj, wj, acc)
-+                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
-                 bad = bad | (abs(acc) < MIN_NORMAL)
-     if bad:
-         return _warp_row_folds[K, False, False](xr, wr, d)[0]
+                 lo = min(lo, (bitcast[DType.uint32](acc) & UInt32(0x7FFFFFFF)) - UInt32(1))
+     # The slots past d hold x = w = +0 (never written): fma(+0, +0, acc) is
+     # acc for every nonzero acc, but turns a -0 into +0, so a zero sum with
