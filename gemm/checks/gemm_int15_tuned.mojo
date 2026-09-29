@@ -51,10 +51,11 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
+from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
 from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
 from gemm.checks.gemm_identical import step_count_device_alloc, step_count_sync
 from gemm.checks.gemm_int15 import INT15_TPB, identical_gemm_int15_mma_into
+from gemm.checks.gemm_int8_mma_amd import identical_gemm_int8_pieces_amd_into
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
     identical_gemm_int8_pieces_tuned_into,
@@ -228,5 +229,12 @@ def identical_gemm_int15_tuned_into(
             identical_gemm_int15_mma_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
             return
         work.ensure(ctx, m * n)
-        identical_gemm_int8_pieces_tuned_into(ctx, work.sums, ah, al, bh, bl, m, n, k)
+        comptime if TARGET_COLUMN == COLUMN_AMD:
+            # THE AMD COLUMN (lane/lowbit-amd-tuned): the sums from the
+            # plan the MI325X measured least for a wavefront of 64, which
+            # at the decode rows is a kernel the tuned file does not have.
+            # The same three integers per cell (that file's gate).
+            identical_gemm_int8_pieces_amd_into(ctx, work.sums, ah, al, bh, bl, m, n, k)
+        else:
+            identical_gemm_int8_pieces_tuned_into(ctx, work.sums, ah, al, bh, bl, m, n, k)
         _epilogue(ctx, c, work, ea, eb, m, n)

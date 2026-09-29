@@ -117,6 +117,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
+    COLUMN_AMD,
     COLUMN_NVIDIA,
     TARGET_COLUMN,
     column_name,
@@ -323,6 +324,14 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     shape and may: every plan returns the same three integers."""
     if m <= INT8_TUNED_ROW_MAX_M:
         return INT8_PIECES_PLAN_SMALL
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        # THE AMD COLUMN (lane/lowbit-amd-tuned, MI325X job 1790657862351):
+        # of this file's plans, 32 x 32 per wave in a 64 x 128 block took
+        # the least time where `n` is above 8192 (mlp_up.t512 0.184 of
+        # fp32.v1 against 0.225, the head 0.195 against 0.261); 16 x 32 in
+        # 64 x 128 where it is not (qkv 0.171, mlp_down 0.212).
+        if n > 8192:
+            return INT8_PIECES_PLAN_FRAG2
     return INT8_PIECES_PLAN_WARPS16
 
 
@@ -379,6 +388,17 @@ def int8_tuned_dispatch(m: Int, n: Int, k: Int) -> Int:
     times as long). Between 17 and 511 rows nothing is measured."""
     if m <= INT8_TUNED_ROW_MAX_M:
         return INT8_TUNED_PLAN_SMALL_K64
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        # THE AMD COLUMN (lane/lowbit-amd-tuned, MI325X job 1790657862351,
+        # a wave is 64 lanes): of this file's plans, 32 x 32 per wave in a
+        # 64 x 64 block with 64 steps a window took the least time at
+        # three rows (qkv.t512 0.085 of fp32.v1 against 0.113 for the
+        # H100's plan, mlp_up 0.059 against 0.096, mlp_down 0.093 against
+        # 0.141); 64 x 64 per wave in a 128 x 128 block at the head, where
+        # `n` is above 14336 (0.078 against 0.099).
+        if n > 14336:
+            return INT8_TUNED_PLAN_K64
+        return INT8_TUNED_PLAN_FRAG2_K64
     return INT8_TUNED_PLAN_WARPS16
 
 

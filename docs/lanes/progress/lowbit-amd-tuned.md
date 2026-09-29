@@ -29,14 +29,27 @@ does not exist; the phase is not used.
 
 ## Hunks in files this lane does not own
 
-None yet. (Task 2 will add AMD branches to Lane D's launcher dispatch; every hunk
-will be listed here.)
+All AMD-only (`comptime if TARGET_COLUMN == COLUMN_AMD`); no other column's
+code path moves.
+
+| File (owner) | Hunk |
+|---|---|
+| `gemm/checks/gemm_int8_mma_tuned.mojo` (Lane D) | import `COLUMN_AMD` from `checks.kernel_matrix` |
+| same | `int8_pieces_dispatch`: on AMD, m > 16 and n > 8192 takes `INT8_PIECES_PLAN_FRAG2` |
+| same | `int8_tuned_dispatch`: on AMD, m > 16 takes `INT8_TUNED_PLAN_FRAG2_K64`, and `INT8_TUNED_PLAN_K64` where n > 14336 |
+| `gemm/checks/gemm_int15_tuned.mojo` (lane/lowbit-int15) | import `COLUMN_AMD` and `identical_gemm_int8_pieces_amd_into` |
+| same | `identical_gemm_int15_tuned_into`: on AMD the sums come from `identical_gemm_int8_pieces_amd_into` (this lane's launcher) in place of `identical_gemm_int8_pieces_tuned_into` |
+
+The int15 hunk makes `gemm_int15_tuned.mojo` import `gemm_int8_mma_amd.mojo` on
+every column. That file has been BUILT ON AMD ONLY; before lane/lowbit-int15
+merges this, its build on the H100 and a Mac must be seen.
 
 ## What ran
 
 | Box | Request | Commit | What | Verdict |
 |---|---|---|---|---|
 | MI325X | 1790657510941 | 0a29ffdf3 | amd-gate, full-price (run of record 2), amd-price | gate: clean GREEN, four arms seen failing, byte-path arm RED (fault); full-price GREEN; amd-price did not build |
+| MI325X | 1790657862351 | 6c6f2bb88 | amd-gate, amd-price (every plan of both files, run 3 of the shared arms), lane/lowbit-int15's tuned gate | amd-gate GREEN with all six arms as expected (byte-path arm passed); amd-price GREEN: cold == record at 1380 of 1380, sabotage seen at 345 of 345; int15 tuned gate RED (Failures 3) |
 
 ## Gate verdicts (MI325X, job 1790657510941)
 
@@ -77,6 +90,85 @@ Every ratio of run 2 is within 0.02 of run 1 but the small-tile plans at
 mlp_up.t512 (16x16 block 32x32, k32 l4: 0.137 / 0.190; k64 l16: 0.101 / 0.134).
 The full table of both runs: `bench/results/lowbit_amd_tuned/2026-09-29/mi325x/`.
 
+## THE AMD LEVER TABLE (job 1790657862351, one run; ms over fp32.v1, same run)
+
+fp32.v1 ms: qkv.t512 0.985, mlp_up.t512 2.441, mlp_down.t512 2.458, lm_head.t512
+2.838 (n capped 16032); qkv.t1 0.067, qkv.t8 0.082, mlp_up.t1 0.174, t8 0.178,
+mlp_down.t1 0.167, t8 0.199, lm_head.t1 1.421, t8 1.409. ONE LAUNCH AND ONE WAIT
+(`probe.amd.launch-floor`) is 0.020 to 0.022 ms: 0.30 of fp32.v1 at qkv.t1.
+
+One product, one lever at a time:
+
+| lever | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 | qkv.t1 | mlp_down.t1 | lm_head.t1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 0. the reference unit plan | 0.272 | 0.365 | 0.344 | 0.359 | 0.867 | 0.948 | 0.206 |
+| control: its schedule respelled here, alignment not stated | 0.283 | 0.384 | 0.362 | 0.389 | 0.791 | 0.987 | 0.224 |
+| A. the same, alignment stated | 0.278 | 0.380 | 0.352 | 0.372 | 0.729 | 0.824 | 0.225 |
+| B. 16-byte loads, two unit steps a load | 0.182 | 0.200 | 0.218 | 0.194 | 0.575 | 0.588 | 0.175 |
+| C. four windows' loads issued before the first unit step | 0.149 | 0.195 | 0.186 | 0.188 | 0.465 | 0.426 | 0.136 |
+| C, one wave a block | 0.158 | 0.201 | 0.188 | 0.204 | 0.481 | 0.429 | 0.125 |
+| D. 32x32 per wave, 2x2 waves (nothing staged) | 0.096 | 0.107 | 0.112 | 0.123 | 0.703 | 0.740 | 0.153 |
+| D, two windows a turn | 0.094 | 0.107 | 0.111 | 0.111 | 0.592 | 0.632 | 0.151 |
+| E. 64x64 per wave, one wave a block (nothing staged) | 0.110 | 0.073 | 0.122 | 0.087 | 0.931 | 1.057 | 0.164 |
+| F. staged in threadgroup memory: 32x32 per wave, block 64x64, k64 | 0.085 | 0.059 | 0.093 | 0.104 | 0.976 | 1.168 | 0.174 |
+| F, k128 | 0.082 | 0.069 | 0.098 | 0.084 | 0.917 | 1.101 | 0.179 |
+| G. MORE WAVES A BLOCK: 8 waves of 32x32, block 64x128 | 0.087 | 0.052 | 0.102 | 0.086 | 1.054 | 1.207 | 0.183 |
+| G. 16 waves of 16x32, block 64x128 | 0.097 | 0.106 | 0.114 | 0.137 | 0.961 | 1.137 | 0.210 |
+| G. 16 waves of 16x32, block 128x64 | 0.094 | 0.118 | 0.114 | 0.136 | 0.879 | 1.067 | 0.274 |
+| G. 16 waves of 16x16, block 64x64 | 0.132 | 0.166 | 0.186 | 0.176 | 0.811 | 1.081 | 0.276 |
+| G. 16 waves of 32x32, block 128x128 (THE H100'S PLAN) | 0.113 | 0.096 | 0.141 | 0.099 | 1.115 | 1.293 | 0.234 |
+| H. tall wave: 64x32 per wave, block 128x64 | 0.108 | 0.055 | 0.132 | 0.057 | 1.086 | 1.419 | 0.171 |
+
+Read plainly:
+- STATING THE ALIGNMENT, the H100's largest lever, bought NOTHING on the MI325X
+  at the wide rows (0.283 to 0.278) and some at the decode rows (0.79 to 0.73).
+- The load WIDTH and ISSUING A TURN'S LOADS TOGETHER are the decode rows'
+  levers: 0.79 to 0.47 at qkv.t1, 0.99 to 0.43 at mlp_down.t1.
+- THE MANY-WAVES LEVER (task 3), in its AMD form: a block of sixteen waves
+  (1024 threads, the most a block holds) cost time at every 512-token row
+  against the same block cut into eight or four larger waves (0.097 against
+  0.087 in a 64x128 block at qkv, 0.106 against 0.052 at mlp_up). The H100's
+  plan, sixteen warps of 32x32 in 128x128, is 1.3 to 1.8 times the best AMD
+  plan here. The two 32-warp plans cannot run (2048 threads); what they test,
+  the smallest tiles in the most waves, is the 16x32 and 16x16 rows above and
+  it loses.
+- STAGING wins at the 512-token rows by a little (0.085 against 0.094 nothing
+  staged); nothing staged wins at every decode row by a factor near two.
+
+Four products (one launch, three Int32 sums a cell), the best plan per row
+against the H100's launcher plan:
+
+| row | H100's plan (16x32, block 64x128, staged) | best AMD plan | which |
+|---|---:|---:|---|
+| qkv.t512 | 0.171 | 0.162 | staged 16x32, block 32x128 |
+| mlp_up.t512 | 0.225 | 0.158 | staged 32x32, block 64x64 |
+| mlp_down.t512 | 0.212 | 0.185 | staged 32x32, block 64x64 |
+| lm_head.t512 | 0.261 | 0.166 | staged 32x32, block 128x64 |
+| qkv.t1 / t8 | 1.787 / 1.483 (the H100's small plan: 1.461 / 1.342) | 0.712 / 0.708 | direct 16x16, block 32x32, 16-byte loads |
+| mlp_up.t1 / t8 | 0.857 / 0.821 (0.689 / 0.736) | 0.402 / 0.406 | the same |
+| mlp_down.t1 / t8 | 2.266 / 1.896 (1.941 / 1.625) | 0.774 / 0.746 | the same |
+| lm_head.t1 / t8 | 0.419 / 0.458 (0.350 / 0.359) | 0.254 / 0.309 | the same |
+
+THE COMPLETE OPERATION (int8 stand-in: quantize A in parallel, four products in
+one launch, the stand-in recombination; one wait), best plan per row, this run:
+inference 0.173, 0.176, 0.196, 0.181 at the 512-token rows; 0.820, 0.796,
+0.427, 0.447, 0.901, 0.832, 0.255, 0.315 at the decode rows (qkv, mlp_up,
+mlp_down, lm_head; t1 then t8): UNDER fp32.v1 AT ALL TWELVE ROWS. Training
+(both operands quantized per call) 0.200, 0.218, 0.273, 0.222; decode 1.25 to
+1.74 but the head (0.87, 0.94): the right operand's quantizer alone is 0.58 to
+0.79 of fp32.v1 there.
+
+## THE PLAN CHOICE FOR A WAVEFRONT OF 64 (task 2)
+
+`int8_amd_dispatch` and `int8_amd_pieces_dispatch` (this lane's launcher) and
+the AMD column of Lane D's two dispatchers (hunks above) now read this
+measurement. One product: m <= 16 the direct plan, four windows a turn; m > 16
+staged 32x32 in 64x64 with k128, or 64x32 in 128x64 where n > 8192. Four
+products: m <= 16 direct 16x16, 16-byte loads; m > 16 staged 32x32 in 64x64,
+or in 128x64 where n > 14336. Lane D's launcher can take only its own file's
+plans (the direct kernels live here and this file imports that one); its AMD
+column takes the best of them.
+
 ## Failures, each with its cause
 
 1. Job 1790657510941, `amd-unstated` (byte path forced): exit 139, "Memory
@@ -87,6 +179,14 @@ The full table of both runs: `bench/results/lowbit_amd_tuned/2026-09-29/mi325x/`
    arm builds with it).
 2. Job 1790657510941, `amd-price`: the harness did not parse:
    `_launch_floor_kernel(out: ...)`, `out` is a keyword. Renamed `cell`.
+3. Job 1790657862351, lane/lowbit-int15's tuned gate on the MI325X: RED at
+   ONE gate, `check_int15_tuned_refuses` ("only 2 of 3 launches refused").
+   The oracle and planted gates PASSED and all four sabotage arms were seen
+   failing. Cause: the gate expects the sums kernel to refuse k = 65536, and
+   lane/lowbit-mma-speed raised that kernel's bound to 65536 (commit
+   520406a38). The gate is stale, not the arithmetic. Worse, that call then
+   LAUNCHES at k = 65536 on buffers of one byte: reads out of bounds. Not this
+   lane's file; reported to the orchestrator.
 
 ## Owed
 
