@@ -324,10 +324,9 @@ def classical_round_seconds(lane, dataset, vendor):
     return 1800 if vendor == "apple" else 900
 
 
-#: DBSCAN eps,min_samples per dataset, the values the published rows used
-#: (bench_all_ours.sh; the racer refuses with no default).
-DBSCAN_DEFAULTS = {"MOJOLEARN_CTD_DBSCAN_TAXI": "0.177,10",
-                   "MOJOLEARN_CTD_DBSCAN_ISTELLA": "4.17,10"}
+#: DBSCAN eps and min_samples: the cuML benchmark's (eps=3, min_samples=2 on
+#: every dataset, tools/bench_board_harness.py), constants of the racer
+#: (classical_two_datasets.DBSCAN_EPS / DBSCAN_MIN_SAMPLES) since 2026-09-29.
 
 #: Classical block each lane reads (classical_two_datasets.BLOCK_OF).
 CLASSICAL_BLOCK = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
@@ -428,6 +427,10 @@ NEURAL_OPPONENTS = {v: {lane: NEURAL.opponents(v, lane) for lane in NEURAL_LANES
 #: and the classical kmeans/pca/ols/svc lanes; on unless --no-infer. The cells
 #: live in a race record's `infer_cells`, apart from the fit `cells`.
 INFER = _load_tool("bench_board_infer")
+
+#: NVIDIA's harnesses (tools/bench_board_harness.py): which lanes take their
+#: values, and from which file and commit (standard library only).
+HARNESS = _load_tool("bench_board_harness")
 
 #: Per-arm memory and the ours-cpu readback (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
@@ -1233,7 +1236,7 @@ def classical_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"])]
     if ctx.get("infer"):
         cmd += INFER.driver_args(race)
-    env = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
+    env = {}
     ceiling = 600 + max(rsec, 600) * len(race["arms"]) + rsec * ctx["rounds"] * len(race["arms"]) + 900
     return cmd, env, ceiling
 
@@ -1521,10 +1524,16 @@ def race_settings(ctx, race):
             s["driver"] = "tools/classical_two_datasets.py"
             s["block"] = CLASSICAL_BLOCK[race["lane"]]
             s["shape_rule"] = ("the lane's own shape (kmeans/pca/ols 4,000,000 rows or the "
-                               "Istella train split; knn 400,000 x 4,000 queries, k=10; kde "
+                               "Istella train split; knn 400,000 x 4,000 queries, k=64; kde "
                                "100,000 x 2,000; svc 10,000 + 10,000; dbscan 1,000,000)")
             if race["lane"] == "dbscan":
-                s["dbscan_eps_min_samples"] = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
+                s["dbscan_eps_min_samples"] = "eps=3, min_samples=2 (cuML benchmark DBSCAN)"
+        # where this lane's values come from: an NVIDIA harness, or the board's own
+        hid = ("algos/" + race["lane"]) if race["family"] == "algos" else race["lane"]
+        src = HARNESS.harness_source(hid) if race["family"] != "neural" else None
+        s["config"] = src or "the board's own settings (no NVIDIA harness entry)"
+        if race["family"] != "neural":
+            s["seed"] = _params_mod().seed_for(hid)     # 42 where cuML's benchmark sets it
         _SETTINGS_CACHE[key] = s
     return dict(_SETTINGS_CACHE[key])
 
@@ -2021,6 +2030,13 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
+            cfg = next((c.get("settings", {}).get("config") for c in rr.get("cells") or []
+                        if c.get("settings", {}).get("config")), None)
+            if cfg:
+                L.append("")
+                L.append("config: %s" % clean(cfg if isinstance(cfg, str) else
+                                              "%s, %s (%s)" % (cfg.get("harness"), cfg.get("entry"),
+                                                               cfg.get("url"))))
             L.extend(render_params(rr))
             L.extend(INFER.render_race(_bb(), rr))
             L.append("")
