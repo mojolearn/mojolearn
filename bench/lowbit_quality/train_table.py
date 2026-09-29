@@ -93,7 +93,7 @@ def zero_code_tables(runs, step):
                 cell["n"] += 1
                 cell["exact"] += ops[op]["exactly_zero_fraction"]
                 for w in WIDTHS:
-                    if w not in ops[op]:  # a record written before bf16 was recorded
+                    if w not in ops[op]:  # a record that did not code this operand under this width
                         cell[w] = cell[w + "_nz"] = float("nan")
                         continue
                     cell[w] += ops[op][w]["zero_code_fraction"]
@@ -107,17 +107,19 @@ def zero_code_tables(runs, step):
 
 def zero_code_markdown(table, title):
     lines = [title, ""]
+    widths = [w for w in WIDTHS
+              if any(c.get(w) == c.get(w) for ops in table.values() for c in ops.values())]  # not NaN
     for op, what in OPERANDS:
         lines += ["### " + what, "",
                   "Fraction of the operand's NONZERO entries whose code is 0 (in brackets: of all entries).", "",
-                  "| product | exactly zero as float32 | " + " | ".join(w for w in WIDTHS) + " |",
-                  "|---|---|" + "---|" * len(WIDTHS)]
+                  "| product | exactly zero as float32 | " + " | ".join(w for w in widths) + " |",
+                  "|---|---|" + "---|" * len(widths)]
         for product in table:
             c = table[product].get(op)
             if c is None:
                 continue
             lines.append("| %s | %.4f | %s |" % (product, c["exact"], " | ".join(
-                "%.4f (%.4f)" % (c[w + "_nz"], c[w]) for w in WIDTHS)))
+                "%.4f (%.4f)" % (c[w + "_nz"], c[w]) for w in widths)))
         lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -126,8 +128,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--runs", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--name", default="training", help="the basename of the files written")
+    ap.add_argument("--only", default=None,
+                    help="read only these arms besides the baseline: arm:mode:proj|attn, comma separated")
     args = ap.parse_args(argv)
     runs = [json.load(open(p)) for p in sorted(glob.glob(os.path.join(args.runs, "run_*.json")))]
+    if args.only:
+        keep = set(tuple(x.split(":")) for x in args.only.split(","))
+        runs = [r for r in runs if r["arm"] == "a"
+                or (r["arm"], r["mode"], "attn" if r["attention_products"] else "proj") in keep]
     if not runs:
         print("no run records under", args.runs)
         return 1
@@ -213,7 +222,7 @@ def main(argv=None):
         if row["dropped"]:
             row["verdict"] += "; " + DROPPED_NOTE
         table["arms"].append(row)
-    with open(os.path.join(args.out, "training.json"), "w") as fh:
+    with open(os.path.join(args.out, args.name + ".json"), "w") as fh:
         json.dump(table, fh, indent=1)
     b = table["baseline"]
     lines = ["baseline fp32.v1: seeds %s, val loss at step %d mean %.5f, noise floor %.5f nats (%.3f%% of perplexity), range %.5f"
@@ -241,29 +250,30 @@ def main(argv=None):
             100 * r["noise_floor_rel_ppl"], inside, reach, cos, r["verdict"]))
     zc = zero_code_tables(list(complete.values()), n_eq - 1)
     table["baseline_gradient_zero_codes"] = dict(step=n_eq - 1, seeds=sorted(complete), products=zc)
-    with open(os.path.join(args.out, "training.json"), "w") as fh:
+    with open(os.path.join(args.out, args.name + ".json"), "w") as fh:
         json.dump(table, fh, indent=1)
     text_zc = zero_code_markdown(zc, "## Zero codes of the backward operands: fp32.v1 baseline, step %d, mean over seeds %s"
                                  % (n_eq - 1, sorted(complete)))
     table["arm_gradient_zero_codes"] = {}
     for (attn, arm, mode), rs in sorted(groups.items(), key=lambda kv: (not kv[0][0], kv[0][1], kv[0][2])):
-        if mode != "fwdbwd" or arm not in ("c", "e"):
+        if arm != "e":
             continue
         rs = [r for r in rs if r["nonfinite_at_step"] is None]
         z = zero_code_tables(rs, n_eq - 1)
         if not z:
             continue
         name = rs[0]["profile_name"]
-        table["arm_gradient_zero_codes"][name] = dict(step=n_eq - 1, seeds=sorted(r["seed"] for r in rs), products=z)
+        table["arm_gradient_zero_codes"][name + "." + mode] = dict(step=n_eq - 1, seeds=sorted(r["seed"] for r in rs), products=z)
         text_zc += "\n" + zero_code_markdown(
-            z, "## Zero codes of the backward operands: %s, forward and backward, step %d, mean over seeds %s"
-            % (name, n_eq - 1, sorted(r["seed"] for r in rs)))
-    with open(os.path.join(args.out, "training.json"), "w") as fh:
+            z, "## Zero codes of the backward operands: %s, %s, step %d, mean over seeds %s"
+            % (name, "forward and backward" if mode == "fwdbwd" else "forward only", n_eq - 1,
+               sorted(r["seed"] for r in rs)))
+    with open(os.path.join(args.out, args.name + ".json"), "w") as fh:
         json.dump(table, fh, indent=1)
-    with open(os.path.join(args.out, "training_zero_codes.md"), "w") as fh:
+    with open(os.path.join(args.out, args.name + "_zero_codes.md"), "w") as fh:
         fh.write(text_zc)
     text = "\n".join(lines) + "\n"
-    with open(os.path.join(args.out, "training.md"), "w") as fh:
+    with open(os.path.join(args.out, args.name + ".md"), "w") as fh:
         fh.write(text)
     print(text)
     return 0

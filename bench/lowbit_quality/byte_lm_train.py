@@ -117,7 +117,7 @@ ORDER = (
      ("d", "fwd", True), ("d", "fwdbwd", True)])
 
 #: The widths a gradient operand is coded under for the zero-code record.
-ZERO_CODE_WIDTHS = ("int8", "int10", "int12", "int15")
+ZERO_CODE_WIDTHS = ("bf16", "int8", "int10", "int12", "int15")
 
 #: When a dict, `QMatmulNT.backward` records into it, per product, the
 #: fraction of entries of each backward operand whose code is 0 under each
@@ -135,10 +135,13 @@ def zero_code_record(x):
     out = dict(entries=n, exactly_zero_fraction=1.0 - nz / n)
     # bf16 keeps an exponent PER VALUE, so only a value below the smallest normal (flushed by the
     # narrowing seam, L-2) rounds to zero, whatever the rest of its row holds.
-    bzero = arith.round_bf16(x) == 0
-    out["bf16"] = dict(zero_code_fraction=float(bzero.double().mean().item()),
-                       zero_code_fraction_of_nonzero=(float((bzero & nonzero).sum().item()) / nz) if nz else 0.0)
+    if "bf16" in ZERO_CODE_WIDTHS:
+        bzero = arith.round_bf16(x) == 0
+        out["bf16"] = dict(zero_code_fraction=float(bzero.double().mean().item()),
+                           zero_code_fraction_of_nonzero=(float((bzero & nonzero).sum().item()) / nz) if nz else 0.0)
     for kind in ZERO_CODE_WIDTHS:
+        if kind == "bf16":
+            continue
         codes, _ = arith.quantize_rows(x, kind)
         zero = codes == 0
         out[kind] = dict(zero_code_fraction=float(zero.double().mean().item()),
@@ -502,9 +505,9 @@ def self_test(args, corpus, device):
     out["forward_only_path"] = one("fwd")
     out["forward_backward_path"] = one("fwdbwd")
     out["sabotage_negated_weight_gradient"] = one("sabotage")
-    # the backward products at 15 bits and in bf16, attention included, against float32: a
+    # the backward products at 15 bits, attention included, against float32: a
     # direction check on the orientation of the backward products, reported, not gated
-    for arm in ("e", "c"):
+    for arm in ("e",):
         got, _ = gradient_of(model, rows, make_spec(arm, True), "fwdbwd")
         out[f"arm_{arm}_fwdbwd_attn_gradient"] = dict(cosine=cosine(ref, got),
                                                      norm_ratio=(got.norm() / ref.norm()).item())
@@ -528,6 +531,8 @@ def main(argv=None):
     ap.add_argument("--equal-steps", type=int, default=4000)
     ap.add_argument("--steps", type=int, default=6000)
     ap.add_argument("--eval-every", type=int, default=100)
+    ap.add_argument("--zero-code-widths", default=",".join(ZERO_CODE_WIDTHS),
+                    help="the widths the zero-code record codes each backward operand under")
     ap.add_argument("--worker", type=int, default=0)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--self-test", action="store_true")
@@ -535,6 +540,8 @@ def main(argv=None):
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--commit", default="unknown")
     args = ap.parse_args(argv)
+    global ZERO_CODE_WIDTHS
+    ZERO_CODE_WIDTHS = tuple(w for w in args.zero_code_widths.split(",") if w)
     runs = plan(args)
     if args.print_plan:
         for r in runs:
