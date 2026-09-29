@@ -83,3 +83,21 @@ def test_other_jobs_are_left_alone(tmp_path):
     finally:
         other.kill()
         other.wait()
+
+
+def test_a_request_stranded_in_working_gets_a_fail_verdict(tmp_path, monkeypatch):
+    """A restart (or systemd stopping the service after an OOM kill) leaves the
+    running request in working/; the next start gives it a FAIL verdict."""
+    import json
+    work, done = tmp_path / "working", tmp_path / "done"
+    work.mkdir()
+    done.mkdir()
+    monkeypatch.setattr(st, "WORK", work)
+    monkeypatch.setattr(st, "DONE", done)
+    (work / "1790000000000-speed-x-abc.do-amd.json").write_text(json.dumps(
+        {"name": "1790000000000-speed-x-abc", "kind": "speed", "lane": "x"}))
+    (work / "1790000000001-speed-y-def.m2pro.json").write_text("{}")   # another steward's: untouched
+    st._recover_stranded("do-amd")
+    v = json.loads((done / "1790000000000-speed-x-abc" / "verdict.json").read_text())
+    assert v["result"] == "FAIL" and v["failed_step"].startswith("interrupted")
+    assert [p.name for p in work.iterdir()] == ["1790000000001-speed-y-def.m2pro.json"]
