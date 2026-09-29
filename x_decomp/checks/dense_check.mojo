@@ -236,4 +236,32 @@ def main() raises:
         same("5320 orgqr host", count_diff_f32(qgh, want_q))
         tr.record_list_f32("x_decomp.geqrf", hd)
         tr.record_list_f32("x_decomp.orgqr", qgd)
+    # ---- the device SVD BOUNDED IN WORK PER LAUNCH (lane/lle-timeout): the
+    # QR in column ranges (x_decomp/qr_bounded.mojo), the Jacobi sweeps in
+    # chunks of pairs, poisoned and read back whole: == the host replay at
+    # the default cut, and the same bits cut small (one QR column and 61
+    # pairs per launch); one slice square, one slice tall, two TSQR slices
+    var bshapes = [150, 150, 300, 150, 1200, 96]
+    for sh in range(len(bshapes) // 2):
+        var bm = bshapes[2 * sh]
+        var bn = bshapes[2 * sh + 1]
+        var ba = seam_fixture(bm, bn, UInt64(95 + sh))
+        var bh = ba.copy()
+        var s_h = zeros(bn)
+        var v_h = zeros(bn * bn)
+        HostExec.svd(ptr(bh), bm, bn, ptr(s_h), ptr(v_h))
+        var bd = ba.copy()
+        var s_d = zeros(bn)
+        var v_d = zeros(bn * bn)
+        DevExec.svd(ptr(bd), bm, bn, ptr(s_d), ptr(v_d))
+        var tag = String(bm) + " x " + String(bn)
+        same("bounded device svd values " + tag, count_diff_f32(s_d, s_h))
+        same("bounded device svd vectors " + tag, count_diff_f32(v_d, v_h))
+        var bc = ba.copy()
+        var s_c = zeros(bn)
+        var v_c = zeros(bn * bn)
+        DevExec.svd_cells(ptr(bc), bm, bn, ptr(s_c), ptr(v_c), 4096, 61 * bn)
+        same("bounded device svd values cut small " + tag, count_diff_f32(s_c, s_h))
+        same("bounded device svd vectors cut small " + tag, count_diff_f32(v_c, v_h))
+        tr.record_list_f32("x_decomp.svd_bounded", v_d)
     print("PASS x_decomp dense_check")
