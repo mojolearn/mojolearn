@@ -1,17 +1,17 @@
 diff --git a/x_ann/ivf_scan_device.mojo b/x_ann/ivf_scan_device.mojo
-index 52ab02c7a..66bdf0ab0 100644
+index 65465f28c..dd69e4f95 100644
 --- a/x_ann/ivf_scan_device.mojo
 +++ b/x_ann/ivf_scan_device.mojo
 @@ -30,7 +30,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
  from max.gpu.memory import AddressSpace
  from max.gpu.sync import barrier
  
--from checks.numerics import ftz, identical_mul_add
-+from checks.numerics import ftz, identical_mul, identical_mul_add
+-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
++from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul, identical_mul_add
+ from std.sys.info import has_apple_gpu_accelerator
+ from x_ann.switches import ANN3_SCAN_SELECT
  from x_ann.ivf_pq_core import (
-     F32P, I32P, ivf_row_removed, pq_better, pq_coarse_dist, pq_inf, pq_insert, pq_lut_entry, pq_probe_takes,
- )
-@@ -296,7 +296,7 @@ def sq_score_kernel(
+@@ -298,7 +298,7 @@ def sq_score_kernel(
          if staged:
              var acc = Float32(0.0)
              for c in range(d):
