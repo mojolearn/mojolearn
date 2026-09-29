@@ -355,7 +355,6 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--all` | every lane this install runs, on the base fixture |
 | `--full` | every lane and all nine fixture variants (explicit extended check) |
 | `--quick` | one lane per family on the base fixture |
-| `--full` | the same as `--all`, spelled out |
 | `--lanes a,b` | only these lanes |
 | `--fixtures a,b` | only these fixtures |
 | `--repeats N` | fits per cell (default 1); two or more also catch a cell that moves on this machine |
@@ -368,6 +367,13 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--par-devices 0,1` | with `--par`: which devices the second column runs on |
 | `--par-self-test` | show that `--par` can fail |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
+
+The default sweep does not run performance benchmarks. It uses one fixed
+fixture per applicable algorithm, one fit per cell, and isolated workers with
+a 120-second per-cell limit. `--full` adds the numerical edge-case fixtures;
+`--quick` samples families and does not replace full algorithm coverage. The
+reference fixture inputs retain their historical sizes, so this change reduces
+fixture multiplicity without changing any expected hashes.
 
 The four checks answer different questions, and are worth more together than
 separately:
