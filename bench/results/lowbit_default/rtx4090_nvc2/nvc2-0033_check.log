@@ -1,0 +1,78 @@
+gpuq: job 0033 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T08:18:37Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/check_job.sh sha256 at submit 180056c4c300690e7ee7c2473d9b433936096325591a201f0c494b707df225d7, now 180056c4c300690e7ee7c2473d9b433936096325591a201f0c494b707df225d7
+tree_head=cc25b1d16ae21089b3058469ff6e36747f5d13d0 dirty_files=46
+machine=NVIDIA GeForce RTX 4090, 580.126.20
+started=2026-09-29T08:18:37Z
+PHASE install-default                              exit=0   expected=pass held
+PHASE install-test                                 exit=0   expected=pass held
+PHASE build-linalg                                 exit=0   expected=pass held
+PHASE build-linalg-host                            exit=0   expected=pass held
+PHASE build-base                                   exit=0   expected=pass held
+PHASE build-training                               exit=0   expected=pass held
+PHASE build-transformer                            exit=0   expected=pass held
+PHASE build-mamba                                  exit=0   expected=pass held
+PHASE build-byte-lm                                exit=0   expected=pass held
+PHASE build-portable-math                          exit=0   expected=pass held
+PHASE build-core-host                              exit=0   expected=pass held
+PHASE build-neural-host                            exit=0   expected=pass held
+PHASE build-transformer-host                       exit=0   expected=pass held
+PHASE build-mamba-host                             exit=0   expected=pass held
+PHASE build-training-host                          exit=0   expected=pass held
+PHASE build-tokenizer-host                         exit=0   expected=pass held
+PHASE build-byte_lm-host                           exit=0   expected=pass held
+PHASE gate-gemm-identity                           exit=0   expected=pass held
+PHASE gate-lowbit                                  exit=0   expected=pass held
+PHASE gate-lowbit-sabotage                         exit=1   expected=fail held
+PHASE gate-int15                                   exit=0   expected=pass held
+PHASE gate-int15-sabotage                          exit=1   expected=fail held
+PHASE gate-int15-tuned                             exit=0   expected=pass held
+PHASE gate-int8-mma-tuned                          exit=0   expected=pass held
+PHASE gate-int8-mma-tuned-sabotage                 exit=1   expected=fail held
+PHASE gate-int8-pieces-tuned                       exit=0   expected=pass held
+PHASE gate-int8-pieces-tuned-sabotage              exit=1   expected=fail held
+PHASE gate-transformer                             exit=0   expected=pass held
+PHASE gate-transformer-int15                       exit=0   expected=pass held
+PHASE gate-transformer-int15-sabotage              exit=1   expected=fail held
+PHASE python-tests                                 exit=0   expected=pass held
+    | 564 passed, 2 skipped, 13 warnings, 4 subtests passed in 51.09s
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:200: the source reference training and transformer host bindings are not built here (a wheel has neither)
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:397: the source reference training and transformer host bindings are not built here
+PHASE profile-tests-ran                            exit=1   expected=fail held
+PHASE verify-causal-lm-default                     exit=0   expected=pass held
+PHASE verify-causal-lm-fp32env                     exit=0   expected=pass held
+    | compared 27 parts, 0 not equal
+PHASE smollm2-default-gate                         exit=0   expected=pass held
+    | RESULT hash default d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f
+    | RESULT hash fp32_v1 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32_reports fp32_v1
+    | RESULT hash env_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash env_fp32_reports fp32_v1
+    | RESULT check default is fixed15_v1: HELD
+    | RESULT check default hash d37c2ea81d13743a: HELD
+    | RESULT check fp32_v1 hash 833c9a8947bdd619: HELD
+    | RESULT check set_numeric_profile(fp32_v1) == fp32_v1 bits: HELD
+    | RESULT check MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits: HELD
+    | RESULT generate box=447c5c6d4d39 arm=default route=resident prompt=512 new=32 median 1451.7 ms (45.37 ms/token) runs 1104.4 1451.7 1454.6 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1567.2 ms (48.98 ms/token) runs 1637.5 1329.1 1567.2 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 default/fp32_v1 = 0.926 (default QUICKER)
+    | DEFAULT GATE GREEN
+PHASE smollm2-resident-gate                        exit=0   expected=pass held
+    | RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+    | RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+    | RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 the resident route ran: HELD
+    | RESULT check fixed15_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+    | RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+    | RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 the resident route ran: HELD
+    | RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESIDENT GATE GREEN
+finished=2026-09-29T08:30:30Z
+MERGE CHECK GREEN
+gpuq: job 0033 done exit=0 at 2026-09-29T08:30:33Z after 716s
