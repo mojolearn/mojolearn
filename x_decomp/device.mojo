@@ -808,7 +808,7 @@ def _svd2_of_r(
         while done < pairs:
             var cnt = per if pairs - done > per else pairs - done
             ctx.enqueue_function[one_sided_svd2_chunk_kernel](
-                rt.unsafe_ptr(), vt.unsafe_ptr(), rots.unsafe_ptr() + k, Int32(n), Int32(p), Int32(q), Int32(cnt),
+                rt.unsafe_ptr(), vt.unsafe_ptr(), _p(rots) + k, Int32(n), Int32(p), Int32(q), Int32(cnt),
                 X_DECOMP_SVD_TOL, grid_dim=(1, 1, 1), block_dim=(J2_TPB, 1, 1),
             )
             ctx.synchronize()
