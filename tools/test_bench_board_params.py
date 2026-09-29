@@ -205,3 +205,17 @@ def test_cuml_tsvd_full_solver_ignores_n_iter_and_tol():
     with pytest.raises(BP.ParamsRefused, match="n_components"):
         BP.enforce("tsvd", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
                    stream=io.StringIO())
+
+
+def test_holt_winters_add_is_additive():
+    ours = _est("mojolearn.forecast", "ExponentialSmoothing", seasonal="additive",
+                seasonal_periods=24, eps=0.00224, start_periods=2)
+    cuml = _est("cuml.tsa.holtwinters", "ExponentialSmoothing", seasonal="add",
+                seasonal_periods=24, eps=0.00224, start_periods=2)
+    rep = BP.enforce("ets", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    cuml._p["seasonal"] = "mul"
+    with pytest.raises(BP.ParamsRefused, match="seasonal"):
+        BP.enforce("ets", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                   stream=io.StringIO())

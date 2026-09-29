@@ -97,6 +97,12 @@ def _cuml_pca_solver(v):
     return "covariance_eigh" if v == "full" else v
 
 
+def _hw_component(v):
+    """Holt-Winters component names: cuML and statsmodels also spell
+    'additive'/'multiplicative' as 'add'/'mul' (the same model)."""
+    return {"add": "additive", "mul": "multiplicative"}.get(v, v)
+
+
 def _unit_if_none(v):
     """scale_pos_weight: None is every library's documented unit weight 1."""
     return 1.0 if v is None else v
@@ -199,7 +205,9 @@ ALIASES = {
                   # GradientBoosting's class weights as the positive-class weight
                   "class_weights": ("scale_pos_weight", _pos_over_neg)},
     "cuml": {"n_bins": "max_bin", "n_folds": "cv",
-             "svd_solver": ("svd_solver", _cuml_pca_solver)},
+             "svd_solver": ("svd_solver", _cuml_pca_solver),
+             "seasonal": ("seasonal", _hw_component)},
+    "statsmodels": {"seasonal": ("seasonal", _hw_component), "trend": ("trend", _hw_component)},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
 }
