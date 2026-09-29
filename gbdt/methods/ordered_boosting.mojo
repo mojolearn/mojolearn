@@ -368,6 +368,52 @@ def _ord_stage_in_kernel(
         out_c.unsafe_store(i, cursor.unsafe_load(j))
 
 
+def _ord_leaf_gather_kernel(
+    bins: MutPointer[UInt32, MutAnyOrigin],
+    perm: MutPointer[UInt32, MutAnyOrigin],
+    dst: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """`dst[r] = bins[perm[r]]`: permutation position `r`'s leaf, the value
+    `_partition_into` read on the host through `tree_bins[permutation[r]]`
+    (scalar u32 loads and stores; no vector load)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        dst.unsafe_store(i, bins.unsafe_load(Int(perm.unsafe_load(i))))
+
+
+def _ord_segment_rows_kernel(
+    sorted_rows: MutPointer[UInt32, MutAnyOrigin],
+    table: MutPointer[UInt32, MutAnyOrigin],
+    n_leaves_in: Int32,
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """One task's partition from its permutation's FULL stable partition
+    (lane/ordered-speed). `table` holds, per leaf `b`, the task's offset
+    `table[3b]`, its size `table[3b + 1]` and the leaf's segment start in
+    `sorted_rows` `table[3b + 2]`. Output position `i` lies in the leaf `c`
+    that is the LAST with `offset <= i` (an empty leaf before it shares its
+    offset; every leaf after it starts past `i`), and takes the
+    `(i - offset_c)`-th row of `c`'s segment: the rows of a leaf are in
+    ascending permutation position there, so a task over the prefix
+    `[0, E)` owns exactly the first `size_c` of them, in the order the
+    stable counting sort of `[0, E)` wrote them. Scalar u32 loads only."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var lo = 0
+        var hi = Int(n_leaves_in) - 1
+        while lo < hi:
+            var mid = (lo + hi + 1) >> 1
+            if Int(table.unsafe_load(3 * mid)) <= i:
+                lo = mid
+            else:
+                hi = mid - 1
+        var off = Int(table.unsafe_load(3 * lo))
+        var seg = Int(table.unsafe_load(3 * lo + 2))
+        row_index.unsafe_store(i, sorted_rows.unsafe_load(seg + i - off))
+
+
 def _grid(n: Int) -> Int:
     return (n + ORDERED_BLOCK - 1) // ORDERED_BLOCK
 
@@ -377,46 +423,152 @@ def _grid(n: Int) -> Int:
 # ===========================================================================
 
 
-def _partition_into(
-    ctx: DeviceContext,
-    tree_bins: HostBuffer[DType.uint32],
-    permutation: List[UInt32],
-    n_rows: Int,
-    n_leaves: Int,
-    h_rows: HostBuffer[DType.uint32],
-    mut row_index: DeviceBuffer[DType.uint32],
-    mut sizes: List[Int],
-    mut offsets: List[Int],
-) raises:
-    """`_partition_from_host_bins` into the caller's `row_index` (at least
-    `n_rows` long; the upload copies the whole staging buffer, whose first
-    `n_rows` cells are this partition), nothing drained."""
-    if n_leaves <= 0:
-        raise Error("partition_from_bins: n_leaves must be positive")
-    sizes.clear()
-    for _ in range(n_leaves):
-        sizes.append(0)
-    var bins_p = tree_bins.unsafe_ptr()
-    for r in range(n_rows):
-        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
-        if b < 0 or b >= n_leaves:
-            raise Error(
-                "partition_from_bins: row " + String(r) + " fell in leaf "
-                + String(b) + " of " + String(n_leaves)
-            )
-        sizes[b] += 1
-    offsets.clear()
-    var running = 0
-    for i in range(n_leaves):
-        offsets.append(running)
-        running += sizes[i]
-    var fill = offsets.copy()
-    var rows_p = h_rows.unsafe_ptr()
-    for r in range(n_rows):
-        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
-        rows_p.unsafe_store(fill[b], UInt32(r))
-        fill[b] += 1
-    ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
+struct _PermPartition(Movable):
+    """One permutation's STABLE partition of its positions `[0, need)` by
+    the tree's leaf, rebuilt each tree (lane/ordered-speed): `sorted`
+    (host staging and its device copy) lists the positions leaf by leaf,
+    ascending within a leaf; `seg_start[b]` is where leaf `b`'s run begins;
+    `snap[k * n_leaves + b]` counts leaf `b` among the positions below the
+    `k`-th task boundary `bounds[k]` (a task over the prefix `[0, E)`
+    reads the snapshot of `E`). Replaces a host counting sort per TASK
+    (two random-access host passes over each prefix, most of an Ordered
+    tree's wall at 4.1M rows) with one per permutation."""
+
+    var need: Int
+    var bounds: List[Int]
+    var h_leaf: HostBuffer[DType.uint32]
+    var d_leaf: DeviceBuffer[DType.uint32]
+    var h_sorted: HostBuffer[DType.uint32]
+    var d_sorted: DeviceBuffer[DType.uint32]
+    var seg_start: List[Int]
+    var snap: List[Int]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        var bounds: List[Int],
+    ) raises:
+        var need = 0
+        for i in range(len(bounds)):
+            if bounds[i] > need:
+                need = bounds[i]
+        # ascending, unique (a handful of fold prefixes)
+        var uniq = List[Int]()
+        for i in range(len(bounds)):
+            var seen = False
+            for j in range(len(uniq)):
+                if uniq[j] == bounds[i]:
+                    seen = True
+            if not seen:
+                var at = len(uniq)
+                uniq.append(bounds[i])
+                while at > 0 and uniq[at - 1] > uniq[at]:
+                    var t = uniq[at - 1]
+                    uniq[at - 1] = uniq[at]
+                    uniq[at] = t
+                    at -= 1
+        self.need = need
+        self.bounds = uniq^
+        self.h_leaf = arena.host_buffer[DType.uint32](ctx, need)
+        self.d_leaf = arena.device[DType.uint32](ctx, need)
+        self.h_sorted = arena.host_buffer[DType.uint32](ctx, need)
+        self.d_sorted = arena.device[DType.uint32](ctx, need)
+        self.seg_start = List[Int]()
+        self.snap = List[Int]()
+
+    def enqueue_leaves(
+        mut self,
+        ctx: DeviceContext,
+        mut bins: DeviceBuffer[DType.uint32],
+        mut dperm: DeviceBuffer[DType.uint32],
+    ) raises:
+        """The leaf of every position below `need`, gathered on the device
+        and brought home; the caller drains before `build`."""
+        ctx.enqueue_function[_ord_leaf_gather_kernel](
+            bins.unsafe_ptr(), dperm.unsafe_ptr(), self.d_leaf.unsafe_ptr(),
+            Int32(self.need), grid_dim=(_grid(self.need), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_copy(dst_buf=self.h_leaf, src_buf=self.d_leaf)
+
+    def build(mut self, ctx: DeviceContext, n_leaves: Int) raises:
+        """The host counting sort of `[0, need)` (sequential reads of the
+        gathered leaves), the per-boundary snapshots, and the upload of
+        `sorted` (enqueued, not drained: the tree's closing drain orders
+        the next tree's rewrite of the staging after it)."""
+        var leaf_p = self.h_leaf.unsafe_ptr()
+        var counts = List[Int](length=n_leaves, fill=0)
+        self.snap = List[Int](length=len(self.bounds) * n_leaves, fill=0)
+        var k = 0
+        for r in range(self.need):
+            while k < len(self.bounds) and self.bounds[k] == r:
+                for b in range(n_leaves):
+                    self.snap[k * n_leaves + b] = counts[b]
+                k += 1
+            var b = Int(leaf_p.unsafe_load(r))
+            if b < 0 or b >= n_leaves:
+                raise Error(
+                    "partition_from_bins: row " + String(r) + " fell in leaf "
+                    + String(b) + " of " + String(n_leaves)
+                )
+            counts[b] += 1
+        while k < len(self.bounds):
+            for b in range(n_leaves):
+                self.snap[k * n_leaves + b] = counts[b]
+            k += 1
+        self.seg_start = List[Int](length=n_leaves, fill=0)
+        var running = 0
+        for b in range(n_leaves):
+            self.seg_start[b] = running
+            running += counts[b]
+        var fill = self.seg_start.copy()
+        var out_p = self.h_sorted.unsafe_ptr()
+        for r in range(self.need):
+            var b = Int(leaf_p.unsafe_load(r))
+            out_p.unsafe_store(fill[b], UInt32(r))
+            fill[b] += 1
+        ctx.enqueue_copy(dst_buf=self.d_sorted, src_ptr=self.h_sorted.unsafe_ptr())
+
+    def task_partition(
+        mut self,
+        ctx: DeviceContext,
+        estimate_size: Int,
+        n_leaves: Int,
+        mut htab: HostBuffer[DType.uint32],
+        mut dtab: DeviceBuffer[DType.uint32],
+        mut row_index: DeviceBuffer[DType.uint32],
+        mut sizes: List[Int],
+        mut offsets: List[Int],
+    ) raises:
+        """The partition `_partition_into` built for the prefix
+        `[0, estimate_size)`: the same sizes and offsets on the host, the
+        same `row_index` on the device (`_ord_segment_rows_kernel`)."""
+        var k = -1
+        for i in range(len(self.bounds)):
+            if self.bounds[i] == estimate_size:
+                k = i
+        if k < 0:
+            raise Error("ordered partition: no snapshot at the task's prefix")
+        sizes.clear()
+        offsets.clear()
+        var running = 0
+        var tp = htab.unsafe_ptr()
+        for b in range(n_leaves):
+            var c = self.snap[k * n_leaves + b]
+            sizes.append(c)
+            offsets.append(running)
+            tp.unsafe_store(3 * b, UInt32(running))
+            tp.unsafe_store(3 * b + 1, UInt32(c))
+            tp.unsafe_store(3 * b + 2, UInt32(self.seg_start[b]))
+            running += c
+        ctx.enqueue_copy(dst_buf=dtab, src_ptr=htab.unsafe_ptr())
+        ctx.enqueue_function[_ord_segment_rows_kernel](
+            self.d_sorted.unsafe_ptr(), dtab.unsafe_ptr(), Int32(n_leaves),
+            row_index.unsafe_ptr(), Int32(estimate_size),
+            grid_dim=(_grid(estimate_size), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
 
 
 def _partition_from_host_bins(
@@ -559,13 +711,15 @@ def _ordered_estimate_task(
 
 struct _OrderedSlot(Movable):
     """One batched estimation task's own buffers, for the whole fit: the
-    partition's row order and its upload staging, and the leaf
+    partition's row order and its leaf table (`_PermPartition.
+    task_partition`) with its upload staging, and the leaf
     upload pair (at `1 << max_depth`, of which a tree reads its
     `n_leaves`). Every cell a task reads it writes first; the batch's
     closing drain orders one tree's reads before the next tree's writes."""
 
     var row_index: DeviceBuffer[DType.uint32]
-    var h_rows: HostBuffer[DType.uint32]
+    var htab: HostBuffer[DType.uint32]
+    var dtab: DeviceBuffer[DType.uint32]
     var dl: DeviceBuffer[DType.float32]
     var hl: HostBuffer[DType.float32]
 
@@ -577,7 +731,8 @@ struct _OrderedSlot(Movable):
         leaf_capacity: Int,
     ) raises:
         self.row_index = arena.device[DType.uint32](ctx, estimate_size)
-        self.h_rows = arena.host_buffer[DType.uint32](ctx, estimate_size)
+        self.htab = arena.host_buffer[DType.uint32](ctx, 3 * leaf_capacity)
+        self.dtab = arena.device[DType.uint32](ctx, 3 * leaf_capacity)
         self.dl = arena.device[DType.float32](ctx, leaf_capacity)
         self.hl = arena.host_buffer[DType.float32](ctx, leaf_capacity)
 
@@ -603,9 +758,7 @@ def _ordered_estimate_prepare(
     mut y: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     mut permutation: DeviceBuffer[DType.uint32],
-    host_permutation: List[UInt32],
-    mut bins: DeviceBuffer[DType.uint32],
-    tree_bins: HostBuffer[DType.uint32],
+    mut part: _PermPartition,
     mut slot: _OrderedSlot,
     mut cursor: DeviceBuffer[DType.float32],
     opts: OrderedBoostingOptions,
@@ -625,9 +778,9 @@ def _ordered_estimate_prepare(
     est_times.begin(ctx)
     var sizes = List[Int]()
     var offsets = List[Int]()
-    _partition_into(
-        ctx, tree_bins, host_permutation, estimate_size, n_leaves,
-        slot.h_rows, slot.row_index, sizes, offsets,
+    part.task_partition(
+        ctx, estimate_size, n_leaves, slot.htab, slot.dtab, slot.row_index,
+        sizes, offsets,
     )
     est_times.end(ctx, "est.partition")
     est_times.begin(ctx)
@@ -911,6 +1064,23 @@ def fit_ordered(
                     est = folds[f].quality_evaluate_samples.right
                 slots.append(_OrderedSlot(ctx, arena, est, 1 << max_depth))
         slots.append(_OrderedSlot(ctx, arena, n_rows, 1 << max_depth))
+    # the batch's partitions, one per permutation a task reads
+    # (`_PermPartition`): the learn permutations at every fold's estimate
+    # prefix, and the estimation permutation at every row. With one
+    # permutation the two are the same list and one partition serves both.
+    var parts = List[_PermPartition]()
+    if batch:
+        for p in range(perm_count):
+            var bounds = List[Int]()
+            if p < learn_count:
+                for f in range(n_folds):
+                    var est = folds[f].estimate_samples.right
+                    comptime if ORDERED_SABOTAGE:
+                        est = folds[f].quality_evaluate_samples.right
+                    bounds.append(est)
+            if p == est_p:
+                bounds.append(n_rows)
+            parts.append(_PermPartition(ctx, arena, bounds^))
     var losses = List[Float64]()
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_part = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
@@ -1088,10 +1258,19 @@ def fit_ordered(
                 ctx, layout, splits, len(splits), cindex, n_rows, bins
             )
         var n_leaves = 1 << len(splits)
-        # the tree's bins on the host ONCE, for every task's partition
-        # (`_partition_from_host_bins`)
-        ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
-        ctx.synchronize()
+        if batch:
+            # every permutation's leaves home at once, then one host
+            # counting sort per permutation (`_PermPartition`)
+            for p in range(perm_count):
+                parts[p].enqueue_leaves(ctx, bins, dperms[p])
+            ctx.synchronize()
+            for p in range(perm_count):
+                parts[p].build(ctx, n_leaves)
+        else:
+            # the tree's bins on the host ONCE, for every task's partition
+            # (`_partition_from_host_bins`)
+            ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
+            ctx.synchronize()
 
         times.end(ctx, "ord.bins")
         # 6. the fold models, then the estimation model
@@ -1108,8 +1287,8 @@ def fit_ordered(
                     pend.append(
                         _ordered_estimate_prepare(
                             ctx, est, folds[f].quality_evaluate_samples.right,
-                            n_leaves, targets, weights, dperms[lp], perms[lp],
-                            bins, h_tree_bins, slots[slot],
+                            n_leaves, targets, weights, dperms[lp], parts[lp],
+                            slots[slot],
                             cursors[lp][f], opts, sm_count, est_pools[slot],
                             arena, est_times, walker_times,
                         )
@@ -1118,7 +1297,7 @@ def fit_ordered(
             pend.append(
                 _ordered_estimate_prepare(
                     ctx, n_rows, n_rows, n_leaves, targets, weights,
-                    dperms[est_p], perms[est_p], bins, h_tree_bins,
+                    dperms[est_p], parts[est_p],
                     slots[est_slot], est_cursor, opts, sm_count,
                     est_pools[est_slot], arena, est_times, walker_times,
                 )
@@ -1220,6 +1399,7 @@ def fit_ordered(
     _ = h_tree_bins^
     _ = h_part_rows^
     _ = slots^
+    _ = parts^
     _ = der_gy^
     _ = der_gw^
     _ = der_stats^
