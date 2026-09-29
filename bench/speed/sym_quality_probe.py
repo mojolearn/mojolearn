@@ -88,10 +88,16 @@ def main():
         for attr in ("learning_rate_", "n_trees_", "best_iteration_", "tree_count_"):
             if hasattr(m, attr):
                 print("PROBE ours %s=%r" % (attr, getattr(m, attr)), flush=True)
-        counts = list(np.asarray(m.get_tree_leaf_counts()))
-        leaves = np.asarray(m.get_leaf_values())
+        counts = [int(c) for c in np.asarray(m.get_tree_leaf_counts()).reshape(-1)]
+        leaves = np.asarray(m.get_leaf_values(), dtype=np.float64).reshape(-1)
         print("PROBE ours trees=%d leaves=%d" % (len(counts), int(sum(counts))), flush=True)
-        off = np.concatenate([[0], np.cumsum(counts)])
+        off = [0]
+        for c in counts:
+            off.append(off[-1] + c)
+        depths = [c.bit_length() - 1 for c in counts]
+        for b in range(0, len(counts), 100):
+            blk = depths[b:b + 100]
+            print("PROBE ours block %4d depth-hist %s" % (b, {d: blk.count(d) for d in sorted(set(blk))}), flush=True)
         for b in range(0, len(counts), 100):
             e = min(b + 100, len(counts))
             v = leaves[off[b]:off[e]]
