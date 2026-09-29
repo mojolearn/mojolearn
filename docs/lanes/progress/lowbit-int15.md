@@ -156,3 +156,28 @@ It is another arithmetic than the one whose perplexity was measured for
 - The forward vectors exported again under the moved pin.
 - Failures 2, reproduced alone.
 - The blocks (step 3): not started; waits on the orchestrator's word.
+
+## 2026-09-29 05:00Z, taken over by a new agent (brief_current.md in force)
+
+- RUN 5 READ (nvc3-0028, 99ae7bb66, the alternation in two blocks), the H100
+  run of record: `bench/results/lowbit_int15/2026-09-29/tables/H100_RECORD_run5.md`.
+  gate and tuned_gate GREEN in the same job; 50 tuned digests equal the
+  reference plan's. Complete inference call, tuned plan, over fp32.v1 in the
+  same run: 0.43 to 0.50 at the 512-token rows; t1/t8 0.53 to 2.69 (qkv and
+  mlp_down above 1). Three products of one layer, added: qkv 0.765, mlp_up
+  0.765, mlp_down 0.730; lm_head refused (k = 128256). Weight gradient
+  product alone 0.88 to 0.98.
+- STEWARD JOBS AT 99ae7bb66 (gate, sim): M2 Pro 1790656528407, M3 Ultra
+  1790656532290, MI325X 1790656534874, all GREEN, every sabotage arm seen
+  failing, the large product (512 x 4096 x 14336) written whole on every
+  clean arm. The recorded one-launch arm (no bound) ALSO wrote it whole on
+  both Macs: the abort did not reproduce in the gate; it did in the M2 Pro
+  reproduction (d4c9d8a34, 2 runs of 3). Clean gate digests of H100 nvc3-0028
+  and the three: 176 cases, 0 missing, 0 disagreeing
+  (`identity/four_box_digests_99ae7bb66.txt`).
+- HARNESS (step 2) submitted at d07ecd201: H100 nvc3-0029; M3 Ultra
+  1790657536591; M2 Pro 1790657540572; MI325X 1790657543156.
+- EPILOGUE FOLD (task 4): interface proposed to the orchestrator (a new file
+  `gemm/checks/gemm_int15_epilogue.mojo` with `int15_store_cell`; Lane D's
+  sums kernel takes `FUSED: Bool` and calls it at its store). Nothing written
+  until approved.
