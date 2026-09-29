@@ -607,7 +607,7 @@ def arm_library(arm):
     if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM):
         return "mojolearn"
     head = arm.split("-", 1)[0]
-    return {"sklearn": "scikit-learn", "umap": "umap-learn"}.get(head, head)
+    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers"}.get(head, head)
 
 
 def arm_device(arm, vendor):
