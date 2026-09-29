@@ -14,6 +14,7 @@ export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-sm_89}
 PY="pixi run -e default python"
 for t in "$LANE_DIR" "$BASE_DIR"; do
   (cd "$t" && git log --oneline -1 2>/dev/null || true; cd "$t" && sh bindings/build_x_linear.sh) 2>&1 | grep -A8 " error:\|^built"
+  [ -f "$t/python/mojolearn/identical/_mojolearn.so" ] || (cd "$t" && sh bindings/build.sh) 2>&1 | grep -A8 " error:\|^built" || true
 done
 if [ ! -f "$DATA/reg-istella.npz" ] || [ ! -f "$DATA/cls-istella.npz" ]; then
   (cd "$LANE_DIR" && $PY tools/bench_board_algos.py prep --data "$DATA" --lanes sgd-clf,sgd-reg,poisson --datasets taxi,istella) 2>&1 | tail -5
