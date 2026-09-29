@@ -620,19 +620,20 @@ def test_cross_check_batch_na_is_respected_not_invented():
     assert "n/a" in va.format_cross_check(r)
 
 
-def test_cross_check_scope_tiers_respect_the_apple_lane_cap():
-    """The default must not exceed what one Apple Metal process may run:
-    identity_break refuses a full column outside a release, in code."""
-    assert va.APPLE_LANE_CAP == 24
+def test_cross_check_scope_tiers_bound_default_but_never_all():
+    """The routine budget must not truncate an explicitly complete check."""
+    assert va.CROSS_CHECK_DEFAULT_LANES == 24
     _need_numpy()
     harness = va.load_harness()
     quick, every, per_family = va.cross_check_lanes(harness, "quick")
     default, _, _ = va.cross_check_lanes(harness, "default")
     every_lanes, _, _ = va.cross_check_lanes(harness, "all")
     assert set(quick) == set(per_family.values()), "quick is one lane per family"
-    assert len(default) <= va.APPLE_LANE_CAP, "the default would be refused on Apple"
+    assert len(default) <= va.CROSS_CHECK_DEFAULT_LANES
     assert len(quick) <= len(default) <= len(every_lanes)
     assert set(default) <= set(every), "the default must stay inside the intersection"
+    assert every_lanes == every
+    assert len(every_lanes) > va.CROSS_CHECK_DEFAULT_LANES
 
 
 # --------------------------------------------- every lane accounted for
@@ -642,8 +643,7 @@ def _exposure(lanes, status="NOT APPLICABLE", reason="claim requires two devices
 
 
 def test_the_accounting_denominator_is_the_whole_harness():
-    """THE NUMBER A USER READS IS 256, NOT 186 (lane/verifier-full-exposure,
-    2026-09-20). Every lane the harness defines gets exactly one state, and
+    """Every lane the harness defines gets exactly one state, and
     the states sum to the lane list. A lane that fell out of the accounting
     would be exactly the silent absence this block exists to remove, so the
     sum is asserted rather than assumed."""

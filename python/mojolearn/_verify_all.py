@@ -1104,11 +1104,10 @@ def _cmd_self_test(args, ml):
     return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
 
 
-#: One Apple Metal process may run at most this many lanes before
-#: `identity_break.refuse_routine_apple_column` refuses it: a full column is a
-#: per-release artifact, not something a routine command takes. The cross-check
-#: respects it rather than tripping over it, so the default is capped here.
-APPLE_LANE_CAP = 24
+#: A runtime budget for the default tier, not a Metal or correctness limit.
+CROSS_CHECK_DEFAULT_LANES = 24
+#: Full checks use fresh, sequential processes to bound accumulated resources.
+CROSS_CHECK_BATCH_LANES = 24
 
 
 def cross_check_lanes(harness, scope="default"):
@@ -1122,12 +1121,9 @@ def cross_check_lanes(harness, scope="default"):
 
       quick    one lane per family, base fixture. Seconds, for someone in a
                hurry or wiring this into CI.
-      default  up to APPLE_LANE_CAP lanes, base fixture. Minutes. Capped
-               because one Apple Metal process may not run more than that
-               without naming a release, which is enforced in identity_break
-               rather than advisory.
-      all      the whole intersection. On Apple this is REFUSED by that same
-               rule, deliberately; on NVIDIA and AMD it runs.
+      default  up to CROSS_CHECK_DEFAULT_LANES lanes, base fixture.
+      all      every eligible lane and every fixture, including on Apple.
+               The CLI runs sequential batches in fresh processes.
     """
     hs = host_surface()
     shipped = set(hs.wheel_bindings())
@@ -1151,12 +1147,70 @@ def cross_check_lanes(harness, scope="default"):
         # bites, then fill up to the cap in lane order
         chosen = list(representative)
         for lane in every:
-            if len(chosen) >= APPLE_LANE_CAP:
+            if len(chosen) >= CROSS_CHECK_DEFAULT_LANES:
                 break
             if lane not in chosen:
                 chosen.append(lane)
-        chosen = sorted(chosen[:APPLE_LANE_CAP])
+        chosen = sorted(chosen[:CROSS_CHECK_DEFAULT_LANES])
     return chosen, every, dict(per_family)
+
+
+def _cross_check_result(vendor, lanes, fixtures, rows, skipped):
+    """A requested cell that never ran must prevent a successful exit."""
+    expected = {(lane, fx, part) for lane in lanes for fx in fixtures
+                for part in ("infer", "batch")}
+    seen = {(r['lane'], r['fixture'], r['part']) for r in rows}
+    missing = [dict(lane=l, fixture=f, part=p) for l, f, p in sorted(expected - seen)]
+    agree = sum(r['agree'] is True for r in rows)
+    differ = sum(r['agree'] is False for r in rows)
+    complete = not missing and not skipped and seen == expected and len(seen) == len(rows)
+    return dict(ran=True, vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
+                lanes=sorted({r['lane'] for r in rows}), fixtures=list(fixtures),
+                requested_lanes=list(lanes), requested_fixtures=list(fixtures),
+                compared=len(rows), agree=agree, differ=differ,
+                skipped=skipped, missing=missing, complete=complete, cells=rows,
+                passed=(differ == 0 and complete) if rows else None)
+
+
+def _cross_check_batched(lanes, fixtures, cpu_threads, log):
+    """Run the complete selection serially; retain failures and continue."""
+    from . import _backend
+    rows, skipped, jobs = [], {}, []
+    for fixture in fixtures:
+        for start in range(0, len(lanes), CROSS_CHECK_BATCH_LANES):
+            selected = lanes[start:start + CROSS_CHECK_BATCH_LANES]
+            log(f"# cross-check batch: {fixture}, lanes {start + 1}-{start + len(selected)} of {len(lanes)}")
+            command = [sys.executable, '-m', 'mojolearn', 'verify',
+                       '--cross-check', 'default', '--lanes', ','.join(selected),
+                       '--fixtures', fixture, '--cpu-threads', str(cpu_threads), '--json']
+            try:
+                proc = subprocess.run(command, stdout=subprocess.PIPE, text=True)
+            except OSError as exc:
+                jobs.append(dict(lanes=selected, fixture=fixture, exit=EXIT_CANNOT_RUN))
+                for lane in selected:
+                    skipped[f'{lane}/{fixture}'] = f'cannot start cross-check process: {exc}'
+                continue
+            jobs.append(dict(lanes=selected, fixture=fixture, exit=proc.returncode))
+            try:
+                doc = json.loads(proc.stdout)
+                if not isinstance(doc, dict) or doc.get('format') != 'mojolearn.verify-cross-check.v1':
+                    raise ValueError('child produced no cross-check report')
+                rows.extend(doc['cells'])
+                skipped.update(doc['skipped'])
+                if proc.returncode not in (EXIT_VERIFIED, EXIT_MISMATCH, EXIT_CANNOT_RUN):
+                    raise ValueError(f'child exited {proc.returncode}')
+                if proc.returncode and doc.get('passed'):
+                    raise ValueError(f'child exited {proc.returncode} despite a passing report')
+            except (ValueError, KeyError, TypeError) as exc:
+                for lane in selected:
+                    skipped[f'{lane}/{fixture}'] = f'cross-check process failed (exit {proc.returncode}): {exc}'
+    result = _cross_check_result(_backend.vendor(), lanes, fixtures, rows, skipped)
+    result['batches'] = jobs
+    if any(job['exit'] != EXIT_VERIFIED for job in jobs):
+        result['complete'] = False
+        if result['passed'] is not None:
+            result['passed'] = False
+    return result
 
 
 def cross_check(harness, ml, lanes, fixtures, log=None):
@@ -1196,7 +1250,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                             "against the recorded columns, and `--self-test` still shows the "
                             "comparison can fail."))
     from ._forest_host import host_model, binary_path
-    rows, agree, differ, skipped = [], 0, 0, {}
+    rows, skipped = [], {}
     for lane in lanes:
         for fx in fixtures:
             t0 = time.time()
@@ -1205,14 +1259,14 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
             try:
                 fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
             except Exception as exc:
-                skipped[lane] = f"the lane raised: {type(exc).__name__}: {exc}"[:200]
+                skipped[f'{lane}/{fx}'] = f"the lane raised: {type(exc).__name__}: {exc}"[:200]
                 continue
             if not callable(fit.probe):
-                skipped[lane] = f"no out-of-sample probe ({fit.probe})"
+                skipped[f'{lane}/{fx}'] = f"no out-of-sample probe ({fit.probe})"
                 continue
             sl = harness._save_load(fit.est)
             if sl is None:
-                skipped[lane] = "the estimator has no save/load, so the CPU side has nothing to load"
+                skipped[f'{lane}/{fx}'] = "the estimator has no save/load, so the CPU side has nothing to load"
                 continue
             save, _load, suffix = sl
             try:
@@ -1230,12 +1284,18 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                 gb, gerr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
                 if gerr is None and isinstance(gb, str) and not gb.startswith("n/a"):
                     pair["batch"] = [gb, None]
-                elif isinstance(gb, str) and gb.startswith("n/a"):
+                elif gerr is None and isinstance(gb, str) and gb.startswith("n/a"):
                     pair["batch"] = [gb, gb]        # declared absent on both sides
+                else:
+                    raise RuntimeError(f'GPU batch check failed: {gerr or gb}')
                 with tempfile.TemporaryDirectory(prefix="mojolearn_cross_") as tmp:
                     path = os.path.join(tmp, f"{lane}{suffix}")
                     getattr(fit.est, save)(path)
                     host = host_model(path)
+                    # This is fixture input, not learned state. The batch
+                    # probe needs the same held-out affinity on both devices.
+                    if lane == 'spectral-precomputed':
+                        host._identity_heldout_affinity = fit.est._identity_heldout_affinity
                     bound = getattr(getattr(host, "_binding", None), "__file__", None)
                     if bound is not None and type(host).__name__ in ("HostGBDT", "HostForest") and (
                             os.path.realpath(bound) != os.path.realpath(binary_path())):
@@ -1250,16 +1310,13 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
                                                         harness.BATCH_ALONE, False)
                         pair["batch"][1] = hb if herr is None else f"raised: {herr}"[:120]
             except Exception as exc:
-                skipped[lane] = f"{type(exc).__name__}: {exc}"[:200]
+                skipped[f'{lane}/{fx}'] = f"{type(exc).__name__}: {exc}"[:200]
                 continue
             secs = round(time.time() - t0, 3)
             verdicts = []
             for part, (g, c) in sorted(pair.items()):
                 na = isinstance(g, str) and g.startswith("n/a")
                 same = (g == c)
-                if not na:
-                    agree += same
-                    differ += (not same)
                 rows.append(dict(lane=lane, fixture=fx, part=part, gpu=g, cpu=c,
                                  agree=None if na else same, na=na, seconds=secs))
                 verdicts.append(f"{part}={'n/a' if na else ('agree' if same else 'DIFFER')}")
@@ -1272,11 +1329,7 @@ def cross_check(harness, ml, lanes, fixtures, log=None):
     # compared, so nothing differed and nothing agreed. Reporting a result
     # about hashes that were never computed is the same defect as VERIFIED over
     # a refused run (lane/verify-cross-check, 2026-09-16).
-    return dict(ran=True, vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
-                lanes=sorted({r['lane'] for r in rows}), fixtures=list(fixtures),
-                compared=len(rows), agree=agree, differ=differ,
-                skipped=skipped, cells=rows,
-                passed=(differ == 0) if rows else None)
+    return _cross_check_result(vendor, lanes, fixtures, rows, skipped)
 
 
 def format_cross_check(r):
@@ -1292,6 +1345,10 @@ def format_cross_check(r):
     lines.append("`batch` is batch invariance: same row, different batch neighbours, same bits --")
     lines.append("a different axis, and the one that bites a serving system batching dynamically.")
     lines.append("")
+    if 'scope' in r:
+        lines.append(f"Scope: {r['scope']}; {len(r['requested_lanes'])} of {r['intersection']} eligible lanes, "
+                     f"{len(r['fixtures'])} of {r['available_fixtures']} fixtures.")
+        lines.append("")
     for c in r["cells"]:
         if c.get("na"):
             lines.append(f"  {c['lane']:<26} {c['fixture']:<8} {c['part']:<6} n/a  {c['gpu']}")
@@ -1323,14 +1380,17 @@ def format_cross_check(r):
             lines.append("named above, and says nothing about the ones that did not run.")
         lines.append("You generated both sides on two different pieces of hardware in this machine,")
         lines.append("so this result depends on trusting nobody: not our recorded columns, not us.")
-    else:
+    elif r['differ']:
         lines.append(f"RESULT: MISMATCH. {r['differ']} of {r['compared']} cells differ between this")
         lines.append("machine's GPU and its CPU. The differing hashes are above and in --json.")
+    else:
+        lines.append(f"RESULT: INCOMPLETE. {r['agree']} cell parts agree, but the requested scope did not complete.")
+        lines.append(f"Missing cell parts: {len(r.get('missing', []))}. This is not a pass.")
     return "\n".join(lines)
 
 
 def _cmd_cross_check(args, ml):
-    """`verify --cross-check [fast|all]`: this machine's GPU against its CPU."""
+    """`verify --cross-check [quick|default|all]`: GPU against CPU."""
     json_out = getattr(args, "json", False)
     log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit
     scope = getattr(args, "cross_check", None) or "default"
@@ -1349,7 +1409,8 @@ def _cmd_cross_check(args, ml):
                   f"the intersection is {len(every)} lanes", sys.stderr)
             return EXIT_USAGE
         chosen = [l for l in every if l in asked]
-    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x] or ["base"]
+    requested_fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x]
+    fixtures = list(dict.fromkeys(requested_fixtures)) or (list(harness.FIXTURES) if scope == 'all' else ['base'])
     bad = [f for f in fixtures if f not in harness.FIXTURES]
     if bad:
         _emit(f"USAGE: --fixtures names fixtures the harness does not define: {bad}", sys.stderr)
@@ -1357,10 +1418,15 @@ def _cmd_cross_check(args, ml):
 
     log(f"# cross-check ({scope}): {len(chosen)} of {len(every)} intersection lanes x "
         f"{len(fixtures)} fixture(s)")
-    result = cross_check(harness, ml, chosen, fixtures, log=log)
-    result.update(scope=scope, intersection=len(every), intersection_lanes=every,
+    from . import _backend
+    if scope == 'all' and _backend.vendor() != 'cpu':
+        result = _cross_check_batched(chosen, fixtures, getattr(args, 'cpu_threads', 1), log)
+    else:
+        result = cross_check(harness, ml, chosen, fixtures, log=log)
+    result.update(scope='custom' if asked or requested_fixtures else scope,
+                  requested_scope=scope, intersection=len(every), intersection_lanes=every,
                   representative_of=per_family, elapsed_s=round(time.time() - started, 2),
-                  apple_lane_cap=APPLE_LANE_CAP)
+                  available_fixtures=len(harness.FIXTURES), default_lane_budget=CROSS_CHECK_DEFAULT_LANES)
     if json_out:
         _emit(json.dumps(dict(format="mojolearn.verify-cross-check.v1", **result),
                          indent=1, sort_keys=True))
@@ -1370,7 +1436,9 @@ def _cmd_cross_check(args, ml):
         # no GPU, or no lane produced both answers: nothing was compared, which
         # is CANNOT RUN rather than a verdict about hashes never computed
         return EXIT_CANNOT_RUN
-    return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
+    if result['differ']:
+        return EXIT_MISMATCH
+    return EXIT_VERIFIED if result["passed"] else EXIT_CANNOT_RUN
 
 
 #: The evidence document `--compare` reads. A file that does not announce

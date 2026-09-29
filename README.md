@@ -121,6 +121,20 @@ mojolearn doctor
 
 reports what the installed wheel supports on this machine.
 
+Direct GPU/CPU cross-checks have three explicit tiers:
+
+- `verify --cross-check quick`: one eligible lane per family, base fixture.
+- `verify --cross-check default`: up to 24 eligible lanes, base fixture.
+- `verify --cross-check all`: every eligible lane on every fixture, including
+  Apple Metal, using sequential batches in fresh processes.
+
+Use `python -m mojolearn verify --cross-check all --cpu-threads 1 --json`
+for the complete cross-check. Explicit `--lanes` or `--fixtures` selections
+are labeled custom scope. Missing comparisons and execution failures prevent
+a successful exit. This compares inference and batch behavior on routes with
+both GPU and CPU implementations; `verify --all` separately compares the
+broader algorithm surface with bundled reference hashes.
+
 ## Quick start
 
 ```python
