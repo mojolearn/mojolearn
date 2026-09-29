@@ -83,7 +83,8 @@ share their power of two in the recombination, so they share a register),
 LL. It stores the three sums and NOTHING ELSE: the recombination in Int64,
 the pinned conversion and the scale are the fifteen-bit profile's seams and
 live in its own file. Every sum is an exact integer under
-`INT8_PIECES_MAX_K`, so every plan of it returns the same three integers.
+`INT8_PIECES_MAX_K` for the operands that bound is stated for (low planes
+in [0, 127]), so every plan of it returns the same three integers.
 
 THE SABOTAGE ARMS.
   `-D MOJOLEARN_INT8_PIECES_SABOTAGE=1` pairs the wrong fragments in the
@@ -136,13 +137,19 @@ comptime INT8_TUNED_UNSTATED = is_defined["MOJOLEARN_INT8_TUNED_UNSTATED"]()
 #: The four-product kernel's defect arm: HL twice, LH never.
 comptime INT8_PIECES_SABOTAGE = is_defined["MOJOLEARN_INT8_PIECES_SABOTAGE"]()
 
-#: The largest `k` of the four-product kernel. Its operands are ANY int8
-#: (a high piece reaches -128), so a product is at most 128 * 128 = 16384
-#: in magnitude and the middle accumulator takes two per step:
-#: `2 * 16384 * 65535 = 2147450880 < 2^31`, and 65536 steps would reach
-#: 2^31. A profile with narrower pieces may admit more; this kernel does
-#: not know the pieces' ranges and refuses above its own bound.
-comptime INT8_PIECES_MAX_K = 65535
+#: The largest `k` of the four-product kernel, the fifteen-bit profile's
+#: own (`INT15_MAX_K`, its clause W-4), and THE OPERANDS IT IS STATED FOR:
+#: HIGH planes of any int8, LOW planes in [0, 127], which is what the
+#: profile's split writes (its clause W-3). Then
+#:     HH        at most 128 * 128 = 16384 a step     exact to k = 131071
+#:     HL + LH   at most 2 * 128 * 127 = 32512 a step  exact to k = 66052
+#:     LL        at most 127 * 127 = 16129 a step
+#: and 65536 is the power of two below the smallest. The kernel reads
+#: codes, not ranges: a caller whose LOW planes hold negative codes has the
+#: middle sum exact to k = 65535 only (`2 * 16384 * 65535 = 2147450880`),
+#: and `INT8_PIECES_MAX_K_ANY_INT8` names that bound.
+comptime INT8_PIECES_MAX_K = 65536
+comptime INT8_PIECES_MAX_K_ANY_INT8 = 65535
 
 #: The unit's k step on both vendors. SCHEDULING.
 comptime INT8_TUNED_K_TILE = 32
@@ -1335,7 +1342,7 @@ def _refuse_pieces_shape(m: Int, n: Int, k: Int) raises:
         raise Error(
             "identical_gemm_int8_pieces: m, n and k must be positive and k at"
             " most " + String(INT8_PIECES_MAX_K) + " (the middle sum takes two"
-            " products of magnitude 16384 per step), got m=" + String(m)
+            " products per step in one Int32), got m=" + String(m)
             + " n=" + String(n) + " k=" + String(k)
         )
 
