@@ -314,7 +314,9 @@ from transformer.impl.llama.int15_block import (
     LlamaInt15Weights,
     llama_int15_proj,
     llama_int15_scores,
+    llama_int15_scores_heads,
 )
+from gemm.checks.gemm_int15_heads import INT15_HEADS_MAX_L
 
 # ORIENTATION NUMBERING: these are `gemm_oracle`'s, where
 # `OP_NN = 0, OP_NT = 1, OP_TN = 2`. They are NOT `bench/gemm_shapes.mojo`'s
@@ -4011,7 +4013,19 @@ def attention_eager_core(
     #      is what makes this reuse decode-safe (contract 7.2). See
     #      DEVIATION 1029 for the part of that argument the contract leaves
     #      to the gemm profile's own plan-invariance gate.
-    for bb in range(b):
+    # lane/lowbit-default: under `fixed15_v1` at the decode rows, every
+    # (batch, head) at once (`llama_int15_scores_heads`: one gather, one
+    # quantizer launch a side, one product launch), the same bits as the
+    # loop below, which every other case keeps.
+    var heads_at_once = stages.int15_on and l <= INT15_HEADS_MAX_L
+    if heads_at_once:
+        if not stages.int15:
+            stages.int15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
+        llama_int15_scores_heads(
+            ctx, stages.int15.value(), stages.scores, stages.q_rope, stages.k_cache,
+            b, nh, nkv, l, s, hd,
+        )
+    for bb in range(b if not heads_at_once else 0):
         for h in range(nh):
             var kvh = h // n_rep
             step_count_launch()

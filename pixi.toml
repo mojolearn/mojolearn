@@ -1108,6 +1108,12 @@ check-gemm-int15-tuned-epilogue-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTI
 check-gemm-int15-tuned-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
 check-gemm-int15-exponent-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-tuned-exponent-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+# lane/lowbit-default: every (batch, head) score product in one launch (gemm/checks/gemm_int15_heads.mojo)
+check-gemm-int15-heads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_heads_check.mojo"
+check-gemm-int15-heads-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_heads_check.mojo"
+check-gemm-int15-heads-epilogue-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EPILOGUE_SABOTAGE=1 -I . gemm/checks/gemm_int15_heads_check.mojo"
+check-gemm-int15-heads-exponent-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1 -I . gemm/checks/gemm_int15_heads_check.mojo"
+check-gemm-int15-heads-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_heads_check.mojo"
 # DEVIATION 2975: the matrix-unit fragment loads as they were before their alignment was stated; every gate passes, same digests.
 check-gemm-int15-unstated-loads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-lowbit-unstated-loads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1 -I . gemm/checks/gemm_lowbit_check.mojo"

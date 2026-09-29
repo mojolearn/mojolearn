@@ -35,6 +35,22 @@ if [ "${LB_BUILD:-1}" = 1 ]; then
     done
 fi
 [ $red -eq 0 ] || { echo "RESIDENT JOB RED (build)"; exit 1; }
+# the gates of the kernels the resident step calls (lever 1's heads product
+# and the block under the profile), each with its arms
+gate() {  # task, expected (pass|fail)
+    $PX $1 > "$OUT/$1.log" 2>&1; rc=$?
+    if [ "$2" = pass ]; then [ $rc -eq 0 ] && v=held || { v=BROKEN; red=1; }
+    else [ $rc -ne 0 ] && v=held || { v=BROKEN; red=1; }; fi
+    echo "GATE $1 exit=$rc expected=$2 $v"; grep -E "^   ok|FAIL|gates," "$OUT/$1.log" | tail -8
+}
+gate check-gemm-int15-heads pass
+gate check-gemm-int15-heads-sabotage fail
+gate check-gemm-int15-heads-epilogue-sabotage fail
+gate check-gemm-int15-heads-exponent-sabotage fail
+gate check-gemm-int15-heads-host-sabotage fail
+gate check-transformer-int15 pass
+gate check-transformer-int15-sabotage fail
+gate check-gemm-int15-tuned pass
 echo "== resident gate (clean tree), MUST exit 0"
 $PX python tools/lowbit_default/resident_gate.py --model "$MODEL" --new ${LB_NEW:-32} --box "$BOX" 2>&1 | grep -v tcmalloc | tee "$OUT/gate_clean.log"
 rc=${PIPESTATUS[0]}; echo "resident gate clean exit $rc"; [ $rc -eq 0 ] || red=1

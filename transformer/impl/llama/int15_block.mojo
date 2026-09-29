@@ -36,6 +36,7 @@ THE ENTRY POINTS are Lane C's (`gemm/checks/gemm_int15.mojo`):
 `identical_gemm_int15_planes_into`. This file adds no arithmetic.
 """
 
+from std.gpu import block_dim, block_idx, thread_idx
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -45,6 +46,7 @@ from gemm.checks.gemm_int15 import (
     identical_gemm_int15_planes_into,
     quantize_planes_int15_parallel_device,
 )
+from gemm.checks.gemm_int15_heads import INT15_HEADS_MAX_L, identical_gemm_int15_heads_into
 from gemm.checks.gemm_int15_tuned import (
     INT15_TUNED_AVAILABLE,
     Int15SumsWorkspace,
@@ -289,6 +291,8 @@ struct LlamaInt15Stage(Movable):
     var eb: DeviceBuffer[DType.int32]
     var quant: Int15QuantWorkspace
     var sums: Int15SumsWorkspace
+    #: every head's query rows, head-major (`llama_int15_scores_heads`)
+    var qall: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext) raises:
         step_count_device_alloc()
@@ -305,6 +309,15 @@ struct LlamaInt15Stage(Movable):
         self.eb = ctx.enqueue_create_buffer[DType.int32](1)
         self.quant = Int15QuantWorkspace(ctx)
         self.sums = Int15SumsWorkspace(ctx)
+        step_count_device_alloc()
+        self.qall = ctx.enqueue_create_buffer[DType.float32](1)
+
+    def ensure_q(mut self, ctx: DeviceContext, n: Int) raises:
+        if n > len(self.qall):
+            step_count_sync()
+            ctx.synchronize()
+            step_count_device_alloc()
+            self.qall = ctx.enqueue_create_buffer[DType.float32](n)
 
     def ensure_a(mut self, ctx: DeviceContext, codes: Int, rows: Int) raises:
         if codes > len(self.ah) or rows > len(self.ea):
@@ -379,3 +392,78 @@ def llama_int15_scores(
     quantize_planes_int15_parallel_device(ctx, st.ah, st.al, st.ea, q, st.quant, l, hd, False)
     quantize_planes_int15_parallel_device(ctx, st.bh, st.bl, st.eb, kmat, st.quant, s, hd, False)
     _llama_int15_gemm(ctx, c, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, st.sums, l, s, hd)
+
+
+# ===========================================================================
+# S11 FOR EVERY (batch, head) AT ONCE (lane/lowbit-default, 2026-09-29).
+# At the decode rows the per-head loop was a gather, two quantizer launches,
+# a product and a scatter per head. Here: one gather of every head's query
+# rows (head-major), ONE quantizer launch over all of them and ONE over every
+# kv head's key rows (a row's code and exponent are functions of that row
+# alone, W-1/W-2, so this is each head's quantization), and ONE product
+# launch (`identical_gemm_int15_heads_into`) that stores each cell through
+# the profile's epilogue straight into `[B, n_heads, L, S]`. The same bits
+# as the per-head loop; `gemm_int15_heads_check.mojo` and the resident gate
+# hold it to that.
+# ===========================================================================
+
+
+def gather_q_heads_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    hd_in: Int32,
+):
+    """`gather_q_head_kernel` for every (batch, head): `q_rope` `[B, L, nh,
+    hd]` into `[B, nh, L, hd]`. A COPY."""
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var hd = Int(hd_in)
+    var n = Int(b_in) * nh * l * hd
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var d = i % hd
+    var r = i // hd  # (bb * nh + h) * l + t
+    var t = r % l
+    var bh = r // l
+    var h = bh % nh
+    var bb = bh // nh
+    dst.unsafe_store(i, q_rope.unsafe_load((bb * l + t) * nh * hd + h * hd + d))
+
+
+def llama_int15_scores_heads(
+    ctx: DeviceContext,
+    mut st: LlamaInt15Stage,
+    mut scores: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut k_rows: DeviceBuffer[DType.float32],
+    b: Int,
+    nh: Int,
+    nkv: Int,
+    l: Int,
+    s: Int,
+    hd: Int,
+) raises:
+    """S11 under the profile for every (batch, head): `scores[bb, h] (l x s)
+    = Q[bb, h] . K[bb, h // n_rep]^T`, `k_rows` the `[B, nkv, S, hd]` rows
+    the per-head loop gathers its keys from. `l <= INT15_HEADS_MAX_L`."""
+    _refuse_k(hd, "the score product (head_dim)")
+    var ra = b * nh * l
+    var rb = b * nkv * s
+    st.ensure_q(ctx, ra * hd)
+    st.ensure_a(ctx, ra * hd, ra)
+    st.ensure_b(ctx, rb * hd, rb)
+    ctx.enqueue_function[gather_q_heads_kernel](
+        st.qall.unsafe_ptr(), q_rope.unsafe_ptr(),
+        Int32(b), Int32(l), Int32(nh), Int32(hd),
+        grid_dim=((ra * hd + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    quantize_planes_int15_parallel_device(ctx, st.ah, st.al, st.ea, st.qall, st.quant, ra, hd, False)
+    quantize_planes_int15_parallel_device(ctx, st.bh, st.bl, st.eb, k_rows, st.quant, rb, hd, False)
+    identical_gemm_int15_heads_into(
+        ctx, scores, st.ah, st.al, st.ea, st.bh, st.bl, st.eb, b, nh, nkv, l, s, hd
+    )
