@@ -250,7 +250,8 @@ on the H100. On the M2 Pro the profile costs 4.5 times fp32_v1's prefill.
    05:20Z and 05:26Z belong to other lanes' processes). CAUSE NOT
    ESTABLISHED; the same code finished every other MI325X run (identity at
    two commits, three timed runs here, four in 1790663724684). Not
-   cancelled (rule 4). Owed: the same job again on the MI325X, and a stack
+   cancelled (rule 4); the steward's own 3-hour cap ended it (exit 124,
+   FAIL). Re-run queued: 1790669531597. Owed: that re-run's verdict, and a stack
    of the stream's last kernels if it recurs.
 6. In the progress file I first wrote an invented commit id for the gate
    run; replaced by the real one (013429062).
