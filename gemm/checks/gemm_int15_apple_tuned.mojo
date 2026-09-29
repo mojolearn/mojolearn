@@ -34,6 +34,12 @@ With `a = ah * 128 + al` and `b = bh * 128 + bl` (clause W-3: `ah`, `bh` in
           reaches 254); a float unit takes any integer below 2^24. The
           brief held this identity in reserve for the integer units at
           twelve-bit codes; on a float unit it carries all fifteen bits.
+          With `REGSUM` the two sums are formed in registers from the
+          fragments of the pieces (one float addition a cell, exact)
+          and only two planes an operand are staged.
+  TWO     lane/lowbit-int15's arithmetic (clause W-12: the left operand
+          WHOLE, `sum(a * b) = sum(a * bh) * 2^7 + sum(a * bl)`), with
+          another carry: no Int64 inside the `k` loop.
 
 WHY NO FLOAT CAN ROUND (the construction argument of each form)
 ---------------------------------------------------------------
@@ -55,8 +61,23 @@ accumulator, and its magnitude is at most `S` times the largest term.
           260 steps is the last that holds (`64516 * 260 = 16774160`), 261
           passes it.
 
-At a chunk end each accumulator converts to Int32 (exact: an integer below
-2^24). THREE forms `MID`'s share of the chunk there, `PP - HH - LL`, three
+  TWO     `|a * bh| <= 16383 * 128 = 2097024`, the largest term. `S = 8`,
+          one step of the unit: `2097024 * 8 = 16776192 < 2^24`; nine
+          would reach 18873216. THE CARRY OF TWO, after every step of the
+          unit: `th` and `tl`, the two accumulators as Int32 (exact), then
+          `t = th * 2^7 + tl`, which is the sum of the step's 8 code
+          products and so at most `8 * 16383^2 = 2147221512 < 2^31`
+          (`th * 2^7` alone is at most `16776192 * 128 = 2147352576 <
+          2^31`); then `t` is cut in two, `t = (t >> 16) * 2^16 + (t &
+          65535)`, an arithmetic shift and a mask, and the halves are
+          added to two Int32 running sums. Over the 8192 steps of the
+          unit that `k = 65536` has, the low sum is at most `65535 * 8192
+          < 2^29` and the high one at most `2^15 * 8192 = 2^28` in
+          magnitude. The epilogue forms `S = HIGH * 2^16 + LOW` in Int64,
+          once a cell.
+
+In THREE and FOUR, at a chunk end each accumulator converts to Int32
+(exact: an integer below 2^24). THREE forms `MID`'s share of the chunk there, `PP - HH - LL`, three
 integers below 2^24, no overflow. Each is added to an Int32 running sum,
 which clause W-4 bounds for `k <= 65536`: the running sums are `HH`, `MID`
 and `LL` themselves in both forms, never `PP`, whose sum over 65536 steps
@@ -81,8 +102,9 @@ slices. The caller waits after the last.
 
 THE SABOTAGE ARMS.
   `-D MOJOLEARN_INT15_APPLE_TUNED_CHUNK_SABOTAGE=1` removes the chunk
-      boundary: the float accumulators run the whole of `k`. The planted
-      sums then pass 2^24 on odd integers and the gate must FAIL on them.
+      boundary: the float accumulators of THREE and FOUR run the whole of
+      `k`, those of TWO run two steps of the unit. The planted sums then
+      pass 2^24 on odd integers and the gate must FAIL on them.
   `-D MOJOLEARN_LOWBIT_SABOTAGE=1` flips the value of every cell stored
       (DEVIATION 2973, the define every fifteen-bit plan reads).
 """
@@ -103,9 +125,21 @@ from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 #: Every integer of magnitude below this is a float32.
 comptime INT15_TUNED_EXACT_BOUND = 16777216
 
-#: The two forms.
+#: The three forms.
+comptime INT15_TUNED_FORM_TWO = 2
 comptime INT15_TUNED_FORM_THREE = 3
 comptime INT15_TUNED_FORM_FOUR = 4
+
+#: Form TWO: the largest magnitude of one product (a whole code times a
+#: high piece), and the steps of `k` in a chunk: one step of the unit.
+comptime INT15_TUNED2_STEP_MAX = 16383 * 128
+comptime INT15_TUNED2_CHUNK_STEPS = 8
+
+#: What `_stage_planes` writes: the two planes, the two planes and their
+#: sums, or the whole code alone.
+comptime STAGE_PAIR = 0
+comptime STAGE_PAIR_SUM = 1
+comptime STAGE_WHOLE = 2
 
 #: Form FOUR: the largest magnitude one step of `k` adds to an accumulator
 #: (the cross term), and the steps of `k` in a chunk.
@@ -149,7 +183,14 @@ comptime TUNED_F3_SG16_KB16 = 9
 comptime TUNED_F4_ROW_KB16 = 10
 comptime TUNED_F3_ROW64_KB16 = 11
 comptime TUNED_F3_ROW64_KB32 = 12
-comptime TUNED_VARIANT_COUNT = 13
+comptime TUNED_F3R_W64_KB16 = 13
+comptime TUNED_F3R_T32_KB32 = 14
+comptime TUNED_F3_SG16X1_KB32 = 15
+comptime TUNED_F2_W64_KB16 = 16
+comptime TUNED_F2_W64_KB32 = 17
+comptime TUNED_F2_T32_KB32 = 18
+comptime TUNED_F2_SG16X1_KB32 = 19
+comptime TUNED_VARIANT_COUNT = 20
 
 
 def int15_apple_tuned_sabotage_name() -> String:
@@ -166,8 +207,11 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
     tile of 2 x 2 simdgroups with 4 x 4 fragments each; t32 a 32 x 32 tile
     of 2 x 2 simdgroups with 2 x 2 fragments; w64x32 a 64 x 32 tile of 2 x 2
     simdgroups with 4 x 2 fragments; sg16 a 64 x 64 tile of 4 x 4
-    simdgroups with 2 x 2 fragments (512 threads); row an 8 x 128 tile and
-    row64 an 8 x 64 tile of 1 x 4 simdgroups, for the decode rows."""
+    simdgroups with 2 x 2 fragments (512 threads); sg16x1 a 32 x 32 tile
+    of 4 x 4 simdgroups with ONE fragment each (512 threads); row an
+    8 x 128 tile and row64 an 8 x 64 tile of 1 x 4 simdgroups, for the
+    decode rows. f3r is THREE with the sums formed in registers; f2 is
+    TWO."""
     if variant == TUNED_F4_W64_KB16_SCALAR:
         return String("f4.w64.kb16.scalar")
     if variant == TUNED_F4_W64_KB16:
@@ -194,11 +238,27 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
         return String("f3.row64.kb16")
     if variant == TUNED_F3_ROW64_KB32:
         return String("f3.row64.kb32")
+    if variant == TUNED_F3R_W64_KB16:
+        return String("f3r.w64.kb16")
+    if variant == TUNED_F3R_T32_KB32:
+        return String("f3r.t32.kb32")
+    if variant == TUNED_F3_SG16X1_KB32:
+        return String("f3.sg16x1.kb32")
+    if variant == TUNED_F2_W64_KB16:
+        return String("f2.w64.kb16")
+    if variant == TUNED_F2_W64_KB32:
+        return String("f2.w64.kb32")
+    if variant == TUNED_F2_T32_KB32:
+        return String("f2.t32.kb32")
+    if variant == TUNED_F2_SG16X1_KB32:
+        return String("f2.sg16x1.kb32")
     return String("unknown")
 
 
 def int15_apple_tuned_chunk_steps(variant: Int) -> Int:
     """The steps of `k` in one chunk of the variant's form."""
+    if variant >= TUNED_F2_W64_KB16:
+        return INT15_TUNED2_CHUNK_STEPS
     if (variant >= TUNED_F3_W64_KB16 and variant <= TUNED_F3_SG16_KB16) or variant >= TUNED_F3_ROW64_KB16:
         return INT15_TUNED3_CHUNK_STEPS
     return INT15_TUNED4_CHUNK_STEPS
@@ -206,7 +266,7 @@ def int15_apple_tuned_chunk_steps(variant: Int) -> Int:
 
 @always_inline
 def _stage_planes[
-    ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int, WITH_SUM: Bool, SCALAR: Bool
+    ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int, MODE: Int, SCALAR: Bool
 ](
     dh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     dl: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
@@ -221,8 +281,11 @@ def _stage_planes[
     aligned: Bool,
 ):
     """One window of BOTH planes of one operand into threadgroup memory,
-    each piece as the float32 it names, and with `WITH_SUM` the plane of
-    their sums `hi + lo` (an integer in `[-127, 254]`, exact). A slot is
+    each piece as the float32 it names, and under `STAGE_PAIR_SUM` the
+    plane of their sums `hi + lo` (an integer in `[-127, 254]`, exact).
+    Under `STAGE_WHOLE` ONE plane, into `dh`: the code whole, `hi * 128 +
+    lo`, a product by a power of two and an addition of integers below
+    2^15, exact. A slot is
     four consecutive steps of one row; a thread owns slots `tid, tid + NT,
     ...` below the window's `ROWS * KB / 4`. `PMAJOR`: element (row r, step
     p) at `d[p * ST + r]` (the left operand); else at `d[r * ST + p]` (the
@@ -258,23 +321,28 @@ def _stage_planes[
                         if k0 + p4 + e < k:
                             vh[e] = qh.unsafe_load(base + e).cast[DType.float32]()
                             vl[e] = ql.unsafe_load(base + e).cast[DType.float32]()
+            comptime if MODE == STAGE_WHOLE:
+                vh = vh * SIMD[DType.float32, 4](128.0) + vl
             comptime if PMAJOR:
                 comptime for e in range(4):
                     dh[(p4 + e) * ST + r] = vh[e]
-                    dl[(p4 + e) * ST + r] = vl[e]
-                comptime if WITH_SUM:
+                comptime if MODE != STAGE_WHOLE:
+                    comptime for e in range(4):
+                        dl[(p4 + e) * ST + r] = vl[e]
+                comptime if MODE == STAGE_PAIR_SUM:
                     var vs = vh + vl
                     comptime for e in range(4):
                         ds[(p4 + e) * ST + r] = vs[e]
             else:
                 (dh + r * ST + p4).store[alignment=16](vh)
-                (dl + r * ST + p4).store[alignment=16](vl)
-                comptime if WITH_SUM:
+                comptime if MODE != STAGE_WHOLE:
+                    (dl + r * ST + p4).store[alignment=16](vl)
+                comptime if MODE == STAGE_PAIR_SUM:
                     (ds + r * ST + p4).store[alignment=16](vh + vl)
 
 
 def identical_gemm_int15_apple_tuned_kernel[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
@@ -296,11 +364,12 @@ def identical_gemm_int15_apple_tuned_kernel[
 
     Per window of `KB` steps the block stages the planes of both operands
     as float32 (`_stage_planes`), then every simdgroup multiplies on the
-    matrix unit: four products per fragment and step of the unit (FOUR) or
-    three (THREE) into three float accumulators. Every chunk, and at the
-    end of `k`, each lane converts its accumulators to Int32, adds them to
-    its running sums `HH`, `MID`, `LL` and restarts the accumulators at
-    zero. The epilogue is every plan's."""
+    matrix unit: four products per fragment and step of the unit (FOUR),
+    three (THREE) or two (TWO). THREE and FOUR keep three float
+    accumulators and, every chunk and at the end of `k`, each lane converts
+    them to Int32, adds them to its running sums `HH`, `MID`, `LL` and
+    restarts them at zero. TWO keeps two and carries after every step of
+    the unit (the header has the carry). The epilogue is every plan's."""
     comptime NSG = SGM * SGN
     comptime NT = NSG * 32
     comptime BM = 8 * FM * SGM
@@ -309,18 +378,23 @@ def identical_gemm_int15_apple_tuned_kernel[
     comptime BST = KB + 4
     comptime NF = FM * FN
     comptime NC = 2 * NF
+    comptime TWO = FORM == INT15_TUNED_FORM_TWO
     comptime THREE = FORM == INT15_TUNED_FORM_THREE
-    comptime NPL = 3 if THREE else 2
-    comptime CHUNK = INT15_TUNED3_CHUNK_STEPS if THREE else INT15_TUNED4_CHUNK_STEPS
-    comptime STEP_MAX = INT15_TUNED3_STEP_MAX if THREE else INT15_TUNED4_STEP_MAX
-    comptime CHUNK_WINDOWS = CHUNK // KB
+    comptime STAGED_SUM = THREE and not REGSUM
+    comptime NPLB = 3 if STAGED_SUM else 2
+    comptime NPLA = 1 if TWO else NPLB
+    comptime MODE_B = STAGE_PAIR_SUM if STAGED_SUM else STAGE_PAIR
+    comptime MODE_A = STAGE_WHOLE if TWO else MODE_B
+    comptime CHUNK = INT15_TUNED2_CHUNK_STEPS if TWO else (INT15_TUNED3_CHUNK_STEPS if THREE else INT15_TUNED4_CHUNK_STEPS)
+    comptime STEP_MAX = INT15_TUNED2_STEP_MAX if TWO else (INT15_TUNED3_STEP_MAX if THREE else INT15_TUNED4_STEP_MAX)
+    comptime CHUNK_WINDOWS = 1 if TWO else CHUNK // KB
     comptime ASZ = KB * AST
     comptime BSZ = BN * BST
-    comptime assert FORM == INT15_TUNED_FORM_THREE or FORM == INT15_TUNED_FORM_FOUR, "the form is THREE or FOUR"
+    comptime assert FORM >= INT15_TUNED_FORM_TWO and FORM <= INT15_TUNED_FORM_FOUR, "the form is TWO, THREE or FOUR"
     comptime assert KB % 8 == 0, "the window is whole steps of the unit"
-    comptime assert CHUNK_WINDOWS * KB == CHUNK, "a chunk is whole windows"
+    comptime assert TWO or CHUNK_WINDOWS * KB == CHUNK, "a chunk is whole windows"
     comptime assert STEP_MAX * CHUNK < INT15_TUNED_EXACT_BOUND, "a chunk's largest partial sum must be a float32"
-    comptime assert NPL * (ASZ + BSZ) * 4 <= INT15_TUNED_SHARED_BYTES, "the staged planes must fit a threadgroup's memory"
+    comptime assert (NPLA * ASZ + NPLB * BSZ) * 4 <= INT15_TUNED_SHARED_BYTES, "the staged planes must fit a threadgroup's memory"
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
@@ -337,25 +411,30 @@ def identical_gemm_int15_apple_tuned_kernel[
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
-    # The planes of an operand lie one after another: high, low, and under
-    # THREE the sums.
-    var at = stack_allocation[NPL * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var bt = stack_allocation[NPL * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # The planes of an operand lie one after another: high (under TWO the
+    # left operand's one plane, the code whole), low, and the sums where
+    # they are staged.
+    var at = stack_allocation[NPLA * ASZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[NPLB * BSZ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # The running sums. THREE and FOUR: `HH`, `MID`, `LL`. TWO: `hh_total`
+    # is the HIGH half of the carry and `ll_total` the LOW one.
     var hh_total = InlineArray[Int32, NC](fill=Int32(0))
     var mid_total = InlineArray[Int32, NC](fill=Int32(0))
     var ll_total = InlineArray[Int32, NC](fill=Int32(0))
-    # `mid_acc` is `MID` under FOUR and `PP` under THREE.
+    # `mid_acc` is `MID` under FOUR and `PP` under THREE. Under TWO
+    # `hh_acc` is `a * bh` and `ll_acc` is `a * bl`.
     var hh_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var mid_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var ll_acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var windows = (k + KB - 1) // KB
+    var step = 0
     for w in range(windows):
         var k0 = w * KB
-        _stage_planes[BM, KB, NT, True, AST, THREE, SCALAR](
-            at, at + ASZ, at + (NPL - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
+        _stage_planes[BM, KB, NT, True, AST, MODE_A, SCALAR](
+            at, at + (NPLA - 1) * ASZ, at + (NPLA - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
         )
-        _stage_planes[BN, KB, NT, False, BST, THREE, SCALAR](
-            bt, bt + BSZ, bt + (NPL - 1) * BSZ, bh, bl, n0, n, k0, k, tid, aligned
+        _stage_planes[BN, KB, NT, False, BST, MODE_B, SCALAR](
+            bt, bt + BSZ, bt + (NPLB - 1) * BSZ, bh, bl, n0, n, k0, k, tid, aligned
         )
         barrier()
         comptime for p8 in range(KB // 8):
@@ -367,43 +446,70 @@ def identical_gemm_int15_apple_tuned_kernel[
             var bsf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
             comptime for fm in range(FM):
                 ahf[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
-                alf[fm] = _amma_load_t(at + ASZ + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
-                comptime if THREE:
+                comptime if not TWO:
+                    alf[fm] = _amma_load_t(at + ASZ + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                comptime if STAGED_SUM:
                     asf[fm] = _amma_load_t(at + 2 * ASZ + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                elif THREE:
+                    asf[fm] = ahf[fm] + alf[fm]
             comptime for fq in range(FN):
                 bhf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
                 blf[fq] = _amma_load_t(bt + BSZ + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
-                comptime if THREE:
+                comptime if STAGED_SUM:
                     bsf[fq] = _amma_load_t(bt + 2 * BSZ + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                elif THREE:
+                    bsf[fq] = bhf[fq] + blf[fq]
             comptime for fm in range(FM):
                 comptime for fq in range(FN):
                     hh_acc[fm * FN + fq] = _amma_mma(ahf[fm], bhf[fq], hh_acc[fm * FN + fq])
-                    comptime if THREE:
+                    comptime if TWO:
+                        ll_acc[fm * FN + fq] = _amma_mma(ahf[fm], blf[fq], ll_acc[fm * FN + fq])
+                    elif THREE:
                         mid_acc[fm * FN + fq] = _amma_mma(asf[fm], bsf[fq], mid_acc[fm * FN + fq])
+                        ll_acc[fm * FN + fq] = _amma_mma(alf[fm], blf[fq], ll_acc[fm * FN + fq])
                     else:
                         mid_acc[fm * FN + fq] = _amma_mma(ahf[fm], blf[fq], mid_acc[fm * FN + fq])
                         mid_acc[fm * FN + fq] = _amma_mma(alf[fm], bhf[fq], mid_acc[fm * FN + fq])
-                    ll_acc[fm * FN + fq] = _amma_mma(alf[fm], blf[fq], ll_acc[fm * FN + fq])
+                        ll_acc[fm * FN + fq] = _amma_mma(alf[fm], blf[fq], ll_acc[fm * FN + fq])
+            comptime if TWO:
+                step += 1
+                # THE CHUNK IS ONE STEP OF THE UNIT: convert, join, cut in
+                # two, carry, restart. No Int64.
+                var step_end = True
+                comptime if INT15_TUNED_CHUNK_SABOTAGE:
+                    # THE DEFECT ARM: the accumulators live across two steps.
+                    step_end = (step % 2) == 0 or (w + 1 == windows and p8 == KB // 8 - 1)
+                if step_end:
+                    comptime for f in range(NF):
+                        comptime for e in range(2):
+                            var th = hh_acc[f][e].cast[DType.int32]()
+                            var tl = ll_acc[f][e].cast[DType.int32]()
+                            var t = (th << Int32(7)) + tl
+                            hh_total[2 * f + e] += t >> Int32(16)
+                            ll_total[2 * f + e] += t & Int32(65535)
+                        hh_acc[f] = _AMMA_M64(0)
+                        ll_acc[f] = _AMMA_M64(0)
         barrier()
-        var chunk_end = w + 1 == windows
-        comptime if not INT15_TUNED_CHUNK_SABOTAGE:
-            chunk_end = chunk_end or (w + 1) % CHUNK_WINDOWS == 0
-        if chunk_end:
-            # THE CARRY: three exact conversions per cell, and under THREE
-            # the cross term's share of the chunk, in integers.
-            comptime for f in range(NF):
-                comptime for e in range(2):
-                    var vh = hh_acc[f][e].cast[DType.int32]()
-                    var vm = mid_acc[f][e].cast[DType.int32]()
-                    var vl = ll_acc[f][e].cast[DType.int32]()
-                    comptime if THREE:
-                        vm = vm - vh - vl
-                    hh_total[2 * f + e] += vh
-                    mid_total[2 * f + e] += vm
-                    ll_total[2 * f + e] += vl
-                hh_acc[f] = _AMMA_M64(0)
-                mid_acc[f] = _AMMA_M64(0)
-                ll_acc[f] = _AMMA_M64(0)
+        comptime if not TWO:
+            var chunk_end = w + 1 == windows
+            comptime if not INT15_TUNED_CHUNK_SABOTAGE:
+                chunk_end = chunk_end or (w + 1) % CHUNK_WINDOWS == 0
+            if chunk_end:
+                # THE CARRY: three exact conversions per cell, and under
+                # THREE the cross term's share of the chunk, in integers.
+                comptime for f in range(NF):
+                    comptime for e in range(2):
+                        var vh = hh_acc[f][e].cast[DType.int32]()
+                        var vm = mid_acc[f][e].cast[DType.int32]()
+                        var vl = ll_acc[f][e].cast[DType.int32]()
+                        comptime if THREE:
+                            vm = vm - vh - vl
+                        hh_total[2 * f + e] += vh
+                        mid_total[2 * f + e] += vm
+                        ll_total[2 * f + e] += vl
+                    hh_acc[f] = _AMMA_M64(0)
+                    mid_acc[f] = _AMMA_M64(0)
+                    ll_acc[f] = _AMMA_M64(0)
     comptime for fm in range(FM):
         comptime for fq in range(FN):
             comptime for e in range(2):
@@ -411,9 +517,13 @@ def identical_gemm_int15_apple_tuned_kernel[
                 var gj = n0 + (sgn * FN + fq) * 8 + fcol + e
                 if gi < m and gj < n:
                     var at_cell = 2 * (fm * FN + fq) + e
+                    var total = Int64(0)
+                    comptime if TWO:
+                        total = (Int64(hh_total[at_cell]) << Int64(16)) + Int64(ll_total[at_cell])
+                    else:
+                        total = int15_recombine(hh_total[at_cell], mid_total[at_cell], ll_total[at_cell])
                     var cell = dequant_int15_pinned(
-                        int15_recombine(hh_total[at_cell], mid_total[at_cell], ll_total[at_cell]),
-                        Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gj)),
+                        total, Int(ea.unsafe_load(gi)) + Int(eb.unsafe_load(gj))
                     )
                     comptime if INT15_TUNED_VALUE_SABOTAGE:
                         cell = gemm_oracle_sabotage_value_flip(cell)
@@ -421,7 +531,7 @@ def identical_gemm_int15_apple_tuned_kernel[
 
 
 def _launch_tuned[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool = False
 ](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -438,7 +548,7 @@ def _launch_tuned[
 ) raises:
     """One variant, in slices of whole rows of tiles, a wait between two
     slices and none after the last."""
-    comptime kern = identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR]
+    comptime kern = identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM]
     comptime BM = 8 * FM * SGM
     comptime BN = 8 * FN * SGN
     var nbm = (m + BM - 1) // BM
@@ -562,6 +672,34 @@ def identical_gemm_int15_apple_tuned_into(
             )
         elif variant == TUNED_F3_ROW64_KB32:
             _launch_tuned[1, 4, 1, 2, 32, INT15_TUNED_FORM_THREE, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F3R_W64_KB16:
+            _launch_tuned[2, 2, 4, 4, 16, INT15_TUNED_FORM_THREE, False, True](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F3R_T32_KB32:
+            _launch_tuned[2, 2, 2, 2, 32, INT15_TUNED_FORM_THREE, False, True](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F3_SG16X1_KB32:
+            _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_THREE, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_W64_KB16:
+            _launch_tuned[2, 2, 4, 4, 16, INT15_TUNED_FORM_TWO, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_W64_KB32:
+            _launch_tuned[2, 2, 4, 4, 32, INT15_TUNED_FORM_TWO, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32_KB32:
+            _launch_tuned[2, 2, 2, 2, 32, INT15_TUNED_FORM_TWO, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_SG16X1_KB32:
+            _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_TWO, False](
                 ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
             )
         else:
