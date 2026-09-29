@@ -1,0 +1,207 @@
+{
+  "schema": "mojolearn.lowbit_public_probe.v1",
+  "host": "90d2c7e3d6aa",
+  "commit": "4c875f5ba3fe57b26a7da5bb9e8b1a13946839e2",
+  "scope": "synthetic public-API GEMM diagnostic; NOT a model or training-step benchmark",
+  "weight_residency": "packed host planes, uploaded by each public call",
+  "model_inference": "BLOCKED_NOT_INTEGRATED",
+  "model_training": "BLOCKED_UNSUPPORTED",
+  "rows": [
+    {
+      "name": "attention_projection_decode1",
+      "shape_mnk": [
+        1,
+        960,
+        960
+      ],
+      "samples_ms": {
+        "fp32_v1": [
+          0.751481,
+          0.534115,
+          0.515538,
+          0.521975,
+          0.516448
+        ],
+        "fixed15_v1": [
+          0.618491,
+          0.512797,
+          0.527072,
+          0.506416,
+          0.534921
+        ]
+      },
+      "median_ms": {
+        "fp32_v1": 0.521975,
+        "fixed15_v1": 0.527072
+      },
+      "fixed15_over_fp32": 1.0097648354806266,
+      "one_time_weight_pack_ms": 384.698857,
+      "input_sha256": [
+        "83593910412d9bc80e31a11615ac99ea7dab060df16fd1d642bee1a128a85b03",
+        "b8bcd16121b0195dc58c58a7e86234817666b797e8c910084a7578ada11216f7"
+      ],
+      "output_sha256": {
+        "fixed15_v1": "c819a2d58fef5f56d22f27e459b1fdf7e50ebf044827c8c36188e43f8b0f8d62",
+        "fp32_v1": "59bae0626ce8f7bef76554f896248925e18f928b37e3699a2f8f49c620c00f59"
+      },
+      "checks": "sampled exact reference, bit-flip comparator, packed/raw, row invariance, repeats"
+    },
+    {
+      "name": "attention_projection_decode8",
+      "shape_mnk": [
+        8,
+        960,
+        960
+      ],
+      "samples_ms": {
+        "fp32_v1": [
+          0.556542,
+          0.538538,
+          0.522161,
+          0.541486,
+          0.51303
+        ],
+        "fixed15_v1": [
+          0.533963,
+          0.577475,
+          0.534296,
+          0.526476,
+          0.533459
+        ]
+      },
+      "median_ms": {
+        "fp32_v1": 0.538538,
+        "fixed15_v1": 0.533963
+      },
+      "fixed15_over_fp32": 0.9915047777501309,
+      "one_time_weight_pack_ms": 1.022179,
+      "input_sha256": [
+        "7c458378214213c608753af022d8fefff2f86fc47820d2f05df22c29bfc99725",
+        "b8bcd16121b0195dc58c58a7e86234817666b797e8c910084a7578ada11216f7"
+      ],
+      "output_sha256": {
+        "fixed15_v1": "3b3d72d84dedabe3917782818dbac46cf4f929bb104c48e96818f9f7b6565191",
+        "fp32_v1": "e3327d22dd5d61bb8b7b022aefa8cc40bf3aff0748a3f4fa69ddb5be9e61cd1c"
+      },
+      "checks": "sampled exact reference, bit-flip comparator, packed/raw, row invariance, repeats"
+    },
+    {
+      "name": "attention_projection_prefill512",
+      "shape_mnk": [
+        512,
+        960,
+        960
+      ],
+      "samples_ms": {
+        "fp32_v1": [
+          1.243987,
+          1.16259,
+          1.23566,
+          1.201455,
+          1.218974
+        ],
+        "fixed15_v1": [
+          1.528248,
+          1.571233,
+          1.547523,
+          1.594905,
+          1.511555
+        ]
+      },
+      "median_ms": {
+        "fp32_v1": 1.218974,
+        "fixed15_v1": 1.547523
+      },
+      "fixed15_over_fp32": 1.2695291285950316,
+      "one_time_weight_pack_ms": 1.063368,
+      "input_sha256": [
+        "a1ac67beadd3252e8b5fbe519413606c4737d2dd1c48a11d1bfabe44e251df4a",
+        "b8bcd16121b0195dc58c58a7e86234817666b797e8c910084a7578ada11216f7"
+      ],
+      "output_sha256": {
+        "fixed15_v1": "bd84cf6dc0a3799ae3985d31e82f58968baa104ebc4d3be105deed1bea14c825",
+        "fp32_v1": "05a242f99d933858e5fa3001947f9e2888bcb6a967b85bde05a89a12e2e8911a"
+      },
+      "checks": "sampled exact reference, bit-flip comparator, packed/raw, row invariance, repeats"
+    },
+    {
+      "name": "feedforward_down_prefill512",
+      "shape_mnk": [
+        512,
+        960,
+        2560
+      ],
+      "samples_ms": {
+        "fp32_v1": [
+          2.154272,
+          2.112508,
+          2.027225,
+          2.034827,
+          2.088869
+        ],
+        "fixed15_v1": [
+          2.71406,
+          2.723028,
+          2.717914,
+          2.784346,
+          2.658276
+        ]
+      },
+      "median_ms": {
+        "fp32_v1": 2.088869,
+        "fixed15_v1": 2.717914
+      },
+      "fixed15_over_fp32": 1.301141431080647,
+      "one_time_weight_pack_ms": 2.321153,
+      "input_sha256": [
+        "667367b4123d1fc986c21a4a5ac153b5e24c8b73232089fd86eb219187e588df",
+        "dd33b7c08581b68ad82d97a4bd9edbf9d7959d15bf2450aa0603af2073136612"
+      ],
+      "output_sha256": {
+        "fixed15_v1": "d381e1cd044d0b0fb2d33f9e559387d6436eff6f71e5b2e003d3bf1bc3674e29",
+        "fp32_v1": "33513bd88b50a530b3e67b61bb65ae1b7fa73e9f251605c2741fd86ef6ad1517"
+      },
+      "checks": "sampled exact reference, bit-flip comparator, packed/raw, row invariance, repeats"
+    },
+    {
+      "name": "output_head_decode1",
+      "shape_mnk": [
+        1,
+        49152,
+        960
+      ],
+      "samples_ms": {
+        "fp32_v1": [
+          21.548799,
+          21.784399,
+          21.669655,
+          21.834895,
+          21.636178
+        ],
+        "fixed15_v1": [
+          11.720503,
+          11.731991,
+          35.90054,
+          19.723262,
+          11.095029
+        ]
+      },
+      "median_ms": {
+        "fp32_v1": 21.669655,
+        "fixed15_v1": 11.731991
+      },
+      "fixed15_over_fp32": 0.5414018358852507,
+      "one_time_weight_pack_ms": 92.155855,
+      "input_sha256": [
+        "83593910412d9bc80e31a11615ac99ea7dab060df16fd1d642bee1a128a85b03",
+        "e0e979951a82f5f34d479b4dc5ed97b38006bb4d35cecf84ed659dc5b9408207"
+      ],
+      "output_sha256": {
+        "fixed15_v1": "6a1a606a2baaf1acf1b2a2117a2862f7519364476ec0f913c6b32b08b33ce149",
+        "fp32_v1": "31623b43450520385e5ce0e5591bdcc8e86f289a9ec0a0d18dd025c263030522"
+      },
+      "checks": "sampled exact reference, bit-flip comparator, packed/raw, row invariance, repeats"
+    }
+  ],
+  "status": "PASS_PUBLIC_API_ONLY"
+}

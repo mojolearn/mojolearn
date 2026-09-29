@@ -113,3 +113,43 @@ The H100 job was still queued at the final status read; its live log is
 available with `sh tools/nvidia_central.sh log nvc3-0031`.
 The model runner's syntax was also parsed successfully on the H100 host;
 actual model execution remains untested pending integration.
+
+## Resume result: H100 public API diagnostic
+
+Job nvc3-0031 completed exit 0 at 2026-09-29T05:13:25Z, source
+4c875f5ba, NVIDIA H100 NVL. Raw JSON and build/job log are retained in
+`bench/results/lowbit_e2e/2026-09-29/h100-public-api/lowbit-e2e-Z4b64zXd/`.
+Every diagnostic assertion passed. Comparison by named shape against the
+AMD run found identical input hashes and identical complete output hashes
+for BOTH profiles separately, all five cases. This is not equality between
+fixed15 and fp32, nor a whole-model cross-vendor certificate.
+
+| Public call | H100 fixed15 / fp32 | AMD fixed15 / fp32 |
+|---|---:|---:|
+| attention projection, 1 token | 1.0098 | 0.7535 |
+| attention projection, 8 tokens | 0.9915 | 0.7843 |
+| attention projection, 512 tokens | 1.2695 | 0.5987 |
+| feed-forward down, 512 tokens | 1.3011 | 1.3563 |
+| output head, 1 token | 0.5414 | 0.6655 |
+
+These are one-run, five-sample public-call diagnostics, not model speed.
+The H100 head's fixed15 samples span 11.095 to 35.901 ms; retain that
+variability rather than treating its median as a stable deployment claim.
+The two large H100 projection calls regress in this snapshot despite the
+other lane's kernel-only gains. Transfers, allocations and dispatch are
+included here; their individual contributions have NOT been isolated.
+
+Integration inspection on resume: lane/lowbit-blocks is at 84b6479e8, with
+committed Python/binding/model integration and recorded passing 4090 block
+gates. Whole-model validation scripts exist there; the public registry
+still refuses inference and training. That lane explicitly enables the
+experimental profile inside its development-only validation process. Our
+public-API model probe still fails closed; it was not queued with an
+override or reported as passing. Do not duplicate that lane's active model
+gates. No integration merge into this branch, default change or new job was
+needed to collect this result.
+
+Next: collect the owning lane's whole-model verdict and supported profile
+revision, review/import that committed integration, then queue the paired
+stateful model probe. Kernel timing and this public-call timing cannot
+substitute for that result. Training remains a separate unsupported phase.
