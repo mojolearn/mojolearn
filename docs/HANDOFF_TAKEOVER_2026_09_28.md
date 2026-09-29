@@ -1,3 +1,19 @@
+# Latest checkpoint — 2026-09-29 01:08 UTC
+
+User priority: expedite PyPI with LIGHT identity-only checks; leave existing inherited benchmarks running, launch no new performance benchmarks. M2 preserved; M3 host retained without restart; no job cancellation. All reviewed Apple speed lanes merged. Main44a61bf61 includes final43-lane cross-vendor reference admission, stale test repairs, strict native staging provenance (original builds preserved, exact110closures and helper C/constants), and default verifier scope reduction.
+
+`verify --all` now checks all applicable algorithms/properties on base only; `--full` explicitly adds all9fixtures. Exact old fixture bytes remain unchanged (legacy N20000); do NOT claim this is a new tiny-data protocol. Selection/coverage/property tests21PASS2skip; strict provenance34PASS46subtests before helper followup, final rerun in progress. Single-fixture output retains all-lane gap accounting. CPU computation in AMD445 totaled73s; wall39m includes substantial unprofiled overhead. Metal445 wall437s; dict-learning54s outlier. Existing KernelPCA5000-row performance jobs are separate and unchanged.
+
+Completed: AMD final445PASS; original NVIDIA445PASS (not final source); Metal installed445 two stale-contract differences independently resolved with TSVD/UMAPall9 across3vendors. Scoped43 cross-vendor PASS and refs admitted (only18 expected train/model hashes changed; no physicalparUMAP promotion). All110 native outputs perMetal/sm89/sm90a/gfx942 staged. Old b715 wheel retained, superseded by Python/runtime/reference changes; final freeze/repack still owed. Current GEMM oracle tinyhost60stagesPASS31s; installed gate116checksPASS39.5s. Module gates25/30passed;5 obsolete refusal assertions being repaired by integration_audit, then targeted reruns only.
+
+Ownership: integration_audit finishes5gates then Mac finalwheel reuses110native; applicability prepares Linux strict split packing afterfreeze (driver E/packaging-preparation/linux-native-assembly-v1/prepare-final-linux.py); runner shell-only bounded installed identity supplemental receipts and NVIDIA monitoring. Root owns freeze/main/publication; do not run all release.py steps (would rent/rebuild duplicates). Publication authorized only after final actual-wheel gates.
+
+Fleet: nvc1 A40 allwork archived, existingidlepolicy retirement deadline01:15UTC; do not refresh viaSSH unnecessarily, do not manually release. nvc2 RTX4090 inheritedbenchmark stillblocks final445 andphysicalGMM/parUMAPqueue; untouched. nvc3 H100 scoped43PASS, ready finalwheel; localwatcher3050dead, remotelease alive with supported90min activityhold session97523 (NOT IDLE_MIN90; config30 cached). Hold exits when /root/hopper-3dded3bd47b9/artifact-job-queued exists. Runner owns. AMD162.243.49.62 deadline02:14UTC idle finalwheel; applicability monitors. Additional2x4090 authorized only if finalwheelready,nvc2stillblocked,nvc1naturallyretired freeing3podcap. M2 i-03767a9dc13829e2f andsteward retained; M3 hosth-04545dd0c2d7a2870 retained noinstance. Never restart M3 orreleasehost.
+
+All earlier sections below are historical; current per-agent E/RUNNER_HANDOFF.md and packaging handoff supplements contain exact paths. No wheel published.
+
+---
+
 # September 29, 00:13 UTC — latest takeover checkpoint
 
 This section supersedes conflicting older state below. Refresh live processes; do not restart, cancel, or duplicate jobs. User now explicitly authorizes completing all verification and publishing the next PyPI release, and obtaining RunPod/AMD capacity as needed. **Nothing has been published.** Keep M2 and M3 host; no Apple instance restart or host release.
