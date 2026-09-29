@@ -44,6 +44,7 @@ from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_kernel
 from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_mma_direct_kernel,
     identical_gemm_int8_mma_tuned_kernel,
+    identical_gemm_int8_pieces_tuned_kernel,
 )
 from gemm.checks.gemm_lowbit import quantize_rows_int8_kernel
 from gemm.checks.quantize_int8_par import quantize_rows_int8_par_kernel
@@ -80,6 +81,12 @@ add staged_w32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 4, 64
 add staged_w16x32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 8, 4, 64, 16]"
 add refused_w16x32_b64x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 4, 8, 64, 16]"
 add refused_w32_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 8, 64, 16]"
+add pieces_w16_b32_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[1, 1, 2, 2, 64, 16]"
+add pieces_w16x32_b64x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[1, 2, 4, 4, 64, 16]"
+add pieces_w32_b64x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[2, 2, 2, 4, 64, 16]"
+add pieces_w16_b64_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[1, 1, 4, 4, 64, 16]"
+add pieces_w16x32_b32x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[1, 2, 2, 4, 64, 16]"
+add pieces_w16x32_b64x64_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[1, 2, 4, 2, 64, 16]"
 add quantize_reference "quantize_rows_int8_kernel"
 add quantize_par_256 "quantize_rows_int8_par_kernel[256]"
 echo 'def main() raises:'
