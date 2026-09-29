@@ -24,6 +24,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ### Measured
 - The time of the complete 15-bit inference call over our own fp32.v1 call at the same 512-token rows, on the same box, in the same run: H100 0.43 to 0.50 (run 5); MI325X 0.19 to 0.30, with a stand-in recombination, one run; M3 Ultra 3.4 to 3.6, on the float unit, untuned.
 
+## 0.8.28 (unreleased)
+
+- Fix binary `LabelBinarizer.inverse_transform` for two-column input: read within the output allocation before selecting its last column. This fixes the `x-prep-inverse-transforms/wide` verifier assertion. The correction was already committed in source but absent from the prior verifier-only wheels.
+- Reuse published 0.8.27 native binaries, references and verifier code; apply only the exact Python bounds fix and version metadata, recorded in `PYTHON_PATCH.json` and checked again before publication.
+
 ## 0.8.27 (published 2026-09-29)
 
 ### Fixed

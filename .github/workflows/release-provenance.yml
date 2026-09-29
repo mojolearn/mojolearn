@@ -115,6 +115,7 @@ on:
           - full
           - light
           - verifier-patch
+          - python-patch
 
       light_platform:
         description: Explicit platform batch for light publication; each wheel needs its own successful installed smoke.
@@ -898,7 +899,7 @@ jobs:
           gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern linux-qualification.tar.gz --dir qualification
       - name: Check exact alpha artifact bytes without GPU execution
-        if: inputs.validation_profile != 'verifier-patch'
+        if: inputs.validation_profile != 'verifier-patch' && inputs.validation_profile != 'python-patch'
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
         run: |
@@ -911,13 +912,13 @@ jobs:
           timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
             dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}" > alpha-admission.json
           cat alpha-admission.json
-      - name: Admit verifier-only changes against published PyPI wheel bytes
-        if: inputs.validation_profile == 'verifier-patch'
+      - name: Admit exact Python/verifier changes against published PyPI wheel bytes
+        if: inputs.validation_profile == 'verifier-patch' || inputs.validation_profile == 'python-patch'
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
           ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
         run: |
-          python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+          python3 packaging/verifier_patch.py dist ${{ inputs.validation_profile == 'python-patch' && '--allow-label-inverse-fix' || '' }} --cache "$RUNNER_TEMP/verifier-base" \
             --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
             --manifest-sha256 "$EXPECTED_MANIFEST_SHA" | tee alpha-admission.json
       - name: Admit the exact prepared wheels under the light release policy
@@ -1006,8 +1007,8 @@ jobs:
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
-          if [ "$VALIDATION_PROFILE" = verifier-patch ]; then
-            python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+          if [ "$VALIDATION_PROFILE" = verifier-patch ] || [ "$VALIDATION_PROFILE" = python-patch ]; then
+            python3 packaging/verifier_patch.py dist ${{ inputs.validation_profile == 'python-patch' && '--allow-label-inverse-fix' || '' }} --cache "$RUNNER_TEMP/verifier-base" \
               --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
               --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
           else
@@ -1097,8 +1098,8 @@ jobs:
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
-          if [ "$VALIDATION_PROFILE" = verifier-patch ]; then
-            python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+          if [ "$VALIDATION_PROFILE" = verifier-patch ] || [ "$VALIDATION_PROFILE" = python-patch ]; then
+            python3 packaging/verifier_patch.py dist ${{ inputs.validation_profile == 'python-patch' && '--allow-label-inverse-fix' || '' }} --cache "$RUNNER_TEMP/verifier-base" \
               --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
               --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
           else
