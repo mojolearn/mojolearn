@@ -36,49 +36,124 @@ which is the difference between the two builds above. Correctness is
 `packaging/macos/verify_wheel.sh` with no flag, on real Apple silicon.
 """
 
-import subprocess
+import struct
 import sys
+from pathlib import Path
 
-# Below this, the extension is a host-only build. The observed values are 98
-# (working) and 0 (broken), so the threshold is not finely tuned and does not
-# need to be; it separates "some GPU code" from "none".
-MIN_MARKERS = 10
-
-
-def markers(path):
-    out = subprocess.run(
-        ["strings", "-a", path], capture_output=True, text=True
-    )
-    if out.returncode != 0:
-        raise SystemExit(f"strings failed on {path}")
-    n = 0
-    for line in out.stdout.splitlines():
-        if "air.main" in line or "metallib" in line or "AIR" in line:
-            n += 1
-    return n
+# One policy for explicit dispatch-only bindings on all device platforms.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "linux"))
+from device_glue import DEVICE_GLUE
 
 
-def check(path):
-    n = markers(path)
-    if n < MIN_MARKERS:
-        print(
-            f"FAIL {path}: {n} AIR/metallib markers (need >= {MIN_MARKERS}).\n"
-            "     This extension contains NO compiled Metal kernels. It will\n"
-            "     import fine and fail on the first fit with 'Failed to create\n"
-            "     Metal function'. Build on a machine with a real Apple GPU.",
-            file=sys.stderr,
-        )
-        return 1
-    print(f"  {path}: GPU kernels embedded, {n} AIR/metallib markers")
-    return 0
+def metallib_kernels(data):
+    """Read bounded MTLB function records and nonempty LLVM payloads.
+
+    String counts are not kernel counts: x_linear has two genuine kernels
+    and only four AIR strings. An empty compiler placeholder has no named
+    compute-function record backed by bitcode and cannot pass this check.
+    This proves emitted code exists, not that every required kernel works.
+    """
+    kernels = []
+    start = 0
+    while (start := data.find(b"MTLB", start)) >= 0:
+        offset = start
+        start += 4
+        if offset + 88 > len(data):
+            continue
+        total = struct.unpack_from("<Q", data, offset + 16)[0]
+        if total < 88 or total > len(data) - offset:
+            continue
+        blob = data[offset:offset + total]
+        function_offset, function_size = struct.unpack_from("<QQ", blob, 24)
+        code_offset, code_size = struct.unpack_from("<QQ", blob, 72)
+        if not (88 <= function_offset and function_size >= 4
+                and function_offset + 4 + function_size <= total
+                and 88 <= code_offset and code_size > 24
+                and code_offset + code_size <= total):
+            continue
+        code = blob[code_offset:code_offset + code_size]
+        # LLVM's bitcode wrapper gives the real payload's offset and size.
+        if code[:4] != b"\xde\xc0\x17\x0b":
+            continue
+        payload_offset, payload_size = struct.unpack_from("<II", code, 8)
+        if not (payload_offset >= 20 and payload_size > 4
+                and payload_offset + payload_size <= len(code)
+                and code[payload_offset:payload_offset + 4] == b"BC\xc0\xde"):
+            continue
+        count = struct.unpack_from("<I", blob, function_offset)[0]
+        cursor = function_offset + 4
+        end = cursor + function_size
+        names = []
+        if not count or count > function_size // 8:
+            continue
+        for _ in range(count):
+            if cursor + 4 > end:
+                break
+            length = struct.unpack_from("<I", blob, cursor)[0]
+            record_end = cursor + length
+            if length < 8 or record_end > end:
+                break
+            cursor += 4
+            fields = {}
+            terminated = False
+            while cursor + 4 <= record_end:
+                tag = blob[cursor:cursor + 4]
+                cursor += 4
+                if tag == b"ENDT":
+                    terminated = True
+                    break
+                if cursor + 2 > record_end:
+                    break
+                size = struct.unpack_from("<H", blob, cursor)[0]
+                cursor += 2
+                if cursor + size > record_end:
+                    break
+                fields[tag] = blob[cursor:cursor + size]
+                cursor += size
+            name = fields.get(b"NAME", b"")
+            if (not terminated or cursor != record_end or not name.endswith(b"\0")
+                    or len(name) < 2 or fields.get(b"TYPE") != b"\x02"):
+                break
+            names.append(name[:-1].decode("utf-8", errors="replace"))
+        else:
+            if cursor == end:
+                kernels.extend(names)
+    return kernels
+
+
+def identity(path):
+    path = Path(path)
+    tier = path.parent.name if path.parent.name in ("identical", "deterministic") else "fast"
+    return tier, path.stem
 
 
 def main(paths):
-    # EVERY EXTENSION IN THE WHEEL, not the first one. The failure this file
-    # exists to catch is a whole build emitting no Metal at all, which would
-    # hit every extension at once -- but a wheel now carries more than one,
-    # and checking a subset is how a gate stops covering what it names.
-    return max(check(p) for p in paths)
+    files = [Path(p) for p in paths]
+    if not files:
+        print("FAIL no device bindings supplied", file=sys.stderr)
+        return 1
+    indexed = {}
+    for path in files:
+        key = identity(path)
+        if key in indexed:
+            print("FAIL duplicate tier/binding: " + str(key), file=sys.stderr)
+            return 1
+        indexed[key] = metallib_kernels(path.read_bytes())
+    failed = False
+    for path in files:
+        key = identity(path)
+        names = indexed[key]
+        if names:
+            print(f"  {path}: {len(names)} named Metal compute kernels with LLVM bitcode")
+            continue
+        delegates = DEVICE_GLUE.get(key)
+        if delegates and all(indexed.get((key[0], name)) for name in delegates):
+            print(f"  {path}: explicit device-free glue; same-tier compiled delegates {', '.join(delegates)}")
+            continue
+        failed = True
+        reason = "missing compiled same-tier delegates" if delegates else "no validated Metal compute library"
+        print(f"FAIL {path}: {reason}", file=sys.stderr)
+    return int(failed)
 
 
 if __name__ == "__main__":
