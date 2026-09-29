@@ -19,6 +19,13 @@
 # about.
 set -eu
 
+BUILD_ONLY=0
+if [ "${1:-}" = --build-only ]; then
+    BUILD_ONLY=1
+    shift
+fi
+[ "$#" -eq 0 ] || { echo "usage: $0 [--build-only]" >&2; exit 2; }
+
 here=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 cd "$here"
 
@@ -675,4 +682,8 @@ ls -la "$here/python/dist"/*.whl
 # wheel that imported on the build machine and nothing else, and that shape
 # of artifact has shipped broken twice (TestPyPI 0.1.0a1, 0.1.0a2).
 cd "$here"
-./packaging/macos/verify_wheel.sh
+if [ "$BUILD_ONLY" = 1 ]; then
+    echo 'BUILD ONLY: wheel packed; runtime verification intentionally not rerun (reuse completed lane checks).'
+else
+    ./packaging/macos/verify_wheel.sh
+fi

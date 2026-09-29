@@ -184,9 +184,9 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
             require(version == released and release_profile == 'alpha-api',
                     'a fresh macOS build is admitted only as the released alpha-api version')
             require(macos_smoke_source is not None,
-                    'a fresh macOS build needs its light-smoke-macos.json receipt in the manifest')
+                    'a fresh macOS build needs a smoke source or explicitly reused merged-checks source')
             require(small('mojolearn/identity_columns/COMMIT').decode().strip() == macos_smoke_source,
-                    'fresh macOS build source witness differs from its smoke receipt source')
+                    'fresh macOS build source witness differs from its admitted source')
             require(dist + 'portable-math.json' in files, 'fresh macOS build lacks its platform-math audit record')
             require(any(n.endswith(('.so', '.dylib')) and n.startswith('mojolearn/identical/') for n in files),
                     'fresh macOS build carries no identical-mode native binaries')
@@ -357,7 +357,7 @@ def extract_qualification(path, expected_sha, output):
                         outgoing.write(chunk)
 
 
-def verify(directory, manifest_sha256, qualification_archive=None, source_root=None):
+def verify(directory, manifest_sha256, qualification_archive=None, source_root=None, preverified_source=None):
     require(hex_digest(manifest_sha256), 'expected manifest SHA256 must be lowercase hexadecimal')
     require(directory.is_dir() and not directory.is_symlink(), 'expected regular artifact directory')
     manifest_path = directory / 'alpha-manifest.json'
@@ -381,6 +381,17 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
     for name, digest in files.items():
         safe_name(name)
         require('/' not in name and name.endswith('.whl') and hex_digest(digest), 'invalid manifest wheel entry')
+    reused = manifest.get('qualification_reuse')
+    if preverified_source is not None:
+        require(re.fullmatch('[0-9a-f]{40}', preverified_source), 'invalid preverified source')
+        require(manifest.get('light_smoke') is None and manifest.get('linux_qualification') is None,
+                'preverified release must not claim fresh runtime receipts')
+        require(isinstance(reused, dict) and reused.get('source_commit') == preverified_source
+                and reused.get('basis') == 'completed checks on merged main'
+                and reused.get('new_runtime_verification') is False,
+                'preverified publication needs its explicit merged-checks record')
+    else:
+        require(reused is None, 'merged-checks reuse requires explicit preverified publication')
     smoke = manifest.get('light_smoke')
     smoke_files = {}
     if smoke is not None:
@@ -415,6 +426,15 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
     for name, expected in sorted(files.items()):
         path = directory / name
         require(wheel_digest(path) == expected, 'wheel SHA256 mismatch: ' + name)
+        if preverified_source is not None:
+            with zipfile.ZipFile(path) as archive:
+                payloads = [n for n in archive.namelist() if n.endswith('.dist-info/LINUX_PAYLOAD.json')]
+                if payloads:
+                    require(len(payloads) == 1 and decode(archive.read(payloads[0])).get('source_commit') == preverified_source,
+                            'Linux wheel differs from frozen preverified source')
+                else:
+                    require(archive.read('mojolearn/identity_columns/COMMIT').decode().strip() == preverified_source,
+                            'wheel differs from frozen preverified source')
         if qualification is not None and name == qualification['wheel']:
             with tempfile.TemporaryDirectory(prefix='mojolearn-alpha-linux-qualification-') as temporary:
                 extracted = Path(temporary)
@@ -426,11 +446,11 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
         else:
             # DEVIATION 2290: the source root only decides which _version.py is read.
             macos_source = (smoke['source_commit'] if smoke is not None
-                            and 'light-smoke-macos.json' in smoke_files else None)
+                            and 'light-smoke-macos.json' in smoke_files else preverified_source)
             tags[name] = verify_wheel(path, version, release_profile, None, source_root, macos_source)
     return dict(schema='mojolearn.alpha-artifact-verification.v1', passed=True, version=version,
                 manifest_sha256=manifest_sha256, files=files, tags=tags, release_profile=release_profile,
-                linux_qualification=qualification,
+                linux_qualification=qualification, qualification_reuse=reused,
                 scope='File integrity, alpha metadata and recorded overlay provenance only; '
                       'no package execution. A listed fresh Linux payload additionally requires its exact final-wheel '
                       'three-architecture installed admission; overlay artifacts inherit no current numerical qualification')
@@ -442,5 +462,6 @@ if __name__ == '__main__':
     parser.add_argument('--manifest-sha256', required=True)
     parser.add_argument('--qualification-archive', type=Path)
     parser.add_argument('--source-root', type=Path)
+    parser.add_argument('--preverified-source', help='explicit reuse of completed merged-lane checks; no runtime checks')
     args = parser.parse_args()
-    print(json.dumps(verify(args.directory, args.manifest_sha256, args.qualification_archive, args.source_root), sort_keys=True, indent=2))
+    print(json.dumps(verify(args.directory, args.manifest_sha256, args.qualification_archive, args.source_root, args.preverified_source), sort_keys=True, indent=2))

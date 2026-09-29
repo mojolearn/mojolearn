@@ -1,5 +1,16 @@
 # Release checklist
 
+## Releasing changes already checked before merge
+
+When the user requests publication using completed checks on merged main,
+select `validation_profile=preverified` with prepared wheels and their pinned
+`artifact_source_commit`. The manifest records `qualification_reuse` with that
+source, `basis: "completed checks on merged main"`, and
+`new_runtime_verification: false`. This path checks artifact integrity and
+publishes without running CPU certification or new installed GPU/CPU smoke.
+Do not manufacture fresh passing test receipts. Use `packaging/macos/build_release_wheel.sh --build-only` to compile and pack
+without the Mac builder's automatic post-build runtime tests.
+
 ## The one command
 
 ```sh

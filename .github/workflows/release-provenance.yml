@@ -116,6 +116,7 @@ on:
           - light
           - verifier-patch
           - python-patch
+          - preverified
 
       light_platform:
         description: Explicit platform batch for light publication; each wheel needs its own successful installed smoke.
@@ -902,10 +903,16 @@ jobs:
         if: inputs.validation_profile != 'verifier-patch' && inputs.validation_profile != 'python-patch'
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
         run: |
           set -euo pipefail
           cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
           qualification_args=()
+          if [ "${VALIDATION_PROFILE:-}" = preverified ]; then
+            test -n "$ARTIFACT_SOURCE_COMMIT"
+            qualification_args+=(--preverified-source "$ARTIFACT_SOURCE_COMMIT")
+          fi
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
@@ -1004,6 +1011,10 @@ jobs:
           set -euo pipefail
           cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
           qualification_args=()
+          if [ "${VALIDATION_PROFILE:-}" = preverified ]; then
+            test -n "$ARTIFACT_SOURCE_COMMIT"
+            qualification_args+=(--preverified-source "$ARTIFACT_SOURCE_COMMIT")
+          fi
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
@@ -1095,6 +1106,10 @@ jobs:
           set -euo pipefail
           cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
           qualification_args=()
+          if [ "${VALIDATION_PROFILE:-}" = preverified ]; then
+            test -n "$ARTIFACT_SOURCE_COMMIT"
+            qualification_args+=(--preverified-source "$ARTIFACT_SOURCE_COMMIT")
+          fi
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
