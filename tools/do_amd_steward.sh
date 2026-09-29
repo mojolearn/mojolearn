@@ -168,6 +168,9 @@ Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /root/mojolearn/tools/apple_steward.py work --steward do-amd
 Restart=always
 RestartSec=30
+# a job process the kernel OOM-kills must not stop the service (and kill every
+# other job with it): the job fails by itself (2026-09-29, a 157 GB DBSCAN arm)
+OOMPolicy=continue
 StandardOutput=append:/root/mojolearn-steward.log
 StandardError=append:/root/mojolearn-steward.log
 [Install]

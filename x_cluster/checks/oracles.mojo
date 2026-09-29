@@ -9,6 +9,7 @@ from std.math import fma, sqrt
 
 from checks.numerics import ftz, identical_cos, identical_div, identical_exp, identical_log, identical_mul, identical_mul64, identical_pow, identical_sqrt
 from x_cluster.bodies import SplitMix64
+from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 
 # DEVIATION 5100 (fold order) and 5101 (contraction): squared distance
@@ -220,22 +221,35 @@ def oracle_resp(q: List[Float32], c: List[Float32], n: Int, kc: Int, descending:
 
 # DEVIATION 5109 (second half): the M-step moment folds, rows ascending
 def oracle_moments(
-    resp: List[Float32], x: List[Float32], n: Int, d: Int, kc: Int, reg: Float32, descending: Bool = False
+    resp: List[Float32], x: List[Float32], n: Int, d: Int, kc: Int, reg: Float32, chain: Bool = False
 ) -> List[Float32]:
-    """nk (kc), then means (kc x d), then cov (kc x d x d), concatenated."""
+    """nk (kc), then means (kc x d), then cov (kc x d x d), concatenated.
+
+    DEVIATION 5110 (revised 2026-09-29): nk is the rows-ascending chain; the
+    means and covariances fold the sample axis through the identical GEMM
+    (`x_cluster/host/moments_gemm.mojo`). `chain=True` is the RETIRED
+    spelling, one rows-ascending float32 chain per cell: the alternative the
+    check's fixture must separate from."""
     var nk = List[Float32](capacity=kc)
     for k in range(kc):
         var acc = Float32(0)
-        for t in range(n):
-            var i = n - 1 - t if descending else t
+        for i in range(n):
             acc = ftz(acc + resp[i * kc + k])
         nk.append(ftz(acc + Float32(1.1920929e-06)))
+    if not chain:
+        var gm = gemm_fold_means(resp, x, nk, n, d, kc)
+        var gc = gemm_fold_cov(resp, x, gm, nk, n, d, kc, reg)
+        var o = nk.copy()
+        for v in gm:
+            o.append(v)
+        for v in gc:
+            o.append(v)
+        return o^
     var means = List[Float32](capacity=kc * d)
     for k in range(kc):
         for a in range(d):
             var acc = Float32(0)
-            for t in range(n):
-                var i = n - 1 - t if descending else t
+            for i in range(n):
                 acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(x[i * d + a]))))
             means.append(ftz(identical_div(acc, nk[k])))
     var out = nk.copy()
@@ -245,8 +259,7 @@ def oracle_moments(
         for a in range(d):
             for b in range(d):
                 var acc = Float32(0)
-                for t in range(n):
-                    var i = n - 1 - t if descending else t
+                for i in range(n):
                     var da = ftz(ftz(x[i * d + a]) - means[k * d + a])
                     var db = ftz(ftz(x[i * d + b]) - means[k * d + b])
                     acc = ftz(acc + ftz(identical_mul(resp[i * kc + k], ftz(identical_mul(da, db)))))

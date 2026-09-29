@@ -341,8 +341,15 @@ THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 #: Torch pins. Mac: the version the skgpu pixi env solved (pixi.lock
 #: osx-arm64/pytorch-2.13.0). AMD: the ROCm 6.4.1 wheels (cp312, hash-pinned)
 #: of tools/classical_two_datasets_leg.sh, so the venv must be Python 3.12
-#: there (tools/bench_board_leg.sh arranges it). NVIDIA: the image's own CUDA
-#: torch through `--system-site-packages` unless --torch-spec names one.
+#: there (tools/bench_board_leg.sh arranges it). NVIDIA: the Mac's torch
+#: version built for CUDA 12.9 (torch==2.13.0+cu129 from the PyTorch cu129
+#: index, which requires cuda-toolkit 12.9.1, inside the RAPIDS 26.8 sets'
+#: cuda-toolkit 12.*), in a CLEAN venv. 2026-09-29: the image's torch
+#: 2.4.1+cu124 through --system-site-packages broke cuML: the image's
+#: dist-packages/nvidia/__init__.py is a regular package, which shadows the
+#: venv's `nvidia` namespace, so nvidia.libnvcomp did not import, libcudf.so
+#: did not load, and every cuML arm refused (ImportError: libcudf.so).
+#: --system-site-packages is refused on NVIDIA for that reason.
 AMD_TORCH_ROCM = (
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1."
     "git6da9e660-cp312-cp312-linux_x86_64.whl"
@@ -350,7 +357,10 @@ AMD_TORCH_ROCM = (
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-"
     "cp312-cp312-linux_x86_64.whl"
     "#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d")
-DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "", "amd": AMD_TORCH_ROCM}
+DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
+                      "amd": AMD_TORCH_ROCM}
+#: an EXTRA index for the default torch spec (PyPI stays the main index)
+DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129"}
 #: OUR CPU ARM. The wheel's public CPU switch is MOJOLEARN_VENDOR=cpu before
 #: import (python/mojolearn/_backend.py): no GPU set loads and the host
 #: bindings under mojolearn/host/ answer, IDENTICAL only. `ours-cpu` is our
@@ -438,6 +448,7 @@ HARNESS = _load_tool("bench_board_harness")
 #: The opponent store (tools/bench_board_store.py): an opponent is measured once
 #: per key (box, device, library version, settings, data, ...) and reused.
 STORE = _load_tool("bench_board_store")
+WATCHDOG = _load_tool("bench_board_watchdog")
 
 #: Per-arm memory and the ours-cpu readback (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
@@ -670,6 +681,11 @@ def capture(cmd, timeout=60, env=None):
     return p.stdout.strip()
 
 
+#: What the host-memory watchdog killed (tools/bench_board_watchdog.py), in
+#: order; run_race reads the entries its race added.
+HOST_MEMORY_KILLS = []
+
+
 def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
     """Run `cmd` with stdout+stderr to `log_path`, in its own process group,
     killed as a GROUP at `timeout` seconds (macOS has no timeout(1), and a
@@ -683,6 +699,11 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
         log.flush()
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env,
                                 cwd=cwd, start_new_session=True)
+        dog = None
+        try:
+            dog = WATCHDOG.HostMemoryWatchdog(proc.pid, log).start()
+        except Exception as exc:      # noqa: BLE001 - recorded; the race still runs
+            log.write("\n=== bench_board: host-memory watchdog not started: %r\n" % (exc,))
         try:
             return proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -693,6 +714,9 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
             proc.wait()
             log.write("\n=== bench_board: KILLED at the %d s race ceiling\n" % timeout)
             return 124
+        finally:
+            if dog is not None:
+                HOST_MEMORY_KILLS.extend(dog.stop())
 
 
 def child_env(ctx, extra=None):
@@ -716,9 +740,32 @@ def child_env(ctx, extra=None):
 # The box fingerprint
 # ---------------------------------------------------------------------------
 
+def repo_sync(repo=REPO):
+    """The patch sync's provenance (tools/dev_pod.sh writes .git/devpod_synced
+    on a pod): {commit, worktree_dirty, base, patch_sha256, ...}, or None when
+    this tree was not patch-synced or its HEAD is no longer that sync's base."""
+    gd = capture(["git", "-C", repo, "rev-parse", "--absolute-git-dir"], timeout=20)
+    head = capture(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
+    if not gd or not head:
+        return None
+    try:
+        with open(os.path.join(gd, "devpod_synced")) as fh:
+            rec = dict(l.strip().split("=", 1) for l in fh if "=" in l)
+    except OSError:
+        return None
+    if rec.get("base") != head or not rec.get("commit"):
+        return None
+    return rec
+
+
 def repo_commit(repo=REPO):
-    """The repo commit this script shipped in: git, else SHIPPED_COMMIT.txt
-    (legs ship `git archive`, which has no .git), else the environment."""
+    """The repo commit this script shipped in: on a patch-synced pod the synced
+    commit (repo_sync; the box's HEAD is only the merge base), git, else
+    SHIPPED_COMMIT.txt (legs ship `git archive`, which has no .git), else the
+    environment."""
+    sync = repo_sync(repo)
+    if sync:
+        return sync["commit"] + ("-dirty" if sync.get("worktree_dirty") == "1" else "")
     c = capture(["git", "-C", repo, "rev-parse", "HEAD"], timeout=20)
     if c:
         dirty = capture(["git", "-C", repo, "status", "--porcelain", "--untracked-files=no"], timeout=20)
@@ -839,22 +886,60 @@ def box_fingerprint(ctx):
         "packages": python_packages(python),
         "mojolearn": {"version": mj, "requested": ctx.get("mojolearn_version"),
                       "wheel": ctx.get("wheel")},
-        "repo": {"commit": ctx.get("commit"), "script": os.path.relpath(script, REPO),
+        "repo": {"commit": ctx.get("commit"), "sync": repo_sync(),
+                 "script": os.path.relpath(script, REPO),
                  "script_sha256": sha256_file(script)},
         "env": {k: os.environ.get(k) for k in THREAD_ENV + ("MODULAR_NVPTX_COMPILER_PATH",)},
     }
 
 
+def pinned_package_names():
+    """Every library the board pins (the opponents' sets, per family, and
+    torch): their installed versions are part of an NVIDIA resume key."""
+    names = {"torch"}
+    reqs = [r for _, rs in opponent_pins().values() for r in rs]
+    reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
+    reqs += [r for rs in ALGOS.PINS.values() for r in rs]
+    reqs += [r for rs in ALGOS.RAPIDS_EXTRA.values() for r in rs]
+    for r in reqs:
+        m = re.match(r"^([A-Za-z0-9_.-]+)", r)
+        if m:
+            names.add(m.group(1).lower())
+    return sorted(names)
+
+
 def box_key(box):
     """What must not change between a run and its resume: the same box and
     the same library bytes. A board mixing two boxes is the patchwork that
-    produced a wrong CatBoost headline (bench_all_ours.sh)."""
+    produced a wrong CatBoost headline (bench_all_ours.sh).
+
+    NVIDIA (Andrew's orchestrator, 2026-09-29): a shared RunPod pod deletes
+    itself when idle, and each race holds ours and its opponents measured
+    together in one run, so a race is valid on its own. An NVIDIA board
+    therefore resumes on a NEW pod when the GPU model, the driver major
+    version, the wheel and every pinned library version are the same; the
+    hostname is not in its key, and every race records the host it ran on
+    (race_host). A different GPU model refuses: start a new --out. The
+    opponent store keeps its own machine key (a reused opponent must come
+    from the same machine)."""
     w = (box.get("mojolearn") or {}).get("wheel") or {}
-    return {"vendor": (box.get("gpu") or {}).get("vendor"),
-            "gpu": (box.get("gpu") or {}).get("name"),
-            "hostname": (box.get("host") or {}).get("hostname"),
-            "mojolearn": (box.get("mojolearn") or {}).get("version"),
-            "wheel_sha256": w.get("sha256")}
+    gpu = box.get("gpu") or {}
+    key = {"vendor": gpu.get("vendor"),
+           "gpu": gpu.get("name"),
+           "hostname": (box.get("host") or {}).get("hostname"),
+           "mojolearn": (box.get("mojolearn") or {}).get("version"),
+           "wheel_sha256": w.get("sha256")}
+    if gpu.get("vendor") == "nvidia":
+        del key["hostname"]
+        key["driver_major"] = str(gpu.get("driver") or "").split(".")[0] or None
+        pk = box.get("packages") or {}
+        key["pinned"] = {n: pk.get(n) for n in pinned_package_names() if pk.get(n)}
+    return key
+
+
+def race_host():
+    """Where a race ran: the hostname and, on RunPod, the pod id."""
+    return {"hostname": platform.node(), "pod_id": os.environ.get("RUNPOD_POD_ID")}
 
 
 # ---------------------------------------------------------------------------
@@ -910,6 +995,19 @@ def setup_python(args, vendor, out, log):
              "bytes": os.path.getsize(wfile)}
     if run_logged(pip + [wfile], None, log, 3600) != 0:
         raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
+    # torch FIRST: the opponent sets that depend on torch (torch-geometric,
+    # gpytorch, ...) then resolve against the pinned build instead of pulling
+    # PyPI's newest torch (another CUDA major on Linux)
+    torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
+    if torch_spec:
+        cmd = list(pip)
+        if args.torch_index_url:
+            cmd += ["--index-url", args.torch_index_url]
+        elif args.torch_spec is None and DEFAULT_TORCH_EXTRA_INDEX.get(vendor):
+            cmd += ["--extra-index-url", DEFAULT_TORCH_EXTRA_INDEX[vendor]]
+        if run_logged(cmd + shlex.split(torch_spec), None, log, 3600) != 0:
+            print("bench_board: torch install failed (%s); torch arms will refuse by name"
+                  % torch_spec, flush=True)
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -957,15 +1055,68 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
                   "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
-    torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
-    if torch_spec:
-        cmd = list(pip)
-        if args.torch_index_url:
-            cmd += ["--index-url", args.torch_index_url]
-        if run_logged(cmd + shlex.split(torch_spec), None, log, 3600) != 0:
-            print("bench_board: torch install failed (%s); torch arms will refuse by name"
-                  % torch_spec, flush=True)
     return python, wheel
+
+
+#: Run in the board's interpreter: can the installed wheel's GPU set load on
+#: this device? (2026-09-29: an A40 is sm_86 and 0.8.25 carries sm_89 and
+#: sm_90a only; the wheel fell back to its CPU set and 18 NVIDIA races
+#: refused our arm one by one.)
+_GPU_SET_PROBE = r"""
+import importlib.util, sys
+if importlib.util.find_spec("mojolearn") is None:
+    print("NO-MOJOLEARN"); sys.exit(0)
+try:
+    import mojolearn._backend as b
+except Exception as e:
+    print("%s: %s" % (type(e).__name__, e)); sys.exit(3)
+try:
+    b.tier_dir("identical")
+except Exception as e:
+    print("%s: %s" % (type(e).__name__, e)); sys.exit(3)
+print("OK")
+"""
+
+
+def gpu_set_refusal(python, vendor):
+    """None when our GPU set loads here (or on Apple, or no mojolearn is
+    installed in the interpreter, as in the unit tests); else the wheel's own
+    reason."""
+    if vendor not in ("nvidia", "amd"):
+        return None
+    try:
+        p = subprocess.run([python, "-c", _GPU_SET_PROBE], capture_output=True, text=True,
+                           timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "the probe did not run: %s" % e
+    if p.returncode == 0:
+        return None
+    return ((p.stdout or "") + (p.stderr or "")).strip()[-2000:] or "rc %d" % p.returncode
+
+
+def setup_arm_venvs(args, vendor, out, log):
+    """{arm: interpreter} for the arms whose library needs its own clean venv
+    (tools/bench_board_algos.py ARM_VENVS), created and installed under the
+    cache. A failed install is not fatal: the arm then refuses by name in its
+    race, in the board's venv."""
+    if args.skip_install or args.python_env or "algos" not in (args.families or ""):
+        return {}
+    got = {}
+    for arm, reqs in sorted(ALGOS.ARM_VENVS.get(vendor, {}).items()):
+        vdir = os.path.join(cache_dir(args, out), "venv-" + arm)
+        py = os.path.join(vdir, "bin", "python")
+        if not os.path.exists(py) and run_logged([args.base_python, "-m", "venv", vdir], None,
+                                                 log, 1800) != 0:
+            print("bench_board: venv for %s failed (it refuses by name)" % arm, flush=True)
+            continue
+        cmd = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+               "--extra-index-url", ALGOS.ARM_VENV_INDEX] + list(reqs)
+        if run_logged(cmd, None, log, 3600) != 0:
+            print("bench_board: %s install failed for %s (it refuses by name)"
+                  % (" ".join(reqs), arm), flush=True)
+            continue
+        got[arm] = py
+    return got
 
 
 def data_status(data_root, datasets, verify=False):
@@ -1000,6 +1151,147 @@ def data_status(data_root, datasets, verify=False):
 # ---------------------------------------------------------------------------
 # Result file
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# --invalidate-memory: a GPU figure read with the wrong counter, withdrawn
+# ---------------------------------------------------------------------------
+
+#: The GPU counters that are only valid for a torch arm (tools/bench_board_probe.py).
+TORCH_GPU_METHODS = ("torch.cuda.max_memory_allocated", "torch.mps.driver_allocated_memory")
+
+
+def _wrong_gpu_counter(cell):
+    """A GPU cell of a non-torch arm whose GPU figure came from torch's
+    allocator (before bench_board_probe took the arm's library, 2026-09-29)."""
+    m = cell.get("memory") or {}
+    return (cell.get("device") == "gpu"
+            and str(cell.get("library") or "") not in PROBE.TORCH_LIBRARIES
+            and str(m.get("gpu_method") or "").startswith(TORCH_GPU_METHODS))
+
+
+def _withdraw_gpu_figure(cell, note):
+    cell["peak_gpu_mb"] = None
+    m = cell.setdefault("memory", {})
+    m["peak_gpu_mb"] = None
+    m["warmup_gpu_mb"] = None
+    m["gpu_method_withdrawn"] = m.get("gpu_method")
+    m["gpu_method"] = note
+
+
+def invalidate_memory(out, prefixes, reason, fixed_at, store_path=None):
+    """Mark the GPU memory of every finished cell whose figure came from the
+    wrong counter (_wrong_gpu_counter) as not measured, in the races whose id
+    starts with one of `prefixes` (comma list; "all" for every race). The
+    times are untouched: the probe only read memory. The opponent store gets
+    a corrected copy of each such record (the store keeps the latest per
+    key). Idempotent: a withdrawn figure no longer carries a torch counter.
+    Returns (board cells marked, store records corrected)."""
+    rpath = os.path.join(out, "board.json")
+    result = load_result(rpath)
+    if result is None:
+        raise SystemExit("--invalidate-memory: no board.json under %s" % out)
+    want = [x.strip() for x in (prefixes or "").split(",") if x.strip()]
+    note = "not measured (%s; fixed at %s)" % (reason, fixed_at)
+    n_board = 0
+    for rid, rec in (result.get("races") or {}).items():
+        if not ("all" in want or any(rid.startswith(x) for x in want)):
+            continue
+        for c in rec.get("cells") or []:
+            if _wrong_gpu_counter(c):
+                _withdraw_gpu_figure(c, note)
+                n_board += 1
+    n_store = 0
+    if store_path and os.path.exists(store_path):
+        for r in STORE.load(store_path).values():
+            k = r.get("key") or {}
+            rid = "%s/%s/%s" % (k.get("family"), k.get("lane"), k.get("dataset"))
+            cell = r.get("cell") or {}
+            if ("all" in want or any(rid.startswith(x) for x in want)) and _wrong_gpu_counter(cell):
+                fixed = json.loads(json.dumps(r))
+                _withdraw_gpu_figure(fixed["cell"], note)
+                fixed["corrected_at"] = now_utc()
+                STORE.append(store_path, fixed)
+                n_store += 1
+    if n_board:
+        result.setdefault("corrections", []).append(
+            {"at": now_utc(), "what": "peak_gpu_mb withdrawn", "prefixes": want, "note": note,
+             "cells": n_board, "store_records": n_store})
+        save_result(rpath, result)
+        write_board(out, result)
+    return n_board, n_store
+
+
+# ---------------------------------------------------------------------------
+# --invalidate-arm: an arm that did not run what its name says, refused after the fact
+# ---------------------------------------------------------------------------
+
+def _refuse_cell(cell, reason):
+    cell["status"] = "REFUSED(%s)" % reason
+    cell["withdrawn"] = {"median_ms": cell.get("median_ms"), "min_ms": cell.get("min_ms"),
+                         "max_ms": cell.get("max_ms"), "times_ms": cell.get("times_ms"),
+                         "quality": cell.get("quality")}
+    for k in ("median_ms", "min_ms", "max_ms", "warmup_ms", "quality", "peak_gpu_mb", "peak_host_mb",
+              "ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_cpu_over"):
+        if k in cell:
+            cell[k] = None
+    cell["times_ms"] = []
+    cell["rounds"] = 0
+
+
+def invalidate_arm(out, arm, reason, store_path=None, vendor=None):
+    """Mark every finished cell of `arm` (fit and inference, run or stored) as
+    REFUSED(reason): its times and quality are withdrawn (kept under
+    `withdrawn`), the rest of the race stays, and the ratios are recomputed
+    without it. For an arm whose measurement was not what its name says (on
+    do-amd, 2026-09-29, `xgboost-gpu` trained on the host CPU), so the races
+    need not be run again. The opponent store gets a refused copy of each of
+    its records of the arm (of `vendor` when given). Idempotent. Returns
+    (board cells refused, store records refused)."""
+    rpath = os.path.join(out, "board.json")
+    result = load_result(rpath)
+    if result is None:
+        raise SystemExit("--invalidate-arm: no board.json under %s" % out)
+    n_board = 0
+    for rid, rec in (result.get("races") or {}).items():
+        hit = False
+        for c in rec.get("cells") or []:
+            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
+                _refuse_cell(c, reason)
+                n_board += 1
+                hit = True
+        infer = rec.get("infer_cells") or []
+        for c in infer:
+            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
+                _refuse_cell(c, reason)
+                n_board += 1
+                hit = True
+        if hit:
+            rec["cells"] = add_ratios(rec.get("cells") or [])
+            if infer:
+                INFER._ratios(infer, _bb())
+    n_store = 0
+    if store_path and os.path.exists(store_path):
+        for r in STORE.load(store_path).values():
+            k = r.get("key") or {}
+            cell = r.get("cell") or {}
+            if k.get("arm") != arm or (vendor and k.get("vendor") != vendor) \
+                    or str(cell.get("status", "")).startswith("REFUSED"):
+                continue
+            fixed = json.loads(json.dumps(r))
+            _refuse_cell(fixed["cell"], reason)
+            for ic in fixed.get("infer_cells") or []:
+                _refuse_cell(ic, reason)
+            fixed["corrected_at"] = now_utc()
+            STORE.append(store_path, fixed)
+            n_store += 1
+    if n_board:
+        result.setdefault("corrections", []).append(
+            {"at": now_utc(), "what": "arm refused after the fact", "arm": arm, "reason": reason,
+             "cells": n_board, "store_records": n_store})
+        save_result(rpath, result)
+        write_board(out, result)
+    return n_board, n_store
+
 
 def load_result(path):
     if not os.path.exists(path):
@@ -1361,6 +1653,9 @@ def algos_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec)]
+    for arm, py in sorted((ctx.get("arm_python") or {}).items()):
+        if arm in race["arms"]:
+            cmd += ["--arm-python", "%s=%s" % (arm, py)]
     if race["rows"]:
         cmd += ["--smoke-rows", str(int(race["rows"]))]
     n = len(race["arms"])
@@ -1925,6 +2220,24 @@ def backfill_store(board_json, store_path):
     return imported, skipped
 
 
+def note_host_memory(rec, kills, arms):
+    """The host-memory watchdog killed something of this race: the race fails
+    by name (HOST MEMORY) and the killed arm's cell says so."""
+    if not kills:
+        return
+    rec["host_memory"] = list(kills)
+    named = []
+    for k in kills:
+        arm = WATCHDOG.arm_of(k.get("command") or "", arms)
+        named.append("%s at %.1f GB (%s)" % (arm or "the driver", k["mb"] / 1024.0, k["why"]))
+        for c in rec.get("cells") or []:
+            if arm is not None and c.get("arm") == arm:
+                c["status"] = "HOST-MEMORY(killed at %.1f GB: %s)" % (k["mb"] / 1024.0, k["why"])
+    rec["status"] = "failed"
+    rec["failure"] = "HOST MEMORY: the watchdog killed " + "; ".join(named)
+    print("bench_board:   %s" % rec["failure"], flush=True)
+
+
 def run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells). Opponents
     the store already holds for this key are not run; their stored cells join
@@ -1936,7 +2249,9 @@ def run_race(ctx, race):
                     arms=[a for a in race["arms"] if a not in stored])
         print("bench_board:   stored (not run): %s" % ", ".join(
             "%s [%s]" % (a, STORE.source_text(r)) for a, r in sorted(stored.items())), flush=True)
+    mark = len(HOST_MEMORY_KILLS)
     rec = _run_race(ctx, race)
+    note_host_memory(rec, HOST_MEMORY_KILLS[mark:], race["arms"])
     rec["arms"] = full["arms"]
     rec["stored_arms"] = sorted(stored)
     for c in rec["cells"]:
@@ -2055,6 +2370,7 @@ def _run_race(ctx, race):
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
+    rec["host"] = race_host()
     attach_params(ctx, rec)
     return rec
 
@@ -2233,6 +2549,9 @@ def render_board(result):
         ("Python", (box.get("python") or {}).get("version")),
         ("mojolearn", "%s (wheel %s, sha256 %s)" % (mj.get("version"), w.get("file"), w.get("sha256"))),
         ("script commit", (box.get("repo") or {}).get("commit")),
+        ("patch sync", ("synced commit %s over base %s, patch sha256 %s" % (
+            sy.get("commit"), sy.get("base"), sy.get("patch_sha256")))
+         if (sy := (box.get("repo") or {}).get("sync")) else "-"),
         ("modes", ", ".join(cfg.get("modes") or [])),
         ("rounds", "%s timed after 1 warm-up, arms interleaved round by round" % cfg.get("rounds")),
         ("seed", SEED),
@@ -2362,7 +2681,10 @@ def render_board(result):
                 L.append("### %s / %s (rows %s, shape %s)" % (rr["lane"], rr["dataset"],
                                                              rows_tag(rr["rows"]), _f(shape)))
             L.append("")
-            L.append("race: %s, driver rc %s, log `%s`" % (rr.get("status"), rr.get("rc"), rr.get("log")))
+            rh = rr.get("host") or {"hostname": (box.get("host") or {}).get("hostname")}
+            L.append("race: %s, driver rc %s, log `%s`, ran on %s%s" % (
+                rr.get("status"), rr.get("rc"), rr.get("log"), _f(rh.get("hostname")),
+                " (pod %s)" % rh["pod_id"] if rh.get("pod_id") else ""))
             L.append("")
             L.append("| arm | library | device | mode | median ms | min..max ms | rounds | "
                      "ours IDENTICAL / arm | ours FAST / arm | ours CPU / arm | peak host MB | "
@@ -2724,6 +3046,18 @@ def build_parser():
                         "cell joins the race (tools/bench_board_store.py)")
     p.add_argument("--retime-opponents", action="store_true",
                    help="measure every opponent again (and store the new measurement)")
+    p.add_argument("--invalidate-memory", default=None, metavar="PREFIXES",
+                   help="before the run (or alone with --render-only): in the finished races whose "
+                        "id starts with one of these (comma list, or all), withdraw every GPU memory "
+                        "figure a non-torch arm read from torch's allocator; needs "
+                        "--invalidate-reason and --invalidate-fixed-at")
+    p.add_argument("--invalidate-reason", default=None)
+    p.add_argument("--invalidate-arm", action="append", default=[], metavar="ARM",
+                   help="before the run (or alone with --render-only): mark every finished cell "
+                        "of this arm REFUSED(--invalidate-arm-reason), times withdrawn and ratios "
+                        "recomputed, for an arm that did not run what its name says (repeatable)")
+    p.add_argument("--invalidate-arm-reason", default=None)
+    p.add_argument("--invalidate-fixed-at", default=None, metavar="COMMIT")
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
                         "print how many were imported and skipped, and exit")
@@ -2831,7 +3165,9 @@ def print_plan(vendor, modes, races, args, rows, data):
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         print("opponents pinned: %s%s" % (" ".join(reqs), (" (index %s)" % idx) if idx else ""))
     ts = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
-    print("torch: %s" % (ts or "the image's own (use --system-site-packages)"))
+    print("torch: %s%s" % (ts or "the image's own (use --system-site-packages)",
+                           " (extra index %s)" % DEFAULT_TORCH_EXTRA_INDEX[vendor]
+                           if args.torch_spec is None and DEFAULT_TORCH_EXTRA_INDEX.get(vendor) else ""))
     if any(r["family"] == "classical2" for r in races):
         print("classical2 opponents pinned: %s" % " ".join(MORE_PINS[vendor]))
         for why in MORE.NOT_PLANNED[vendor]:
@@ -2922,6 +3258,30 @@ def main(argv=None):
             print("bench_board:   skipped %d: %s" % (n, why), flush=True)
         return 0
 
+    if args.invalidate_memory:
+        if not (args.out and args.invalidate_reason and args.invalidate_fixed_at):
+            raise SystemExit("--invalidate-memory needs --out, --invalidate-reason and "
+                             "--invalidate-fixed-at")
+        iout = os.path.abspath(os.path.expanduser(args.out))
+        store = os.path.abspath(os.path.expanduser(
+            args.opponent_store or os.path.join(os.path.dirname(iout), "opponent-store.jsonl")))
+        nb, ns = invalidate_memory(iout, args.invalidate_memory, args.invalidate_reason,
+                                   args.invalidate_fixed_at, store)
+        print("bench_board: --invalidate-memory %s: withdrew %d GPU memory figures on the board, "
+              "corrected %d opponent-store records" % (args.invalidate_memory, nb, ns), flush=True)
+
+    if args.invalidate_arm:
+        if not (args.out and args.invalidate_arm_reason):
+            raise SystemExit("--invalidate-arm needs --out and --invalidate-arm-reason")
+        iout = os.path.abspath(os.path.expanduser(args.out))
+        store = os.path.abspath(os.path.expanduser(
+            args.opponent_store or os.path.join(os.path.dirname(iout), "opponent-store.jsonl")))
+        for arm in args.invalidate_arm:
+            nb, ns = invalidate_arm(iout, arm, args.invalidate_arm_reason, store,
+                                    vendor=None if args.vendor == "auto" else args.vendor)
+            print("bench_board: --invalidate-arm %s: refused %d cells on the board, %d opponent-store "
+                  "records" % (arm, nb, ns), flush=True)
+
     if args.render_only:
         if not args.out:
             raise SystemExit("--render-only needs --out")
@@ -2935,6 +3295,11 @@ def main(argv=None):
     vendor = detect_vendor() if args.vendor == "auto" else args.vendor
     if vendor is None:
         raise SystemExit("bench_board: no Metal, nvidia-smi or rocm-smi found; pass --vendor")
+    if vendor == "nvidia" and args.system_site_packages:
+        raise SystemExit("bench_board: REFUSING --system-site-packages on NVIDIA: an image's "
+                         "dist-packages/nvidia/__init__.py shadows the venv's CUDA libraries and "
+                         "cuML cannot load libcudf (2026-09-29). The board installs its own torch "
+                         "(%s)." % DEFAULT_TORCH_SPEC["nvidia"])
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
     lanes = (_csv(args.lanes, TREE_LANES + TREE_TASK_LANES + CLASSICAL_LANES + MORE_LANES
@@ -3006,6 +3371,11 @@ def main(argv=None):
     result = load_result(rpath)
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    why = gpu_set_refusal(python, vendor)
+    if why:
+        raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
+                         "so every race would refuse our arm:\n%s" % (vendor, why))
     if wheel is None and result:
         wheel = ((result.get("box") or {}).get("mojolearn") or {}).get("wheel")
     ptxas = None
@@ -3029,7 +3399,7 @@ def main(argv=None):
            "neural_driver": os.path.abspath(args.neural_driver),
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
-           "algos_driver": os.path.abspath(args.algos_driver),
+           "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
     ctx["box"] = box

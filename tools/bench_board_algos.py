@@ -123,6 +123,35 @@ PINS = {"apple": list(PINS_COMMON), "amd": list(PINS_COMMON),
         "nvidia": list(PINS_COMMON)}
 #: installed from the rapids index with the pinned cuml/cuvs set
 RAPIDS_EXTRA = {"nvidia": ["cugraph-cu12==26.8.0"]}
+#: An arm whose library cannot share the board's venv gets its own (clean)
+#: venv, created by tools/bench_board.py and passed as --arm-python ARM=PY.
+#: implicit-gpu (2026-09-29): the PyPI implicit 0.7.3 GPU extension links
+#: CUDA 13 (libcublas.so.13, librmm from rmm-cu13) and was built against rmm
+#: 26.4 (26.8 lacks its rmm::bad_alloc typeinfo; 25.12 its device_buffer
+#: constructor), while the RAPIDS sets are cu12; cuda-toolkit 13.0 matches
+#: the pods' 580 driver. The worker preloads the CUDA 13 libraries through
+#: cuda.pathfinder (the extension carries no RUNPATH to them).
+ARM_VENVS = {"nvidia": {"implicit-gpu": [
+    "implicit==0.7.3", "rmm-cu13==26.4.0", "librmm-cu13==26.4.0",
+    "cuda-toolkit[cublas,curand,cudart]==13.0.3", "numpy==2.4.6", "scipy==1.17.1",
+    "threadpoolctl==3.7.0"]}}
+#: the index the arm venvs install from besides PyPI
+ARM_VENV_INDEX = "https://pypi.nvidia.com"
+
+
+def _preload_cuda_libs(names):
+    """Load CUDA libraries from the venv's wheels (cuda.pathfinder) so an
+    extension without a RUNPATH to them resolves; a missing loader or library
+    leaves it to the arm's own refusal."""
+    try:
+        from cuda.pathfinder import load_nvidia_dynamic_lib
+    except ImportError:
+        return
+    for n in names:
+        try:
+            load_nvidia_dynamic_lib(n)
+        except Exception:
+            pass
 
 # ---------------------------------------------------------------------------
 # THE TABLE. One entry per algorithm (a class pair such as SGDClassifier /
@@ -266,7 +295,8 @@ _add("affinity-prop", xlane="cluster", ours="AffinityPropagation", task="cluster
 _add("bayesian-gmm", xlane="cluster", ours="BayesianGaussianMixture", task="gmm", block="reg",
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.mixture:BayesianGaussianMixture",
      params=dict(n_components=8, covariance_type="full", max_iter=100, tol=1e-3, reg_covar=1e-6,
-                 init_params="kmeans", random_state=SEED))
+                 init_params="kmeans", random_state=SEED),
+     notes=["constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
 
 # ---- lane neighbors + kernel ---------------------------------------------
 _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block="cls",
@@ -1998,6 +2028,8 @@ def lane_arrays(lane, B):
             if yk in D:
                 D[yk] = _stride(D[yk], m)
     t = s["task"]
+    if lane == "bayesian-gmm":             # the gmm lane's rule, the same columns for every arm
+        D = _tool("bench_board_more").drop_constant_columns(D)
     if s["kind"] == "shap" or t in ("impute",):
         pass
     if t == "impute":
@@ -3852,8 +3884,12 @@ def _build_als(lane, arm, D):
         def outputs():
             return {"U": _arr(S["e"].user_factors_, np.float32), "V": _arr(S["e"].item_factors_, np.float32)}
         return Runner(info, fit, outputs, record=_BP().arm_record(cls(**p)))
-    import implicit
     gpu = arm == "implicit-gpu"
+    if gpu:
+        # BEFORE `import implicit`: its __init__ imports implicit.gpu, which
+        # decides HAS_CUDA once, at that import
+        _preload_cuda_libs(("cudart", "cublasLt", "cublas", "curand"))
+    import implicit
     if gpu:
         import implicit.gpu
         if not implicit.gpu.HAS_CUDA:
@@ -3869,7 +3905,10 @@ def _build_als(lane, arm, D):
                iterations=p["iterations"], random_state=p["random_state"], use_gpu=gpu,
                calculate_training_loss=p["calculate_training_loss"])
     if not gpu:                        # implicit's GPU model has only its CG solver
-        akw.update(use_cg=p["use_cg"], cg_steps=p["cg_steps"])
+        # implicit 0.7.3 takes no cg_steps (its CG runs its own fixed steps);
+        # with use_cg=False on both sides no CG step runs, so ours' cg_steps
+        # has no effect either
+        akw.update(use_cg=p["use_cg"])
     rec = dict(akw, __library__="implicit")
 
     def fit():
@@ -4162,7 +4201,8 @@ def worker(args):
         runner.info.update(_tool("bench_board_probe").library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
-    mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
+    mem = _tool("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
+        library=(runner.info or {}).get("library") or "?")
     last = None
     for line in sys.stdin:
         parts = line.split()
@@ -4603,8 +4643,9 @@ def race(args):
     env_extra = {}
     if args.smoke_rows:
         env_extra["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
+    arm_python = dict(a.split("=", 1) for a in (args.arm_python or []))
     for arm in arms:
-        py = args.ours_python if arm in OURS_ARMS else args.theirs_python
+        py = arm_python.get(arm) or (args.ours_python if arm in OURS_ARMS else args.theirs_python)
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
         env = _worker_env(arm)
@@ -4763,6 +4804,8 @@ def build_parser():
     r.add_argument("--smoke-rows", type=int, default=0)
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
+    r.add_argument("--arm-python", action="append", default=[], metavar="ARM=PY",
+                   help="this arm's own interpreter (repeatable; ARM_VENVS)")
     r.add_argument("--ready-seconds", type=float, default=1800)
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "

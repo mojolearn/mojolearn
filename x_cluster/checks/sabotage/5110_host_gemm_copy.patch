@@ -1,0 +1,12 @@
+diff --git a/x_cluster/host/host_ops.mojo b/x_cluster/host/host_ops.mojo
+index 5e1a05eb9..14f73af34 100644
+--- a/x_cluster/host/host_ops.mojo
++++ b/x_cluster/host/host_ops.mojo
+@@ -491,6 +491,7 @@ struct HostOps(ClusterOps):
+         var cl = gemm_fold_cov(self.f[resp], self.f[x], ml, nkl, n, d, kc, reg)
+         for t in range(kc * d * d):
+             pc[t] = cl[t]
++        pc[0] = ftz(pc[0] + Float32(1e-6))
+ 
+     def pdist(
+         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
