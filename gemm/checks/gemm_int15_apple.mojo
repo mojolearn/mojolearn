@@ -128,6 +128,11 @@ comptime INT15_APPLE4_CHUNK_STEPS = 512
 #: The arm that carries the accumulators across two steps of the unit.
 comptime INT15_APPLE_CHUNK_SABOTAGE = is_defined["MOJOLEARN_INT15_APPLE_CHUNK_SABOTAGE"]()
 
+#: `-D MOJOLEARN_INT15_APPLE_SCALAR_STAGING=1` keeps the staging at one code
+#: per load on every launch, as run 1 of this plan had it, so one box can
+#: run both and compare bits and time. SCHEDULING.
+comptime INT15_APPLE_SCALAR_STAGING = is_defined["MOJOLEARN_INT15_APPLE_SCALAR_STAGING"]()
+
 #: DEVIATION 2973, the value arm, the define every fifteen-bit plan reads.
 comptime INT15_APPLE_VALUE_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
 
@@ -178,12 +183,19 @@ def _stage_left[
     k0: Int,
     k: Int,
     tid: Int,
+    aligned: Bool,
 ):
     """One window of the LEFT operand into threadgroup memory, each code
     whole, as the float32 it names: `hi * 128 + lo`, exact. Element (row r,
     step p) at `dst[p * ST + r]`. A slot is four consecutive steps of one
     row; a thread owns slots `tid, tid + NT, ...`. A row at or beyond
-    `rows` and a step at or beyond `k` are the ZERO CODE."""
+    `rows` and a step at or beyond `k` are the ZERO CODE.
+
+    FOUR CODES IN ONE LOAD where the load is aligned: inside the row, `k` a
+    multiple of four (every row then starts on one), and the base of the
+    buffer aligned, which the launch reads off the pointers and passes as
+    `aligned` (clause W-11's discipline). One code per load elsewhere. Run
+    1 of this plan read one code per load everywhere."""
     comptime SLOTS = (ROWS * KB) // 4
     comptime SL = (SLOTS + NT - 1) // NT
     comptime assert KB % 4 == 0, "_stage_left: a window is whole slots"
@@ -193,14 +205,21 @@ def _stage_left[
             var r = s // (KB // 4)
             var p4 = (s % (KB // 4)) * 4
             var gr = row0 + r
+            var v = SIMD[DType.float32, 4](0.0)
+            if gr < rows:
+                var base = gr * k + k0 + p4
+                if aligned and k0 + p4 + 4 <= k and (k & 3) == 0:
+                    var h4 = hi.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                    var l4 = lo.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                    v = h4 * SIMD[DType.float32, 4](128.0) + l4
+                else:
+                    comptime for e in range(4):
+                        if k0 + p4 + e < k:
+                            v[e] = Float32(Int32(hi.unsafe_load(base + e))) * Float32(128.0) + Float32(
+                                Int32(lo.unsafe_load(base + e))
+                            )
             comptime for e in range(4):
-                var v = Float32(0.0)
-                if gr < rows and k0 + p4 + e < k:
-                    var at_ = gr * k + k0 + p4 + e
-                    v = Float32(Int32(hi.unsafe_load(at_))) * Float32(128.0) + Float32(
-                        Int32(lo.unsafe_load(at_))
-                    )
-                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v[e]
 
 
 @always_inline
@@ -214,6 +233,7 @@ def _stage_piece_left[
     k0: Int,
     k: Int,
     tid: Int,
+    aligned: Bool,
 ):
     """One window of ONE PLANE of the left operand (form FOUR), each piece
     as the float32 it names, in `_stage_left`'s layout: element (row r,
@@ -227,11 +247,17 @@ def _stage_piece_left[
             var r = s // (KB // 4)
             var p4 = (s % (KB // 4)) * 4
             var gr = row0 + r
+            var v = SIMD[DType.float32, 4](0.0)
+            if gr < rows:
+                var base = gr * k + k0 + p4
+                if aligned and k0 + p4 + 4 <= k and (k & 3) == 0:
+                    v = q.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                else:
+                    comptime for e in range(4):
+                        if k0 + p4 + e < k:
+                            v[e] = Float32(Int32(q.unsafe_load(base + e)))
             comptime for e in range(4):
-                var v = Float32(0.0)
-                if gr < rows and k0 + p4 + e < k:
-                    v = Float32(Int32(q.unsafe_load(gr * k + k0 + p4 + e)))
-                dst[(p4 + e) * ST + r] = v
+                dst[(p4 + e) * ST + r] = v[e]
 
 
 @always_inline
@@ -245,6 +271,7 @@ def _stage_right[
     k0: Int,
     k: Int,
     tid: Int,
+    aligned: Bool,
 ):
     """One window of ONE PLANE of the right operand, each piece as the
     float32 it names. Element (row r, step p) at `dst[r * ST + p]`. The
@@ -258,11 +285,16 @@ def _stage_right[
             var r = s // (KB // 4)
             var p4 = (s % (KB // 4)) * 4
             var gr = row0 + r
-            comptime for e in range(4):
-                var v = Float32(0.0)
-                if gr < rows and k0 + p4 + e < k:
-                    v = Float32(Int32(q.unsafe_load(gr * k + k0 + p4 + e)))
-                dst[r * ST + p4 + e] = v
+            var v = SIMD[DType.float32, 4](0.0)
+            if gr < rows:
+                var base = gr * k + k0 + p4
+                if aligned and k0 + p4 + 4 <= k and (k & 3) == 0:
+                    v = q.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                else:
+                    comptime for e in range(4):
+                        if k0 + p4 + e < k:
+                            v[e] = Float32(Int32(q.unsafe_load(base + e)))
+            (dst + r * ST + p4).store[alignment=16](v)
 
 
 def identical_gemm_int15_apple_kernel[
@@ -278,6 +310,7 @@ def identical_gemm_int15_apple_kernel[
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    aligned_in: Int32,
 ):
     """OP_NT, `C[m x n] = Qa[m x k] . Qb[n x k]^T`. One block owns a
     `BM x BN` output tile; each simdgroup owns `FM x FN` 8x8 fragments, each
@@ -303,6 +336,7 @@ def identical_gemm_int15_apple_kernel[
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
     var tid = Int(thread_idx.x)
     var sg = tid // 32
     var lane = tid % 32
@@ -326,9 +360,9 @@ def identical_gemm_int15_apple_kernel[
     var step = 0
     for w in range(windows):
         var k0 = w * KB
-        _stage_left[BM, KB, NT, AST](at, ah, al, m0, m, k0, k, tid)
-        _stage_right[BN, KB, NT, BST](bth, bh, n0, n, k0, k, tid)
-        _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid)
+        _stage_left[BM, KB, NT, AST](at, ah, al, m0, m, k0, k, tid, aligned)
+        _stage_right[BN, KB, NT, BST](bth, bh, n0, n, k0, k, tid, aligned)
+        _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid, aligned)
         barrier()
         comptime for p8 in range(KB // 8):
             var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
@@ -386,6 +420,7 @@ def identical_gemm_int15_apple4_kernel[
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    aligned_in: Int32,
 ):
     """THE FORM FOUR. The layout of `identical_gemm_int15_apple_kernel`;
     four staged planes, four multiplies per fragment and step of the unit
@@ -408,6 +443,7 @@ def identical_gemm_int15_apple4_kernel[
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
     var tid = Int(thread_idx.x)
     var sg = tid // 32
     var lane = tid % 32
@@ -433,10 +469,10 @@ def identical_gemm_int15_apple4_kernel[
     var windows = (k + KB - 1) // KB
     for w in range(windows):
         var k0 = w * KB
-        _stage_piece_left[BM, KB, NT, AST](ath, ah, m0, m, k0, k, tid)
-        _stage_piece_left[BM, KB, NT, AST](atl, al, m0, m, k0, k, tid)
-        _stage_right[BN, KB, NT, BST](bth, bh, n0, n, k0, k, tid)
-        _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid)
+        _stage_piece_left[BM, KB, NT, AST](ath, ah, m0, m, k0, k, tid, aligned)
+        _stage_piece_left[BM, KB, NT, AST](atl, al, m0, m, k0, k, tid, aligned)
+        _stage_right[BN, KB, NT, BST](bth, bh, n0, n, k0, k, tid, aligned)
+        _stage_right[BN, KB, NT, BST](btl, bl, n0, n, k0, k, tid, aligned)
         barrier()
         comptime for p8 in range(KB // 8):
             var ahf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
@@ -514,6 +550,14 @@ def identical_gemm_int15_apple_with_geometry(
                 " k at most " + String(INT15_MAX_K) + " (contract W-4), got m="
                 + String(m) + " n=" + String(n) + " k=" + String(k)
             )
+        # The staging takes four codes in one load only where the bases of
+        # all four planes are aligned, read here (clause W-11).
+        var aligned = Int32(0)
+        comptime if not INT15_APPLE_SCALAR_STAGING:
+            if (
+                (Int(ah.unsafe_ptr()) | Int(al.unsafe_ptr()) | Int(bh.unsafe_ptr()) | Int(bl.unsafe_ptr())) & 7
+            ) == 0:
+                aligned = Int32(1)
         if form != INT15_APPLE_FORM_TWO and form != INT15_APPLE_FORM_FOUR:
             raise Error("identical_gemm_int15_apple: form must be 2 or 4, got " + String(form))
         if geometry != INT15_APPLE_GEOMETRY_WIDE and geometry != INT15_APPLE_GEOMETRY_ROW:
@@ -535,6 +579,7 @@ def identical_gemm_int15_apple_with_geometry(
                     Int32(m),
                     Int32(n),
                     Int32(k),
+                    aligned,
                     grid_dim=(((m + 7) // 8) * ((n + 127) // 128), 1, 1),
                     block_dim=(128, 1, 1),
                 )
@@ -551,6 +596,7 @@ def identical_gemm_int15_apple_with_geometry(
                 Int32(m),
                 Int32(n),
                 Int32(k),
+                aligned,
                 grid_dim=(((m + 63) // 64) * ((n + 63) // 64), 1, 1),
                 block_dim=(128, 1, 1),
             )
@@ -568,6 +614,7 @@ def identical_gemm_int15_apple_with_geometry(
                 Int32(m),
                 Int32(n),
                 Int32(k),
+                aligned,
                 grid_dim=(((m + 7) // 8) * ((n + 127) // 128), 1, 1),
                 block_dim=(128, 1, 1),
             )
@@ -584,6 +631,7 @@ def identical_gemm_int15_apple_with_geometry(
             Int32(m),
             Int32(n),
             Int32(k),
+            aligned,
             grid_dim=(((m + 63) // 64) * ((n + 63) // 64), 1, 1),
             block_dim=(128, 1, 1),
         )
