@@ -397,32 +397,26 @@ def _warp_row_dot_spec[K: Int](
     so while no partial sum is subnormal every fz is the identity and the
     chain is the plain fma chain. This runs that chain (one fma per term on
     the critical path instead of the fma, the flush's four integer steps and
-    the slot select) and watches every partial sum OFF the path; if any was
-    subnormal (or exactly zero: the watch is one float compare) it returns
-    the exact flushed chain instead. Either way the word
-    is the flushed chain's. The whole warp takes the same branch (every lane
-    folds the same words)."""
+    the slot select), watches every partial OFF the path, and returns the
+    exact flushed chain instead when a partial was subnormal (or when the
+    dead slots could have changed a zero's sign, below). The whole warp takes
+    the same branch (every lane folds the same words)."""
     comptime W = WARP_SIZE
-    # the smallest normal float32: |partial| below it is a subnormal or a
-    # zero (a zero only sends the row to the exact chain, which is harmless)
-    comptime MIN_NORMAL = Float32(1.17549435e-38)
     var acc = Float32(0)
-    var bad = False
+    # min over the partials of |bits| - 1 (unsigned): below 0x007FFFFF
+    # exactly when some partial was a subnormal (a zero wraps to the top)
+    var lo = UInt32(0xFFFFFFFF)
     comptime for kk in range(K):
-        if (kk + 1) * W <= d:
+        if kk * W < d:
             comptime for l in range(W):
                 var xj = shuffle_idx(xr[kk], UInt32(l))
                 var wj = shuffle_idx(wr[kk], UInt32(l))
                 acc = xmad(xj, wj, acc)
-                bad = bad | (abs(acc) < MIN_NORMAL)
-        elif kk * W < d:
-            # the last chunk: only its d - kk * W live slots (no dead slot
-            # and no per-slot select on the chain)
-            for l in range(d - kk * W):
-                var xj = shuffle_idx(xr[kk], UInt32(l))
-                var wj = shuffle_idx(wr[kk], UInt32(l))
-                acc = xmad(xj, wj, acc)
-                bad = bad | (abs(acc) < MIN_NORMAL)
+                lo = min(lo, (bitcast[DType.uint32](acc) & UInt32(0x7FFFFFFF)) - UInt32(1))
+    # The slots past d hold x = w = +0 (never written): fma(+0, +0, acc) is
+    # acc for every nonzero acc, but turns a -0 into +0, so a zero sum with
+    # such slots goes to the exact chain too.
+    var bad = lo < UInt32(0x007FFFFF) or (acc == 0 and d % W != 0)
     if bad:
         return _warp_row_folds[K, False, False](xr, wr, d)[0]
     return acc

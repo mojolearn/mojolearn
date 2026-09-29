@@ -227,9 +227,11 @@ def gw_tile_kernel(
     dst in `glm_fit`'s cell order. The chain runs without its flush while no
     partial is subnormal (then the flush is the identity); a compare off the
     chain watches every partial, and a cell that saw one below the smallest
-    normal (a subnormal, or a zero) is recomputed exactly by the one-cell
-    function from the same init over the same rows. The same word either way."""
-    comptime MIN_NORMAL = Float32(1.17549435e-38)
+    normal is recomputed exactly by the one-cell
+    function from the same init over the same rows. The same word either way.
+    The watch is the exact subnormal test (a zero partial is common, e.g. a
+    zero feature on the first row, and must not send a cell to the slow
+    exact chain)."""
     var n = Int(n_in)
     var d = Int(d_in)
     var m = Int(m_in)
@@ -276,12 +278,12 @@ def gw_tile_kernel(
             comptime for r in range(GR):
                 var v = xmad(sm[base + r * GROW + tj], sm[base + r * GROW + tk], acc)
                 acc = v
-                bad = bad | (abs(v) < MIN_NORMAL)
+                bad = bad | _subnormal(v)
         else:
             for r in range(rows - cix * GR):
                 var v = xmad(sm[base + r * GROW + tj], sm[base + r * GROW + tk], acc)
                 acc = v
-                bad = bad | (abs(v) < MIN_NORMAL)
+                bad = bad | _subnormal(v)
         if cix + 1 < chunks:
             var nb = ((cix + 1) % 2) * GR * GROW
             comptime for q in range(GPER):
@@ -306,6 +308,12 @@ def gw_tile_kernel(
             else:
                 acc = fold_fa(rw, r0, 1, rows, init)
     st(dst, cell, acc)
+
+
+@always_inline
+def _subnormal(v: Float32) -> Bool:
+    """A nonzero word with a zero exponent field: the words `fz` changes."""
+    return ((bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)) - UInt32(1)) < UInt32(0x007FFFFF)
 
 
 def _budget(default: Int) -> Int:
