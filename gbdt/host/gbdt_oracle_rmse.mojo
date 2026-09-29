@@ -103,6 +103,7 @@ from gbdt.host.gbdt_oracle import (
     _binary_block,
     _bootstrap_pass,
     _choose_scale_from_magnitudes,
+    _snap_gradients,
     _cosine_gain,
     _cosine_gains,
     _deterministic_sum_lanes,
@@ -355,6 +356,7 @@ def gbdt_rmse_host_fit(
             mags[0] = bm[0]
             mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        _snap_gradients(stats, n_rows, 2, fixed_scale)  # lane/sym-quality
         # `run_tree_layout`'s ScoreStdDev over the bootstrapped planes
         var score_std_dev = Float32(0.0)
         if random_strength != Float32(0.0):

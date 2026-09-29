@@ -132,6 +132,7 @@ from gbdt.gpu_data.grid_policy import (
 )
 from gbdt.host.gbdt_oracle import (
     _bootstrap_pass,
+    _snap_gradients,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
@@ -1156,6 +1157,10 @@ def gbdt_host_fit_non_symmetric(
         if gmag > mag:
             mag = gmag
         var fixed_scale = Float32(choose_scale(mag, n_rows))
+        # lane/sym-quality: `fit_non_symmetric_tree` snaps the gradient plane
+        # right after its scale, before the score std dev and the root
+        # histogram (`greedy_search_helper_depthwise.mojo`)
+        _snap_gradients(stats, n_rows, 2, fixed_scale)
 
         var tree = _grow_non_symmetric_tree(
             n_rows, n_features, t_layout, t_blocks, t_cindex, stats, fixed_scale,

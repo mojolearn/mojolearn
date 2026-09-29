@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Seam DEVIATION 5110: the mixture M-step moments (nk, means, covariances), every fold over the rows ascending.
+"""Seam DEVIATION 5110: the mixture M-step moments. nk: one rows-ascending chain; means and covariances:
+the sample axis through the identical GEMM (revised 2026-09-29, x_cluster/host/moments_gemm.mojo).
 
     tools/with_identical_mode.sh pixi run mojo run -I . x_cluster/checks/moments_check.mojo
 
@@ -51,7 +52,8 @@ def _case(n: Int, d: Int, kc: Int, seed: UInt64, tag: String) raises:
         for k in range(kc):
             resp.append((abs(u[i * kc + k]) + Float32(0.01)) / s)
     var want = oracle_moments(resp, x, n, d, kc, Float32(1e-6))
-    require_separates(tag + " moments fold order", count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
+    # the GEMM fold against the retired rows-ascending chain: the fixture must tell them apart
+    require_separates(tag + " moments fold (GEMM vs chain)", count_diff_f32(want, oracle_moments(resp, x, n, d, kc, Float32(1e-6), True)))
     var dev = DeviceOps()
     var got = run(dev, resp, x, n, d, kc)
     _same(tag + " moments device", count_diff_f32(got, want))

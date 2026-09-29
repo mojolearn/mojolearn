@@ -156,16 +156,27 @@ class _RusageV4(object):
         return self.reset_fn is not None and self.reset_fn(os.getpid()) == 0
 
 
+#: libraries whose GPU buffers live in torch's caching allocator
+TORCH_LIBRARIES = ("torch", "gpytorch", "torch_geometric", "torch-geometric")
+
+
 class MemProbe(object):
     """Per-round peak memory of this process, sampled around the timed call.
 
     device: 'cpu' or 'gpu' (the arm's device); vendor: apple, nvidia or amd
     (default: MOJOLEARN_BOARD_VENDOR, else guessed from the platform);
     shared: True when several arms share this process (the trees driver), so
-    a process-level GPU figure is labelled as the process total."""
+    a process-level GPU figure is labelled as the process total. library: the
+    arm's library (runner.info["library"]); torch's allocator counter is read
+    only for a torch arm. Before 2026-09-29 it was read for ANY arm in a
+    process where torch had initialized CUDA/ROCm, so on do-amd our trees arm
+    (and XGBoost's) reported peak_gpu_mb 0.0 from torch's allocator, which
+    never sees their buffers. None (a caller that does not say) keeps that
+    older behavior."""
 
-    def __init__(self, device="gpu", vendor=None, shared=False):
+    def __init__(self, device="gpu", vendor=None, shared=False, library=None):
         self.device = device
+        self.library = library
         self.vendor = (vendor or os.environ.get(VENDOR_ENV)
                        or ("apple" if sys.platform == "darwin" else None))
         self.shared = shared
@@ -323,6 +334,8 @@ class MemProbe(object):
     def _read_gpu(self):
         if self.device != "gpu":
             return None, "cpu arm: no device memory"
+        if self.library is not None and str(self.library) not in TORCH_LIBRARIES:
+            return self._smi()
         t, kind = self._torch()
         if kind == "cuda":
             try:

@@ -29,7 +29,8 @@ WHAT IS REFUSED, AND WHERE
   min_samples < 1, min_samples > n_rows `runner.mojo`
   min_cluster_size < 2 or > n_rows      `build_condensed_hierarchy`
   alpha <= 0 or non-finite              `build_mr_linkage`
-  n_rows < 2, n_rows > 46340            `build_mr_linkage`
+  n_rows < 2                            `build_mr_linkage` (past 46340 rows
+                                        the sparse arm, DEVIATION 1620)
   a NaN or infinite anywhere            DEVIATION 1607
   the SPARSE mutual reachability graph  `reachability.mojo` (DEVIATION 1600)
 """

@@ -10,6 +10,7 @@ reads the library the way it does on a box.
 """
 import importlib.util
 import io
+import json
 import os
 import types
 
@@ -173,3 +174,87 @@ def test_worker_records_are_checked_like_objects():
     arms["catboost-cpu"]["params"]["depth"] = 4
     with pytest.raises(BP.ParamsRefused, match="max_depth"):
         BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
+
+
+def test_cuml_pca_full_is_covariance_eigh_and_its_tol_is_an_exception():
+    ours = _est("mojolearn.decomposition", "PCA", n_components=10, svd_solver="covariance_eigh",
+                tol=0.0, whiten=False, random_state=7)
+    cuml = _est("cuml.decomposition.pca", "PCA", n_components=10, svd_solver="full", tol=1e-7,
+                whiten=False)
+    rep = BP.enforce("pca", {"ours": ours, "cuml-gpu": cuml}, family="classical",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    assert rep["arms"]["cuml-gpu"]["params"]["svd_solver"] == "covariance_eigh"
+    assert "tol" in json.dumps(rep["exceptions"])
+    # jacobi is another algorithm: still refused
+    cuml._p["svd_solver"] = "jacobi"
+    with pytest.raises(BP.ParamsRefused, match="svd_solver"):
+        BP.enforce("pca", {"ours": ours, "cuml-gpu": cuml}, family="classical",
+                   stream=io.StringIO())
+
+
+def test_cuml_tsvd_full_solver_ignores_n_iter_and_tol():
+    ours = _est("mojolearn.decomposition", "TruncatedSVD", n_components=10, algorithm="covariance_eigh",
+                n_iter=5, tol=0.0, random_state=7)
+    cuml = _est("cuml.decomposition.tsvd", "TruncatedSVD", n_components=10, algorithm="full",
+                n_iter=15, tol=1e-7, random_state=7)
+    rep = BP.enforce("tsvd", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    cuml._p["n_components"] = 12                           # a real difference still refuses
+    with pytest.raises(BP.ParamsRefused, match="n_components"):
+        BP.enforce("tsvd", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                   stream=io.StringIO())
+
+
+def test_holt_winters_add_is_additive():
+    ours = _est("mojolearn.forecast", "ExponentialSmoothing", seasonal="additive",
+                seasonal_periods=24, eps=0.00224, start_periods=2)
+    cuml = _est("cuml.tsa.holtwinters", "ExponentialSmoothing", seasonal="add",
+                seasonal_periods=24, eps=0.00224, start_periods=2)
+    rep = BP.enforce("ets", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                     stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    cuml._p["seasonal"] = "mul"
+    with pytest.raises(BP.ParamsRefused, match="seasonal"):
+        BP.enforce("ets", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
+                   stream=io.StringIO())
+
+
+def _hdbscan_arms(sk_min_samples, cuml_min_samples=10):
+    common = dict(min_cluster_size=100, metric="euclidean", cluster_selection_method="eom",
+                  cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False)
+    ours = _est("mojolearn.hdbscan", "HDBSCAN", min_samples=10, max_cluster_size=0, **common)
+    cuml = _est("cuml.cluster.hdbscan", "HDBSCAN", min_samples=cuml_min_samples, max_cluster_size=0,
+                **common)
+    sk = _est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN", min_samples=sk_min_samples,
+              max_cluster_size=None, n_jobs=-1, **common)
+    return {"ours": ours, "cuml-gpu": cuml, "sklearn-cpu": sk}
+
+
+def test_hdbscan_min_samples_counts_the_point_in_sklearn_only():
+    """scikit-learn's HDBSCAN counts the point itself in min_samples; ours and
+    cuML's do not. scikit-learn 11 selects ours' 10th neighbour: MATCHED."""
+    rep = BP.enforce("hdbscan", _hdbscan_arms(11), family="classical", stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    assert rep["arms"]["sklearn-cpu"]["params"]["min_samples"] == 10
+    assert rep["arms"]["cuml-gpu"]["params"]["min_samples"] == 10
+
+
+def test_hdbscan_same_number_is_a_different_k_and_refuses():
+    """The same NUMBER on scikit-learn is a different neighbour: refused."""
+    with pytest.raises(BP.ParamsRefused):
+        BP.enforce("hdbscan", _hdbscan_arms(10), family="classical", stream=io.StringIO())
+
+
+def test_hdbscan_cuml_takes_no_transform():
+    """cuML passes min_samples straight to runner.h, which adds 1 as ours does."""
+    with pytest.raises(BP.ParamsRefused):
+        BP.enforce("hdbscan", _hdbscan_arms(11, cuml_min_samples=11), family="classical",
+                   stream=io.StringIO())
+
+
+def test_sklearn_dbscan_min_samples_is_not_transformed():
+    """Only scikit-learn's HDBSCAN is keyed: its DBSCAN counts the point, as ours does."""
+    assert BP.library_of(_est("sklearn.cluster._dbscan", "DBSCAN", min_samples=2)) == "sklearn"
+    assert BP.library_of(_est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN")) == "sklearn/HDBSCAN"

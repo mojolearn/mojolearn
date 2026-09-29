@@ -170,6 +170,7 @@ from gbdt.methods.dynamic_boosting_folds import (
     create_folds,
 )
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import enqueue_snap_plane
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
     LeafPartition,
@@ -1592,6 +1593,10 @@ def fit_ordered(
         trace.record_scalar_f32(tag + ".scale", scale)
         trace.record_scalar_f32(tag + ".score_std", score_std)
 
+        # lane/sym-quality: the gradient plane onto the tree's grid before
+        # the search (`enqueue_snap_plane`), after the score std dev, the
+        # bootstrap and the scale, as gbdt_oracle_ordered restates it
+        enqueue_snap_plane(ctx, sg, total, scale)
         times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
         times.begin(ctx)

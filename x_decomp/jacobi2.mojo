@@ -496,3 +496,230 @@ def one_sided_svd2_kernel(
         info_out.unsafe_store(0, Float32(1.0) if converged else Float32(0.0))
         info_out.unsafe_store(1, Float32(executed))
         info_out.unsafe_store(2, Float32(last_rots))
+
+# ---------------------------------------------------------------------------
+# The same solve BOUNDED IN WORK PER LAUNCH (lane/lle-timeout, 2026-09-29).
+# `one_sided_svd2_kernel` runs every sweep in ONE launch: O(n^3) per sweep in
+# one threadgroup (199 s at n = 1,000 on the M2 Pro), and macOS aborts a long
+# Metal launch SILENTLY, leaving stale output and a stale info word (seen:
+# "did not converge in 60 sweeps ... performed 0.0 rotations" at n = 500).
+# The chunk kernel runs `count` consecutive pairs of a sweep's cyclic order
+# from (p0, q0). Its state between pairs is rt, vt and the three Gram cells
+# of the next pair, which the pipelined loop folds from the rows it just
+# stored; the chunk kernel folds the first pair's cells from rt with the
+# same partition, the same per-lane ascending order and the same halving
+# tree, so any cut of the sweep into chunks stores the bits the one launch
+# stores. Each chunk writes its rotation count to its own info slot (the
+# host poisons the slots first: a cut launch leaves the poison). The finish
+# kernel is the one launch's tail (singular values, R and V transposed
+# back). The host loop (x_decomp/device.mojo `_svd2_of_r`) sums the slots per
+# sweep and stops on a sweep without a rotation, as the one launch does.
+# ---------------------------------------------------------------------------
+
+
+def one_sided_svd2_chunk_kernel(
+    rt: MutPointer[Float32, MutAnyOrigin],
+    vt: MutPointer[Float32, MutAnyOrigin],
+    rots_out: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    p0_in: Int32,
+    q0_in: Int32,
+    count_in: Int32,
+    tol_in: Float32,
+):
+    """`count` pairs of one sweep of `one_sided_svd2_kernel` from (p0, q0) on
+    its scratch (rt = R^T, vt = V^T), launched with exactly `J2_TPB`
+    threads; rots_out[0] = the rotations performed."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var slab = stack_allocation[2 * 3 * S2_R, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var p0 = Int(p0_in)
+    var q0 = Int(q0_in)
+
+    var par = 0
+    var app = Float32(0.0)
+    var aqq = Float32(0.0)
+    var apq = Float32(0.0)
+    if n >= 2:
+        var lp = Float32(0.0)
+        var lq = Float32(0.0)
+        var lpq = Float32(0.0)
+        if tid < S2_R:
+            var i = tid
+            while i < n:
+                var xp = ftz(rt.unsafe_load(p0 * n + i))
+                var xq = ftz(rt.unsafe_load(q0 * n + i))
+                lp = ftz(identical_mul_add(xp, xp, lp))
+                lq = ftz(identical_mul_add(xq, xq, lq))
+                lpq = ftz(identical_mul_add(xp, xq, lpq))
+                i += S2_R
+            slab[tid] = lp
+            slab[S2_R + tid] = lq
+            slab[2 * S2_R + tid] = lpq
+        barrier()
+        var w = InlineArray[Float32, 16](fill=Float32(0.0))
+        comptime for t in range(16):
+            w[t] = slab[t] + slab[t + 16]
+        app = _halve16(w)
+        comptime for t in range(16):
+            w[t] = slab[S2_R + t] + slab[S2_R + t + 16]
+        aqq = _halve16(w)
+        comptime for t in range(16):
+            w[t] = slab[2 * S2_R + t] + slab[2 * S2_R + t + 16]
+        apq = _halve16(w)
+        par = 1
+
+    var p = p0
+    var q = q0
+    var rots = 0
+    for _k in range(Int(count_in)):
+        var np_ = ftz(identical_sqrt(app))
+        var nq_ = ftz(identical_sqrt(aqq))
+        var thresh = ftz(tol_in * ftz(np_ * nq_))
+        var rotate = abs(apq) > thresh
+        var c = Float32(1.0)
+        var s = Float32(0.0)
+        if rotate:
+            rots += 1
+            var cs = jacobi_rotation_cs(app, aqq, apq)
+            c = cs[0]
+            s = cs[1]
+        # the next pair, uniform
+        var pn = p
+        var qn = q + 1
+        if qn >= n:
+            pn = p + 1
+            qn = p + 2
+            if qn >= n:
+                pn = 0
+                qn = 1
+        var base = par * 3 * S2_R
+        if tid < S2_R:
+            var lp = Float32(0.0)
+            var lq = Float32(0.0)
+            var lpq = Float32(0.0)
+            var i0 = tid
+            while i0 < n:
+                var xp = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var xq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var yp = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var yq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                comptime for u in range(J2_U):
+                    var i = i0 + u * S2_R
+                    if i < n:
+                        xp[u] = ftz(rt.unsafe_load(p * n + i))
+                        xq[u] = ftz(rt.unsafe_load(q * n + i))
+                        if pn != p and pn != q:
+                            yp[u] = ftz(rt.unsafe_load(pn * n + i))
+                        if qn != p and qn != q:
+                            yq[u] = ftz(rt.unsafe_load(qn * n + i))
+                comptime for u in range(J2_U):
+                    var i = i0 + u * S2_R
+                    if i < n:
+                        var np2 = xp[u]
+                        var nq2 = xq[u]
+                        if rotate:
+                            np2 = _rot_sub(c, xp[u], s, xq[u])
+                            nq2 = _rot_add(s, xp[u], c, xq[u])
+                            rt.unsafe_store(p * n + i, np2)
+                            rt.unsafe_store(q * n + i, nq2)
+                        var y1 = yp[u]
+                        if pn == p:
+                            y1 = np2
+                        elif pn == q:
+                            y1 = nq2
+                        var y2 = yq[u]
+                        if qn == p:
+                            y2 = np2
+                        elif qn == q:
+                            y2 = nq2
+                        lp = ftz(identical_mul_add(y1, y1, lp))
+                        lq = ftz(identical_mul_add(y2, y2, lq))
+                        lpq = ftz(identical_mul_add(y1, y2, lpq))
+                i0 += J2_U * S2_R
+            slab[base + tid] = lp
+            slab[base + S2_R + tid] = lq
+            slab[base + 2 * S2_R + tid] = lpq
+        elif rotate:
+            var i0 = tid - S2_R
+            while i0 < n:
+                var vp = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                var vq = InlineArray[Float32, J2_U](fill=Float32(0.0))
+                comptime for u in range(J2_U):
+                    var i = i0 + u * S2_V
+                    if i < n:
+                        vp[u] = ftz(vt.unsafe_load(p * n + i))
+                        vq[u] = ftz(vt.unsafe_load(q * n + i))
+                comptime for u in range(J2_U):
+                    var i = i0 + u * S2_V
+                    if i < n:
+                        vt.unsafe_store(p * n + i, _rot_sub(c, vp[u], s, vq[u]))
+                        vt.unsafe_store(q * n + i, _rot_add(s, vp[u], c, vq[u]))
+                i0 += J2_U * S2_V
+        barrier()
+        var w = InlineArray[Float32, 16](fill=Float32(0.0))
+        comptime for t in range(16):
+            w[t] = slab[base + t] + slab[base + t + 16]
+        app = _halve16(w)
+        comptime for t in range(16):
+            w[t] = slab[base + S2_R + t] + slab[base + S2_R + t + 16]
+        aqq = _halve16(w)
+        comptime for t in range(16):
+            w[t] = slab[base + 2 * S2_R + t] + slab[base + 2 * S2_R + t + 16]
+        apq = _halve16(w)
+        par = 1 - par
+        q += 1
+        if q >= n:
+            p += 1
+            q = p + 1
+    if tid == 0:
+        rots_out.unsafe_store(0, Float32(rots))
+
+
+def one_sided_svd2_finish_kernel(
+    r: MutPointer[Float32, MutAnyOrigin],
+    v_out: MutPointer[Float32, MutAnyOrigin],
+    s_out: MutPointer[Float32, MutAnyOrigin],
+    rt: MutPointer[Float32, MutAnyOrigin],
+    vt: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`one_sided_svd2_kernel`'s tail: s_out (column norms of the rotated R),
+    r = rt^T (U * S), v_out = vt^T; exactly `J2_TPB` threads."""
+    var n = Int(n_in)
+    var tid = Int(thread_idx.x)
+    var slab = stack_allocation[2 * 3 * S2_R, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var par = 0
+
+    # The singular values: column norms of the rotated R (rows of R^T), the
+    # fold lanes' own rows, one fold per column.
+    for j in range(n):
+        var base = par * 3 * S2_R
+        if tid < S2_R:
+            var acc = Float32(0.0)
+            var i2 = tid
+            while i2 < n:
+                var vv = ftz(rt.unsafe_load(j * n + i2))
+                acc = ftz(identical_mul_add(vv, vv, acc))
+                i2 += S2_R
+            slab[base + tid] = acc
+        barrier()
+        if tid == 0:
+            var w = InlineArray[Float32, 16](fill=Float32(0.0))
+            comptime for t in range(16):
+                w[t] = slab[base + t] + slab[base + t + 16]
+            s_out.unsafe_store(j, ftz(identical_sqrt(_halve16(w))))
+        par = 1 - par
+
+    # R = rt^T (U * S in columns), V = vt^T (vector i in column i).
+    for p in range(n):
+        if tid < S2_R:
+            var i = tid
+            while i < n:
+                r.unsafe_store(i * n + p, rt.unsafe_load(p * n + i))
+                i += S2_R
+        else:
+            var i = tid - S2_R
+            while i < n:
+                v_out.unsafe_store(i * n + p, vt.unsafe_load(p * n + i))
+                i += S2_V

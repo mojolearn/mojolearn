@@ -81,6 +81,7 @@ from gbdt.host.gbdt_oracle import (
     _binarize_columns,
     _deterministic_sum_lanes,
     _halving_fold,
+    _snap_plane,
     _partition_stat,
     gbdt_host_grid,
 )
@@ -484,6 +485,9 @@ def gbdt_pointwise_host_fit(
         if m1 < 0.0:
             m1 = -m1
         var scale = Float32(choose_scale(m1 if m1 > m0 else m0, n_rows))
+        # lane/sym-quality: `enqueue_snap_plane` (doc_parallel_boosting's
+        # pointwise arm), the gradient plane onto the tree's grid
+        _snap_plane(sg, n_rows, scale)
 
         # ---- the single-task pointwise structure search ----
         var splits = _ordered_tree_structure(

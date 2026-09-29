@@ -1,0 +1,15 @@
+diff --git a/dbscan/impl/runner.mojo b/dbscan/impl/runner.mojo
+index bf88c1f48..7042261c8 100644
+--- a/dbscan/impl/runner.mojo
++++ b/dbscan/impl/runner.mojo
+@@ -983,6 +983,10 @@ their code branches on is this Bool.
+         # pointer-valued conditional picks the wrong branch in this Mojo
+         # and, besides, buffers are not pointers here anyway. The
+         # merge is a separate `if (i > 0)` in theirs too (`runner.cuh:389`).
++        # SABOTAGE (check-only): the last batch's edges never reach the
++        # labelling whenever the fit has more than one batch.
++        if n_batches > 1 and b2 == n_batches - 1:
++            continue
+         var t_cc = perf_counter_ns()
+         var batch_passes: Int
+         if b2 == 0:

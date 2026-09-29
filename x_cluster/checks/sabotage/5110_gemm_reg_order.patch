@@ -1,0 +1,14 @@
+diff --git a/x_cluster/host/moments_gemm.mojo b/x_cluster/host/moments_gemm.mojo
+index 918abafb0..abc585ccc 100644
+--- a/x_cluster/host/moments_gemm.mojo
++++ b/x_cluster/host/moments_gemm.mojo
+@@ -64,8 +64,8 @@ def gemm_fold_cov(
+         var rc = host_gemm_oracle(scaled, diff, OP_TN, d, d, n)
+         for idx in range(dd):
+             var v = ftz(rc[idx])
+-            v = ftz(identical_div(v, ftz(nk[k])))
+             if idx // d == idx % d:
+                 v = ftz(v + reg)
++            v = ftz(identical_div(v, ftz(nk[k])))
+             cov[k * dd + idx] = v
+     return cov^

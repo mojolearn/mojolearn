@@ -1,0 +1,55 @@
+{
+  "version": "0.8.30",
+  "published": true,
+  "source_commit": "6667bf7c49d537c9c88a31a08532d37a47dae2b2",
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/36629147118",
+  "release": "https://github.com/mojolearn/mojolearn/releases/tag/alpha-api-0.8.30-main-20260929",
+  "validation_profile": "preverified",
+  "fresh_runtime_verification": false,
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "af9d03c2b76129ac3981cfeb926baeb699af876b",
+        "message": "Merge LLE: the iterative route above 200 rows (as scikit-learn's auto), bounded Metal launches with poisoned read-back for the dense QR/Jacobi SVD (identity PASS: AMD MI325X, NVIDIA A40, m2pro, 18 x-decomp lanes)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "6667bf7c49d537c9c88a31a08532d37a47dae2b2"
+  },
+  "published_files": [
+    {
+      "project": "mojolearn",
+      "filename": "mojolearn-0.8.30-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "57747aac3c00311191c0a3bea443a5988a77488840682246e0598a26ece5182a",
+      "url": "https://files.pythonhosted.org/packages/15/20/923668116efb158ad146e0a7fbc88f5b6ee5d1a9ee44cf570a266484849a/mojolearn-0.8.30-py3-none-macosx_11_0_arm64.whl",
+      "upload_time": "2026-09-29T20:52:50.122769Z"
+    },
+    {
+      "project": "mojolearn",
+      "filename": "mojolearn-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "3c6ae4704ff50d09ca49b2e045adec5192d920ef4dcff8e5f18c0b1bc73d7713",
+      "url": "https://files.pythonhosted.org/packages/8d/1e/4e999e26f4d59ddea6f7f6cb5a323b9432aa3254faa35cd1c249a64e7db5/mojolearn-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-09-29T20:52:52.995364Z"
+    },
+    {
+      "project": "mojolearn-nvidia",
+      "filename": "mojolearn_nvidia-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "0176a6e3c216c57f27ec51034b028e0dd079c209be0c4a26adcdcdbe13299a5b",
+      "url": "https://files.pythonhosted.org/packages/30/81/4b39c8c080816aade370c5adbef4fa62a1e34b5ce524bab1c6bc5a102ada/mojolearn_nvidia-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-09-29T20:51:40.175599Z"
+    },
+    {
+      "project": "mojolearn-amd",
+      "filename": "mojolearn_amd-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "sha256": "1ec4c34a0777ec148415110d10193793b605b09b92986b9b66f28b6b1b4a8d5e",
+      "url": "https://files.pythonhosted.org/packages/53/78/834ac2af1672f4c66189e14d3bdf650f10fc106731750ee49da12828c54c/mojolearn_amd-0.8.30-py3-none-manylinux_2_35_x86_64.whl",
+      "upload_time": "2026-09-29T20:51:40.165938Z"
+    }
+  ],
+  "build_workflows": [
+    36626434780,
+    36626435078,
+    36626434825
+  ]
+}

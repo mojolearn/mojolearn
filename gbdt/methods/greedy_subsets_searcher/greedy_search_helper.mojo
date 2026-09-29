@@ -63,6 +63,8 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
+    snap_gradients_to_scale_kernel,
+    snap_plane_to_scale_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -1927,6 +1929,46 @@ def enqueue_level_quantize(
         grid_dim=(replicas, n_live, 1),
         block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
     )
+
+
+def enqueue_snap_gradients(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    stat_count: Int,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """lane/sym-quality: `snap_gradients_to_scale_kernel` over the gradient
+    planes (line `n_rows`), after the tree's scale is on the device and
+    before its first histogram. Row-parallel, no reduction."""
+    if n_rows < 1 or stat_count < 2:
+        return
+    ctx.enqueue_function[snap_gradients_to_scale_kernel](
+        stats.unsafe_ptr(), Int32(n_rows), Int32(stat_count), fixed_scale,
+        grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+        block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+    )
+
+
+def enqueue_snap_plane(
+    ctx: DeviceContext,
+    mut plane: DeviceBuffer[DType.float32],
+    n: Int,
+    fixed_scale: Float32,
+) raises:
+    """lane/sym-quality: the POINTWISE searcher's gradient plane onto the
+    tree's fixed-point grid (`snap_plane_to_scale_kernel`), after its scale
+    and before `fit_oblivious_tree_structure`. Gated on the SAME comptime
+    truth as the greedy snap (`acc_i32_is_live`): where no histogram
+    quantizes, nothing moves. Row-parallel, no reduction."""
+    comptime if acc_i32_is_live[HIST2_SMEM_MODE]():
+        if n < 1:
+            return
+        ctx.enqueue_function[snap_plane_to_scale_kernel](
+            plane.unsafe_ptr(), Int32(n), fixed_scale,
+            grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+            block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+        )
 
 
 def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
@@ -4990,6 +5032,15 @@ def run_tree_layout_traced[
         ctx.enqueue_copy(
             dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
         )
+
+    # lane/sym-quality: the gradient planes onto this tree's fixed-point
+    # grid before the first histogram (`snap_gradients_to_scale_kernel`), so
+    # the float partition totals and the quantized histograms sum the same
+    # values and `right = total - left` carries no dither mismatch. Only
+    # where a histogram quantizes at all (`_ACC_LIVE`); a float-flush build
+    # sums floats on both sides.
+    comptime if _ACC_LIVE:
+        enqueue_snap_gradients(ctx, stats, n_rows, stat_count, fixed_scale)
 
     # ================================================================
     # Their `TGreedyTreeLikeStructureSearcher::FitImpl`

@@ -1,0 +1,19 @@
+{
+  "files": {
+    "mojolearn-0.8.30-py3-none-macosx_11_0_arm64.whl": "57747aac3c00311191c0a3bea443a5988a77488840682246e0598a26ece5182a"
+  },
+  "qualification_reuse": {
+    "basis": "completed checks on merged main",
+    "merge_evidence": [
+      {
+        "commit": "af9d03c2b76129ac3981cfeb926baeb699af876b",
+        "message": "Merge LLE: the iterative route above 200 rows (as scikit-learn's auto), bounded Metal launches with poisoned read-back for the dense QR/Jacobi SVD (identity PASS: AMD MI325X, NVIDIA A40, m2pro, 18 x-decomp lanes)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+      }
+    ],
+    "new_runtime_verification": false,
+    "source_commit": "6667bf7c49d537c9c88a31a08532d37a47dae2b2"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.30"
+}

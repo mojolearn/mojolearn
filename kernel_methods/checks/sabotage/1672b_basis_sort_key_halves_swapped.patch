@@ -1,0 +1,16 @@
+diff --git a/kernel_methods/checks/random_features.mojo b/kernel_methods/checks/random_features.mojo
+index 3e0911314..22371e6c1 100644
+--- a/kernel_methods/checks/random_features.mojo
++++ b/kernel_methods/checks/random_features.mojo
+@@ -367,7 +367,10 @@ def km_rank_order_sort(keys: List[UInt64], count: Int) -> List[Int32]:
+     var hist = List[Int](length=KM_BASIS_RADIX_BUCKETS, fill=0)
+     var mask = UInt64(KM_BASIS_RADIX_BUCKETS - 1)
+     for p in range(KM_BASIS_RADIX_PASSES):
+-        var shift = UInt64(p * KM_BASIS_RADIX_BITS)
++        var shift = UInt64(
++            ((p + KM_BASIS_RADIX_PASSES // 2) % KM_BASIS_RADIX_PASSES)
++            * KM_BASIS_RADIX_BITS
++        )
+         for b in range(KM_BASIS_RADIX_BUCKETS):
+             hist[b] = 0
+         for j in range(n):

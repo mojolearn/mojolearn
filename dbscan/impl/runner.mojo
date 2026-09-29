@@ -342,8 +342,17 @@ def dbscan_fit(
     phase_timing: Bool = False,
     metric: Int = DBSCAN_METRIC_L2,
     has_weights: Bool = False,
+    edge_cap: Int = Int(MAX_LABEL),
+    n_batches_out_addr: Int = 0,
 ) raises -> Int:
     """`Dbscan::run`, single node. Returns the total propagation passes.
+
+    `edge_cap` is the most edges one batch's CSR may hold: `MAX_LABEL`, the
+    int32 CSR's bound, and nothing else in production. A ball-cover batch
+    whose EXACT edge count exceeds it is split in two and re-counted until
+    every batch fits (loop 1 below). A check passes a small cap to force the
+    split on a small fixture. `n_batches_out_addr`, when nonzero, is the
+    address of one host Int that receives the batch count loop 1 settled on.
 
     Workspace, sized as `runner.cuh:169-177` sizes theirs:
 
@@ -472,7 +481,7 @@ their code branches on is this Bool.
     # and 2^63 / N never caps a real batch. Ours is int32-label with RBC
     # reachable (DEVIATION 35), so the assert is scoped to the arm whose
     # dense `N * batch_size` adjacency is real; on the RBC arm the honest
-    # int32 bound is the EDGE COUNT, refused at the query below, and copying
+    # int32 bound is the EDGE COUNT, met by splitting the batch at the query below, and copying
     # the assert unconditionally would re-impose the very clamp
     # `dbscan.cuh:71` gates off for RBC.
     if not sparse_rbc_mode and n_rows * batch >= Int(MAX_LABEL):
@@ -541,16 +550,55 @@ their code branches on is this Bool.
     var eps_radius = Float32(eps)
 
     # --- loop 1: the mask. REVERSED, so batch 0 stays resident -----------
+    #
+    # ADAPTIVE SPLITTING (lane dbscan-int64, 2026-09-29). The batch size
+    # above is a MEMORY estimate; it does not know how many edges a batch
+    # will have. On an L40S, taxi 4.1M x 16 at eps 3 / min_samples 2 (the
+    # cuML benchmark's values), one batch of the memory-sized ball-cover arm
+    # had about 2.5e9 edges, past the int32 CSR, and the fit used to REFUSE
+    # (with the wrapped count in its message; a count past 2^32 could wrap
+    # back positive and pass silently). The count pass now returns the exact
+    # 64-bit count, and a batch over `edge_cap` is split in two halves that
+    # are counted again, until every batch fits. cuML meets the same bound by
+    # widening the index to int64 (`runner.cuh:143-150`); this implementation
+    # keeps the int32 CSR and narrows the batch instead.
+    #
+    # WHY THIS CANNOT MOVE A LABEL. Nothing downstream reads the batch
+    # boundaries as data: the core mask is per row, each batch's CSR is its
+    # rows' full neighbour lists, `merge_labels` folds the per-batch
+    # components, and the border pass (DEVIATION 5130) recomputes every
+    # border label from the final core labels. Uneven batches are the same
+    # argument as even ones; `dbscan/checks/dbscan_edge_split_check.mojo`
+    # gates it bitwise against the one-batch fit.
+    #
+    # MEMORY. Only ONE batch's columns are ever resident (`col_ind` below is
+    # the LARGEST batch's edge count, `runner.cuh:317`), never the whole
+    # graph, so splitting is also what keeps the columns within
+    # `edge_cap * 4` bytes (8.6 GB at the int32 bound).
+    #
+    # THE ORDER IS PRESERVED. A stack of pending row ranges, highest first:
+    # a split pushes its lower half and then its upper half, so the ranges
+    # are still visited in DESCENDING row order and the last range counted
+    # starts at row 0 -- the batch 0 whose `ex_scan` the fill after this
+    # loop relies on being resident.
+    var plan_start = List[Int]()
+    var plan_rows = List[Int]()
     var batchadjlen = List[Int]()
     var maxklen = List[Int]()
-    for _i in range(n_batches):
-        batchadjlen.append(0)
-        maxklen.append(0)
+    var pend_start = List[Int]()
+    var pend_rows = List[Int]()
+    for b0 in range(n_batches):
+        pend_start.append(b0 * batch)
+        pend_rows.append(min(n_rows - b0 * batch, batch))
+    var n_splits = 0
 
-    var i = n_batches - 1
-    while i >= 0:
-        var start_vertex_id = i * batch
-        var n_points = min(n_rows - i * batch, batch)
+    while len(pend_start) > 0:
+        var start_vertex_id = pend_start.pop()
+        var n_points = pend_rows.pop()
+        # The uniform batch this range came from; phase labels only.
+        var i = start_vertex_id // batch
+        var nnz1 = 0
+        var maxk_here = 0
         var t_vd1 = perf_counter_ns()
 
         if sparse_rbc_mode:
@@ -567,34 +615,51 @@ their code branches on is this Bool.
             var qb1 = x.create_sub_buffer[DType.float32](
                 start_vertex_id * n_features, n_points * n_features
             )
-            var nnz1 = rbc_eps_nn_query_count(
+            nnz1 = rbc_eps_nn_query_count(
                 ctx, rbc_xr, qb1, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
                 ex_scan, vd, n_points, n_features, n_landmarks, eps_radius,
             )
-            # WHY cuML REQUIRES int64 ON THIS PATH, INHERITED HONESTLY.
+            # WHY cuML REQUIRES int64 ON THIS PATH, AND WHAT OURS DOES INSTEAD.
             #
             # `runner.cuh:143-150` refuses RBC for `Index_ == int32_t`, and
-            # `:235` builds the index only under `float && int64_t`. That is
-            # not a build-config accident: the CSR this query emits is indexed
-            # by the EDGE COUNT, and a dense neighbourhood at large n runs past
-            # 2^31 long before it runs out of memory. cuML's answer is a wider
-            # index type. Ours is int32 throughout, so ours must be a REFUSAL.
-            #
-            # Their brute-force arm has the matching assertion at
-            # `runner.cuh:180-184` ("An overflow occurred with the current
-            # choice of precision"). This is its counterpart for the arm we
-            # actually default to, and without it the failure is silent: the
-            # offsets wrap, the CSR is garbage, and `weak_cc` still returns a
-            # plausible labelling.
-            if nnz1 < 0 or nnz1 > Int(MAX_LABEL):
+            # `:235` builds the index only under `float && int64_t`: the CSR
+            # this query emits is indexed by the EDGE COUNT, and a dense
+            # neighbourhood at large n runs past 2^31 long before it runs out
+            # of memory. Ours keeps the int32 CSR and SPLITS the batch (see
+            # the block above loop 1). `nnz1` is exact (summed in 64-bit by
+            # the count pass), so this test cannot be fooled by a wrap; the
+            # `ex_scan` and `vd` of a rejected range are overwritten by the
+            # next count and nothing else has read them.
+            if nnz1 < 0:
                 raise Error(
-                    "dbscan: the ball-cover neighbourhood has "
-                    + String(nnz1)
-                    + " edges in one batch, which does not fit the int32 CSR"
-                    " this implementation uses. cuML requires int64 labels for RBC"
-                    " (runner.cuh:143-150) for exactly this reason. Use a"
-                    " smaller eps, a smaller batch, or the BRUTE_FORCE arm."
+                    "dbscan: the ball-cover count returned " + String(nnz1)
+                    + " edges for rows " + String(start_vertex_id) + ".."
+                    + String(start_vertex_id + n_points)
+                    + "; an exact count is never negative"
                 )
+            if nnz1 > edge_cap:
+                if n_points < 2:
+                    raise Error(
+                        "dbscan: row " + String(start_vertex_id) + " alone has "
+                        + String(nnz1) + " neighbours, more than the "
+                        + String(edge_cap) + " edges one int32 CSR batch"
+                        " holds (" + String(nnz1 * 4) + " bytes of column"
+                        " ids), so no split of the query rows can fit it"
+                    )
+                var lo = n_points // 2
+                pend_start.append(start_vertex_id)
+                pend_rows.append(lo)
+                pend_start.append(start_vertex_id + lo)
+                pend_rows.append(n_points - lo)
+                n_splits += 1
+                if phase_timing:
+                    print(
+                        "PHASE mask.split rows " + String(start_vertex_id)
+                        + "+" + String(n_points) + " edges " + String(nnz1)
+                        + " cap " + String(edge_cap) + " "
+                        + String(Float64(perf_counter_ns() - t_vd1) / 1.0e6)
+                    )
+                continue
             # DEVIATION 29: `need_ja_compute = sparse_rbc_mode && ((i == 0)
             # || (sample_weight != nullptr))`, `runner.cuh:257`. The count
             # pass above emitted `ia` and `vd` and NO columns, and a
@@ -648,7 +713,12 @@ their code branches on is this Bool.
         var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
         ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
         ctx.synchronize()
-        batchadjlen[i] = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+        # The ball-cover arm keeps the EXACT count: `vd[n_points]` is the
+        # int32 scan's tail, equal to it only because the split above has
+        # already brought it under `edge_cap`.
+        var adjlen_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+        if sparse_rbc_mode:
+            adjlen_here = nnz1
 
         # `runner.cuh:287-293`: `maxklen.at(i) = thrust::reduce(vd, vd +
         # n_points, 0, maximum{})` -- the longest row in this batch, measured
@@ -669,7 +739,7 @@ their code branches on is this Bool.
                 dst_ptr=h_adjlen.unsafe_ptr(), src_buf=rbc_mk_scratch
             )
             ctx.synchronize()
-            maxklen[i] = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
+            maxk_here = Int(h_adjlen.unsafe_ptr().unsafe_load(0))
         if phase_timing:
             print(
                 "PHASE mask.vertexdeg batch " + String(i + 1) + "/"
@@ -696,7 +766,29 @@ their code branches on is this Bool.
                 + String(n_batches) + " "
                 + String(Float64(perf_counter_ns() - t_cp) / 1.0e6)
             )
-        i -= 1
+        plan_start.append(start_vertex_id)
+        plan_rows.append(n_points)
+        batchadjlen.append(adjlen_here)
+        maxklen.append(maxk_here)
+
+    # Loop 1 accepted the ranges in DESCENDING row order; every later loop
+    # indexes them ascending, batch 0 first, as `runner.cuh` does.
+    plan_start.reverse()
+    plan_rows.reverse()
+    batchadjlen.reverse()
+    maxklen.reverse()
+    n_batches = len(plan_start)
+    if plan_start[0] != 0:
+        raise Error("dbscan: loop 1's plan does not start at row 0")
+    if phase_timing and n_splits > 0:
+        print(
+            "PHASE plan.split splits " + String(n_splits) + " n_batches "
+            + String(n_batches) + " edge_cap " + String(edge_cap)
+        )
+    if n_batches_out_addr != 0:
+        MutPointer[Int, MutUntrackedOrigin](
+            unsafe_from_address=n_batches_out_addr
+        ).unsafe_store(0, n_batches)
 
     # `Index_ maxadjlen = *std::max_element(...); adj_graph.resize(maxadjlen)`
     var maxadjlen = 1
@@ -720,7 +812,7 @@ their code branches on is this Bool.
     # state at loop 2's entry is identical byte for byte.
     var rbc_tmp_len = 1
     if sparse_rbc_mode:
-        var np0 = min(n_rows, batch)
+        var np0 = plan_rows[0]
         var qb0 = x.create_sub_buffer[DType.float32](0, np0 * n_features)
         rbc_eps_nn_query_fill(
             ctx, rbc_xr, qb0, rbc_r, rbc_ip, rbc_c1, rbc_d1, rbc_rad,
@@ -732,7 +824,7 @@ their code branches on is this Bool.
         # each max_k call; `maxklen` is fully known here, so ours is one
         # buffer at the largest size any one-pass batch will ask for.
         for b1 in range(1, n_batches):
-            var np_b = min(n_rows - b1 * batch, batch)
+            var np_b = plan_rows[b1]
             if np_b <= 0:
                 break
             # The max-k kernel duplicates the count kernel's distance loop.
@@ -755,8 +847,8 @@ their code branches on is this Bool.
     # --- loop 2: the labelling -------------------------------------------
     var passes = 0
     for b2 in range(n_batches):
-        var start2 = b2 * batch
-        var n_points2 = min(n_rows - b2 * batch, batch)
+        var start2 = plan_start[b2]
+        var n_points2 = plan_rows[b2]
         if n_points2 <= 0:
             break
 
@@ -959,8 +1051,8 @@ their code branches on is this Bool.
         ctx.synchronize()
         var bb = n_batches - 1
         while bb >= 0:
-            var start_b = bb * batch
-            var np_b = min(n_rows - start_b, batch)
+            var start_b = plan_start[bb]
+            var np_b = plan_rows[bb]
             var needs = False
             for r in range(start_b, start_b + max(np_b, 0)):
                 if (

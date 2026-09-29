@@ -18,6 +18,7 @@ correctly rounded on every platform. So the CPU column and every GPU column
 run the same arithmetic in the same order, and the result is the same bits.
 """
 import array
+import heapq as _heapq
 import ctypes
 from . import _portable_math as math
 import sys
@@ -1728,9 +1729,10 @@ class FactorAnalysis(_Base):
 # ================================================================ TruncatedSVD explained variance
 def _exact_eigen_solver(name, who):
     """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
-    solve, which is what runs. 'arpack' (a Lanczos) is a different algorithm
-    and is refused by name rather than run as the exact solve (a silent
-    substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
+    solve, which is what runs (LLE's 'auto' past 200 rows: shift-invert
+    subspace iteration to convergence, `_lle_smallest`). 'arpack' (a
+    Lanczos) is a different algorithm and is refused by name rather than run
+    as another solve (a silent substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
     if name == "arpack":
         raise NotImplementedError(
             f"{who}: eigen_solver='arpack' is not implemented; the exact solve "
@@ -2885,9 +2887,13 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     the `_dist` distances themselves."""
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
+    take = n_neighbors + (1 if exclude_self else 0)
     for i in range(Q.r):
         row = D.row(i)
-        order = sorted(range(X.r), key=lambda j: (row[j], j))
+        # the `take` smallest, exactly sorted(range(X.r), key=(row[j], j))[:take]
+        # (nsmallest is stable: ties to the lower index), O(n) per row
+        # instead of the full sort (lane/lle-timeout: 51 s of a 10,000-row fit)
+        order = _heapq.nsmallest(take, range(X.r), key=row.__getitem__)
         if exclude_self:
             order = [j for j in order if j != i]
         sel = order[:n_neighbors]
@@ -3417,6 +3423,221 @@ class MDS(_Base):
         return self
 
 
+#: LocallyLinearEmbedding's iterative route for eigen_solver='auto', taken
+#: under sklearn's own ARPACK policy (n > 200 and n_components + 1 < 10).
+#: The dense route is the one-sided Jacobi SVD of the whole n x n factor:
+#: O(n^3) per sweep in ONE threadgroup on the GPU (M2 Pro: 3.2 s at 250
+#: rows, 22 s at 500, 199 s at 1,000; past the board's 600 s ceiling at
+#: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
+#: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
+_LLE_ITER_MIN_N = 200
+_LLE_ITER_MAX_K = 10
+#: The triangular inverse's leaf size (the LU solve against the identity).
+_LLE_TRI_LEAF = 64
+#: Converged: the sine of the largest principal angle between two successive
+#: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
+#: _LLE_STALL_TOL, it stopped shrinking (float32's floor for this factor).
+_LLE_SUBSPACE_TOL = 1e-5
+_LLE_STALL_TOL = 1e-2
+#: The deflation guard: F's rms row sum |F 1| / sqrt(n) (float32's rounding
+#: of the weights' unit sums) must be at most this fraction of its rms row
+#: norm, or the constant is not F's null vector and the dense route runs.
+_LLE_NULL_GUARD = 1e-3
+#: A wanted Ritz singular value at most this many float32 epsilons times the
+#: rms row norm is numerically zero: the kNN graph has several components
+#: (taxi's near-duplicate rows at 2,000), M's null space is wider than the
+#: constant, and any basis of it is the answer (sklearn's ARPACK returns
+#: its own); the iteration stops there from its third step.
+_LLE_NULL_FLOOR = 8.0
+
+
+def _lle_tri_inv(k, R):
+    """The inverse of an upper triangular R (zeros below the diagonal), by
+    blocks: [[A, B], [0, D]]^-1 = [[A^-1, -A^-1 B D^-1], [0, D^-1]], split
+    at n // 2; a leaf of at most _LLE_TRI_LEAF rows is the LU solve against
+    the identity with the identity pivot (L's unit diagonal and R's zero
+    lower part: plain back substitution, sums ascending)."""
+    n = R.r
+    if n <= _LLE_TRI_LEAF:
+        return k.lu_solve(R, array.array("i", range(n)), _eye(n))
+    h = n // 2
+    w = n - h
+    top = R.rows(0, h)
+    Ai = _lle_tri_inv(k, top.cols(0, h))
+    Di = _lle_tri_inv(k, R.rows(h, n).cols(h, n))
+    Bi = k.ew("scale", k.mm(Ai, k.mm(top.cols(h, n), Di)), s=-1.0)
+    a, b, d = Ai.s, Bi.s, Di.s
+    out = _M.zeros(n, n)
+    s = out.s
+    for i in range(h):
+        s[i * n:i * n + h] = a[i * h:(i + 1) * h]
+        s[i * n + h:(i + 1) * n] = b[i * w:(i + 1) * w]
+    for i in range(w):
+        s[(h + i) * n + h:(h + i + 1) * n] = d[i * w:(i + 1) * w]
+    return out
+
+
+def _lle_upper(s, n, unit=False):
+    """The upper triangle of the row-major n x n store `s` (zeros below the
+    diagonal; `unit`: ones on it) as an _M."""
+    out = array.array("f", s)
+    zero = array.array("f", [0.0]) * n
+    for i in range(1, n):
+        out[i * n:i * n + i] = zero[:i]
+    if unit:
+        for i in range(n):
+            out[i * n + i] = 1.0
+    return _M(out, n, n)
+
+
+def _lle_orth(k, Z):
+    """Z's columns orthonormalized by the Householder QR (geqrf, orgqr):
+    unconditionally orthonormal, never a zeroed column (the kit's orth zeroes
+    a column it judges dependent, DEVIATION 5318, and subspace iteration's
+    columns lean together). Each column is first scaled by its 1-norm (the
+    shift-invert operator reaches 1 / sigma^2, 1e18 on a null space at
+    float32 resolution, whose squares overflow)."""
+    nr = [float(v) for v in k.colsum(k.ew("abs", Z)).s]
+    sc = _M.of([1.0 / v if v > 0.0 and math.isfinite(v) else 1.0 for v in nr], 1, Z.c)
+    h, tau = k.geqrf(k.ew("mul", Z, sc))
+    return k.orgqr(h, tau, Z.c)
+
+
+def _lle_smallest(k, F, nc, max_iter, seed=0):
+    """The nc smallest right singular pairs of the square LLE factor F
+    (n x n, M = F^T F) past its null vector, the constant: (V n x nc, unit
+    columns, ascending singular value, each signed so its largest-|.| entry
+    is positive; S 1 x nc). None when the route does not apply (the caller
+    runs the dense SVD).
+
+    The constant is deflated exactly: H, the Householder reflector taking
+    u = 1 / sqrt(n) to e_{n-1}, and F^ = F H[:, :n-1], F restricted to the
+    constant's complement (its last column F u is dropped; F u is float32
+    rounding of the weights' unit sums, and the guard below checks it is
+    far under its rms row norm). F0 = [F^ | u] is square and, when
+    u is not orthogonal to z (the unit left null vector of F^), nonsingular:
+    ONE LU (the device's parallel right-looking getrf; a pivot under float32
+    resolution is set to eps times the largest), U^-1 and L^-1 by blocks. z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
+    (F^T F^)^-1 x = the first n - 1 entries of F0^-1 (P_z F0^-T [x; 0]),
+    P_z = I - z z^T: F0^-T [x; 0] solves F^^T y = x, P_z takes its
+    minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
+    Subspace iteration on that operator (sklearn's shift-invert at
+    sigma = 0) with p = max(2 nc + 1, 20) columns (ARPACK's ncv), each step
+    in two halves (F^+T, then F^+), each half orthonormalized (`_lle_orth`),
+    then rotated to the Ritz vectors of F^
+    (the one-sided Jacobi SVD of F^ X, n x p), until the wanted Ritz
+    subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
+    Every product is a kit cell and the stopping test reads their outputs:
+    the same iterations on every vendor. Not settled in max_iter steps
+    raises (an unconverged answer is not returned as one). Wanted singular
+    values under _LLE_NULL_FLOOR float32 epsilons (a null space wider than
+    the constant) stop it from the third step on (each step has shrunk
+    the rest by (sigma / sigma_next)^2): any basis of that space is the
+    answer, to float32's resolution of |F^ x|."""
+    n = F.c
+    if F.r != n:
+        return None
+    n1 = n - 1
+    p = min(n1, max(2 * nc + 1, 20))
+    if p <= nc:
+        return None
+    rn = 1.0 / math.sqrt(n)
+    hv = [rn] * n
+    hv[n - 1] = rn - 1.0
+    coef = 2.0 / _dsum(v * v for v in hv)
+    h = _M.of(hv, n, 1)
+    un = _M.of([rn] * n, n, 1)
+    hrow = _M.of([rn] * n1, 1, n1)
+    Fh = k.mm(F, h)
+    Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
+    Fu = k.mm(F, un)
+    g = math.sqrt(_dsum(float(v) * float(v) for v in Fu.s))
+    rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
+    if not (g <= _LLE_NULL_GUARD * rms):
+        return None
+    floor = _LLE_NULL_FLOOR * _F32_EPS * rms
+    F0 = _hstack(Fhat, un)
+    lu, piv, _ = k.lu(F0)
+    ls = lu.s
+    # a pivot under float32 resolution (an exactly zero one skipped its
+    # step) is set to eps times the largest: inverse iteration's usual
+    # perturbation (LAPACK's stein/hsein); the factor is only the spectral
+    # transform, the Rayleigh-Ritz step below uses F^ itself
+    big = max(abs(ls[i * n + i]) for i in range(n))
+    if not (big > 0.0 and math.isfinite(big)):
+        return None
+    tiny = _f32(_F32_EPS * big)
+    for i in range(n):
+        d = ls[i * n + i]
+        if abs(d) < tiny:
+            ls[i * n + i] = -tiny if d < 0 else tiny
+    Ui = _lle_tri_inv(k, _lle_upper(ls, n))              # U^-1
+    LiT = _lle_tri_inv(k, _lle_upper(lu.T.s, n, True))   # (L^T)^-1 = (L^-1)^T
+    perm = list(range(n))
+    for i in range(n):
+        j = int(piv[i])
+        perm[i], perm[j] = perm[j], perm[i]
+    inv = [0] * n
+    for i, j in enumerate(perm):
+        inv[j] = i
+
+    def solve(B):               # F0^-1 B = U^-1 L^-1 P B
+        return k.mm(Ui, k.mm(LiT, B.take_rows(perm), ta=True))
+
+    def solve_t(B):             # F0^-T B = P^T L^-T U^-T B
+        return k.mm(LiT, k.mm(Ui, B, ta=True)).take_rows(inv)
+
+    en = _M.zeros(n, 1)
+    en.s[n - 1] = 1.0
+    z = solve_t(en)
+    zn = math.sqrt(_dsum(float(v) * float(v) for v in z.s))
+    if not zn > 0.0 or not math.isfinite(zn):
+        return None
+    z = k.ew("scale", z, s=1.0 / zn)
+
+    X = _lle_orth(k, k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
+    want = list(range(p - 1, p - 1 - nc, -1))
+    prev, e_prev = None, float("inf")
+    for it in range(max(1, int(max_iter))):
+        # (F^T F^)^-1 X in two orthonormalized halves: F^+T X = P_z F0^-T
+        # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
+        # of F0^-1; each half stretches the block by 1 / sigma, not
+        # 1 / sigma^2, so the columns stay far from float32 dependence
+        Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
+        Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
+        X = _lle_orth(k, solve(Y).rows(0, n1))
+        S, Vt = k.svd(k.mm(Fhat, X))
+        X = k.mm(X, Vt, tb=True)
+        Y = X.take_cols(want)
+        if it >= 2 and max(float(v) for v in S.take_cols(want).s) <= floor:
+            break
+        if prev is not None:
+            E = k.ew("sub", Y, k.mm(prev, k.mm(prev, Y, ta=True)))
+            e = math.sqrt(max(float(k.total(k.ew("sq", E)).s[0]), 0.0))
+            if e <= _LLE_SUBSPACE_TOL or (e <= _LLE_STALL_TOL and e >= e_prev):
+                break
+            e_prev = e
+        prev = Y
+    else:
+        raise RuntimeError(
+            f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
+            f"iterations (last subspace change {e_prev:.3g}); pass eigen_solver='dense' for the full SVD. "
+            "An unconverged embedding is not returned as if it were one.")
+    sv = S.take_cols(want)
+    # back to R^n: H [Y; 0] = [Y; 0] - coef h (h^T [Y; 0])
+    t = k.mm(hrow, Y)
+    full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
+    V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
+    # the columns are unit vectors or the solve is not an answer (an
+    # overflow, a dropped launch): refuse rather than return them
+    sq = k.colsum(k.ew("sq", V)).s
+    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(float(v)) for v in sv.s):
+        raise RuntimeError(
+            "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
+            f"{[float(v) for v in sq]} (not unit); pass eigen_solver='dense' for the full SVD.")
+    return V.neg_cols(k.absmax_flags(V, True)), sv
+
+
 class LocallyLinearEmbedding(_Base):
     """sklearn.manifold.LocallyLinearEmbedding, method='standard' (reference:
     scikit-learn `manifold/_locally_linear.py`: `barycenter_kneighbors_graph`,
@@ -3425,7 +3646,10 @@ class LocallyLinearEmbedding(_Base):
     `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
     n_components + 1 smallest eigenvectors, the first dropped.
     method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
-    factor (M = B^T B) and take the same SVD route."""
+    factor (M = B^T B) and take the same SVD route. eigen_solver='auto'
+    with method='standard' past 200 rows (sklearn's ARPACK policy) takes
+    `_lle_smallest`, shift-invert subspace iteration on the deflated factor;
+    'dense' (and every other case) the full one-sided Jacobi SVD."""
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -3473,11 +3697,20 @@ class LocallyLinearEmbedding(_Base):
         # float32 resolution next to M's largest, so the dense eigh of M
         # cannot order them; the one-sided Jacobi SVD of I - W resolves its
         # small singular values to high RELATIVE accuracy.
-        S, Vt = k.svd(IW)
-        rows = list(range(n - 2, n - 2 - nc, -1))
-        self.embedding_m_ = Vt.take_rows(rows).T
+        got = None
+        if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
+                and nc + 1 < _LLE_ITER_MAX_K):
+            got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
+        if got is not None:
+            self.embedding_m_, sv = got
+        else:
+            # eigen_solver='dense', a small n, or the iterative route's guard
+            # refused: the full SVD of I - W (O(n^3) per Jacobi sweep)
+            S, Vt = k.svd(IW)
+            rows = list(range(n - 2, n - 2 - nc, -1))
+            self.embedding_m_ = Vt.take_rows(rows).T
+            sv = S.take_cols(rows)
         self.embedding_ = self.embedding_m_.out()
-        sv = S.take_cols(rows)
         self.reconstruction_error_ = _dsum(v * v for v in sv.s)
         self._fit_X, self._knn = M, nn
         self.n_features_in_ = M.c

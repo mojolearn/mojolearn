@@ -22,3 +22,5 @@ x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5217_cc_max_labe
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5204_louvain_order_reversed.patch
 x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5205_cholesky_fold_reversed.patch
 neighbors/checks/fused_slot_merge_check.mojo	neighbors/checks/sabotage/5219_slot_merge_drops_last_block.patch
+kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672a_basis_sort_unstable_scatter.patch
+kernel_methods/checks/nystroem_basis_sort_check.mojo	kernel_methods/checks/sabotage/1672b_basis_sort_key_halves_swapped.patch

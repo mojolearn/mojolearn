@@ -98,6 +98,7 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     _add_leaf_cosine,
     _bootstrap_pass,
+    _snap_gradients,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     _binarize_columns,
@@ -830,6 +831,7 @@ def gbdt_multi_host_fit(
             mags[0] = bm[0]
             mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        _snap_gradients(stats, n_rows, stat_count, fixed_scale)  # lane/sym-quality
         var score_std_dev = Float32(0.0)
         if random_strength != Float32(0.0):
             score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))

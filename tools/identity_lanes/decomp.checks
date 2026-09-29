@@ -36,3 +36,5 @@ x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/host_lu_split.patch
 x_decomp/checks/rows_check.mojo	x_decomp/checks/sabotage/host_lda_topic_fold.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/host_ew_onemsq_fused.patch
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/host_rowsum_flush.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/lle_svd_chunk_resume.patch
+x_decomp/checks/dense_check.mojo	x_decomp/checks/sabotage/lle_qr_range_skip.patch

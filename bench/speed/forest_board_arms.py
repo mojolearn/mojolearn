@@ -74,7 +74,8 @@ class TreeMem(object):
     def _probe(self, arm_name):
         if arm_name not in self.probes:
             dev = "cpu" if (arm_name.endswith("-cpu") or "-cpu-" in arm_name) else "gpu"
-            self.probes[arm_name] = probe.MemProbe(dev, shared=True)
+            lib = "mojolearn" if arm_name.startswith("ours") else arm_name.split("-")[0]
+            self.probes[arm_name] = probe.MemProbe(dev, shared=True, library=lib)
         return self.probes[arm_name]
 
     def emit(self, arm_name, r, m):

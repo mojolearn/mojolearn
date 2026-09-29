@@ -39,8 +39,13 @@ def main() raises:
     var m = 40000
     var x = seam_fixture(200, 200, 31)
     var s = List[Float32](capacity=m)
+    # every fifth cell 0.0: there the noise IS the value (scale = tiny * 100,
+    # s = scale * z), so the draw's last bit reaches the result. On a cell of
+    # size ~1 the noise is ~1 ulp and a rounding change of the unit draw (a
+    # relative 6e-8 of z) never moves the sum's bits: the fixture was VACUOUS
+    # (m2pro, 2026-09-29, seed 0).
     for t in range(m):
-        s.append(-abs(x[t]) - Float32(0.25))
+        s.append(Float32(0) if t % 5 == 0 else -abs(x[t]) - Float32(0.25))
     var seeds: List[UInt64] = [UInt64(0), UInt64(1), (UInt64(1) << 62) + UInt64(7)]
     for seed in seeds:
         var want = oracle_ap_noise(s, seed)

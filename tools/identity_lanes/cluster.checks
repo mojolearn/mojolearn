@@ -3,21 +3,24 @@
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5100_dist_fold.patch
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5101_dist_contract.patch
 x_cluster/checks/nearest_check.mojo	x_cluster/checks/sabotage/5102_argmin_tie.patch
-x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5103_kth.patch
+# 5103_kth.patch (bodies.kth_smallest_row's bisection) is retired: since lane cluster-cpu
+# (2026-09-28) the host selects over the magnitude bits (5103_host_select.patch) and the device
+# runs its radix select (5120_kth_radix.patch); the bisection is reached only for a k outside
+# 1..n_cols, which kth_check does not plant, so that arm could not fail (m2pro, 2026-09-29)
 x_cluster/checks/meanshift_check.mojo	x_cluster/checks/sabotage/5104_meanshift_fold.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5105_ap_damping.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5106_ap_colfold.patch
 x_cluster/checks/descend_check.mojo	x_cluster/checks/sabotage/5107_descend_tie.patch
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_gauss_fold.patch
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5109_lse_order.patch
-x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_moments_fold.patch
+x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_gemm_reg_order.patch
 x_cluster/checks/pdist_check.mojo	x_cluster/checks/sabotage/5111_pdist_fold.patch
 x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5103_host_select.patch
 cluster/checks/host_gemm_check.mojo	cluster/checks/sabotage/host_gemm_leaf_order.patch
 cluster/checks/host_gemm_check.mojo	cluster/checks/sabotage/host_gemm_flush.patch
 hierarchy/checks/linkage_host_check.mojo	hierarchy/checks/sabotage/linkage_host_tie_order.patch
 hierarchy/checks/linkage_host_check.mojo	hierarchy/checks/sabotage/linkage_host_fold_order.patch
-x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_host_cov_tile.patch
+x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_host_gemm_copy.patch
 x_cluster/checks/gauss_check.mojo	x_cluster/checks/sabotage/5108_host_gauss_fold.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5106_host_ap_colfold.patch
 x_cluster/checks/dist_check.mojo	x_cluster/checks/sabotage/5100_host_dist_fold.patch
@@ -25,6 +28,15 @@ x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5117_lance_williams.
 x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch
 x_cluster/checks/spectral_assign_check.mojo	x_cluster/checks/sabotage/5119_svd_fold.patch
 x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
-x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_tile.patch
-x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5105_ap_rmax_tie.patch
+x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_device_gemm_divide.patch
+# 5105_ap_rmax_tie.patch is retired: it hands a tied row maximum to the HIGHEST index instead of the
+# lowest, but a tie at the maximum makes the max and the second max the same value, and the
+# responsibility update reads only those two values (ap_r_update), so no output can change; the
+# arm passed unseen on the m2pro (2026-09-29). 5105's live arm is 5105_ap_damping.patch
 x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_round.patch
+# lane dbscan-int64 (2026-09-29): the ball-cover edge count is exact past the int32 wrap, and a batch past the int32 CSR is split with no label moved
+dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_split_drops_last_batch.patch
+dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_exact_total_reads_wrapped_tail.patch
+# lane hdbscan-sparse (2026-09-29): DEVIATION 1620, the sparse mutual reachability MST == the dense one (device, CPU, fit); the tie rule broken on each column
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_device_tie.patch
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_host_tie.patch

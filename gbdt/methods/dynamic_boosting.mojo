@@ -24,6 +24,7 @@ from gbdt.methods.dynamic_boosting_folds import TFold, EBoostingType, IQueriesGr
 from gbdt.methods.doc_parallel_boosting import TEstimationWorkspace, _estimate_and_apply
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import PointwiseTreeWorkspace, fit_oblivious_tree_structure
+from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import enqueue_snap_plane
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import compute_bins_for_model, partition_from_bins
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.models.oblivious_model import TAdditiveModel, TObliviousTreeModel, TObliviousTreeStructure
@@ -260,6 +261,9 @@ def fit_ordered_rmse(
                 grid_dim=((size + 255) // 256, 1, 1), block_dim=(256, 1, 1),
             )
             offset += size
+        # lane/sym-quality: the gradient plane onto the tree's grid before
+        # the search (`enqueue_snap_plane`), as gbdt_oracle_ordered restates
+        enqueue_snap_plane(ctx, sg, total, scale)
         var splits = fit_oblivious_tree_structure(
             ctx, layout, n, max_depth, cindex, sw^, sg^, sm_count,
             scale, score_function, pool, l2_leaf_reg,

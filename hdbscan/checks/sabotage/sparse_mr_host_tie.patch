@@ -1,0 +1,13 @@
+diff --git a/hdbscan/host/hdbscan_host_oracle.mojo b/hdbscan/host/hdbscan_host_oracle.mojo
+index 1bc4fed12..8a1cf6d13 100644
+--- a/hdbscan/host/hdbscan_host_oracle.mojo
++++ b/hdbscan/host/hdbscan_host_oracle.mojo
+@@ -881,7 +881,7 @@ def hdbh_sparse_prim(
+                     var wk = weight_order_key(wt)
+                     var a = Int32(cur if cur < u else u)
+                     var b = Int32(u if cur < u else cur)
+-                    if triple_less_i(wk, Int(a), Int(b), wkp[u], Int(lop[u]), Int(hip[u])):
++                    if wk <= wkp[u]:
+                         wkp[u] = wk
+                         lop[u] = a
+                         hip[u] = b
