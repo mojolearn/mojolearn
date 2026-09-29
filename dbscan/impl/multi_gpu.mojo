@@ -157,6 +157,19 @@ def _rbc_rows(
     for rank in range(count):
         if failures[rank] != 0:
             raise Error("DBSCAN neighborhood shard failed: " + String(rank))
+    # COUNT MODE NEVER REFUSES. Each shard's count is exact (the count pass
+    # sums degrees in 64-bit), so their sum is the batch's true edge count.
+    # When it does not fit the int32 CSR the offsets below cannot be merged,
+    # and the caller (`runner.mojo`, loop 1) splits the batch on this number
+    # rather than refusing; nothing is merged and nothing reads `ia` or `vd`.
+    if mode == 0:
+        var exact = 0
+        for rank in range(count):
+            exact += shards[rank].edges
+        if exact > 2147483647:
+            _ = shards^
+            ctx.synchronize()
+            return exact
     var total = 0
     var longest = 0
     for rank in range(count):

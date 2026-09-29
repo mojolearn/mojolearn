@@ -34,3 +34,6 @@ x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_device_gemm_d
 # responsibility update reads only those two values (ap_r_update), so no output can change; the
 # arm passed unseen on the m2pro (2026-09-29). 5105's live arm is 5105_ap_damping.patch
 x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_round.patch
+# lane dbscan-int64 (2026-09-29): the ball-cover edge count is exact past the int32 wrap, and a batch past the int32 CSR is split with no label moved
+dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_split_drops_last_batch.patch
+dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_exact_total_reads_wrapped_tail.patch
