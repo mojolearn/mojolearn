@@ -10,10 +10,10 @@ Pattern as dist_check.mojo."""
 from core.identity_trace import IdentityTrace
 from x_neighbors.checks.oracles import o_ls_laplacian, o_ls_clamp, o_lp_clamp, o_knn_impute
 from x_neighbors.checks.seam_util import seam_fixture, fa, ia, zf, zi, count_diff_f32, require_separates, same
-from x_neighbors.device_ops import op_ls_laplacian, op_ls_clamp, op_lp_clamp, op_knn_impute
+from x_neighbors.device_ops import op_ls_laplacian, op_ls_clamp, op_lp_clamp, op_knn_impute, op_col_degree, op_ls_laplacian_deg
 from x_neighbors.host_ops import (
     op_ls_laplacian as h_ls_laplacian, op_ls_clamp as h_ls_clamp, op_lp_clamp as h_lp_clamp,
-    op_knn_impute as h_knn_impute,
+    op_knn_impute as h_knn_impute, op_col_degree as h_col_degree, op_ls_laplacian_deg as h_ls_laplacian_deg,
 )
 
 
@@ -33,6 +33,18 @@ def main() raises:
     var hl = zf(n * n)
     h_ls_laplacian(fa(a), fa(hl), n)
     same("5214 ls_laplacian host", count_diff_f32(hl, wl))
+    # LabelSpreading's DEFAULT graph (_expansion_neighbors.py): degrees once
+    # (col_degree), then ls_laplacian_deg; the same words as the per-cell item.
+    var dd = zf(n)
+    op_col_degree(fa(a), fa(dd), n)
+    var dg = zf(n * n)
+    op_ls_laplacian_deg(fa(a), fa(dd), fa(dg), n)
+    same("5214 ls_laplacian_deg device", count_diff_f32(dg, wl))
+    var hd = zf(n)
+    h_col_degree(fa(a), fa(hd), n)
+    var hg = zf(n * n)
+    h_ls_laplacian_deg(fa(a), fa(hd), fa(hg), n)
+    same("5214 ls_laplacian_deg host", count_diff_f32(hg, wl))
     tr.record_list_f32("x_neighbors.laplacian", dl)
 
     var c = 3
