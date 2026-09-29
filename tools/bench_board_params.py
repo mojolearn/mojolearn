@@ -32,11 +32,15 @@ A driver whose arms live in separate worker processes has each worker send
    that both our arm and that arm have differs, or is set on one side and
    left to the library default (None) on the other, unless that exact
    (lane, parameter, arm) is listed in `EXCEPTIONS` with its reason.
-   An arm whose constructor has NO seed parameter at all (no seed name in
-   its read-back, and for a constructed object none in its constructor's
-   signature either) is recorded as `seed: none (no argument)` without an
-   EXCEPTIONS entry. An arm that HAS a seed parameter holding anything but
-   the board's seed still refuses unless EXCEPTIONS names it.
+   THE SEED. Every arm that has a seed parameter must hold the lane's seed
+   (`seed_for(lane)`: 7, or the NVIDIA harness's own where it sets one,
+   `LANE_SEED`); anything else refuses unless EXCEPTIONS names it. An arm
+   whose constructor has NO seed parameter at all (no seed name in its
+   read-back, and for a constructed object none in its constructor's
+   signature either) draws nothing and is recorded as
+   `seed: none (deterministic)` without an EXCEPTIONS entry. A third-party
+   arm that DOES draw random numbers but has no seed argument is the one
+   case EXCEPTIONS keeps for the seed: its row's reason is recorded instead.
    Execution-only settings (threads, device, verbosity, numeric mode) are in
    `IGNORE` and never compared.
 4. It prints one `BOARD-PARAMS <json>` line with every arm's resolved
@@ -55,6 +59,21 @@ import math
 import sys
 
 SEED = 7
+
+#: The NVIDIA harness's own seed, where it sets one, for the lanes it covers
+#: (tools/bench_board_harness.py records the source and commit); every other
+#: lane uses SEED.
+LANE_SEED = {
+    # cuML benchmark algorithms.py SpectralClustering shared_args random_state=42
+    "spectral": 42,
+    # cuML benchmark algorithms.py TargetEncoder cpu_args random_state=42, cuml_args seed=42
+    "algos/target-encoder": 42,
+}
+
+
+def seed_for(lane):
+    """The seed every arm of `lane` is given."""
+    return LANE_SEED.get(lane, SEED)
 MARK = "BOARD-PARAMS"
 MARK_REFUSED = "BOARD-PARAMS-REFUSED"
 
@@ -67,6 +86,21 @@ MARK_REFUSED = "BOARD-PARAMS-REFUSED"
 
 def _plus1(v):
     return None if v is None else v + 1
+
+
+def _unit_if_none(v):
+    """scale_pos_weight: None is every library's documented unit weight 1."""
+    return 1.0 if v is None else v
+
+
+def _pos_over_neg(w):
+    """Ours' class_weights [w0, w1] as scale_pos_weight w1 / w0 (the weight
+    CatBoost, XGBoost and LightGBM put on the positive class); None is unit
+    weights, 1.0. More than two classes is not a scale_pos_weight."""
+    if w is None:
+        return 1.0
+    w = list(w)
+    return w[1] / w[0] if len(w) == 2 and w[0] else repr(w)
 
 
 ALIASES = {
@@ -127,6 +161,8 @@ ALIASES = {
         "set_op_mix_ratio": "set_op_mix_ratio", "local_connectivity": "local_connectivity",
         "negative_sample_rate": "negative_sample_rate", "repulsion_strength": "repulsion_strength",
         "assign_labels": "assign_labels", "start_periods": "start_periods",
+        # gbm-bench's binary classification weight (tools/bench_board_harness.py)
+        "scale_pos_weight": ("scale_pos_weight", _unit_if_none),
     },
     # XGBoost's `gamma` is the minimum split loss reduction
     "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
@@ -147,7 +183,9 @@ ALIASES = {
                   "leaf_estimation_iterations": "leaf_estimation_iterations",
                   "feature_border_type": "feature_border_type", "nan_mode": "nan_mode",
                   # the RF quantile bin count (cuML's n_bins) is a bin count
-                  "n_bins": "max_bin"},
+                  "n_bins": "max_bin",
+                  # GradientBoosting's class weights as the positive-class weight
+                  "class_weights": ("scale_pos_weight", _pos_over_neg)},
     "cuml": {"n_bins": "max_bin"},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
@@ -215,8 +253,9 @@ EXCEPTIONS = [
      "sklearn has no max_depth parameter and fixes the same value"),
     # --- classical (tools/classical_two_datasets.py) and classical2 (tools/bench_board_more.py).
     # An arm with no seed argument at all needs no row (check() records it as
-    # `seed: none (no argument)`); a seed row below names an arm whose
-    # constructor HAS a seed parameter that is left None on purpose.
+    # `seed: none (deterministic)`). A seed row below names either an arm whose
+    # constructor HAS a seed parameter left None on purpose, or a third-party
+    # arm that draws random numbers and has no seed argument.
     ("svc", "seed", "ours*", "mojolearn SVC refuses random_state without probability=True (the fit "
      "draws nothing); scikit-learn and cuML get 7"),
     ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
@@ -239,6 +278,8 @@ EXCEPTIONS = [
      "selection='cyclic'"),
     ("elasticnet", "seed", "ours*", "mojolearn ElasticNet refuses random_state: it selects nothing "
      "with selection='cyclic'"),
+    ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed and its k-means training "
+     "samples rows; ours and faiss get 7"),
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
      "runs 'arpack' at tol=0"),
     ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
@@ -256,9 +297,18 @@ EXCEPTIONS = [
     # neural classes take no seed argument (recorded automatically); torch arms
     # call torch.manual_seed(7)
     # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>"): the arms
-    # with no seed argument (the deterministic lanes, ours' weightless layers,
-    # SVGP, cuGraph louvain, faiss HNSW, the cuVS IndexParams) are recorded
-    # automatically
+    # with no seed argument that draw nothing (the deterministic lanes, ours'
+    # weightless layers, SVGP) are recorded automatically; the third-party arms
+    # below draw random numbers and take no seed
+    ("algos/louvain", "seed", "cugraph-gpu", "cuGraph louvain takes no seed; its GPU move order "
+     "is not seeded; ours and networkx get 7"),
+    ("algos/cagra", "seed", "faiss-cpu", "faiss IndexHNSWFlat takes no seed argument (its level "
+     "draw uses faiss' fixed internal seed)"),
+] + [
+    ("algos/" + lane, "seed", "cuvs-gpu", "cuVS IndexParams take no seed and the index build "
+     "samples rows; ours and faiss get 7")
+    for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
+] + [
     ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
      "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
     ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
@@ -415,7 +465,10 @@ def _equal(a, b):
 
 
 #: What the report records for an arm with no seed parameter at all.
-NO_SEED_ARGUMENT = "none (no argument)"
+NO_SEED_ARGUMENT = "none (deterministic)"
+#: ... and for one that draws random numbers without a seed argument (an
+#: EXCEPTIONS row names it and gives the reason).
+NO_SEED_DRAWS = "none (no argument; draws random numbers, see exceptions)"
 
 
 def _seed_names():
@@ -454,11 +507,13 @@ def exception_for(lane, param, arm):
 # The check
 # ---------------------------------------------------------------------------
 
-def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions=()):
+def check(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=()):
     """The report for one race. `arms`: {arm name: constructed object or
     declared dict}. `extra_exceptions`: (param, arm glob, reason) the driver
-    adds for this race (the same shape as EXCEPTIONS without the lane)."""
-    resolved, sources, libs, no_seed = {}, {}, {}, set()
+    adds for this race (the same shape as EXCEPTIONS without the lane).
+    `seed`: None is `seed_for(lane)`."""
+    seed = seed_for(lane) if seed is None else seed
+    resolved, sources, libs, no_seed, draws = {}, {}, {}, set(), set()
     for name, obj in arms.items():
         lib, source, raw = read_params(obj)
         libs[name], sources[name] = lib, source
@@ -488,7 +543,13 @@ def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions
                 else:
                     problems.append("%s: seed is %r (%s), the board's seed is %d"
                                     % (name, got, canon["seed"][1], seed))
-        elif name not in no_seed:
+        elif name in no_seed:
+            # no seed argument: deterministic, unless a row says it draws
+            why = _excused("seed", name)
+            if why:
+                draws.add(name)
+                applied.append({"arm": name, "param": "seed", "value": None, "reason": why})
+        else:
             # the constructor takes a seed but the read-back lost it
             why = _excused("seed", name)
             if why:
@@ -522,9 +583,10 @@ def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions
             "arms": {n: {"library": libs[n], "source": sources[n],
                          "params": dict(sorted(
                              [(p, v) for p, (v, _) in c.items()]
-                             + ([("seed", NO_SEED_ARGUMENT)] if n in no_seed else [])))}
+                             + ([("seed", NO_SEED_DRAWS if n in draws else NO_SEED_ARGUMENT)]
+                                if n in no_seed else [])))}
                      for n, c in resolved.items()},
-            "no_seed_argument": sorted(no_seed),
+            "seed_none_deterministic": sorted(no_seed - draws),
             "compared": compared, "exceptions": applied, "problems": problems,
             "verdict": "REFUSED" if problems else "MATCHED"}
 
@@ -538,7 +600,7 @@ def emit(report, stream=None):
     stream.flush()
 
 
-def enforce(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions=(), stream=None):
+def enforce(lane, arms, family=None, reference="ours", seed=None, extra_exceptions=(), stream=None):
     """check + emit; raises ParamsRefused when the arms do not match."""
     report = check(lane, arms, family=family, reference=reference, seed=seed,
                    extra_exceptions=extra_exceptions)
@@ -565,6 +627,7 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["table"]:
         print(json.dumps({"ALIASES": {k: {n: (r if isinstance(r, str) else r[0] + " (transformed)")
                                           for n, r in v.items()} for k, v in ALIASES.items()},
-                          "IGNORE": sorted(IGNORE), "EXCEPTIONS": EXCEPTIONS}, indent=1))
+                          "IGNORE": sorted(IGNORE), "LANE_SEED": LANE_SEED,
+                          "EXCEPTIONS": EXCEPTIONS}, indent=1))
     else:
         print(__doc__)
