@@ -113,6 +113,12 @@ def main():
             v = leaves[off[b]:off[e]]
             print("PROBE ours block %4d-%4d mean|leaf|=%.3e max|leaf|=%.3e" % (
                 b, e, float(np.mean(np.abs(v))), float(np.max(np.abs(v)))), flush=True)
+        want = {int(t) for t in os.environ.get("SYMQ_DUMP_TREES", "").split(",") if t}
+        if want:
+            for ln in m.model_.splitlines():
+                f = ln.split()
+                if f and f[0] in ("split", "tree") and len(f) > 1 and f[1].isdigit() and int(f[1]) in want:
+                    print("PROBE dump " + ln[:160], flush=True)
         # THE BOARD'S OWN SCORING PATH, on the untouched fitted model:
         # tools/speed_gbdt_arm._score_sklearn_like (predict_proba, float64)
         proba = np.asarray(m.predict_proba(xte), dtype=np.float64)
