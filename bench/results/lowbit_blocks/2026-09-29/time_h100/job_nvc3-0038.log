@@ -1,0 +1,8 @@
+gpuq: job 0038 lane=lowbit-blocks-h100 gpus=0 cap=45min started 2026-09-29T05:48:46Z
+gpuq: script /root/mojolearn-lowbit-blocks-h100/tools/lowbit_blocks/time_job.sh sha256 at submit 39c18585531a15128c43c93f722c8bf7554fc3c53ab62af00f40197b406f8ab8, now 39c18585531a15128c43c93f722c8bf7554fc3c53ab62af00f40197b406f8ab8
+0, NVIDIA H100 NVL, 0 %, 0 MiB
+RESULT time box=90d2c7e3d6aa profile=fp32_v1 prefill512 397.0 ms decode 299.85 ms/token
+RESULT time box=90d2c7e3d6aa profile=fixed15_v1 prefill512 269.5 ms decode 143.34 ms/token
+RESULT time box=90d2c7e3d6aa profile=fp32_v1 prefill512 421.0 ms decode 320.13 ms/token
+RESULT time box=90d2c7e3d6aa profile=fixed15_v1 prefill512 271.3 ms decode 134.74 ms/token
+gpuq: job 0038 done exit=0 at 2026-09-29T05:52:16Z after 210s
