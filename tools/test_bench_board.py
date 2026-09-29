@@ -956,18 +956,18 @@ def _store_ctx(tmp_path):
     return ctx, race
 
 
-def _key(ctx, race, arm, params=READBACK, version="1.2.8", device_name=None, **over):
+def _key(ctx, race, arm, params=READBACK, version="1.2.8", device_name=None, over=None):
     key = bb.opponent_key(ctx["box"], race, arm, bb.race_settings(ctx, race),
                           bb.race_data_sha(ctx, race, ctx["box"]), ctx["rounds"],
                           params=params, version=version, device_name=device_name)
-    key.update(over)
+    key.update(over or {})
     return key
 
 
-def _stored_record(ctx, race, arm, status="ok", **over):
+def _stored_record(ctx, race, arm, status="ok", over=None):
     cell = dict(bb.base_cell(ctx, race, arm, None), status=status, median_ms=1000.0,
                 times_ms=[1000.0], rounds=1)
-    return bb.STORE.record(_key(ctx, race, arm, **over), cell,
+    return bb.STORE.record(_key(ctx, race, arm, over=over), cell,
                            measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
 
 
@@ -1027,7 +1027,7 @@ def test_store_miss_when_any_key_field_differs(tmp_path):
     ctx, race = _store_ctx(tmp_path)
     base = _key(ctx, race, "catboost-cpu")
     for field in bb.STORE.KEY_FIELDS:
-        rec = _stored_record(ctx, race, "catboost-cpu", **{field: "something else"})
+        rec = _stored_record(ctx, race, "catboost-cpu", over={field: "something else"})
         store = {bb.STORE.key_id(rec["key"]): rec}
         assert bb.STORE.lookup(store, base) is None, field
     store = {bb.STORE.key_id(base): _stored_record(ctx, race, "catboost-cpu")}
