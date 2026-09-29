@@ -186,8 +186,8 @@ def main(out=sys.stdout):
     rep.raises(arm, ValueError, "must be 1-D",
                "a 2-D y is refused by name",
                GaussianProcessRegressor().fit, x, y.reshape(N, 1))
-    rep.raises(arm, NotImplementedError, "DEVIATION 1759",
-               "predict(return_cov=True) is refused",
+    rep.raises(arm, ValueError, "call fit() first",
+               "unfitted covariance prediction is refused",
                gp.predict, x, **{"return_cov": True})
     rep.raises(arm, ValueError, "call fit() first",
                "sample_y on an unfitted model (the prior arm) is refused",
@@ -231,6 +231,14 @@ def main(out=sys.stdout):
               and int(model.clamped_.sum()) == model.n_clamped_,
               "the per-point clamp flags and their count agree "
               "(DEVIATION 1760)")
+    cov_mean, covariance = model.predict(x, return_cov=True)
+    covariance = np.asarray(covariance)
+    rep.bits_equal(arm, mean, cov_mean, "covariance request preserves posterior mean bits", mode == "identical")
+    rep.check(arm, covariance.shape == (N, N) and np.isfinite(covariance).all(),
+              "posterior covariance is finite and square")
+    rep.check(arm, np.array_equal(covariance, covariance.T), "posterior covariance is symmetric")
+    rep.raises(arm, RuntimeError, "at most one", "std and covariance cannot both be requested",
+               model.predict, x, return_std=True, return_cov=True)
     lml = model.log_marginal_likelihood()
     rep.check(arm, np.isfinite(lml)
               and lml == model.log_marginal_likelihood_value_,

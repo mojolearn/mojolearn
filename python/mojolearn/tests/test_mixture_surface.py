@@ -93,13 +93,20 @@ def arm_fit(rep):
 
 def arm_refusals(rep):
     x, _ = _blobs()
-    for ct in ("tied", "diag", "spherical"):
-        rep.raises("REFUSE", Exception, ct, "covariance_type=%r refused by name on the Mojo host" % ct, GaussianMixture(n_components=2, covariance_type=ct).fit, x)
-    for ip in ("k-means++", "random_from_data"):
-        rep.raises("REFUSE", Exception, ip, "init_params=%r refused by name on the Mojo host" % ip, GaussianMixture(n_components=2, init_params=ip).fit, x)
-    rep.raises("REFUSE", ValueError, "n_init", "n_init=2 refused by name (DEVIATION 1734)", GaussianMixture(n_components=2, n_init=2).fit, x)
-    rep.raises("REFUSE", ValueError, "warm_start", "warm_start refused by name", GaussianMixture(n_components=2, warm_start=True).fit, x)
-    rep.raises("REFUSE", ValueError, "means_init", "means_init refused by name", GaussianMixture(n_components=2, means_init=x[:2]).fit, x)
+    supported = [dict(covariance_type=ct) for ct in ("tied", "diag", "spherical")]
+    supported += [dict(init_params=ip) for ip in ("k-means++", "random_from_data")]
+    supported += [dict(n_init=2), dict(warm_start=True), dict(means_init=x[:2])]
+    for options in supported:
+        model = GaussianMixture(n_components=2, **options).fit(x)
+        result = np.asarray(model.predict(x))
+        rep.check("OPTIONS", result.shape == (96,) and np.isfinite(model.lower_bound_),
+                  "supported mixture options fit and predict: %r" % options.keys())
+    rep.raises("REFUSE", ValueError, "covariance_type", "unknown covariance type refused",
+               GaussianMixture(n_components=2, covariance_type="unknown").fit, x)
+    rep.raises("REFUSE", Exception, "init_params='unknown'", "unknown initialization refused by native validation",
+               GaussianMixture(n_components=2, init_params="unknown").fit, x)
+    rep.raises("REFUSE", ValueError, "means", "wrong initial mean shape refused",
+               GaussianMixture(n_components=2, means_init=x[:1]).fit, x)
     rep.raises("REFUSE", ValueError, "positive", "n_components=0", GaussianMixture(n_components=0).fit, x)
     rep.raises("REFUSE", Exception, "", "n_components > n_samples, refused on the Mojo host", GaussianMixture(n_components=97).fit, x)
     bad = x.copy(); bad[3, 1] = np.float32("nan")

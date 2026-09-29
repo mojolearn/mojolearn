@@ -52,7 +52,7 @@ def arm_kernel_ridge(rep):
     p2 = np.asarray(m2.predict(x[:5]))
     rep.check("KRR", p2.shape == (5, 2) and np.isfinite(p2).all(), "rbf fit with two targets predicts (q, 2)", p2.shape)
     rep.check("KRR", np.max(np.abs(p2[:, 0] + p2[:, 1])) < 1e-4, "the two targets are negatives of each other", float(np.max(np.abs(p2[:, 0] + p2[:, 1]))))
-    for k in ("poly", "sigmoid", "laplacian"):
+    for k in ("poly", "sigmoid", "laplacian", "cosine"):
         mk = km.KernelRidge(alpha=0.5, kernel=k, gamma=0.3, degree=2, coef0=1.0).fit(x, y)
         rep.check("KRR", mk.info_ == 0 and np.isfinite(np.asarray(mk.predict(x[:3]))).all(), "kernel %r fits and predicts finite values" % k)
 
@@ -104,7 +104,7 @@ def arm_rbf_sampler(rep):
 def arm_refusals(rep):
     x, y = _xy(n=16)
     rep.raises("REFUSE", ValueError, "precomputed", "kernel='precomputed' by name", km.KernelRidge(kernel="precomputed").fit, x, y)
-    rep.raises("REFUSE", ValueError, "kernel must be", "an unknown kernel name", km.KernelRidge(kernel="cosine").fit, x, y)
+    rep.raises("REFUSE", ValueError, "kernel must be", "an unknown kernel name", km.KernelRidge(kernel="unknown").fit, x, y)
     rep.raises("REFUSE", Exception, "alpha", "a negative alpha, refused on the Mojo host by name", km.KernelRidge(alpha=-1.0).fit, x, y)
     rep.raises("REFUSE", Exception, "gamma", "gamma <= 0 under rbf, refused on the Mojo host by name", km.KernelRidge(kernel="rbf", gamma=0.0).fit, x, y)
     rep.raises("REFUSE", ValueError, "rows", "y with the wrong row count", km.KernelRidge().fit, x, y[:5])
