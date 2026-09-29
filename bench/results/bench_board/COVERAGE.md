@@ -2,34 +2,36 @@
 
 Every public mojolearn algorithm (python/mojolearn/__init__.py `__all__`, the ten `_expansion_*.py` doors, and the functions of mojolearn.linalg, resample, training) against the board's race ids (`python3 tools/bench_board.py --dry-run --vendor <v>`), 2026-09-29, branch lane/bench-board-m3ultra. Configuration objects, state containers, GP kernel objects, GBDT loss objects, modules and runtime switches are not algorithms and are not listed.
 
-Every lane is planned on all three vendors (apple, nvidia, amd): the same 244 lanes and 439 races on each. Only the ARMS differ by vendor: cuML, cuVS, cuGraph, CuPy, implicit-gpu and xgboost-gpu are CUDA only; torch TF32 arms are NVIDIA only; our FAST arm races on Apple only (NVIDIA and AMD race IDENTICAL, plus ours-cpu everywhere).
+Every lane is planned on all three vendors (apple, nvidia, amd): the same 264 lanes and 464 races on each (2026-09-29, branch lane/bench-board-harness). Only the ARMS differ by vendor: cuML, cuVS, cuGraph, CuPy, implicit-gpu and xgboost-gpu are CUDA only; torch TF32 arms are NVIDIA only; our FAST arm races on Apple only (NVIDIA and AMD race IDENTICAL, plus ours-cpu everywhere).
 
 | | count |
 |---|---|
 | public algorithms listed | 260 |
 | raced before 2026-09-29 | 215 |
 | added 2026-09-29 (new lanes) | 27 |
-| not raced (reason below) | 18 |
+| added 2026-09-29, second pass (the 15 whose reason was not good) | 15 |
+| not raced (reason below) | 1 |
+| EXCLUDED (Andrew, 2026-09-29): multi-GPU, not raced | 2 |
 
 ## The 13 families (README.md, "Algorithms")
 
 The board's own five driver families are trees, classical, classical2, neural and algos; the README's 13 algorithm families cut across them:
 
-| family | algorithms listed | raced | not raced |
-|---|---|---|---|
-| boosting | 7 | 6 | 1 |
-| trees and ensembles | 19 | 19 | 0 |
-| clustering | 12 | 12 | 0 |
-| neighbors, density and search | 20 | 19 | 1 |
-| linear models | 27 | 26 | 1 |
-| kernel methods and Gaussian processes | 14 | 14 | 0 |
-| decomposition and manifold | 30 | 29 | 1 |
-| time series | 18 | 17 | 1 |
-| preprocessing, probabilistic models and resampling | 40 | 39 | 1 |
-| neural blocks and optimizers | 41 | 35 | 6 |
-| convolutional and graph networks | 15 | 15 | 0 |
-| language models and tokenization | 6 | 1 | 5 |
-| linear algebra | 11 | 10 | 1 |
+| family | algorithms listed | raced | not raced | excluded |
+|---|---|---|---|---|
+| boosting | 7 | 7 | 0 | 0 |
+| trees and ensembles | 19 | 19 | 0 | 0 |
+| clustering | 12 | 12 | 0 | 0 |
+| neighbors, density and search | 20 | 19 | 0 | 1 |
+| linear models | 27 | 27 | 0 | 0 |
+| kernel methods and Gaussian processes | 14 | 14 | 0 | 0 |
+| decomposition and manifold | 30 | 30 | 0 | 0 |
+| time series | 18 | 18 | 0 | 0 |
+| preprocessing, probabilistic models and resampling | 40 | 39 | 1 | 0 |
+| neural blocks and optimizers | 41 | 41 | 0 | 0 |
+| convolutional and graph networks | 15 | 15 | 0 | 0 |
+| language models and tokenization | 6 | 5 | 0 | 1 |
+| linear algebra | 11 | 11 | 0 | 0 |
 
 ## Table
 
@@ -41,7 +43,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | DARTRegressor | boosting | algos/dart-reg | lightgbm-cpu; xgboost-cpu; xgboost-gpu (nvidia) | apple, nvidia, amd | raced |
 | GradientBoosting | boosting | trees/gbdt-symmetric, trees/gbdt-depthwise, trees/gbdt-lossguide, trees/gbdt-rank-yetirank, trees/gbdt-rank-pairlogit, trees/gbdt-multiclass, trees/gbdt-categorical | catboost-cpu (apple, amd); catboost-gpu (nvidia) (per lane) | apple, nvidia, amd | raced |
 | GradientBoostingClassifier / GradientBoostingRegressor | boosting | trees/gbdt-symmetric | catboost-cpu (apple, amd); catboost-gpu (nvidia) | apple, nvidia, amd | raced (scikit-learn-shaped doors over GradientBoosting: raced through the gbdt-* lanes' engine) |
-| Ordered boosting (GradientBoosting boosting_type='Ordered') | boosting | none | | | NOT RACED: every gbdt-* lane runs Plain; an Ordered lane belongs in tools/speed_gbdt_arm.py's TASK_LANES (opponent: CatBoost boosting_type='Ordered') |
+| Ordered boosting (GradientBoosting boosting_type='Ordered') | boosting | trees/gbdt-ordered | catboost-cpu (apple, amd); catboost-gpu (nvidia) | apple, nvidia, amd | raced |
 | BaggingClassifier | trees and ensembles | algos/bagging-clf | sklearn-cpu | apple, nvidia, amd | raced |
 | BaggingRegressor | trees and ensembles | algos/bagging-reg | sklearn-cpu | apple, nvidia, amd | raced |
 | CalibratedClassifierCV | trees and ensembles | algos/calibrated | sklearn-cpu | apple, nvidia, amd | raced |
@@ -92,7 +94,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | PageRank | neighbors, density and search | algos/pagerank | networkx-cpu; cugraph-gpu (nvidia) | apple, nvidia, amd | raced |
 | RadiusNeighbors | neighbors, density and search | algos/radius-neighbors | sklearn-cpu | apple, nvidia, amd | added 2026-09-29 |
 | refine | neighbors, density and search | algos/ivf-refine | faiss-cpu; cuvs-gpu (nvidia) | apple, nvidia, amd | raced (the re-rank step the ivf-refine lane times) |
-| DistributedIVFIndex and parallel_* modules | neighbors, density and search | none | | | NOT RACED: multi-GPU wrappers: the board is one GPU per box (opponent: faiss sharded indexes / Dask-ML) |
+| DistributedIVFIndex and parallel_* modules | neighbors, density and search | none | | | EXCLUDED (Andrew, 2026-09-29): multi-GPU, not raced |
 | ARDRegression | linear models | algos/ard | sklearn-cpu | apple, nvidia, amd | raced |
 | BayesianRidge | linear models | algos/bayesian-ridge | sklearn-cpu | apple, nvidia, amd | raced |
 | ElasticNet | linear models | classical2/elasticnet | cuml-gpu (nvidia); sklearn-cpu (apple, amd) | apple, nvidia, amd | raced |
@@ -119,7 +121,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | SGDOneClassSVM | linear models | algos/sgd-ocsvm | sklearn-cpu | apple, nvidia, amd | raced |
 | SGDRegressor | linear models | algos/sgd-reg | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | TweedieRegressor | linear models | algos/tweedie | sklearn-cpu | apple, nvidia, amd | raced |
-| QNRegressor | linear models | none | | | NOT RACED: same-algorithm opponent is cuML-internal; scikit-learn's LinearRegression / QuantileRegressor take other parameter sets (opponent: cuML's internal QN solver) |
+| QNRegressor | linear models | algos/qn-reg | sklearn-cpu (LinearRegression); cuml-gpu (cuml.solvers.QN, nvidia) | apple, nvidia, amd | raced |
 | AdditiveChi2Sampler | kernel methods and Gaussian processes | algos/additive-chi2 | sklearn-cpu | apple, nvidia, amd | raced |
 | GaussianProcessClassifier | kernel methods and Gaussian processes | classical2/gpc | sklearn-cpu | apple, nvidia, amd | raced |
 | GaussianProcessRegressor | kernel methods and Gaussian processes | classical2/gpr | sklearn-cpu | apple, nvidia, amd | raced |
@@ -163,7 +165,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | TruncatedSVD | decomposition and manifold | classical2/tsvd | cuml-gpu (nvidia); sklearn-cpu (apple, amd) | apple, nvidia, amd | raced |
 | TSNE | decomposition and manifold | algos/tsne | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | UMAP | decomposition and manifold | classical2/umap | cuml-gpu (nvidia); umap-learn-cpu (apple, amd); umap-learn-cpu-unseeded (apple, amd) | apple, nvidia, amd | raced |
-| johnson_lindenstrauss_min_dim | decomposition and manifold | none | | | NOT RACED: a closed-form integer: nothing to time |
+| johnson_lindenstrauss_min_dim | decomposition and manifold | algos/jl-min-dim | sklearn-cpu | apple, nvidia, amd | raced |
 | ARIMA | time series | classical2/arima | statsmodels-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | AutoARIMA | time series | algos/autoarima | statsforecast-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | AutoTheta | time series | algos/auto-theta | statsforecast-cpu | apple, nvidia, amd | added 2026-09-29 |
@@ -181,7 +183,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | STL | time series | algos/stl | statsmodels-cpu | apple, nvidia, amd | raced |
 | Theta | time series | algos/theta | statsforecast-cpu; statsmodels-cpu | apple, nvidia, amd | raced |
 | VAR | time series | algos/var | statsmodels-cpu | apple, nvidia, amd | raced |
-| kpss_test / select_d | time series | none | | | NOT RACED: timed inside algos/autoarima (d chosen by KPSS); statsmodels' kpss uses another lag rule (opponent: pmdarima (not pinned); statsmodels kpss) |
+| kpss_test / select_d | time series | algos/kpss, algos/select-d | statsmodels-cpu (kpss, ours' lag count passed) | apple, nvidia, amd | raced |
 | BernoulliNB | preprocessing, probabilistic models and resampling | algos/bernoulli-nb | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | Binarizer | preprocessing, probabilistic models and resampling | algos/binarizer | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | CategoricalNB | preprocessing, probabilistic models and resampling | algos/categorical-nb | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
@@ -221,7 +223,7 @@ The board's own five driver families are trees, classical, classical2, neural an
 | StandardScaler | preprocessing, probabilistic models and resampling | algos/standard-scaler | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | added 2026-09-29 |
 | TargetEncoder | preprocessing, probabilistic models and resampling | algos/target-encoder | sklearn-cpu; cuml-gpu (nvidia) | apple, nvidia, amd | raced |
 | VarianceThreshold | preprocessing, probabilistic models and resampling | algos/variance-threshold | sklearn-cpu | apple, nvidia, amd | raced |
-| resample.monte_carlo_integrate | preprocessing, probabilistic models and resampling | none | | | NOT RACED: no pinned library has the same seeded volume-times-mean integrator (opponent: none) |
+| resample.monte_carlo_integrate | preprocessing, probabilistic models and resampling | none | | | NOT RACED: no pinned library has a plain seeded Monte Carlo integrator (numpy and torch have none; scipy.integrate.qmc_quad is quasi-Monte Carlo over a QMCEngine) (opponent: none) |
 | Adafactor | neural blocks and optimizers | algos/adafactor | torch-compile-fp32; torch-eager-fp32 | apple, nvidia, amd | raced |
 | Adagrad | neural blocks and optimizers | algos/adagrad | torch-compile-fp32; torch-eager-fp32 | apple, nvidia, amd | raced |
 | Adam | neural blocks and optimizers | algos/adam | torch-compile-fp32; torch-eager-fp32 | apple, nvidia, amd | added 2026-09-29 |
@@ -257,12 +259,12 @@ The board's own five driver families are trees, classical, classical2, neural an
 | SmallMLPTrainer | neural blocks and optimizers | neural/mlp-train-step | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | TransformerBlock | neural blocks and optimizers | neural/transformer-forward | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | TransformerBlockInference | neural blocks and optimizers | neural/transformer-infer | torch-cpu-compile-bf16; torch-cpu-compile-fp32; torch-cpu-eager-bf16; torch-cpu-eager-fp32 | apple, nvidia, amd | raced |
-| clip_grad_norm_ | neural blocks and optimizers | none | | | NOT RACED: a norm and a scale; not raced alone (opponent: torch.nn.utils.clip_grad_norm_) |
-| cross_entropy (and training.* forward/backward helpers) | neural blocks and optimizers | none | | | NOT RACED: components timed inside neural/lm-train-step and neural/samba-train-step, not raced alone (opponent: torch.nn.functional) |
-| ExponentialLR | neural blocks and optimizers | none | | | NOT RACED: a scalar per step: nothing to time |
-| OneCycleLR | neural blocks and optimizers | none | | | NOT RACED: a scalar per step: nothing to time |
-| StepLR | neural blocks and optimizers | none | | | NOT RACED: a scalar per step: nothing to time |
-| training LR schedules (ConstantLR, WarmupLinearLR, WarmupCosineLR) | neural blocks and optimizers | none | | | NOT RACED: a scalar per step: nothing to time (opponent: torch.optim.lr_scheduler) |
+| clip_grad_norm_ | neural blocks and optimizers | algos/clip-grad-norm | torch-eager-fp32; torch-compile-fp32 | apple, nvidia, amd | raced |
+| cross_entropy (and training.* forward/backward helpers) | neural blocks and optimizers | algos/cross-entropy | torch-eager-fp32; torch-compile-fp32 | apple, nvidia, amd | raced |
+| ExponentialLR | neural blocks and optimizers | algos/lr-exponential | torch-cpu (torch.optim.lr_scheduler) | apple, nvidia, amd | raced |
+| OneCycleLR | neural blocks and optimizers | algos/lr-onecycle | torch-cpu (torch.optim.lr_scheduler) | apple, nvidia, amd | raced |
+| StepLR | neural blocks and optimizers | algos/lr-step | torch-cpu (torch.optim.lr_scheduler) | apple, nvidia, amd | raced |
+| training LR schedules (ConstantLR, WarmupLinearLR, WarmupCosineLR) | neural blocks and optimizers | algos/lr-constant, algos/lr-warmup-linear, algos/lr-warmup-cosine | torch-cpu (LinearLR, SequentialLR, CosineAnnealingLR) | apple, nvidia, amd | raced |
 | AdaptiveAvgPool2d | convolutional and graph networks | algos/global-avgpool | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | AdaptiveMaxPool2d | convolutional and graph networks | algos/global-maxpool | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | AvgPool1d | convolutional and graph networks | algos/avgpool1d | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
@@ -279,11 +281,11 @@ The board's own five driver families are trees, classical, classical2, neural an
 | MaxPool2d | convolutional and graph networks | algos/maxpool2d | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | SAGEConv | convolutional and graph networks | algos/graphsage | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | LanguageModelTrainer | language models and tokenization | neural/lm-train-step, neural/lm-forward | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
-| BpeTokenizer (GPT2Tokenizer) | language models and tokenization | none | | | NOT RACED: not on the board (opponent: Hugging Face tokenizers (not pinned)) |
-| LanguageModelHostTrainer | language models and tokenization | none | | | NOT RACED: not on the board (opponent: torch on the CPU) |
-| LanguageModelInference | language models and tokenization | none | | | NOT RACED: not on the board: the neural family races the trainer's forward (lm-forward), not the host inference class (opponent: torch (HF-style decode) on the CPU) |
-| ParallelByteLanguageModelTrainer / ParallelNeuralTrainer / PooledByteLanguageModelTrainer / OffloadedByteLanguageModelTrainer | language models and tokenization | none | | | NOT RACED: multi-GPU: the board is one GPU per box (opponent: torch DDP / FSDP) |
-| SmallByteLanguageModelTrainer | language models and tokenization | none | | | NOT RACED: not on the board (opponent: torch) |
+| BpeTokenizer (GPT2Tokenizer) and BpeVocabularyTrainer | language models and tokenization | algos/bpe-encode, algos/bpe-train | hf-tokenizers-cpu (tokenizers==0.23.2) | apple, nvidia, amd | raced |
+| LanguageModelHostTrainer | language models and tokenization | neural/lm-host-train-step | torch-cpu-* | apple, nvidia, amd | raced |
+| LanguageModelInference | language models and tokenization | neural/lm-infer | torch-cpu-* | apple, nvidia, amd | raced |
+| ParallelByteLanguageModelTrainer / ParallelNeuralTrainer / PooledByteLanguageModelTrainer / OffloadedByteLanguageModelTrainer | language models and tokenization | none | | | EXCLUDED (Andrew, 2026-09-29): multi-GPU, not raced |
+| SmallByteLanguageModelTrainer | language models and tokenization | neural/lm-train-step, neural/lm-forward | torch-* (it IS LanguageModelTrainer, language_model.py) | apple, nvidia, amd | raced |
 | Cholesky | linear algebra | algos/cholesky | numpy-cpu; torch-gpu; cupy-gpu (nvidia) | apple, nvidia, amd | added 2026-09-29 |
 | linalg.eigh | linear algebra | algos/eigh | numpy-cpu; torch-gpu; cupy-gpu (nvidia) | apple, nvidia, amd | added 2026-09-29 |
 | linalg.qr | linear algebra | algos/qr | numpy-cpu; torch-gpu; cupy-gpu (nvidia) | apple, nvidia, amd | added 2026-09-29 |
@@ -294,4 +296,4 @@ The board's own five driver families are trees, classical, classical2, neural an
 | matmul | linear algebra | neural/gemm | torch-compile-bf16; torch-compile-fp32; torch-eager-bf16; torch-eager-fp32; torch-compile-tf32 (nvidia); torch-eager-tf32 (nvidia) | apple, nvidia, amd | raced |
 | randomized_svd | linear algebra | algos/randomized-svd | sklearn-cpu; torch-gpu | apple, nvidia, amd | raced |
 | solve | linear algebra | algos/lu-solve | numpy-cpu; torch-gpu; cupy-gpu (nvidia) | apple, nvidia, amd | raced |
-| linalg.matmul_bf16 / linalg.matmul_int8 | linear algebra | none | | | NOT RACED: not on the board: neural/gemm races fp32 matmul only (opponent: torch bf16 matmul / torch._int_mm) |
+| linalg.matmul_bf16 / linalg.matmul_int8 | linear algebra | neural/gemm-bf16, neural/gemm-int8 | torch-*-bf16; torch-*-int8 (torch._int_mm, nvidia only; ours alone on apple and amd) | apple, nvidia, amd | raced |
