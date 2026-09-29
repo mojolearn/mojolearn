@@ -2195,6 +2195,29 @@ def build_parser():
     return p
 
 
+_DRIVER_KEY = {"trees": "tree_driver", "classical": "classical_driver", "classical2": "more_driver",
+               "neural": "neural_driver", "algos": "algos_driver"}
+
+
+def _driver_has_params_check(ctx, family):
+    """Does this family's driver call tools/bench_board_params.py? A finished
+    race whose record has no MATCHED check is run again once it does, so every
+    race on the board ends up checked (Andrew, 2026-09-29: same seed, same
+    tuning parameters, enforced). The trees family's arms are built in
+    tools/speed_gbdt_arm.py, which is searched too."""
+    paths = [ctx.get(_DRIVER_KEY.get(family, ""), "")]
+    if family == "trees":
+        paths.append(os.path.join(HERE, "speed_gbdt_arm.py"))
+    for p in paths:
+        try:
+            with open(p, errors="replace") as fh:
+                if "bench_board_params" in fh.read():
+                    return True
+        except OSError:
+            pass
+    return False
+
+
 def _rerun_wanted(args, race_id, prev):
     """--rerun: a finished race whose id starts with one of the prefixes and
     that finished before --rerun-before (UTC, ISO) runs again. The earlier
@@ -2434,7 +2457,13 @@ def main(argv=None):
     todo = []
     for r in races:
         prev = result["races"].get(r["id"])
-        if prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
+        if prev and prev.get("status") == "done" and prev.get("params_check") != "MATCHED" \
+                and _driver_has_params_check(ctx, r["family"]):
+            print("bench_board: RERUN %s (done %s without a MATCHED parameter check: %s; its "
+                  "driver now has the check)" % (r["id"], prev.get("finished"),
+                                                 prev.get("params_check") or "NOT CHECKED"), flush=True)
+            result.setdefault("superseded", []).append(prev)
+        elif prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
             print("bench_board: skip %s (done %s)" % (r["id"], prev.get("finished")), flush=True)
             continue
         if prev and prev.get("status") == "done":
