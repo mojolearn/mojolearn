@@ -1687,9 +1687,19 @@ def neural_round_seconds(shape):
     return 600 if shape == "small" else 1800
 
 
+def neural_warmup_seconds(shape, rsec):
+    """The warm-up is a torch.compile arm's compile: on the full shape the
+    Samba train step's inductor compile took 617 s (fp32) and over 1800 s
+    (bf16 autocast) on an L40S (2026-09-29), where 1800 s refused
+    torch-compile-bf16 by timeout. The opponent keeps its compile outside the
+    clock, however long it takes: 2 h on the full shape."""
+    return rsec if shape == "small" else max(rsec, 7200)
+
+
 def neural_cmd(ctx, race):
     """tools/bench_board_neural.py race for one neural lane."""
     rsec = ctx["round_seconds"] or neural_round_seconds(race.get("shape"))
+    wsec = neural_warmup_seconds(race.get("shape"), rsec)
     cmd = [ctx["python"], "-u", ctx["neural_driver"], "race",
            "--lane", race["lane"], "--shape", race.get("shape") or "full",
            "--arms", ",".join(race["arms"]),
@@ -1698,10 +1708,10 @@ def neural_cmd(ctx, race):
            "--work", os.path.join(ctx["out"], "work"),
            "--ours-python", shlex.quote(ctx["python"]),
            "--theirs-python", shlex.quote(ctx["python"]),
-           "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
+           "--ready-seconds", str(rsec), "--warmup-seconds", str(wsec),
            "--round-seconds", str(rsec)]
     n = len(race["arms"])
-    ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    ceiling = 600 + (rsec + wsec) * n + rsec * ctx["rounds"] * n + 900
     return cmd, {}, ceiling
 
 

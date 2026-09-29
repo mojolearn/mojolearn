@@ -1369,3 +1369,15 @@ def test_full_board_starts_after_a_smoke_pass(env):
     assert _run(env, "--rows", "full") == 0
     res = json.loads((env["out"] / "board.json").read_text())
     assert res["config"]["smoke_gate"].startswith("passed")
+
+
+def test_neural_full_shape_gives_a_compile_its_warmup():
+    ctx = {"round_seconds": 0, "python": "py", "neural_driver": "d", "rounds": 1, "out": "/o"}
+    race = {"lane": "samba-train-step", "shape": "full", "arms": ["ours", "torch-compile-bf16"]}
+    cmd, _, ceiling = bb.neural_cmd(ctx, race)
+    assert cmd[cmd.index("--warmup-seconds") + 1] == "7200"
+    assert cmd[cmd.index("--round-seconds") + 1] == "1800"
+    assert ceiling >= 2 * 7200
+    race["shape"] = "small"
+    cmd, _, _ = bb.neural_cmd(ctx, race)
+    assert cmd[cmd.index("--warmup-seconds") + 1] == cmd[cmd.index("--round-seconds") + 1]
