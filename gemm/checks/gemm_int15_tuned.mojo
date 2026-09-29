@@ -58,10 +58,11 @@ the column exponent is read at the row index. Every one reaches both paths.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
+from checks.kernel_matrix import COLUMN_AMD, TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
 from gemm.checks.gemm_identical import step_count_device_alloc, step_count_sync
 from gemm.checks.gemm_int15 import INT15_TPB, identical_gemm_int15_mma_into
 from gemm.checks.gemm_int15_epilogue import int15_epilogue_sabotage_name, int15_store_cell
+from gemm.checks.gemm_int8_mma_amd import identical_gemm_int8_pieces_amd_fused_into
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
     int8_pieces_dispatch,
@@ -268,7 +269,18 @@ def identical_gemm_int15_tuned_into(
         if not int15_tuned_admits(m, n, k):
             identical_gemm_int15_mma_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
             return
-        identical_gemm_int15_tuned_with_plan(ctx, c, ah, al, ea, bh, bl, eb, work, m, n, k, int8_pieces_dispatch(m, n, k))
+        comptime if TARGET_COLUMN == COLUMN_AMD and not INT15_FUSED_IS_STUB:
+            # THE AMD COLUMN (lane/lowbit-amd-tuned, MI325X job
+            # 1790659453776): the fused form on the plan the MI325X measured
+            # least for a wavefront of 64. At the decode rows that is a
+            # kernel the tuned file does not have (nothing staged, 16-byte
+            # loads): the int8 stand-in's fused operation 0.45 to 0.89 of
+            # fp32.v1 there against 0.71 to 2.02 on the tuned file's plan.
+            # The same bits (gemm_int8_mma_amd_check.mojo gates every AMD
+            # plan's fused form against the host's seam).
+            identical_gemm_int8_pieces_amd_fused_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
+        else:
+            identical_gemm_int15_tuned_with_plan(ctx, c, ah, al, ea, bh, bl, eb, work, m, n, k, int8_pieces_dispatch(m, n, k))
 
 
 def identical_gemm_int15_tuned_two_launch_into(
