@@ -309,3 +309,44 @@ def test_invalidate_memory_withdraws_only_torch_counter_figures(tmp_path, monkey
     latest = bb.STORE.load(str(store))
     assert list(latest.values())[0]["cell"]["peak_gpu_mb"] is None
     assert bb.invalidate_memory(str(out), "trees/,neural/", "wrong counter", "abc123", str(store)) == (0, 0)
+
+
+def test_invalidate_arm_refuses_its_cells_and_recomputes_ratios(tmp_path, monkeypatch):
+    """--invalidate-arm: every finished cell of the arm (fit and inference, and
+    its store records of this vendor) becomes REFUSED(reason) with its times
+    withdrawn; the race's other cells and ratios stay right; a second pass
+    changes nothing."""
+    def cell(arm, lib, ms, **kw):
+        return dict({"arm": arm, "library": lib, "mode": "identical" if lib == "mojolearn" else "opponent",
+                     "status": "ok", "median_ms": ms, "min_ms": ms, "max_ms": ms, "times_ms": [ms],
+                     "rounds": 1, "quality": {"auc": 0.6}}, **kw)
+    cells = [cell("ours", "mojolearn", 50.0), cell("xgboost-gpu", "xgboost", 100.0),
+             cell("xgboost-cpu", "xgboost", 200.0)]
+    infer = [cell("ours", "mojolearn", 5.0, batch="test"), cell("xgboost-gpu", "xgboost", 10.0, batch="test")]
+    bb.add_ratios(cells)
+    races = {"trees/gbdt-depthwise/taxi/rows=full": {"status": "done", "cells": cells, "infer_cells": infer},
+             "trees/gbdt-symmetric/taxi/rows=full": {"status": "done", "cells": [cell("ours", "mojolearn", 1.0)]}}
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "board.json").write_text(json.dumps({"races": races}))
+    store = tmp_path / "opponent-store.jsonl"
+    rows = [{"key": {"arm": "xgboost-gpu", "vendor": "amd", "lane": "gbdt-depthwise", "box": "a"},
+             "cell": cell("xgboost-gpu", "xgboost", 100.0)},
+            {"key": {"arm": "xgboost-gpu", "vendor": "nvidia", "lane": "gbdt-depthwise", "box": "n"},
+             "cell": cell("xgboost-gpu", "xgboost", 7.0)}]
+    store.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    monkeypatch.setattr(bb, "write_board", lambda o, r: None)
+    why = "PyPI xgboost is a CUDA build; on AMD it trained on the CPU"
+    assert bb.invalidate_arm(str(out), "xgboost-gpu", why, str(store), vendor="amd") == (2, 1)
+    r = json.loads((out / "board.json").read_text())["races"]["trees/gbdt-depthwise/taxi/rows=full"]
+    c = {x["arm"]: x for x in r["cells"]}
+    g = c["xgboost-gpu"]
+    assert g["status"] == "REFUSED(%s)" % why and g["median_ms"] is None and g["times_ms"] == []
+    assert g["withdrawn"]["median_ms"] == 100.0 and g["ratio_ours_identical_over"] is None
+    assert c["xgboost-cpu"]["ratio_ours_identical_over"] == 0.25 and c["xgboost-cpu"]["status"] == "ok"
+    assert c["ours"]["median_ms"] == 50.0
+    i = {x["arm"]: x for x in r["infer_cells"]}
+    assert i["xgboost-gpu"]["status"].startswith("REFUSED(") and i["ours"]["median_ms"] == 5.0
+    latest = {v["key"]["vendor"]: v for v in bb.STORE.load(str(store)).values()}
+    assert latest["amd"]["cell"]["status"].startswith("REFUSED(") and latest["nvidia"]["cell"]["median_ms"] == 7.0
+    assert bb.invalidate_arm(str(out), "xgboost-gpu", why, str(store), vendor="amd") == (0, 0)
