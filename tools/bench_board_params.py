@@ -284,6 +284,63 @@ EXCEPTIONS = [
     ("ets", "seed", "*", "no Holt-Winters takes a seed argument (deterministic): ours, "
      "statsmodels, cuML"),
     ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed; ours and faiss get 7"),
+    # ---- neural (tools/bench_board_neural.py; lane ids "neural/<lane>")
+    ("neural/*", "seed", "ours*", "ours' neural classes take no seed argument: every parameter "
+     "and input of every arm is the conductor's default_rng(7) file; torch arms call "
+     "torch.manual_seed(7)"),
+    # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>")
+] + [
+    ("algos/" + lane, "seed", "*", "deterministic given its inputs: no arm of this lane (ours, "
+     "scikit-learn or the function-call opponent) takes a seed argument")
+    for lane in ("poisson", "gamma", "tweedie", "huber", "bayesian-ridge", "ard", "quantile",
+                 "ridge-cv", "isotonic", "meanshift", "optics", "lof", "nearest-centroid", "ocsvm",
+                 "additive-chi2", "label-propagation", "label-spreading", "knn-imputer",
+                 "incremental-pca", "cca", "pls-canonical", "pls", "isomap", "robust-scaler",
+                 "maxabs-scaler", "power-transformer", "normalizer", "binarizer", "poly-features",
+                 "spline", "onehot", "ordinal", "variance-threshold", "simple-imputer",
+                 "label-encoder", "label-binarizer", "multilabel-binarizer", "select-f-classif",
+                 "select-chi2", "select-f-regression", "select-mutual-info", "rfe", "gaussian-nb",
+                 "bernoulli-nb", "categorical-nb", "multinomial-nb", "complement-nb", "lda-clf",
+                 "qda", "voting-clf", "voting-reg", "stacking-clf", "stacking-reg",
+                 "multioutput-clf", "multioutput-reg", "ovr", "calibrated", "classical-mds",
+                 "pagerank", "connected-components", "lu-solve", "lstsq",
+                 "autoarima", "stl", "var", "theta", "croston", "damped-ets", "garch", "prophet",
+                 "rmsprop", "adagrad", "adamax", "nadam", "adafactor", "lion", "lamb")
+] + [
+    ("algos/" + lane, "seed", "ours*", "ours' layer has no weights to draw and takes no seed; the "
+     "torch arm calls torch.manual_seed(7) and both read the same seed-7 input")
+    for lane in ("layernorm", "maxpool2d", "avgpool2d", "maxpool1d", "avgpool1d", "batchnorm1d",
+                 "batchnorm2d", "global-avgpool", "global-maxpool")
+] + [
+    ("algos/svgp", "seed", "ours*", "ours' SVGP takes no seed: fixed inducing points and "
+     "hyperparameters, q(u) in closed form; nothing is drawn"),
+    ("algos/louvain", "seed", "cugraph-gpu", "cuGraph louvain takes no seed; ours and networkx get 7"),
+    ("algos/cagra", "seed", "faiss-cpu", "faiss IndexHNSWFlat takes no seed argument (its level "
+     "draw uses faiss' fixed internal seed)"),
+] + [
+    ("algos/" + lane, "seed", "cuvs-gpu", "cuVS IndexParams take no seed; ours and faiss get 7")
+    for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
+] + [
+    ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
+     "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
+    ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
+     "no leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
+    ("algos/mds", "metric", "sklearn-cpu", "the same metric MDS on Euclidean distances, spelled "
+     "differently: ours metric='euclidean' (scikit-learn 1.9's name), the pinned scikit-learn "
+     "1.7.2 metric=True with dissimilarity='euclidean'"),
+    ("algos/tsne", "init", "cuml-gpu", "cuML TSNE takes only init='random' and draws its own "
+     "start; ours and scikit-learn start from the same seed-7 array"),
+    ("algos/tsne", "learning_rate", "cuml-gpu", "cuML names its rate schedule "
+     "learning_rate_method='adaptive'; ours and scikit-learn learning_rate='auto'"),
+    ("algos/sgd-clf", "learning_rate", "cuml-gpu", "cuML MBSGD has no 'optimal' schedule and runs "
+     "'constant' eta0=0.001"),
+    ("algos/sgd-clf", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=20, not max_iter"),
+    ("algos/sgd-clf", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
+     "and scikit-learn tol=None"),
+    ("algos/sgd-reg", "max_iter", "cuml-gpu", "cuML MBSGD reads epochs=20, not max_iter"),
+    ("algos/sgd-reg", "tol", "cuml-gpu", "cuML MBSGD tol=0.0 is its no-early-stop value; ours "
+     "and scikit-learn tol=None"),
+    ("algos/sgd-reg", "loss", "cuml-gpu", "cuML spells squared error 'squared_loss'"),
 ]
 
 

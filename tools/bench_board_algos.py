@@ -2833,8 +2833,10 @@ def _build_ann(lane, arm, D):
                 S["ind"] = refine_fn(X, Q, cand, k)[1]
             else:
                 S["ind"] = S["e"].search(Q)[1]
-        return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer,
-                      record=dict(kw, __library__="mojolearn"))
+        rec = dict(kw, __library__="mojolearn")
+        if t == "ivf-refine":           # k results after a re-rank of k x refine_ratio candidates
+            rec.update(n_neighbors=k, refine_ratio=p["refine_ratio"])
+        return Runner(info, fit, lambda: {"ind": _arr(S["ind"], np.int64)}, infer, record=rec)
     if arm == "faiss-cpu":
         import faiss
         info = {"library": "faiss", "version": faiss.__version__, "device": "cpu",
