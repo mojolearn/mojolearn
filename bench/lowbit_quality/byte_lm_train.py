@@ -520,6 +520,7 @@ def self_test(args, corpus, device):
 
 
 def main(argv=None):
+    global ZERO_CODE_WIDTHS
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
@@ -540,7 +541,6 @@ def main(argv=None):
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--commit", default="unknown")
     args = ap.parse_args(argv)
-    global ZERO_CODE_WIDTHS
     ZERO_CODE_WIDTHS = tuple(w for w in args.zero_code_widths.split(",") if w)
     runs = plan(args)
     if args.print_plan:
