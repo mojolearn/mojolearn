@@ -1431,3 +1431,32 @@ def test_no_mamba_ssm_neither_plans_nor_installs_the_arms(tmp_path, monkeypatch)
                                          "--families", "neural", "--no-mamba-ssm"])
     bb.setup_python(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
     assert not any("mamba-ssm" in " ".join(c) or "causal-conv1d" in " ".join(c) for c in cmds)
+
+
+def test_stop_at_clips_a_race_and_records_a_timeout_by_name(monkeypatch):
+    # a race still running at the job's own stop is killed by the board and
+    # recorded as a TIMEOUT by name (not cut with nothing recorded, then
+    # started again by every later copy)
+    monkeypatch.setattr(bb.time, "time", lambda: 1000.0)
+    rec = {}
+    assert bb._stop_ceiling({"stop_at": None}, rec, 5000) == 5000 and rec == {}
+    assert bb._stop_ceiling({"stop_at": 1000 + 9000}, rec, 5000) == 5000 and rec == {}
+    assert bb._stop_ceiling({"stop_at": 1000 + 1200}, rec, 5000) == 1200
+    clip = rec["stop_clipped"]
+    assert clip["race_ceiling_s"] == 5000 and clip["ceiling_s"] == 1200
+    cells = [{"arm": "ours", "status": "UNKNOWN(no race json, rc 124)"},
+             {"arm": "sklearn-cpu", "status": "UNKNOWN(no race json, rc 124)"},
+             {"arm": "ours-fast", "status": "ok"}]
+    out = bb.stopped_cells(cells, clip)
+    assert [c["status"].startswith("TIMEOUT(still running at the job's stop") for c in out] == \
+        [True, True, False]
+    assert out[2]["status"] == "ok"
+
+
+def test_stop_at_is_a_board_option():
+    args = bb.build_parser().parse_args(["--stop-at", "12345"])
+    assert args.stop_at == 12345
+    src = open(os.path.join(HERE, "bench_board.py")).read()
+    assert '"stop_at": args.stop_at' in src
+    # every race family's process ceiling goes through the clip
+    assert src.count("_stop_ceiling(ctx, rec,") - src.count("def _stop_ceiling(ctx, rec,") == 5
