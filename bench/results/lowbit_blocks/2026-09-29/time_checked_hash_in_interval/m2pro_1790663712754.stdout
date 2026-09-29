@@ -1,0 +1,38 @@
+model /Users/ec2-user/models/SmolLM2-360M
+== build build
+build build exit 0
+ld: warning: object file (/private/var/folders/m5/mhddkc2d6c5_3f_vljmqvq_40000gn/T/mojo_archive-43c0b6d.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)
+== build build_linalg
+build build_linalg exit 0
+ld: warning: object file (/private/var/folders/m5/mhddkc2d6c5_3f_vljmqvq_40000gn/T/mojo_archive-9bf3dab.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built python/mojolearn/identical/_mojolearn_linalg.so (kernel-launch smoke skipped; binary checks ran)
+== build build_training
+build build_training exit 0
+    core               2
+built python/mojolearn/identical/_mojolearn_training.so (kernel-launch smoke skipped; binary checks ran)
+== build build_transformer
+build build_transformer exit 0
+    checks             0
+built python/mojolearn/identical/_mojolearn_transformer.so (kernel-launch smoke skipped; binary checks ran)
+== build build_byte_lm
+build build_byte_lm exit 0
+ld: warning: object file (/private/var/folders/m5/mhddkc2d6c5_3f_vljmqvq_40000gn/T/mojo_archive-e11080c.a) was built for newer 'macOS' version (26.0) than being linked (11.0)
+built python/mojolearn/identical/_mojolearn_byte_lm.so; attention_memory_profile=estash; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence
+== run fp32_v1 auto time
+model SmolLM2-360M profile fp32_v1 device gpu vendor metal load 0.9 s
+RESULT time box=m2pro profile=fp32_v1 prefill512 1106.2 ms decode 573.25 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fp32_v1_gpu.json
+== run fixed15_v1 auto time
+model SmolLM2-360M profile fixed15_v1 device gpu vendor metal load 1.5 s
+RESULT time box=m2pro profile=fixed15_v1 prefill512 4988.3 ms decode 1496.32 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fixed15_v1_gpu.json
+== run fp32_v1 auto time
+model SmolLM2-360M profile fp32_v1 device gpu vendor metal load 0.8 s
+RESULT time box=m2pro profile=fp32_v1 prefill512 1138.3 ms decode 576.56 ms/token  outputs AGREE prefill512_sha256=da9825e377588fcb decode32_sha256=2887098d1f90cd1d
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fp32_v1_gpu.json
+== run fixed15_v1 auto time
+model SmolLM2-360M profile fixed15_v1 device gpu vendor metal load 1.4 s
+RESULT time box=m2pro profile=fixed15_v1 prefill512 4948.5 ms decode 1493.34 ms/token  outputs AGREE prefill512_sha256=c55e4ce6d5e155d9 decode32_sha256=1c2876958e46b7d3
+wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model/model_m2pro_fixed15_v1_gpu.json
+out /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_blocks/m2pro/model
