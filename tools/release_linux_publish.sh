@@ -150,9 +150,12 @@ fi
 
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
 # Choose explicitly: old calls keep full certification, receipts use bounded admission.
+DISPATCHED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
 sleep 20
-RUN=$(gh run list --workflow release-provenance.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+RUN=$(gh run list --workflow release-provenance.yml --branch "$TAG" --event workflow_dispatch \
+  --created ">=$DISPATCHED_AT" --limit 1 --json databaseId --jq '.[0].databaseId')
+[[ "$RUN" =~ ^[0-9]+$ ]] || { echo "No new workflow run found for $TAG; inspect the dispatch before retrying" >&2; exit 1; }
 echo "run $RUN"
 gh run watch "$RUN" --exit-status || { echo "WORKFLOW FAILED run=$RUN"; exit 1; }
 echo "DONE publish=$PUBLISH tag=$TAG wheel_sha256=$WSHA manifest_sha256=$MSHA run=$RUN"

@@ -48,7 +48,7 @@ class PublishCommandTests(unittest.TestCase):
                 'git': '#!/bin/sh\nif [ "$1" = rev-parse ]; then echo ' + ('b' * 40 if artifact_source else source) + '; fi\n',
                 'gh': '#!/bin/sh\nprintf "%s\\n" "$*" >> "$COMMAND_RECORD"\n'
                       'if [ "$1 $2" = "release view" ]; then exit 1; fi\n'
-                      'if [ "$1 $2" = "run list" ]; then echo 42; fi\n',
+                      'if [ "$1 $2" = "run list" ]; then case "$*" in *"--branch alpha-api-0.8.9-test"*) echo 42 ;; *) echo 99 ;; esac; fi\n',
                 'sleep': '#!/bin/sh\nexit 0\n',
             }
             for name, content in scripts.items():
@@ -80,6 +80,8 @@ class PublishCommandTests(unittest.TestCase):
                 result, calls, manifest = self.invoke(platform)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertIn('validation_profile=light', calls)
+                self.assertIn('run watch 42 --exit-status', calls)
+                self.assertIn('--event workflow_dispatch --created >=', calls)
                 self.assertIn('light_platform=' + platform, calls)
                 self.assertIn('light-smoke-' + platform + '.json', calls)
                 self.assertEqual(manifest['light_smoke']['source_commit'], 'a' * 40)
