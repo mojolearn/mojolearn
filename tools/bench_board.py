@@ -1670,7 +1670,72 @@ def run_race(ctx, race):
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
+    attach_params(ctx, rec)
     return rec
+
+
+def _params_mod():
+    spec = importlib.util.spec_from_file_location("bench_board_params",
+                                                  os.path.join(HERE, "bench_board_params.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def attach_params(ctx, rec):
+    """tools/bench_board_params.py: the driver printed one BOARD-PARAMS line
+    per race (every arm's parameters, read back from the constructed object).
+    The report goes on the race and each arm's resolved parameters on its
+    cell. A REFUSED report fails the race by name, whatever the driver's rc.
+    No line means the driver ran without the check: `params_check` says so."""
+    try:
+        with open(os.path.join(ctx["out"], rec["log"]), errors="replace") as fh:
+            reports = _params_mod().parse_lines(fh.read())
+    except (OSError, KeyError, TypeError):
+        reports = []
+    if not reports:
+        rec["params_check"] = "NOT CHECKED (the driver printed no BOARD-PARAMS line)"
+        return
+    rep = reports[-1]
+    rec["params"] = rep
+    rec["params_check"] = rep.get("verdict")
+    for c in rec.get("cells") or []:
+        arm = rep.get("arms", {}).get(c.get("arm"))
+        if arm is not None:
+            c["params"] = arm
+    if rep.get("verdict") == "REFUSED":
+        rec["status"] = "failed"
+        rec["failure"] = "PARAMS REFUSED: " + " | ".join(rep.get("problems") or [])
+
+
+def render_params(rr):
+    """The resolved parameters of every arm side by side, under the race."""
+    L = [""]
+    rep = rr.get("params")
+    if not rep:
+        L.append("parameters: %s" % clean(rr.get("params_check") or "NOT CHECKED"))
+        return L
+    arms = list(rep.get("arms") or {})
+    names = sorted({p for a in arms for p in rep["arms"][a].get("params", {})})
+    L.append("parameters (tools/bench_board_params.py, read back from each constructed arm; "
+             "reference `%s`, seed %s): %s" % (rep.get("reference"), rep.get("seed"),
+                                                clean(rep.get("verdict"))))
+    L.append("")
+    L.append("| parameter | %s |" % " | ".join(arms))
+    L.append("|---|%s" % "---|" * len(arms))
+    L.append("| library (source) | %s |" % " | ".join(
+        "%s (%s)" % (rep["arms"][a].get("library"), rep["arms"][a].get("source")) for a in arms))
+    for n in names:
+        L.append("| %s | %s |" % (n, " | ".join(
+            clean(json.dumps(rep["arms"][a]["params"][n])) if n in rep["arms"][a].get("params", {})
+            else "-" for a in arms)))
+    for e in rep.get("exceptions") or []:
+        L.append("")
+        L.append("accepted difference: %s %s: %s" % (e.get("arm"), e.get("param"), clean(e.get("reason"))))
+    for pr in rep.get("problems") or []:
+        L.append("")
+        L.append("REFUSED: %s" % clean(pr))
+    return L
 
 
 def all_cells(result):
@@ -1948,6 +2013,7 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
+            L.extend(render_params(rr))
             L.extend(INFER.render_race(_bb(), rr))
             L.append("")
     L.append("## Not covered by this board")

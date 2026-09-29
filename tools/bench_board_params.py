@@ -1,0 +1,393 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""THE BENCH BOARD'S PARAMETER CHECK: same seed, same tuning parameters, enforced.
+
+Andrew (2026-09-29): "they need to be comparable same seed same tuning params".
+Every board driver (trees, classical, classical2, neural, algos) calls
+`enforce(...)` once per race, after it has CONSTRUCTED every arm and before the
+first timed round:
+
+    import bench_board_params as BP
+    report = BP.enforce("rf", {"ours": est, "ours-fast": est_fast,
+                               "sklearn-rf-cpu": skl, "lightgbm-cpu": lgb_model},
+                        family="trees")        # prints BOARD-PARAMS, raises on a mismatch
+
+A driver whose arms live in separate worker processes has each worker send
+`BP.arm_record(obj)` for the object it constructed, and the conductor calls
+`enforce` with those records. The arm names are the board's cell names
+(`ours`, `ours-fast` / `ours-ab`, the opponent arm names).
+
+1. It READS BACK what each arm really got, from the constructed object:
+   `get_params()` for scikit-learn-shaped estimators (scikit-learn, ours, the
+   XGBoost / LightGBM / CatBoost scikit-learn wrappers, umap-learn), the
+   optimizer's `defaults` for a torch optimizer, the scalar attributes for a
+   torch module, the params dict for a raw XGBoost / LightGBM booster
+   config. A plain dict is accepted only for an arm that is a function call
+   (statsmodels, faiss, NumPy), and the report says `source: declared`.
+2. It maps names that mean the same thing across libraries to one canonical
+   name through ONE table, `ALIASES` (with value transforms, e.g. CatBoost's
+   `border_count` is `max_bin - 1`).
+3. It REFUSES the race by name (`ParamsRefused`, and a `BOARD-PARAMS-REFUSED`
+   line) when an arm's seed differs from ours, or when a canonical parameter
+   that both our arm and that arm have differs, or is set on one side and
+   left to the library default (None) on the other, unless that exact
+   (lane, parameter, arm) is listed in `EXCEPTIONS` with its reason.
+   Execution-only settings (threads, device, verbosity, numeric mode) are in
+   `IGNORE` and never compared.
+4. It prints one `BOARD-PARAMS <json>` line with every arm's resolved
+   canonical parameters, what was compared, and the exceptions applied; the
+   board copies it into the race's cells and renders it in BOARD.md.
+
+The reference arm is `ours` (IDENTICAL); every other arm, our FAST arm
+included, is compared with it.
+
+    python3 tools/bench_board_params.py table     # print ALIASES, IGNORE, EXCEPTIONS
+"""
+import fnmatch
+import inspect
+import json
+import math
+import sys
+
+SEED = 7
+MARK = "BOARD-PARAMS"
+MARK_REFUSED = "BOARD-PARAMS-REFUSED"
+
+# ---------------------------------------------------------------------------
+# ONE alias table. library -> {library's name: canonical name or
+# (canonical name, transform to the canonical value)}. "*" applies to every
+# library unless the library's own table names the parameter.
+# ---------------------------------------------------------------------------
+
+
+def _plus1(v):
+    return None if v is None else v + 1
+
+
+ALIASES = {
+    "*": {
+        "random_state": "seed", "seed": "seed", "random_seed": "seed", "rng_seed": "seed",
+        "n_estimators": "n_estimators", "num_boost_round": "n_estimators",
+        "iterations": "n_estimators", "num_iterations": "n_estimators",
+        "num_trees": "n_estimators", "n_trees": "n_estimators",
+        "max_depth": "max_depth", "depth": "max_depth",
+        "learning_rate": "learning_rate", "eta": "learning_rate", "lr": "learning_rate",
+        "min_child_weight": "min_child_weight", "min_sum_hessian_in_leaf": "min_child_weight",
+        "min_child_hessian": "min_child_weight",
+        "max_bin": "max_bin", "max_bins": "max_bin",
+        "reg_lambda": "reg_lambda", "l2_leaf_reg": "reg_lambda", "lambda_l2": "reg_lambda",
+        "reg_alpha": "reg_alpha", "lambda_l1": "reg_alpha",
+        "max_leaves": "max_leaves", "num_leaves": "max_leaves", "max_leaf_nodes": "max_leaves",
+        "min_samples_leaf": "min_samples_leaf", "min_child_samples": "min_samples_leaf",
+        "min_data_in_leaf": "min_samples_leaf",
+        "min_split_gain": "min_split_gain", "gamma_split": "min_split_gain",
+        "min_impurity_decrease": "min_split_gain",
+        "subsample": "subsample", "bagging_fraction": "subsample",
+        "colsample_bytree": "feature_fraction", "feature_fraction": "feature_fraction",
+        "max_features": "max_features", "colsample_bynode": "feature_fraction_bynode",
+        "feature_fraction_bynode": "feature_fraction_bynode",
+        "grow_policy": "grow_policy", "bootstrap": "bootstrap", "criterion": "criterion",
+        "max_samples": "max_samples", "contamination": "contamination",
+        "n_clusters": "n_clusters", "n_components": "n_components", "n_init": "n_init",
+        "init": "init", "max_iter": "max_iter", "tol": "tol", "algorithm": "algorithm",
+        "C": "C", "alpha": "alpha", "l1_ratio": "l1_ratio", "kernel": "kernel",
+        "degree": "degree", "coef0": "coef0", "epsilon": "epsilon",
+        "fit_intercept": "fit_intercept", "penalty": "penalty", "loss": "loss",
+        "solver": "solver", "whiten": "whiten", "svd_solver": "svd_solver",
+        "n_neighbors": "n_neighbors", "metric": "metric", "p": "p", "weights": "weights",
+        "min_dist": "min_dist", "spread": "spread", "n_epochs": "n_epochs",
+        "eps": "eps", "min_samples": "min_samples", "min_cluster_size": "min_cluster_size",
+        "bandwidth": "bandwidth", "linkage": "linkage", "affinity": "affinity",
+        "covariance_type": "covariance_type", "reg_covar": "reg_covar",
+        "n_iter": "n_iter", "perplexity": "perplexity", "early_exaggeration": "early_exaggeration",
+        "betas": "betas", "weight_decay": "weight_decay", "momentum": "momentum",
+        "dampening": "dampening", "nesterov": "nesterov", "amsgrad": "amsgrad",
+        "hidden_size": "hidden_size", "num_layers": "num_layers", "dropout": "dropout",
+        "batch_size": "batch_size", "epochs": "epochs", "shuffle": "shuffle",
+        "nlist": "nlist", "nprobe": "nprobe", "n_lists": "nlist", "n_probes": "nprobe",
+        "order": "order", "seasonal_order": "seasonal_order", "trend": "trend",
+        "seasonal": "seasonal", "seasonal_periods": "seasonal_periods",
+        "damped_trend": "damped_trend", "initialization_method": "initialization_method",
+        "normalize": "normalize", "positive": "positive", "class_weight": "class_weight",
+        "leaf_size": "leaf_size", "boosting_type": "boosting_type",
+        "border_count": ("max_bin", _plus1),
+    },
+    # XGBoost's `gamma` is the minimum split loss reduction
+    "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
+    # LightGBM's `min_child_weight` is min_sum_hessian_in_leaf
+    "lightgbm": {"min_child_weight": "min_child_weight", "boosting_type": "boosting_type"},
+    # CatBoost and ours count borders, not bins: 254 borders = 255 bins
+    "catboost": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type"},
+    "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type"},
+    # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
+    "torch": {"lr": "learning_rate"},
+}
+
+#: Execution-only settings: never compared (they choose where and how verbosely
+#: the same computation runs, not what it computes).
+IGNORE = frozenset({
+    "n_jobs", "nthread", "num_threads", "thread_count", "verbose", "verbosity", "silent",
+    "logging_level", "device", "device_type", "task_type", "numeric_mode", "copy_X", "copy",
+    "allow_writing_files", "train_dir", "importance_type", "callbacks", "warm_start",
+    "used_ram_limit", "gpu_ram_part", "gpu_id", "devices", "tree_method", "predictor",
+    "output_type", "handle", "compute_uv", "memory", "low_memory", "validate_parameters",
+})
+
+#: The ONLY accepted differences. Each entry: (lane glob, canonical parameter,
+#: arm glob, reason). A difference not listed here refuses the race.
+EXCEPTIONS = [
+    # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+]
+
+
+class ParamsRefused(RuntimeError):
+    """The race's arms do not share the seed or a tuning parameter."""
+
+
+# ---------------------------------------------------------------------------
+# Reading back what an arm really got
+# ---------------------------------------------------------------------------
+
+def library_of(obj):
+    mod = type(obj).__module__ or ""
+    top = mod.split(".")[0]
+    return {"sklearn": "sklearn", "xgboost": "xgboost", "lightgbm": "lightgbm",
+            "catboost": "catboost", "mojolearn": "mojolearn", "torch": "torch",
+            "umap": "umap-learn", "faiss": "faiss", "statsmodels": "statsmodels"}.get(top, top or "?")
+
+
+def _scalar(v):
+    return v is None or isinstance(v, (bool, int, float, str)) or (
+        isinstance(v, (tuple, list)) and all(isinstance(x, (bool, int, float, str)) or x is None for x in v))
+
+
+def read_params(obj):
+    """(library, source, {name: value}) of what the constructed arm holds."""
+    if isinstance(obj, dict) and obj.get("__record__"):
+        # read back in another process (a worker) by arm_record()
+        return obj["library"], obj["source"], dict(obj["params"])
+    if isinstance(obj, dict):
+        return obj.get("__library__", "declared"), "declared", {
+            k: v for k, v in obj.items() if k != "__library__"}
+    lib = library_of(obj)
+    # torch optimizer: its defaults are the hyperparameters every group starts from
+    defaults = getattr(obj, "defaults", None)
+    if lib == "torch" and isinstance(defaults, dict) and hasattr(obj, "param_groups"):
+        return lib, "optimizer.defaults", {k: v for k, v in defaults.items() if _scalar(v)}
+    if lib == "catboost" and hasattr(obj, "get_params"):
+        # CatBoost's get_params lists only what was set; a known name that is
+        # absent is the library default and reads None
+        got = dict(obj.get_params())
+        for name in ("random_seed", "iterations", "depth", "learning_rate", "l2_leaf_reg",
+                     "border_count", "min_data_in_leaf", "max_leaves", "grow_policy",
+                     "bootstrap_type", "subsample", "random_strength", "boosting_type"):
+            got.setdefault(name, None)
+        return lib, "get_params", got
+    if hasattr(obj, "get_params"):
+        try:
+            got = obj.get_params(deep=False)
+        except TypeError:
+            got = obj.get_params()
+        if lib in ("xgboost", "lightgbm"):
+            got = dict(got)
+            kw = got.pop("kwargs", None)
+            if isinstance(kw, dict):
+                got.update(kw)
+        return lib, "get_params", dict(got)
+    if lib == "torch":
+        return lib, "module attributes", {
+            k: v for k, v in vars(obj).items() if not k.startswith("_") and _scalar(v)}
+    # a constructor-signature object without get_params
+    try:
+        names = [p for p in inspect.signature(type(obj).__init__).parameters if p != "self"]
+    except (TypeError, ValueError):
+        names = []
+    got = {n: getattr(obj, n) for n in names if hasattr(obj, n)}
+    if not got:
+        got = {k: v for k, v in vars(obj).items() if not k.startswith("_") and _scalar(v)}
+    return lib, "attributes", got
+
+
+def arm_record(obj):
+    """What a WORKER process sends back to its conductor for one arm: the
+    read-back of the object it constructed, JSON-safe. The conductor passes
+    the records to enforce() in place of the objects."""
+    lib, source, raw = read_params(obj)
+    return {"__record__": True, "library": lib, "source": source,
+            "params": {k: _jsonable(v) for k, v in raw.items() if k not in IGNORE}}
+
+
+def canonical(lib, params):
+    """{canonical name: (value, the library's own name)} for the aliased,
+    non-ignored parameters."""
+    own = ALIASES.get(lib, {})
+    shared = ALIASES["*"]
+    out = {}
+    for name, value in params.items():
+        if name in IGNORE:
+            continue
+        rule = own.get(name, shared.get(name))
+        if rule is None:
+            continue
+        canon, fn = (rule, None) if isinstance(rule, str) else rule
+        try:
+            value = fn(value) if fn else value
+        except TypeError:
+            pass
+        out[canon] = (_jsonable(value), name)
+    return out
+
+
+def _jsonable(v):
+    if v is None or isinstance(v, (bool, str)):
+        return v
+    if isinstance(v, int):
+        return int(v)
+    if isinstance(v, float):
+        return v
+    if isinstance(v, (tuple, list)):
+        return [_jsonable(x) for x in v]
+    try:
+        import numpy as np                              # noqa: PLC0415
+        if isinstance(v, np.generic):
+            return v.item()
+    except ImportError:
+        pass
+    if callable(v) or isinstance(v, type):
+        return getattr(v, "__name__", repr(v))
+    return repr(v)
+
+
+def _equal(a, b):
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b or a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
+            return True
+        return float(a) == float(b)
+    if isinstance(a, str) and isinstance(b, str):
+        return a.lower() == b.lower()
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_equal(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def exception_for(lane, param, arm):
+    for lg, p, ag, why in EXCEPTIONS:
+        if p == param and fnmatch.fnmatch(lane, lg) and fnmatch.fnmatch(arm, ag):
+            return why
+    return None
+
+
+# ---------------------------------------------------------------------------
+# The check
+# ---------------------------------------------------------------------------
+
+def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions=()):
+    """The report for one race. `arms`: {arm name: constructed object or
+    declared dict}. `extra_exceptions`: (param, arm glob, reason) the driver
+    adds for this race (the same shape as EXCEPTIONS without the lane)."""
+    resolved, sources, libs = {}, {}, {}
+    for name, obj in arms.items():
+        lib, source, raw = read_params(obj)
+        libs[name], sources[name] = lib, source
+        resolved[name] = canonical(lib, raw)
+    ref = reference if reference in resolved else next(iter(resolved), None)
+    problems, compared, applied = [], [], []
+
+    def _excused(param, arm):
+        why = exception_for(lane, param, arm)
+        if why is None:
+            for p, ag, r in extra_exceptions:
+                if p == param and fnmatch.fnmatch(arm, ag):
+                    why = r
+                    break
+        return why
+
+    for name, canon in resolved.items():
+        # the seed: every arm, ours included, must carry the board's seed
+        if "seed" in canon:
+            got = canon["seed"][0]
+            if got is None or not _equal(got, seed):
+                why = _excused("seed", name)
+                if why:
+                    applied.append({"arm": name, "param": "seed", "value": got, "reason": why})
+                else:
+                    problems.append("%s: seed is %r (%s), the board's seed is %d"
+                                    % (name, got, canon["seed"][1], seed))
+        else:
+            why = _excused("seed", name)
+            if why:
+                applied.append({"arm": name, "param": "seed", "value": None, "reason": why})
+            else:
+                problems.append("%s (%s): no seed parameter read back; list it in EXCEPTIONS "
+                                "with the reason if the library has none" % (name, libs[name]))
+        if name == ref:
+            continue
+        for param, (val, own_name) in sorted(canon.items()):
+            if param == "seed" or param not in resolved[ref]:
+                continue
+            rval, rname = resolved[ref][param]
+            same = _equal(val, rval) and not (val is None and rval is None)
+            compared.append({"arm": name, "param": param, "ours": rval, "theirs": val, "same": same})
+            if same:
+                continue
+            why = _excused(param, name)
+            if why:
+                applied.append({"arm": name, "param": param, "ours": rval, "theirs": val, "reason": why})
+                continue
+            if val is None or rval is None:
+                problems.append("%s: %s is %s on %s and %s on %s (a library default is not a "
+                                "matched value; set it explicitly on both)"
+                                % (name, param, "unset" if rval is None else repr(rval), ref,
+                                   "unset" if val is None else repr(val), name))
+            else:
+                problems.append("%s: %s is %r (%s) on %s and %r (%s) on %s"
+                                % (name, param, rval, rname, ref, val, own_name, name))
+    return {"lane": lane, "family": family, "reference": ref, "seed": seed,
+            "arms": {n: {"library": libs[n], "source": sources[n],
+                         "params": {p: v for p, (v, _) in sorted(c.items())}}
+                     for n, c in resolved.items()},
+            "compared": compared, "exceptions": applied, "problems": problems,
+            "verdict": "REFUSED" if problems else "MATCHED"}
+
+
+def emit(report, stream=None):
+    stream = stream or sys.stdout
+    stream.write("%s %s\n" % (MARK, json.dumps(report, sort_keys=True, default=repr)))
+    if report["problems"]:
+        stream.write("%s lane=%s reason=%s\n" % (MARK_REFUSED, report["lane"],
+                                                  " | ".join(report["problems"])[:2000]))
+    stream.flush()
+
+
+def enforce(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions=(), stream=None):
+    """check + emit; raises ParamsRefused when the arms do not match."""
+    report = check(lane, arms, family=family, reference=reference, seed=seed,
+                   extra_exceptions=extra_exceptions)
+    emit(report, stream)
+    if report["problems"]:
+        raise ParamsRefused("parameters do not match (%d): %s"
+                            % (len(report["problems"]), "; ".join(report["problems"])))
+    return report
+
+
+def parse_lines(text):
+    """[report] from a driver log (the board's side)."""
+    out = []
+    for line in text.splitlines():
+        if line.startswith(MARK + " {"):
+            try:
+                out.append(json.loads(line[len(MARK) + 1:]))
+            except ValueError:
+                pass
+    return out
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["table"]:
+        print(json.dumps({"ALIASES": {k: {n: (r if isinstance(r, str) else r[0] + " (transformed)")
+                                          for n, r in v.items()} for k, v in ALIASES.items()},
+                          "IGNORE": sorted(IGNORE), "EXCEPTIONS": EXCEPTIONS}, indent=1))
+    else:
+        print(__doc__)
