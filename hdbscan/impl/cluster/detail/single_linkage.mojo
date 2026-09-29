@@ -54,6 +54,7 @@ from hdbscan.checks.mutual_reachability_dense import (
     mutual_reachability_dense,
     refuse_nonfinite_device,
 )
+from hdbscan.impl.cluster.detail.sparse_mr_mst import sparse_mr_mst
 from hdbscan.impl.detail.reachability import (
     CORE_TPB,
     compute_core_dists,
@@ -75,6 +76,17 @@ from checks.numerics import identical_div
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from std.os import getenv
 from std.time import perf_counter_ns
+
+
+comptime MR_GRAPH_AUTO = 0
+"""The dense graph up to `PAIRWISE_MAX_ROWS`, the sparse arm past it
+(DEVIATION 1620). What every caller outside the checks passes."""
+comptime MR_GRAPH_DENSE = 1
+"""The dense m x m graph (DEVIATION 1600) at any size; refused past
+`PAIRWISE_MAX_ROWS`."""
+comptime MR_GRAPH_SPARSE = 2
+"""The on-the-fly Boruvka (DEVIATION 1620) at any size; the seam check
+runs it where the dense arm can run too."""
 
 
 def build_mr_linkage(
@@ -99,8 +111,12 @@ def build_mr_linkage(
     mr_tpb: Int = MR_TPB,
     core_tpb: Int = CORE_TPB,
     sabotage: Int32 = HDB_SAB_NONE,
+    graph: Int = MR_GRAPH_AUTO,
 ) raises -> Int:
     """`single_linkage.cuh:50-118`. Returns the Boruvka round count.
+
+    `graph` picks the arm (`MR_GRAPH_*`); both return the same tree, bit
+    for bit (DEVIATION 1620, `hdbscan/checks/sparse_mr_check.mojo`).
 
     `x_host` is the SAME data as `x`, on the host, because this tree's
     k-NN entry takes host pointers (see `reachability.mojo`'s header) and
@@ -122,17 +138,27 @@ def build_mr_linkage(
             and n <= 64
             and sabotage == HDB_SAB_NONE
             and not trace.enabled
+            and graph == MR_GRAPH_AUTO
         )
-    if m > PAIRWISE_MAX_ROWS and not use_fast:
+    # DEVIATION 1620: past the dense bound (or when asked) the mutual
+    # reachability MST is built without the m * m graph.
+    var use_sparse = graph == MR_GRAPH_SPARSE or (
+        graph == MR_GRAPH_AUTO and m > PAIRWISE_MAX_ROWS and not use_fast
+    )
+    if graph != MR_GRAPH_AUTO and graph != MR_GRAPH_DENSE and graph != MR_GRAPH_SPARSE:
+        raise Error(
+            "hdbscan.build_mr_linkage: graph=" + String(graph)
+            + " refused by name; 0 (auto), 1 (dense) or 2 (sparse)"
+        )
+    if m > PAIRWISE_MAX_ROWS and not use_fast and not use_sparse:
         raise Error(
             "hdbscan.build_mr_linkage: n_rows=" + String(m) + " > "
             + String(PAIRWISE_MAX_ROWS)
             + "; the dense mutual reachability graph is m * m cells and"
             " hierarchy's PAIRWISE connectivity refuses past that bound"
-            " (their value_idx overflows). To close this refusal, implementation the"
-            " SPARSE arm (DEVIATION 1600), which needs the cross-component"
-            " fix-up in the hierarchy lane and a k-NN distance epilogue in"
-            " the neighbors lane"
+            " (their value_idx overflows). The dense arm was asked for by"
+            " name; the default (graph=0) takes the sparse arm here"
+            " (DEVIATION 1620)"
         )
     if metric != DISTANCE_L2_SQRT_EXPANDED:
         raise Error(
@@ -181,14 +207,14 @@ def build_mr_linkage(
     # `indptr[i] = i * m`, `indices[i*m + j] = j` and the diagonal at
     # FLT_MAX; `pairwise_distances` also runs DEVIATION 623's NaN refusal
     # on the matrix before it returns.
-    var nnz = 1 if use_fast else m * m
+    var nnz = 1 if (use_fast or use_sparse) else m * m
     var indptr = ctx.enqueue_create_buffer[DType.int32](m + 1)
     # the column of cell e is e % m: the solver computes it (DENSE), so the
     # m * m index array is neither written nor read (lane/cluster-apple)
     var indices = ctx.enqueue_create_buffer[DType.int32](1)
     var pw_dists = ctx.enqueue_create_buffer[DType.float32](nnz)
     var norms = ctx.enqueue_create_buffer[DType.float32](m)
-    if not use_fast:
+    if not use_fast and not use_sparse:
         pairwise_distances(
             ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
             tile_tpb, LINK_SAB_NONE, fill_indices=False,
@@ -202,7 +228,7 @@ def build_mr_linkage(
     # `pw_dists` and writes cell idx of `mr`, nothing else reads it after),
     # one m * m allocation instead of two (lane/cluster-apple)
     var mr = pw_dists.create_sub_buffer[DType.float32](0, nnz)
-    if not use_fast:
+    if not use_fast and not use_sparse:
         mutual_reachability_dense(
             ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
         )
@@ -220,7 +246,37 @@ def build_mr_linkage(
     # BY NAME rather than pretending, which is what this lane wants.
     var color = ctx.enqueue_create_buffer[DType.int32](m)
     var rounds: Int
-    if use_fast:
+    if use_sparse:
+        # DEVIATION 1620: the same tree, sorted and oriented, with no graph.
+        var sp = sparse_mr_mst(
+            ctx, x_host, x, core_dists, m, n, inv_alpha, sabotage
+        )
+        var h_r = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
+        var h_c = ctx.enqueue_create_host_buffer[DType.int32](m - 1)
+        var h_w = ctx.enqueue_create_host_buffer[DType.float32](m - 1)
+        ctx.synchronize()
+        for e in range(m - 1):
+            h_r.unsafe_ptr().unsafe_store(e, sp.lo[e])
+            h_c.unsafe_ptr().unsafe_store(e, sp.hi[e])
+            h_w.unsafe_ptr().unsafe_store(e, sp.w[e])
+        ctx.enqueue_copy(
+            dst_buf=mst_rows.create_sub_buffer[DType.int32](0, m - 1),
+            src_ptr=h_r.unsafe_ptr(),
+        )
+        ctx.enqueue_copy(
+            dst_buf=mst_cols.create_sub_buffer[DType.int32](0, m - 1),
+            src_ptr=h_c.unsafe_ptr(),
+        )
+        ctx.enqueue_copy(
+            dst_buf=mst_weights.create_sub_buffer[DType.float32](0, m - 1),
+            src_ptr=h_w.unsafe_ptr(),
+        )
+        ctx.synchronize()
+        rounds = sp.rounds
+        _ = h_r^
+        _ = h_c^
+        _ = h_w^
+    elif use_fast:
         rounds = fast_euclidean_mst(
             ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
             mutual_reach=True,

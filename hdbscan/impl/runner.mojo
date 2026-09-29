@@ -46,7 +46,10 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.identity_trace import IdentityTrace
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE
 from hdbscan.checks.mutual_reachability_dense import MR_TPB
-from hdbscan.impl.cluster.detail.single_linkage import build_mr_linkage
+from hdbscan.impl.cluster.detail.single_linkage import (
+    MR_GRAPH_AUTO,
+    build_mr_linkage,
+)
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
 from hdbscan.impl.detail.condense import build_condensed_hierarchy
 from hdbscan.impl.detail.extract import ExtractOutput, extract_clusters
@@ -207,6 +210,7 @@ def fit_hdbscan(
     stab_tpb: Int = STAB_TPB,
     select_tpb: Int = SELECT_TPB,
     sabotage: Int32 = HDB_SAB_NONE,
+    graph: Int = MR_GRAPH_AUTO,
 ) raises -> HDBSCANOutput:
     """`runner.h:152-234` `_fit_hdbscan`, with their `build_linkage`
     (`:54-150`) inlined at the point their `:170` calls it -- one Mojo
@@ -297,7 +301,7 @@ def fit_hdbscan(
     var rounds = build_mr_linkage(
         ctx, trace, x_host, x, m, n, k, params.alpha, metric,
         core_dists, mst_rows, mst_cols, mst_weights, children, deltas, sizes,
-        tile_tpb, mst_tpb, mr_tpb, core_tpb, sabotage,
+        tile_tpb, mst_tpb, mr_tpb, core_tpb, sabotage, graph,
     )
 
     if st_on:
