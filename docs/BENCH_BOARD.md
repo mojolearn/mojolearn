@@ -48,6 +48,24 @@ full contract. In short:
   only. `bench/results/bench_board/COVERAGE.md` maps every public algorithm
   to its races.
 
+## The opponent store
+
+An opponent is measured once per key and reused. Every finished opponent cell
+is appended to `--opponent-store` (JSONL, default `<out>/../opponent-store.jsonl`)
+with its key: box and machine model, vendor, device, OS, library and exact
+version, lane, dataset, rows, the race's settings (sha256), the data file it
+read (sha256) and the rounds, plus the measurement time, the commit and the
+arm's parameters from the BOARD-PARAMS check. Before a race runs, an opponent
+whose key is in the store is not run: its stored cell joins the race and
+BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
+measured in this run is marked `measured this run`. When every opponent is
+stored, only our arms run. Any key field that differs means a new
+measurement. A refused or failed opponent is stored as what it was; a
+PARTIAL one is never reused. `--retime-opponents` measures every opponent
+again, and `--backfill-store <board.json>` imports an existing board's
+opponent cells (a cell whose key cannot be completed is skipped and counted)
+(tools/bench_board_store.py).
+
 ## NVIDIA's harnesses
 
 The board takes its settings from NVIDIA's two public benchmark harnesses.

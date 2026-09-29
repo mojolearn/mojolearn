@@ -435,6 +435,10 @@ INFER = _load_tool("bench_board_infer")
 #: values, and from which file and commit (standard library only).
 HARNESS = _load_tool("bench_board_harness")
 
+#: The opponent store (tools/bench_board_store.py): an opponent is measured once
+#: per key (box, device, library version, settings, data, ...) and reused.
+STORE = _load_tool("bench_board_store")
+
 #: Per-arm memory and the ours-cpu readback (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
 
@@ -1588,7 +1592,206 @@ def add_ratios(cells):
 # Running
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# The opponent store: keys, lookup before a race, append after it
+# ---------------------------------------------------------------------------
+
+def _machine(box):
+    return ((box.get("gpu") or {}).get("name") or (box.get("host") or {}).get("cpu_model")
+            or (box.get("host") or {}).get("machine"))
+
+
+def _device_text(box, arm, vendor):
+    dev = arm_device(arm, vendor)
+    name = (box.get("gpu") or {}).get("name") if dev == "gpu" else (box.get("host") or {}).get("cpu_model")
+    return "%s (%s)" % (dev, name) if name else None
+
+
+def library_version(box, lib):
+    """The installed version of an opponent library, from the box's package list
+    (a distribution named `lib` or `lib-<suffix>`: cuml-cu12, faiss-cpu, cupy-cuda12x)."""
+    pk = box.get("packages") or {}
+    lib = (lib or "").lower()
+    if lib in pk:
+        return pk[lib]
+    for name in sorted(pk):
+        if name.startswith(lib + "-"):
+            return pk[name]
+    return None
+
+
+_R2_TO_DATA = {v: k for k, v in R2_KEYS.items()}
+
+
+def race_data_files(ctx, race):
+    """[(name, path)] of the data files a race reads; [] for seeded data; None when
+    the race reads a file the board does not know how to name."""
+    fam, lane, ds = race["family"], race["lane"], race["dataset"]
+    if fam == "neural":
+        return []
+    if fam == "algos":
+        out = []
+        for key in ALGOS.r2_keys(lane, ds):
+            if key in _R2_TO_DATA:
+                out.append((_R2_TO_DATA[key], os.path.join(ctx["data_root"], DATA_FILES[_R2_TO_DATA[key]])))
+            else:
+                out.append((key, ALGOS.corpus_path(key)))
+        return out
+    return [(k, os.path.join(ctx["data_root"], DATA_FILES[k])) for k in race_data_keys(race)
+            if k in DATA_FILES]
+
+
+def race_data_sha(ctx, race, box):
+    """sha256 of what the race reads (one hash over several files); the neural
+    family's inputs come from the installed wheel's sources, so its wheel; a
+    seeded synthetic set is named as such. None when a file is missing."""
+    if race["family"] == "neural":
+        w = ((box.get("mojolearn") or {}).get("wheel") or {}).get("sha256")
+        v = (box.get("mojolearn") or {}).get("version")
+        return "mojolearn-sources:%s" % (w or v) if (w or v) else None
+    files = race_data_files(ctx, race)
+    if not files:
+        return "synthetic (seed %d)" % SEED
+    cache = ctx.setdefault("data_sha", {})
+    shas = []
+    for name, path in files:
+        if name not in cache:
+            cache[name] = sha256_file(path) if os.path.isfile(path) else None
+        if cache[name] is None:
+            return None
+        shas.append(cache[name])
+    return shas[0] if len(shas) == 1 else STORE.sha256_json(shas)
+
+
+def opponent_key(box, race, arm, settings, data_sha, rounds):
+    vendor = (box.get("gpu") or {}).get("vendor")
+    lib = arm_library(arm)
+    return {"box": (box.get("host") or {}).get("hostname"), "machine": _machine(box),
+            "vendor": vendor, "device": _device_text(box, arm, vendor),
+            "os": (box.get("os") or {}).get("platform"),
+            "library": lib, "library_version": library_version(box, lib),
+            "family": race["family"], "lane": race["lane"], "dataset": race["dataset"],
+            "rows": race.get("rows"), "neural_shape": race.get("shape"), "arm": arm,
+            "settings_sha256": STORE.sha256_json(settings) if settings else None,
+            "data_sha256": data_sha, "rounds": rounds}
+
+
+def stored_opponents(ctx, race):
+    """{arm: stored record} for the race's opponents the store already holds
+    (none with --retime-opponents or without a store)."""
+    if not ctx.get("store_path") or ctx.get("retime") or not ctx.get("box"):
+        return {}
+    store = STORE.load(ctx["store_path"])
+    if not store:
+        return {}
+    settings = race_settings(ctx, race)
+    dsha = race_data_sha(ctx, race, ctx["box"])
+    out = {}
+    for arm in race.get("opponents") or []:
+        hit = STORE.lookup(store, opponent_key(ctx["box"], race, arm, settings, dsha, ctx["rounds"]))
+        if hit is not None:
+            out[arm] = hit
+    return out
+
+
+def store_opponents(ctx, race, rec):
+    """Append every opponent cell measured in this race to the store; returns
+    how many were stored (a cell with a missing key field is not)."""
+    if not ctx.get("store_path") or not ctx.get("box"):
+        return 0
+    settings = race_settings(ctx, race)
+    dsha = race_data_sha(ctx, race, ctx["box"])
+    params = ((rec.get("params") or {}).get("arms") or {})
+    n = 0
+    for c in rec.get("cells") or []:
+        if c.get("library") == "mojolearn" or c.get("stored"):
+            continue
+        key = opponent_key(ctx["box"], race, c["arm"], settings, dsha, ctx["rounds"])
+        if STORE.missing(key):
+            c["store"] = "not stored (key fields missing: %s)" % ", ".join(STORE.missing(key))
+            continue
+        infer = [ic for ic in rec.get("infer_cells") or [] if ic.get("arm") == c["arm"]]
+        STORE.append(ctx["store_path"], STORE.record(
+            key, c, measured_at=rec.get("finished"), commit=ctx.get("commit"),
+            params=params.get(c["arm"]), infer_cells=infer))
+        n += 1
+    return n
+
+
+def backfill_store(board_json, store_path):
+    """Import the opponent cells of an existing board.json into the store, the
+    key and provenance from the board's box, config and each cell's settings.
+    Returns (imported, skipped)."""
+    res = load_result(board_json)
+    if res is None:
+        raise SystemExit("bench_board: cannot read %s" % board_json)
+    box = res.get("box") or {}
+    cfg = res.get("config") or {}
+    data = cfg.get("data") or {}
+    shas = dict(cfg.get("data_sha256") or {})
+    for name, d in data.items():         # a pinned file whose size matched its pin
+        if name not in shas and d.get("size_ok") and d.get("pinned_sha256"):
+            shas[name] = d["pinned_sha256"]
+    ctx = {"data_root": cfg.get("data_root") or "", "data_sha": shas}
+    imported = skipped = 0
+    for rid, rr in sorted((res.get("races") or {}).items()):
+        race = {"family": rr.get("family"), "lane": rr.get("lane"), "dataset": rr.get("dataset"),
+                "rows": rr.get("rows"), "shape": rr.get("shape")}
+        if not race["family"]:
+            continue
+        try:
+            files = race_data_files(ctx, race)
+            dsha = race_data_sha(ctx, race, box) if files is not None else None
+        except Exception:               # noqa: BLE001  (a file the backfill cannot name)
+            dsha = None
+        if files and any(n not in shas for n, _ in files):
+            dsha = None                 # never hash a file on a box it may not be on
+        params = ((rr.get("params") or {}).get("arms") or {})
+        for c in rr.get("cells") or []:
+            if c.get("library") == "mojolearn" or c.get("stored"):
+                continue
+            key = opponent_key(box, race, c.get("arm"), c.get("settings"), dsha,
+                               (c.get("settings") or {}).get("rounds") or cfg.get("rounds"))
+            if STORE.missing(key):
+                skipped += 1
+                continue
+            infer = [ic for ic in rr.get("infer_cells") or [] if ic.get("arm") == c.get("arm")]
+            STORE.append(store_path, STORE.record(
+                key, c, measured_at=rr.get("finished"), commit=(box.get("repo") or {}).get("commit"),
+                params=params.get(c.get("arm")), infer_cells=infer))
+            imported += 1
+    return imported, skipped
+
+
 def run_race(ctx, race):
+    """Run one race and return its record (status, rc, log, cells). Opponents
+    the store already holds for this key are not run; their stored cells join
+    the race (tools/bench_board_store.py)."""
+    stored = stored_opponents(ctx, race)
+    full = race
+    if stored:
+        race = dict(race, opponents=[a for a in race["opponents"] if a not in stored],
+                    arms=[a for a in race["arms"] if a not in stored])
+        print("bench_board:   stored (not run): %s" % ", ".join(
+            "%s [%s]" % (a, STORE.source_text(r)) for a, r in sorted(stored.items())), flush=True)
+    rec = _run_race(ctx, race)
+    rec["arms"] = full["arms"]
+    rec["stored_arms"] = sorted(stored)
+    for c in rec["cells"]:
+        if c.get("library") != "mojolearn":
+            c["source"] = "measured this run"
+    for arm, r in sorted(stored.items()):
+        rec["cells"].append(STORE.stored_cell(r))
+        if r.get("infer_cells") and rec.get("infer_cells") is not None:
+            for ic in r["infer_cells"]:
+                ic = dict(ic, source=STORE.source_text(r))
+                rec["infer_cells"].append(ic)
+    rec["cells"] = add_ratios(rec["cells"])
+    rec["stored_now"] = store_opponents(ctx, full, rec)
+    return rec
+
+
+def _run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells)."""
     rec = {"id": race["id"], "family": race["family"], "lane": race["lane"],
            "dataset": race["dataset"], "rows": race["rows"], "arms": race["arms"],
@@ -2018,7 +2221,8 @@ def render_board(result):
                              _f(c.get("peak_host_mb")), _f(c.get("peak_gpu_mb")),
                              _q(c.get("quality")), _f(c.get("hash_stable")),
                              clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
-                             clean(c["status"])))
+                             clean(c["status"]) + (" (%s)" % clean(c["source"])
+                                                   if c.get("source") else "")))
             L.extend(render_memory_methods(rc))
             lc = rr.get("lane_config") or {}
             if lc:
@@ -2203,6 +2407,15 @@ def build_parser():
     p.add_argument("--rerun-before", default=None,
                    help="with --rerun: only races that finished before this UTC time "
                         "(ISO, e.g. 2026-09-29T13:00:00Z)")
+    p.add_argument("--opponent-store", default=None,
+                   help="the opponent store, JSONL (default <out>/../opponent-store.jsonl): an "
+                        "opponent already measured for the same key is not run again; its stored "
+                        "cell joins the race (tools/bench_board_store.py)")
+    p.add_argument("--retime-opponents", action="store_true",
+                   help="measure every opponent again (and store the new measurement)")
+    p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
+                   help="import the opponent cells of an existing board.json into the store, "
+                        "print how many were imported and skipped, and exit")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -2360,6 +2573,15 @@ def main(argv=None):
     if args.rounds < 1:
         raise SystemExit("--rounds must be >= 1")
 
+    if args.backfill_store:
+        board_json = os.path.abspath(os.path.expanduser(args.backfill_store))
+        store = args.opponent_store or os.path.join(os.path.dirname(os.path.dirname(board_json)),
+                                                    "opponent-store.jsonl")
+        imported, skipped = backfill_store(board_json, os.path.abspath(os.path.expanduser(store)))
+        print("bench_board: backfill %s -> %s: imported %d opponent cells, skipped %d (a key "
+              "field missing)" % (board_json, store, imported, skipped), flush=True)
+        return 0
+
     if args.render_only:
         if not args.out:
             raise SystemExit("--render-only needs --out")
@@ -2456,6 +2678,11 @@ def main(argv=None):
            "algos_driver": os.path.abspath(args.algos_driver),
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
+    ctx["box"] = box
+    ctx["retime"] = args.retime_opponents
+    ctx["store_path"] = os.path.abspath(os.path.expanduser(
+        args.opponent_store or os.path.join(os.path.dirname(out), "opponent-store.jsonl")))
+    ctx["data_sha"] = {}
 
     if result is None:
         result = {"schema": SCHEMA, "created": now_utc(), "box": box, "races": {}}
@@ -2478,7 +2705,11 @@ def main(argv=None):
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))
                                  or ("neural" in families and args.neural_shape == "small"),
-                        "data": data}
+                        "data": data, "data_root": ctx["data_root"],
+                        # sha256 of each data file a race read (the store's data key)
+                        "data_sha256": ctx["data_sha"],
+                        "opponent_store": ctx["store_path"],
+                        "retime_opponents": ctx["retime"]}
     result["plan"] = [r["id"] for r in races]
     save_result(rpath, result)
     write_board(out, result)

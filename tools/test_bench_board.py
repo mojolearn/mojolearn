@@ -932,3 +932,115 @@ def test_classical2_pins_installed_per_vendor(tmp_path, monkeypatch):
             assert not any("statsmodels" in c for c in flat)
     assert "umap-learn==0.5.12" in bb.MORE_PINS["apple"] and "faiss-cpu==1.15.1" in bb.MORE_PINS["amd"]
     assert all("==" in p for v in bb.MORE_PINS.values() for p in v)
+
+
+# --- the opponent store (tools/bench_board_store.py) -------------------------
+
+def _store_ctx(tmp_path):
+    data_root = tmp_path / "data"
+    (data_root / "taxi").mkdir(parents=True)
+    (data_root / bb.DATA_FILES["taxi"]).write_bytes(b"taxi bytes")
+    box = {"host": {"hostname": "m3ultra-b", "cpu_model": "Apple M3 Ultra", "machine": "arm64"},
+           "os": {"platform": "macOS-26-arm64"},
+           "gpu": {"vendor": "apple", "name": "Apple M3 Ultra"},
+           "packages": {"catboost": "1.2.8", "scikit-learn": "1.7.2"},
+           "mojolearn": {"version": "0.8.22", "wheel": {"sha256": "ab" * 32}}}
+    ctx = {"vendor": "apple", "rounds": 1, "data_root": str(data_root), "box": box,
+           "store_path": str(tmp_path / "opponent-store.jsonl"), "retime": False,
+           "python": "py", "tree_driver": "drv", "arm_budget_s": 60, "race_deadline_s": 600,
+           "infer": False, "commit": "c0ffee"}
+    race = bb.plan_races("apple", ["identical"], ["trees"], ["gbdt-symmetric"], ["taxi"],
+                         None, cpu_arm=False)[0]
+    return ctx, race
+
+
+def _stored_record(ctx, race, arm, status="ok", **key_over):
+    key = bb.opponent_key(ctx["box"], race, arm, bb.race_settings(ctx, race),
+                          bb.race_data_sha(ctx, race, ctx["box"]), ctx["rounds"])
+    key.update(key_over)
+    cell = dict(bb.base_cell(ctx, race, arm, None), status=status, median_ms=1000.0,
+                times_ms=[1000.0], rounds=1)
+    return bb.STORE.record(key, cell, measured_at="2026-09-29T12:00:00Z", commit="c0ffee")
+
+
+def test_store_hit_skips_the_opponent_and_runs_ours_only(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    assert race["opponents"] == ["catboost-cpu"]
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    seen = {}
+
+    def fake(ctx_, race_):
+        seen["race"] = race_
+        cells = [dict(bb.base_cell(ctx_, race_, "ours", "identical"), status="ok",
+                      median_ms=500.0, times_ms=[500.0], rounds=1)]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "now"}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(ctx, race)
+    assert seen["race"]["opponents"] == [] and "catboost-cpu" not in seen["race"]["arms"]
+    cmd, _env = bb.tree_cmd(ctx, seen["race"])
+    assert "--ours-only" in cmd and "--arms" not in cmd
+    cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
+    assert cat["source"].startswith("stored (measured 2026-09-29T12:00:00Z on m3ultra-b")
+    assert cat["ratio_ours_identical_over"] == 0.5
+    assert rec["stored_arms"] == ["catboost-cpu"] and rec["stored_now"] == 0
+
+
+def test_store_miss_when_any_key_field_differs(tmp_path):
+    ctx, race = _store_ctx(tmp_path)
+    base = _stored_record(ctx, race, "catboost-cpu")["key"]
+    for field in bb.STORE.KEY_FIELDS:
+        rec = _stored_record(ctx, race, "catboost-cpu", **{field: "something else"})
+        store = {bb.STORE.key_id(rec["key"]): rec}
+        assert bb.STORE.lookup(store, base) is None, field
+    store = {bb.STORE.key_id(base): _stored_record(ctx, race, "catboost-cpu")}
+    assert bb.STORE.lookup(store, base) is not None
+    # a key with a missing field neither hits nor is stored
+    assert bb.STORE.lookup(store, dict(base, library_version=None)) is None
+    assert "library_version" in bb.STORE.missing(dict(base, library_version=None))
+
+
+def test_store_retime_partial_and_measured_cells(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    bb.STORE.append(ctx["store_path"], _stored_record(ctx, race, "catboost-cpu"))
+    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
+    assert bb.stored_opponents(dict(ctx, retime=True), race) == {}
+    # a PARTIAL cell is stored as what it was but never reused
+    part = tmp_path / "partial.jsonl"
+    bb.STORE.append(str(part), _stored_record(ctx, race, "catboost-cpu", status="PARTIAL(0/1 rounds)"))
+    assert bb.stored_opponents(dict(ctx, store_path=str(part)), race) == {}
+
+    def fake(ctx_, race_):
+        cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)), status="ok",
+                      median_ms=700.0, times_ms=[700.0], rounds=1) for a in race_["arms"]]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "2026-09-29T13:00:00Z",
+                "params": {"arms": {"catboost-cpu": {"params": {"max_depth": 8}}}}}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(dict(ctx, retime=True), race)
+    cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
+    assert cat["source"] == "measured this run" and rec["stored_now"] == 1
+    latest = bb.STORE.lookup(bb.STORE.load(ctx["store_path"]),
+                             _stored_record(ctx, race, "catboost-cpu")["key"])
+    assert latest["measured_at"] == "2026-09-29T13:00:00Z"
+    assert latest["params"] == {"params": {"max_depth": 8}}
+
+
+def test_backfill_store_imports_and_skips(tmp_path):
+    ctx, race = _store_ctx(tmp_path)
+    cell = dict(bb.base_cell(ctx, race, "catboost-cpu", None), status="ok", median_ms=900.0)
+    ours = dict(bb.base_cell(ctx, race, "ours", "identical"), status="ok", median_ms=450.0)
+    sha = bb.race_data_sha(ctx, race, ctx["box"])
+    board = {"box": ctx["box"],
+             "config": {"rounds": 1, "data_root": ctx["data_root"],
+                        "data": {"taxi": {"size_ok": True, "pinned_sha256": sha}}},
+             "races": {race["id"]: {"family": "trees", "lane": race["lane"], "dataset": "taxi",
+                                    "rows": None, "finished": "2026-09-29T11:00:00Z",
+                                    "cells": [ours, cell]},
+                       "trees/gbdt-symmetric/istella/rows=full": {
+                           "family": "trees", "lane": "gbdt-symmetric", "dataset": "istella",
+                           "rows": None, "cells": [dict(cell, dataset="istella")]}}}
+    path = tmp_path / "board.json"
+    path.write_text(json.dumps(board))
+    store = tmp_path / "store.jsonl"
+    assert bb.backfill_store(str(path), str(store)) == (1, 1)     # istella: no data hash
+    ctx["store_path"] = str(store)
+    assert set(bb.stored_opponents(ctx, race)) == {"catboost-cpu"}
