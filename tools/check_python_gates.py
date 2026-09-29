@@ -151,7 +151,7 @@ def main(argv=None):
             'spec.loader.exec_module(tests)\n')
         body = attach + body
     for i, gate in enumerate(gates):
-        code = run([sys.executable, *(['-I'] if args.installed else []), '-c', body, args.backend, 'mojolearn.tests.' + gate],
+        code = run([sys.executable, '-u', *(['-I'] if args.installed else []), '-c', body, args.backend, 'mojolearn.tests.' + gate],
                    'run' if args.backend == 'cpu' else args.backend, gate)
         if code:
             report(gates[i+1:], dict(gate=gate, exit_code=code))

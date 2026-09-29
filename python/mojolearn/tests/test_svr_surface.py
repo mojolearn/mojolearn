@@ -352,9 +352,10 @@ def arm_refusals(rep):
     rep.raises(arm, NotImplementedError, "'sigmoid'",
                "kernel='tanh' is refused, naming cuML's spelling",
                SVR, kernel="tanh")
-    rep.raises(arm, NotImplementedError, "PRECOMPUTED",
-               "kernel='precomputed' is refused by name",
-               SVR, kernel="precomputed")
+    rep.check(arm, SVR(kernel="precomputed").kernel == "precomputed",
+              "precomputed kernel control is accepted (its arithmetic has a dedicated identity lane)")
+    rep.raises(arm, ValueError, "square", "precomputed fit requires a square kernel matrix",
+               SVR(kernel="precomputed").fit, x, y)
     rep.raises(arm, ValueError, "not a kernel name",
                "an unknown kernel name is refused",
                SVR, kernel="cosine")
