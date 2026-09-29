@@ -190,6 +190,9 @@ LANE_NAMES = (
     "gbdt-rank-pairlogit",
     "gbdt-multiclass",
     "gbdt-categorical",
+    # Ordered boosting (2026-09-29): GradientBoosting boosting_type='Ordered'
+    # against CatBoost boosting_type='Ordered', gbm-bench's values otherwise
+    "gbdt-ordered",
 )
 
 
@@ -1169,6 +1172,7 @@ LANE_DEFAULT_DATASET = {
     "gbdt-rank-pairlogit": "istellarank",
     "gbdt-multiclass": "taximc",
     "gbdt-categorical": "taxicat",
+    "gbdt-ordered": "taxi",
 }
 
 
@@ -1821,6 +1825,26 @@ TASK_LANES = {
 }
 
 
+TASK_LANES["gbdt-ordered"] = dict(
+    task=("binary", "regression"), loss=None, grow_policy="SymmetricTree",
+    boosting_type="Ordered", datasets=("taxi", "istella"),
+    objectives={"mojolearn": "Logloss (taxi) / RMSE (Istella-S)",
+                "catboost": "Logloss (taxi) / RMSE (Istella-S)"},
+    mismatches=(
+        "Ordered boosting on ours and CatBoost only: XGBoost and LightGBM have no ordered "
+        "(permutation) boosting, so the lane races CatBoost alone, on the symmetric grower "
+        "Ordered requires (catboost_options.cpp:757-759)",
+        "each library draws its fold permutations from its own generator seeded 7; the "
+        "streams are not shared, so the fits differ by construction",
+    ))
+
+
+def task_names(task):
+    """A task lane's task, or tuple of tasks, as a tuple."""
+    t = task["task"]
+    return t if isinstance(t, tuple) else (t,)
+
+
 def task_of(lane):
     """The TASK_LANES record of a task lane, or None for the original lanes."""
     return TASK_LANES.get(lane)
@@ -2028,7 +2052,9 @@ def lane_config(lane, size):
             cfg.update(task=task["task"], loss=task["loss"],
                        objectives=dict(task["objectives"]),
                        mismatches=list(task["mismatches"]))
-            if task["grow_policy"] == "SymmetricTree":
+            if task.get("boosting_type"):
+                cfg["boosting_type"] = task["boosting_type"]
+            if task["grow_policy"] == "SymmetricTree" and lane != "gbdt-ordered":
                 # the opponents without an oblivious grower race their own
                 # at the same depth (TASK_LANES, "grower")
                 cfg["xgboost_grow_policy"] = "depthwise"
@@ -2236,7 +2262,7 @@ def catboost_tree_params(cfg, task_type):
         border_count=cfg["borders"],
         random_seed=cfg["seed"],
         bootstrap_type="No",       # DEVIATION 1833
-        boosting_type="Plain",     # DEVIATION 1841, the data-dependent trap
+        boosting_type=cfg["boosting_type"],   # Plain (DEVIATION 1841) or the Ordered lane's
         grow_policy=cfg["grow_policy"],
         max_leaves=cfg["max_leaves"],   # 2 ** depth; CatBoost accepts exactly that off Lossguide
         min_data_in_leaf=cfg["min_data_in_leaf"],
@@ -3542,6 +3568,10 @@ def opponent_builders(lane, cfg, data, devices):
         if "lightgbm" in task["objectives"]:
             builders.append((["lightgbm-cpu", "lightgbm-cuda", "lightgbm-opencl"],
                              lambda: lightgbm_rank_arms(lane, cfg, data, devices)))
+    elif lane == "gbdt-ordered":
+        # Ordered boosting: CatBoost is the only other library that has it
+        builders.append((["catboost-cpu", "catboost-gpu"],
+                         lambda: catboost_arms(lane, cfg, data, devices)))
     elif task:
         # multiclass and categorical: the gbdt builders, which read the task
         # from the data (MultiClass / multi:softprob / multiclass) and the
