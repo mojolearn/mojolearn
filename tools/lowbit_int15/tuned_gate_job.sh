@@ -81,6 +81,7 @@ run tuned-exponent-sabotage fail pixi run check-gemm-int15-tuned-exponent-sabota
 must_name tuned-exponent-sabotage check_int15_tuned_matches_oracle
 must_pass tuned-exponent-sabotage check_int15_tuned_refuses
 grep -h "^   fused path: " "$OUT/tuned.log" 2>/dev/null | head -1 >> "$OUT/gate.txt"
+echo "fused kernel's store: $(grep -E '^from gemm\.checks\.gemm_(int15_epilogue|int8_pieces_epilogue_stub) import int15_store_cell' gemm/checks/gemm_int8_mma_tuned.mojo || echo 'NO int15_store_cell import found')" >> "$OUT/gate.txt"
 grep -h "^   DIGEST " "$OUT/tuned.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
 {
     echo "digests=$(grep -c . "$OUT/digests.tsv")"

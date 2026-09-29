@@ -23,8 +23,8 @@ the epilogue fold, the orchestrator's approval of the five-point interface).
   FUSED     the sums kernel with `FUSED = True` calls `int15_store_cell` at
             its store: one launch, no sums in device memory. THE ENTRY
             POINTS TAKE IT. Until lane/lowbit-mma-speed's half is pushed
-            the fused path is a STUB (`INT15_FUSED_IS_STUB`): the two-launch
-            path under the fused name.
+            the fused path was a STUB (`INT15_FUSED_IS_STUB`, now False): the
+            two-launch path under the fused name.
   TWO LAUNCH the sums stored side by side at `3 (i n + j)`, then
             `int15_sums_epilogue_kernel` calls `int15_store_cell` on them.
             `identical_gemm_int15_tuned_two_launch_*`: a gate arm (fused and
@@ -64,6 +64,7 @@ from gemm.checks.gemm_int15_epilogue import int15_epilogue_sabotage_name, int15_
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
     int8_pieces_dispatch,
+    identical_gemm_int8_pieces_tuned_fused_with_plan,
     identical_gemm_int8_pieces_tuned_with_plan,
 )
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
@@ -76,7 +77,7 @@ comptime INT15_TUNED_AVAILABLE = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 #: gate and the timing harness build before that lane's half is pushed. A
 #: stub build's fused and two-launch digests agree by construction and its
 #: fused time is the two-launch time: neither says anything of the fold.
-comptime INT15_FUSED_IS_STUB = True
+comptime INT15_FUSED_IS_STUB = False
 
 
 def int15_tuned_sabotage_name() -> String:
@@ -167,30 +168,6 @@ def _epilogue(
     )
 
 
-def _fused_with_plan_stub(
-    ctx: DeviceContext,
-    mut c: DeviceBuffer[DType.float32],
-    mut ah: DeviceBuffer[DType.int8],
-    mut al: DeviceBuffer[DType.int8],
-    mut ea: DeviceBuffer[DType.int32],
-    mut bh: DeviceBuffer[DType.int8],
-    mut bl: DeviceBuffer[DType.int8],
-    mut eb: DeviceBuffer[DType.int32],
-    mut work: Int15SumsWorkspace,
-    m: Int,
-    n: Int,
-    k: Int,
-    plan: Int,
-) raises:
-    """THE STUB of lane/lowbit-mma-speed's
-    `identical_gemm_int8_pieces_tuned_fused_with_plan(ctx, c, ah, al, ea, bh,
-    bl, eb, m, n, k, plan)`: the two-launch path. Removed when that lane's
-    half is pushed (`INT15_FUSED_IS_STUB`)."""
-    work.ensure(ctx, m * n)
-    identical_gemm_int8_pieces_tuned_with_plan(ctx, work.sums, ah, al, bh, bl, m, n, k, plan)
-    _epilogue(ctx, c, work, ea, eb, m, n)
-
-
 def _check_tuned_named(m: Int, n: Int, k: Int) raises:
     comptime if not INT15_TUNED_AVAILABLE:
         raise Error(
@@ -254,7 +231,13 @@ def identical_gemm_int15_tuned_with_plan(
     Asynchronous."""
     _check_tuned_named(m, n, k)
     comptime if INT15_TUNED_AVAILABLE:
-        _fused_with_plan_stub(ctx, c, ah, al, ea, bh, bl, eb, work, m, n, k, plan)
+        comptime if INT15_FUSED_IS_STUB:
+            # THE STUB: the two-launch path under the fused name.
+            work.ensure(ctx, m * n)
+            identical_gemm_int8_pieces_tuned_with_plan(ctx, work.sums, ah, al, bh, bl, m, n, k, plan)
+            _epilogue(ctx, c, work, ea, eb, m, n)
+        else:
+            identical_gemm_int8_pieces_tuned_fused_with_plan(ctx, c, ah, al, ea, bh, bl, eb, m, n, k, plan)
 
 
 def identical_gemm_int15_tuned_into(
