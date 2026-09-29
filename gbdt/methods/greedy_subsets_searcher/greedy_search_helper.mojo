@@ -64,7 +64,6 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
     snap_gradients_to_scale_kernel,
-    snap_weights_to_grid_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -1931,26 +1930,6 @@ def enqueue_level_quantize(
     )
 
 
-def enqueue_snap_weights(
-    ctx: DeviceContext,
-    mut stats: DeviceBuffer[DType.float32],
-    n_rows: Int,
-    weight_sum: MutPointer[Float32, MutAnyOrigin],
-) raises:
-    """lane/sym-quality: `snap_weights_to_grid_kernel` over the weight plane
-    (stat plane 0, line `n_rows`), after the target kernel and before the
-    tree's first histogram. `weight_sum` is the device sum of |plane 0|
-    (the magnitudes the scale is derived from). Row-parallel, one thread
-    per row, no reduction, so the geometry cannot reach a bit."""
-    if n_rows < 1:
-        return
-    ctx.enqueue_function[snap_weights_to_grid_kernel](
-        stats.unsafe_ptr(), Int32(n_rows), weight_sum,
-        grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
-        block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
-    )
-
-
 def enqueue_snap_gradients(
     ctx: DeviceContext,
     mut stats: DeviceBuffer[DType.float32],
@@ -1968,31 +1947,6 @@ def enqueue_snap_gradients(
         grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
         block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
     )
-
-
-def enqueue_snap_weights_host_sum(
-    ctx: DeviceContext,
-    mut stats: DeviceBuffer[DType.float32],
-    n_rows: Int,
-    weight_magnitude: Float32,
-) raises:
-    """`enqueue_snap_weights` for a caller that holds the weight sum on the
-    host (the non-symmetric driver, and the symmetric one without a device
-    magnitudes buffer): one Float32 upload, no drain."""
-    var d = ctx.enqueue_create_buffer[DType.float32](1)
-    var h = ctx.enqueue_create_host_buffer[DType.float32](1)
-    var m = weight_magnitude
-    if m < Float32(0.0):
-        m = -m
-    h.unsafe_ptr().unsafe_store(0, m)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
-    enqueue_snap_weights(
-        ctx, stats, n_rows,
-        rebind[MutPointer[Float32, MutAnyOrigin]](d.unsafe_ptr()),
-    )
-    ctx.synchronize()
-    _ = h^  # past the drain
-    _ = d^
 
 
 def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
@@ -4801,14 +4755,6 @@ def run_tree_layout_traced[
     var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
-    # lane/sym-quality: put the weight plane on an exact dyadic grid before
-    # the first histogram (`snap_weights_to_grid_kernel`). The boosting loop
-    # sets it for weighted fits only; False keeps every caller's bits.
-    snap_stats: Bool = False,
-    # lane/sym-quality: the gradient planes onto the tree's fixed-point grid
-    # (`snap_gradients_to_scale_kernel`), so the float partition totals and
-    # the quantized histograms sum the same values. False keeps the bits.
-    snap_gradients: Bool = False,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -5065,26 +5011,14 @@ def run_tree_layout_traced[
             dst_buf=ws[0].scale_dev, src_ptr=ws[0].h_scale.unsafe_ptr()
         )
 
-    # lane/sym-quality: the weighted fit's WEIGHT plane onto a dyadic grid
-    # on which every search sum is exact (`snap_weights_to_grid_kernel`), so
-    # an empty side weighs exactly zero as it does with unit weights. Only
+    # lane/sym-quality: the gradient planes onto this tree's fixed-point
+    # grid before the first histogram (`snap_gradients_to_scale_kernel`), so
+    # the float partition totals and the quantized histograms sum the same
+    # values and `right = total - left` carries no dither mismatch. Only
     # where a histogram quantizes at all (`_ACC_LIVE`); a float-flush build
-    # sums floats on both sides of `right = total - left`.
+    # sums floats on both sides.
     comptime if _ACC_LIVE:
-        if snap_gradients:
-            enqueue_snap_gradients(ctx, stats, n_rows, stat_count, fixed_scale)
-        if snap_stats:
-            if mags_dev:
-                enqueue_snap_weights(
-                    ctx, stats, n_rows,
-                    rebind[MutPointer[Float32, MutAnyOrigin]](
-                        mags_dev.value().unsafe_ptr()
-                    ),
-                )
-            else:
-                enqueue_snap_weights_host_sum(
-                    ctx, stats, n_rows, weight_magnitude
-                )
+        enqueue_snap_gradients(ctx, stats, n_rows, stat_count, fixed_scale)
 
     # ================================================================
     # Their `TGreedyTreeLikeStructureSearcher::FitImpl`
@@ -6043,14 +5977,6 @@ def run_tree_layout[
     var dynamic_cindex: Optional[DeviceBuffer[DType.uint32]] = None,
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
-    # lane/sym-quality: put the weight plane on an exact dyadic grid before
-    # the first histogram (`snap_weights_to_grid_kernel`). The boosting loop
-    # sets it for weighted fits only; False keeps every caller's bits.
-    snap_stats: Bool = False,
-    # lane/sym-quality: the gradient planes onto the tree's fixed-point grid
-    # (`snap_gradients_to_scale_kernel`), so the float partition totals and
-    # the quantized histograms sum the same values. False keeps the bits.
-    snap_gradients: Bool = False,
 ) raises -> List[Int]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `run_tree_layout_traced` with BOTH instruments off.
@@ -6087,8 +6013,6 @@ def run_tree_layout[
         dynamic_cindex=dynamic_cindex^,
         dynamic_fold_counts=dynamic_fold_counts,
         dynamic_one_hot=dynamic_one_hot,
-        snap_stats=snap_stats,
-        snap_gradients=snap_gradients,
     )
 
 
