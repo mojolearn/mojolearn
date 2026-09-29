@@ -118,8 +118,8 @@ from gemm.checks.gemm_int8_mma_tuned import (
     _mfma_i8,
     _refuse_pieces_shape,
     _refuse_tuned_shape,
+    _store_cell_of_sums,
     _store_cell_tuned,
-    _store_sums,
 )
 
 #: The scheduling arm of the direct loads: a step beyond `k` is the row's
@@ -639,9 +639,12 @@ def identical_gemm_int8_mma_amd_into(
 
 
 def identical_gemm_int8_pieces_amd_direct_kernel[
-    FM: Int, FN: Int, WM: Int, WN: Int, KU: Int, KW: Int
+    FUSED: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KU: Int, KW: Int
 ](
     s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
     al: MutPointer[Int8, MutAnyOrigin],
     bh: MutPointer[Int8, MutAnyOrigin],
@@ -656,7 +659,13 @@ def identical_gemm_int8_pieces_amd_direct_kernel[
     Int32 per cell. `identical_gemm_int8_mma_amd_direct_kernel`'s block,
     waves, tiles, windows and turns; a lane reads its codes of each plane
     of each operand row, and a unit tile runs four unit steps into three
-    accumulators. The same grid and block. No barrier."""
+    accumulators. The same grid and block. No barrier.
+
+    `FUSED` False, THE SUMS FORM: the three sums to `s`; `c`, `ea`, `eb`
+    are not read. `FUSED` True, THE FUSED FORM: each cell through the
+    tuned file's `_store_cell_of_sums` (the caller's seam,
+    `int15_store_cell`) to `c`; `s` is not written. The tuned kernel's
+    two forms, the same arguments in the same order."""
     comptime TM = INT8_TUNED_TILE * FM
     comptime TN = INT8_TUNED_TILE * FN
     comptime BM = WM * TM
@@ -759,8 +768,11 @@ def identical_gemm_int8_pieces_amd_direct_kernel[
                 var gi = row0 + fm * 16 + i4
                 var gj = col0 + fq * 16 + i16
                 comptime for e in range(4):
-                    _store_sums(
+                    _store_cell_of_sums[FUSED](
                         s,
+                        c,
+                        ea,
+                        eb,
                         acc[(fm * FN + fq) * 3][e],
                         acc[(fm * FN + fq) * 3 + 1][e],
                         acc[(fm * FN + fq) * 3 + 2][e],
@@ -774,10 +786,13 @@ def identical_gemm_int8_pieces_amd_direct_kernel[
 
 
 def _launch_amd_pieces_direct[
-    FM: Int, FN: Int, WM: Int, WN: Int, KU: Int, KW: Int
+    FUSED: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KU: Int, KW: Int
 ](
     ctx: DeviceContext,
-    mut s: DeviceBuffer[DType.int32],
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
     mut ah: DeviceBuffer[DType.int8],
     mut al: DeviceBuffer[DType.int8],
     mut bh: DeviceBuffer[DType.int8],
@@ -789,14 +804,17 @@ def _launch_amd_pieces_direct[
     comptime BM = WM * FM * INT8_TUNED_TILE
     comptime BN = WN * FN * INT8_TUNED_TILE
     comptime LB = INT8_AMD_LANE_BYTES * KU
-    comptime kern = identical_gemm_int8_pieces_amd_direct_kernel[FM, FN, WM, WN, KU, KW]
+    comptime kern = identical_gemm_int8_pieces_amd_direct_kernel[FUSED, FM, FN, WM, WN, KU, KW]
     var aligned = Int32(0)
     if _bases_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr()), LB) and _bases_aligned(
         Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr()), LB
     ):
         aligned = Int32(1)
     ctx.enqueue_function[kern](
-        s.unsafe_ptr(),
+        s,
+        c,
+        ea,
+        eb,
         ah.unsafe_ptr(),
         al.unsafe_ptr(),
         bh.unsafe_ptr(),
@@ -808,6 +826,56 @@ def _launch_amd_pieces_direct[
         grid_dim=((n + BN - 1) // BN, (m + BM - 1) // BM, 1),
         block_dim=(WM * WN * WARP_SIZE, 1, 1),
     )
+
+
+def _amd_pieces_with_plan[FUSED: Bool](
+    ctx: DeviceContext,
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    """Either form on a NAMED plan of this file. Refuses by name on a
+    column that is not AMD and a `k` above the four-product bound."""
+    _refuse_not_amd(String("identical_gemm_int8_pieces_amd"))
+    comptime if INT8_AMD_AVAILABLE:
+        _refuse_pieces_shape(m, n, k)
+        if plan == INT8_AMD_PIECES_DIRECT_L8:
+            _launch_amd_pieces_direct[FUSED, 1, 1, 2, 2, 1, 1](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT:
+            _launch_amd_pieces_direct[FUSED, 1, 1, 2, 2, 2, 1](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_U4:
+            _launch_amd_pieces_direct[FUSED, 1, 1, 2, 2, 2, 4](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_ONE_WAVE:
+            _launch_amd_pieces_direct[FUSED, 1, 1, 1, 1, 2, 4](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_FRAG2:
+            _launch_amd_pieces_direct[FUSED, 2, 2, 2, 2, 2, 1](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_FRAG2X4:
+            _launch_amd_pieces_direct[FUSED, 2, 4, 2, 2, 2, 1](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_TALL:
+            _launch_amd_pieces_direct[FUSED, 4, 2, 2, 2, 2, 1](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_DIRECT_ROW:
+            _launch_amd_pieces_direct[FUSED, 1, 4, 1, 4, 2, 2](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_STAGED_FRAG2:
+            _launch_pieces[FUSED, False, 2, 2, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_STAGED_FRAG2X4:
+            _launch_pieces[FUSED, False, 2, 4, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_STAGED_WAVES8:
+            _launch_pieces[FUSED, False, 1, 2, 2, 4, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_STAGED_TALL_WAVE:
+            _launch_pieces[FUSED, False, 4, 2, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_AMD_PIECES_STAGED_WAVES8_TALL:
+            _launch_pieces[FUSED, False, 2, 2, 4, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        else:
+            raise Error("identical_gemm_int8_pieces_amd: no plan " + String(plan))
 
 
 def identical_gemm_int8_pieces_amd_with_plan(
@@ -822,41 +890,15 @@ def identical_gemm_int8_pieces_amd_with_plan(
     k: Int,
     plan: Int,
 ) raises:
-    """The four products on a NAMED plan of this file, for the gate and the
+    """THE SUMS FORM on a NAMED plan of this file, for the gate and the
     timing harness. `s` holds `3 m n` Int32: cell `(i, j)`'s HH, HL + LH and
     LL at `3 (i n + j)`. Refuses by name on a column that is not AMD.
     Asynchronous."""
-    _refuse_not_amd(String("identical_gemm_int8_pieces_amd"))
-    comptime if INT8_AMD_AVAILABLE:
-        _refuse_pieces_shape(m, n, k)
-        if plan == INT8_AMD_PIECES_DIRECT_L8:
-            _launch_amd_pieces_direct[1, 1, 2, 2, 1, 1](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT:
-            _launch_amd_pieces_direct[1, 1, 2, 2, 2, 1](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_U4:
-            _launch_amd_pieces_direct[1, 1, 2, 2, 2, 4](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_ONE_WAVE:
-            _launch_amd_pieces_direct[1, 1, 1, 1, 2, 4](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_FRAG2:
-            _launch_amd_pieces_direct[2, 2, 2, 2, 2, 1](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_FRAG2X4:
-            _launch_amd_pieces_direct[2, 4, 2, 2, 2, 1](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_TALL:
-            _launch_amd_pieces_direct[4, 2, 2, 2, 2, 1](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_DIRECT_ROW:
-            _launch_amd_pieces_direct[1, 4, 1, 4, 2, 2](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_STAGED_FRAG2:
-            _launch_pieces[2, 2, 2, 2, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_STAGED_FRAG2X4:
-            _launch_pieces[2, 4, 2, 2, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_STAGED_WAVES8:
-            _launch_pieces[1, 2, 2, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_STAGED_TALL_WAVE:
-            _launch_pieces[4, 2, 2, 2, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        elif plan == INT8_AMD_PIECES_STAGED_WAVES8_TALL:
-            _launch_pieces[2, 2, 4, 2, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
-        else:
-            raise Error("identical_gemm_int8_pieces_amd: no plan " + String(plan))
+    # The sums form reads no float and no exponent: `c` is `s` under the
+    # float type, `ea` and `eb` are `s`, none of them touched (the tuned
+    # file's convention).
+    var sp = s.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    _amd_pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
 
 
 def identical_gemm_int8_pieces_amd_into(
@@ -876,4 +918,61 @@ def identical_gemm_int8_pieces_amd_into(
     Asynchronous."""
     identical_gemm_int8_pieces_amd_with_plan(
         ctx, s, ah, al, bh, bl, m, n, k, int8_amd_pieces_dispatch(m, n, k)
+    )
+
+
+def identical_gemm_int8_pieces_amd_fused_with_plan(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+    plan: Int,
+) raises:
+    """THE FUSED FORM on a NAMED plan of this file:
+    `identical_gemm_int8_pieces_tuned_fused_with_plan`'s signature and its
+    bits (each cell stored by `int15_store_cell`), ONE launch.
+    Asynchronous."""
+    # The fused form writes no sums: `s` is `ea` and is not touched.
+    _amd_pieces_with_plan[True](
+        ctx,
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        c.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ea.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        eb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        ah,
+        al,
+        bh,
+        bl,
+        m,
+        n,
+        k,
+        plan,
+    )
+
+
+def identical_gemm_int8_pieces_amd_fused_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """THE FUSED FORM on the plan `int8_amd_pieces_dispatch` names:
+    `identical_gemm_int8_pieces_tuned_fused_into`'s signature and its bits.
+    Asynchronous."""
+    identical_gemm_int8_pieces_amd_fused_with_plan(
+        ctx, c, ah, al, ea, bh, bl, eb, m, n, k, int8_amd_pieces_dispatch(m, n, k)
     )

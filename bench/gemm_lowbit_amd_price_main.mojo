@@ -42,8 +42,10 @@ LOWBIT-NOT-RUN line):
     inference.pieces.int8.amd       THE COMPLETE OPERATION on the AMD
     training.pieces.int8.amd        launcher's plan: parallel quantize A
                                     (and B), four products in one launch,
-                                    the stand-in recombination of the
-                                    harness this file extends. One wait.
+                                    then the extended harness's second
+                                    launch, the fifteen-bit seam
+                                    (`int15_store_cell`) one thread a
+                                    cell. One wait.
     inference.pieces.int8.plan.*    the same complete operation on EVERY
     training.pieces.int8.plan.*     four-product plan, the tuned file's
                                     (`plan.staged...`) and the AMD file's
@@ -51,14 +53,18 @@ LOWBIT-NOT-RUN line):
                                     complete operation takes the least time
                                     on is read from one run and not
                                     inferred from the product alone.
+    inference.pieces.int8.amd.fused THE FUSED FORM: quantize A, then the
+    inference.pieces.int8.fused.plan.*  four products AND the seam in ONE
+                                    launch, on the AMD launcher's plan and
+                                    on every plan of both files.
 
 THE COMPLETE OPERATION'S LIMITS are the extended harness's and are repeated
 because the number is the one that is quoted: the quantizer is the int8
 one, standing in for the fifteen-bit one, and its codes are not the planes
-the products read (those are the fixture's, made before anything is timed);
-the recombination is a stand-in of the same work and not the fifteen-bit
-profile's pinned seam. The WORK is a complete call's; the digest is
-compared among these arms and with nothing else.
+the products read (those are the fixture's, made before anything is timed).
+The seam is the fifteen-bit profile's own (`int15_store_cell`). The WORK is
+a complete call's; the digest is compared among these arms and with nothing
+else. lane/lowbit-int15's harness times the profile's own complete call.
 
 THE BASES. Per shape a `BASES` line prints each operand buffer's address
 modulo 16 and modulo 4096 as the launch is about to pass it: a load states
@@ -78,7 +84,9 @@ from std.time import perf_counter_ns
 from bench.gemm_lowbit_price_main import (
     ARM_BF16_WIDEN_B,
     ARM_COUNT,
+    ARM_DECODE_BASE,
     ARM_INF_PIECES,
+    ARM_INF_PIECES_FUSED,
     ARM_INT8_DEQUANT_B,
     ARM_INT8_FLAT,
     ARM_INT8_MMA,
@@ -134,6 +142,8 @@ from gemm.checks.gemm_int8_mma_amd import (
     INT8_AMD_PLAN_COUNT,
     identical_gemm_int8_mma_amd_into,
     identical_gemm_int8_mma_amd_with_plan,
+    identical_gemm_int8_pieces_amd_fused_into,
+    identical_gemm_int8_pieces_amd_fused_with_plan,
     identical_gemm_int8_pieces_amd_into,
     identical_gemm_int8_pieces_amd_with_plan,
     int8_amd_dispatch,
@@ -145,6 +155,7 @@ from gemm.checks.gemm_int8_mma_amd import (
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
     INT8_PIECES_PLAN_COUNT,
+    identical_gemm_int8_pieces_tuned_fused_with_plan,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_plan_name,
 )
@@ -167,7 +178,12 @@ comptime AMD_ARM_INF_PIECES = AMD_ARM_INF + 4
 comptime AMD_ARM_TRAIN_PIECES = AMD_ARM_INF + 5
 comptime AMD_ARM_INF_PLAN_BASE = AMD_ARM_INF + 6
 comptime AMD_ARM_TRAIN_PLAN_BASE = AMD_ARM_INF_PLAN_BASE + ALL_PIECES_PLANS
-comptime ALL_ARM_COUNT = AMD_ARM_TRAIN_PLAN_BASE + ALL_PIECES_PLANS
+#: THE FUSED FORM of the complete inference operation: the four products and
+#: the fifteen-bit seam (`int15_store_cell`) in ONE launch, on the AMD
+#: launcher's plan and on every plan of both files.
+comptime AMD_ARM_INF_FUSED = AMD_ARM_TRAIN_PLAN_BASE + ALL_PIECES_PLANS
+comptime AMD_ARM_INF_FUSED_PLAN_BASE = AMD_ARM_INF_FUSED + 1
+comptime ALL_ARM_COUNT = AMD_ARM_INF_FUSED_PLAN_BASE + ALL_PIECES_PLANS
 
 
 def _all_pieces_plan_name(u: Int) -> String:
@@ -204,8 +220,14 @@ def _name(arm: Int) -> String:
         return String("inference.pieces.int8.plan.") + _all_pieces_plan_name(
             arm - AMD_ARM_INF_PLAN_BASE
         )
-    return String("training.pieces.int8.plan.") + _all_pieces_plan_name(
-        arm - AMD_ARM_TRAIN_PLAN_BASE
+    if arm < AMD_ARM_INF_FUSED:
+        return String("training.pieces.int8.plan.") + _all_pieces_plan_name(
+            arm - AMD_ARM_TRAIN_PLAN_BASE
+        )
+    if arm == AMD_ARM_INF_FUSED:
+        return String("inference.pieces.int8.amd.fused")
+    return String("inference.pieces.int8.fused.plan.") + _all_pieces_plan_name(
+        arm - AMD_ARM_INF_FUSED_PLAN_BASE
     )
 
 
@@ -231,7 +253,7 @@ def _needs_pieces(arm: Int) -> Bool:
     """Whether the arm reads the four planes, so that the four-product
     kernel's bound on `k` binds it and its buffers must exist."""
     if arm < ARM_COUNT:
-        return arm >= ARM_PIECES_FLAT
+        return arm >= ARM_PIECES_FLAT and arm <= ARM_INF_PIECES_FUSED
     if arm >= AMD_ARM_PIECES_BASE and arm < AMD_ARM_INF:
         return True
     return arm >= AMD_ARM_INF_PIECES
@@ -288,9 +310,28 @@ def _enqueue(
                 identical_gemm_int8_mma_amd_into(
                     ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k
                 )
+        elif arm >= AMD_ARM_INF_FUSED:
+            # THE FUSED COMPLETE OPERATION: quantize A, then the four
+            # products and the seam in one launch.
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            if arm == AMD_ARM_INF_FUSED:
+                identical_gemm_int8_pieces_amd_fused_into(
+                    ctx, sb.c, sb.pah, sb.pal, sb.ea, sb.pbh, sb.pbl, sb.eb, m, n, k
+                )
+            else:
+                var u = arm - AMD_ARM_INF_FUSED_PLAN_BASE
+                if u < INT8_PIECES_PLAN_COUNT:
+                    identical_gemm_int8_pieces_tuned_fused_with_plan(
+                        ctx, sb.c, sb.pah, sb.pal, sb.ea, sb.pbh, sb.pbl, sb.eb, m, n, k, u
+                    )
+                else:
+                    identical_gemm_int8_pieces_amd_fused_with_plan(
+                        ctx, sb.c, sb.pah, sb.pal, sb.ea, sb.pbh, sb.pbl, sb.eb, m, n, k,
+                        u - INT8_PIECES_PLAN_COUNT,
+                    )
         else:
             # THE COMPLETE OPERATION: the conversions, four products in one
-            # launch, the stand-in recombination.
+            # launch, the second launch (the seam, one thread a cell).
             var training = arm == AMD_ARM_TRAIN_PIECES or arm >= AMD_ARM_TRAIN_PLAN_BASE
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
             if training:
@@ -362,6 +403,12 @@ def _note(arm: Int, m: Int, n: Int, k: Int) -> String:
     if arm == AMD_ARM_TRAIN_4X:
         return String("quantize.a.par+pack.b.par+4x.") + one
     var four = String("amd.") + int8_amd_pieces_plan_name(int8_amd_pieces_dispatch(m, n, k))
+    if arm == AMD_ARM_INF_FUSED:
+        return String("quantize.a.par+four-products-and-seam-FUSED.") + four
+    if arm > AMD_ARM_INF_FUSED:
+        return String("quantize.a.par+four-products-and-seam-FUSED.") + _all_pieces_plan_name(
+            arm - AMD_ARM_INF_FUSED_PLAN_BASE
+        )
     var lead = String("quantize.a.par+four-products.")
     if arm == AMD_ARM_TRAIN_PIECES or arm >= AMD_ARM_TRAIN_PLAN_BASE:
         lead = String("quantize.a.par+pack.b.par+four-products.")
@@ -369,7 +416,7 @@ def _note(arm: Int, m: Int, n: Int, k: Int) -> String:
         four = _all_pieces_plan_name(arm - AMD_ARM_TRAIN_PLAN_BASE)
     elif arm >= AMD_ARM_INF_PLAN_BASE:
         four = _all_pieces_plan_name(arm - AMD_ARM_INF_PLAN_BASE)
-    return lead + four + "+stand-in-recombination"
+    return lead + four + "+seam-launch"
 
 
 def _agree(
@@ -542,6 +589,11 @@ def _time_shape(
     for arm in range(AMD_ARM_PIECES_BASE, AMD_ARM_INF):
         bad += _agree(ARM_PIECES_FLAT, arm, dig, ran, name)
     for arm in range(AMD_ARM_INF, AMD_ARM_INF_PIECES):
+        bad += _agree(ARM_INT8_FLAT, arm, dig, ran, name)
+    # The extended harness's own later arms: the fused operation ends in the
+    # two-launch operation's cells; a decode plan is the profile's product.
+    bad += _agree(ARM_INF_PIECES, ARM_INF_PIECES_FUSED, dig, ran, name)
+    for arm in range(ARM_DECODE_BASE, ARM_COUNT):
         bad += _agree(ARM_INT8_FLAT, arm, dig, ran, name)
     # The first complete operation that ran is what the others are held to.
     var first_op = ARM_INF_PIECES

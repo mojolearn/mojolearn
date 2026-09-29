@@ -121,6 +121,7 @@ from max.gpu.sync import barrier
 
 from checks.kernel_matrix import (
     COLUMN_AMD,
+    COLUMN_APPLE,
     COLUMN_NVIDIA,
     TARGET_COLUMN,
     column_name,
@@ -129,6 +130,7 @@ from checks.kernel_matrix import (
 )
 from checks.numerics import dequant_int8_pinned, int8_row_exponent
 from gemm.checks.gemm_int8_mma import _imma_m16n8k32, _pack4, int8_mma_admits
+from gemm.checks.gemm_identical import step_count_sync
 from gemm.checks.gemm_int15_epilogue import int15_store_cell
 from gemm.checks.quantize_int8_par import _absmax_step, _code
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
@@ -165,6 +167,18 @@ comptime INT8_DECODE_QA_SABOTAGE = is_defined["MOJOLEARN_QUANT_PAR_SABOTAGE"]()
 #: middle sum exact to k = 65535 only (`2 * 16384 * 65535 = 2147450880`),
 #: and `INT8_PIECES_MAX_K_ANY_INT8` names that bound.
 comptime INT8_PIECES_MAX_K = 65536
+
+#: A LAUNCH ON APPLE IS BOUNDED IN WORK (lane/lowbit-int15's DEVIATION 2979,
+#: the same rule): macOS aborts a Metal command buffer that holds the GPU
+#: for seconds and leaves the cells after the abort as they were, with no
+#: error. So on the Apple column the reference device plan of the four
+#: products launches its cells in slices of at most this many products
+#: (`4 k` a cell) and waits between slices. `-D MOJOLEARN_INT8_PIECES_ONE_LAUNCH=1`
+#: launches every cell at once. Which cells a launch covers is SCHEDULING.
+comptime INT8_PIECES_BOUNDED_LAUNCHES = TARGET_COLUMN == COLUMN_APPLE and not is_defined[
+    "MOJOLEARN_INT8_PIECES_ONE_LAUNCH"
+]()
+comptime INT8_PIECES_SLICE_PRODUCTS = 1073741824
 comptime INT8_PIECES_MAX_K_ANY_INT8 = 65535
 
 #: The unit's k step on both vendors. SCHEDULING.
@@ -345,18 +359,28 @@ def int8_pieces_plan_name(plan: Int) -> String:
 
 def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_pieces_tuned_into` takes. Reads the
-    shape and may: every plan returns the same three integers."""
+    shape and may: every plan returns the same three integers. The H100's
+    measurement of 2026-09-29 (run 8, job nvc3-0030): TWO PAGES took the
+    least time of the eleven plans at all twelve rows, the 32 x 32 warps of
+    the 64 x 128 block at the four 512-token rows and the 32 x 32 block at
+    the eight decode rows."""
     if m <= INT8_TUNED_ROW_MAX_M:
-        return INT8_PIECES_PLAN_SMALL
+        comptime if TARGET_COLUMN == COLUMN_AMD:
+            # THE AMD COLUMN: the MI325X has not timed the two-page plans
+            # yet; the one-page plan it measured is kept until it has.
+            return INT8_PIECES_PLAN_SMALL
+        return INT8_PIECES_PLAN_PIPE_SMALL
     comptime if TARGET_COLUMN == COLUMN_AMD:
         # THE AMD COLUMN (lane/lowbit-amd-tuned, MI325X job 1790657862351):
-        # of this file's plans, 32 x 32 per wave in a 64 x 128 block took
-        # the least time where `n` is above 8192 (mlp_up.t512 0.184 of
-        # fp32.v1 against 0.225, the head 0.195 against 0.261); 16 x 32 in
-        # 64 x 128 where it is not (qkv 0.171, mlp_down 0.212).
+        # of this file's one-page plans, 32 x 32 per wave in a 64 x 128
+        # block took the least time where `n` is above 8192 (mlp_up.t512
+        # 0.184 of fp32.v1 against 0.225, the head 0.195 against 0.261);
+        # 16 x 32 in 64 x 128 where it is not (qkv 0.171, mlp_down 0.212).
+        # The two-page plans are not yet timed there.
         if n > 8192:
             return INT8_PIECES_PLAN_FRAG2
-    return INT8_PIECES_PLAN_WARPS16
+        return INT8_PIECES_PLAN_WARPS16
+    return INT8_PIECES_PLAN_PIPE_FRAG2
 
 
 def int8_pieces_sabotage_name() -> String:
@@ -1645,15 +1669,18 @@ def identical_gemm_int8_pieces_flat_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    cell0_in: Int32,
+    cell1_in: Int32,
 ):
     """THE REFERENCE DEVICE PLAN of the four products: one thread per cell,
     `p` ascending, one product per step into each of the three Int32 sums.
-    No unit, no staging, every column. Grid `ceil(m n / 256)`, block 256."""
+    No unit, no staging, every column. The launch covers the cells
+    `[cell0, cell1)`: grid `ceil((cell1 - cell0) / 256)`, block 256."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
-    var cell = Int(block_idx.x) * 256 + Int(thread_idx.x)
-    if cell >= m * n:
+    var cell = Int(cell0_in) + Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if cell >= Int(cell1_in):
         return
     var i = cell // n
     var j = cell - i * n
@@ -2033,20 +2060,38 @@ def identical_gemm_int8_pieces_flat_into(
     k: Int,
 ) raises:
     """The reference device plan of the four products, always. `s` holds
-    `3 m n` Int32. Every column. Asynchronous."""
+    `3 m n` Int32. Every column. Asynchronous where it is one launch; on
+    Apple a product of more than one slice waits between slices."""
     _refuse_pieces_shape(m, n, k)
-    ctx.enqueue_function[identical_gemm_int8_pieces_flat_kernel](
-        s.unsafe_ptr(),
-        ah.unsafe_ptr(),
-        al.unsafe_ptr(),
-        bh.unsafe_ptr(),
-        bl.unsafe_ptr(),
-        Int32(m),
-        Int32(n),
-        Int32(k),
-        grid_dim=((m * n + 255) // 256, 1, 1),
-        block_dim=(256, 1, 1),
-    )
+    var total = m * n
+    var per = total
+    comptime if INT8_PIECES_BOUNDED_LAUNCHES:
+        per = ((INT8_PIECES_SLICE_PRODUCTS // (4 * k)) // 256) * 256
+        if per < 256:
+            per = 256
+    var cell0 = 0
+    while cell0 < total:
+        var cell1 = cell0 + per
+        if cell1 > total:
+            cell1 = total
+        ctx.enqueue_function[identical_gemm_int8_pieces_flat_kernel](
+            s.unsafe_ptr(),
+            ah.unsafe_ptr(),
+            al.unsafe_ptr(),
+            bh.unsafe_ptr(),
+            bl.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(cell0),
+            Int32(cell1),
+            grid_dim=((cell1 - cell0 + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+        cell0 = cell1
+        if cell0 < total:
+            step_count_sync()
+            ctx.synchronize()
 
 
 def _launch_pieces[

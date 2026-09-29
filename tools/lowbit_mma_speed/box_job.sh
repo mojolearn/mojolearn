@@ -31,6 +31,15 @@
 #                back, and whether it belongs to a build or to a run
 #   ptx          tools/lowbit_mma_speed/ptx_probe.sh (NVIDIA): the kernels'
 #                PTX, counted; launches nothing, times nothing
+#   apple-gates  (Apple) the int8 flat plan's gate and its value arm, and the
+#                four products' reference device plan against the host: both
+#                plans now launch in slices bounded in work on Apple
+#   flat-slices  (Apple) the int8 flat plan, sliced, at the three widest
+#                512-token rows beside the Apple chunk probe: the harness
+#                poisons every output and refuses a surviving poison, the two
+#                digests must agree, cold run and run of record
+#   quant-price-noflat  the quantizer phase WITHOUT the multi-second flat
+#                products (the orchestrator, 2026-09-29)
 #
 # Every phase runs even when an earlier one failed (a red phase is a
 # finding); the exit is non-zero when any phase's was. The box name is what
@@ -71,6 +80,31 @@ AMD_ARMS="$AMD_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
 AMD_ARMS="$AMD_ARMS,inference.int8i32.v1.amd,training.int8i32.v1.amd"
 AMD_ARMS="$AMD_ARMS,inference.4x.int8i32.v1.amd,training.4x.int8i32.v1.amd"
 AMD_ARMS="$AMD_ARMS,pieces.int8*,inference.pieces.int8*,training.pieces.int8*"
+#: The quantizer phase without the flat products.
+QUANT_NOFLAT_ARMS="fp32.v1,int8i32.v1.applechunk"
+QUANT_NOFLAT_ARMS="$QUANT_NOFLAT_ARMS,convert.int8.quantize.a,convert.int8.pack.b"
+QUANT_NOFLAT_ARMS="$QUANT_NOFLAT_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
+QUANT_NOFLAT_ARMS="$QUANT_NOFLAT_ARMS,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk"
+QUANT_NOFLAT_ARMS="$QUANT_NOFLAT_ARMS,inference.int8i32.v1.applechunk.parq,training.int8i32.v1.applechunk.parq"
+apple_gates() {
+    local out="$MOJOLEARN_LOWBIT_RESULTS/$MOJOLEARN_LOWBIT_BOX/gate_apple"
+    rm -rf "$out"; mkdir -p "$out"
+    local r=0
+    export PATH="$HOME/.pixi/bin:$PATH"
+    pixi run check-gemm-lowbit > "$out/lowbit.log" 2>&1; local a=$?
+    pixi run check-gemm-lowbit-sabotage > "$out/lowbit-sabotage.log" 2>&1; local b=$?
+    pixi run check-gemm-int8-pieces-tuned > "$out/pieces.log" 2>&1; local c=$?
+    {
+        echo "check-gemm-lowbit exit=$a (expected 0)"
+        echo "check-gemm-lowbit-sabotage exit=$b (expected non-zero)"
+        echo "check-gemm-int8-pieces-tuned exit=$c (expected 0: the reference device plan against the host)"
+    } | tee "$out/verdict.txt"
+    [ "$a" -eq 0 ] || r=1
+    [ "$b" -ne 0 ] || r=1
+    [ "$c" -eq 0 ] || r=1
+    tail -5 "$out/lowbit.log" "$out/pieces.log"
+    return "$r"
+}
 red=0
 summary=""
 for phase in "$@"; do
@@ -87,6 +121,9 @@ for phase in "$@"; do
         amd-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$AMD_ARMS} MOJOLEARN_LOWBIT_PRICE_MAIN=bench/gemm_lowbit_amd_price_main.mojo bash tools/lowbit_mma_speed/price_job.sh amd ;;
         amd-fault-repro) bash tools/lowbit_amd_tuned/fault_repro.sh 4 3 ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
+        apple-gates) apple_gates ;;
+        flat-slices) MOJOLEARN_LOWBIT_PRICE_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.applechunk" MOJOLEARN_LOWBIT_PRICE_ONLY="mlp_up.t512,mlp_down.t512,lm_head.t512" bash tools/lowbit_mma_speed/price_job.sh flatslices ;;
+        quant-price-noflat) MOJOLEARN_LOWBIT_PRICE_ARMS=$QUANT_NOFLAT_ARMS bash tools/lowbit_mma_speed/price_job.sh quantnoflat ;;
         *) echo "box_job.sh: unknown phase $phase" >&2; exit 2 ;;
     esac
     rc=$?

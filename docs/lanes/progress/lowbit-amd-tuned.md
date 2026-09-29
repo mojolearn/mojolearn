@@ -38,13 +38,15 @@ code path moves.
 | `gemm/checks/gemm_int8_mma_tuned.mojo` (Lane D) | import `COLUMN_AMD` from `checks.kernel_matrix` |
 | same | `int8_pieces_dispatch`: on AMD, m > 16 and n > 8192 takes `INT8_PIECES_PLAN_FRAG2` |
 | same | `int8_tuned_dispatch`: on AMD, m > 16 takes `INT8_TUNED_PLAN_FRAG2_K64`, and `INT8_TUNED_PLAN_K64` where n > 14336 |
-| `gemm/checks/gemm_int15_tuned_check.mojo` (Lane C) | `check_int15_tuned_refuses` rewritten (Failures 3): reads both bounds, never launches on buffers shorter than `k`, checks each refusal names its bound. Also as a patch: `~/mojolearn-evidence/lowbit-amd-tuned/int15_refuses_gate_fix.patch` |
-| `gemm/checks/gemm_int15_tuned.mojo` (lane/lowbit-int15) | import `COLUMN_AMD` and `identical_gemm_int8_pieces_amd_into` |
-| same | `identical_gemm_int15_tuned_into`: on AMD the sums come from `identical_gemm_int8_pieces_amd_into` (this lane's launcher) in place of `identical_gemm_int8_pieces_tuned_into` |
+| (withdrawn) `gemm/checks/gemm_int15_tuned_check.mojo`, `gemm/checks/gemm_int15_tuned.mojo` | This lane's fix of the refusal gate and its AMD branch in the fifteen-bit launcher were DROPPED at the orchestrator's word: Lane C fixed the gate at its root in its own branch (MI325X job 1790658677079) and rebuilt the launcher on the fused form; both files are now lane/lowbit-int15's as merged. |
 
-The int15 hunk makes `gemm_int15_tuned.mojo` import `gemm_int8_mma_amd.mojo` on
-every column. That file has been BUILT ON AMD ONLY; before lane/lowbit-int15
-merges this, its build on the H100 and a Mac must be seen.
+The AMD pieces launcher now has Lane D's two forms: the SUMS form
+(`identical_gemm_int8_pieces_amd_with_plan/_into`) and the FUSED form
+(`identical_gemm_int8_pieces_amd_fused_with_plan/_into`, the seam
+`int15_store_cell` at the last step, the tuned file's `_store_cell_of_sums`),
+for the direct kernels and the staged ones alike. The gate checks every plan's
+fused form, and the dispatched one, against the seam computed on the host's
+sums.
 
 ## What ran
 

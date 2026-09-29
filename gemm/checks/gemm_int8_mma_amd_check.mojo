@@ -56,6 +56,7 @@ from std.sys import has_accelerator, is_defined
 
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.numerics import numeric_mode_name
+from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
 from gemm.checks.gemm_int8_apple_chunk_check import (
     PLANT_SHAPE_COUNT,
     _plant_exponents,
@@ -68,6 +69,8 @@ from gemm.checks.gemm_int8_mma_amd import (
     INT8_AMD_SABOTAGE,
     identical_gemm_int8_mma_amd_into,
     identical_gemm_int8_mma_amd_with_plan,
+    identical_gemm_int8_pieces_amd_fused_into,
+    identical_gemm_int8_pieces_amd_fused_with_plan,
     identical_gemm_int8_pieces_amd_into,
     identical_gemm_int8_pieces_amd_with_plan,
     int8_amd_dispatch,
@@ -439,6 +442,25 @@ def check_amd_dispatch_is_batch_invariant(ctx: DeviceContext) raises:
 # ===========================================================================
 
 
+def _fused_host(
+    want: List[Int32], ea: List[Int32], eb: List[Int32], m: Int, n: Int
+) -> List[Float32]:
+    """What the FUSED form stores, from the host's three sums: the
+    fifteen-bit seam (`int15_store_cell`'s arithmetic, W-5 to W-7) on the
+    host, with no define of the device's defect arms."""
+    var out = List[Float32]()
+    for i in range(m):
+        for j in range(n):
+            var at_ = 3 * (i * n + j)
+            out.append(
+                dequant_int15_pinned(
+                    int15_recombine(want[at_], want[at_ + 1], want[at_ + 2]),
+                    Int(ea[i]) + Int(eb[j]),
+                )
+            )
+    return out^
+
+
 def _run_every_amd_pieces_plan(
     ctx: DeviceContext,
     ah: List[Int8],
@@ -456,6 +478,13 @@ def _run_every_amd_pieces_plan(
     thread per cell) and every four-product plan of the AMD file, each
     against the host and against the reference device plan."""
     var want = piece_sums_host(ah, al, bh, bl, m, n, k)
+    # The FUSED form's operands and answer: row exponents that differ row
+    # to row, and the seam on the host's sums.
+    var ea = _plant_exponents(m, -6, 5)
+    var eb = _plant_exponents(n, -7, 3)
+    var want_c = _fused_host(want, ea, eb, m, n)
+    var dea = _upload_i32(ctx, ea)
+    var deb = _upload_i32(ctx, eb)
     var dah = _upload_i8(ctx, ah)
     var dal = _upload_i8(ctx, al)
     var dbh = _upload_i8(ctx, bh)
@@ -488,6 +517,17 @@ def _run_every_amd_pieces_plan(
             got = _sums_diff(out, want, n, ptag + " (amd plan vs host)")
             if got.byte_length() == 0 and flat_ok:
                 got = _sums_diff(out, flat, n, ptag + " (amd plan vs reference device plan)")
+            # THE FUSED FORM of the same plan: the seam in the last step.
+            if got.byte_length() == 0:
+                var dc = _poisoned(ctx, m * n)
+                _trace(ptag + " fused")
+                identical_gemm_int8_pieces_amd_fused_with_plan(
+                    ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, plan
+                )
+                ctx.synchronize()
+                var outc = _download_f32(ctx, dc, m * n, ptag + " fused")
+                got = _diff(outc, want_c, ptag + " (amd plan, fused form, vs host seam)")
+                _ = dc
         except e:
             got = ptag + ": " + String(e)
         # Every four-product plan's window is 64 steps but the first's,
@@ -498,6 +538,30 @@ def _run_every_amd_pieces_plan(
         reach.note(_can_reach(int8_amd_pieces_plan_is_direct(plan), window, k), got, ptag)
         tally.note(got)
         _ = ds
+    # The fused form on the plan the AMD launcher names.
+    var dispatched: String
+    try:
+        var dc = _poisoned(ctx, m * n)
+        _trace(tag + " fused dispatched")
+        identical_gemm_int8_pieces_amd_fused_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        ctx.synchronize()
+        var outc = _download_f32(ctx, dc, m * n, tag + " fused dispatched")
+        dispatched = _diff(outc, want_c, tag + " fused dispatched (vs host seam)")
+        _ = dc
+    except e:
+        dispatched = tag + " fused dispatched: " + String(e)
+    reach.note(
+        _can_reach(
+            int8_amd_pieces_plan_is_direct(int8_amd_pieces_dispatch(m, n, k)),
+            32 if int8_amd_pieces_dispatch(m, n, k) == 0 else 64,
+            k,
+        ),
+        dispatched,
+        tag + " fused dispatched",
+    )
+    tally.note(dispatched)
+    _ = dea
+    _ = deb
     _ = dah
     _ = dal
     _ = dbh

@@ -1,0 +1,4 @@
+pieces	0	24s	expected=pass	held=yes
+pieces-sabotage	1	24s	expected=fail	held=yes
+pieces-staging-sabotage	1	24s	expected=fail	held=yes
+pieces-value-sabotage	1	22s	expected=fail	held=yes
