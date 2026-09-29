@@ -128,8 +128,8 @@ def compute_batch_size(
     # `dbscan.cuh:71`: `if (eps_nn_method != EpsNnMethod::RBC)`. The clamp
     # guards the dense `N * batch_size` adjacency and the worst-case CSR the
     # brute arm can emit; the RBC arm materializes neither, and its int32
-    # bound is the ACTUAL edge count, refused at the query site
-    # (runner.mojo, the `nnz1 > MAX_LABEL` raise). Their `:86-94` info about
+    # bound is the ACTUAL edge count, met at the query site by splitting
+    # the batch (runner.mojo, loop 1's `nnz1 > edge_cap` split). Their `:86-94` info about
     # a smaller sufficient index type is dead for Index_ == int32 and is not
     # implemented.
     if eps_nn_method != EPS_NN_RBC:
