@@ -13,5 +13,5 @@ OUT=$PWD/bench/results/lowbit_default/$BOX/split
 mkdir -p "$OUT"
 for n in 1 32; do
     pixi run -e default python tools/lowbit_default/default_gate.py --model $M --phases generate --new $n \
-        --rounds 3 --box "$BOX-new$n" --out "$OUT" 2>&1 | grep -E "RESULT|GATE|rror|Traceback"
+        --rounds ${LB_ROUNDS:-7} --box "$BOX-new$n" --out "$OUT" 2>&1 | grep -E "RESULT|GATE|rror|Traceback"
 done
