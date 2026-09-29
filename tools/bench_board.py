@@ -388,6 +388,54 @@ def cpu_arm_reason(family, lane):
 #: carries einops >= 0.8 for the same reference).
 NEURAL_PINS = ["einops==0.8.1"]
 
+#: THE STRONGEST MAMBA OPPONENT (tools/bench_board_neural.py MAMBA_SSM_ARMS):
+#: mamba_ssm's fused kernels, NVIDIA only. Pinned to the state-spaces/mamba
+#: commit mamba/corpus/gen_corpus.py cites (its Mamba3 is the heavy-tail A our
+#: Mamba3Block implements; PyPI's 2.3.2.post1 sdist is an older Mamba-3 with
+#: A = -softplus). No published wheel matches the board's torch 2.13.0+cu129
+#: (the GitHub release wheels stop at torch 2.10 for CUDA 12), so both
+#: packages BUILD FROM SOURCE in the board's venv against its torch
+#: (--no-build-isolation) with the pod's CUDA toolkit (/usr/local/cuda nvcc,
+#: CUDA 12.x; torch's extension builder takes a matching major version):
+#: causal-conv1d (the fused path of both mixers needs it) and mamba-ssm with
+#: MAMBA_KEEP_CUDA_BUILD=TRUE (the selective-scan CUDA kernel Mamba-1 runs;
+#: without it only the Triton kernels are installed). Both setup.py files
+#: compile sm_75/80/87/90 (sm_80 code runs on sm_86 and sm_89). --no-deps:
+#: mamba-ssm's install_requires pull tilelang, quack-kernels and an unpinned
+#: transformers; the forward needs none but transformers (mamba_ssm/__init__
+#: imports MambaLMHeadModel, whose generation utilities import it), pinned
+#: here with its tokenizers range holding the algos pin (tokenizers 0.23.2).
+#: pip's wheel cache keeps the built wheels, so a later venv on the same box
+#: installs them without compiling. A failed build is not fatal: the
+#: mamba-ssm arms then refuse by name (mamba_ssm or causal_conv1d does not
+#: import) in their cells.
+MAMBA_SSM_COMMIT = "e9594ce1c732d97440f0332fdc43170a2294dbfa"
+MAMBA_SSM_PINS = {"nvidia": ["transformers==5.17.0", "ninja==1.13.2", "wheel==0.48.0",
+                             "packaging==26.3", "setuptools==84.0.0"]}
+MAMBA_SSM_BUILD = {"nvidia": ["causal-conv1d==1.7.0",
+                              "mamba-ssm @ git+https://github.com/state-spaces/mamba@" + MAMBA_SSM_COMMIT]}
+MAMBA_SSM_BUILD_ENV = {"MAMBA_FORCE_BUILD": "TRUE", "MAMBA_KEEP_CUDA_BUILD": "TRUE",
+                       "CAUSAL_CONV1D_FORCE_BUILD": "TRUE"}
+
+
+def mamba_ssm_install_steps(python, vendor, opponent_wheels=None):
+    """[(argv, extra env)] that install the mamba-ssm opponent into `python`'s
+    venv on `vendor` ([] where it is not planned). With --opponent-wheels the
+    two builds come from that directory's prebuilt wheels instead."""
+    if vendor not in MAMBA_SSM_BUILD:
+        return []
+    pip = [python, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+    local = ["--no-index", "--find-links", os.path.abspath(opponent_wheels)] if opponent_wheels else []
+    env = dict(MAMBA_SSM_BUILD_ENV)
+    env["MAX_JOBS"] = str(max(1, min(32, os.cpu_count() or 1)))
+    if os.path.isdir("/usr/local/cuda") and not os.environ.get("CUDA_HOME"):
+        env["CUDA_HOME"] = "/usr/local/cuda"
+    builds = MAMBA_SSM_BUILD[vendor]
+    if opponent_wheels:           # a wheel directory holds the built wheels by name
+        builds = [b.split(" @ ", 1)[0] for b in builds]
+    return [(pip + local + MAMBA_SSM_PINS[vendor], {}),
+            (pip + local + ["--no-build-isolation", "--no-deps"] + builds, env)]
+
 
 def now_utc():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -622,7 +670,8 @@ def arm_library(arm):
     if arm in ("ours", "ours-ab", "ours-fast", "ours-base", CPU_ARM):
         return "mojolearn"
     head = arm.split("-", 1)[0]
-    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers"}.get(head, head)
+    return {"sklearn": "scikit-learn", "umap": "umap-learn", "hf": "tokenizers",
+            "mamba": "mamba-ssm"}.get(head, head)
 
 
 def arm_device(arm, vendor):
@@ -899,6 +948,8 @@ def pinned_package_names():
     names = {"torch"}
     reqs = [r for _, rs in opponent_pins().values() for r in rs]
     reqs += [r for rs in MORE_PINS.values() for r in rs] + list(NEURAL_PINS)
+    reqs += [r for rs in MAMBA_SSM_PINS.values() for r in rs]
+    reqs += [r for rs in MAMBA_SSM_BUILD.values() for r in rs]
     reqs += [r for rs in ALGOS.PINS.values() for r in rs]
     reqs += [r for rs in ALGOS.RAPIDS_EXTRA.values() for r in rs]
     for r in reqs:
@@ -1055,6 +1106,16 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
                   "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
+        # the mamba-ssm arms: two CUDA source builds (MAMBA_SSM_BUILD's comment)
+        for argv, extra in mamba_ssm_install_steps(python, vendor, args.opponent_wheels):
+            env = dict(os.environ, **extra) if extra else None
+            if env is not None and os.path.isdir("/usr/local/cuda/bin"):
+                env["PATH"] = "/usr/local/cuda/bin" + os.pathsep + env.get("PATH", "")
+            rc = run_logged(argv, env, log, 3 * 3600)
+            if rc != 0:
+                print("bench_board: mamba-ssm opponent install rc %d (%s); the mamba-ssm arms will "
+                      "refuse by name" % (rc, " ".join(argv[6:])), flush=True)
+                break
     return python, wheel
 
 
@@ -2620,7 +2681,10 @@ def render_board(result):
              "arms. An arm torch cannot run on this box is REFUSED by name in its cell. Every "
              "clock is host in, host out, synchronized. Every arm starts from the same "
              "parameters and reads the same inputs, so losses and outputs are comparable; "
-             "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours.")
+             "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours. "
+             "On NVIDIA the Mamba forward lanes add mamba_ssm's own fused kernels (the deployment "
+             "path, our weights loaded): `mamba-ssm-fp32` (TF32 off, Triton fp32 dots IEEE) and "
+             "`mamba-ssm-tf32` (TF32 on, Triton's default tf32 dots; ANOTHER PRECISION).")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
     L.append("- Our CPU tier (`mojolearn CPU IDENTICAL`, arm `ours-cpu`): the same public estimator "
              "in a worker started under MOJOLEARN_VENDOR=cpu, the wheel's CPU switch (no GPU set "

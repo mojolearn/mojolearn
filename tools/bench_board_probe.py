@@ -157,7 +157,10 @@ class _RusageV4(object):
 
 
 #: libraries whose GPU buffers live in torch's caching allocator
-TORCH_LIBRARIES = ("torch", "gpytorch", "torch_geometric", "torch-geometric")
+#: libraries whose GPU buffers live in torch's caching allocator (mamba-ssm's
+#: kernels allocate through torch)
+TORCH_LIBRARIES = ("torch", "gpytorch", "torch_geometric", "torch-geometric", "mamba-ssm",
+                   "mamba_ssm")
 
 
 class MemProbe(object):
@@ -407,6 +410,7 @@ def summarize(samples):
 
 #: a board library name -> the module it imports as
 IMPORT_NAME = {"scikit-learn": "sklearn", "umap-learn": "umap", "hf": "tokenizers",
+               "mamba-ssm": "mamba_ssm",
                "torch-geometric": "torch_geometric", "faiss-cpu": "faiss", "cuml-cu12": "cuml"}
 
 

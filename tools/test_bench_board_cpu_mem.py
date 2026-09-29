@@ -70,7 +70,7 @@ def test_plan_puts_ours_cpu_on_every_lane_with_a_cpu_path():
     assert bb.cpu_arm_reason("neural", "mlp-infer") and bb.cpu_arm_reason("trees", "rf") is None
 
 
-@pytest.mark.parametrize("vendor,cells,off", [("apple", 455, 362), ("nvidia", 397, 304),
+@pytest.mark.parametrize("vendor,cells,off", [("apple", 455, 362), ("nvidia", 403, 310),
                                               ("amd", 385, 292)])
 def test_dry_run_counts_with_and_without_the_cpu_arm(vendor, cells, off, capsys):
     fams = ["--families", "trees,classical,classical2,neural"]
