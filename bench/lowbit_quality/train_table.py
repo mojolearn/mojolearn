@@ -161,6 +161,8 @@ def main(argv=None):
             range_nats=max(b_eq.values()) - min(b_eq.values()),
             smoothed_mean=statistics.mean(b_sm.values()), smoothed_noise_floor_nats=floor_sm,
             val_loss_at_end={s: at(r, n_end) for s, r in complete.items()},
+            noise_floor_at_end_nats=(statistics.stdev([at(r, n_end) for r in complete.values()])
+                                     if all(at(r, n_end) is not None for r in complete.values()) else None),
             first_step_at_or_below_own_final={s: first_reach(r, b_eq[s]) for s, r in complete.items()},
             initial_val_loss={s: at(r, 0) for s, r in complete.items()}),
         arms=[])
@@ -187,6 +189,15 @@ def main(argv=None):
             row.update(rel_ppl_change_lo=math.expm1(mean - half), rel_ppl_change_hi=math.expm1(mean + half),
                        interval="mean of the per-seed paired differences +- t(0.975, %d) standard errors, "
                                 "through exp(x) - 1; the seeds are resampled" % (len(d) - 1))
+            # the same paired change at the LAST step of the runs: what the longer run says
+            de = [at(r, n_end) - at(complete[r["seed"]], n_end) for r in good
+                  if at(r, n_end) is not None and at(complete[r["seed"]], n_end) is not None]
+            if len(de) == len(good) and len(de) > 1:
+                me = statistics.mean(de)
+                he = T975.get(len(de) - 1, 1.96) * statistics.stdev(de) / math.sqrt(len(de))
+                row.update(end_step=n_end, end_delta_nats_per_seed={r["seed"]: x for r, x in zip(good, de)},
+                           end_delta_nats_mean=me, end_rel_ppl_change=math.expm1(me),
+                           end_rel_ppl_change_lo=math.expm1(me - he), end_rel_ppl_change_hi=math.expm1(me + he))
             reach = [first_reach(r, b_eq[r["seed"]]) for r in good]
             reached = sorted(x for x in reach if x is not None)
             cos = [v["cosine"] for r in good for v in r["gradient_against_fp32"].values()]
@@ -231,8 +242,8 @@ def main(argv=None):
              "relative change of validation perplexity. The interval is that mean plus and minus t(0.975, seeds - 1) "
              "standard errors; the seeds are resampled; it bounds the run-to-run error at this shape on this corpus "
              "and says nothing about another shape or text." % n_eq, "",
-             "| profile | products | mode | seeds | change at step %d | interval | noise floor | inside noise | steps to baseline final | gradient cosine against fp32 (min) | verdict |" % n_eq,
-             "|---|---|---|---|---|---|---|---|---|---|---|"]
+             "| profile | products | mode | seeds | change at step %d | interval | change at step %d | interval | noise floor | inside noise | steps to baseline final | gradient cosine against fp32 (min) | verdict |" % (n_eq, n_end),
+             "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in table["arms"]:
         if "rel_ppl_change" in r:
             change = "%+.3f%% (%+.5f nats)" % (100 * r["rel_ppl_change"], r["delta_nats_mean"])
@@ -241,13 +252,19 @@ def main(argv=None):
                 "%d of %d seeds not within %d" % (r["seeds_not_reaching"], len(r["delta_nats_per_seed"]), n_end)
             inside = "yes" if r["inside_noise"] else "no"
             cos = "%.6f" % r["gradient_cosine_against_fp32_min"] if r["gradient_cosine_against_fp32_min"] is not None else "-"
+            if "end_rel_ppl_change" in r:
+                echange = "%+.3f%% (%+.5f nats)" % (100 * r["end_rel_ppl_change"], r["end_delta_nats_mean"])
+                einterval = "%+.3f%% to %+.3f%%" % (100 * r["end_rel_ppl_change_lo"], 100 * r["end_rel_ppl_change_hi"])
+            else:
+                echange = einterval = "-"
         else:
             change, interval, reach, inside, cos = "non-finite", "-", "-", "-", "-"
+            echange = einterval = "-"
         name = r["profile"] + (" (%s)" % r["finalist"] if r.get("finalist") else "")
-        lines.append("| %s | %s | %s | %d | %s | %s | %.3f%% | %s | %s | %s | %s |" % (
+        lines.append("| %s | %s | %s | %d | %s | %s | %s | %s | %.3f%% | %s | %s | %s | %s |" % (
             name, "projections + attention" if r["attention_products"] else "projections",
             "forward" if r["mode"] == "fwd" else "forward + backward", len(r["seeds"]), change, interval,
-            100 * r["noise_floor_rel_ppl"], inside, reach, cos, r["verdict"]))
+            echange, einterval, 100 * r["noise_floor_rel_ppl"], inside, reach, cos, r["verdict"]))
     zc = zero_code_tables(list(complete.values()), n_eq - 1)
     table["baseline_gradient_zero_codes"] = dict(step=n_eq - 1, seeds=sorted(complete), products=zc)
     with open(os.path.join(args.out, args.name + ".json"), "w") as fh:
