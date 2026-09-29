@@ -145,6 +145,17 @@ score_samples), so `pre_clock_fit` is declared true on ours there too and
 the device-resident input of the torch and cuML arms (their FAST arm, by the
 board's rule).
 
+NVIDIA'S VALUES (2026-09-29): every lane here has a cuML benchmark
+AlgorithmPair (tools/bench_board_harness.py CUML, rapidsai/cuml
+python/cuml/cuml/benchmark/algorithms.py at the recorded commit), and each
+parameter it sets explicitly is the value on EVERY arm: kmeans n_clusters=8,
+init='k-means++', max_iter=300, n_init=1 (oversampling_factor=0 on cuML and
+ours, the classic sequential seeding); pca n_components=10; knn
+n_neighbors=64 (scikit-learn algorithm='brute', n_jobs=-1); kde
+kernel='gaussian', bandwidth=1.0; dbscan eps=3, min_samples=2 (scikit-learn
+algorithm='brute'); svc kernel='rbf'. ols and hdbscan pass nothing. What the
+harness leaves at the libraries' defaults keeps the value below on every arm.
+
 SAME SEED, SAME TUNING PARAMETERS (2026-09-29): every arm gets seed 7 through
 its library's own argument and every parameter the libraries share is set
 explicitly; CONFIG names what cannot be matched. Each worker sends the
@@ -203,13 +214,27 @@ BIG_ROWS = 4_000_000
 #: The board's one seed (tools/bench_board.py SEED), given to every arm through
 #: the library's own seed argument; an arm without one is named in CONFIG.
 SEED = 7
-KMEANS_K = 64
-KMEANS_ITER = 20
-#: One tol on every arm that takes one. ours and cuML refuse tol <= 0
-#: ("invalid parameter (tol<=0)"), so 0.0 cannot be the shared value.
+#: cuML benchmark KMeans shared_args (tools/bench_board_harness.py): n_clusters=8,
+#: init='k-means++', max_iter=300, n_init=1; cuml_args oversampling_factor=0,
+#: which ours takes too (it is cuML's k-means: 0 is the classic sequential
+#: k-means++ seeding, scikit-learn's).
+KMEANS_K = 8
+KMEANS_ITER = 300
+KMEANS_INIT = "k-means++"
+KMEANS_OVERSAMPLING = 0.0
+#: One tol on every arm that takes one (the harness leaves it at the
+#: libraries' defaults). ours and cuML refuse tol <= 0 ("invalid parameter
+#: (tol<=0)"), so 0.0 cannot be the shared value.
 KMEANS_TOL = 1e-7
-PCA_COMPONENTS = 8
-KNN_K = 10
+#: cuML benchmark PCA shared_args n_components=10
+PCA_COMPONENTS = 10
+#: cuML benchmark NearestNeighbors shared_args n_neighbors=64
+KNN_K = 64
+#: cuML benchmark KernelDensity shared_args kernel='gaussian', bandwidth=1.0
+KDE_BANDWIDTH = 1.0
+#: cuML benchmark DBSCAN shared_args eps=3, min_samples=2 (cpu_args algorithm='brute')
+DBSCAN_EPS = 3.0
+DBSCAN_MIN_SAMPLES = 2
 KDE_TRAIN = 100_000
 KDE_QUERY = 2_000
 KDE_LEAF_SIZE = 40
@@ -233,22 +258,27 @@ TORCH_KNN_QUERY_CHUNK = 1024
 CONFIG = {
     "kmeans": {
         "rows": "big block: 4,000,000 taxi rows or the Istella-S train split, raw",
-        "params": "n_clusters=64, init=<the same 64 block rows on every arm>, n_init=1, "
-                  "max_iter=20, tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, scikit-learn "
-                  "and cuML random_state=7, torch.manual_seed(7))",
-        "timed": "fit",
+        "params": "n_clusters=8, init='k-means++', max_iter=300, n_init=1 (the cuML benchmark's "
+                  "KMeans), oversampling_factor=0 on ours and cuML (its cuml_args; the classic "
+                  "sequential seeding), tol=1e-7, metric='euclidean', Lloyd; seed 7 (ours, "
+                  "scikit-learn and cuML random_state=7, torch a generator seeded 7)",
+        "timed": "fit (the k-means++ seeding included on every arm)",
         "mismatches": [
+            "k-means++: each library draws its own start from its own generator seeded 7, so "
+            "the starts differ; scikit-learn greedy k-means++ (2 + log k candidates per center), "
+            "ours and cuML the sequential k-means++ of cuML (oversampling_factor=0), torch-gpu "
+            "scikit-learn's greedy rule written out",
             "tol=1e-7 on ours, scikit-learn and cuML (ours and cuML refuse 0); each library "
-            "applies it through its own convergence test. torch-gpu has no tol and always runs "
-            "20 iterations. n_iter is in every quality cell",
+            "applies it through its own convergence test; torch-gpu stops by scikit-learn's "
+            "(center shift <= tol x mean feature variance). n_iter is in every quality cell",
             "algorithm: scikit-learn algorithm='lloyd'; ours and cuML have no such parameter "
             "(Lloyd); torch-gpu is written as Lloyd",
-            "seed: with init given as an array no arm draws a random number; 7 is set anyway",
         ],
     },
     "pca": {
         "rows": "big block, raw",
-        "params": "n_components=8, whiten=False, random_state=7; ours and scikit-learn "
+        "params": "n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; "
+                  "ours and scikit-learn "
                   "svd_solver='covariance_eigh'",
         "timed": "fit",
         "mismatches": [
@@ -272,8 +302,8 @@ CONFIG = {
     },
     "knn": {
         "rows": "knn block: 400,000 index rows, 4,000 queries, raw",
-        "params": "n_neighbors=10, metric='euclidean', algorithm='brute' (ours, scikit-learn, "
-                  "cuML); torch cdist p=2 plus topk",
+        "params": "n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', "
+                  "algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk",
         "timed": "kneighbors; the fit (index) is before the clock on every arm",
         "mismatches": [
             "seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)",
@@ -282,7 +312,8 @@ CONFIG = {
     },
     "kde": {
         "rows": "kde block: 100,000 fit rows, 2,000 queries, standardized",
-        "params": "bandwidth=Scott's rule, kernel='gaussian', metric='euclidean' on every arm; "
+        "params": "bandwidth=1.0, kernel='gaussian' (the cuML benchmark's KernelDensity), "
+                  "metric='euclidean' on every arm; "
                   "ours and scikit-learn atol=0, rtol=0, algorithm='auto', leaf_size=40, "
                   "breadth_first=True",
         "timed": "score_samples; the fit is before the clock on every arm",
@@ -306,13 +337,13 @@ CONFIG = {
     },
     "dbscan": {
         "rows": "dbscan block: 1,000,000 rows, standardized",
-        "params": "eps and min_samples from MOJOLEARN_CTD_DBSCAN_<DATASET>, the same on every "
-                  "arm; metric='euclidean'",
+        "params": "eps=3, min_samples=2 (the cuML benchmark's DBSCAN) on every arm; "
+                  "metric='euclidean'",
         "timed": "fit",
         "mismatches": [
             "seed: no arm has a seed argument (deterministic)",
             "algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' "
-            "(its default), scikit-learn 'auto' (a tree on taxi, brute on Istella-S; it has no "
+            "(its default), scikit-learn 'brute' (the cuML benchmark's cpu_args; it has no "
             "'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'",
             "leaf_size=30 and n_jobs=-1: scikit-learn only",
         ],
@@ -606,13 +637,13 @@ def prep(args):
             Xq, bad_q = clean_sentinel(xte[q_idx])
             Xf, Xq = standardize(Xf, Xq)
             d = Xf.shape[1]
-            bw = float(Xf.shape[0] ** (-1.0 / (d + 4)))
+            bw = KDE_BANDWIDTH       # the cuML benchmark's KernelDensity bandwidth
             rec = dict(base, block="kde", lanes=["kde"], loader=loader,
                        fit_rows="stride sample of %d of the train split's %d rows" % (Xf.shape[0], xtr.shape[0]),
                        query_rows="stride sample of %d of the test split's %d rows" % (Xq.shape[0], xte.shape[0]),
                        sentinel_cells_replaced={"X": bad_x, "Xq": bad_q},
                        scaling="standardized by the fit rows (float64 mean and std)",
-                       kde={"bandwidth": bw, "bandwidth_rule": "scott n**(-1/(d+4))",
+                       kde={"bandwidth": bw, "bandwidth_rule": "1.0, the cuML benchmark's (d=%d)" % d,
                             "kernel": "gaussian", "metric": "euclidean"})
             _write_block(args.data, "kde-" + ds, {"X": Xf, "Xq": Xq}, rec)
         if "svc" in blocks:
@@ -781,14 +812,14 @@ class OursKMeans:
         # The binding refuses tol = 0 with a plain Exception('invalid
         # parameter (tol<=0)') (RunPod MI300X, 2026-09-11), so every arm now
         # takes KMEANS_TOL instead of ours alone falling back to it.
-        self.info["config"] = ("mojolearn.KMeans(n_clusters=64, init='array', n_init=1, "
-                               "max_iter=20, tol=%g, metric='euclidean', random_state=%d)"
-                               % (KMEANS_TOL, SEED))
+        self.info["config"] = ("mojolearn.KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, "
+                               "oversampling_factor=0, tol=%g, metric='euclidean', random_state=%d)"
+                               % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, KMEANS_TOL, SEED))
 
     def make(self):
-        return self.ml.KMeans(n_clusters=KMEANS_K, init="array", n_init=1,
+        return self.ml.KMeans(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1,
                               max_iter=KMEANS_ITER, tol=KMEANS_TOL, metric="euclidean",
-                              random_state=SEED, init_centroids=self.init)
+                              oversampling_factor=KMEANS_OVERSAMPLING, random_state=SEED)
 
     def call(self):
         est = self.make()
@@ -882,7 +913,7 @@ class OursKDE:
     def __init__(self, data, rec):
         self.ml = _ours_module()
         self.q = data["Xq"]
-        self.kd = self.ml.KernelDensity(bandwidth=rec["kde"]["bandwidth"], kernel="gaussian",
+        self.kd = self.ml.KernelDensity(bandwidth=KDE_BANDWIDTH, kernel="gaussian",
                                         metric="euclidean", algorithm="auto", atol=0.0, rtol=0.0,
                                         breadth_first=True, leaf_size=KDE_LEAF_SIZE)
         self.kd.fit(data["X"])
@@ -980,12 +1011,13 @@ class SkKMeans:
         self.X, self.init = data["X"], data["init"]
         self.est = None
         self.info = _sklearn_info()
-        self.info["config"] = ("KMeans(n_clusters=64, init=<the shared array>, n_init=1, max_iter=20, "
-                               "tol=%g, algorithm='lloyd', random_state=%d)" % (KMEANS_TOL, SEED))
+        self.info["config"] = ("KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, tol=%g, "
+                               "algorithm='lloyd', random_state=%d)"
+                               % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, KMEANS_TOL, SEED))
         self.params_obj = self.make()
 
     def make(self):
-        return self.KMeans(n_clusters=KMEANS_K, init=self.init, n_init=1,
+        return self.KMeans(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1,
                            max_iter=KMEANS_ITER, tol=KMEANS_TOL, algorithm="lloyd",
                            random_state=SEED)
 
@@ -1071,7 +1103,7 @@ class SkKNN:
         self.nn.fit(data["index"])
         self.out = None
         self.info = _sklearn_info()
-        self.info["config"] = ("NearestNeighbors(n_neighbors=10, algorithm='brute', metric='euclidean', "
+        self.info["config"] = ("NearestNeighbors(n_neighbors=64, algorithm='brute', metric='euclidean', "
                                "p=2, n_jobs=-1); fit before the clock, kneighbors timed")
         self.info["pre_clock_fit"] = True
         self.params_obj = self.nn
@@ -1094,7 +1126,7 @@ class SkKDE:
         _sklearn_pools_touch()
         self.q = data["Xq"]
         t0 = time.perf_counter()
-        self.kd = KernelDensity(bandwidth=rec["kde"]["bandwidth"], kernel="gaussian",
+        self.kd = KernelDensity(bandwidth=KDE_BANDWIDTH, kernel="gaussian",
                                 metric="euclidean", algorithm="auto", rtol=0.0, atol=0.0,
                                 breadth_first=True, leaf_size=KDE_LEAF_SIZE)
         self.kd.fit(data["X"])
@@ -1102,7 +1134,7 @@ class SkKDE:
         self.scores = None
         self.params_obj = self.kd
         self.info = _sklearn_info()
-        self.info["config"] = ("KernelDensity(bandwidth=scott, kernel='gaussian', metric='euclidean', "
+        self.info["config"] = ("KernelDensity(bandwidth=1.0, kernel='gaussian', metric='euclidean', "
                                "algorithm='auto', rtol=0, atol=0, breadth_first=True, leaf_size=40); "
                                "score_samples timed; single-threaded by design")
         self.info["tree_fit_ms_untimed"] = fit_ms
@@ -1199,23 +1231,66 @@ class TorchKMeans:
         self.torch, self.dev, t, self.info = _torch_setup({"X": data["X"], "init": data["init"]})
         self.x, self.init = t["X"], t["init"]
         self.ones = self.torch.ones(self.x.shape[0], device=self.dev, dtype=self.torch.float32)
-        self.info["config"] = ("Lloyd, 20 iterations, no early stop; assignment = chunked "
-                               "addmm(||c||^2, x, c.T, alpha=-2).argmin; update = index_add_")
+        self.info["config"] = ("greedy k-means++ (scikit-learn's rule, 2 + log k candidates, a "
+                               "generator seeded %d), then Lloyd up to %d iterations stopping by "
+                               "scikit-learn's rule (center shift <= tol x mean feature variance, "
+                               "tol=%g); assignment = chunked addmm(||c||^2, x, c.T, alpha=-2).argmin; "
+                               "update = index_add_" % (SEED, KMEANS_ITER, KMEANS_TOL))
         self.c = None
         self.labels = None
+        self.n_iter = 0
         # Declared (a function, not an estimator): the values `call` really uses.
         self.params_obj = {"__library__": "torch", "seed": SEED, "n_clusters": KMEANS_K,
-                           "init": _array_tag(data["init"]), "n_init": 1,
+                           "init": KMEANS_INIT, "n_init": 1, "tol": KMEANS_TOL,
                            "max_iter": KMEANS_ITER, "metric": "euclidean"}
+
+    def _sq_dist(self, x, xx, c):
+        """||x - c||^2 for every row and every column of c, chunked, clamped at 0."""
+        torch = self.torch
+        cc = (c * c).sum(dim=1)
+        out = torch.empty((x.shape[0], c.shape[0]), device=self.dev, dtype=torch.float32)
+        for s in range(0, x.shape[0], TORCH_CHUNK_ROWS):
+            e = min(s + TORCH_CHUNK_ROWS, x.shape[0])
+            out[s:e] = torch.addmm(cc.unsqueeze(0), x[s:e], c.T, beta=1.0, alpha=-2.0) \
+                .add_(xx[s:e, None]).clamp_(min=0.0)
+        return out
+
+    def _kmeans_pp(self, x, xx, k, gen):
+        """scikit-learn's greedy k-means++ (_kmeans_plusplus): the first center
+        uniform, then 2 + int(log k) candidates drawn by D^2 and the one that
+        lowers the potential most kept."""
+        import math
+        torch = self.torch
+        n = x.shape[0]
+        trials = 2 + int(math.log(k))
+        first = int(torch.randint(n, (1,), generator=gen, device=self.dev).item())
+        centers = [x[first]]
+        closest = self._sq_dist(x, xx, x[first:first + 1])[:, 0]
+        pot = closest.sum()
+        for _ in range(1, k):
+            r = torch.rand(trials, generator=gen, device=self.dev) * pot
+            cand = torch.searchsorted(torch.cumsum(closest, 0), r).clamp_(max=n - 1)
+            dc = torch.minimum(closest[:, None], self._sq_dist(x, xx, x[cand]))
+            pots = dc.sum(dim=0)
+            best = int(pots.argmin().item())
+            closest, pot = dc[:, best].contiguous(), pots[best]
+            centers.append(x[cand[best]])
+        return torch.stack(centers)
 
     def call(self):
         torch = self.torch
         x = self.x
         n, d = x.shape
-        c = self.init.clone()
-        k = c.shape[0]
+        gen = torch.Generator(device=self.dev)
+        gen.manual_seed(SEED)
+        xx = (x * x).sum(dim=1)
+        k = KMEANS_K
+        c = self._kmeans_pp(x, xx, k, gen)
+        # scikit-learn's absolute tolerance: tol x the mean feature variance
+        tol = KMEANS_TOL * float(x.var(dim=0, unbiased=False).mean().item())
         labels = torch.empty(n, dtype=torch.long, device=self.dev)
-        for _ in range(KMEANS_ITER):
+        it = 0
+        for it in range(1, KMEANS_ITER + 1):
             c2 = (c * c).sum(dim=1)
             for s in range(0, n, TORCH_CHUNK_ROWS):
                 e = min(s + TORCH_CHUNK_ROWS, n)
@@ -1225,8 +1300,12 @@ class TorchKMeans:
             counts = torch.zeros(k, device=self.dev, dtype=torch.float32)
             sums.index_add_(0, labels, x)
             counts.index_add_(0, labels, self.ones)
-            c = torch.where((counts > 0)[:, None], sums / counts.clamp(min=1.0)[:, None], c)
-        self.c, self.labels = c, labels
+            new = torch.where((counts > 0)[:, None], sums / counts.clamp(min=1.0)[:, None], c)
+            shift = float(((new - c) ** 2).sum().item())
+            c = new
+            if shift <= tol:
+                break
+        self.c, self.labels, self.n_iter = c, labels, it
 
     def sync(self):
         _torch_sync()
@@ -1234,7 +1313,7 @@ class TorchKMeans:
     def outputs(self):
         return {"centers": _to_host(self.c).astype(np.float32),
                 "labels": _to_host(self.labels).astype(np.int32),
-                "n_iter": np.array([KMEANS_ITER], dtype=np.int64)}
+                "n_iter": np.array([self.n_iter], dtype=np.int64)}
 
 
 class TorchPCA:
@@ -1407,12 +1486,13 @@ class CumlKMeans:
         # H100 pod 22up9vbhj3tbeg, 2026-09-11), exactly as our binding does, so
         # every arm takes KMEANS_TOL.
         self.params_obj, self.kw = construct_tolerant(
-            KMeans, dict(n_clusters=KMEANS_K, init=self.init, n_init=1, max_iter=KMEANS_ITER,
-                         tol=KMEANS_TOL, random_state=SEED, output_type="cupy"), self.info)
+            KMeans, dict(n_clusters=KMEANS_K, init=KMEANS_INIT, n_init=1, max_iter=KMEANS_ITER,
+                         tol=KMEANS_TOL, oversampling_factor=KMEANS_OVERSAMPLING,
+                         random_state=SEED, output_type="cupy"), self.info)
         self.KMeans = KMeans
-        self.info["config"] = ("cuml.cluster.KMeans(n_clusters=64, init=<the shared array, on device>, "
-                               "n_init=1, max_iter=20, tol=%g, random_state=%d, output_type='cupy'); "
-                               "fit timed" % (KMEANS_TOL, SEED))
+        self.info["config"] = ("cuml.cluster.KMeans(n_clusters=%d, init=%r, n_init=1, max_iter=%d, "
+                               "oversampling_factor=0, tol=%g, random_state=%d, output_type='cupy'); "
+                               "fit timed" % (KMEANS_K, KMEANS_INIT, KMEANS_ITER, KMEANS_TOL, SEED))
         self.est = None
 
     def call(self):
@@ -1505,7 +1585,7 @@ class CumlKNN:
         # what `_span_facts` reads, so rewording that prose cannot silently
         # turn this fact false.
         self.info["pre_clock_fit"] = True
-        self.info["config"] = ("cuml.neighbors.NearestNeighbors(n_neighbors=10, algorithm='brute', "
+        self.info["config"] = ("cuml.neighbors.NearestNeighbors(n_neighbors=64, algorithm='brute', "
                                "metric='euclidean', output_type='cupy'); fit before the clock, kneighbors timed")
         self.out = None
 
@@ -1526,7 +1606,7 @@ class CumlKDE:
         from cuml.neighbors import KernelDensity
         t, self.info = _cuml_setup({"X": data["X"], "Xq": data["Xq"]})
         self.q = t["Xq"]
-        self.kd = KernelDensity(bandwidth=rec["kde"]["bandwidth"], kernel="gaussian",
+        self.kd = KernelDensity(bandwidth=KDE_BANDWIDTH, kernel="gaussian",
                                 metric="euclidean", output_type="cupy")
         self.params_obj = self.kd
         self.kd.fit(t["X"])
@@ -1534,7 +1614,7 @@ class CumlKDE:
         # Declared where it becomes true: the fit above is outside the clock,
         # which times `score_samples` alone. See CumlKNN.
         self.info["pre_clock_fit"] = True
-        self.info["config"] = ("cuml.neighbors.KernelDensity(bandwidth=scott, kernel='gaussian', "
+        self.info["config"] = ("cuml.neighbors.KernelDensity(bandwidth=1.0, kernel='gaussian', "
                                "metric='euclidean', output_type='cupy'); fit before the clock, score_samples timed")
         self.scores = None
 
@@ -1643,14 +1723,9 @@ class SkQuota:
 # ---- DBSCAN and HDBSCAN (lane linear-cluster-istella, measurement only) -------
 
 def _dbscan_params(ds):
-    """(eps, min_samples) for this dataset, from MOJOLEARN_CTD_DBSCAN_<DATASET>
-    ("eps,min_samples"). One value for every arm of a race, never a default."""
-    key = "MOJOLEARN_CTD_DBSCAN_%s" % ds.upper()
-    raw = os.environ.get(key, "")
-    if "," not in raw:
-        raise RuntimeError("%s is not set (want 'eps,min_samples')" % key)
-    eps, ms = raw.split(",", 1)
-    return float(eps), int(ms)
+    """(eps, min_samples): the cuML benchmark's DBSCAN shared_args (eps=3,
+    min_samples=2), the same on every dataset and every arm."""
+    return DBSCAN_EPS, DBSCAN_MIN_SAMPLES
 
 
 class OursDBSCAN:
@@ -1717,9 +1792,8 @@ class CumlDBSCANRbc(CumlDBSCAN):
 class SkDBSCAN:
     """sklearn.cluster.DBSCAN with the race's eps and min_samples on the same
     1,000,000-row standardized block, on every core (n_jobs=-1; its default is
-    one). algorithm='auto' is scikit-learn's own choice: a tree index on
-    low-dimensional taxi, brute force on 220-column Istella-S, where a round can
-    run for hours; the board's per-round limit then records the timeout."""
+    one). algorithm='brute', the cuML benchmark's cpu_args; a round can run
+    for hours, and the board's per-round limit then records the timeout."""
 
     def __init__(self, data, rec):
         from sklearn.cluster import DBSCAN
@@ -1730,12 +1804,12 @@ class SkDBSCAN:
         self.est = None
         self.info = _sklearn_info()
         self.info["config"] = ("sklearn.cluster.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
-                               "algorithm='auto', n_jobs=-1); fit timed" % (self.eps, self.min_samples))
+                               "algorithm='brute', n_jobs=-1); fit timed" % (self.eps, self.min_samples))
         self.params_obj = self.make()
 
     def make(self):
         return self.DBSCAN(eps=self.eps, min_samples=self.min_samples, metric="euclidean",
-                           algorithm="auto", n_jobs=-1)
+                           algorithm="brute", n_jobs=-1)
 
     def call(self):
         est = self.make()
@@ -2364,7 +2438,7 @@ def quality(lane, data, outs, rec):
                                 for s in range(0, nq, 256)], axis=0)
             within = d <= kth[:, None] * (1.0 + 1e-9) + 1e-12
             hits = np.minimum(within.sum(axis=1), distinct)
-            entry["recall_at_10"] = float(hits.mean() / KNN_K)
+            entry["recall_at_k"] = float(hits.mean() / KNN_K)
             q[arm] = entry
     elif lane == "kde":
         sentinel = -3.0e38
