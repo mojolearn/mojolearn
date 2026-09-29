@@ -140,6 +140,7 @@ COVERED = {
     "gbdt-lossguide": ("gbm-bench", "xgb/lgbm/cat shared_params, ntrees 500"),
     "gbdt-multiclass": ("gbm-bench", "xgb/lgbm/cat shared_params, ntrees 500 (MULTICLASS task)"),
     "gbdt-categorical": ("gbm-bench", "xgb/lgbm/cat shared_params, ntrees 500 (binary task)"),
+    "gbdt-ordered": ("gbm-bench", "cat shared_params, ntrees 500, boosting_type 'Ordered'"),
     "rf": ("gbm-bench", "skrf/cumlrf: max_depth 8, n_estimators 500"),
     # classical, cuML
     "kmeans": ("cuml", "KMeans"), "pca": ("cuml", "PCA"), "ols": ("cuml", "LinearRegression"),
