@@ -21,6 +21,12 @@
 # ships exactly two files, the wheel and qualify_verifier_wheel.py (stdlib
 # only), and every transfer has a deadline.
 #
+# For an existing scheduler, the bounded base-fixture artifact path is
+# tools/release_installed_checks.sh qualify-identity. It retains this smoke's
+# genuine expanded receipt and a separate exact-wheel identity report, without
+# invoking legacy full-column processes or any performance benchmarks. It does
+# not rent or delete a host and does not claim the full surface suite passed.
+#
 # Options:
 #   --out DIR            results (default ~/mojolearn-evidence/release-smoke/<version>/<stamp>-linux)
 #   --gpu NAME           RunPod GPU type (default "NVIDIA GeForce RTX 4090", sm_89,

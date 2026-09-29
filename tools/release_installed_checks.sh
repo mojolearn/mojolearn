@@ -3,6 +3,12 @@
 # controller bounds this whole script, including the existing surface gate.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# Identity-only artifact qualification is a distinct receipt, never a fabricated
+# successful full surface suite. It runs on an already scheduled GPU host.
+if [[ ${1:-} = qualify-identity ]]; then
+    shift
+    exec bash "$ROOT/tools/release_identity_installed.sh" "$@"
+fi
 [[ $# = 7 && $1 = qualify-release-linux3 ]] || { echo 'Expected qualify-release-linux3 WHEEL SHA VENDOR OUT PROOFS ARCH' >&2; exit 2; }
 WHEEL=$(realpath "$2")
 VENDOR=$4
