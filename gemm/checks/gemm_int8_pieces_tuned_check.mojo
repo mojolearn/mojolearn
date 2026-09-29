@@ -56,6 +56,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
+    int8_pieces_plan_admits,
     int8_pieces_plan_name,
     int8_pieces_sabotage_name,
 )
@@ -240,6 +241,8 @@ def _run_every_pieces_plan(
     tally.note(verdict)
     comptime if HAS_UNIT:
         for plan in range(INT8_PIECES_PLAN_COUNT):
+            if not int8_pieces_plan_admits(plan, m, n, k):
+                continue
             var ptag = tag + " " + int8_pieces_plan_name(plan)
             var ds = _poisoned_sums(ctx, 3 * m * n)
             var got: String

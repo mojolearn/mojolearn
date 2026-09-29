@@ -47,6 +47,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_mma_direct_kernel,
     identical_gemm_int8_mma_tuned_kernel,
     identical_gemm_int8_mma_decode_kernel,
+    identical_gemm_int8_pieces_decode_kernel,
     identical_gemm_int8_pieces_tuned_kernel,
 )
 from gemm.checks.gemm_lowbit import quantize_rows_int8_kernel
@@ -110,6 +111,9 @@ add fused_pipe2_w16x32_b64x128_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[
 add decode_w8 "identical_gemm_int8_mma_decode_kernel[False, 8]" 256
 add decode_w16 "identical_gemm_int8_mma_decode_kernel[False, 16]" 512
 add decode_quant_w8 "identical_gemm_int8_mma_decode_kernel[True, 8]" 256
+add pieces_decode_w8 "identical_gemm_int8_pieces_decode_kernel[False, 8]" 256
+add pieces_decode_fused_w8 "identical_gemm_int8_pieces_decode_kernel[True, 8]" 256
+add pieces_decode_fused_w4 "identical_gemm_int8_pieces_decode_kernel[True, 4]" 128
 add quantize_reference "quantize_rows_int8_kernel" 256
 add quantize_par_256 "quantize_rows_int8_par_kernel[256]" 256
 echo 'def main() raises:'

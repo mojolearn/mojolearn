@@ -277,6 +277,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
+    int8_pieces_plan_admits,
     int8_pieces_plan_name,
     identical_gemm_int8_mma_direct_into,
     identical_gemm_int8_mma_tuned_into,
@@ -1175,6 +1176,9 @@ def _time_shape(
         # The decode kernel takes at most sixteen rows.
         if arm >= ARM_DECODE_BASE and m > INT8_DECODE_MAX_M:
             runs = False
+        if arm >= ARM_PIECES_BASE and arm < ARM_INF_PIECES:
+            if not int8_pieces_plan_admits(arm - ARM_PIECES_BASE, m, n, k):
+                runs = False
         ran.append(runs)
         samples.append(List[Int]())
     var sb = ShapeBuffers(ctx, m, n, k, pieces)
