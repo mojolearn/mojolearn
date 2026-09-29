@@ -210,4 +210,15 @@ gs = ms.GridSearchCV(GBR(n_estimators=5), {"max_depth": [2, 3]}, cv=3, scoring="
 print("ok  " if gs.best_index_ in (0, 1) else "FAIL", "GridSearchCV", gs.best_params_)
 
 print(f"{len(FAILS)} failures")
-sys.exit(1 if FAILS else 0)
+
+
+def test_metrics_sanity():
+    """Under pytest: the checks above ran at import; none may have failed.
+    (Until 2026-09-29 the module called `sys.exit` at import, which pytest
+    reports as an INTERNALERROR that stops the whole suite; found by
+    lane/lowbit-default's whole-suite check, nvc2-0038.)"""
+    assert not FAILS, FAILS
+
+
+if __name__ == "__main__":
+    sys.exit(1 if FAILS else 0)
