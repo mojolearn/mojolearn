@@ -423,23 +423,154 @@ def _grid(n: Int) -> Int:
 # ===========================================================================
 
 
+def _ord_chunk_count_kernel(
+    leaf: MutPointer[UInt32, MutAnyOrigin],
+    counts: MutPointer[UInt32, MutAnyOrigin],
+    starts: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """Chunk `t`'s per-leaf row counts, `counts[b * n_chunks + t]`, one
+    thread per chunk walking its rows in order (no atomics: a column is
+    one thread's). A leaf id out of range is skipped here and caught by
+    the host's total check."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nc = Int(n_chunks_in)
+    if t < nc:
+        var nl = Int(n_leaves_in)
+        for b in range(nl):
+            counts.unsafe_store(b * nc + t, UInt32(0))
+        var lo = Int(starts.unsafe_load(t))
+        var hi = Int(starts.unsafe_load(t + 1))
+        for r in range(lo, hi):
+            var b = Int(leaf.unsafe_load(r))
+            if b < nl:
+                var at = b * nc + t
+                counts.unsafe_store(at, counts.unsafe_load(at) + 1)
+
+
+def _ord_leaf_scan_kernel(
+    counts: MutPointer[UInt32, MutAnyOrigin],
+    prefix: MutPointer[UInt32, MutAnyOrigin],
+    totals: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """Per leaf `b` (one thread), the exclusive prefix of its chunk counts
+    in chunk order, and its total. Integer sums: order-free."""
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if b < Int(n_leaves_in):
+        var nc = Int(n_chunks_in)
+        var run = UInt32(0)
+        for t in range(nc):
+            prefix.unsafe_store(b * nc + t, run)
+            run += counts.unsafe_load(b * nc + t)
+        totals.unsafe_store(b, run)
+
+
+def _ord_seg_start_kernel(
+    totals: MutPointer[UInt32, MutAnyOrigin],
+    seg_start: MutPointer[UInt32, MutAnyOrigin],
+    n_leaves_in: Int32,
+):
+    """One thread: the leaves' run starts, the exclusive scan of totals."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        var run = UInt32(0)
+        for b in range(Int(n_leaves_in)):
+            seg_start.unsafe_store(b, run)
+            run += totals.unsafe_load(b)
+
+
+def _ord_snap_kernel(
+    prefix: MutPointer[UInt32, MutAnyOrigin],
+    totals: MutPointer[UInt32, MutAnyOrigin],
+    bound_chunk: MutPointer[UInt32, MutAnyOrigin],
+    snap: MutPointer[UInt32, MutAnyOrigin],
+    n_bounds_in: Int32,
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """`snap[k * n_leaves + b]`: rows of leaf `b` below the `k`-th task
+    boundary. Every boundary is a chunk start (`_PermPartition`), chunk
+    `bound_chunk[k]`, so it is that chunk's exclusive prefix, or the
+    leaf's total at `n_chunks` (the boundary `need`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nl = Int(n_leaves_in)
+    if i < Int(n_bounds_in) * nl:
+        var k = i // nl
+        var b = i - k * nl
+        var nc = Int(n_chunks_in)
+        var c = Int(bound_chunk.unsafe_load(k))
+        if c >= nc:
+            snap.unsafe_store(i, totals.unsafe_load(b))
+        else:
+            snap.unsafe_store(i, prefix.unsafe_load(b * nc + c))
+
+
+def _ord_chunk_scatter_kernel(
+    leaf: MutPointer[UInt32, MutAnyOrigin],
+    prefix: MutPointer[UInt32, MutAnyOrigin],
+    seg_start: MutPointer[UInt32, MutAnyOrigin],
+    sorted_rows: MutPointer[UInt32, MutAnyOrigin],
+    starts: MutPointer[UInt32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_leaves_in: Int32,
+):
+    """The stable scatter: chunk `t`'s rows, in order, to
+    `seg_start[b] + prefix[b][t]` and on (the column is advanced in place;
+    `_ord_snap_kernel` has read it first). Chunks are in row order and a
+    chunk's rows are walked in order, so a leaf's run lists its rows
+    ascending: the stable counting sort, the same list of integers."""
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nc = Int(n_chunks_in)
+    if t < nc:
+        var nl = Int(n_leaves_in)
+        var lo = Int(starts.unsafe_load(t))
+        var hi = Int(starts.unsafe_load(t + 1))
+        for r in range(lo, hi):
+            var b = Int(leaf.unsafe_load(r))
+            if b < nl:
+                var at = b * nc + t
+                var slot = prefix.unsafe_load(at)
+                prefix.unsafe_store(at, slot + 1)
+                sorted_rows.unsafe_store(
+                    Int(seg_start.unsafe_load(b) + slot), UInt32(r)
+                )
+
+
+#: the per-(leaf, chunk) count matrix is capped at this many cells; the
+#: chunk grows to fit (depth 16 has 65,536 leaves)
+comptime ORDERED_PART_CELLS = 1 << 22
+comptime ORDERED_PART_CHUNK = 1024
+
+
 struct _PermPartition(Movable):
     """One permutation's STABLE partition of its positions `[0, need)` by
-    the tree's leaf, rebuilt each tree (lane/ordered-speed): `sorted`
-    (host staging and its device copy) lists the positions leaf by leaf,
-    ascending within a leaf; `seg_start[b]` is where leaf `b`'s run begins;
-    `snap[k * n_leaves + b]` counts leaf `b` among the positions below the
-    `k`-th task boundary `bounds[k]` (a task over the prefix `[0, E)`
-    reads the snapshot of `E`). Replaces a host counting sort per TASK
-    (two random-access host passes over each prefix, most of an Ordered
-    tree's wall at 4.1M rows) with one per permutation."""
+    the tree's leaf, rebuilt each tree on the device (lane/ordered-speed):
+    `d_sorted` lists the positions leaf by leaf, ascending within a leaf;
+    `seg_start[b]` is where leaf `b`'s run begins; `snap[k * n_leaves + b]`
+    counts leaf `b` among the positions below the `k`-th task boundary
+    `bounds[k]` (a task over the prefix `[0, E)` reads the snapshot of
+    `E`). Replaces a host counting sort per TASK (two random-access host
+    passes over each prefix: 6.8 s of 13.5 s for 10 trees at 4.1M rows on
+    the M2 Pro) with one device counting sort per permutation; only the
+    counts come home."""
 
     var need: Int
     var bounds: List[Int]
-    var h_leaf: HostBuffer[DType.uint32]
+    var n_chunks: Int
+    #: chunk `t` is rows `[starts[t], starts[t + 1])`; every boundary is a start
+    var d_starts: DeviceBuffer[DType.uint32]
+    #: boundary `k`'s chunk index (`n_chunks` for `need`)
+    var d_bound_chunk: DeviceBuffer[DType.uint32]
     var d_leaf: DeviceBuffer[DType.uint32]
-    var h_sorted: HostBuffer[DType.uint32]
     var d_sorted: DeviceBuffer[DType.uint32]
+    var d_seg: DeviceBuffer[DType.uint32]
+    var d_tot: DeviceBuffer[DType.uint32]
+    var d_snap: DeviceBuffer[DType.uint32]
+    var h_seg: HostBuffer[DType.uint32]
+    var h_tot: HostBuffer[DType.uint32]
+    var h_snap: HostBuffer[DType.uint32]
     var seg_start: List[Int]
     var snap: List[Int]
 
@@ -448,6 +579,7 @@ struct _PermPartition(Movable):
         ctx: DeviceContext,
         mut arena: BufferArena,
         var bounds: List[Int],
+        leaf_capacity: Int,
     ) raises:
         var need = 0
         for i in range(len(bounds)):
@@ -469,66 +601,136 @@ struct _PermPartition(Movable):
                     uniq[at] = t
                     at -= 1
         self.need = need
+        var nb = len(uniq)
+        # chunks of ORDERED_PART_CHUNK rows (grown so the (leaf, chunk)
+        # matrix fits ORDERED_PART_CELLS at the fit's leaf capacity), cut
+        # again at every boundary so a snapshot is a chunk prefix
+        var chunk = ORDERED_PART_CHUNK
+        var cap = ORDERED_PART_CELLS // leaf_capacity - nb
+        if cap < 1:
+            cap = 1
+        if (need + chunk - 1) // chunk > cap:
+            chunk = (need + cap - 1) // cap
+        var starts = List[Int]()
+        var bound_chunk = List[Int]()
+        var r = 0
+        var k = 0
+        while r < need:
+            while k < nb and uniq[k] <= r:
+                bound_chunk.append(len(starts))
+                k += 1
+            starts.append(r)
+            var nxt = r + chunk
+            if k < nb and uniq[k] < nxt:
+                nxt = uniq[k]
+            if nxt > need:
+                nxt = need
+            r = nxt
+        while k < nb:
+            bound_chunk.append(len(starts))
+            k += 1
+        self.n_chunks = len(starts)
+        starts.append(need)
+        self.d_starts = arena.device[DType.uint32](ctx, len(starts))
+        self.d_bound_chunk = arena.device[DType.uint32](ctx, nb)
+        var hs = ctx.enqueue_create_host_buffer[DType.uint32](len(starts))
+        for i in range(len(starts)):
+            hs.unsafe_ptr().unsafe_store(i, UInt32(starts[i]))
+        var hb = ctx.enqueue_create_host_buffer[DType.uint32](nb)
+        for i in range(nb):
+            hb.unsafe_ptr().unsafe_store(i, UInt32(bound_chunk[i]))
+        ctx.enqueue_copy(dst_buf=self.d_starts, src_ptr=hs.unsafe_ptr())
+        ctx.enqueue_copy(dst_buf=self.d_bound_chunk, src_ptr=hb.unsafe_ptr())
+        ctx.synchronize()
+        _ = hs^
+        _ = hb^
         self.bounds = uniq^
-        self.h_leaf = arena.host_buffer[DType.uint32](ctx, need)
         self.d_leaf = arena.device[DType.uint32](ctx, need)
-        self.h_sorted = arena.host_buffer[DType.uint32](ctx, need)
         self.d_sorted = arena.device[DType.uint32](ctx, need)
+        self.d_seg = arena.device[DType.uint32](ctx, leaf_capacity)
+        self.d_tot = arena.device[DType.uint32](ctx, leaf_capacity)
+        self.d_snap = arena.device[DType.uint32](ctx, nb * leaf_capacity)
+        self.h_seg = arena.host_buffer[DType.uint32](ctx, leaf_capacity)
+        self.h_tot = arena.host_buffer[DType.uint32](ctx, leaf_capacity)
+        self.h_snap = arena.host_buffer[DType.uint32](ctx, nb * leaf_capacity)
         self.seg_start = List[Int]()
         self.snap = List[Int]()
 
-    def enqueue_leaves(
+    def enqueue_sort(
         mut self,
         ctx: DeviceContext,
         mut bins: DeviceBuffer[DType.uint32],
         mut dperm: DeviceBuffer[DType.uint32],
+        n_leaves: Int,
+        mut counts: DeviceBuffer[DType.uint32],
+        mut prefix: DeviceBuffer[DType.uint32],
     ) raises:
-        """The leaf of every position below `need`, gathered on the device
-        and brought home; the caller drains before `build`."""
+        """The leaves in permutation order, the chunked counting sort, the
+        boundary snapshots, and the counts home, all enqueued (the caller
+        drains once for every permutation, then calls `settle`). `counts`
+        and `prefix` are the caller's scratch of `ORDERED_PART_CELLS`,
+        shared by the permutations: the queue orders one permutation's
+        reads before the next one's writes."""
+        var need = self.need
         ctx.enqueue_function[_ord_leaf_gather_kernel](
             bins.unsafe_ptr(), dperm.unsafe_ptr(), self.d_leaf.unsafe_ptr(),
-            Int32(self.need), grid_dim=(_grid(self.need), 1, 1),
+            Int32(need), grid_dim=(_grid(need), 1, 1),
             block_dim=(ORDERED_BLOCK, 1, 1),
         )
-        ctx.enqueue_copy(dst_buf=self.h_leaf, src_buf=self.d_leaf)
+        var n_chunks = self.n_chunks
+        if n_chunks * n_leaves > ORDERED_PART_CELLS:
+            raise Error("ordered partition: chunk matrix over its capacity")
+        ctx.enqueue_function[_ord_chunk_count_kernel](
+            self.d_leaf.unsafe_ptr(), counts.unsafe_ptr(),
+            self.d_starts.unsafe_ptr(), Int32(n_chunks), Int32(n_leaves),
+            grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[_ord_leaf_scan_kernel](
+            counts.unsafe_ptr(), prefix.unsafe_ptr(), self.d_tot.unsafe_ptr(),
+            Int32(n_chunks), Int32(n_leaves),
+            grid_dim=(_grid(n_leaves), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[_ord_seg_start_kernel](
+            self.d_tot.unsafe_ptr(), self.d_seg.unsafe_ptr(), Int32(n_leaves),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        var nb = len(self.bounds)
+        ctx.enqueue_function[_ord_snap_kernel](
+            prefix.unsafe_ptr(), self.d_tot.unsafe_ptr(),
+            self.d_bound_chunk.unsafe_ptr(), self.d_snap.unsafe_ptr(),
+            Int32(nb), Int32(n_chunks), Int32(n_leaves),
+            grid_dim=(_grid(nb * n_leaves), 1, 1),
+            block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_function[_ord_chunk_scatter_kernel](
+            self.d_leaf.unsafe_ptr(), prefix.unsafe_ptr(),
+            self.d_seg.unsafe_ptr(), self.d_sorted.unsafe_ptr(),
+            self.d_starts.unsafe_ptr(), Int32(n_chunks), Int32(n_leaves),
+            grid_dim=(_grid(n_chunks), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+        )
+        ctx.enqueue_copy(dst_buf=self.h_seg, src_buf=self.d_seg)
+        ctx.enqueue_copy(dst_buf=self.h_tot, src_buf=self.d_tot)
+        ctx.enqueue_copy(dst_buf=self.h_snap, src_buf=self.d_snap)
 
-    def build(mut self, ctx: DeviceContext, n_leaves: Int) raises:
-        """The host counting sort of `[0, need)` (sequential reads of the
-        gathered leaves), the per-boundary snapshots, and the upload of
-        `sorted` (enqueued, not drained: the tree's closing drain orders
-        the next tree's rewrite of the staging after it)."""
-        var leaf_p = self.h_leaf.unsafe_ptr()
-        var counts = List[Int](length=n_leaves, fill=0)
-        self.snap = List[Int](length=len(self.bounds) * n_leaves, fill=0)
-        var k = 0
-        for r in range(self.need):
-            while k < len(self.bounds) and self.bounds[k] == r:
-                for b in range(n_leaves):
-                    self.snap[k * n_leaves + b] = counts[b]
-                k += 1
-            var b = Int(leaf_p.unsafe_load(r))
-            if b < 0 or b >= n_leaves:
-                raise Error(
-                    "partition_from_bins: row " + String(r) + " fell in leaf "
-                    + String(b) + " of " + String(n_leaves)
-                )
-            counts[b] += 1
-        while k < len(self.bounds):
-            for b in range(n_leaves):
-                self.snap[k * n_leaves + b] = counts[b]
-            k += 1
-        self.seg_start = List[Int](length=n_leaves, fill=0)
-        var running = 0
+    def settle(mut self, n_leaves: Int) raises:
+        """After the caller's drain: the counts onto the host lists, and
+        the check the host sort made row by row (every row in a leaf)."""
+        var total = 0
         for b in range(n_leaves):
-            self.seg_start[b] = running
-            running += counts[b]
-        var fill = self.seg_start.copy()
-        var out_p = self.h_sorted.unsafe_ptr()
-        for r in range(self.need):
-            var b = Int(leaf_p.unsafe_load(r))
-            out_p.unsafe_store(fill[b], UInt32(r))
-            fill[b] += 1
-        ctx.enqueue_copy(dst_buf=self.d_sorted, src_ptr=self.h_sorted.unsafe_ptr())
+            total += Int(self.h_tot[b])
+        if total != self.need:
+            raise Error(
+                "partition_from_bins: " + String(self.need - total)
+                + " rows fell outside the tree's " + String(n_leaves)
+                + " leaves"
+            )
+        self.seg_start = List[Int](length=n_leaves, fill=0)
+        for b in range(n_leaves):
+            self.seg_start[b] = Int(self.h_seg[b])
+        var nb = len(self.bounds)
+        self.snap = List[Int](length=nb * n_leaves, fill=0)
+        for i in range(nb * n_leaves):
+            self.snap[i] = Int(self.h_snap[i])
 
     def task_partition(
         mut self,
@@ -1080,7 +1282,11 @@ def fit_ordered(
                     bounds.append(est)
             if p == est_p:
                 bounds.append(n_rows)
-            parts.append(_PermPartition(ctx, arena, bounds^))
+            parts.append(
+                _PermPartition(ctx, arena, bounds^, 1 << max_depth)
+            )
+    var part_counts = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
+    var part_prefix = arena.device[DType.uint32](ctx, ORDERED_PART_CELLS if batch else 1)
     var losses = List[Float64]()
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_part = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
@@ -1259,13 +1465,15 @@ def fit_ordered(
             )
         var n_leaves = 1 << len(splits)
         if batch:
-            # every permutation's leaves home at once, then one host
-            # counting sort per permutation (`_PermPartition`)
+            # one device counting sort per permutation (`_PermPartition`),
+            # one drain for all of them, their counts home
             for p in range(perm_count):
-                parts[p].enqueue_leaves(ctx, bins, dperms[p])
+                parts[p].enqueue_sort(
+                    ctx, bins, dperms[p], n_leaves, part_counts, part_prefix
+                )
             ctx.synchronize()
             for p in range(perm_count):
-                parts[p].build(ctx, n_leaves)
+                parts[p].settle(n_leaves)
         else:
             # the tree's bins on the host ONCE, for every task's partition
             # (`_partition_from_host_bins`)
@@ -1400,6 +1608,8 @@ def fit_ordered(
     _ = h_part_rows^
     _ = slots^
     _ = parts^
+    _ = part_counts^
+    _ = part_prefix^
     _ = der_gy^
     _ = der_gw^
     _ = der_stats^
