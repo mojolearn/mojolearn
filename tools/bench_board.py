@@ -1080,6 +1080,31 @@ def gpu_set_refusal(python, vendor):
     return ((p.stdout or "") + (p.stderr or "")).strip()[-2000:] or "rc %d" % p.returncode
 
 
+def setup_arm_venvs(args, vendor, out, log):
+    """{arm: interpreter} for the arms whose library needs its own clean venv
+    (tools/bench_board_algos.py ARM_VENVS), created and installed under the
+    cache. A failed install is not fatal: the arm then refuses by name in its
+    race, in the board's venv."""
+    if args.skip_install or args.python_env or "algos" not in (args.families or ""):
+        return {}
+    got = {}
+    for arm, reqs in sorted(ALGOS.ARM_VENVS.get(vendor, {}).items()):
+        vdir = os.path.join(cache_dir(args, out), "venv-" + arm)
+        py = os.path.join(vdir, "bin", "python")
+        if not os.path.exists(py) and run_logged([args.base_python, "-m", "venv", vdir], None,
+                                                 log, 1800) != 0:
+            print("bench_board: venv for %s failed (it refuses by name)" % arm, flush=True)
+            continue
+        cmd = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+               "--extra-index-url", ALGOS.ARM_VENV_INDEX] + list(reqs)
+        if run_logged(cmd, None, log, 3600) != 0:
+            print("bench_board: %s install failed for %s (it refuses by name)"
+                  % (" ".join(reqs), arm), flush=True)
+            continue
+        got[arm] = py
+    return got
+
+
 def data_status(data_root, datasets, verify=False):
     """{dataset: {path, present, bytes, pinned_bytes, sha256_ok}}."""
     pins = {}
@@ -1473,6 +1498,9 @@ def algos_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec)]
+    for arm, py in sorted((ctx.get("arm_python") or {}).items()):
+        if arm in race["arms"]:
+            cmd += ["--arm-python", "%s=%s" % (arm, py)]
     if race["rows"]:
         cmd += ["--smoke-rows", str(int(race["rows"]))]
     n = len(race["arms"])
@@ -3132,6 +3160,7 @@ def main(argv=None):
     result = load_result(rpath)
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     why = gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
@@ -3159,7 +3188,7 @@ def main(argv=None):
            "neural_driver": os.path.abspath(args.neural_driver),
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
-           "algos_driver": os.path.abspath(args.algos_driver),
+           "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
     ctx["box"] = box

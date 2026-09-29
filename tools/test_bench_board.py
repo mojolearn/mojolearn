@@ -1053,6 +1053,27 @@ def test_nvidia_installs_the_cu129_torch_first_from_its_extra_index(tmp_path, mo
     assert any("gpytorch" in c for c in flat[t + 1:])
 
 
+def test_implicit_gpu_gets_its_own_venv_and_the_algos_race_passes_it(tmp_path, monkeypatch):
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    args = bb.build_parser().parse_args(["--families", "algos", "--cache", str(tmp_path / "c")])
+    got = bb.setup_arm_venvs(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
+    assert set(got) == {"implicit-gpu"} and got["implicit-gpu"].endswith("venv-implicit-gpu/bin/python")
+    flat = [" ".join(c) for c in cmds]
+    assert any("-m venv" in c and "venv-implicit-gpu" in c for c in flat)
+    assert any("implicit==0.7.3" in c and "rmm-cu13==26.4.0" in c and "cuda-toolkit" in c for c in flat)
+    assert bb.setup_arm_venvs(args, "apple", str(tmp_path), str(tmp_path / "log")) == {}
+    ctx = {"round_seconds": 60, "python": "py", "algos_driver": "d", "rounds": 1, "out": str(tmp_path),
+           "algos_data": str(tmp_path), "arm_python": got}
+    race = {"lane": "als", "dataset": "taxi-zones", "rows": None,
+            "arms": ["ours", "implicit-cpu", "implicit-gpu"]}
+    cmd, _, _ = bb.algos_cmd(ctx, race)
+    i = cmd.index("--arm-python")
+    assert cmd[i + 1] == "implicit-gpu=" + got["implicit-gpu"]
+    race["arms"] = ["ours", "implicit-cpu"]
+    assert "--arm-python" not in bb.algos_cmd(ctx, race)[0]
+
+
 def test_nvidia_refuses_system_site_packages():
     with pytest.raises(SystemExit, match="system-site-packages"):
         bb.main(["--vendor", "nvidia", "--system-site-packages", "--dry-run"])

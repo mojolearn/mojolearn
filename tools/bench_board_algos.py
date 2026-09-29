@@ -123,6 +123,35 @@ PINS = {"apple": list(PINS_COMMON), "amd": list(PINS_COMMON),
         "nvidia": list(PINS_COMMON)}
 #: installed from the rapids index with the pinned cuml/cuvs set
 RAPIDS_EXTRA = {"nvidia": ["cugraph-cu12==26.8.0"]}
+#: An arm whose library cannot share the board's venv gets its own (clean)
+#: venv, created by tools/bench_board.py and passed as --arm-python ARM=PY.
+#: implicit-gpu (2026-09-29): the PyPI implicit 0.7.3 GPU extension links
+#: CUDA 13 (libcublas.so.13, librmm from rmm-cu13) and was built against rmm
+#: 26.4 (26.8 lacks its rmm::bad_alloc typeinfo; 25.12 its device_buffer
+#: constructor), while the RAPIDS sets are cu12; cuda-toolkit 13.0 matches
+#: the pods' 580 driver. The worker preloads the CUDA 13 libraries through
+#: cuda.pathfinder (the extension carries no RUNPATH to them).
+ARM_VENVS = {"nvidia": {"implicit-gpu": [
+    "implicit==0.7.3", "rmm-cu13==26.4.0", "librmm-cu13==26.4.0",
+    "cuda-toolkit[cublas,curand,cudart]==13.0.3", "numpy==2.4.6", "scipy==1.17.1",
+    "threadpoolctl==3.7.0"]}}
+#: the index the arm venvs install from besides PyPI
+ARM_VENV_INDEX = "https://pypi.nvidia.com"
+
+
+def _preload_cuda_libs(names):
+    """Load CUDA libraries from the venv's wheels (cuda.pathfinder) so an
+    extension without a RUNPATH to them resolves; a missing loader or library
+    leaves it to the arm's own refusal."""
+    try:
+        from cuda.pathfinder import load_nvidia_dynamic_lib
+    except ImportError:
+        return
+    for n in names:
+        try:
+            load_nvidia_dynamic_lib(n)
+        except Exception:
+            pass
 
 # ---------------------------------------------------------------------------
 # THE TABLE. One entry per algorithm (a class pair such as SGDClassifier /
@@ -3858,6 +3887,7 @@ def _build_als(lane, arm, D):
     import implicit
     gpu = arm == "implicit-gpu"
     if gpu:
+        _preload_cuda_libs(("cudart", "cublasLt", "cublas", "curand"))
         import implicit.gpu
         if not implicit.gpu.HAS_CUDA:
             raise RuntimeError("REFUSED: the pinned implicit wheel was built without CUDA "
@@ -4606,8 +4636,9 @@ def race(args):
     env_extra = {}
     if args.smoke_rows:
         env_extra["MOJOLEARN_ALGOS_SMOKE_ROWS"] = str(args.smoke_rows)
+    arm_python = dict(a.split("=", 1) for a in (args.arm_python or []))
     for arm in arms:
-        py = args.ours_python if arm in OURS_ARMS else args.theirs_python
+        py = arm_python.get(arm) or (args.ours_python if arm in OURS_ARMS else args.theirs_python)
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
         env = _worker_env(arm)
@@ -4766,6 +4797,8 @@ def build_parser():
     r.add_argument("--smoke-rows", type=int, default=0)
     r.add_argument("--ours-python", default=sys.executable)
     r.add_argument("--theirs-python", default=sys.executable)
+    r.add_argument("--arm-python", action="append", default=[], metavar="ARM=PY",
+                   help="this arm's own interpreter (repeatable; ARM_VENVS)")
     r.add_argument("--ready-seconds", type=float, default=1800)
     r.add_argument("--params-only", action="store_true",
                    help="construct every arm, read its parameters back, write <out>/<tag>.params.json "
