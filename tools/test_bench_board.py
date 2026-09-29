@@ -389,12 +389,12 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    # the 93 races before the algorithm expansion are unchanged; the algos
-    # family adds its own
+    # the 95 races before the algorithm expansion (93, and gbdt-symmetric-1000
+    # on two datasets since 2026-09-29); the algos family adds its own
     algos = bb.plan_races("apple", bb.modes_for("apple"), ["algos"], rows=1000, cpu_arm=False)
     before = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES[:-1], rows=1000, cpu_arm=False)
-    assert len(before) == 93 and sum(len(r["arms"]) for r in before) == 336
-    assert "TOTAL races=%d cells=%d" % (93 + len(algos), 336 + sum(len(r["arms"]) for r in algos)) in text
+    assert len(before) == 95 and sum(len(r["arms"]) for r in before) == 342
+    assert "TOTAL races=%d cells=%d" % (95 + len(algos), 342 + sum(len(r["arms"]) for r in algos)) in text
     assert "family algos" in text
     # every algos race names whether its class is in the source tree (once every
     # lane has merged its classes, no race reads "not built yet")
@@ -613,14 +613,14 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 336, 134, 76),
-                                                      ("nvidia", 280, 94, 95),
-                                                      ("amd", 270, 90, 76)])
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 342, 134, 76),
+                                                      ("nvidia", 284, 94, 95),
+                                                      ("amd", 274, 90, 76)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=%d" % cells in text
+    assert "TOTAL races=95 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
     assert "family neural     races=16 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text
