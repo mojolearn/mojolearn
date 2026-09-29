@@ -448,6 +448,7 @@ HARNESS = _load_tool("bench_board_harness")
 #: The opponent store (tools/bench_board_store.py): an opponent is measured once
 #: per key (box, device, library version, settings, data, ...) and reused.
 STORE = _load_tool("bench_board_store")
+WATCHDOG = _load_tool("bench_board_watchdog")
 
 #: Per-arm memory and the ours-cpu readback (standard library only at import).
 PROBE = _load_tool("bench_board_probe")
@@ -680,6 +681,11 @@ def capture(cmd, timeout=60, env=None):
     return p.stdout.strip()
 
 
+#: What the host-memory watchdog killed (tools/bench_board_watchdog.py), in
+#: order; run_race reads the entries its race added.
+HOST_MEMORY_KILLS = []
+
+
 def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
     """Run `cmd` with stdout+stderr to `log_path`, in its own process group,
     killed as a GROUP at `timeout` seconds (macOS has no timeout(1), and a
@@ -693,6 +699,11 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
         log.flush()
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env,
                                 cwd=cwd, start_new_session=True)
+        dog = None
+        try:
+            dog = WATCHDOG.HostMemoryWatchdog(proc.pid, log).start()
+        except Exception as exc:      # noqa: BLE001 - recorded; the race still runs
+            log.write("\n=== bench_board: host-memory watchdog not started: %r\n" % (exc,))
         try:
             return proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -703,6 +714,9 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
             proc.wait()
             log.write("\n=== bench_board: KILLED at the %d s race ceiling\n" % timeout)
             return 124
+        finally:
+            if dog is not None:
+                HOST_MEMORY_KILLS.extend(dog.stop())
 
 
 def child_env(ctx, extra=None):
@@ -2134,6 +2148,24 @@ def backfill_store(board_json, store_path):
     return imported, skipped
 
 
+def note_host_memory(rec, kills, arms):
+    """The host-memory watchdog killed something of this race: the race fails
+    by name (HOST MEMORY) and the killed arm's cell says so."""
+    if not kills:
+        return
+    rec["host_memory"] = list(kills)
+    named = []
+    for k in kills:
+        arm = WATCHDOG.arm_of(k.get("command") or "", arms)
+        named.append("%s at %.1f GB (%s)" % (arm or "the driver", k["mb"] / 1024.0, k["why"]))
+        for c in rec.get("cells") or []:
+            if arm is not None and c.get("arm") == arm:
+                c["status"] = "HOST-MEMORY(killed at %.1f GB: %s)" % (k["mb"] / 1024.0, k["why"])
+    rec["status"] = "failed"
+    rec["failure"] = "HOST MEMORY: the watchdog killed " + "; ".join(named)
+    print("bench_board:   %s" % rec["failure"], flush=True)
+
+
 def run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells). Opponents
     the store already holds for this key are not run; their stored cells join
@@ -2145,7 +2177,9 @@ def run_race(ctx, race):
                     arms=[a for a in race["arms"] if a not in stored])
         print("bench_board:   stored (not run): %s" % ", ".join(
             "%s [%s]" % (a, STORE.source_text(r)) for a, r in sorted(stored.items())), flush=True)
+    mark = len(HOST_MEMORY_KILLS)
     rec = _run_race(ctx, race)
+    note_host_memory(rec, HOST_MEMORY_KILLS[mark:], race["arms"])
     rec["arms"] = full["arms"]
     rec["stored_arms"] = sorted(stored)
     for c in rec["cells"]:
