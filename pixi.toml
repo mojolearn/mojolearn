@@ -1090,6 +1090,12 @@ check-gemm-lowbit = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/
 check-gemm-lowbit-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+# lane/lowbit-int15 (2026-09-29): mojolearn.identical.gemm.int15i64.v1, contract section THE FIFTEEN-BIT PROFILE.
+check-gemm-int15 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_FORCE_FLAT=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-piece-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_PIECE_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 
 
 # The three identity check files ALONE, in whatever mode the tree is
