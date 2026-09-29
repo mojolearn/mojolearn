@@ -229,11 +229,15 @@ _add("bayesian-ridge", xlane="linear", ours="BayesianRidge", task="reg", block="
      sk="sklearn.linear_model:BayesianRidge", params=dict(max_iter=300, tol=1e-3))
 _add("ard", xlane="linear", ours="ARDRegression", task="reg", block="reg", sub={"X": SUB["mid"]},
      sk="sklearn.linear_model:ARDRegression", params=dict(max_iter=300, tol=1e-3))
+#: Lars' eps: ours' and scikit-learn's default, np.finfo(float64).eps; cuML's is
+#: None (its own default), so every arm gets the value explicitly (the L40S board
+#: refused the race on an unset cuML eps, 2026-09-29)
+LARS_EPS = 2.220446049250313e-16
 _add("lars", xlane="linear", ours="Lars", task="reg", block="reg",
      sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True,
-                                                 random_state=SEED),
+                                                 eps=LARS_EPS, random_state=SEED),
      cuml="cuml.experimental.linear_model:Lars",
-     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True))
+     cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True, eps=LARS_EPS))
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
      sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",

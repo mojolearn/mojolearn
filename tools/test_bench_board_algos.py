@@ -261,3 +261,11 @@ def test_cudf_object_is_copied_to_host_explicitly():
             raise TypeError("Implicit conversion to a host NumPy array via __array__ is not allowed")
     ctd = _load("classical_two_datasets")
     assert ctd._to_host(Frame()).tolist() == [[0.0, 1.0], [2.0, 3.0]]
+
+
+def test_lars_sets_eps_on_every_arm():
+    """cuML's Lars eps defaults to None (unset); ours and scikit-learn default to
+    float64 machine eps. Every arm gets the value explicitly."""
+    s = A.LANES["lars"]
+    assert s["params"]["eps"] == float(np.finfo(np.float64).eps)
+    assert s["cuml_params"]["eps"] == s["params"]["eps"]
