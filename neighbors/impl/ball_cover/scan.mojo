@@ -30,6 +30,7 @@ that file records as a bug found by audit rather than by a test.
 """
 
 from std.gpu import block_idx, thread_idx
+from max.gpu.host import HostBuffer
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
 from max.gpu.primitives.block import max as block_max
 
@@ -79,6 +80,29 @@ def rbc_exclusive_scan_kernel(
 
     if tid == RBC_SCAN_TPB - 1:
         ex_scan.unsafe_store(n, offset + total)
+
+
+def rbc_exact_edge_total(mut ia: HostBuffer[DType.int32], n: Int) -> Int:
+    """The EXACT edge count of an int32 exclusive scan, however far it wrapped.
+
+    `rbc_exclusive_scan_kernel` accumulates in Int32, so `ia[n]` is the edge
+    count MODULO 2^32 read as a signed number. Past 2^31 it goes negative;
+    past 2^32 it comes back POSITIVE and small, and a bare `ia[n] > 2^31 - 1`
+    test passes a garbage CSR (found on an L40S, taxi 4.1M x 16, eps 3: the
+    true count was about 2.5e9 and `ia[n]` read -1799116104).
+
+    Each row's degree is at most the number of index rows, below 2^31, so
+    the WRAPPING Int32 difference `ia[i + 1] - ia[i]` is that degree
+    exactly, whatever the offsets wrapped to. Summing the degrees in Int
+    (64-bit) gives the true count. Integer addition, so the order of the
+    sum cannot move a bit; it runs on the host over the `ia` copy the count
+    pass already reads back, so no kernel and no vendor is involved.
+    """
+    var p = ia.unsafe_ptr()
+    var total = 0
+    for i in range(n):
+        total += Int(p.unsafe_load(i + 1) - p.unsafe_load(i))
+    return total
 
 
 def rbc_max_reduce_kernel(
