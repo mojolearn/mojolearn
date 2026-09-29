@@ -2510,6 +2510,8 @@ def write_board(out, result):
 # ---------------------------------------------------------------------------
 
 SMOKE_SCHEMA = "mojolearn-bench-board-smoke/1"
+#: the per-step bound in a smoke run (warm-up, round, trees arm budget), seconds
+SMOKE_STEP_S = 300
 SMOKE_ROWS = 2000
 #: The board and driver files a smoke result vouches for (with the vendor).
 SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py",
@@ -2898,6 +2900,12 @@ def main(argv=None):
     if args.smoke:
         # small and once, into its own directory, never the board's
         args.rows, args.rounds, args.neural_shape = str(SMOKE_ROWS), 1, "small"
+        # a hang fails fast: at the smoke's rows anything needing minutes is already a
+        # failure (the full board's 600 s steps and 1 h trees budget cost 10 min per hung
+        # arm in the 2026-09-29 proof); the bound still covers a first compile
+        args.round_seconds = args.round_seconds or SMOKE_STEP_S
+        args.arm_budget_s = min(args.arm_budget_s, SMOKE_STEP_S)
+        args.race_deadline_s = min(args.race_deadline_s, 4 * SMOKE_STEP_S)
         if not args.dry_run and not args.out:
             raise SystemExit("bench_board: --smoke needs --out (it writes <out>-smoke)")
         if args.out and not os.path.abspath(args.out).rstrip("/").endswith("-smoke"):
