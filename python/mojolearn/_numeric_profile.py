@@ -387,7 +387,7 @@ def state_field(profile):
     """What a checkpoint writer merges into its state: nothing under
     `fp32_v1` (so an fp32_v1 checkpoint's bytes do not change, and a state
     with no field reads as fp32_v1), the name otherwise; a state written
-    under the inference default `fixed15_v1` carries it."""
+    under the opt-in profile `fixed15_v1` carries it."""
     key = canonical(profile)
     return {} if key == BASELINE else {STATE_KEY: key}
 
