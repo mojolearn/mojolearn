@@ -31,10 +31,13 @@ HL + LH and LL of the right cell, read from the right plane. So:
                      position, so a fragment read from the wrong plane, or
                      paired with the wrong one, changes a sum;
     ragged extents   lane/lowbit-units' and the one-product gate's;
-    the bound        every code -128 on all four planes, at the largest `k`
-                     the kernel admits, 65535: the middle sum is 2147450880,
-                     the largest Int32 it may hold; the same with the low
-                     planes at +127, where the middle sum is -2130673920;
+    the bound        high planes -128 and low planes +127 at the largest
+                     `k` the kernel admits, 65536, the fifteen-bit
+                     profile's own: the middle sum is -2130706432 and HH is
+                     2^30; and every code -128 on ALL FOUR planes (outside
+                     the operands the bound is stated for, inside any
+                     int8's) at 65535, where the middle sum is 2147450880,
+                     the largest any input gives;
     one plane alone  three planes of zero codes and one of +127, in turn,
                      so each plane's path to each sum is seen alone.
 """
@@ -46,6 +49,7 @@ from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_uni
 from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
+    INT8_PIECES_MAX_K_ANY_INT8,
     INT8_PIECES_PLAN_COUNT,
     identical_gemm_int8_pieces_flat_into,
     identical_gemm_int8_pieces_tuned_into,
@@ -302,11 +306,11 @@ def _pieces_plant_value(plant: Int, plane: Int) -> Int:
     return 0
 
 
-comptime PIECES_PLANT_SHAPE_COUNT = 7
+comptime PIECES_PLANT_SHAPE_COUNT = 8
 
 
 def _pieces_plant_shape(i: Int) -> Tuple[Int, Int, Int]:
-    """Off every tile and window of the plans, and the largest `k`."""
+    """Off every tile and window of the plans, and the two largest `k`."""
     if i == 0:
         return (9, 7, 1025)
     if i == 1:
@@ -316,10 +320,12 @@ def _pieces_plant_shape(i: Int) -> Tuple[Int, Int, Int]:
     if i == 3:
         return (8, 129, 14336)
     if i == 4:
-        return (2, 3, INT8_PIECES_MAX_K)
+        return (2, 3, INT8_PIECES_MAX_K_ANY_INT8)
     if i == 5:
         return (129, 257, 96)
-    return (17, 33, 4100)
+    if i == 6:
+        return (17, 33, 4100)
+    return (3, 2, INT8_PIECES_MAX_K)
 
 
 def check_pieces_planted_worst_cases(ctx: DeviceContext) raises:
@@ -333,13 +339,22 @@ def check_pieces_planted_worst_cases(ctx: DeviceContext) raises:
         var n = sh[1]
         var k = sh[2]
         for plant in range(PIECES_PLANT_COUNT):
+            if plant == PIECES_PLANT_ALL_MIN and k > INT8_PIECES_MAX_K_ANY_INT8:
+                # Low planes of -128 are outside the operands the larger
+                # bound is stated for: at this `k` their middle sum is 2^31.
+                print(
+                    "   -- " + _pieces_plant_name(plant) + " is not run at k = " + String(k)
+                    + ": its low planes are outside [0, 127]"
+                )
+                continue
             var ah = _constant_plane(m * k, _pieces_plant_value(plant, 0))
             var al = _constant_plane(m * k, _pieces_plant_value(plant, 1))
             var bh = _constant_plane(n * k, _pieces_plant_value(plant, 2))
             var bl = _constant_plane(n * k, _pieces_plant_value(plant, 3))
-            # One nonzero code of each plane differs from its constant, at
-            # a row and a step that differ per plane, so a cell is not
-            # every other cell.
+            # One code of each plane differs from its constant, at a row
+            # and a step that differ per plane, so a cell is not every
+            # other cell. Each is smaller in magnitude than the constant it
+            # replaces or sits in a plane of zero codes, so no sum grows.
             ah[(m - 1) * k + k // 3] = Int8(5)
             al[(m // 2) * k + k - 1] = Int8(7)
             bh[(n - 1) * k] = Int8(-3)

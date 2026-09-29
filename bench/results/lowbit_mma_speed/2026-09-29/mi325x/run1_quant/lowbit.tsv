@@ -1,0 +1,276 @@
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0614 0.0588 273.2045 GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.0769 1.0507 15.5786 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.0484 0.0483 346.5651 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.3449 1.3375 0.0030 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 3.8354 3.8109 4.3743 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 1.4013 1.3811 11.9722 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 5.1827 5.1437 3.2372 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.0211 0.0162 0.1940 Gelem/s 0x54279cbda1444726 per-call,block=1
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.0415 0.0404 404.5627 Gelem/s 0x305b1a502296caf6 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.parq 0.0562 0.0540 298.4208 GMAC/s 0x8a9227b93e430acd quantize.a.par+product
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.parq 0.0879 0.0835 190.7803 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.0820 0.0724 1637.4006 GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 1.1406 1.1292 117.6722 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.0500 0.0498 2684.8915 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.4271 1.4129 0.0230 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8091 3.8011 4.4045 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 1.4888 1.4764 90.1523 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 5.3075 5.2741 25.2884 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.0181 0.0163 1.8154 Gelem/s 0xbd0b5aed2b83cb45 per-call,block=1
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.0454 0.0442 369.2169 Gelem/s 0xa8ce17326c01345 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.parq 0.0567 0.0559 2365.9039 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+product
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.parq 0.0890 0.0861 1507.7255 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 0.9526 0.9451 9017.6603 GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 41.7794 41.7629 205.6023 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 0.2678 0.2654 32074.8541 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.6619 3.6597 0.5727 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.7031 3.6844 4.5306 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 3.9446 3.9098 2177.6700 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 7.4818 7.4769 1148.1173 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.0211 0.0200 99.2547 Gelem/s 0xe8bb3ad105a4ae26 per-call,block=1
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.0455 0.0445 369.0626 Gelem/s 0xd5ea46fdcb251db4 once-per-weight,block=1
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.parq 0.2748 0.2724 31261.1347 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+product
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.parq 0.3159 0.3148 27187.7252 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1599 0.1589 367.2334 GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 1.0983 1.0828 53.4663 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.0548 0.0535 1071.9287 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3448 1.3399 0.0030 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 4.0811 4.0596 14.3883 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 1.4223 1.4020 41.2843 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 5.4484 5.4125 10.7775 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a.par 0.0172 0.0163 0.2380 Gelem/s 0x1343c750c1ded02 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b.par 0.1149 0.1145 510.9175 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.parq 0.0667 0.0661 881.0241 GMAC/s 0xff302668595b02d quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.parq 0.1673 0.1656 351.0738 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.1658 0.1648 2833.4935 GMAC/s 0x7b30465d325906e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.8872 2.8834 162.7048 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.0650 0.0621 7229.3328 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.4467 1.4420 0.0227 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 4.1076 4.0765 14.2956 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 1.5237 1.5213 308.3041 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 5.5324 5.5006 84.9112 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a.par 0.0171 0.0168 1.9185 Gelem/s 0x5e46321f760ef85d per-call,block=1
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b.par 0.1124 0.1109 522.4687 Gelem/s 0xa9e079afde494e3d once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.parq 0.0716 0.0709 6560.0063 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.parq 0.1689 0.1667 2782.1264 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 2.5295 2.5240 11885.5449 GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 151.1694 151.0888 198.8813 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 0.8904 0.8885 33765.1628 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.8893 3.7354 0.5392 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 4.1743 4.1385 14.0669 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 4.6929 4.6224 6406.3803 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 8.8649 8.6868 3391.4306 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a.par 0.0200 0.0194 104.9153 Gelem/s 0x8c503fb082856006 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b.par 0.1132 0.1093 518.5057 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.parq 0.9248 0.9069 32509.2031 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+product
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.parq 1.0478 1.0265 28693.5905 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1508 0.1496 389.4174 GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 3.7615 3.7376 15.6110 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.1367 0.1355 429.5242 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.7451 4.6438 0.0030 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.9080 13.7208 4.2221 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 4.9227 4.8399 11.9285 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 18.7519 18.6225 3.1314 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a.par 0.0294 0.0271 0.4881 Gelem/s 0x160d734878c0f458 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b.par 0.1229 0.1203 477.9834 Gelem/s 0x31274090cc79ba2f once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.parq 0.1722 0.1718 340.9825 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.parq 0.2781 0.2749 211.1791 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.1902 0.1894 2469.3257 GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 3.7495 3.7418 125.2882 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.1437 0.1422 3268.5920 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 5.1222 5.0934 0.0224 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 14.0403 13.8916 4.1823 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 5.3189 5.2496 88.3197 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 19.1789 19.0928 24.4936 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a.par 0.0296 0.0279 3.8732 Gelem/s 0xbb4f2a7232392bfe per-call,block=1
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b.par 0.1262 0.1235 465.4796 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.parq 0.1772 0.1739 2651.0423 GMAC/s 0x694aafd520fdadad quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.parq 0.2821 0.2789 1665.2973 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 2.5925 2.5604 11596.8974 GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 139.3887 138.9228 215.6901 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 0.8488 0.8470 35418.6967 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 13.3351 13.3256 0.5504 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.6360 13.6213 4.3063 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 14.2304 14.1999 2112.7183 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 27.2081 27.2024 1104.9934 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a.par 0.0354 0.0339 207.5801 Gelem/s 0x903f6ff84c6082 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b.par 0.1229 0.1192 477.8667 Gelem/s 0xa046020a81d05746 once-per-weight,block=1
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.parq 0.8918 0.8870 33712.4970 GMAC/s 0x6120545eacb068ad quantize.a.par+product
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.parq 1.0516 1.0359 28589.6047 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.6071 1.5436 326.8895 GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 6.2839 6.0864 83.6004 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.2788 0.2760 1884.2167 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3683 1.3499 0.0030 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 15.7357 15.6259 33.3850 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 1.6538 1.6509 317.6529 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 17.4058 17.3267 30.1816 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a.par 0.0185 0.0169 0.2214 Gelem/s 0x67d2e298b047bf2b per-call,block=1
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b.par 0.8532 0.8491 615.7546 Gelem/s 0x1c75800d0b1054bd once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.parq 0.2928 0.2919 1793.9985 GMAC/s 0xe0222b2f9de835ed quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.parq 1.1552 1.1511 454.7475 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 1.6544 1.4092 2540.3476 GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 47.1462 45.9099 89.1417 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 0.3288 0.3251 12783.0782 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.4441 1.4306 0.0227 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 16.0919 15.8587 32.6461 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 1.7837 1.7685 2356.1577 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 17.7314 17.4311 237.0202 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a.par 0.0210 0.0192 1.5574 Gelem/s 0x443be8ad16d189a3 per-call,block=1
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b.par 0.8534 0.8518 615.5742 Gelem/s 0x8e01af3f075298bb once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.parq 0.3420 0.3332 12288.6108 GMAC/s 0x8151fd05ff287a5d quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.parq 1.2100 1.2010 3473.3083 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 2.8671 2.8357 11726.5696 GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 249.7247 248.7966 134.6344 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 1.0096 1.0086 33301.5793 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.7850 3.7464 0.5541 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 4.3455 4.2252 15.1117 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 4.8641 4.8514 6912.2097 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 9.0480 8.9703 3715.9032 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a.par 0.0234 0.0220 89.5071 Gelem/s 0xfd89ee79d025dda7 per-call,block=1
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b.par 0.1220 0.1204 538.3429 Gelem/s 0xcc187b17bc36366d once-per-weight,block=1
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.parq 1.0446 1.0393 32186.7212 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+product
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.parq 1.2004 1.1885 28009.6179 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+product
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk.parq this column does not have the unit the arm runs on
