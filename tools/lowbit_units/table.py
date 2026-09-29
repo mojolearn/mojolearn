@@ -35,6 +35,10 @@ PRODUCTS = ("fp32.v1", "bf16f32.v1.fused", "bf16f32.v1.widen", "int8i32.v1.flat"
 CONVERSIONS = ("convert.int8.quantize.a", "convert.int8.pack.b", "convert.bf16.pack.b",
                "convert.bf16.widen.b", "convert.int8.dequantize.b")
 LOWBIT_PRODUCTS = PRODUCTS[1:]
+#: The complete operations: every step of one call, one wait.
+INFERENCE = ("inference.bf16f32.v1", "inference.int8i32.v1", "inference.int8i32.v1.applechunk")
+TRAINING = ("training.bf16f32.v1", "training.int8i32.v1", "training.int8i32.v1.applechunk")
+ALL_ARMS = PRODUCTS + CONVERSIONS + INFERENCE + TRAINING
 
 
 def read_lowbit(path):
@@ -108,6 +112,8 @@ def main():
     ap.add_argument("--identity-only", action="append", default=[], metavar="NAME",
                     help="a box judged on bitwise identity only: its time columns read "
                          "'not timed (identity only)' whatever its file holds")
+    ap.add_argument("--note", action="append", default=[], metavar="NAME=TEXT",
+                    help="a sentence printed under the box's name (whether its run was taken alone)")
     ap.add_argument("--expect-disagree", nargs=2, metavar=("CLEAN", "SABOTAGE"))
     ap.add_argument("--out", default="")
     a = ap.parse_args()
@@ -145,12 +151,120 @@ def main():
     w("G MAC/s (multiply-accumulates, `m n k`) for a product and G elem/s for a conversion.")
     w("")
 
+    notes = {}
+    for spec in a.note:
+        name, _, text = spec.partition("=")
+        if name not in boxes:
+            sys.exit(f"table.py: --note {name} names no --box")
+        notes.setdefault(name, []).append(text)
+
+    # THE COMPLETE OPERATION, TWICE: measured arms, each over fp32.v1.
+    for title, arms, what in (
+        ("INFERENCE", INFERENCE,
+         "The weights were packed once. One call pays the conversion of its activations, the product on the "
+         "plan the profile's dispatcher picks, and the epilogue. bf16f32.v1 keeps its activations float32."),
+        ("TRAINING", TRAINING,
+         "The weights change every step, so one step pays their conversion as well as the activations'. "
+         "ONLY THE FORWARD PRODUCT: int8i32.v1 is OP_NT only and no low-bit backward kernel exists."),
+    ):
+        w(f"## {title}: the complete operation against fp32.v1")
+        w("")
+        w(what + " Every step of the call is enqueued and waited for ONCE, so each time is measured, not a")
+        w("sum. `over` is the time over fp32.v1's at the same shape on the same box; above 1 it took longer.")
+        w("The Apple probe is not in any dispatcher.")
+        w("")
+        for box in order:
+            rows, shapes, _ = boxes[box]
+            if box in a.identity_only:
+                w(f"### {box}")
+                w("")
+                w("| shape | fp32.v1 ms | bf16f32.v1 ms | over | int8i32.v1 ms | over | Apple probe ms | over |")
+                w("|---|---:|---:|---:|---:|---:|---:|---:|")
+                for shape in shapes:
+                    w(f"| {shape} | " + " | ".join(["not timed (identity only)"] * 7) + " |")
+                w("")
+                continue
+            if not any((shape, arms[0]) in rows for shape in shapes):
+                w(f"### {box}: the run holds no {title.lower()} arm")
+                w("")
+                continue
+            w(f"### {box}")
+            w("")
+            for text in notes.get(box, []):
+                w(text)
+                w("")
+            w("| shape | m x n x k | fp32.v1 ms | bf16f32.v1 ms | over | int8i32.v1 ms | over | Apple probe ms | over |")
+            w("|---|---|---:|---:|---:|---:|---:|---:|---:|")
+            for shape in shapes:
+                fp32 = rows.get((shape, "fp32.v1"))
+                if not fp32:
+                    continue
+                ext = "" if fp32["extent"] == "FULL" else " (CAPPED)"
+                cells_ = []
+                for arm in arms:
+                    r = rows.get((shape, arm))
+                    cells_.append(f"{r['median_ms']:.4f} | {ratio(r['median_ms'], fp32['median_ms'])}" if r
+                                  else "not run | ")
+                w(f"| {shape} | {fp32['m']} x {fp32['n']} x {fp32['k']}{ext} | {fp32['median_ms']:.4f} | "
+                  + " | ".join(cells_) + " |")
+            w("")
+
+    # THE SHORT TABLE: what each profile's dispatcher runs at the shape (the
+    # arm whose note says `dispatched`), the Apple probe beside it, and what
+    # one call pays when its activations arrive float32.
+    w("## The products alone: the plan each profile's dispatcher runs")
+    w("")
+    w("`over` is the arm's median over fp32.v1's at the same shape on the same box. `+q` adds the per-call")
+    w("quantization of the activations (`convert.int8.quantize.a`), a sum of two medians. The Apple probe")
+    w("is not in any dispatcher.")
+    w("")
+    for box in order:
+        rows, shapes, _ = boxes[box]
+        if box in a.identity_only:
+            w(f"### {box}: not timed (identity only)")
+            w("")
+            continue
+        w(f"### {box}")
+        w("")
+        w("| shape | m x n x k | fp32.v1 ms | bf16f32.v1 ms | over | int8i32.v1 ms | over | +q over | Apple probe ms | over | +q over |")
+        w("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for shape in shapes:
+            fp32 = rows.get((shape, "fp32.v1"))
+            if not fp32:
+                continue
+            qa = rows.get((shape, "convert.int8.quantize.a"))
+
+            def picked(arms):
+                for arm in arms:
+                    r = rows.get((shape, arm))
+                    if r and r["note"].startswith("dispatched"):
+                        return r
+                return None
+
+            def cells(r):
+                if not r:
+                    return "not run | | "
+                plus = ratio(r["median_ms"] + qa["median_ms"], fp32["median_ms"]) if qa and r["arm"].startswith("int8") else ""
+                return f"{r['median_ms']:.4f} | {ratio(r['median_ms'], fp32['median_ms'])} | {plus}"
+
+            bf = picked(("bf16f32.v1.fused", "bf16f32.v1.widen"))
+            i8 = picked(("int8i32.v1.mma", "int8i32.v1.flat"))
+            probe = rows.get((shape, "int8i32.v1.applechunk"))
+            bfc = f"{bf['median_ms']:.4f} | {ratio(bf['median_ms'], fp32['median_ms'])}" if bf else "not run | "
+            ext = "" if fp32["extent"] == "FULL" else " (CAPPED)"
+            w(f"| {shape} | {fp32['m']} x {fp32['n']} x {fp32['k']}{ext} | {fp32['median_ms']:.4f} | {bfc} | "
+              f"{cells(i8)} | {cells(probe)} |")
+        w("")
+
     costs_more = []
     for box in order:
         rows, shapes, not_run = boxes[box]
         column = next(iter(rows.values()))["column"]
         w(f"## {box} (column {column})")
         w("")
+        for text in notes.get(box, []):
+            w(text)
+            w("")
         if box in a.identity_only:
             if box in vendors:
                 sys.exit(f"table.py: {box} is identity only; it takes no --vendor")
@@ -163,7 +277,7 @@ def main():
                 w("")
                 w("| arm | median ms | min ms | rate | arm over fp32.v1 | note |")
                 w("|---|---:|---:|---:|---:|---|")
-                for arm in PRODUCTS + CONVERSIONS:
+                for arm in ALL_ARMS:
                     r = rows.get((shape, arm))
                     if r is None:
                         if (shape, arm) in not_run:
@@ -185,7 +299,7 @@ def main():
             w("")
             w("| arm | median ms | min ms | rate | arm over fp32.v1 | note |")
             w("|---|---:|---:|---:|---:|---|")
-            for arm in PRODUCTS + CONVERSIONS:
+            for arm in ALL_ARMS:
                 r = rows.get((shape, arm))
                 if r is None:
                     if (shape, arm) in not_run:
@@ -247,7 +361,7 @@ def main():
             if s not in all_shapes:
                 all_shapes.append(s)
     for shape in all_shapes:
-        for arm in PRODUCTS + CONVERSIONS:
+        for arm in ALL_ARMS:
             got = {b: boxes[b][0].get((shape, arm)) for b in order}
             ran = {b: r for b, r in got.items() if r}
             if not ran:
@@ -268,7 +382,7 @@ def main():
     w("")
     w("| arm | shapes | AGREE | DISAGREE | ONE BOX | not comparable |")
     w("|---|---:|---:|---:|---:|---:|")
-    for arm in PRODUCTS + CONVERSIONS:
+    for arm in ALL_ARMS:
         v = per_arm.get(arm, [])
         if v:
             w(f"| {arm} | {len(v)} | {v.count('AGREE')} | {v.count('DISAGREE')} | {v.count('ONE BOX')} | "
@@ -285,8 +399,11 @@ def main():
     w("| profile | plans | shapes | AGREE | DISAGREE | ONE BOX |")
     w("|---|---|---:|---:|---:|---:|")
     for profile, plans in (("fp32.v1", ("fp32.v1",)),
-                           ("bf16f32.v1", ("bf16f32.v1.fused", "bf16f32.v1.widen")),
-                           ("int8i32.v1", ("int8i32.v1.flat", "int8i32.v1.mma", "int8i32.v1.applechunk"))):
+                           ("bf16f32.v1", ("bf16f32.v1.fused", "bf16f32.v1.widen", "inference.bf16f32.v1",
+                                           "training.bf16f32.v1")),
+                           ("int8i32.v1", ("int8i32.v1.flat", "int8i32.v1.mma", "int8i32.v1.applechunk",
+                                           "inference.int8i32.v1", "inference.int8i32.v1.applechunk",
+                                           "training.int8i32.v1", "training.int8i32.v1.applechunk"))):
         tally = {"AGREE": 0, "DISAGREE": 0, "ONE BOX": 0}
         seen = set()
         for shape in all_shapes:

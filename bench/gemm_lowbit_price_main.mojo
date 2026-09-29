@@ -59,6 +59,41 @@ The dequantization of the PRODUCT (`dequant_int8_pinned`, one per output
 cell) is the epilogue of every int8 kernel and is inside each int8 arm's
 time; it has no launch of its own to time.
 
+THE COMPLETE OPERATION, TWICE (the brief's review point 3). A product's time
+alone is not what a caller pays. Each arm below enqueues EVERY step of one
+call on the one in-order context and waits once, so its time is measured,
+not a sum of medians, and each is read against `fp32.v1` at the same shape
+on the same box:
+
+    INFERENCE: the weights were packed once and are reused. One call pays
+    the conversion of its activations, the product on the plan the
+    profile's dispatcher picks, and the epilogue.
+        inference.bf16f32.v1              the product (activations stay
+                                          float32 in this profile)
+        inference.int8i32.v1              quantize A, the product
+        inference.int8i32.v1.applechunk   quantize A, the Apple probe
+
+    TRAINING: the weights change every step, so their conversion is paid
+    every step as well.
+        training.bf16f32.v1               pack B to bf16, the product
+        training.int8i32.v1               quantize A, quantize B, the product
+        training.int8i32.v1.applechunk    quantize A, quantize B, the probe
+
+    ONLY THE FORWARD PRODUCT. A training step's backward products are OP_TN
+    and OP_NN; `int8i32.v1` is OP_NT only and no low-bit backward kernel
+    exists, so nothing here times a gradient.
+
+These arms convert INTO the operands the product arms read. The conversion
+is a function of the float32 operand, which nothing here writes, so the
+operands hold the same bits after as before.
+
+ON APPLE EVERY TIME IS THE WHOLE KERNEL'S. `fp32.v1` there is
+`PLAN_APPLE_MMA` where its dispatcher picks it: the staging, the admission
+test of every window and any window that fell back to the exact step are
+inside the time, as the probe's staging, int8 to float conversion and chunk
+carries are inside the probe's. No arm here forces the fallback path, so
+its cost alone is not measured.
+
 THE HASH. After its untimed warm-up every arm's output is read back, a
 surviving poison is refused (`_dev_digest`), and the FNV-1a digest of the
 output bits is printed on the arm's `LOWBIT` line. Identity rides along:
@@ -157,8 +192,10 @@ from gemm.checks.gemm_lowbit import (
     bf16_widen,
     dequantize_rows_int8_device,
     identical_gemm_bf16w_fused_into,
+    identical_gemm_bf16w_into,
     identical_gemm_bf16w_widen_into,
     identical_gemm_int8_flat_into,
+    identical_gemm_int8_into,
     int8_plan_dispatch_name,
     lowbit_sabotage_name,
     quantize_rows_int8_device,
@@ -184,7 +221,13 @@ comptime ARM_INT8_PACK_B = 7
 comptime ARM_BF16_PACK_B = 8
 comptime ARM_BF16_WIDEN_B = 9
 comptime ARM_INT8_DEQUANT_B = 10
-comptime ARM_COUNT = 11
+comptime ARM_INF_BF16 = 11
+comptime ARM_INF_INT8 = 12
+comptime ARM_INF_INT8_APPLE_CHUNK = 13
+comptime ARM_TRAIN_BF16 = 14
+comptime ARM_TRAIN_INT8 = 15
+comptime ARM_TRAIN_INT8_APPLE_CHUNK = 16
+comptime ARM_COUNT = 17
 
 #: The arm of the digest and the comparison: one bit of one cell of every
 #: arm's output is flipped before the digest. Off in every build that does
@@ -217,11 +260,25 @@ def _arm_name(arm: Int) -> String:
         return String("convert.bf16.pack.b")
     if arm == ARM_BF16_WIDEN_B:
         return String("convert.bf16.widen.b")
-    return String("convert.int8.dequantize.b")
+    if arm == ARM_INT8_DEQUANT_B:
+        return String("convert.int8.dequantize.b")
+    if arm == ARM_INF_BF16:
+        return String("inference.bf16f32.v1")
+    if arm == ARM_INF_INT8:
+        return String("inference.int8i32.v1")
+    if arm == ARM_INF_INT8_APPLE_CHUNK:
+        return String("inference.int8i32.v1.applechunk")
+    if arm == ARM_TRAIN_BF16:
+        return String("training.bf16f32.v1")
+    if arm == ARM_TRAIN_INT8:
+        return String("training.int8i32.v1")
+    return String("training.int8i32.v1.applechunk")
 
 
 def _arm_is_product(arm: Int) -> Bool:
-    return arm <= ARM_INT8_APPLE_CHUNK
+    """Whether the arm's output is the product `C` (a plan alone, or a
+    complete operation that ends in one)."""
+    return arm <= ARM_INT8_APPLE_CHUNK or arm >= ARM_INF_BF16
 
 
 def _arm_runs(arm: Int) -> Bool:
@@ -229,7 +286,11 @@ def _arm_runs(arm: Int) -> Bool:
     NOT RUN line with the reason; a missing line is never an agreeing one."""
     if arm == ARM_INT8_MMA:
         return HAS_INT8_MMA
-    if arm == ARM_INT8_APPLE_CHUNK:
+    if (
+        arm == ARM_INT8_APPLE_CHUNK
+        or arm == ARM_INF_INT8_APPLE_CHUNK
+        or arm == ARM_TRAIN_INT8_APPLE_CHUNK
+    ):
         return HAS_APPLE_CHUNK
     return True
 
@@ -464,8 +525,29 @@ def _enqueue_arm(
         bf16_narrow(ctx, sb.hs, sb.b, n * k)
     elif arm == ARM_BF16_WIDEN_B:
         bf16_widen(ctx, sb.work.wide, sb.bh, n * k)
-    else:
+    elif arm == ARM_INT8_DEQUANT_B:
         dequantize_rows_int8_device(ctx, sb.work.wide, sb.qb, sb.eb, n, k)
+    elif arm == ARM_INF_BF16:
+        identical_gemm_bf16w_into(ctx, sb.c, sb.a, sb.bh, sb.work, m, n, k, OP_NT)
+    elif arm == ARM_INF_INT8:
+        quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+        identical_gemm_int8_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_INF_INT8_APPLE_CHUNK:
+        comptime if HAS_APPLE_CHUNK:
+            quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_TRAIN_BF16:
+        bf16_narrow(ctx, sb.bh, sb.b, n * k)
+        identical_gemm_bf16w_into(ctx, sb.c, sb.a, sb.bh, sb.work, m, n, k, OP_NT)
+    elif arm == ARM_TRAIN_INT8:
+        quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+        quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+        identical_gemm_int8_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    else:
+        comptime if HAS_APPLE_CHUNK:
+            quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+            identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
 
 
 def _arm_digest(
@@ -518,7 +600,19 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         return String("per-call")
     if arm == ARM_INT8_PACK_B or arm == ARM_BF16_PACK_B:
         return String("once-per-weight")
-    return String("per-call-when-materialized")
+    if arm == ARM_BF16_WIDEN_B or arm == ARM_INT8_DEQUANT_B:
+        return String("per-call-when-materialized")
+    if arm == ARM_INF_BF16:
+        return String("product")
+    if arm == ARM_INF_INT8:
+        return String("quantize.a+product")
+    if arm == ARM_INF_INT8_APPLE_CHUNK:
+        return String("quantize.a+probe")
+    if arm == ARM_TRAIN_BF16:
+        return String("pack.b+product")
+    if arm == ARM_TRAIN_INT8:
+        return String("quantize.a+pack.b+product")
+    return String("quantize.a+pack.b+probe")
 
 
 def _must_agree(
@@ -639,6 +733,14 @@ def _time_shape(
     bad += _must_agree(ARM_BF16_FUSED, ARM_BF16_WIDEN, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_INT8_MMA, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_INT8_APPLE_CHUNK, dig, ran, name)
+    # A complete operation ends in its profile's product, so its digest is
+    # the profile's.
+    bad += _must_agree(ARM_BF16_WIDEN, ARM_INF_BF16, dig, ran, name)
+    bad += _must_agree(ARM_BF16_WIDEN, ARM_TRAIN_BF16, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8_APPLE_CHUNK, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_APPLE_CHUNK, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^

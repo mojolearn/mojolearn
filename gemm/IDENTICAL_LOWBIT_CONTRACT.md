@@ -101,7 +101,8 @@ through the flat plan and compare.
 
 **What is promised under L-9.** The same output bits from either plan on
 every shape, and the same bits as `gemm_int8_oracle`. **What is not.**
-Speed: neither plan has been timed on any vendor. And this clause is a
+Speed: both plans were timed on 2026-09-29 (section 3) and the clause
+promises nothing about the times. And this clause is a
 construction argument until the gate runs on a box that has a unit:
 `check_int8_mma_matches_flat` and `check_int8_device_matches_oracle` on an
 H100 and on an MI300X or MI325X (`tools/lowbit_mma_leg.sh`), with the
@@ -130,9 +131,14 @@ quantized on another carry the same codes.
   int8 profile may run on one and still be the profile.
 - Speed. The fused bf16 plan reads half the weight bytes of the fp32 plan;
   the int8 flat plan is one thread per cell with no tiling, and the int8
-  MMA plan (L-9) runs on the integer matrix unit of NVIDIA and AMD. None
-  has been timed against the fp32 plans, and no number in this tree says
-  any is faster.
+  MMA plan (L-9) runs on the integer matrix unit of NVIDIA and AMD. They
+  were timed against the fp32 plans on 2026-09-29 (lane/lowbit-units,
+  `bench/gemm_lowbit_price_main.mojo`, an H100 and an M2 Pro; the AMD box
+  is checked for identity and not timed):
+  `bench/results/lowbit_units/2026-09-29/TABLE.md`. At the 512-token rows
+  every low-bit plan a dispatcher picks took MORE time than fp32.v1 on both
+  boxes, and the quantization of the activations, one thread per row, took
+  more time than the int8 product on the H100.
 - Any orientation but OP_NT for int8i32.v1.
 
 ## 4. The sabotage arms
@@ -147,6 +153,22 @@ fails `check_bf16_device_matches_oracle`, `check_bf16_plans_agree` and
 `check_int8_device_matches_oracle`; the host arm fails the two oracle gates
 and leaves the plan gate passing, which is correct, since the host arm does
 not reach a device kernel.
+
+## 4.1 The Apple exact-chunk probe (not a plan of the profile)
+
+`gemm/checks/gemm_int8_apple_chunk.mojo` (lane/lowbit-units, 2026-09-29)
+holds each int8 code as a float32 and runs the product on Metal's float
+matrix unit, `k` cut into chunks of 1024 steps so that no partial sum leaves
+the integers a float32 holds (`16129 * 1040 < 2^24`), the chunk sums carried
+in Int32, the epilogue `dequant_int8_pinned`. It is NOT in the dispatcher and
+`lib_int8_matrix_unit_for` still answers False on Apple. Its gate,
+`gemm/checks/gemm_int8_apple_chunk_check.mojo`, passed on the M2 Pro
+(bits equal to the flat kernel and to `gemm_int8_oracle` on 21 shapes of
+quantized fixtures and 110 planted worst cases, both tile geometries), and
+the arm that removes the chunk boundary failed 54 of the 110 planted cases
+and none of the quantized fixtures. At the twelve transformer rows its
+digests equal the H100's and the MI325X's integer-unit digests. Owed before
+it can become a plan under L-9: the same gate on a second Apple generation.
 
 ## 5. Owed
 
