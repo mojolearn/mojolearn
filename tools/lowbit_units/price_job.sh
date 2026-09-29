@@ -22,7 +22,10 @@
 set -u
 cd "$(dirname "$0")/../.." || exit 9
 BOX=${MOJOLEARN_LOWBIT_BOX:-$(hostname -s)}
-OUT="$PWD/bench/results/lowbit_units/$BOX/${MOJOLEARN_LOWBIT_PRICE_DIR:-price}"
+# MOJOLEARN_LOWBIT_RESULTS names the results folder of the lane that runs this
+# (default: lane/lowbit-units's), so another lane's run of the same harness
+# is filed under its own name and overwrites nothing here.
+OUT="$PWD/${MOJOLEARN_LOWBIT_RESULTS:-bench/results/lowbit_units}/$BOX/${MOJOLEARN_LOWBIT_PRICE_DIR:-price}"
 mkdir -p "$OUT"
 export PATH="$HOME/.pixi/bin:$PATH"
 if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then

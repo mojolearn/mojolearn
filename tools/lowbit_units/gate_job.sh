@@ -10,7 +10,9 @@ set -u
 cd "$(dirname "$0")/../.." || exit 9
 BOX=${MOJOLEARN_LOWBIT_BOX:-$(hostname -s)}
 export MOJOLEARN_LOWBIT_LEG_ROOT="$PWD"
-export MOJOLEARN_LOWBIT_LEG_OUT="$PWD/bench/results/lowbit_units/$BOX/gate"
+# MOJOLEARN_LOWBIT_RESULTS: the results folder of the lane that runs this
+# (tools/lowbit_units/price_job.sh says why).
+export MOJOLEARN_LOWBIT_LEG_OUT="$PWD/${MOJOLEARN_LOWBIT_RESULTS:-bench/results/lowbit_units}/$BOX/gate"
 rm -rf "$MOJOLEARN_LOWBIT_LEG_OUT"
 sh tools/lowbit_mma_leg.sh
 rc=$?
