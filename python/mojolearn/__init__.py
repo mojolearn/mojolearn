@@ -64,6 +64,26 @@ numeric_mode = _backend.numeric_mode
 #: estimator under a `fast` default raises rather than silently upgrading.
 set_numeric_mode = _backend.set_default_mode
 
+#: `numeric_profile`: THE NUMBER FORMAT OF THE MATRIX PRODUCTS, OPT IN. Its
+#: own parameter, beside `numeric_mode` and independent of it: the mode is
+#: the promise (identical, deterministic, fast), the profile is what the
+#: products compute in. The default is `fp32_v1` and does not move; another
+#: profile runs only where the caller names it, one that no model class
+#: computes under yet is refused by name and never replaced by the default,
+#: and one that was measured and failed quality is not offered at all.
+#: `weight_format=` is how weights are STORED; this is how the products are
+#: COMPUTED. See `_numeric_profile.py`.
+#:
+#:     mojolearn.numeric_profiles()                   # every registered row
+#:     mojolearn.set_numeric_profile("fp32_v1")       # process default
+#:     mojolearn.models.CausalLM.load(path, numeric_profile="fp32_v1")
+from . import _numeric_profile as _numeric_profile
+
+numeric_profile = _numeric_profile.default_profile
+set_numeric_profile = _numeric_profile.set_default_profile
+numeric_profiles = _numeric_profile.profiles
+numeric_profile_measured = _numeric_profile.measured
+
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or
 #: 'hip', read back out of the binaries (`checks/vendor.mojo`). On Linux
 #: one wheel carries a CUDA set and a HIP set and `_backend._layout()` picks
@@ -444,6 +464,10 @@ __all__ = [
     "__version__",
     "numeric_mode",
     "set_numeric_mode",
+    "numeric_profile",
+    "set_numeric_profile",
+    "numeric_profiles",
+    "numeric_profile_measured",
     "vendor",
     "gpu_arch",
     "gpu_arch_how",

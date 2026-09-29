@@ -1090,6 +1090,30 @@ check-gemm-lowbit = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/
 check-gemm-lowbit-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+# lane/lowbit-int15 (2026-09-29): mojolearn.identical.gemm.int15i64.v1, contract section THE FIFTEEN-BIT PROFILE.
+check-gemm-int15 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_FORCE_FLAT=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-piece-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_PIECE_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-quant-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_QUANT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-apple-chunk-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_APPLE_CHUNK_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+# DEVIATION 2979: every cell of a product in ONE launch on Apple, as before 2026-09-29. On a box slow enough the large product is cut short and the gate FAILS; on a quick box it passes. Recorded, never required.
+check-gemm-int15-one-launch = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_ONE_LAUNCH=1 -D MOJOLEARN_INT15_NO_APPLE_UNIT=1 -I . gemm/checks/gemm_int15_check.mojo"
+# The TUNED plan of int15i64.v1 (contract W-13): lane/lowbit-mma-speed's four products with one staging, this profile's seams.
+check-gemm-int15-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+check-gemm-int15-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+check-gemm-int15-tuned-pieces-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_PIECES_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+check-gemm-int15-tuned-epilogue-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_EPILOGUE_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+check-gemm-int15-tuned-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
+# DEVIATION 2975: the matrix-unit fragment loads as they were before their alignment was stated; every gate passes, same digests.
+check-gemm-int15-unstated-loads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-lowbit-unstated-loads = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+# The host oracle and the device against the quality lane's PyTorch simulation (contract 6.6).
+check-gemm-int15-sim = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
+check-gemm-int15-sim-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
+check-gemm-int15-sim-convert-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
+check-gemm-int15-sim-device-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
 # lane/lowbit-units: the Apple exact-chunk PROBE's gate (Metal only) and its
 # two arms that must FAIL; tools/lowbit_units/chunk_job.sh runs the three.
 check-gemm-int8-apple-chunk = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"

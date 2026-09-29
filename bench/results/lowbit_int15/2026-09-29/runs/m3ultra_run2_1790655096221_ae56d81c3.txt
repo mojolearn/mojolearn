@@ -1,0 +1,502 @@
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m3ultra vendor=apple gpu_archs=unset
+started=2026-09-29T04:12:04Z
+tree_head=ae56d81c373360fd0fe9bbb6f3a7ef80b55ab8b4 dirty_files=3
+machine=Apple M3 Ultra macOS 26.7
+finished=2026-09-29T04:13:25Z
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m3ultra
+started=2026-09-29T04:13:25Z
+tree_head=ae56d81c373360fd0fe9bbb6f3a7ef80b55ab8b4 dirty_files=3
+mac_budget=default repeats=default only=all
+machine=Apple M3 Ultra macOS 26.7
+build exit=0 12s
+warm exit=0 329s (untimed, every arm once)
+price exit=0 409s
+warm-and-timed: the two runs printed the same digests (403)
+price-sabotage exit=0 (identity only)
+sabotage-comparison exit=0 (0: every sabotaged fifteen-bit digest differed from the clean one)
+finished=2026-09-29T04:26:31Z
+profiles fp32.v1, int15i64.v1
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.9750 0.9670 17.2074 GMAC/s 0x920cdd138650a8bd OP_NT,plan=0
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.flat 0.7960 0.7750 21.0769 GMAC/s 0x6c0a74154145a04f dispatched-for-codes
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.pieces 0.9120 0.9060 18.3961 GMAC/s 0x6c0a74154145a04f dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a 1.1660 1.1330 0.0035 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a.parallel 0.3070 0.2890 0.0133 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.a.parallel 0.2950 0.2620 0.0139 Gelem/s 0xdd1cf024338b930d per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.a 0.2170 0.2140 0.0189 Gelem/s 0xdd1cf024338b930d per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b 1.5410 1.5320 10.8872 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b.parallel 1.2390 1.2130 13.5409 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.b.parallel 1.2970 1.2770 12.9354 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.b 0.8150 0.7800 20.5855 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes 0.8930 0.8810 18.7875 GMAC/s 0x6c0a74154145a04f planes.a.parallel+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.codes 0.7870 0.7530 21.3179 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes.rowquant 1.7350 1.6610 9.6699 GMAC/s 0x6c0a74154145a04f quantize.a+split.a+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes 1.9580 1.9320 8.5685 GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.codes 1.7910 1.7750 9.3675 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes.rowquant 3.6110 3.5470 4.6461 GMAC/s 0x6c0a74154145a04f quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.apple.two 1.5680 1.5480 10.6998 GMAC/s 0x6c0a74154145a04f not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.apple.four 1.7030 1.6770 9.8516 GMAC/s 0x6c0a74154145a04f not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.apple.two 1.6250 1.5960 10.3244 GMAC/s 0x6c0a74154145a04f planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.apple.four 1.7320 1.7180 9.6866 GMAC/s 0x6c0a74154145a04f planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.apple.two 2.6960 2.6210 6.2230 GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.apple.four 2.7990 2.7880 5.9940 GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.5760 0.5210 233.0169 GMAC/s 0xd5677d8a13939709 OP_NT,plan=20
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.flat 1.2350 1.2120 108.6783 GMAC/s 0x81664edfe5ebeb5a dispatched-for-codes
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.pieces 2.0500 2.0030 65.4721 GMAC/s 0x81664edfe5ebeb5a dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a 1.2590 1.2420 0.0260 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a.parallel 0.3100 0.3060 0.1057 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.a.parallel 0.3010 0.2420 0.1089 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.a 0.2180 0.1930 0.1503 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b 1.5310 1.5270 10.9583 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b.parallel 1.2510 1.2100 13.4110 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.b.parallel 1.2680 1.2140 13.2312 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.b 0.8570 0.8000 19.5767 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes 2.1300 2.0790 63.0130 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.codes 1.3170 1.2940 101.9117 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes.rowquant 2.9690 2.8640 45.2064 GMAC/s 0x81664edfe5ebeb5a quantize.a+split.a+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes 3.0730 3.0080 43.6764 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.codes 2.3610 2.2960 56.8478 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes.rowquant 4.8560 4.8190 27.6396 GMAC/s 0x81664edfe5ebeb5a quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.apple.two 1.6210 1.5870 82.7993 GMAC/s 0x81664edfe5ebeb5a not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.apple.four 1.7920 1.7400 74.8983 GMAC/s 0x81664edfe5ebeb5a not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.apple.two 1.6740 1.6280 80.1779 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.apple.four 1.8460 1.8280 72.7073 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.apple.two 2.6900 2.6540 49.8951 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.apple.four 2.8600 2.8090 46.9293 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 3.3740 3.2700 2545.9202 GMAC/s 0x67d3d940546b834c OP_NT,plan=20
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.flat 39.9430 39.9190 215.0548 GMAC/s 0xa9844dfadf1fd6da dispatched-for-codes
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.pieces 77.6510 77.4520 110.6223 GMAC/s 0xa9844dfadf1fd6da dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a 1.5240 1.5110 1.3761 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.4120 0.4110 5.0902 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.a.parallel 0.3770 0.3750 5.5627 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.a 0.2970 0.2940 7.0611 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b 1.5450 1.5100 10.8590 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b.parallel 1.3070 1.2740 12.8364 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.b.parallel 1.2640 1.2340 13.2731 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.b 0.8770 0.8420 19.1302 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes 77.8070 77.6500 110.4005 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.codes 40.1710 40.0430 213.8342 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes.rowquant 79.1570 78.5710 108.5177 GMAC/s 0xa9844dfadf1fd6da quantize.a+split.a+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes 78.8200 78.3850 108.9817 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.codes 41.1270 41.0350 208.8636 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 80.6770 80.6210 106.4732 GMAC/s 0xa9844dfadf1fd6da quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.apple.two 17.1210 17.0520 501.7192 GMAC/s 0xa9844dfadf1fd6da not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.apple.four 11.5210 11.4630 745.5893 GMAC/s 0xa9844dfadf1fd6da not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.apple.two 17.2280 17.1750 498.6031 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.apple.four 11.6890 11.6250 734.8734 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.apple.two 18.2410 18.1320 470.9136 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.apple.four 12.7000 12.5920 676.3728 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL fp32.v1 3.3950 3.3120 2530.1722 GMAC/s 0xef9cf5a7a4f7f63e OP_NN,plan=20
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.flat 40.0120 39.8880 214.6840 GMAC/s 0x6c4eff5b0480823a dispatched-for-codes
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.pieces 77.7880 77.6010 110.4275 GMAC/s 0x6c4eff5b0480823a dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a 1.5230 1.4830 1.3770 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.4070 0.3790 5.1527 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.a.parallel 0.3840 0.3730 5.4613 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.a 0.2980 0.2870 7.0374 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b 3.6350 3.5990 4.6155 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b.parallel 1.3600 1.2800 12.3362 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.b.parallel 1.3170 1.2820 12.7390 Gelem/s 0x22cb22fa7a9b88ff per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.b 0.8710 0.8250 19.2620 Gelem/s 0x22cb22fa7a9b88ff once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes 79.0450 78.6010 108.6714 GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.codes 41.2580 41.0890 208.2005 GMAC/s 0x6c4eff5b0480823a quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 82.7090 82.5380 103.8573 GMAC/s 0x6c4eff5b0480823a quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.apple.two 17.1870 16.9750 499.7926 GMAC/s 0x6c4eff5b0480823a not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.apple.four 11.5130 11.4670 746.1074 GMAC/s 0x6c4eff5b0480823a not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.apple.two 18.3020 18.1970 469.3440 GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.apple.four 12.6910 12.6490 676.8525 GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL fp32.v1 2.9020 2.8640 2960.0050 GMAC/s 0xe489aab33323c201 OP_TN,plan=20
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.flat 40.1090 40.1000 214.1648 GMAC/s 0x8ef510e0780e450 dispatched-for-codes
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.pieces 76.4350 76.0470 112.3822 GMAC/s 0x8ef510e0780e450 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a 0.6080 0.6010 3.4493 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a.parallel 0.4660 0.4410 4.5003 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.a.parallel 0.4360 0.4350 4.8100 Gelem/s 0x660ec1446ce3f2a1 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.a 0.2870 0.2790 7.3071 Gelem/s 0x660ec1446ce3f2a1 per-call
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b 0.5540 0.5520 3.7855 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b.parallel 0.4310 0.4270 4.8658 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.b.parallel 0.4320 0.4260 4.8545 Gelem/s 0x7a7bbd8b4dfdf226 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.b 0.2840 0.2800 7.3843 Gelem/s 0x7a7bbd8b4dfdf226 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes 76.8790 76.6060 111.7332 GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.codes 40.5700 40.5500 211.7312 GMAC/s 0x8ef510e0780e450 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes.rowquant 77.3220 77.1310 111.0930 GMAC/s 0x8ef510e0780e450 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.apple.two 15.4050 15.2400 557.6069 GMAC/s 0x8ef510e0780e450 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.apple.four 10.1650 10.1110 845.0501 GMAC/s 0x8ef510e0780e450 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.apple.two 15.8400 15.7410 542.2939 GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.apple.four 10.6200 10.5540 808.8451 GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 1.0420 0.9640 56.3534 GMAC/s 0x4965ea6af2ff5e61 OP_NT,plan=0
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.flat 0.8210 0.7950 71.5228 GMAC/s 0xae35d8ef540f67ad dispatched-for-codes
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.pieces 0.8680 0.8330 67.6501 GMAC/s 0xae35d8ef540f67ad dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a 1.1710 1.1440 0.0035 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a.parallel 0.3010 0.2900 0.0136 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.a.parallel 0.2680 0.2540 0.0153 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.a 0.2130 0.1910 0.0192 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b 1.6330 1.6180 35.9585 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b.parallel 3.8970 3.8860 15.0681 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.b.parallel 3.9060 3.8890 15.0333 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.b 2.1330 2.0990 27.5294 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes 0.9400 0.8780 62.4684 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.codes 0.8170 0.7960 71.8730 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes.rowquant 1.7630 1.7240 33.3070 GMAC/s 0xae35d8ef540f67ad quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes 4.5520 4.4700 12.8999 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.codes 4.4430 4.4180 13.2164 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes.rowquant 5.0780 4.9860 11.5637 GMAC/s 0xae35d8ef540f67ad quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.apple.two 1.6100 1.5860 36.4722 GMAC/s 0xae35d8ef540f67ad not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.apple.four 1.7470 1.7050 33.6121 GMAC/s 0xae35d8ef540f67ad not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.apple.two 1.6500 1.6050 35.5880 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.apple.four 1.7970 1.7700 32.6768 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.apple.two 5.2290 5.2230 11.2297 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.apple.four 5.4130 5.3860 10.8480 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 1.0380 0.9680 452.5646 GMAC/s 0x7b30465d325906e OP_NT,plan=20
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.flat 2.6970 2.6690 174.1795 GMAC/s 0x5dd8142ffbce1023 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.pieces 4.0760 4.0260 115.2507 GMAC/s 0x5dd8142ffbce1023 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a 1.2530 1.2220 0.0262 Gelem/s 0xc41e630721b559a8 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a.parallel 0.3090 0.2800 0.1060 Gelem/s 0xc41e630721b559a8 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.a.parallel 0.2660 0.2530 0.1232 Gelem/s 0xa65514e80d97e412 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.a 0.2030 0.1800 0.1614 Gelem/s 0xa65514e80d97e412 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b 1.6060 1.5890 36.5630 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b.parallel 3.8780 3.8660 15.1419 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.b.parallel 3.8810 3.8680 15.1302 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.b 2.1270 2.0970 27.6071 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes 4.1040 4.0520 114.4644 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.codes 2.7790 2.7600 169.0400 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes.rowquant 5.1570 4.9260 91.0921 GMAC/s 0x5dd8142ffbce1023 quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes 7.8070 7.6310 60.1719 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.codes 6.3870 6.3640 73.5497 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes.rowquant 8.4730 8.3590 55.4422 GMAC/s 0x5dd8142ffbce1023 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.apple.two 1.5830 1.5450 296.7543 GMAC/s 0x5dd8142ffbce1023 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.apple.four 1.7620 1.7280 266.6073 GMAC/s 0x5dd8142ffbce1023 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.apple.two 1.6450 1.6300 285.5696 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.apple.four 1.7890 1.7810 262.5836 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.apple.two 5.2610 5.2090 89.2914 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.apple.four 5.4190 5.3900 86.6880 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 10.4220 10.4050 2884.7410 GMAC/s 0x27a166783c45f9f0 OP_NT,plan=20
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.flat 137.8180 137.7130 218.1484 GMAC/s 0x31746954b2b719d4 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.pieces 255.9680 255.7770 117.4552 GMAC/s 0x31746954b2b719d4 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a 1.6750 1.4780 1.2520 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a.parallel 0.4120 0.3850 5.0902 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.a.parallel 0.3810 0.3750 5.5043 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.a 0.2980 0.2920 7.0374 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b 1.6480 1.6130 35.6312 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b.parallel 3.8970 3.8620 15.0681 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.b.parallel 3.9050 3.8940 15.0372 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.b 2.1530 2.1390 27.2737 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes 256.0680 255.7990 117.4093 GMAC/s 0x31746954b2b719d4 planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.codes 137.8800 137.8050 218.0503 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes.rowquant 257.5320 256.8260 116.7419 GMAC/s 0x31746954b2b719d4 quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes 259.4880 259.2820 115.8619 GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.codes 141.2870 141.1850 212.7922 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes.rowquant 260.0070 259.7030 115.6306 GMAC/s 0x31746954b2b719d4 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.apple.two 58.6360 58.1320 512.7357 GMAC/s 0x31746954b2b719d4 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.apple.four 35.5750 35.1920 845.1095 GMAC/s 0x31746954b2b719d4 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.apple.two 56.4150 55.3510 532.9216 GMAC/s 0x31746954b2b719d4 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.apple.four 35.0630 34.7810 857.4500 GMAC/s 0x31746954b2b719d4 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.apple.two 60.8710 59.9600 493.9096 GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.apple.four 38.8600 38.2930 773.6688 GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL fp32.v1 11.5260 11.2830 2608.4306 GMAC/s 0x88081a26a7d76edd OP_NN,plan=20
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.flat 139.2120 139.0730 215.9639 GMAC/s 0xd25adc12f122f248 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.pieces 258.6450 257.9300 116.2395 GMAC/s 0xd25adc12f122f248 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a 4.8960 4.8650 1.4992 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a.parallel 0.6850 0.6780 10.7154 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.a.parallel 0.6530 0.6330 11.2405 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.a 0.4700 0.4650 15.6171 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b 12.4830 12.3960 4.7040 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b.parallel 5.1410 5.0390 11.4220 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.b.parallel 5.1170 5.0820 11.4755 Gelem/s 0xad29fb7fad789398 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.b 2.1430 2.1300 27.4010 Gelem/s 0xad29fb7fad789398 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes 263.4930 263.1450 114.1008 GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.codes 144.4400 144.1890 208.1471 GMAC/s 0xd25adc12f122f248 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes.rowquant 277.4240 276.6150 108.3712 GMAC/s 0xd25adc12f122f248 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.apple.two 61.2590 60.0960 490.7813 GMAC/s 0xd25adc12f122f248 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.apple.four 40.5650 39.9190 741.1505 GMAC/s 0xd25adc12f122f248 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.apple.two 66.0480 65.2870 455.1958 GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.apple.four 45.1720 45.0530 665.5621 GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL fp32.v1 9.1580 9.1350 3282.8970 GMAC/s 0x64a7d4375083cf3f OP_TN,plan=20
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.flat 139.6800 139.6640 215.2403 GMAC/s 0x7f5a1c9a4096e46d dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.pieces 283.1990 281.2340 106.1613 GMAC/s 0x7f5a1c9a4096e46d dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a 0.7730 0.6780 9.4955 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a.parallel 0.7800 0.7640 9.4103 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.a.parallel 0.7630 0.7570 9.6200 Gelem/s 0xeb86f345a0f5c39a per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.a 0.4770 0.4740 15.3879 Gelem/s 0xeb86f345a0f5c39a per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b 0.6950 0.6440 3.0175 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b.parallel 0.4800 0.4750 4.3691 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.b.parallel 0.4450 0.4290 4.7127 Gelem/s 0xe2e3bcc68ceb9073 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.b 0.3040 0.2830 6.8985 Gelem/s 0xe2e3bcc68ceb9073 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes 283.6790 282.5670 105.9817 GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.codes 140.4640 140.4430 214.0390 GMAC/s 0x7f5a1c9a4096e46d quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes.rowquant 284.3590 282.5530 105.7282 GMAC/s 0x7f5a1c9a4096e46d quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.apple.two 51.7910 51.6910 580.5018 GMAC/s 0x7f5a1c9a4096e46d not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.apple.four 34.0570 33.9810 882.7780 GMAC/s 0x7f5a1c9a4096e46d not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.apple.two 52.7840 52.3640 569.5811 GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.apple.four 34.8480 34.8060 862.7402 GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 2.8860 2.8620 20.3466 GMAC/s 0x4efb8e54c724fa9 OP_NT,plan=0
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.flat 2.0750 2.0470 28.2989 GMAC/s 0xbad9a98c45aa8707 dispatched-for-codes
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.pieces 2.3770 2.3420 24.7035 GMAC/s 0xbad9a98c45aa8707 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a 3.4170 3.3900 0.0042 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a.parallel 0.3230 0.3110 0.0444 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.a.parallel 0.3070 0.2960 0.0467 Gelem/s 0x582710daad02888 per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.a 0.2210 0.2130 0.0649 Gelem/s 0x582710daad02888 per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b 5.1960 5.1530 11.3011 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b.parallel 3.7630 3.7580 15.6046 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.b.parallel 3.7680 3.7330 15.5839 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.b 2.1620 2.1360 27.1602 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes 2.4440 2.4380 24.0263 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.codes 2.1330 2.1290 27.5294 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes.rowquant 5.4960 5.4830 10.6842 GMAC/s 0xbad9a98c45aa8707 quantize.a+split.a+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes 5.8890 5.8820 9.9712 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.codes 5.6230 5.5910 10.4429 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes.rowquant 12.3150 12.2990 4.7682 GMAC/s 0xbad9a98c45aa8707 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.apple.two 4.8970 4.8640 11.9911 GMAC/s 0xbad9a98c45aa8707 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.apple.four 5.5190 5.5000 10.6397 GMAC/s 0xbad9a98c45aa8707 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.apple.two 4.9500 4.9480 11.8627 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.apple.four 5.5660 5.5300 10.5498 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.apple.two 8.4370 8.4280 6.9599 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.apple.four 9.0710 9.0250 6.4734 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 1.3840 1.3360 339.4234 GMAC/s 0xfb21004541ae3e8e OP_NT,plan=20
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.flat 3.6900 3.6700 127.3068 GMAC/s 0x5d341feda0541b7c dispatched-for-codes
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.pieces 5.7820 5.7480 81.2456 GMAC/s 0x5d341feda0541b7c dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a 3.7580 3.7520 0.0305 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a.parallel 0.3130 0.3020 0.3664 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.a.parallel 0.2920 0.2770 0.3928 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.a 0.2170 0.1920 0.5285 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b 5.2060 5.1640 11.2793 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b.parallel 3.7630 3.7440 15.6046 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.b.parallel 3.7680 3.7610 15.5839 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.b 2.1370 2.1160 27.4779 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes 5.8480 5.8030 80.3287 GMAC/s 0x5d341feda0541b7c planes.a.parallel+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.codes 3.7760 3.7540 124.4073 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+flat
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes.rowquant 9.2910 9.2800 50.5610 GMAC/s 0x5d341feda0541b7c quantize.a+split.a+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes 9.3330 9.3280 50.3334 GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.codes 7.2510 7.2410 64.7858 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes.rowquant 16.1170 16.1000 29.1470 GMAC/s 0x5d341feda0541b7c quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.apple.two 4.9110 4.8870 95.6551 GMAC/s 0x5d341feda0541b7c not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.apple.four 5.5370 5.5080 84.8405 GMAC/s 0x5d341feda0541b7c not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.apple.two 4.9770 4.9680 94.3866 GMAC/s 0x5d341feda0541b7c planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.apple.four 5.6290 5.5990 83.4539 GMAC/s 0x5d341feda0541b7c planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.apple.two 8.4700 8.4510 55.4619 GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.apple.four 9.0880 9.0070 51.6904 GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 11.5060 11.1950 2612.9646 GMAC/s 0x4743c97cb961339e OP_NT,plan=20
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.flat 139.0320 138.5790 216.2435 GMAC/s 0x29a5b58e07315db6 dispatched-for-codes
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.pieces 258.5960 257.6750 116.2615 GMAC/s 0x29a5b58e07315db6 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a 4.8500 4.8310 1.5134 Gelem/s 0x3f6f13fd8bf5bc70 per-call
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a.parallel 0.6820 0.6570 10.7625 Gelem/s 0x3f6f13fd8bf5bc70 per-call
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.a.parallel 0.7140 0.6450 10.2802 Gelem/s 0xcf3c04152197ad4f per-call
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.a 0.4600 0.4500 15.9566 Gelem/s 0xcf3c04152197ad4f per-call
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b 5.1660 5.1460 11.3667 Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b.parallel 3.7690 3.7380 15.5798 Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.b.parallel 3.7730 3.7450 15.5633 Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.b 2.1320 2.1280 27.5423 Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes 259.3140 258.7860 115.9396 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.codes 139.6770 139.6320 215.2450 GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes.rowquant 263.0630 262.2670 114.2873 GMAC/s 0x29a5b58e07315db6 quantize.a+split.a+product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes 261.1800 261.1150 115.1113 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.codes 143.1440 142.4880 210.0317 GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes.rowquant 269.8850 269.6050 111.3985 GMAC/s 0x29a5b58e07315db6 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.apple.two 61.2600 60.6070 490.7733 GMAC/s 0x29a5b58e07315db6 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.apple.four 41.5280 40.6030 723.9639 GMAC/s 0x29a5b58e07315db6 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.apple.two 61.3930 60.8170 489.7101 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.apple.four 41.0460 40.1000 732.4653 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.apple.two 65.8690 64.1510 456.4328 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.apple.four 44.8030 43.8620 671.0437 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL fp32.v1 10.4670 10.4530 2872.3389 GMAC/s 0x530556760e570c80 OP_NN,plan=20
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.flat 137.8340 137.6170 218.1230 GMAC/s 0xf02913c8e388c6f0 dispatched-for-codes
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.pieces 256.3630 255.3510 117.2742 GMAC/s 0xf02913c8e388c6f0 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a 1.4960 1.4940 1.4018 Gelem/s 0x641e827791a67e8e per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a.parallel 0.4070 0.3960 5.1527 Gelem/s 0x641e827791a67e8e per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.a.parallel 0.3720 0.3640 5.6375 Gelem/s 0xaa13c116215e42ec per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.a 0.2880 0.2810 7.2818 Gelem/s 0xaa13c116215e42ec per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b 3.9520 3.8620 14.8584 Gelem/s 0xec3851bf8dee716b per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b.parallel 4.0650 4.0470 14.4453 Gelem/s 0xec3851bf8dee716b per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.b.parallel 4.0590 4.0540 14.4667 Gelem/s 0xef6837087a440a32 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.b 2.1320 2.1220 27.5423 Gelem/s 0xef6837087a440a32 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes 259.6050 258.9210 115.8097 GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.codes 141.5340 141.3310 212.4208 GMAC/s 0xf02913c8e388c6f0 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes.rowquant 262.4210 262.0130 114.5669 GMAC/s 0xf02913c8e388c6f0 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.apple.two 56.1470 55.2330 535.4653 GMAC/s 0xf02913c8e388c6f0 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.apple.four 34.7820 34.6710 864.3773 GMAC/s 0xf02913c8e388c6f0 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.apple.two 61.5260 59.3590 488.6515 GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.apple.four 38.9670 38.7130 771.5444 GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL fp32.v1 9.1970 9.1750 3268.9759 GMAC/s 0x57cdff62332dd579 OP_TN,plan=20
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.flat 139.5520 139.4950 215.4378 GMAC/s 0x648fb9758841ed0f dispatched-for-codes
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.pieces 274.3250 273.6230 109.5954 GMAC/s 0x648fb9758841ed0f dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a 0.6440 0.6100 3.2564 Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a.parallel 0.4700 0.4500 4.4620 Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.a.parallel 0.4330 0.4280 4.8433 Gelem/s 0x6054e7041e529e7d per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.a 0.2900 0.2860 7.2316 Gelem/s 0x6054e7041e529e7d per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b 0.7150 0.6290 10.2658 Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b.parallel 0.7810 0.7510 9.3982 Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.b.parallel 0.7530 0.7490 9.7477 Gelem/s 0xb0e2c0513a836af7 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.b 0.4600 0.4440 15.9566 Gelem/s 0xb0e2c0513a836af7 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes 275.2310 274.7610 109.2347 GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.codes 140.3080 140.2940 214.2770 GMAC/s 0x648fb9758841ed0f quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes.rowquant 275.5840 275.2210 109.0948 GMAC/s 0x648fb9758841ed0f quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.apple.two 53.7770 53.5350 559.0637 GMAC/s 0x648fb9758841ed0f not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.apple.four 34.1170 34.0730 881.2255 GMAC/s 0x648fb9758841ed0f not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.apple.two 54.6430 54.1820 550.2035 GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.apple.four 34.9760 34.8780 859.5829 GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 4.0960 4.0890 128.2560 GMAC/s 0xcdc134cbce391535 OP_NT,plan=0
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.flat 3.0710 3.0450 171.0637 GMAC/s 0x18d3d46aaa413329 dispatched-for-codes
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.pieces 5.7120 5.5390 91.9707 GMAC/s 0x18d3d46aaa413329 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.lm_head.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a 1.1760 1.1460 0.0035 Gelem/s 0x6707375da9d66f3 per-call
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a.parallel 0.3160 0.2760 0.0130 Gelem/s 0x6707375da9d66f3 per-call
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.a.parallel 0.2980 0.2490 0.0137 Gelem/s 0x421b169685b8e06f per-call
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.a 0.2240 0.2000 0.0183 Gelem/s 0x421b169685b8e06f per-call
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b 10.8850 10.8210 48.2624 Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b.parallel 36.5510 36.5280 14.3727 Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.b.parallel 36.4660 36.4640 14.4062 Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.b 16.8630 16.8620 31.1532 Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes 5.6990 5.6130 92.1805 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.codes 3.1310 3.1230 167.7856 GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+flat
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes.rowquant 6.5740 6.4460 79.9113 GMAC/s 0x18d3d46aaa413329 quantize.a+split.a+product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes 41.8430 41.8190 12.5549 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.codes 39.3690 39.3470 13.3439 GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes.rowquant 33.8500 33.7350 15.5195 GMAC/s 0x18d3d46aaa413329 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.apple.two 8.7130 8.6570 60.2934 GMAC/s 0x18d3d46aaa413329 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.apple.four 9.8860 9.8230 53.1394 GMAC/s 0x18d3d46aaa413329 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.apple.two 8.7670 8.7160 59.9220 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.apple.four 9.9680 9.9120 52.7023 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.apple.two 44.8820 44.8450 11.7048 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.apple.four 46.1140 46.0880 11.3921 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 5.6610 5.6560 742.3940 GMAC/s 0x3ebab59d0da21444 OP_NT,plan=20
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.flat 20.6100 20.5230 203.9152 GMAC/s 0x4a40a5e39d7bbdce dispatched-for-codes
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.pieces 41.3200 41.1820 101.7109 GMAC/s 0x4a40a5e39d7bbdce dispatched-for-planes
+INT15-NOT-RUN apple llama8b.lm_head.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a 1.3090 1.2440 0.0250 Gelem/s 0x2f87955adcc70c86 per-call
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a.parallel 0.3260 0.3210 0.1005 Gelem/s 0x2f87955adcc70c86 per-call
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.a.parallel 0.3010 0.2920 0.1089 Gelem/s 0x3d2b9462e8adae61 per-call
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.a 0.2270 0.2200 0.1444 Gelem/s 0x3d2b9462e8adae61 per-call
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b 10.8990 10.8300 48.2004 Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b.parallel 36.5660 36.5530 14.3668 Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.b.parallel 36.4740 36.4490 14.4030 Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.b 16.8550 16.8520 31.1680 Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes 41.4890 41.4160 101.2966 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.codes 20.5920 20.5370 204.0935 GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+flat
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes.rowquant 42.2240 42.1590 99.5333 GMAC/s 0x4a40a5e39d7bbdce quantize.a+split.a+product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes 77.5980 77.3020 54.1598 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.codes 56.7780 56.7430 74.0197 GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes.rowquant 69.6160 69.4880 60.3696 GMAC/s 0x4a40a5e39d7bbdce quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.apple.two 8.8430 8.7110 475.2564 GMAC/s 0x4a40a5e39d7bbdce not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.apple.four 10.0720 9.9730 417.2650 GMAC/s 0x4a40a5e39d7bbdce not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.apple.two 8.9600 8.4900 469.0505 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.apple.four 10.0940 9.9640 416.3555 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.apple.two 45.0900 45.0530 93.2068 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.apple.four 46.2560 46.1590 90.8572 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 11.5760 11.5680 2904.4178 GMAC/s 0x84fd143bb625cf70 OP_NT,plan=20
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.flat 154.3210 153.6820 217.8676 GMAC/s 0x60f6165f74f17867 dispatched-for-codes
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.pieces 287.7560 287.4710 116.8405 GMAC/s 0x60f6165f74f17867 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.lm_head.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a 1.5210 1.4750 1.3788 Gelem/s 0xbae59394889813d4 per-call
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a.parallel 0.4150 0.4130 5.0534 Gelem/s 0xbae59394889813d4 per-call
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.a.parallel 0.3810 0.3760 5.5043 Gelem/s 0x8e302e8f2144f554 per-call
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.a 0.2990 0.2950 7.0139 Gelem/s 0x8e302e8f2144f554 per-call
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b 2.0570 1.8620 31.9237 Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b.parallel 4.3360 4.3100 15.1446 Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.b.parallel 4.3400 4.2840 15.1307 Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.b 2.3580 2.3460 27.8486 Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes 288.2290 287.9680 116.6487 GMAC/s 0x60f6165f74f17867 planes.a.parallel+product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.codes 154.3540 153.8330 217.8210 GMAC/s 0x60f6165f74f17867 quantize.a.parallel+flat
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes.rowquant 289.0480 288.8330 116.3182 GMAC/s 0x60f6165f74f17867 quantize.a+split.a+product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes 291.4800 290.8730 115.3477 GMAC/s 0x60f6165f74f17867 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.codes 158.2710 157.8650 212.4302 GMAC/s 0x60f6165f74f17867 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes.rowquant 292.4640 292.0010 114.9596 GMAC/s 0x60f6165f74f17867 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.apple.two 62.6690 61.8300 536.4940 GMAC/s 0x60f6165f74f17867 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.apple.four 39.3270 38.6180 854.9226 GMAC/s 0x60f6165f74f17867 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.apple.two 63.0840 62.5880 532.9646 GMAC/s 0x60f6165f74f17867 planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.apple.four 39.1890 38.9210 857.9331 GMAC/s 0x60f6165f74f17867 planes.a.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.apple.two 66.7690 65.8570 503.5502 GMAC/s 0x60f6165f74f17867 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.apple.four 43.0850 42.8900 780.3537 GMAC/s 0x60f6165f74f17867 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512.bwd_dx 512 512 128256 CAPPED fp32.v1 17.6030 17.5720 1909.9893 GMAC/s 0xafccdbb3aae1fc36 OP_NN,plan=20
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.flat REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.pieces REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.mma REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.planes.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.split.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.planes.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.split.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.apple.two REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.apple.four REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.apple.two REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.apple.four REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.int15i64.v1.apple.two REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.int15i64.v1.apple.four REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED fp32.v1 10.1950 10.1880 3297.8461 GMAC/s 0xdb68419e4a2093b7 OP_TN,plan=20
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.flat 156.3030 156.2380 215.1049 GMAC/s 0x97ac9bb1c8a6a3b4 dispatched-for-codes
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.pieces 314.2370 313.5900 106.9942 GMAC/s 0x97ac9bb1c8a6a3b4 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a 0.7630 0.7150 10.7580 Gelem/s 0xbd776d10a4327b97 per-call,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a.parallel 0.8390 0.8370 9.7835 Gelem/s 0xbd776d10a4327b97 per-call,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.a.parallel 0.8170 0.8100 10.0470 Gelem/s 0xe10b55c37d468a96 per-call,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.a 0.4970 0.4840 16.5159 Gelem/s 0xe10b55c37d468a96 per-call
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b 0.5890 0.5850 3.5605 Gelem/s 0x97f820265d8cb72 per-step,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b.parallel 0.4460 0.4370 4.7021 Gelem/s 0x97f820265d8cb72 per-step,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.b.parallel 0.4410 0.4340 4.7554 Gelem/s 0x90f880954a62bcd5 per-step,transposing
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.b 0.2880 0.2800 7.2818 Gelem/s 0x90f880954a62bcd5 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes 315.0010 314.3910 106.7347 GMAC/s 0x97ac9bb1c8a6a3b4 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.codes 157.1110 157.0900 213.9986 GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes.rowquant 315.7530 313.8890 106.4805 GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.apple.two 58.1300 58.0150 578.3854 GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.apple.four 37.9770 37.9240 885.3132 GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.apple.two 58.9310 58.5870 570.5238 GMAC/s 0x97ac9bb1c8a6a3b4 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.apple.four 38.9920 38.8410 862.2677 GMAC/s 0x97ac9bb1c8a6a3b4 planes.a.parallel+planes.b.parallel+float-unit-product
+price_job: box=m3ultra red=0
+box_job: box=m3ultra phases: gate=0 price=0 red=0

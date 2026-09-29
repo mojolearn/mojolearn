@@ -1,0 +1,388 @@
+request 1790656532290-speed-lowbit-int15-99ae7bb668 steward m3ultra-b commit 99ae7bb66 cmd_rc 0
+######## phase gate on m3ultra, started 2026-09-29T04:35:42Z
+int15	0	14s	expected=pass	held=yes
+int15-force-flat	0	12s	expected=pass	held=yes
+int15-unstated-loads	0	11s	expected=pass	held=yes
+int15-sabotage	1	12s	expected=fail	held=yes
+int15-host-sabotage	1	11s	expected=fail	held=yes
+int15-piece-sabotage	1	11s	expected=fail	held=yes
+int15-quant-sabotage	1	11s	expected=fail	held=yes
+int15-apple-chunk-sabotage	1	12s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m3ultra vendor=apple gpu_archs=unset
+started=2026-09-29T04:35:42Z
+tree_head=99ae7bb6682a92427a46b864a3825eb2bc38eefc dirty_files=3
+machine=Apple M3 Ultra macOS 26.7
+loads: stated and unstated alignment printed the same 1491 digests
+reach: int15-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-sabotage failed check_int15_plans_agree, as it must
+reach: int15-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-host-sabotage failed check_int15_pieces_oracle_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_plans_agree, as it must
+reach: int15-host-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-piece-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-piece-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-quant-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-apple-chunk-sabotage failed check_int15_planted_worst_cases, as it must
+one-launch: exit=0 (recorded); 0 poison lines; ok check_int15_large_product_is_written_whole
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+digests=1491 digests_force_flat=1491
+finished=2026-09-29T04:37:27Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== int15 (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 0 failed ==
+== int15-force-flat (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 0 failed ==
+== int15-unstated-loads (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 0 failed ==
+== int15-sabotage (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.126932/0x0xc18903f5 want -17.12693/0x0xc18903f4
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatch-planes vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (apple-two-wide vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (apple-two-wide vs orac
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336 (flat): cell 0 is 641670600000.0/0x0x5315668c, the host oracle has 641670500000.0/0x0x5315668b
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 4 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 4 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-host-sabotage (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: none  host sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+!! GATE FAILED: check_int15_pieces_oracle_matches_oracle
+   host pieces 1x32x32: 32 of 32 cells differ; first at 0 got 159.09662/0x0x431f18bc want 159.09663/0x0x431f18bd
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.12693/0x0xc18903f4 want -17.126932/0x0xc18903f5
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatch-planes vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (apple-two-wide vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (apple-two-wide vs orac
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336 (flat): cell 0 is 641670500000.0/0x0x5315668b, the host oracle has 641670600000.0/0x0x5315668c
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 5 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 5 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-piece-sabotage (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_PIECE_HI_CLAMP  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: planes at 259 are (-127, 1), want (-128, 1)
+ok check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (pieces vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (dispatch-planes vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (apple-two-wide vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (apple-two-row vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (apple-four-wide vs oracle): 1 of 32 cells differ; first at 28 
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.1-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (apple-two-wide vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (apple-two-row vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (apple
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336: pieces printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-codes printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-planes printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: apple-two-wide printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1; large-512x4096x14336: apple-four-wide printed 0x1c11bbd47c65ed10, the first plan 0xab3415ded9b700f1
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 4 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 4 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-quant-sabotage (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_QUANT_TAIL_DROPPED  apple unit sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: exponent of row 6 is -10 (codes) and -10 (planes), want -4
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32 (from_f32): 32 of 32 cells differ; first at 0 got -25.0/0x0xc1c80000 want -17.12693/0x0xc18903f4
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_large_product_is_written_whole
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-apple-chunk-sabotage (every line that is not a digest or a per-shape ok; last 60)
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  apple unit sabotage: INT15_APPLE_CHUNK_BOUNDARY_REMOVED  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+   plans-13x21x4097 (apple-four-wide vs oracle): 2 of 273 cells differ; first at 33 got -100.383194/0x0xc2c8c432 want -100.3832/0x0xc2c8c433; plans-13x21x4097 (apple-four-row vs oracle): 2 of 273 cells differ; first at 33 got -100.383194/0x0xc2c8c432 want -100.3832/0x0xc2c8c433
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (apple-two-wide vs oracle): 15 of 15 cells differ; first at 0 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (apple-two-row vs oracle): 15 of 15 cells differ; first at 0 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.4-3x5x17 (apple-two-wide vs oracle): 12 of 15 cells differ; first at 1 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.4-3x5x17 (apple-two-row vs oracle): 12 of 15 cells differ; first at 1 got 4562844700.0/0x0x4f87fbbe want 4562845700.0/0x0x4f87fbc0; planted-0.6-3x5x17 (apple-t
+!! GATE FAILED: check_int15_large_product_is_written_whole
+   large-512x4096x14336: dispatch-codes printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1; large-512x4096x14336: dispatch-planes printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1; large-512x4096x14336: apple-four-wide printed 0xaef8fb3409f68f30, the first plan 0xab3415ded9b700f1
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 13 gates, 3 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 3 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== gate digests (the clean run)
+gate_job: box=m3ultra red=0
+######## phase gate on m3ultra exit=0, finished 2026-09-29T04:37:27Z
+######## phase sim on m3ultra, started 2026-09-29T04:37:27Z
+sim	0	4s	expected=pass	held=yes
+sim-host-sabotage	1	4s	expected=fail	held=yes
+sim-convert-sabotage	1	4s	expected=fail	held=yes
+sim-device-sabotage	1	4s	expected=fail	held=yes
+bwd-step50	0	1s	expected=pass	held=yes
+bwd-step50-host-sabotage	1	1s	expected=fail	held=yes
+bwd-step50-convert-sabotage	1	1s	expected=fail	held=yes
+bwd-step50-device-sabotage	1	1s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m3ultra
+started=2026-09-29T04:37:27Z
+tree_head=99ae7bb6682a92427a46b864a3825eb2bc38eefc dirty_files=3
+arith_pin=c60a455c601e30b5a7cd3a1c47f1ad82f450f681  bench/lowbit_quality/arith.py  lane/lowbit-quality 8a6589cb3cd4b6d5869e1f2eaa30fc9017c4fbb2
+export DID NOT RUN: python3 on this box has no PyTorch; the committed vectors are read
+vectors_sha256=4fc64c503ab4cdffdc2d37e7f9b666ac3f82f6949d4ea344c32c3e11d8550cf5
+reach: sim-host-sabotage failed check_sim_host_product, as it must
+reach: sim-convert-sabotage failed check_sim_host_codes, as it must
+reach: sim-device-sabotage failed check_sim_device_product, as it must
+backward_vectors_step50 sha256=8e8c6824315b7f9aad894c08c42bf269dadbc6973caaeab3ce5183ca8f04df79
+reach: bwd-step50-host-sabotage failed check_sim_host_product, as it must
+reach: bwd-step50-convert-sabotage failed check_sim_host_codes, as it must
+reach: bwd-step50-device-sabotage failed check_sim_device_product, as it must
+finished=2026-09-29T04:37:47Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== sim (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: forward
+   vectors: gemm/checks/vectors/int15_sim_vectors.q15, 7 cases, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3
+ok check_sim_vectors_load
+   ok 120240 codes and their exponents are the simulation's; 422 codes of A sit at the clamp
+ok check_sim_host_codes
+   ok 1172 cells are the simulation's (12 NaN, 85 infinite)
+ok check_sim_host_product
+   ok 1172 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 0 failed ==
+== sim-host-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: True  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: forward
+   vectors: gemm/checks/vectors/int15_sim_vectors.q15, 7 cases, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3
+ok check_sim_vectors_load
+   ok 120240 codes and their exponents are the simulation's; 422 codes of A sit at the clamp
+ok check_sim_host_codes
+!! GATE FAILED: check_sim_host_product
+   host product 4x6x33: 24 of 24 cells differ; first at 0 got -2.3835155e-12/0x0xac27b999, the simulation has -2.3835153e-12/0x0xac27b998
+   ok 1172 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== sim-convert-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False  convert sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: forward
+   vectors: gemm/checks/vectors/int15_sim_vectors.q15, 7 cases, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3
+ok check_sim_vectors_load
+!! GATE FAILED: check_sim_host_codes
+   4x6x33: code 0 of A (row 0, value -3.1291118e-09/0x0xb15707eb) is -859, the simulation has -860
+   ok 1172 cells are the simulation's (12 NaN, 85 infinite)
+ok check_sim_host_product
+   ok 1172 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== sim-device-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP  host sabotage: False  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: forward
+   vectors: gemm/checks/vectors/int15_sim_vectors.q15, 7 cases, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3
+ok check_sim_vectors_load
+   ok 120240 codes and their exponents are the simulation's; 422 codes of A sit at the clamp
+ok check_sim_host_codes
+   ok 1172 cells are the simulation's (12 NaN, 85 infinite)
+ok check_sim_host_product
+!! GATE FAILED: check_sim_device_product
+   device product 4x6x33: 24 of 24 cells differ; first at 0 got -2.3835155e-12/0x0xac27b999, the simulation has -2.3835153e-12/0x0xac27b998
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== bwd-step50-convert-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False  convert sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: backward
+   vectors: /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/vectors/int15_backward_vectors_step50.q15, 18 cases, arith.py blob c60a455c601e30b5a7cd3a1c47f1ad82f450f681
+ok check_sim_vectors_load
+!! GATE FAILED: check_sim_host_codes
+   12x12x128: code 0 of A (row 0, value -0.5172397/0x0xbf0469d2) is -2120, the simulation has -2119
+   ok 2592 cells are the simulation's (0 NaN, 0 infinite)
+ok check_sim_host_product
+   ok 2592 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== bwd-step50-device-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP  host sabotage: False  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: backward
+   vectors: /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/vectors/int15_backward_vectors_step50.q15, 18 cases, arith.py blob c60a455c601e30b5a7cd3a1c47f1ad82f450f681
+ok check_sim_vectors_load
+   ok 440832 codes and their exponents are the simulation's; 0 codes of A sit at the clamp
+ok check_sim_host_codes
+   ok 2592 cells are the simulation's (0 NaN, 0 infinite)
+ok check_sim_host_product
+!! GATE FAILED: check_sim_device_product
+   device product 12x12x128: 144 of 144 cells differ; first at 0 got -0.7265107/0x0xbf39fc9b, the simulation has -0.72651064/0x0xbf39fc9a
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== bwd-step50-host-sabotage (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: True  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: backward
+   vectors: /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/vectors/int15_backward_vectors_step50.q15, 18 cases, arith.py blob c60a455c601e30b5a7cd3a1c47f1ad82f450f681
+ok check_sim_vectors_load
+   ok 440832 codes and their exponents are the simulation's; 0 codes of A sit at the clamp
+ok check_sim_host_codes
+!! GATE FAILED: check_sim_host_product
+   host product 12x12x128: 144 of 144 cells differ; first at 0 got -0.7265107/0x0xbf39fc9b, the simulation has -0.72651064/0x0xbf39fc9a
+   ok 2592 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== bwd-step50 (every line that is not a digest; last 40)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False  convert sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: apple  int15 dispatch: flat and pieces below 2^28 multiply-accumulates, the float matrix unit above (apple)
+   kind: backward
+   vectors: /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/vectors/int15_backward_vectors_step50.q15, 18 cases, arith.py blob c60a455c601e30b5a7cd3a1c47f1ad82f450f681
+ok check_sim_vectors_load
+   ok 440832 codes and their exponents are the simulation's; 0 codes of A sit at the clamp
+ok check_sim_host_codes
+   ok 2592 cells are the simulation's (0 NaN, 0 infinite)
+ok check_sim_host_product
+   ok 2592 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 0 failed ==
+== sim digests (the clean run)
+sim_job: box=m3ultra red=0
+######## phase sim on m3ultra exit=0, finished 2026-09-29T04:37:47Z
+box_job: box=m3ultra phases: gate=0 sim=0 red=0

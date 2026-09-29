@@ -89,6 +89,13 @@ from gemm.checks.gemm_lowbit import (
     quantize_rows_int8_device,
 )
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.checks.gemm_int15 import (
+    Int15QuantWorkspace,
+    dequantize_planes_int15_device,
+    identical_gemm_int15_planes_into,
+    quantize_planes_int15_parallel_device,
+)
+from gemm.host.gemm_int15_oracle import INT15_MAX_K, INT15_PROFILE_VERSION
 from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -467,6 +474,152 @@ def dequantize_int8_binding(
     return PythonObject(rows * cols)
 
 
+# ===========================================================================
+# THE FIFTEEN-BIT PROFILE (lane/lowbit-int15, 2026-09-29)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6. An operand crosses the
+# boundary as its two int8 PLANES (clause W-3) and its int32 row exponents:
+# the package's Array has no int16, and the planes are what the product
+# reads on every column.
+# ===========================================================================
+
+
+def int15_profile_version_binding() raises -> PythonObject:
+    """The MAJOR VERSION of the fifteen-bit profile this binary
+    implements: 1, for `mojolearn.identical.gemm.int15i64.v1`."""
+    return PythonObject(INT15_PROFILE_VERSION)
+
+
+def gemm_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`C[m x n] = Q_a[m x k] . Q_b[n x k]^T` dequantized, under
+    `mojolearn.identical.gemm.int15i64.v1` (OP_NT only). Returns `m * n`.
+
+    `addrs` is, in this exact order (mirrored word for word in
+    `python/mojolearn/_linalg_impl.py` and in the host binding):
+
+        0  c            float32, m x n
+        1  a hi         int8, m x k
+        2  a lo         int8, m x k
+        3  a exponents  int32, m
+        4  b hi         int8, n x k
+        5  b lo         int8, n x k
+        6  b exponents  int32, n
+
+    `params` is `[m, n, k]`."""
+    if len(addrs) != 7:
+        raise Error("gemm_int15: addrs must contain 7 addresses (c, a hi, a lo, a exponents, b hi, b lo, b exponents), got " + String(len(addrs)))
+    if len(params) != 3:
+        raise Error("gemm_int15: params must contain 3 values (m, n, k), got " + String(len(params)))
+    var c_address = Int(py=addrs[0])
+    var ah_address = Int(py=addrs[1])
+    var al_address = Int(py=addrs[2])
+    var ea_address = Int(py=addrs[3])
+    var bh_address = Int(py=addrs[4])
+    var bl_address = Int(py=addrs[5])
+    var eb_address = Int(py=addrs[6])
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int15"))
+    if k > INT15_MAX_K:
+        raise Error("gemm_int15: k must be at most " + String(INT15_MAX_K) + " (contract W-4), got " + String(k))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dah = _dev_i8(ctx, ah_address, m * k)
+        var dal = _dev_i8(ctx, al_address, m * k)
+        var dea = _dev_i32(ctx, ea_address, m)
+        var dbh = _dev_i8(ctx, bh_address, n * k)
+        var dbl = _dev_i8(ctx, bl_address, n * k)
+        var deb = _dev_i32(ctx, eb_address, n)
+        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+        identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
+        ctx.synchronize()
+        _ = dah^
+        _ = dal^
+        _ = dea^
+        _ = dbh^
+        _ = dbl^
+        _ = deb^
+        _ = dc^
+        # DEVIATION 3010: drain the frees the buffers above enqueued.
+        ctx.synchronize()
+    return PythonObject(m * n)
+
+
+def quantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Row-wise planes and int32 exponents of a float32 matrix, by clauses
+    W-1 to W-3, on the device (the parallel schedule). `addrs`: 0 hi, 1 lo,
+    2 exponents, 3 x. `params` is `[rows, cols]`. Returns `rows * cols`."""
+    if len(addrs) != 4:
+        raise Error("quantize_int15: addrs must contain 4 addresses (hi, lo, exponents, x), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("quantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var h_address = Int(py=addrs[0])
+    var l_address = Int(py=addrs[1])
+    var e_address = Int(py=addrs[2])
+    var x_address = Int(py=addrs[3])
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dx = _dev_f32(ctx, x_address, rows * cols)
+        var dh = ctx.enqueue_create_buffer[DType.int8](rows * cols)
+        var dl = ctx.enqueue_create_buffer[DType.int8](rows * cols)
+        var de = ctx.enqueue_create_buffer[DType.int32](rows)
+        var quant = Int15QuantWorkspace(ctx)
+        quantize_planes_int15_parallel_device(ctx, dh, dl, de, dx, quant, rows, cols, False)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=i8_ptr(h_address), src_buf=dh)
+        ctx.enqueue_copy(dst_ptr=i8_ptr(l_address), src_buf=dl)
+        ctx.enqueue_copy(dst_ptr=i32_ptr(e_address), src_buf=de)
+        ctx.synchronize()
+        _ = dx^
+        _ = dh^
+        _ = dl^
+        _ = de^
+        _ = quant^
+        # DEVIATION 3010: drain the frees the buffers above enqueued.
+        ctx.synchronize()
+    return PythonObject(rows * cols)
+
+
+def dequantize_int15_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`y = (hi * 128 + lo) * 2^e` row by row, on the device. `addrs`:
+    0 y, 1 hi, 2 lo, 3 exponents. `params` is `[rows, cols]`."""
+    if len(addrs) != 4:
+        raise Error("dequantize_int15: addrs must contain 4 addresses (y, hi, lo, exponents), got " + String(len(addrs)))
+    if len(params) != 2:
+        raise Error("dequantize_int15: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var y_address = Int(py=addrs[0])
+    var h_address = Int(py=addrs[1])
+    var l_address = Int(py=addrs[2])
+    var e_address = Int(py=addrs[3])
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_int15: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var dh = _dev_i8(ctx, h_address, rows * cols)
+        var dl = _dev_i8(ctx, l_address, rows * cols)
+        var de = _dev_i32(ctx, e_address, rows)
+        var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
+        dequantize_planes_int15_device(ctx, dy, dh, dl, de, rows, cols)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
+        ctx.synchronize()
+        _ = dh^
+        _ = dl^
+        _ = de^
+        _ = dy^
+        # DEVIATION 3010: drain the frees the buffers above enqueued.
+        ctx.synchronize()
+    return PythonObject(rows * cols)
+
+
 def to_bf16_binding(
     dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -647,6 +800,10 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[gemm_int8_binding]("gemm_int8")
         m.def_function[quantize_int8_binding]("quantize_int8")
         m.def_function[dequantize_int8_binding]("dequantize_int8")
+        m.def_function[int15_profile_version_binding]("int15_profile_version")
+        m.def_function[gemm_int15_binding]("gemm_int15")
+        m.def_function[quantize_int15_binding]("quantize_int15")
+        m.def_function[dequantize_int15_binding]("dequantize_int15")
         m.def_function[to_bf16_binding]("to_bf16")
         m.def_function[from_bf16_binding]("from_bf16")
         m.def_function[qr_r_binding]("qr_r")

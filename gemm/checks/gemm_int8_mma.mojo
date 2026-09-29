@@ -58,6 +58,23 @@ CDNA3 ISA (v_mfma_i32_16x16x32_i8) and are UNVERIFIED until the gate runs:
     RUN OWED: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo
 `tools/lowbit_mma_leg.sh` runs the four on a rented box.
 
+THE FRAGMENT LOADS STATE THEIR ALIGNMENT (lane/lowbit-int15, 2026-09-29,
+DEVIATION 2975; found by lane/lowbit-mma-speed, job nvc3-0016). `_pack4`
+took its word with `unsafe_load[width=4]` and stated no alignment, and on
+NVIDIA the compiler emitted four byte loads for it; with `alignment=4` it
+is ONE 32-bit load (that lane measured qkv.t512 on an H100 at 1.436 ms
+before and 0.398 ms after, bits equal). An alignment is a PROMISE to the
+compiler, so it is stated only where it is a fact:
+  - the offset inside the buffer is a multiple of the word, which the
+    function already tests (`k` a multiple of 4 or 8 makes every row start
+    one, and `k0` always is);
+  - the BASE of the buffer is a multiple of 8, which the LAUNCH reads off
+    the two operand pointers it is about to pass (`mma_operands_aligned`)
+    and hands the kernel as `aligned_in`. It is not assumed of an allocator.
+Where either fails the load is the one this file always had, and beyond the
+row the byte path with its zero codes. SCHEDULING: the same bytes reach the
+unit whichever load fetched them, and the gates hold it to that.
+
 THE SABOTAGE ARM. `-D MOJOLEARN_LOWBIT_SABOTAGE=1` flips the value of every
 cell this kernel stores, exactly as the flat kernel does (DEVIATION 2908),
 so a sabotage build fails `check_int8_device_matches_oracle` through either
@@ -84,6 +101,11 @@ from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
 #: reads (`gemm_lowbit.mojo::LOWBIT_SABOTAGE`); re-derived here rather than
 #: imported so this file and `gemm_lowbit.mojo` do not import each other.
 comptime INT8_MMA_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
+
+#: DEVIATION 2975: `-D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1` keeps the fragment
+#: loads as they were before the alignment was stated, on every launch, so
+#: one box can run both and compare bits and time. SCHEDULING.
+comptime INT8_MMA_UNSTATED_LOADS = is_defined["MOJOLEARN_INT8_MMA_UNSTATED_LOADS"]()
 
 #: The unit's k step on both vendors: m16n8k32 on NVIDIA, 16x16x32 on AMD.
 #: SCHEDULING (the construction argument above); a different tile would
@@ -122,21 +144,38 @@ def int8_mma_admits(m: Int, n: Int, k: Int) -> Bool:
 # ===========================================================================
 
 
+def mma_operands_aligned(a_address: Int, b_address: Int) -> Bool:
+    """Whether the BASES of two operand buffers are both multiples of 8
+    bytes, given as the addresses of the pointers the launch is about to
+    pass (`Int(buffer.unsafe_ptr())`). The fragment loads state an
+    alignment only when this is true (DEVIATION 2975)."""
+    return ((a_address | b_address) & 7) == 0
+
+
 @always_inline
 def _pack4(
-    p: MutPointer[Int8, MutAnyOrigin], row: Int, k0: Int, rows: Int, k: Int
+    p: MutPointer[Int8, MutAnyOrigin],
+    row: Int,
+    k0: Int,
+    rows: Int,
+    k: Int,
+    aligned: Bool = False,
 ) -> Int32:
     """Four consecutive codes of `row` starting at `k0`, packed into one
     32-bit register, element `i` in byte `i` (little-endian, the order the
     PTX fragment expects). A row at or beyond `rows` and a column at or
     beyond `k` read as the ZERO CODE (the padding rule). The vector load is
-    taken only when it is aligned (`k % 4 == 0` makes every row start a
-    multiple of four bytes, and `k0` is always a multiple of four) and
-    entirely inside the row."""
+    taken only when it is aligned inside the buffer (`k % 4 == 0` makes
+    every row start a multiple of four bytes, and `k0` is always a multiple
+    of four) and entirely inside the row; it STATES that alignment only
+    when the launch found the buffer's base aligned too (`aligned`,
+    DEVIATION 2975)."""
     if row >= rows:
         return Int32(0)
     var base = row * k
     if k0 + 4 <= k and (k & 3) == 0:
+        if aligned:
+            return bitcast[DType.int32, 1](p.unsafe_load[width=4, alignment=4](base + k0))[0]
         return bitcast[DType.int32, 1](p.unsafe_load[width=4](base + k0))[0]
     var v = SIMD[DType.int8, 4](0)
     for i in range(4):
@@ -147,16 +186,24 @@ def _pack4(
 
 @always_inline
 def _pack8(
-    p: MutPointer[Int8, MutAnyOrigin], row: Int, k0: Int, rows: Int, k: Int
+    p: MutPointer[Int8, MutAnyOrigin],
+    row: Int,
+    k0: Int,
+    rows: Int,
+    k: Int,
+    aligned: Bool = False,
 ) -> Int64:
     """Eight consecutive codes of `row` from `k0` in one 64-bit register,
     element `i` in byte `i`, the order the MFMA i8 operand expects. The
     same padding rule and the same alignment discipline as `_pack4`
-    (`k % 8 == 0`; `k0` is always a multiple of eight)."""
+    (`k % 8 == 0`; `k0` is always a multiple of eight; the alignment is
+    stated only under `aligned`)."""
     if row >= rows:
         return Int64(0)
     var base = row * k
     if k0 + 8 <= k and (k & 7) == 0:
+        if aligned:
+            return bitcast[DType.int64, 1](p.unsafe_load[width=8, alignment=8](base + k0))[0]
         return bitcast[DType.int64, 1](p.unsafe_load[width=8](base + k0))[0]
     var v = SIMD[DType.int8, 8](0)
     for i in range(8):
@@ -224,6 +271,7 @@ def _nvidia_warp_tile(
     m: Int,
     n: Int,
     k: Int,
+    aligned: Bool,
 ):
     """PTX ISA, Matrix Fragments for mma.m16n8k32 with .s8 operands:
     `groupID = lane >> 2`, `tig = lane & 3`.
@@ -244,15 +292,15 @@ def _nvidia_warp_tile(
     var acc1 = SIMD[DType.int32, 4](0)
     for kt in range(0, k, INT8_MMA_K_TILE):
         var ka = kt + t * 4
-        var a0 = _pack4(qa, ra0, ka, m, k)
-        var a1 = _pack4(qa, ra1, ka, m, k)
-        var a2 = _pack4(qa, ra0, ka + 16, m, k)
-        var a3 = _pack4(qa, ra1, ka + 16, m, k)
-        var b0 = _pack4(qb, cb0, ka, n, k)
-        var b1 = _pack4(qb, cb0, ka + 16, n, k)
+        var a0 = _pack4(qa, ra0, ka, m, k, aligned)
+        var a1 = _pack4(qa, ra1, ka, m, k, aligned)
+        var a2 = _pack4(qa, ra0, ka + 16, m, k, aligned)
+        var a3 = _pack4(qa, ra1, ka + 16, m, k, aligned)
+        var b0 = _pack4(qb, cb0, ka, n, k, aligned)
+        var b1 = _pack4(qb, cb0, ka + 16, n, k, aligned)
         acc0 = _imma_m16n8k32(a0, a1, a2, a3, b0, b1, acc0)
-        var b2 = _pack4(qb, cb1, ka, n, k)
-        var b3 = _pack4(qb, cb1, ka + 16, n, k)
+        var b2 = _pack4(qb, cb1, ka, n, k, aligned)
+        var b3 = _pack4(qb, cb1, ka + 16, n, k, aligned)
         acc1 = _imma_m16n8k32(a0, a1, a2, a3, b2, b3, acc1)
     var jc = col0 + t * 2
     _store_cell(c, ea, eb, acc0[0], ra0, jc, m, n)
@@ -278,6 +326,7 @@ def _amd_warp_tile(
     m: Int,
     n: Int,
     k: Int,
+    aligned: Bool,
 ):
     """CDNA3 `v_mfma_i32_16x16x32_i8`, wave64, one instruction per k step
     of 32. Operand layout (AMD matrix instruction calculator, 16x16x32 i8):
@@ -289,8 +338,8 @@ def _amd_warp_tile(
     var kq = (lane >> 4) * 8
     var acc = SIMD[DType.int32, 4](0)
     for kt in range(0, k, INT8_MMA_K_TILE):
-        var a = _pack8(qa, row0 + i16, kt + kq, m, k)
-        var b = _pack8(qb, col0 + i16, kt + kq, n, k)
+        var a = _pack8(qa, row0 + i16, kt + kq, m, k, aligned)
+        var b = _pack8(qb, col0 + i16, kt + kq, n, k, aligned)
         acc = llvm_intrinsic[
             "llvm.amdgcn.mfma.i32.16x16x32.i8",
             SIMD[DType.int32, 4],
@@ -313,16 +362,20 @@ def identical_gemm_int8_mma_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    aligned_in: Int32,
 ):
     """OP_NT, `C[m x n] = Qa[m x k] . Qb[n x k]^T`, one 16 x 16 output tile
     per warp on the vendor's integer matrix unit, Int32 accumulation, then
     the dequantization seam. Grid `(ceil(n / 32), ceil(m / 32), 1)`, block
-    `INT8_MMA_TPB`. On a target with no integer matrix unit (Metal, the
-    CPU column) both branches are dead and the kernel stores nothing; the
-    dispatcher never launches it there (`lib_int8_matrix_unit_for`)."""
+    `INT8_MMA_TPB`. `aligned_in` is 1 when the launch found both operand
+    buffers' bases aligned (DEVIATION 2975). On a target with no integer
+    matrix unit (Metal, the CPU column) both branches are dead and the
+    kernel stores nothing; the dispatcher never launches it there
+    (`lib_int8_matrix_unit_for`)."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
     var warp = Int(thread_idx.x) // WARP_SIZE
     var lane = Int(lane_id())
     var wm = warp // INT8_MMA_WARPS_N
@@ -334,9 +387,9 @@ def identical_gemm_int8_mma_kernel(
     if row0 >= m or col0 >= n:
         return
     comptime if is_nvidia_gpu():
-        _nvidia_warp_tile(c, qa, ea, qb, eb, lane, row0, col0, m, n, k)
+        _nvidia_warp_tile(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
     elif is_amd_gpu():
-        _amd_warp_tile(c, qa, ea, qb, eb, lane, row0, col0, m, n, k)
+        _amd_warp_tile(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
     else:
         return
 
@@ -372,6 +425,10 @@ def identical_gemm_int8_mma_into(
             )
         var grid_x = (n + INT8_MMA_BLOCK_TILE_N - 1) // INT8_MMA_BLOCK_TILE_N
         var grid_y = (m + INT8_MMA_BLOCK_TILE_M - 1) // INT8_MMA_BLOCK_TILE_M
+        var aligned = Int32(0)
+        comptime if not INT8_MMA_UNSTATED_LOADS:
+            if mma_operands_aligned(Int(qa.unsafe_ptr()), Int(qb.unsafe_ptr())):
+                aligned = Int32(1)
         ctx.enqueue_function[identical_gemm_int8_mma_kernel](
             c.unsafe_ptr(),
             qa.unsafe_ptr(),
@@ -381,6 +438,7 @@ def identical_gemm_int8_mma_into(
             Int32(m),
             Int32(n),
             Int32(k),
+            aligned,
             grid_dim=(grid_x, grid_y, 1),
             block_dim=(INT8_MMA_TPB, 1, 1),
         )

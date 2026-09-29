@@ -260,6 +260,21 @@ def _r_dequant(ml, F):
     return {"call": lambda: ml.linalg.dequantize_int8(*ml.linalg.quantize_int8(F["X"]))}
 
 
+@recipe("linalg.matmul_int15")
+def _r_matmul_int15(ml, F):
+    return {"call": lambda: ml.linalg.matmul_int15(F["X"], F["Xh"].T.copy())}
+
+
+@recipe("linalg.quantize_int15")
+def _r_quant15(ml, F):
+    return {"call": lambda: ml.linalg.quantize_int15(F["X"])}
+
+
+@recipe("linalg.dequantize_int15")
+def _r_dequant15(ml, F):
+    return {"call": lambda: ml.linalg.dequantize_int15(*ml.linalg.quantize_int15(F["X"]))}
+
+
 @recipe("resample.bootstrap")
 def _r_boot(ml, F):
     return {"call": lambda: ml.resample.bootstrap(F["yr"], n_resamples=199)}

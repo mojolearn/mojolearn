@@ -1,0 +1,69 @@
+box=m2pro rows=mlp_down.t512
+started=2026-09-29T04:23:14Z
+tree_head=d4c9d8a340bf4efe56d453a37cf70b7a76fd156e
+machine=Apple M2 Pro macOS 26.7
+build exit=0
+run 1 exit=1 33s rows_begun=1 digests=0 thread_limit_messages=0
+Unhandled exception caught during execution: POISON SURVIVED at cell 1632064 of int15.llama8b.mlp_down.t512.int15i64.v1.pieces: the kernel never wrote it, so the milliseconds beside it are a timing of a launch that did not produce an answer.
+run 2 exit=0 111s rows_begun=3 digests=59 thread_limit_messages=0
+run 3 exit=1 9s rows_begun=1 digests=0 thread_limit_messages=0
+Unhandled exception caught during execution: POISON SURVIVED at cell 1081408 of int15.llama8b.mlp_down.t512.inference.int15i64.v1.planes: the kernel never wrote it, so the milliseconds beside it are a timing of a launch that did not produce an answer.
+small rows exit=0 112s thread_limit_messages=0
+finished=2026-09-29T04:27:52Z
+== Metal validation: dispatches over a pipeline's thread limit, by message
+== every other line of the validation layer
+   2 stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+   1 2026-09-29 04:26:00.235 int15_price[29277:11762599] Metal API Validation Enabled
+   1 2026-09-29 04:26:00.080 int15_price[29253:11762487] Execution of the command buffer was aborted due to an error during execution. Impacting Interactivity (0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity)
+   1 2026-09-29 04:25:51.484 int15_price[29253:11762477] Metal API Validation Enabled
+   1 2026-09-29 04:24:00.269 int15_price[28582:11755519] Metal API Validation Enabled
+   1 2026-09-29 04:24:00.076 int15_price[28078:11752909] Execution of the command buffer was aborted due to an error during execution. Impacting Interactivity (0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity)
+   1 2026-09-29 04:23:27.802 int15_price[28078:11752890] Metal API Validation Enabled
+== run 1: the lines of the row
+== bench/gemm_int15_price_main.mojo [IDENTICAL] ==
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+== run 2: the lines of the row
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.apple.two not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.apple.four not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.apple.two not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.apple.four not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+float-unit-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx training.int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+== llama8b.mlp_down.t512.bwd_dw  m=4096 n=14336 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x57cdff62332dd579 OP_TN,plan=20
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f dispatched-for-codes
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x6054e7041e529e7d per-call,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x6054e7041e529e7d per-call
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xb0e2c0513a836af7 per-step,transposing
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xb0e2c0513a836af7 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f quantize.a+quantize.b+split.a+split.b+product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.apple.two not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f not-dispatched,float-unit,two-products,carry-every-8-steps
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.apple.four not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f not-dispatched,float-unit,four-products,carry-every-512-steps
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.apple.two inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.apple.four inference-has-no-backward-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.apple.two not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15 apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.apple.four not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+float-unit-product
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+INT15-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw training.int15i64.v1.tuned this-column-has-no-integer-matrix-unit
+== done [IDENTICAL]: 3 rows ==
+== run 3: the lines of the row
+== bench/gemm_int15_price_main.mojo [IDENTICAL] ==
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+apple_repro_job: box=m2pro

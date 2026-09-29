@@ -1,0 +1,22 @@
+diff --git a/gemm/checks/gemm_int15.mojo b/gemm/checks/gemm_int15.mojo
+index 0925ba0f0..b44df7781 100644
+--- a/gemm/checks/gemm_int15.mojo
++++ b/gemm/checks/gemm_int15.mojo
+@@ -376,7 +376,7 @@ def split_int15_kernel(
+         return
+     var c = q.unsafe_load(i)
+     var h = int15_piece_hi(c)
+-    comptime if INT15_PIECE_SABOTAGE:
++    comptime if True:  # SABOTAGE (int15 seam arm): INT15_PIECE_SABOTAGE at its use site, a high piece of -128 written -127
+         # THE DEFECT ARM: a split that believes an int8 piece is symmetric.
+         if h == Int8(-128):
+             h = Int8(-127)
+@@ -499,7 +499,7 @@ def int15_planes_kernel(
+     var v = x.unsafe_load(r * Int(s_row_in) + c * Int(s_col_in))
+     var code = quantize_int15_value(v, Int(e.unsafe_load(r)))
+     var h = int15_piece_hi(code)
+-    comptime if INT15_PIECE_SABOTAGE:
++    comptime if True:  # SABOTAGE (int15 seam arm): INT15_PIECE_SABOTAGE at its use site, a high piece of -128 written -127
+         if h == Int8(-128):
+             h = Int8(-127)
+     hi.unsafe_store(i, h)
