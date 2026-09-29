@@ -49,3 +49,35 @@ def test_sdpa_takes_mixed_input_dtypes():
     v = torch.randn(1, 2, 4, 8).to(torch.bfloat16)     # a linear's bf16 output
     out = m.attention_sdpa(q, k, v, 1, 4)
     assert out.dtype == torch.bfloat16 and out.shape == (4, 16)
+
+
+class _FakeTorch(object):
+    def __init__(self, root):
+        self.__file__ = os.path.join(root, "__init__.py")
+
+
+def test_cpu_compile_pins_torchs_openmp_on_macos(tmp_path, monkeypatch):
+    # the board venv's base Python lib dir holds a second libomp; inductor
+    # must bind to torch's own (OMP Error #15 on the M3 Ultra, 2026-09-29)
+    (tmp_path / "include").mkdir()
+    (tmp_path / "include" / "omp.h").write_text("")
+    monkeypatch.setattr(bbn.sys, "platform", "darwin")
+    monkeypatch.delenv("OMP_PREFIX", raising=False)
+    what = bbn._pin_inductor_openmp(_FakeTorch(str(tmp_path)))
+    assert os.environ["OMP_PREFIX"] == str(tmp_path)
+    assert "torch's own libomp" in what
+
+
+def test_cpu_compile_refuses_without_torchs_omp_header(tmp_path, monkeypatch):
+    monkeypatch.setattr(bbn.sys, "platform", "darwin")
+    monkeypatch.delenv("OMP_PREFIX", raising=False)
+    with pytest.raises(RuntimeError, match="REFUSED"):
+        bbn._pin_inductor_openmp(_FakeTorch(str(tmp_path)))
+    assert "OMP_PREFIX" not in os.environ
+
+
+def test_cpu_compile_leaves_other_platforms_alone(tmp_path, monkeypatch):
+    monkeypatch.setattr(bbn.sys, "platform", "linux")
+    monkeypatch.delenv("OMP_PREFIX", raising=False)
+    bbn._pin_inductor_openmp(_FakeTorch(str(tmp_path)))
+    assert "OMP_PREFIX" not in os.environ
