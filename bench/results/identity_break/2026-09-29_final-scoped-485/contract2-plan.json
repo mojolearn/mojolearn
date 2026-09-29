@@ -1,0 +1,10 @@
+{
+  "lanes": [
+    "tsvd",
+    "umap"
+  ],
+  "lane_revisions": {
+    "tsvd": "explained-variance-train-contract-1",
+    "umap": "save-option-extras-contract-2"
+  }
+}
