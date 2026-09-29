@@ -3612,6 +3612,13 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     t = k.mm(hrow, Y)
     full = _M(array.array("f", Y.s) + array.array("f", [0.0]) * nc, n, nc)
     V = k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
+    # the columns are unit vectors or the solve is not an answer (an
+    # overflow, a dropped launch): refuse rather than return them
+    sq = k.colsum(k.ew("sq", V)).s
+    if not all(0.9 <= float(v) <= 1.1 for v in sq) or not all(math.isfinite(float(v)) for v in sv.s):
+        raise RuntimeError(
+            "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
+            f"{[float(v) for v in sq]} (not unit); pass eigen_solver='dense' for the full SVD.")
     return V.neg_cols(k.absmax_flags(V, True)), sv
 
 
