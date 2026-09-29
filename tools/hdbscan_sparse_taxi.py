@@ -55,6 +55,7 @@ def ours(args):
     os.makedirs(args.out, exist_ok=True)
     np.save(os.path.join(args.out, "ours_labels.npy"), np.asarray(est.labels_, dtype=np.int32))
     np.save(os.path.join(args.out, "ours_probs.npy"), np.asarray(est.probabilities_, dtype=np.float32))
+    np.save(os.path.join(args.out, "ours_core.npy"), np.asarray(est.core_distances_, dtype=np.float32))
     rec = dict(arm="ours", mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "(default)"), rows=int(X.shape[0]),
                cols=int(X.shape[1]), fit_s=wall, n_clusters=int(est.n_clusters_), n_noise=int(est.n_outliers_),
                n_boruvka_rounds=int(est.n_boruvka_rounds_),
@@ -110,6 +111,40 @@ def compare(args):
         json.dump(rec, f, indent=1)
 
 
+def ties(args):
+    """Where float32 (ours) and float64 (scikit-learn) can legitimately part:
+    the core distance recomputed in float64 against ours, and the points whose
+    k-th and (k+1)-th neighbour distances are within a few float32 ulps (a
+    near-tie that a rounding can reorder). Reported beside the points whose
+    label differs under the majority mapping."""
+    from sklearn.neighbors import NearestNeighbors
+    X = _rows(args).astype(np.float64)
+    k = KW["min_samples"]
+    d, _ = NearestNeighbors(n_neighbors=k + 2, algorithm="brute").fit(X).kneighbors(X)
+    core64 = d[:, k]              # column 0 is the point itself: the k-th OTHER neighbour
+    core32 = np.load(os.path.join(args.out, "ours_core.npy")).astype(np.float64)
+    rel = np.abs(core32 - core64) / np.maximum(core64, 1e-30)
+    eps32 = float(np.finfo(np.float32).eps)
+    gap = (d[:, k + 1] - d[:, k]) / np.maximum(d[:, k], 1e-30)
+    near_kth = gap < 4 * eps32
+    a = np.load(os.path.join(args.out, "ours_labels.npy"))
+    b = np.load(os.path.join(args.out, "sk_labels.npy"))
+    mapped = np.full_like(a, -2)
+    for c in np.unique(a):
+        m = a == c
+        vals, cnt = np.unique(b[m], return_counts=True)
+        mapped[m] = vals[np.argmax(cnt)]
+    diff = mapped != b
+    rec = dict(core_max_rel_diff=float(rel.max()), core_rel_diff_over_4ulp=int((rel > 4 * eps32).sum()),
+               core_exactly_equal_to_f64_rounded=int((core32 == core64.astype(np.float32)).sum()),
+               kth_neighbour_near_ties=int(near_kth.sum()), points_label_differs=int(diff.sum()),
+               differing_points_with_kth_near_tie=int((diff & near_kth).sum()),
+               noise_only_ours=int(((a < 0) & (b >= 0)).sum()), noise_only_sklearn=int(((a >= 0) & (b < 0)).sum()))
+    print(json.dumps(rec))
+    with open(os.path.join(args.out, "ties.json"), "w") as f:
+        json.dump(rec, f, indent=1)
+
+
 def _fnv(arr):
     h = 0xCBF29CE484222325
     for byte in np.ascontiguousarray(arr).tobytes():
@@ -119,12 +154,12 @@ def _fnv(arr):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("what", choices=("prep", "ours", "sklearn", "compare"))
+    p.add_argument("what", choices=("prep", "ours", "sklearn", "compare", "ties"))
     p.add_argument("--data", default=os.path.expanduser("~/hdbscan-sparse-data"))
     p.add_argument("--out", default=os.path.expanduser("~/hdbscan-sparse-out"))
     p.add_argument("--rows", type=int, default=100_000)
     args = p.parse_args()
-    {"prep": prep, "ours": ours, "sklearn": sk, "compare": compare}[args.what](args)
+    {"prep": prep, "ours": ours, "sklearn": sk, "compare": compare, "ties": ties}[args.what](args)
 
 
 if __name__ == "__main__":
