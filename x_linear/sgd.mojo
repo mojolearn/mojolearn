@@ -390,8 +390,8 @@ def _warp_row_folds_tree[K: Int, NORMS: Bool, SQ: Bool](
 @always_inline
 def _is_subnormal(v: Float32) -> Bool:
     """A nonzero word with a zero exponent field: the words `fz` changes."""
-    var b = bitcast[DType.uint32](v)
-    return (b & UInt32(0x7F800000)) == UInt32(0) and (b & UInt32(0x007FFFFF)) != UInt32(0)
+    # |v|'s bits in [1, 0x007FFFFF]; unsigned wrap sends zero above the range
+    return ((bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)) - UInt32(1)) < UInt32(0x007FFFFF)
 
 
 @always_inline
