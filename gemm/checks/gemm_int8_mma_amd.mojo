@@ -311,40 +311,44 @@ def int8_amd_pieces_plan_is_direct(plan: Int) -> Bool:
 
 def int8_amd_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_mma_amd_into` takes. Reads the shape
-    and may: every plan is the profile. THE MI325X'S MEASUREMENT of
-    2026-09-29 (job 1790657862351, every plan of this file and of the tuned
-    file timed in one run at the twelve rows,
+    and may: every plan is the profile. THE MI325X'S MEASUREMENT, every plan
+    of this file and of the tuned file timed in one run at the twelve rows,
+    with the launch bound stated (job 1790660119759,
     `docs/lanes/progress/lowbit-amd-tuned.md`):
-      - at the eight decode rows the reference's tile with sixteen-byte
-        loads and four windows' loads issued per turn (`DIRECT_U4`) took
-        the least time, or at most 0.014 of fp32.v1's time more than the
-        plan that did (one wave a block, at three rows);
+      - at the decode rows the reference's tile, ONE WAVE A BLOCK, 16-byte
+        loads, four windows' loads per turn (`DIRECT_ONE_WAVE`) took the
+        least time at seven of the eight rows (0.13 to 0.48 of fp32.v1) and
+        0.028 of fp32.v1's time more than the least at the eighth;
       - at the 512-token rows, 32 x 32 per wave in a 64 x 64 block with
         128 steps a window where `n` is at most 8192 (qkv 0.082, mlp_down
-        0.098 of fp32.v1), 64 x 32 per wave in a 128 x 64 block where it is
-        more (mlp_up 0.055, the head 0.057).
+        0.097), 64 x 32 per wave in a 128 x 64 block where it is more
+        (the head 0.056; mlp_up, measured 0.055 in job 1790657862351).
     Between 17 and 511 rows nothing is measured."""
     if m <= INT8_TUNED_ROW_MAX_M:
-        return INT8_AMD_PLAN_DIRECT_U4
+        return INT8_AMD_PLAN_DIRECT_ONE_WAVE
     if n > 8192:
         return INT8_AMD_PLAN_STAGED_TALL_WAVE
     return INT8_AMD_PLAN_STAGED_FRAG2_K128
 
 
 def int8_amd_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
-    """The plan `identical_gemm_int8_pieces_amd_into` takes. THE MI325X'S
-    MEASUREMENT (job 1790657862351): at the eight decode rows the direct
-    kernel of 16 x 16 per wave, 2 x 2 waves, sixteen-byte loads took the
-    least time at every row (0.25 to 0.77 of fp32.v1, where the tuned
-    file's best staged plan took 0.35 to 1.91); at the 512-token rows 32 x
-    32 per wave in a 64 x 64 block (qkv 0.172, mlp_up 0.158, mlp_down
-    0.185) and, where `n` is above 14336 (the head), 32 x 32 per wave in a
-    128 x 64 block (0.166)."""
+    """The plan `identical_gemm_int8_pieces_amd_into` and its fused form
+    take. THE MI325X'S MEASUREMENT with the launch bound stated (job
+    1790660119759), the fused complete operation's time over fp32.v1:
+      - decode rows: nothing staged, 16 x 16 per wave, ONE WAVE A BLOCK,
+        four windows' loads per turn, least at all eight rows (0.25 to
+        0.79; the sums form least at seven of eight);
+      - 512-token rows: nothing staged, 32 x 64 per wave in a 64 x 128
+        block where `n` is at most 4096 (qkv 0.152, mlp_down 0.188);
+        staged 32 x 32 in 64 x 64 up to 14336 (mlp_up 0.160); staged 32 x
+        32 in 128 x 64 above (the head 0.162)."""
     if m <= INT8_TUNED_ROW_MAX_M:
-        return INT8_AMD_PIECES_DIRECT
+        return INT8_AMD_PIECES_DIRECT_ONE_WAVE
     if n > 14336:
         return INT8_AMD_PIECES_STAGED_WAVES8_TALL
-    return INT8_AMD_PIECES_STAGED_FRAG2
+    if n > 4096:
+        return INT8_AMD_PIECES_STAGED_FRAG2
+    return INT8_AMD_PIECES_DIRECT_FRAG2X4
 
 
 # ===========================================================================

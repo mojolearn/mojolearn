@@ -122,6 +122,7 @@ for phase in "$@"; do
         amd-fault-repro) bash tools/lowbit_amd_tuned/fault_repro.sh 4 3 ;;
         amd-fault-stress) bash tools/lowbit_amd_tuned/fault_stress.sh ${MOJOLEARN_AMD_STRESS_RUNS:-25} ;;
         amd-scratch-first) bash tools/lowbit_amd_tuned/scratch_first.sh ${MOJOLEARN_AMD_SCRATCH_RUNS:-150} ;;
+        amd-cross-build) bash tools/lowbit_amd_tuned/cross_build.sh gemm/checks/gemm_int8_mma_amd_check.mojo bench/gemm_lowbit_amd_price_main.mojo gemm/checks/gemm_int15_tuned_check.mojo bench/gemm_int15_price_main.mojo ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
         apple-gates) apple_gates ;;
         flat-slices) MOJOLEARN_LOWBIT_PRICE_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.applechunk" MOJOLEARN_LOWBIT_PRICE_ONLY="mlp_up.t512,mlp_down.t512,lm_head.t512" bash tools/lowbit_mma_speed/price_job.sh flatslices ;;

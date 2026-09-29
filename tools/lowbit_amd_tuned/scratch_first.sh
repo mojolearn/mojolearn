@@ -19,6 +19,12 @@ pixi run mojo build -D MOJOLEARN_SCRATCH=1 -I . tools/lowbit_amd_tuned/scratch_f
 echo "build scratch exit=$?" >> "$OUT/summary.txt"
 pixi run mojo build -I . tools/lowbit_amd_tuned/scratch_first.mojo -o "$OUT/bin/noscratch" > "$OUT/build_noscratch.log" 2>&1
 echo "build noscratch exit=$?" >> "$OUT/summary.txt"
+if [ ! -x "$OUT/bin/scratch" ] || [ ! -x "$OUT/bin/noscratch" ]; then
+    echo "a build failed; nothing is run" >> "$OUT/summary.txt"
+    tail -20 "$OUT"/build_*.log >> "$OUT/summary.txt"
+    cat "$OUT/summary.txt"
+    exit 1
+fi
 for kind in scratch noscratch; do
     python3 - "$OUT/bin/$kind" "$OUT/co/$kind" <<'PY'
 import struct, sys

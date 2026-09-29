@@ -53,6 +53,8 @@ sums.
 | Box | Request | Commit | What | Verdict |
 |---|---|---|---|---|
 | MI325X | 1790657510941 | 0a29ffdf3 | amd-gate, full-price (run of record 2), amd-price | gate: clean GREEN, four arms seen failing, byte-path arm RED (fault); full-price GREEN; amd-price did not build |
+| MI325X | 1790660119759 | de62bbfbc | first-scratch probe (did not build: `out` as an argument name, again), AMD gate, 40 stress runs, amd-price with the launch bound | gate GREEN, every arm as expected, the fused forms equal to the host's seam on every plan; 0 faults in 40 runs; amd-price GREEN (cold == record at 1836 of 1836; sabotage seen at every arm) |
+| MI325X | 1790659453776 | 51307868e | AMD gate (fused forms added), 25 stress runs, amd-price, int15 tuned gate and price (Lane C's fused launcher) | gate GREEN every arm; 1 fault in 25 runs (first launch of the first kernel with scratch); amd-price GREEN (1836 of 1836); int15 tuned gate GREEN with its five arms seen failing; int15 price GREEN (422 digests warm == timed) |
 | MI325X | 1790659053624 | 72b659823 | lane/lowbit-int15's tuned gate (before its fix was merged here), the fault's reproduction (4 builds x 3 runs, byte path and stated loads) | tuned gate GREEN with this lane's refusal-gate fix (since withdrawn for Lane C's); the fault CAME BACK once in 24 runs (Failures 1) |
 | MI325X | 1790658495381 | 6153fb859 | Lane D's unit and pieces gates (the AMD column), amd-gate, amd-price on the new dispatch, int15 tuned gate, int15 price | every lowbit-mma-speed and AMD gate GREEN with every arm as expected; amd-price GREEN (1380 of 1380 cold == record, 345 of 345 sabotage seen); int15 tuned gate RED at the stale refusal gate only; int15 price GREEN (372 digests warm == timed, sabotage seen) |
 | MI325X | 1790657862351 | 6c6f2bb88 | amd-gate, amd-price (every plan of both files, run 3 of the shared arms), lane/lowbit-int15's tuned gate | amd-gate GREEN with all six arms as expected (byte-path arm passed); amd-price GREEN: cold == record at 1380 of 1380, sabotage seen at 345 of 345; int15 tuned gate RED (Failures 3) |
@@ -164,8 +166,33 @@ mlp_down, lm_head; t1 then t8): UNDER fp32.v1 AT ALL TWELVE ROWS. Training
 1.74 but the head (0.87, 0.94): the right operand's quantizer alone is 0.58 to
 0.79 of fp32.v1 there.
 
+## THE LAUNCH BOUND (a lever found by the fault hunt), job 1790659453776 against 1790660119759
+
+The same kernels with only the launch bound stated; ms over fp32.v1, each in
+its own run:
+
+| plan | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 | qkv.t1 | mlp_down.t1 |
+|---|---:|---:|---:|---:|---:|---:|
+| one product, direct 128x32 per wave, block 256x64 | 0.241 / 0.130 | 0.146 / 0.090 | 0.305 / 0.154 | 0.133 / 0.082 | 1.501 / 0.977 | 1.884 / 1.066 |
+| one product, direct 64x64, block 128x128 | 0.144 / 0.109 | 0.082 / 0.076 | 0.174 / 0.124 | 0.084 / 0.077 | 1.101 / 1.048 | 1.149 / 1.147 |
+| four products, direct 32x64, block 64x128 | 0.487 / 0.141 | 1.031 / 0.202 | 0.649 / 0.180 | 1.111 / 0.261 | 2.159 / 1.624 | 2.525 / 1.940 |
+| four products, direct 16x16, one wave, four windows a turn | 0.758 / 0.285 | 1.260 / 0.434 | 1.153 / 0.373 | 1.310 / 0.415 | 0.906 / 0.665 | 0.923 / 0.634 |
+| the fused complete operation, AMD's launcher | 0.161 / 0.161 | 0.160 / 0.159 | 0.198 / 0.197 | 0.173 / 0.171 | 0.893 / 0.874 | 0.872 / 0.891 |
+
+The plans that did not spill did not move. The dispatch was re-read from the
+second run (below).
+
 ## THE PLAN CHOICE FOR A WAVEFRONT OF 64 (task 2)
 
+UPDATED from job 1790660119759 (launch bound stated): one product at m <= 16
+is the direct plan of one wave a block, four windows a turn; four products
+at m <= 16 the same geometry, and at the 512-token rows the direct 32x64 per
+wave in 64x128 where n <= 4096, staged 32x32 in 64x64 to n = 14336, staged
+32x32 in 128x64 above. The fused complete operation on it: 0.152, 0.160,
+0.188, 0.162 at the 512-token rows; 0.787, 0.662, 0.376, 0.363, 0.775,
+0.654, 0.253, 0.302 at the decode rows (each the least of every plan's).
+
+Before that, from job 1790657862351:
 `int8_amd_dispatch` and `int8_amd_pieces_dispatch` (this lane's launcher) and
 the AMD column of Lane D's two dispatchers (hunks above) now read this
 measurement. One product: m <= 16 the direct plan, four windows a turn; m > 16

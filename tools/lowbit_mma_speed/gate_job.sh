@@ -62,6 +62,12 @@
 #     amd-value-sabotage    -D MOJOLEARN_LOWBIT_SABOTAGE=1: every stored
 #                           value flipped. EXPECTED non-zero, naming every
 #                           gate that reads a product or a sum.
+#     amd-epilogue-sabotage -D MOJOLEARN_INT15_EPILOGUE_SABOTAGE=1 and
+#     amd-exponent-sabotage -D MOJOLEARN_INT15_EXPONENT_SABOTAGE=1: the
+#                           fifteen-bit seam's own arms, read by every
+#                           FUSED form. EXPECTED non-zero, naming the two
+#                           four-product gates (their fused comparisons);
+#                           the one-product gates must PASS.
 #     amd-unstated          -D MOJOLEARN_INT8_TUNED_UNSTATED=1: every load
 #                           the byte path. EXPECTED exit 0, the same bits.
 #   Runs on AMD only. On any other column it is NOT RUN, which is not a pass.
@@ -128,7 +134,7 @@ amd_check() {
 AMD_PRODUCT_GATES="check_amd_plans_match_reference_flat_oracle check_amd_planted_worst_cases check_amd_minus_128_piece"
 AMD_SUM_GATES="check_amd_pieces_match_flat_and_host check_amd_pieces_planted_worst_cases"
 if [ "$WHICH" = amd ]; then
-    PHASES="amd amd-direct-sabotage amd-staging-sabotage amd-pieces-sabotage amd-value-sabotage amd-unstated"
+    PHASES="amd amd-direct-sabotage amd-staging-sabotage amd-pieces-sabotage amd-value-sabotage amd-epilogue-sabotage amd-exponent-sabotage amd-unstated"
     if ! { command -v rocm-smi > /dev/null 2>&1 || command -v amd-smi > /dev/null 2>&1; }; then
         echo "gate_job: box=$BOX is not an AMD box. NOT RUN, which is not a pass." | tee -a "$OUT/gate.txt"
         exit 3
@@ -158,6 +164,19 @@ if [ "$WHICH" = amd ]; then
         must_name amd-value-sabotage "$g"
     done
     must_pass amd-value-sabotage check_amd_pieces_refuses_above_its_bound
+    # The fifteen-bit seam's own arms (gemm/checks/gemm_int15_epilogue.mojo),
+    # read by every FUSED form: the sums are untouched, so the one-product
+    # gates and the sums pass and every fused comparison must fail.
+    for arm in epilogue exponent; do
+        if [ "$arm" = epilogue ]; then d=MOJOLEARN_INT15_EPILOGUE_SABOTAGE; else d=MOJOLEARN_INT15_EXPONENT_SABOTAGE; fi
+        run "amd-$arm-sabotage" fail amd_check -D "$d=1"
+        for g in $AMD_SUM_GATES; do
+            must_name "amd-$arm-sabotage" "$g"
+        done
+        for g in $AMD_PRODUCT_GATES check_amd_dispatch_is_batch_invariant check_amd_pieces_refuses_above_its_bound; do
+            must_pass "amd-$arm-sabotage" "$g"
+        done
+    done
     run amd-unstated pass amd_check -D MOJOLEARN_INT8_TUNED_UNSTATED=1 -D MOJOLEARN_INT8_AMD_TRACE=1
     for g in $AMD_PRODUCT_GATES $AMD_SUM_GATES check_amd_dispatch_is_batch_invariant; do
         must_pass amd-unstated "$g"

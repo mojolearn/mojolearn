@@ -23,21 +23,21 @@ comptime SCRATCH = is_defined["MOJOLEARN_SCRATCH"]()
 comptime WORDS = 256
 
 
-def probe_kernel(out: MutPointer[Int32, MutAnyOrigin], salt_in: Int32):
+def probe_kernel(dst: MutPointer[Int32, MutAnyOrigin], salt_in: Int32):
     var t = Int(thread_idx.x)
     var salt = Int(salt_in)
     var arr = InlineArray[Int32, WORDS](fill=Int32(0))
     comptime if SCRATCH:
         for i in range(WORDS):
             arr[(i * 7 + t + salt) & (WORDS - 1)] += Int32(i)
-        out.unsafe_store(t, arr[(t * 3 + salt) & (WORDS - 1)])
+        dst.unsafe_store(t, arr[(t * 3 + salt) & (WORDS - 1)])
     else:
         comptime for i in range(WORDS):
             arr[i] += Int32(i + t + salt)
         var acc = Int32(0)
         comptime for i in range(WORDS):
             acc += arr[i]
-        out.unsafe_store(t, acc)
+        dst.unsafe_store(t, acc)
 
 
 def main() raises:
