@@ -115,6 +115,32 @@ def main():
             fit("ours-bgmm-" + tag, lambda: ml.BayesianGaussianMixture(**bkw2), Xd)
         fit("sk-f32-" + tag, lambda: GaussianMixture(**kw2), Xd)
         fit("sk-bgmm-f32-" + tag, lambda: BayesianGaussianMixture(**bkw2), Xd)
+    if os.environ.get("GMM_PROBE_DIAG") and "ml" in dir():
+        # WHERE OUR BGMM DIFFERS: the same GaussianMixture algorithm through the
+        # cluster lane's driver (x_cluster, its moments one sequential float32
+        # chain over the rows per cell) against the mixture binding (moments
+        # through the identical GEMM's tree fold). A refusal on the first and a
+        # fit on the second puts the cause in the moment fold, which our
+        # BayesianGaussianMixture shares with the first.
+        from mojolearn._expansion_cluster import _gmm_ext_fit
+
+        class Ext(object):
+            def __init__(self, **k):
+                self.est = ml.GaussianMixture(**k)
+
+            def fit(self, X_):
+                _gmm_ext_fit(self.est, X_)
+                return self.est
+        for rc in [float(v) for v in os.environ.get("GMM_PROBE_DIAG_RC", "1e-4,1e-3").split(",")]:
+            kw3 = dict(kw, reg_covar=rc)
+            fit("diag-ours-gemm-rc%g" % rc, lambda: ml.GaussianMixture(**kw3), Xd)
+            fit("diag-ours-seqchain-rc%g" % rc, lambda: Ext(**kw3), Xd)
+            try:
+                sk = BayesianGaussianMixture(**dict(bkw, reg_covar=rc, max_iter=1)).fit(Xd)
+                say("diag-sk-bgmm-internal-dtypes-rc%g" % rc, covariances=str(sk.covariances_.dtype),
+                    means=str(sk.means_.dtype), precisions_cholesky=str(sk.precisions_cholesky_.dtype))
+            except BaseException as exc:  # noqa: BLE001
+                say("diag-sk-bgmm-internal-dtypes-rc%g" % rc, error=repr(exc)[:300])
     return 0
 
 
