@@ -118,6 +118,9 @@ on the host for the CPU column.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 
 from core.device_zero import enqueue_fill
@@ -186,6 +189,7 @@ from gbdt.methods.kernel.pointwise_scores import (
 )
 from gbdt.targets.kernel.pointwise_targets import (
     MSE_BLOCK_SIZE,
+    REDUCE_LANES_BLOCK,
     deterministic_sum_lanes_kernel,
     launch_approximate,
 )
@@ -307,6 +311,64 @@ def _ord_std_terms_kernel(
                 var q = ftz(sg.unsafe_load(i) / w)
                 term = ftz(ftz(q * q) * w)
         terms.unsafe_store(i, term)
+
+
+def _ord_std_and_mags_kernel(
+    sw: MutPointer[Float32, MutAnyOrigin],
+    sg: MutPointer[Float32, MutAnyOrigin],
+    quality: MutPointer[UInt32, MutAnyOrigin],
+    total_in: Int32,
+    dst: MutPointer[Float32, MutAnyOrigin],
+):
+    """ONE block of `REDUCE_LANES_BLOCK`: `dst[0]` the score-noise sum of
+    `_ord_std_terms_kernel`'s terms, `dst[1]`/`dst[2]` the sums of `|sw|` and
+    `|sg|` (`_ord_abs_planes_kernel`), each folded EXACTLY as
+    `deterministic_sum_lanes_kernel` folds it -- thread `t` adds positions
+    `t, t + 256, ...` in ascending order, then the same shared tree -- so the
+    three sums are the bits of the two separate passes, from one read of the
+    planes and without their two scratch arrays (lane/ordered-speed). Only
+    valid when the planes are not bootstrapped between the two (the noise is
+    taken BEFORE the bootstrap and the scale AFTER it)."""
+    var tid = Int(thread_idx.x)
+    var total = Int(total_in)
+    var a0 = Float32(0.0)
+    var a1 = Float32(0.0)
+    var a2 = Float32(0.0)
+    var i = tid
+    while i < total:
+        var w = sw.unsafe_load(i)
+        var g = sg.unsafe_load(i)
+        var term = Float32(0.0)
+        if quality.unsafe_load(i) != UInt32(0):
+            if w > Float32(0.0):
+                var q = ftz(g / w)
+                term = ftz(ftz(q * q) * w)
+        a0 += term
+        a1 += abs(w)
+        a2 += abs(g)
+        i += REDUCE_LANES_BLOCK
+    var red = stack_allocation[
+        3 * REDUCE_LANES_BLOCK,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    red[tid] = a0
+    red[REDUCE_LANES_BLOCK + tid] = a1
+    red[2 * REDUCE_LANES_BLOCK + tid] = a2
+    barrier()
+    var step = REDUCE_LANES_BLOCK // 2
+    while step > 0:
+        if tid < step:
+            comptime for lane in range(3):
+                red[lane * REDUCE_LANES_BLOCK + tid] = (
+                    red[lane * REDUCE_LANES_BLOCK + tid]
+                    + red[lane * REDUCE_LANES_BLOCK + tid + step]
+                )
+        barrier()
+        step //= 2
+    if tid == 0:
+        comptime for lane in range(3):
+            dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
 
 def _ord_bootstrap_apply_kernel(
@@ -1293,6 +1355,8 @@ def fit_ordered(
     var fv = ctx.enqueue_create_buffer[DType.float32](1)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
     var dummy_mag = ctx.enqueue_create_buffer[DType.float32](2)
+    var d_sums = ctx.enqueue_create_buffer[DType.float32](3)
+    var h_sums = ctx.enqueue_create_host_buffer[DType.float32](3)
     var loss_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
     var has_test = test.n_rows > 0
     if has_test:
@@ -1366,7 +1430,36 @@ def fit_ordered(
         # 3. the score noise, from the UNBOOTSTRAPPED quality slices
         times.begin(ctx)
         var score_std = Float32(0.0)
-        if opts.random_strength != Float32(0.0):
+        # the noise sum and the scale's two magnitudes in ONE pass when no
+        # bootstrap lies between them (`_ord_std_and_mags_kernel`)
+        var fused_sums = opts.random_strength != Float32(0.0) and not bootstrap_on
+        var m0 = Float64(0.0)
+        var m1 = Float64(0.0)
+        if fused_sums:
+            ctx.enqueue_function[_ord_std_and_mags_kernel](
+                sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
+                Int32(total), d_sums.unsafe_ptr(),
+                grid_dim=1, block_dim=REDUCE_LANES_BLOCK,
+            )
+            ctx.enqueue_copy(dst_buf=h_sums, src_buf=d_sums)
+            ctx.synchronize()
+            m0 = Float64(h_sums[1])
+            m1 = Float64(h_sums[2])
+            var count = 0
+            for f in range(n_folds):
+                count += (
+                    folds[f].quality_evaluate_samples.right
+                    - folds[f].estimate_samples.right
+                )
+            var mult = ordered_model_length_mult(
+                n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
+            )
+            score_std = Float32(
+                mult
+                * sqrt(Float64(h_sums[0]) / (Float64(count) + 1e-100))
+                * Float64(opts.random_strength)
+            )
+        elif opts.random_strength != Float32(0.0):
             var terms = ctx.enqueue_create_buffer[DType.float32](total)
             ctx.enqueue_function[_ord_std_terms_kernel](
                 sw.unsafe_ptr(), sg.unsafe_ptr(), quality.unsafe_ptr(),
@@ -1422,27 +1515,28 @@ def fit_ordered(
         times.end(ctx, "ord.bootstrap")
         # the fixed-point scale from the planes as the searcher reads them
         times.begin(ctx)
-        var absv = ctx.enqueue_create_buffer[DType.float32](2 * total)
-        ctx.enqueue_function[_ord_abs_planes_kernel](
-            sw.unsafe_ptr(), sg.unsafe_ptr(), absv.unsafe_ptr(), Int32(total),
-            grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
-        )
-        var mags = ctx.enqueue_create_buffer[DType.float32](2)
-        ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
-            absv.unsafe_ptr(), Int32(total), mags.unsafe_ptr(),
-            grid_dim=1, block_dim=256,
-        )
-        var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
-        ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
-        ctx.synchronize()
-        var m0 = Float64(hm[0])
-        var m1 = Float64(hm[1])
+        if not fused_sums:
+            var absv = ctx.enqueue_create_buffer[DType.float32](2 * total)
+            ctx.enqueue_function[_ord_abs_planes_kernel](
+                sw.unsafe_ptr(), sg.unsafe_ptr(), absv.unsafe_ptr(), Int32(total),
+                grid_dim=(_grid(total), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+            )
+            var mags = ctx.enqueue_create_buffer[DType.float32](2)
+            ctx.enqueue_function[deterministic_sum_lanes_kernel[2]](
+                absv.unsafe_ptr(), Int32(total), mags.unsafe_ptr(),
+                grid_dim=1, block_dim=256,
+            )
+            var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
+            ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
+            ctx.synchronize()
+            m0 = Float64(hm[0])
+            m1 = Float64(hm[1])
+            _ = absv^
+            _ = mags^
+            _ = hm^
         var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
         trace.record_scalar_f32(tag + ".scale", scale)
         trace.record_scalar_f32(tag + ".score_std", score_std)
-        _ = absv^
-        _ = mags^
-        _ = hm^
 
         times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
@@ -1624,6 +1718,8 @@ def fit_ordered(
     _ = fv^
     _ = h_fv^
     _ = dummy_mag^
+    _ = d_sums^
+    _ = h_sums^
     _ = loss_stats^
     # the ERROR tracker's best: the held-out curve's with a test set, else
     # the first strict minimum of the learn curve (`error_tracker.h:58-64`)
