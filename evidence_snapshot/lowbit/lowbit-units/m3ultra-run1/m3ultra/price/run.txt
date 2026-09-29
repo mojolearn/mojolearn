@@ -1,0 +1,8 @@
+box=m3ultra
+started=2026-09-29T03:21:43Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=1
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:23:20Z

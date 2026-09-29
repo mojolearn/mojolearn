@@ -1,0 +1,39 @@
+✨ Pixi task (check-gemm-int15-sim-convert-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo
+285737 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bb080000000, nodemask=2)
+285737 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52d7c0000000, nodemask=1)
+== gemm/checks/gemm_int15_sim_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False  convert sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1 against bench/lowbit_quality/arith.py, kind int15
+   column: nvidia  int15 dispatch: mma (lib_int8_matrix_unit_for)
+   vectors: gemm/checks/vectors/int15_sim_vectors.q15, 7 cases, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3
+ok check_sim_vectors_load
+!! GATE FAILED: check_sim_host_codes
+   4x6x33: code 0 of A (row 0, value -3.1291118e-09/0x0xb15707eb) is -859, the simulation has -860
+   DIGEST sim-4x6x33 simulation 0xcabc67299c45baef
+   DIGEST sim-4x6x33 oracle 0xcabc67299c45baef
+   DIGEST sim-16x24x257 simulation 0x33ee1cb7eaade871
+   DIGEST sim-16x24x257 oracle 0x33ee1cb7eaade871
+   DIGEST sim-12x12x64 simulation 0x8b3964f8cfcec2f8
+   DIGEST sim-12x12x64 oracle 0x8b3964f8cfcec2f8
+   DIGEST sim-3x5x4097 simulation 0xf90d75291c0a3e06
+   DIGEST sim-3x5x4097 oracle 0xf90d75291c0a3e06
+   DIGEST sim-1x40x1000 simulation 0x38f3bd7b7732cacd
+   DIGEST sim-1x40x1000 oracle 0x38f3bd7b7732cacd
+   DIGEST sim-2x2x8192 simulation 0xc41b4397e32d71b0
+   DIGEST sim-2x2x8192 oracle 0xc41b4397e32d71b0
+   DIGEST sim-33x17x31 simulation 0x8dfd0414b2131532
+   DIGEST sim-33x17x31 oracle 0x8dfd0414b2131532
+   ok 1172 cells are the simulation's (12 NaN, 85 infinite)
+ok check_sim_host_product
+   DIGEST sim-4x6x33 device 0xcabc67299c45baef
+   DIGEST sim-16x24x257 device 0x33ee1cb7eaade871
+   DIGEST sim-12x12x64 device 0x8b3964f8cfcec2f8
+   DIGEST sim-3x5x4097 device 0xf90d75291c0a3e06
+   DIGEST sim-1x40x1000 device 0x38f3bd7b7732cacd
+   DIGEST sim-2x2x8192 device 0xc41b4397e32d71b0
+   DIGEST sim-33x17x31 device 0x8dfd0414b2131532
+   ok 1172 device cells are the simulation's
+ok check_sim_device_product
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 gate(s) failed
+/root/mojolearn-lowbit-int15/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

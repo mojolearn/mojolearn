@@ -1,0 +1,14 @@
+a.fwd.proj.s2 step 1000 train 1.5936 val 1.6405
+a.fwd.proj.s2 step 2000 train 1.5964 val 1.538
+a.fwd.proj.s2 step 3000 train 1.5802 val 1.5033
+a.fwd.proj.s2 step 4000 train 1.4158 val 1.4695
+a.fwd.proj.s2 step 5000 train 1.5175 val 1.459
+a.fwd.proj.s2 step 6000 train 1.3777 val 1.4447
+DONE a.fwd.proj.s2 val@4000 1.4695193936996906 val@6000 1.4446969677956034 nonfinite None seconds 125.4
+e.fwdbwd.attn.s4 step 1000 train 1.6659 val 1.6508
+e.fwdbwd.attn.s4 step 2000 train 1.5055 val 1.5465
+e.fwdbwd.attn.s4 step 3000 train 1.5941 val 1.5063
+e.fwdbwd.attn.s4 step 4000 train 1.6002 val 1.4698
+e.fwdbwd.attn.s4 step 5000 train 1.4832 val 1.4453
+e.fwdbwd.attn.s4 step 6000 train 1.5087 val 1.4405
+DONE e.fwdbwd.attn.s4 val@4000 1.4697855362073207 val@6000 1.4404677026884893 nonfinite None seconds 1060.9

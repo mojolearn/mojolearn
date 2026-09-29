@@ -1,0 +1,4 @@
+
+$ git fetch -q origin +refs/heads/*:refs/remotes/origin/* +refs/steward/*:refs/steward/*
+
+$ git worktree add -q --detach /Users/ec2-user/mojolearn-wt/steward-m3ultra-b f1e6cb61ca792fec4a71e0b4b13112c8129288f2

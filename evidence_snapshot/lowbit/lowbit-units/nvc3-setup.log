@@ -1,0 +1,8 @@
+gpuq: dispatcher up, lease backstop up
+dev_pod: patch-synced e1c701e56+worktree -> ggsb85k40x5i87:/root/mojolearn-lowbit-units (1679 bytes over merge base a4b906e81)
+nvidia_central: lane lowbit-units is on nvc3 (1 GPU slots, NVIDIA H100 NVL); submit with: tools/nvidia_central.sh submit lowbit-units <script>
+a4b906e8
+PIXI_EXIT=0
+✔ The default environment has been installed.
+NVIDIA H100 NVL, 95830 MiB, 580.159.04
+exit=0

@@ -1,0 +1,5 @@
+gpuq: dispatcher up, lease backstop up
+fatal: could not read Username for 'https://github.com': No such device or address
+fatal: expected flush after ref listing
+dev_pod: could not seed the box's git tree at 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698
+exit=1

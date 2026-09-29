@@ -1,0 +1,8 @@
+case 4x6x33 planted=False e_a=[-38,13] e_b=[-39,13] codes at the clamp: 0
+case 16x24x257 planted=True e_a=[-139,115] e_b=[-139,115] codes at the clamp: 608
+case 12x12x64 planted=True e_a=[-139,115] e_b=[-139,115] codes at the clamp: 156
+case 3x5x4097 planted=False e_a=[-34,-3] e_b=[-32,14] codes at the clamp: 0
+case 1x40x1000 planted=False e_a=[-38,-38] e_b=[-39,20] codes at the clamp: 0
+case 2x2x8192 planted=False e_a=[-27,-2] e_b=[-31,20] codes at the clamp: 0
+case 33x17x31 planted=True e_a=[-139,115] e_b=[-139,115] codes at the clamp: 80
+wrote /root/mojolearn-lowbit-int15/bench/results/lowbit_int15/sim/int15_vectors.bin: 241858 words, 7 cases, 1172 cells (12 NaN, 85 infinite, 329 zero), torch 2.4.1+cu124, arith.py blob 17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3, sha256 4fc64c503ab4cdffdc2d37e7f9b666ac3f82f6949d4ea344c32c3e11d8550cf5

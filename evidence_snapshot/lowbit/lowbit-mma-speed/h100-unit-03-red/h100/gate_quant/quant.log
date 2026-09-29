@@ -1,0 +1,78 @@
+✨ Pixi task (check-quantize-int8-par in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/quantize_int8_par_check.mojo
+231001 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b4f00000000, nodemask=2)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:36: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                    ~~~~~~~~~~~~~~~^~~~~
+                                    unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:36: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                    ~~~~~~~~~~~~~~~^~~~~
+                                    unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+             ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+             ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:28: warning: 'store' is deprecated, use 'unsafe_store' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+            ~~~~~~~~~~~~~~~^~~~~~
+                            unsafe_store
+<unknown>:0: note: 'store' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:340:29: warning: assignment to 'verdict' was never used; assign to '_' instead?
+        var verdict = String("")
+                            ^
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: nvidia  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   ok quantize 9x1  e[0]=-9
+   ok quantize 9x5  e[0]=-5
+   ok quantize 10x32  e[0]=-3
+   ok quantize 9x129  e[0]=-3
+   ok quantize 12x255  e[0]=-3
+   ok quantize 9x1000  e[0]=-3
+   ok quantize 9x1023  e[0]=-3
+   ok quantize 16x1024  e[0]=-3
+   ok quantize 9x4096  e[0]=-3
+   ok quantize 11x4097  e[0]=-3
+   ok quantize 9x14336  e[0]=-3
+   ok quantize 300x96  e[0]=-3
+   quantizer: 36 cases, 0 failed
+ok check_par_quantizer_matches
+   ok quantize and multiply 3x70x1000
+   ok quantize and multiply 33x129x4096
+   ok quantize and multiply 1x300x4097
+   ok quantize and multiply 130x17x96
+   quantize-and-multiply: 4 cases, 0 failed
+ok check_par_quantizer_feeds_the_product
+== 2 gates, 0 failed ==

@@ -1,0 +1,20 @@
+dev_pod: patch-synced 7e977d3d1+worktree -> r29w610uuwkfwy:/root/mojolearn-lowbit-flag (33097 bytes over merge base 45464ced2)
+nvidia_central: lane lowbit-flag is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-flag <script>
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+new file       _gemm_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+new file       tests/test_gemm_profile.py
+import ok 0.8.25 fp32.v1 identical
+import_exit=0
+........................................................................ [ 73%]
+..........................                                               [100%]
+98 passed in 0.84s
+pytest_exit=0

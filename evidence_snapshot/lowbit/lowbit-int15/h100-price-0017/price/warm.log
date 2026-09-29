@@ -1,0 +1,732 @@
+244366 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a8b80000000, nodemask=2)
+== bench/gemm_int15_price_main.mojo [IDENTICAL] ==
+column nvidia
+profiles fp32.v1, int15i64.v1
+int15 dispatch: mma (lib_int8_matrix_unit_for)
+sabotage: none
+repeats 5  mac budget 34359738368  only 
+IDENTITY ONLY: every arm runs once for its digest and NOTHING IS TIMED in this run.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.qkv.t1 fp32.v1 0x920cdd138650a8bd
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x920cdd138650a8bd OP_NT,plan=13
+DIGEST price-llama8b.qkv.t1 int15i64.v1.flat 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t1 int15i64.v1.pieces 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t1 int15i64.v1.mma 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f dispatched,four-unit-products
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.a 0x4bfbfd4a194dd3c3
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x4bfbfd4a194dd3c3 per-call
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.a.parallel 0x4bfbfd4a194dd3c3
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x4bfbfd4a194dd3c3 per-call
+DIGEST conv-llama8b.qkv.t1 convert.int15.planes.a.parallel 0xdd1cf024338b930d
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xdd1cf024338b930d per-call
+DIGEST conv-llama8b.qkv.t1 convert.int15.split.a 0xdd1cf024338b930d
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xdd1cf024338b930d per-call
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.b 0xd7511d5a7d3792ec
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.b.parallel 0xd7511d5a7d3792ec
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t1 convert.int15.planes.b.parallel 0x3a9803f3b6c2415a
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t1 convert.int15.split.b 0x3a9803f3b6c2415a
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.planes 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f planes.a.parallel+product
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.codes 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.planes.rowquant 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f quantize.a+split.a+product
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.planes 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.codes 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.planes.rowquant 0x6c0a74154145a04f
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.qkv.t8 fp32.v1 0xd5677d8a13939709
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xd5677d8a13939709 OP_NT,plan=14
+DIGEST price-llama8b.qkv.t8 int15i64.v1.flat 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t8 int15i64.v1.pieces 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t8 int15i64.v1.mma 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a dispatched,four-unit-products
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.a 0xb78bf34e712fc6ae
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xb78bf34e712fc6ae per-call
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.a.parallel 0xb78bf34e712fc6ae
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xb78bf34e712fc6ae per-call
+DIGEST conv-llama8b.qkv.t8 convert.int15.planes.a.parallel 0x3adff9f2d64aa749
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x3adff9f2d64aa749 per-call
+DIGEST conv-llama8b.qkv.t8 convert.int15.split.a 0x3adff9f2d64aa749
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x3adff9f2d64aa749 per-call
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.b 0x7ada9833a1c6cf07
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.b.parallel 0x7ada9833a1c6cf07
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t8 convert.int15.planes.b.parallel 0x4f6ab0ce3273940
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t8 convert.int15.split.b 0x4f6ab0ce3273940
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.planes 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+product
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.codes 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.planes.rowquant 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a quantize.a+split.a+product
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.planes 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.codes 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.planes.rowquant 0x81664edfe5ebeb5a
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.qkv.t512 fp32.v1 0x67d3d940546b834c
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x67d3d940546b834c OP_NT,plan=10
+DIGEST price-llama8b.qkv.t512 int15i64.v1.flat 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512 int15i64.v1.pieces 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512 int15i64.v1.mma 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da dispatched,four-unit-products
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.a 0x96388d91a5c28f60
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x96388d91a5c28f60 per-call
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.a.parallel 0x96388d91a5c28f60
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x96388d91a5c28f60 per-call
+DIGEST conv-llama8b.qkv.t512 convert.int15.planes.a.parallel 0xb04426ef4d989cc2
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xb04426ef4d989cc2 per-call
+DIGEST conv-llama8b.qkv.t512 convert.int15.split.a 0xb04426ef4d989cc2
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xb04426ef4d989cc2 per-call
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.b 0x83c4a5fdce0c9ef8
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.b.parallel 0x83c4a5fdce0c9ef8
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t512 convert.int15.planes.b.parallel 0x547571ca5138fbe8
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.qkv.t512 convert.int15.split.b 0x547571ca5138fbe8
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.planes 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+product
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.codes 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.planes.rowquant 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da quantize.a+split.a+product
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.planes 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.codes 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.planes.rowquant 0xa9844dfadf1fd6da
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512.bwd_dx  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.qkv.t512.bwd_dx fp32.v1 0xef9cf5a7a4f7f63e
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xef9cf5a7a4f7f63e OP_NN,plan=10
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.flat 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.pieces 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.mma 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a dispatched,four-unit-products
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.a 0x5412e9d77fa8f1b4
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x5412e9d77fa8f1b4 per-call
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.a.parallel 0x5412e9d77fa8f1b4
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x5412e9d77fa8f1b4 per-call
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.planes.a.parallel 0x4d900a1071a39cb2
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x4d900a1071a39cb2 per-call
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.split.a 0x4d900a1071a39cb2
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x4d900a1071a39cb2 per-call
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.b 0xc57f9785ab2999c0
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.b.parallel 0xc57f9785ab2999c0
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.planes.b.parallel 0x22cb22fa7a9b88ff
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x22cb22fa7a9b88ff per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.split.b 0x22cb22fa7a9b88ff
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x22cb22fa7a9b88ff once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.planes 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.codes 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.planes.rowquant 0x6c4eff5b0480823a
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512.bwd_dw  m=4096 n=4096 k=512  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.qkv.t512.bwd_dw fp32.v1 0xe489aab33323c201
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xe489aab33323c201 OP_TN,plan=10
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.flat 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.pieces 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.mma 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 dispatched,four-unit-products
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.a 0xb2ac5568e254c666
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xb2ac5568e254c666 per-call,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.a.parallel 0xb2ac5568e254c666
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xb2ac5568e254c666 per-call,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.planes.a.parallel 0x660ec1446ce3f2a1
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x660ec1446ce3f2a1 per-call,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.split.a 0x660ec1446ce3f2a1
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x660ec1446ce3f2a1 per-call
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.b 0x12961c8aff1fa754
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x12961c8aff1fa754 per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.b.parallel 0x12961c8aff1fa754
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x12961c8aff1fa754 per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.planes.b.parallel 0x7a7bbd8b4dfdf226
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x7a7bbd8b4dfdf226 per-step,transposing
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.split.b 0x7a7bbd8b4dfdf226
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x7a7bbd8b4dfdf226 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.planes 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.codes 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x8ef510e0780e450
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_up.t1 fp32.v1 0x4965ea6af2ff5e61
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4965ea6af2ff5e61 OP_NT,plan=13
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.flat 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.pieces 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.mma 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.a 0xb01c5164b78a8cd9
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xb01c5164b78a8cd9 per-call
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.a.parallel 0xb01c5164b78a8cd9
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xb01c5164b78a8cd9 per-call
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.planes.a.parallel 0x6ca381f7a412a406
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x6ca381f7a412a406 per-call
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.split.a 0x6ca381f7a412a406
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x6ca381f7a412a406 per-call
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.b 0xf305c69146315ce1
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.b.parallel 0xf305c69146315ce1
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.planes.b.parallel 0x4f08c5bb8eef630f
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.split.b 0x4f08c5bb8eef630f
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.planes 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad planes.a.parallel+product
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.codes 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.planes.rowquant 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad quantize.a+split.a+product
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.planes 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.codes 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.planes.rowquant 0xae35d8ef540f67ad
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_up.t8 fp32.v1 0x7b30465d325906e
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x7b30465d325906e OP_NT,plan=14
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.flat 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.pieces 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.mma 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.a 0xc41e630721b559a8
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xc41e630721b559a8 per-call
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.a.parallel 0xc41e630721b559a8
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xc41e630721b559a8 per-call
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.planes.a.parallel 0xa65514e80d97e412
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xa65514e80d97e412 per-call
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.split.a 0xa65514e80d97e412
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xa65514e80d97e412 per-call
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.b 0x5526319a1fd404eb
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.b.parallel 0x5526319a1fd404eb
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.planes.b.parallel 0x1a382def955ed027
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.split.b 0x1a382def955ed027
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.planes 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+product
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.codes 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.planes.rowquant 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 quantize.a+split.a+product
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.planes 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.codes 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.planes.rowquant 0x5dd8142ffbce1023
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_up.t512 fp32.v1 0x27a166783c45f9f0
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x27a166783c45f9f0 OP_NT,plan=10
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.flat 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.pieces 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.mma 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.a 0xb4bf94dcc3facd06
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xb4bf94dcc3facd06 per-call
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.a.parallel 0xb4bf94dcc3facd06
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xb4bf94dcc3facd06 per-call
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.planes.a.parallel 0xa995a6c363c89d21
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xa995a6c363c89d21 per-call
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.split.a 0xa995a6c363c89d21
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xa995a6c363c89d21 per-call
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.b 0x828a1731c89221c0
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.b.parallel 0x828a1731c89221c0
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.planes.b.parallel 0x74a888a8034727d3
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.split.b 0x74a888a8034727d3
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.planes 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 planes.a.parallel+product
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.codes 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.planes.rowquant 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 quantize.a+split.a+product
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.planes 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.codes 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.planes.rowquant 0x31746954b2b719d4
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512.bwd_dx  m=512 n=4096 k=14336  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dx fp32.v1 0x88081a26a7d76edd
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x88081a26a7d76edd OP_NN,plan=10
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.flat 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.pieces 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.mma 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.a 0x702c87e35b5a7ee8
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x702c87e35b5a7ee8 per-call
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.a.parallel 0x702c87e35b5a7ee8
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x702c87e35b5a7ee8 per-call
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.planes.a.parallel 0x99df5fc34d66c8af
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x99df5fc34d66c8af per-call
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.split.a 0x99df5fc34d66c8af
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x99df5fc34d66c8af per-call
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.b 0xda60585d9b0dc19d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xda60585d9b0dc19d per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.b.parallel 0xda60585d9b0dc19d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xda60585d9b0dc19d per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.planes.b.parallel 0xad29fb7fad789398
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xad29fb7fad789398 per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.split.b 0xad29fb7fad789398
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xad29fb7fad789398 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.planes 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.codes 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.planes.rowquant 0xd25adc12f122f248
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512.bwd_dw  m=14336 n=4096 k=512  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dw fp32.v1 0x64a7d4375083cf3f
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x64a7d4375083cf3f OP_TN,plan=10
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.flat 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.pieces 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.mma 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.a 0xb5be61f74714be0b
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xb5be61f74714be0b per-call,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.a.parallel 0xb5be61f74714be0b
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xb5be61f74714be0b per-call,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.planes.a.parallel 0xeb86f345a0f5c39a
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xeb86f345a0f5c39a per-call,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.split.a 0xeb86f345a0f5c39a
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xeb86f345a0f5c39a per-call
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.b 0x4020b24addf55360
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x4020b24addf55360 per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.b.parallel 0x4020b24addf55360
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x4020b24addf55360 per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.planes.b.parallel 0xe2e3bcc68ceb9073
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xe2e3bcc68ceb9073 per-step,transposing
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.split.b 0xe2e3bcc68ceb9073
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xe2e3bcc68ceb9073 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.planes 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.codes 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x7f5a1c9a4096e46d
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_down.t1 fp32.v1 0x4efb8e54c724fa9
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4efb8e54c724fa9 OP_NT,plan=13
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.flat 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.pieces 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.mma 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.a 0x1eb5f3ac580f624a
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x1eb5f3ac580f624a per-call
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.a.parallel 0x1eb5f3ac580f624a
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x1eb5f3ac580f624a per-call
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.planes.a.parallel 0x582710daad02888
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x582710daad02888 per-call
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.split.a 0x582710daad02888
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x582710daad02888 per-call
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.b 0xa7c3c54a8d0b275e
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.b.parallel 0xa7c3c54a8d0b275e
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.planes.b.parallel 0x43dfc5a2a3228278
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.split.b 0x43dfc5a2a3228278
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.planes 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+product
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.codes 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.planes.rowquant 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 quantize.a+split.a+product
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.planes 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.codes 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.planes.rowquant 0xbad9a98c45aa8707
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_down.t8 fp32.v1 0xfb21004541ae3e8e
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xfb21004541ae3e8e OP_NT,plan=14
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.flat 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.pieces 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.mma 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.a 0xf9ccba3820fc369f
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xf9ccba3820fc369f per-call
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.a.parallel 0xf9ccba3820fc369f
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xf9ccba3820fc369f per-call
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.planes.a.parallel 0xaaaac9d17ce8bc07
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xaaaac9d17ce8bc07 per-call
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.split.a 0xaaaac9d17ce8bc07
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xaaaac9d17ce8bc07 per-call
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.b 0xf292ee1fa4d75016
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.b.parallel 0xf292ee1fa4d75016
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.planes.b.parallel 0x7c10177c2322eed
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.split.b 0x7c10177c2322eed
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.planes 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c planes.a.parallel+product
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.codes 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.planes.rowquant 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c quantize.a+split.a+product
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.planes 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.codes 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.planes.rowquant 0x5d341feda0541b7c
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_down.t512 fp32.v1 0x4743c97cb961339e
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4743c97cb961339e OP_NT,plan=10
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.flat 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.pieces 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.mma 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.quantize.a 0x3f6f13fd8bf5bc70
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x3f6f13fd8bf5bc70 per-call
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.quantize.a.parallel 0x3f6f13fd8bf5bc70
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x3f6f13fd8bf5bc70 per-call
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.planes.a.parallel 0xcf3c04152197ad4f
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xcf3c04152197ad4f per-call
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.split.a 0xcf3c04152197ad4f
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xcf3c04152197ad4f per-call
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.quantize.b 0xc9ac78579ce12a0f
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.quantize.b.parallel 0xc9ac78579ce12a0f
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.planes.b.parallel 0xed9bafdc9a6f7b8d
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.mlp_down.t512 convert.int15.split.b 0xed9bafdc9a6f7b8d
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.mlp_down.t512 inference.int15i64.v1.planes 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 planes.a.parallel+product
+DIGEST price-llama8b.mlp_down.t512 inference.int15i64.v1.codes 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t512 inference.int15i64.v1.planes.rowquant 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 quantize.a+split.a+product
+DIGEST price-llama8b.mlp_down.t512 training.int15i64.v1.planes 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_down.t512 training.int15i64.v1.codes 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t512 training.int15i64.v1.planes.rowquant 0x29a5b58e07315db6
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t512.bwd_dx  m=512 n=14336 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_down.t512.bwd_dx fp32.v1 0x530556760e570c80
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x530556760e570c80 OP_NN,plan=10
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.flat 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.pieces 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.mma 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.quantize.a 0x641e827791a67e8e
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x641e827791a67e8e per-call
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.quantize.a.parallel 0x641e827791a67e8e
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x641e827791a67e8e per-call
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.planes.a.parallel 0xaa13c116215e42ec
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xaa13c116215e42ec per-call
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.split.a 0xaa13c116215e42ec
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xaa13c116215e42ec per-call
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.quantize.b 0xec3851bf8dee716b
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xec3851bf8dee716b per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.quantize.b.parallel 0xec3851bf8dee716b
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xec3851bf8dee716b per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.planes.b.parallel 0xef6837087a440a32
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xef6837087a440a32 per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dx convert.int15.split.b 0xef6837087a440a32
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xef6837087a440a32 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.int15i64.v1.planes 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.int15i64.v1.codes 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.int15i64.v1.planes.rowquant 0xf02913c8e388c6f0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t512.bwd_dw  m=4096 n=14336 k=512  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.mlp_down.t512.bwd_dw fp32.v1 0x57cdff62332dd579
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x57cdff62332dd579 OP_TN,plan=10
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.flat 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.pieces 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.mma 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f dispatched,four-unit-products
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.quantize.a 0x1dbcacc74a82c682
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.quantize.a.parallel 0x1dbcacc74a82c682
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.planes.a.parallel 0x6054e7041e529e7d
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x6054e7041e529e7d per-call,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.split.a 0x6054e7041e529e7d
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x6054e7041e529e7d per-call
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.quantize.b 0xeca44c0da5a995a0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.quantize.b.parallel 0xeca44c0da5a995a0
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.planes.b.parallel 0xb0e2c0513a836af7
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0xb0e2c0513a836af7 per-step,transposing
+DIGEST conv-llama8b.mlp_down.t512.bwd_dw convert.int15.split.b 0xb0e2c0513a836af7
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0xb0e2c0513a836af7 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.int15i64.v1.planes 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.int15i64.v1.codes 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x648fb9758841ed0f
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.lm_head.t1 fp32.v1 0xcdc134cbce391535
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xcdc134cbce391535 OP_NT,plan=13
+DIGEST price-llama8b.lm_head.t1 int15i64.v1.flat 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t1 int15i64.v1.pieces 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t1 int15i64.v1.mma 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 dispatched,four-unit-products
+DIGEST conv-llama8b.lm_head.t1 convert.int15.quantize.a 0x6707375da9d66f3
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x6707375da9d66f3 per-call
+DIGEST conv-llama8b.lm_head.t1 convert.int15.quantize.a.parallel 0x6707375da9d66f3
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x6707375da9d66f3 per-call
+DIGEST conv-llama8b.lm_head.t1 convert.int15.planes.a.parallel 0x421b169685b8e06f
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x421b169685b8e06f per-call
+DIGEST conv-llama8b.lm_head.t1 convert.int15.split.a 0x421b169685b8e06f
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x421b169685b8e06f per-call
+DIGEST conv-llama8b.lm_head.t1 convert.int15.quantize.b 0x504628acd6e3fdcd
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t1 convert.int15.quantize.b.parallel 0x504628acd6e3fdcd
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t1 convert.int15.planes.b.parallel 0x36f96c5bbb978213
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t1 convert.int15.split.b 0x36f96c5bbb978213
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.lm_head.t1 inference.int15i64.v1.planes 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 planes.a.parallel+product
+DIGEST price-llama8b.lm_head.t1 inference.int15i64.v1.codes 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t1 inference.int15i64.v1.planes.rowquant 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 quantize.a+split.a+product
+DIGEST price-llama8b.lm_head.t1 training.int15i64.v1.planes 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.lm_head.t1 training.int15i64.v1.codes 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t1 training.int15i64.v1.planes.rowquant 0x18d3d46aaa413329
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+DIGEST fp32-llama8b.lm_head.t8 fp32.v1 0x3ebab59d0da21444
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x3ebab59d0da21444 OP_NT,plan=14
+DIGEST price-llama8b.lm_head.t8 int15i64.v1.flat 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t8 int15i64.v1.pieces 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t8 int15i64.v1.mma 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce dispatched,four-unit-products
+DIGEST conv-llama8b.lm_head.t8 convert.int15.quantize.a 0x2f87955adcc70c86
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0x2f87955adcc70c86 per-call
+DIGEST conv-llama8b.lm_head.t8 convert.int15.quantize.a.parallel 0x2f87955adcc70c86
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0x2f87955adcc70c86 per-call
+DIGEST conv-llama8b.lm_head.t8 convert.int15.planes.a.parallel 0x3d2b9462e8adae61
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x3d2b9462e8adae61 per-call
+DIGEST conv-llama8b.lm_head.t8 convert.int15.split.a 0x3d2b9462e8adae61
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x3d2b9462e8adae61 per-call
+DIGEST conv-llama8b.lm_head.t8 convert.int15.quantize.b 0xbbc8066c3f80c566
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t8 convert.int15.quantize.b.parallel 0xbbc8066c3f80c566
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t8 convert.int15.planes.b.parallel 0x2e7c3b24b2073f13
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t8 convert.int15.split.b 0x2e7c3b24b2073f13
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.lm_head.t8 inference.int15i64.v1.planes 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+product
+DIGEST price-llama8b.lm_head.t8 inference.int15i64.v1.codes 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t8 inference.int15i64.v1.planes.rowquant 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce quantize.a+split.a+product
+DIGEST price-llama8b.lm_head.t8 training.int15i64.v1.planes 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.lm_head.t8 training.int15i64.v1.codes 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t8 training.int15i64.v1.planes.rowquant 0x4a40a5e39d7bbdce
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.lm_head.t512 fp32.v1 0x84fd143bb625cf70
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 not-timed not-timed not-timed GMAC/s 0x84fd143bb625cf70 OP_NT,plan=10
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.flat 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.pieces 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.mma 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 dispatched,four-unit-products
+DIGEST conv-llama8b.lm_head.t512 convert.int15.quantize.a 0xbae59394889813d4
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xbae59394889813d4 per-call
+DIGEST conv-llama8b.lm_head.t512 convert.int15.quantize.a.parallel 0xbae59394889813d4
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xbae59394889813d4 per-call
+DIGEST conv-llama8b.lm_head.t512 convert.int15.planes.a.parallel 0x8e302e8f2144f554
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0x8e302e8f2144f554 per-call
+DIGEST conv-llama8b.lm_head.t512 convert.int15.split.a 0x8e302e8f2144f554
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.a not-timed not-timed not-timed Gelem/s 0x8e302e8f2144f554 per-call
+DIGEST conv-llama8b.lm_head.t512 convert.int15.quantize.b 0xc8dab253643ca495
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t512 convert.int15.quantize.b.parallel 0xc8dab253643ca495
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t512 convert.int15.planes.b.parallel 0x856f7302c953e00d
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+DIGEST conv-llama8b.lm_head.t512 convert.int15.split.b 0x856f7302c953e00d
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+DIGEST price-llama8b.lm_head.t512 inference.int15i64.v1.planes 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 planes.a.parallel+product
+DIGEST price-llama8b.lm_head.t512 inference.int15i64.v1.codes 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 quantize.a.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t512 inference.int15i64.v1.planes.rowquant 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 quantize.a+split.a+product
+DIGEST price-llama8b.lm_head.t512 training.int15i64.v1.planes 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.lm_head.t512 training.int15i64.v1.codes 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t512 training.int15i64.v1.planes.rowquant 0x60f6165f74f17867
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.lm_head.t512.bwd_dx  m=512 n=512 k=128256  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.lm_head.t512.bwd_dx fp32.v1 0xafccdbb3aae1fc36
+INT15 nvidia llama8b.lm_head.t512.bwd_dx 512 512 128256 CAPPED fp32.v1 not-timed not-timed not-timed GMAC/s 0xafccdbb3aae1fc36 OP_NN,plan=10
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.flat REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.pieces REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.mma REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.planes.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.split.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.planes.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.split.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+
+== llama8b.lm_head.t512.bwd_dw  m=16032 n=4096 k=512  CAPPED  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+DIGEST fp32-llama8b.lm_head.t512.bwd_dw fp32.v1 0xdb68419e4a2093b7
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED fp32.v1 not-timed not-timed not-timed GMAC/s 0xdb68419e4a2093b7 OP_TN,plan=10
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.flat 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.pieces 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.pieces not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched(the-column-has-the-unit)
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.mma 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.mma not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 dispatched,four-unit-products
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.quantize.a 0xbd776d10a4327b97
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a not-timed not-timed not-timed Gelem/s 0xbd776d10a4327b97 per-call,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.quantize.a.parallel 0xbd776d10a4327b97
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a.parallel not-timed not-timed not-timed Gelem/s 0xbd776d10a4327b97 per-call,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.planes.a.parallel 0xe10b55c37d468a96
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.a.parallel not-timed not-timed not-timed Gelem/s 0xe10b55c37d468a96 per-call,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.split.a 0xe10b55c37d468a96
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.a not-timed not-timed not-timed Gelem/s 0xe10b55c37d468a96 per-call
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.quantize.b 0x97f820265d8cb72
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b not-timed not-timed not-timed Gelem/s 0x97f820265d8cb72 per-step,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.quantize.b.parallel 0x97f820265d8cb72
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b.parallel not-timed not-timed not-timed Gelem/s 0x97f820265d8cb72 per-step,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.planes.b.parallel 0x90f880954a62bcd5
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.b.parallel not-timed not-timed not-timed Gelem/s 0x90f880954a62bcd5 per-step,transposing
+DIGEST conv-llama8b.lm_head.t512.bwd_dw convert.int15.split.b 0x90f880954a62bcd5
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.b not-timed not-timed not-timed Gelem/s 0x90f880954a62bcd5 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.int15i64.v1.planes 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 planes.a.parallel+planes.b.parallel+product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.int15i64.v1.codes 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.codes not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x97ac9bb1c8a6a3b4
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes.rowquant not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a+quantize.b+split.a+split.b+product
+
+== done [IDENTICAL]: 20 rows ==

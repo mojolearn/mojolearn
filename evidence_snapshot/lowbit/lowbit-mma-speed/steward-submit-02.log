@@ -1,0 +1,9 @@
+== do-amd (mi325x): unit-gate pieces-gate quant-gate full-price
+do-amd: fetched 464d5002a34c from origin into ~/mojolearn
+queued speed request 1790656243553-speed-lowbit-mma-speed-464d5002a3 on do-amd
+== m3ultra-b (m3ultra): quant-gate quant-price
+m3ultra-b: pushed 464d5002a34c to its bare repo and fetched it into ~/mojolearn
+queued speed request 1790656246400-speed-lowbit-mma-speed-464d5002a3 on m3ultra-b
+== m2pro (m2pro): quant-gate quant-price
+m2pro: pushed 464d5002a34c to its bare repo and fetched it into ~/mojolearn
+queued speed request 1790656250587-speed-lowbit-mma-speed-464d5002a3 on m2pro

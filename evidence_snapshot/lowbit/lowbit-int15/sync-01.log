@@ -1,0 +1,4 @@
+gpuq: dispatcher up, lease backstop up
+dev_pod: patch-synced 02a65fc42+worktree -> ggsb85k40x5i87:/root/mojolearn-lowbit-int15 (27097 bytes over merge base 45464ced2)
+nvidia_central: lane lowbit-int15 is on nvc3 (1 GPU slots, NVIDIA H100 NVL); submit with: tools/nvidia_central.sh submit lowbit-int15 <script>
+sync exit=0

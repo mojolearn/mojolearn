@@ -1,0 +1,4 @@
+
+$ git fetch -q origin +refs/heads/*:refs/remotes/origin/* +refs/steward/*:refs/steward/*
+
+$ git checkout -q --detach ae56d81c373360fd0fe9bbb6f3a7ef80b55ab8b4

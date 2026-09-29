@@ -1,0 +1,41 @@
+== tools/vendor_gemm_price.py ==
+  device      : Apple GPU (mps)
+  library     : MPS/MPSGraph
+  build       : torch 2.13.0, torch 2.13.0
+  shapes      : 12 of 20, parsed from bench/gemm_shapes.mojo (--only llama8b)
+  COMPARISON ONLY: a vendor library's arithmetic is the vendor's; no arm
+                here carries an identity claim and none is hashed.
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict only, meaning torch's DEFAULT for this backend.
+                On ROCm that default is off, but CDNA3 does have an XF32
+                matrix mode that the same allow_tf32 switch reaches, so
+                this is strict FP32 by default rather than by assertion.
+                An XF32 arm is OWED here the way tf32 is measured on CUDA.
+  bf16 arm    : both operands torch.bfloat16, product in bf16 (allow_tf32 off).
+
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.9410 ms       35.7 GF/s
+VENDORPRICE bf16       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.6908 ms       48.6 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          1.9498 ms      137.7 GF/s
+VENDORPRICE bf16       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          1.1721 ms      229.0 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          3.6535 ms     4702.4 GF/s
+VENDORPRICE bf16       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          5.6663 ms     3031.9 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          2.0024 ms       58.7 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          1.1575 ms      101.5 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          2.0945 ms      448.6 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          1.5861 ms      592.3 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096         10.4447 ms     5756.9 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096         18.3253 ms     3281.2 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         1.6173 ms       72.6 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         1.4094 ms       83.3 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         2.5292 ms      371.5 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         1.5827 ms      593.6 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336        11.2181 ms     5360.0 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336        19.3677 ms     3104.6 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096         12.8662 ms       81.7 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          6.0240 ms      174.4 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096         17.1264 ms      490.8 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          8.3946 ms     1001.3 GF/s
+VENDORPRICE strict     llama8b.lm_head.t512             NT m=512     n=128256  k=4096        122.9330 ms     4375.9 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t512             NT m=512     n=128256  k=4096        199.7351 ms     2693.3 GF/s
+
+  wrote /Users/ec2-user/mojolearn-wt/steward-m2pro/bench/results/lowbit_units/m2pro/vendor/vendor_price.json

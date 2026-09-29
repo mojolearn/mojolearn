@@ -1,0 +1,32 @@
+NOT COMPARED llama8b.qkv.t1 fp32.v1: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 bf16f32.v1.fused: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 bf16f32.v1.widen: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 int8i32.v1.flat: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 int8i32.v1.mma: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 convert.int8.quantize.a: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 convert.int8.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 convert.bf16.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 convert.bf16.widen.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t1 convert.int8.dequantize.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 fp32.v1: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 bf16f32.v1.fused: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 bf16f32.v1.widen: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 int8i32.v1.flat: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 int8i32.v1.mma: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 convert.int8.quantize.a: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 convert.int8.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 convert.bf16.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 convert.bf16.widen.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t8 convert.int8.dequantize.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 fp32.v1: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 bf16f32.v1.fused: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 bf16f32.v1.widen: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 int8i32.v1.flat: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 int8i32.v1.mma: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 convert.int8.quantize.a: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 convert.int8.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 convert.bf16.pack.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 convert.bf16.widen.b: the clean run has no such row
+NOT COMPARED llama8b.qkv.t512 convert.int8.dequantize.b: the clean run has no such row
+sabotage comparison: 0 compared, 0 differed, 0 did not, 30 not compared
+VERDICT: NOTHING COMPARED, which is a failure

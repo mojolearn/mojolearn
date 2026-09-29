@@ -1,0 +1,556 @@
+{
+ "schema": "mojolearn.lowbit_quality.backward_vectors.v1",
+ "commit": "a5e9522f027e29c45a83f1bd36f9c0b232ff3eaa",
+ "file": "int15_backward_vectors.q15",
+ "sha256": "8e8c6824315b7f9aad894c08c42bf269dadbc6973caaeab3ce5183ca8f04df79",
+ "words": 884750,
+ "cases": 18,
+ "arith_blob": "c60a455c601e30b5a7cd3a1c47f1ad82f450f681",
+ "source_blobs": {
+  "arith.py": "c60a455c601e30b5a7cd3a1c47f1ad82f450f681",
+  "byte_lm_train.py": "2d40524aeefa8810e15c3b35eae74774afec76d9",
+  "backward_export.py": "72e0de8d339a8988684f69a60944a7f2938f1666"
+ },
+ "rule": "every product quantizes its own operands from their float32 values, along that product's own contracted extent; codes are never carried between products and never transposed",
+ "model_profile": "mojolearn.byte-lm.b32-l128-d128-h4-kv2-hd32-ff256-v256-blocks4.fp32.v3",
+ "seed": 0,
+ "steps_before": 50,
+ "loss": 2.737419366836548,
+ "initial_parameters_sha256": "115568951bab0333ca0948d58ff1d68481860c25f4d0cd748961720e77ef2d32",
+ "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+ "device": "cpu",
+ "torch": "2.4.1+cu124",
+ "rows_cut_to": 12,
+ "carried_codes_rule_cells_differing": 312,
+ "manifest": [
+  {
+   "case": 0,
+   "product": "block0.w_q",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    4096,
+    128
+   ],
+   "full_shape_of_B": [
+    128,
+    128
+   ],
+   "A_zero_codes": 0.0,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -13,
+    -12
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 1,
+   "product": "block0.w_q",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 4096,
+   "full_shape_of_A": [
+    128,
+    4096
+   ],
+   "full_shape_of_B": [
+    128,
+    4096
+   ],
+   "A_zero_codes": 0.06565348307291667,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -28,
+    -25
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 2,
+   "product": "block0.w_q",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    4096,
+    128
+   ],
+   "full_shape_of_B": [
+    128,
+    128
+   ],
+   "A_zero_codes": 0.08984375,
+   "B_zero_codes": 0.0006510416666666666,
+   "A_exponents": [
+    -32,
+    0
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 132,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 0
+  },
+  {
+   "case": 3,
+   "product": "block1.w_gate",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    4096,
+    128
+   ],
+   "full_shape_of_B": [
+    256,
+    128
+   ],
+   "A_zero_codes": 0.0006510416666666666,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -12,
+    -12
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 4,
+   "product": "block1.w_gate",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 4096,
+   "full_shape_of_A": [
+    256,
+    4096
+   ],
+   "full_shape_of_B": [
+    128,
+    4096
+   ],
+   "A_zero_codes": 0.008443196614583334,
+   "B_zero_codes": 0.0002848307291666667,
+   "A_exponents": [
+    -29,
+    -27
+   ],
+   "B_exponents": [
+    -12,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 5,
+   "product": "block1.w_gate",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 256,
+   "full_shape_of_A": [
+    4096,
+    256
+   ],
+   "full_shape_of_B": [
+    128,
+    256
+   ],
+   "A_zero_codes": 0.0068359375,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -29,
+    -27
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 0
+  },
+  {
+   "case": 6,
+   "product": "block3.w_down",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 256,
+   "full_shape_of_A": [
+    4096,
+    256
+   ],
+   "full_shape_of_B": [
+    128,
+    256
+   ],
+   "A_zero_codes": 0.0013020833333333333,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -13,
+    -12
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 7,
+   "product": "block3.w_down",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 4096,
+   "full_shape_of_A": [
+    128,
+    4096
+   ],
+   "full_shape_of_B": [
+    256,
+    4096
+   ],
+   "A_zero_codes": 8.138020833333333e-05,
+   "B_zero_codes": 0.0011800130208333333,
+   "A_exponents": [
+    -28,
+    -28
+   ],
+   "B_exponents": [
+    -15,
+    -11
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 8,
+   "product": "block3.w_down",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    4096,
+    128
+   ],
+   "full_shape_of_B": [
+    256,
+    128
+   ],
+   "A_zero_codes": 0.0006510416666666666,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -29,
+    -28
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 0
+  },
+  {
+   "case": 9,
+   "product": "lm_head",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    4096,
+    128
+   ],
+   "full_shape_of_B": [
+    256,
+    128
+   ],
+   "A_zero_codes": 0.0,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -11,
+    -10
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 10,
+   "product": "lm_head",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 4096,
+   "full_shape_of_A": [
+    256,
+    4096
+   ],
+   "full_shape_of_B": [
+    128,
+    4096
+   ],
+   "A_zero_codes": 0.08317057291666667,
+   "B_zero_codes": 6.103515625e-05,
+   "A_exponents": [
+    -37,
+    -26
+   ],
+   "B_exponents": [
+    -12,
+    -10
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 11,
+   "product": "lm_head",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 256,
+   "full_shape_of_A": [
+    4096,
+    256
+   ],
+   "full_shape_of_B": [
+    128,
+    256
+   ],
+   "A_zero_codes": 0.6780598958333334,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -27,
+    -26
+   ],
+   "B_exponents": [
+    -16,
+    -16
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 84
+  },
+  {
+   "case": 12,
+   "product": "block1.attn_qk",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 32,
+   "full_shape_of_A": [
+    128,
+    32
+   ],
+   "full_shape_of_B": [
+    128,
+    32
+   ],
+   "A_zero_codes": 0.0,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -13,
+    -12
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 13,
+   "product": "block1.attn_qk",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    128,
+    128
+   ],
+   "full_shape_of_B": [
+    32,
+    128
+   ],
+   "A_zero_codes": 0.046875,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -34,
+    -31
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 14,
+   "product": "block1.attn_qk",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    128,
+    128
+   ],
+   "full_shape_of_B": [
+    32,
+    128
+   ],
+   "A_zero_codes": 0.9498697916666666,
+   "B_zero_codes": 0.0013020833333333333,
+   "A_exponents": [
+    -34,
+    0
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 126,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 84
+  },
+  {
+   "case": 15,
+   "product": "block2.attn_pv",
+   "which": "forward",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    128,
+    128
+   ],
+   "full_shape_of_B": [
+    32,
+    128
+   ],
+   "A_zero_codes": 0.9505208333333334,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -15,
+    -13
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 134,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 16,
+   "product": "block2.attn_pv",
+   "which": "weight gradient",
+   "m": 12,
+   "n": 12,
+   "k": 128,
+   "full_shape_of_A": [
+    32,
+    128
+   ],
+   "full_shape_of_B": [
+    128,
+    128
+   ],
+   "A_zero_codes": 0.0,
+   "B_zero_codes": 0.21875,
+   "A_exponents": [
+    -29,
+    -28
+   ],
+   "B_exponents": [
+    -18,
+    -13
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0
+  },
+  {
+   "case": 17,
+   "product": "block2.attn_pv",
+   "which": "input gradient",
+   "m": 12,
+   "n": 12,
+   "k": 32,
+   "full_shape_of_A": [
+    128,
+    32
+   ],
+   "full_shape_of_B": [
+    128,
+    32
+   ],
+   "A_zero_codes": 0.0,
+   "B_zero_codes": 0.0,
+   "A_exponents": [
+    -30,
+    -28
+   ],
+   "B_exponents": [
+    -13,
+    -12
+   ],
+   "recomputed_bits_differing": 0,
+   "sabotage_rounding_bits_differing": 144,
+   "nonfinite_cells": 0,
+   "carried_codes_rule_bits_differing": 144
+  }
+ ],
+ "verdict": "PASS"
+}

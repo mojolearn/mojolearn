@@ -1,0 +1,43 @@
+nvidia_central: lane lowbit-flag is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-flag <script>
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+new file       _numeric_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  _training_impl.py
+base==release  _byte_lm_host.py
+base==release  _byte_lm_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+new file       tests/test_numeric_profile.py
+import ok 0.8.25 fp32_v1 identical
+import_exit=0
+==================================== ERRORS ====================================
+_ ERROR collecting lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_training_primitives_surface.py _
+ImportError while importing test module '/root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_training_primitives_surface.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+mojolearn-lowbit-flag/.pixi/envs/test/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_training_primitives_surface.py:25: in <module>
+    from mojolearn.tests._expose_d_harness import Report, bind_or_exit, mode, run
+E   ModuleNotFoundError: No module named 'mojolearn.tests._expose_d_harness'
+_ ERROR collecting lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_byte_lm_host_trainer.py _
+ImportError while importing test module '/root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_byte_lm_host_trainer.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+mojolearn-lowbit-flag/.pixi/envs/test/lib/python3.14/importlib/__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_byte_lm_host_trainer.py:24: in <module>
+    from mojolearn.tests.test_byte_lm_host import fake_host  # noqa: F401  (fixture)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   ModuleNotFoundError: No module named 'mojolearn.tests.test_byte_lm_host'
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!!
+2 errors in 0.65s
+pytest_exit=2

@@ -1,0 +1,6 @@
+box=m2pro
+started=2026-09-29T02:47:26Z
+tree_head=50ae5ae2788874379387fd1e082301a0823e8e15 dirty_files=31
+machine=Apple M2 Pro macOS 26.7
+finished=2026-09-29T02:47:44Z
+verdict=GREEN every expected outcome held (see status.tsv)

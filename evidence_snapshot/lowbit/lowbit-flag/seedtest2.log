@@ -1,0 +1,22 @@
+2026-09-29T02:40:58Z
+gpuq: dispatcher up, lease backstop up
+dev_pod: GitHub refused the box; shipping 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 from this checkout (less the HEAD the box holds: none)
+dev_pod: patch-synced cb95f50ea+worktree -> r29w610uuwkfwy:/root/mojolearn-lowbit-seedtest2 (26125 bytes over merge base 45464ced2)
+nvidia_central: lane lowbit-seedtest2 is on nvc1 (2 GPU slots, NVIDIA GeForce RTX 4090); submit with: tools/nvidia_central.sh submit lowbit-seedtest2 <script>
+sync_exit=0
+2026-09-29T02:53:52Z
+box HEAD 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698
+shallow: 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698
+ M python/mojolearn/__init__.py
+ M python/mojolearn/_samba_impl.py
+ M python/mojolearn/models/causal_lm.py
+ M python/mojolearn/models/parallel_causal_lm.py
+ M tools/dev_pod.sh
+?? python/mojolearn/_gemm_profile.py
+?? python/mojolearn/tests/test_gemm_profile.py
+FLAG_FILE_PRESENT
+355M
+26414
+26414
+INDEX_EQUAL_TO_GITHUB_SEEDED_TREE
+check_exit=0

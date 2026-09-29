@@ -1,0 +1,325 @@
+273999 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a8f80000000, nodemask=2)
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column nvidia
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: mma (lib_int8_matrix_unit_for)
+sabotage: price ONE_BIT_OF_THE_LAST_CELL  lowbit none  apple chunk none  parallel quantizer none  tuned unit none
+repeats 1  mac budget 34359738368  only qkv  arms fp32.v1,int8i32.v1.flat,int8i32.v1.mma*,probe.int8.mma*,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1.tuned,training.int8i32.v1.tuned,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.fp32.v1.device 0.077456
+   device-bits lowbit.llama8b.qkv.t1.fp32.v1.device 0.077456/0x3fb3d4280ae10492
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0775 0.0775 216.6032 GMAC/s 0x920cdc138650a70a plan=13
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 0.668625
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.flat.device 0.668625/0x3fe565604189374c
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 0.6686 0.6686 25.0921 GMAC/s 0x8a9226b93e43091a not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.device 0.161267
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.device 0.161267/0x3fc4a465a57646ae
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.1613 0.1613 104.0338 GMAC/s 0x8a9226b93e43091a dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.quantize.a.par.device 0.01359
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.quantize.a.par.device 0.01359/0x3f8bd512ec6bce85
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.0136 0.0136 0.3014 Gelem/s 0x542798bda1472383 per-call,block=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.convert.int8.pack.b.par.device 0.059037
+   device-bits lowbit.llama8b.qkv.t1.convert.int8.pack.b.par.device 0.059037/0x3fae3a19008205ff
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.0590 0.0590 284.1814 Gelem/s 0x890ef69c534d0ca9 once-per-weight,block=1
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.186737
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.186737/0x3fc7e6ff7dfa00e2
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.1867 0.1867 89.8441 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.223781
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.223781/0x3fcca4db163baba8
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.2238 0.2238 74.9716 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.423983
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.423983/0x3fdb228997c3d684
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.4240 0.4240 39.5705 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.37117
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.37117/0x3fd7c13fd0d0678c
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.3712 0.3712 45.2009 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.158502
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.158502/0x3fc449cb252ce033
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1585 0.1585 105.8486 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.146553
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.146553/0x3fc2c23fab10ba62
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1466 0.1466 114.4788 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.12979
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.12979/0x3fc09cf56eac8605
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.1298 0.1298 129.2643 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.136025
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.136025/0x3fc1694467381d7e
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1360 0.1360 123.3392 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.17123
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.17123/0x3fc5eadd590c0ad0
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1712 0.1712 97.9806 GMAC/s 0x8a9226b93e43091a the-tuned-launcher's-plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.052452
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.052452/0x3faadafd113836a8
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0525 0.0525 319.8585 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.077668
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.077668/0x3fb3e20ccff21b3b
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0777 0.0777 216.0119 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.066909
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.066909/0x3fb120f2becedd48
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0669 0.0669 250.7468 GMAC/s 0x8a9226b93e43091a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.064249
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.064249/0x3fb0729f59ccfaf0
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 0.0642 0.0642 261.1280 GMAC/s 0x8a9226b93e43091a plan
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.reference-loads.device 0.142959
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.reference-loads.device 0.142959/0x3fc24c7b02d59d56
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.direct.reference-loads 0.1430 0.1430 117.3568 GMAC/s 0x8a9226b93e43091a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.aligned-loads.device 0.085641
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.aligned-loads.device 0.085641/0x3fb5ec918e325d4a
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads 0.0856 0.0856 195.9017 GMAC/s 0x8a9226b93e43091a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.065868
+   device-bits lowbit.llama8b.qkv.t1.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.065868/0x3fb0dcb9a9da597d
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads.scalar-acc 0.0659 0.0659 254.7097 GMAC/s 0x8a9226b93e43091a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.probe.int8.mma.loads-hoisted.device 0.015226
+   device-bits lowbit.llama8b.qkv.t1.probe.int8.mma.loads-hoisted.device 0.015226/0x3f8f2ecf20642396
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL probe.int8.mma.loads-hoisted 0.0152 0.0152 1101.8794 GMAC/s 0xbdf0dd6daee36af2 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.probe.int8.mma.one-half.device 0.056988
+   device-bits lowbit.llama8b.qkv.t1.probe.int8.mma.one-half.device 0.056988/0x3fad2d87f88765ba
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL probe.int8.mma.one-half 0.0570 0.0570 294.3991 GMAC/s 0x784dc67454c2f772 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.probe.int8.mma.raw-store.device 0.086158
+   device-bits lowbit.llama8b.qkv.t1.probe.int8.mma.raw-store.device 0.086158/0x3fb60e736049ecb3
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL probe.int8.mma.raw-store 0.0862 0.0862 194.7262 GMAC/s 0xc898c453c4599bd2 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.inference.int8i32.v1.tuned.device 0.176049
+   device-bits lowbit.llama8b.qkv.t1.inference.int8i32.v1.tuned.device 0.176049/0x3fc688c60cbf2b24
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.tuned 0.1760 0.1760 95.2986 GMAC/s 0x8a9226b93e43091a quantize.a.par+staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.training.int8i32.v1.tuned.device 0.388942
+   device-bits lowbit.llama8b.qkv.t1.training.int8i32.v1.tuned.device 0.388942/0x3fd8e46cfc829cfe
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.tuned 0.3889 0.3889 43.1355 GMAC/s 0x8a9226b93e43091a quantize.a.par+pack.b.par+staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.inference.4x.int8i32.v1.tuned.device 0.66788
+   device-bits lowbit.llama8b.qkv.t1.inference.4x.int8i32.v1.tuned.device 0.66788/0x3fe55f45e0b4e11e
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.4x.int8i32.v1.tuned 0.6679 0.6679 25.1201 GMAC/s 0x8a9226b93e43091a quantize.a.par+4x.staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t1.training.4x.int8i32.v1.tuned.device 0.87317
+   device-bits lowbit.llama8b.qkv.t1.training.4x.int8i32.v1.tuned.device 0.87317/0x3febf102363b2570
+LOWBIT nvidia llama8b.qkv.t1 1 4096 4096 FULL training.4x.int8i32.v1.tuned 0.8732 0.8732 19.2141 GMAC/s 0x8a9226b93e43091a quantize.a.par+pack.b.par+4x.staged.w16x64.b16x256.k64.l16
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=True (256 thr, 2-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.fp32.v1.device 0.111773
+   device-bits lowbit.llama8b.qkv.t8.fp32.v1.device 0.111773/0x3fbc9d27c3936827
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.1118 0.1118 1200.8063 GMAC/s 0xd5677c8a13939556 plan=14
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 0.666608
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.flat.device 0.666608/0x3fe554da4ce8101f
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 0.6666 0.6666 201.3443 GMAC/s 0x484bd10aabe66d32 not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.device 0.150236
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.device 0.150236/0x3fc33aeee957470f
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.1502 0.1502 893.3793 GMAC/s 0x484bd10aabe66d32 dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.quantize.a.par.device 0.015214
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.quantize.a.par.device 0.015214/0x3f8f28848387df5d
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.0152 0.0152 2.1538 Gelem/s 0x9fe9a836780c4372 per-call,block=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.convert.int8.pack.b.par.device 0.058877
+   device-bits lowbit.llama8b.qkv.t8.convert.int8.pack.b.par.device 0.058877/0x3fae25204af92296
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.0589 0.0589 284.9536 Gelem/s 0xfedb09cb32b7d192 once-per-weight,block=1
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.190657
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.190657/0x3fc86772d5e071c5
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.1907 0.1907 703.9748 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.228726
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.228726/0x3fcd46e4c0df58c1
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.2287 0.2287 586.8057 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.41843
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.41843/0x3fdac78e9f6a93f3
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.4184 0.4184 320.7651 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.37529
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.37529/0x3fd804c059210386
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.3753 0.3753 357.6374 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.160435
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.160435/0x3fc4892253111f0c
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1604 0.1604 836.5863 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.14438
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.14438/0x3fc27b0b39192642
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1444 0.1444 929.6144 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.130416
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.130416/0x3fc0b178b3700475
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.1304 0.1304 1029.1508 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.136587
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.136587/0x3fc17baecd07852f
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1366 0.1366 982.6538 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.171564
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.171564/0x3fc5f5cf2495e17e
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1716 0.1716 782.3187 GMAC/s 0x484bd10aabe66d32 the-tuned-launcher's-plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.053466
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.053466/0x3fab5fe542e557de
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0535 0.0535 2510.3379 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.077434
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.077434/0x3fb3d2b6f19934f0
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0774 0.0774 1733.3178 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.065968
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.065968/0x3fb0e3476295208e
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0660 0.0660 2034.5884 GMAC/s 0x484bd10aabe66d32 plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.065219
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.065219/0x3fb0b2314013ec46
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 0.0652 0.0652 2057.9544 GMAC/s 0x484bd10aabe66d32 plan
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.reference-loads.device 0.149285
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.reference-loads.device 0.149285/0x3fc31bc558644524
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.direct.reference-loads 0.1493 0.1493 899.0704 GMAC/s 0x484bd10aabe66d32 the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.aligned-loads.device 0.083162
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.aligned-loads.device 0.083162/0x3fb54a1ad6451b93
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads 0.0832 0.0832 1613.9310 GMAC/s 0x484bd10aabe66d32 the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.062217
+   device-bits lowbit.llama8b.qkv.t8.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.062217/0x3fafdae81882adc5
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads.scalar-acc 0.0622 0.0622 2157.2517 GMAC/s 0x484bd10aabe66d32 the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.probe.int8.mma.loads-hoisted.device 0.015848
+   device-bits lowbit.llama8b.qkv.t8.probe.int8.mma.loads-hoisted.device 0.015848/0x3f903a7546d3f9e8
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL probe.int8.mma.loads-hoisted 0.0158 0.0158 8469.0641 GMAC/s 0xdbfc8c52b8cc78f2 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.probe.int8.mma.one-half.device 0.054189
+   device-bits lowbit.llama8b.qkv.t8.probe.int8.mma.one-half.device 0.054189/0x3fabbea91d9b1b7a
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL probe.int8.mma.one-half 0.0542 0.0542 2476.8445 GMAC/s 0x73061685e9fa57b2 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.probe.int8.mma.raw-store.device 0.081716
+   device-bits lowbit.llama8b.qkv.t8.probe.int8.mma.raw-store.device 0.081716/0x3fb4eb56fb8f57f7
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL probe.int8.mma.raw-store 0.0817 0.0817 1642.4902 GMAC/s 0x15c279faa5a9fa8e WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.inference.int8i32.v1.tuned.device 0.178032
+   device-bits lowbit.llama8b.qkv.t8.inference.int8i32.v1.tuned.device 0.178032/0x3fc6c9c0a8d21bc1
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.tuned 0.1780 0.1780 753.8966 GMAC/s 0x484bd10aabe66d32 quantize.a.par+staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.training.int8i32.v1.tuned.device 0.391992
+   device-bits lowbit.llama8b.qkv.t8.training.int8i32.v1.tuned.device 0.391992/0x3fd916659d12cade
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.tuned 0.3920 0.3920 342.3992 GMAC/s 0x484bd10aabe66d32 quantize.a.par+pack.b.par+staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.inference.4x.int8i32.v1.tuned.device 0.667798
+   device-bits lowbit.llama8b.qkv.t8.inference.4x.int8i32.v1.tuned.device 0.667798/0x3fe55e99e94ab1d5
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.4x.int8i32.v1.tuned 0.6678 0.6678 200.9855 GMAC/s 0x484bd10aabe66d32 quantize.a.par+4x.staged.w16x64.b16x256.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t8.training.4x.int8i32.v1.tuned.device 0.879714
+   device-bits lowbit.llama8b.qkv.t8.training.4x.int8i32.v1.tuned.device 0.879714/0x3fec269df97aaac1
+LOWBIT nvidia llama8b.qkv.t8 8 4096 4096 FULL training.4x.int8i32.v1.tuned 0.8797 0.8797 152.5697 GMAC/s 0x484bd10aabe66d32 quantize.a.par+pack.b.par+4x.staged.w16x64.b16x256.k64.l16
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=True (1-D grid, no swizzle)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.fp32.v1.device 1.04974
+   device-bits lowbit.llama8b.qkv.t512.fp32.v1.device 1.04974/0x3ff0cbbc2b94d940
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 1.0497 1.0497 8182.9163 GMAC/s 0x67d3da40546b84ff plan=10
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 39.200691
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.flat.device 39.200691/0x404399b03e20ccff
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 39.2007 39.2007 219.1271 GMAC/s 0xa5f2cd1f1b9a0d0a not-dispatched(the-column-has-the-unit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.device 1.423768
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.device 1.423768/0x3ff6c7c0f4517614
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 1.4238 1.4238 6033.2404 GMAC/s 0xa5f2cd1f1b9a0d0a dispatched
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.quantize.a.par.device 0.01769
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.quantize.a.par.device 0.01769/0x3f921d53cddd6e05
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.0177 0.0177 118.5501 Gelem/s 0xa4c29f2d55db77d9 per-call,block=1
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.convert.int8.pack.b.par.device 0.06211
+   device-bits lowbit.llama8b.qkv.t512.convert.int8.pack.b.par.device 0.06211/0x3fafcce1c58255b0
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.0621 0.0621 270.1210 Gelem/s 0xcd5a4c6ba3ec5f67 once-per-weight,block=1
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.389127
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x16.b32x32.k32.l4.device 0.389127/0x3fd8e774eebf65dc
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.3891 0.3891 22074.8871 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.324245
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b64x64.k32.l4.device 0.324245/0x3fd4c06e19b90eaa
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.3242 0.3242 26492.1112 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.679948
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k32.l4.device 0.679948/0x3fe5c2224edf6124
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.6799 0.6799 12633.2228 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.56548
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x256.k32.l4.device 0.56548/0x3fe21869835158b8
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.5655 0.5655 15190.5188 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.265943
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k32.l16.device 0.265943/0x3fd10535c9e6687f
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.2659 0.2659 32299.9086 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.272568
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k64.l16.device 0.272568/0x3fd171c10d7be985
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.2726 0.2726 31514.8315 GMAC/s 0xa5f2cd1f1b9a0d0a the-tuned-launcher's-plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.26299
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x128.k128.l16.device 0.26299/0x3fd0d4d4024b33db
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.2630 0.2630 32662.5902 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.288559
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w64x64.b128x256.k64.l16.device 0.288559/0x3fd277c02afdda8c
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.2886 0.2886 29768.3822 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.404429
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x64.b16x256.k64.l16.device 0.404429/0x3fd9e22a2c237479
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.4044 0.4044 21239.6603 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.179545
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x16.b32x32.k64.l16.device 0.179545/0x3fc6fb549f94855e
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.1795 0.1795 47842.7948 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.12098
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b64x64.k64.l16.device 0.12098/0x3fbef88b9778572a
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.1210 0.1210 71002.9310 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.117963
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w32x32.b128x128.k64.l16.device 0.117963/0x3fbe32d2bb23571d
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.1180 0.1180 72818.8889 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.12647
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.staged.w16x32.b128x128.k64.l16.device 0.12647/0x3fc0302b40f66a55
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 0.1265 0.1265 67920.7290 GMAC/s 0xa5f2cd1f1b9a0d0a plan
+LOWBIT-NOT-RUN nvidia llama8b.qkv.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.reference-loads.device 1.43378
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.reference-loads.device 1.43378/0x3ff6f0c34c1a8ac6
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.direct.reference-loads 1.4338 1.4338 5991.1106 GMAC/s 0xa5f2cd1f1b9a0d0a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.aligned-loads.device 0.393334
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.aligned-loads.device 0.393334/0x3fd92c625e99e94b
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads 0.3933 0.3933 21838.7797 GMAC/s 0xa5f2cd1f1b9a0d0a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.39501
+   device-bits lowbit.llama8b.qkv.t512.int8i32.v1.mma.direct.aligned-loads.scalar-acc.device 0.39501/0x3fd947d805e5f30e
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.direct.aligned-loads.scalar-acc 0.3950 0.3950 21746.1193 GMAC/s 0xa5f2cd1f1b9a0d0a the-reference's-schedule,one-thing-changed
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.probe.int8.mma.loads-hoisted.device 0.037373
+   device-bits lowbit.llama8b.qkv.t512.probe.int8.mma.loads-hoisted.device 0.037373/0x3fa3228dc981beb2
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL probe.int8.mma.loads-hoisted 0.0374 0.0374 229843.3252 GMAC/s 0xcba41ece8a438f2 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.probe.int8.mma.one-half.device 0.328508
+   device-bits lowbit.llama8b.qkv.t512.probe.int8.mma.one-half.device 0.328508/0x3fd506466b1e5c0c
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL probe.int8.mma.one-half 0.3285 0.3285 26148.3270 GMAC/s 0xa3b69c9c7acf0892 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.probe.int8.mma.raw-store.device 0.411114
+   device-bits lowbit.llama8b.qkv.t512.probe.int8.mma.raw-store.device 0.411114/0x3fda4fb1183b6028
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL probe.int8.mma.raw-store 0.4111 0.4111 20894.2887 GMAC/s 0x54006af684c2f2e6 WRONG-ON-PURPOSE,a-time-and-no-identity
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.inference.int8i32.v1.tuned.device 0.275445
+   device-bits lowbit.llama8b.qkv.t512.inference.int8i32.v1.tuned.device 0.275445/0x3fd1a0e410b630a9
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.tuned 0.2754 0.2754 31185.6617 GMAC/s 0xa5f2cd1f1b9a0d0a quantize.a.par+staged.w64x64.b128x128.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.training.int8i32.v1.tuned.device 0.351666
+   device-bits lowbit.llama8b.qkv.t512.training.int8i32.v1.tuned.device 0.351666/0x3fd681b21c475e63
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.tuned 0.3517 0.3517 24426.4006 GMAC/s 0xa5f2cd1f1b9a0d0a quantize.a.par+pack.b.par+staged.w64x64.b128x128.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.inference.4x.int8i32.v1.tuned.device 1.149145
+   device-bits lowbit.llama8b.qkv.t512.inference.4x.int8i32.v1.tuned.device 1.149145/0x3ff262e5de15ca6d
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.4x.int8i32.v1.tuned 1.1491 1.1491 7475.0659 GMAC/s 0xa5f2cd1f1b9a0d0a quantize.a.par+4x.staged.w64x64.b128x128.k64.l16
+PRICE IDENTICAL lowbit.llama8b.qkv.t512.training.4x.int8i32.v1.tuned.device 1.187683
+   device-bits lowbit.llama8b.qkv.t512.training.4x.int8i32.v1.tuned.device 1.187683/0x3ff300bfe3b03e21
+LOWBIT nvidia llama8b.qkv.t512 512 4096 4096 FULL training.4x.int8i32.v1.tuned 1.1877 1.1877 7232.5146 GMAC/s 0xa5f2cd1f1b9a0d0a quantize.a.par+pack.b.par+4x.staged.w64x64.b128x128.k64.l16
+
+== done [IDENTICAL]: 3 shapes ==

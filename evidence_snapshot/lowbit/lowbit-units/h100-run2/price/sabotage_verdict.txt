@@ -1,0 +1,32 @@
+DISAGREE (expected) llama8b.qkv.t1 fp32.v1: clean 0x920cdd138650a8bd sabotage 0x920cdc138650a70a
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.fused: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.widen: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.flat: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.mma: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.pack.b: clean 0x24efed638bb6b96b sabotage 0x24efec638bb6b7b8
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.widen.b: clean 0xd2c2d96392622325 sabotage 0xd2c2d86392622172
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.dequantize.b: clean 0x2fd9ee536fd82325 sabotage 0x2fd9ed536fd82172
+DISAGREE (expected) llama8b.qkv.t8 fp32.v1: clean 0xd5677d8a13939709 sabotage 0xd5677c8a13939556
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.fused: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.widen: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.flat: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.mma: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.pack.b: clean 0xdccc5a093a080c52 sabotage 0xdccc5b093a080e05
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.widen.b: clean 0x944a5da41b4d2325 sabotage 0x944a5ca41b4d2172
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.dequantize.b: clean 0x24697157b3da2325 sabotage 0x24697057b3da2172
+DISAGREE (expected) llama8b.qkv.t512 fp32.v1: clean 0x67d3d940546b834c sabotage 0x67d3da40546b84ff
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.fused: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.widen: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.flat: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.mma: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.pack.b: clean 0xaef2da473a8e2a10 sabotage 0xaef2db473a8e2bc3
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.widen.b: clean 0xc8e5243510392325 sabotage 0xc8e5233510392172
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.dequantize.b: clean 0x1798a32eac742325 sabotage 0x1798a22eac742172
+sabotage comparison: 30 compared, 30 differed, 0 did not, 0 not compared
+VERDICT: the sabotage arm was seen at every arm and shape compared

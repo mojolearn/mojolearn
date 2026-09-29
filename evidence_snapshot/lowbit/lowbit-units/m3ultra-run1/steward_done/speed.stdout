@@ -1,0 +1,1211 @@
+######## phase gate on m3ultra, started 2026-09-29T03:20:17Z
+lowbit	0	41s	expected=pass	held=yes
+lowbit-force-flat	0	11s	expected=pass	held=yes
+lowbit-sabotage	1	10s	expected=fail	held=yes
+lowbit-host-sabotage	1	11s	expected=fail	held=yes
+deviation=2910
+started=2026-09-29T03:20:17Z
+root=/Users/ec2-user/mojolearn-wt/steward-m3ultra-b
+vendor=apple gpu_archs=unset column=unset
+reach: lowbit-sabotage cannot name check_int8_mma_matches_flat on apple (the gate does not run there)
+reach: lowbit-host-sabotage cannot name check_int8_mma_matches_flat on apple (the gate does not run there)
+   column: apple  int8 dispatch: flat (no int8 matrix unit on this column)
+   column: apple  int8 dispatch: flat (MOJOLEARN_INT8_FORCE_FLAT)
+finished=2026-09-29T03:21:30Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== lowbit (tail)
+   ok bf16 NT 1x64x128  c[0]=-21.241974/0x0xc1a9ef90
+   ok bf16 NT 2x96x127  c[0]=275.45615/0x0x4389ba63
+   ok bf16 NT 7x33x129  c[0]=143.0458/0x0x430f0bba
+   ok bf16 NT 16x64x1000  c[0]=1108.8789/0x0x448a9c20
+   ok bf16 NN 5x9x256  c[0]=734.9258/0x0x4437bb40
+   ok bf16 TN 9x5x300  c[0]=584.57214/0x0x4412249e
+   ok bf16 NT 129x129x256  c[0]=673.85126/0x0x4428767b
+   ok bf16 NT 1x4096x512  c[0]=-430.62427/0x0xc3d74fe8
+ok check_bf16_device_matches_oracle
+   ok fused == widen on 9 shapes; fused cap 16384 cells
+ok check_bf16_plans_agree
+   ok 6 rows agree with their single-row calls
+ok check_bf16_is_batch_invariant
+   ok int8 1x32x32  c[0]=-3.71875/0x0xc06e0000
+   ok int8 1x64x128  c[0]=-85.25/0x0xc2aa8000
+   ok int8 2x96x127  c[0]=-292.82813/0x0xc3926a00
+   ok int8 7x33x129  c[0]=157.89063/0x0x431de400
+   ok int8 16x64x1000  c[0]=1029.1094/0x0x4480a380
+   ok int8 129x129x256  c[0]=-44.765625/0x0xc2331000
+   ok int8 1x4096x512  c[0]=314.01562/0x0x439d0200
+ok check_int8_device_matches_oracle
+   ok 5 int8 rows agree with their single-row calls
+ok check_int8_is_batch_invariant
+   check_int8_mma_matches_flat DID NOT RUN: column apple has no int8 matrix unit (RUN OWED on an H100 and an MI300X/MI325X, tools/lowbit_mma_leg.sh)
+== 9 gates, 0 failed ==
+== lowbit-force-flat (tail)
+   ok bf16 NT 1x64x128  c[0]=-21.241974/0x0xc1a9ef90
+   ok bf16 NT 2x96x127  c[0]=275.45615/0x0x4389ba63
+   ok bf16 NT 7x33x129  c[0]=143.0458/0x0x430f0bba
+   ok bf16 NT 16x64x1000  c[0]=1108.8789/0x0x448a9c20
+   ok bf16 NN 5x9x256  c[0]=734.9258/0x0x4437bb40
+   ok bf16 TN 9x5x300  c[0]=584.57214/0x0x4412249e
+   ok bf16 NT 129x129x256  c[0]=673.85126/0x0x4428767b
+   ok bf16 NT 1x4096x512  c[0]=-430.62427/0x0xc3d74fe8
+ok check_bf16_device_matches_oracle
+   ok fused == widen on 9 shapes; fused cap 16384 cells
+ok check_bf16_plans_agree
+   ok 6 rows agree with their single-row calls
+ok check_bf16_is_batch_invariant
+   ok int8 1x32x32  c[0]=-3.71875/0x0xc06e0000
+   ok int8 1x64x128  c[0]=-85.25/0x0xc2aa8000
+   ok int8 2x96x127  c[0]=-292.82813/0x0xc3926a00
+   ok int8 7x33x129  c[0]=157.89063/0x0x431de400
+   ok int8 16x64x1000  c[0]=1029.1094/0x0x4480a380
+   ok int8 129x129x256  c[0]=-44.765625/0x0xc2331000
+   ok int8 1x4096x512  c[0]=314.01562/0x0x439d0200
+ok check_int8_device_matches_oracle
+   ok 5 int8 rows agree with their single-row calls
+ok check_int8_is_batch_invariant
+   check_int8_mma_matches_flat DID NOT RUN: column apple has no int8 matrix unit (RUN OWED on an H100 and an MI300X/MI325X, tools/lowbit_mma_leg.sh)
+== 9 gates, 0 failed ==
+######## phase gate on m3ultra exit=0, finished 2026-09-29T03:21:30Z
+######## phase chunk on m3ultra, started 2026-09-29T03:21:30Z
+chunk	0	5s	expected=pass	held=yes
+chunk-sabotage	1	4s	expected=fail	held=yes
+chunk-value-sabotage	1	4s	expected=fail	held=yes
+box=m3ultra
+started=2026-09-29T03:21:30Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=1
+machine=Apple M3 Ultra macOS 26.7
+finished=2026-09-29T03:21:43Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== chunk.log
+✨ Pixi task (check-gemm-int8-apple-chunk in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:260:54: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if INT8_PRODUCT_MAX * INT8_APPLE_CHUNK_MAX_STEPS >= F32_EXACT_INTEGER_BOUND:
+                                                     ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:262:60: warning: 'if' condition always evaluates to 'False'; 'if' branch is unreachable
+    if INT8_PRODUCT_MAX * (INT8_APPLE_CHUNK_MAX_STEPS + 1) < F32_EXACT_INTEGER_BOUND:
+                                                           ^
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:74:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:294:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:295:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:296:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:332:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:333:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:334:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+== gemm/checks/gemm_int8_apple_chunk_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the Apple exact-chunk PROBE
+   column: apple
+   geometries: WIDE 64x64 (2x2 simdgroups, 4x4 fragments); ROW 8x128 (1x4 simdgroups, 1x4 fragments)
+   ok chunk 1024 steps (32 windows of 32), bound 1040; the host chain at 1041 steps is 16790288, the integer is 16790289
+ok check_chunk_bound_is_exact_and_tight
+   ok int8 chunk 1x32x32  c[0]=53.328125/0x0x42555000
+   ok int8 chunk 1x64x128  c[0]=-37.921875/0x0xc217b000
+   ok int8 chunk 2x96x127  c[0]=-36.65625/0x0xc212a000
+   ok int8 chunk 7x33x129  c[0]=-1.046875/0x0xbf860000
+   ok int8 chunk 16x64x1000  c[0]=-81.734375/0x0xc2a37800
+   ok int8 chunk 129x129x256  c[0]=275.40625/0x0x4389b400
+   ok int8 chunk 1x4096x512  c[0]=507.51563/0x0x43fdc200
+   ok int8 chunk 3x5x17  c[0]=-1.046875/0x0xbf860000
+   ok int8 chunk 17x33x31  c[0]=86.265625/0x0x42ac8800
+   ok int8 chunk 33x17x33  c[0]=252.76562/0x0x437cc400
+   ok int8 chunk 1x47x100  c[0]=106.484375/0x0x42d4f800
+   ok int8 chunk 50x70x1000  c[0]=-1477.9219/0x0xc4b8bd80
+   ok int8 chunk 13x21x4097  c[0]=-956.15625/0x0xc46f0a00
+   ok int8 chunk 2x16x32  c[0]=144.57812/0x0x43109400
+   ok int8 chunk 100x3x64  c[0]=-71.046875/0x0xc28e1800
+   ok int8 chunk 5x70x1023  c[0]=-36.1875/0x0xc210c000
+   ok int8 chunk 5x70x1024  c[0]=431.32812/0x0x43d7aa00
+   ok int8 chunk 5x70x1025  c[0]=-678.2344/0x0xc4298f00
+   ok int8 chunk 66x130x2049  c[0]=157.14062/0x0x431d2400
+   ok int8 chunk 8x128x4096  c[0]=-1792.5/0x0xc4e01000
+   ok int8 chunk 9x129x4096  c[0]=907.5625/0x0x4462e400
+   ok chunk == flat == oracle on 21 shapes of quantized fixtures
+ok check_apple_chunk_matches_flat_and_oracle
+   ok ROW == WIDE == flat on 14 shapes
+ok check_apple_chunk_geometries_agree
+   planted: 110 cases, 0 failed
+ok check_apple_chunk_planted_worst_cases
+== 4 gates, 0 failed ==
+== chunk-sabotage.log
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:66:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:294:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:295:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:296:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:332:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:333:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:334:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+== gemm/checks/gemm_int8_apple_chunk_check.mojo [IDENTICAL]  sabotage: CHUNK_BOUNDARY_REMOVED ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the Apple exact-chunk PROBE
+   column: apple
+   geometries: WIDE 64x64 (2x2 simdgroups, 4x4 fragments); ROW 8x128 (1x4 simdgroups, 1x4 fragments)
+   ok chunk 1024 steps (32 windows of 32), bound 1040; the host chain at 1041 steps is 16790288, the integer is 16790289
+ok check_chunk_bound_is_exact_and_tight
+   ok int8 chunk 1x32x32  c[0]=53.328125/0x0x42555000
+   ok int8 chunk 1x64x128  c[0]=-37.921875/0x0xc217b000
+   ok int8 chunk 2x96x127  c[0]=-36.65625/0x0xc212a000
+   ok int8 chunk 7x33x129  c[0]=-1.046875/0x0xbf860000
+   ok int8 chunk 16x64x1000  c[0]=-81.734375/0x0xc2a37800
+   ok int8 chunk 129x129x256  c[0]=275.40625/0x0x4389b400
+   ok int8 chunk 1x4096x512  c[0]=507.51563/0x0x43fdc200
+   ok int8 chunk 3x5x17  c[0]=-1.046875/0x0xbf860000
+   ok int8 chunk 17x33x31  c[0]=86.265625/0x0x42ac8800
+   ok int8 chunk 33x17x33  c[0]=252.76562/0x0x437cc400
+   ok int8 chunk 1x47x100  c[0]=106.484375/0x0x42d4f800
+   ok int8 chunk 50x70x1000  c[0]=-1477.9219/0x0xc4b8bd80
+   ok int8 chunk 13x21x4097  c[0]=-956.15625/0x0xc46f0a00
+   ok int8 chunk 2x16x32  c[0]=144.57812/0x0x43109400
+   ok int8 chunk 100x3x64  c[0]=-71.046875/0x0xc28e1800
+   ok int8 chunk 5x70x1023  c[0]=-36.1875/0x0xc210c000
+   ok int8 chunk 5x70x1024  c[0]=431.32812/0x0x43d7aa00
+   ok int8 chunk 5x70x1025  c[0]=-678.2344/0x0xc4298f00
+   ok int8 chunk 66x130x2049  c[0]=157.14062/0x0x431d2400
+   ok int8 chunk 8x128x4096  c[0]=-1792.5/0x0xc4e01000
+   ok int8 chunk 9x129x4096  c[0]=907.5625/0x0x4462e400
+   ok chunk == flat == oracle on 21 shapes of quantized fixtures
+ok check_apple_chunk_matches_flat_and_oracle
+   ok ROW == WIDE == flat on 14 shapes
+ok check_apple_chunk_geometries_agree
+   !! int8 chunk planted all-positive 70x9x2081 WIDE (chunk vs oracle): 630 of 630 cells differ; first at 0 got 4097.0957/0x0x458008c4 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-positive 70x9x2081 ROW (chunk vs oracle): 630 of 630 cells differ; first at 0 got 4097.0957/0x0x458008c4 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-negative 70x9x2081 WIDE (chunk vs oracle): 630 of 630 cells differ; first at 0 got -4097.0957/0x0xc58008c4 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-negative 70x9x2081 ROW (chunk vs oracle): 630 of 630 cells differ; first at 0 got -4097.0957/0x0xc58008c4 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted odd-windows 70x9x2081 WIDE (chunk vs oracle): 630 of 630 cells differ; first at 0 got 4093.097/0x0x457fd18d want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted odd-windows 70x9x2081 ROW (chunk vs oracle): 630 of 630 cells differ; first at 0 got 4093.097/0x0x457fd18d want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted checkerboard 70x9x2081 WIDE (chunk vs oracle): 630 of 630 cells differ; first at 0 got -4097.0957/0x0xc58008c4 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted checkerboard 70x9x2081 ROW (chunk vs oracle): 630 of 630 cells differ; first at 0 got -4097.0957/0x0xc58008c4 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-positive 65x67x4096 WIDE (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.127/0x0x45fc0104 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-positive 65x67x4096 ROW (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.127/0x0x45fc0104 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-negative 65x67x4096 WIDE (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.127/0x0xc5fc0104 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-negative 65x67x4096 ROW (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.127/0x0xc5fc0104 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted cancel-halves 65x67x4096 WIDE (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -0.00012207031/0x0xb9000000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 65x67x4096 ROW (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -0.00012207031/0x0xb9000000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 65x67x4096 WIDE (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.207/0x0x45fbc1a8 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted odd-windows 65x67x4096 ROW (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.207/0x0x45fbc1a8 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted checkerboard 65x67x4096 WIDE (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.127/0x0xc5fc0104 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted checkerboard 65x67x4096 ROW (chunk vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.127/0x0xc5fc0104 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-positive 1x130x4097 WIDE (chunk vs oracle): 130 of 130 cells differ; first at 0 got 8066.0957/0x0x45fc10c4 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-positive 1x130x4097 ROW (chunk vs oracle): 130 of 130 cells differ; first at 0 got 8066.0957/0x0x45fc10c4 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 WIDE (chunk vs oracle): 130 of 130 cells differ; first at 0 got -8066.0957/0x0xc5fc10c4 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 ROW (chunk vs oracle): 130 of 130 cells differ; first at 0 got -8066.0957/0x0xc5fc10c4 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted cancel-halves 1x130x4097 WIDE (chunk vs oracle): 130 of 130 cells differ; first at 0 got -1.9689941/0x0xbffc0800 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 1x130x4097 ROW (chunk vs oracle): 130 of 130 cells differ; first at 0 got -1.9689941/0x0xbffc0800 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 1x130x4097 WIDE (chunk vs oracle): 130 of 130 cells differ; first at 0 got 8058.16/0x0x45fbd148 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted odd-windows 1x130x4097 ROW (chunk vs oracle): 130 of 130 cells differ; first at 0 got 8058.16/0x0x45fbd148 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted checkerboard 1x130x4097 WIDE (chunk vs oracle): 130 of 130 cells differ; first at 0 got -8066.0957/0x0xc5fc10c4 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted checkerboard 1x130x4097 ROW (chunk vs oracle): 130 of 130 cells differ; first at 0 got -8066.0957/0x0xc5fc10c4 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-positive 8x129x14336 WIDE (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got 28224.127/0x0x46dc8041 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-positive 8x129x14336 ROW (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got 28224.127/0x0x46dc8041 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-negative 8x129x14336 WIDE (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -28224.127/0x0xc6dc8041 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-negative 8x129x14336 ROW (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -28224.127/0x0xc6dc8041 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted cancel-halves 8x129x14336 WIDE (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -0.00012207031/0x0xb9000000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 8x129x14336 ROW (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -0.00012207031/0x0xb9000000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 8x129x14336 WIDE (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got 28196.207/0x0x46dc486a want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted odd-windows 8x129x14336 ROW (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got 28196.207/0x0x46dc486a want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted checkerboard 8x129x14336 WIDE (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -28224.127/0x0xc6dc8041 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted checkerboard 8x129x14336 ROW (chunk vs oracle): 1032 of 1032 cells differ; first at 0 got -28224.127/0x0xc6dc8041 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-positive 2x3x131072 WIDE (chunk vs oracle): 6 of 6 cells differ; first at 0 got 258048.14/0x0x487c0009 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-positive 2x3x131072 ROW (chunk vs oracle): 6 of 6 cells differ; first at 0 got 258048.14/0x0x487c0009 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-negative 2x3x131072 WIDE (chunk vs oracle): 6 of 6 cells differ; first at 0 got -258048.14/0x0xc87c0009 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-negative 2x3x131072 ROW (chunk vs oracle): 6 of 6 cells differ; first at 0 got -258048.14/0x0xc87c0009 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted cancel-halves 2x3x131072 WIDE (chunk vs oracle): 6 of 6 cells differ; first at 0 got 0.0057373047/0x0x3bbc0000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 2x3x131072 ROW (chunk vs oracle): 6 of 6 cells differ; first at 0 got 0.0057373047/0x0x3bbc0000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 2x3x131072 WIDE (chunk vs oracle): 6 of 6 cells differ; first at 0 got 257792.22/0x0x487bc00e want 257810.0/0x0x487bc480
+   !! int8 chunk planted odd-windows 2x3x131072 ROW (chunk vs oracle): 6 of 6 cells differ; first at 0 got 257792.22/0x0x487bc00e want 257810.0/0x0x487bc480
+   !! int8 chunk planted checkerboard 2x3x131072 WIDE (chunk vs oracle): 6 of 6 cells differ; first at 0 got -258048.14/0x0xc87c0009 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted checkerboard 2x3x131072 ROW (chunk vs oracle): 6 of 6 cells differ; first at 0 got -258048.14/0x0xc87c0009 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-positive 3x5x1042 WIDE (chunk vs oracle): 15 of 15 cells differ; first at 0 got 2051.5645/0x0x45003908 want 2051.5647/0x0x45003909
+   !! int8 chunk planted all-positive 3x5x1042 ROW (chunk vs oracle): 15 of 15 cells differ; first at 0 got 2051.5645/0x0x45003908 want 2051.5647/0x0x45003909
+   !! int8 chunk planted all-negative 3x5x1042 WIDE (chunk vs oracle): 15 of 15 cells differ; first at 0 got -2051.5645/0x0xc5003908 want -2051.5647/0x0xc5003909
+   !! int8 chunk planted all-negative 3x5x1042 ROW (chunk vs oracle): 15 of 15 cells differ; first at 0 got -2051.5645/0x0xc5003908 want -2051.5647/0x0xc5003909
+   !! int8 chunk planted checkerboard 3x5x1042 WIDE (chunk vs oracle): 15 of 15 cells differ; first at 0 got -2051.5645/0x0xc5003908 want -2051.5647/0x0xc5003909
+   !! int8 chunk planted checkerboard 3x5x1042 ROW (chunk vs oracle): 15 of 15 cells differ; first at 0 got -2051.5645/0x0xc5003908 want -2051.5647/0x0xc5003909
+   planted: 110 cases, 54 failed
+!! GATE FAILED: check_apple_chunk_planted_worst_cases
+   54 of 110 planted cases differ; first: int8 chunk planted all-positive 70x9x2081 WIDE (chunk vs oracle): 630 of 630 cells differ; first at 0 got 4097.0957/0x0x458008c4 want 4097.2227/0x0x458009c8
+== 4 gates, 1 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 1 of 4 gates failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== chunk-value-sabotage.log
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:294:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:295:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:296:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:332:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:333:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk_check.mojo:334:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+== gemm/checks/gemm_int8_apple_chunk_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the Apple exact-chunk PROBE
+   column: apple
+   geometries: WIDE 64x64 (2x2 simdgroups, 4x4 fragments); ROW 8x128 (1x4 simdgroups, 1x4 fragments)
+   ok chunk 1024 steps (32 windows of 32), bound 1040; the host chain at 1041 steps is 16790288, the integer is 16790289
+ok check_chunk_bound_is_exact_and_tight
+!! GATE FAILED: check_apple_chunk_matches_flat_and_oracle
+   int8 chunk 1x32x32 (chunk vs oracle): 32 of 32 cells differ; first at 0 got 53.32813/0x0x42555001 want 53.328125/0x0x42555000
+   ok ROW == WIDE == flat on 14 shapes
+ok check_apple_chunk_geometries_agree
+   !! int8 chunk planted all-positive 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+   !! int8 chunk planted all-positive 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+   !! int8 chunk planted all-negative 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted all-negative 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted cancel-halves 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2014.1407/0x0x44fbc481 want 2014.1406/0x0x44fbc480
+   !! int8 chunk planted odd-windows 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2014.1407/0x0x44fbc481 want 2014.1406/0x0x44fbc480
+   !! int8 chunk planted checkerboard 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted checkerboard 9x7x1024 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2016.1251/0x0xc4fc0401 want -2016.125/0x0xc4fc0400
+   !! int8 chunk planted all-positive 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2018.094/0x0x44fc4302 want 2018.0939/0x0x44fc4301
+   !! int8 chunk planted all-positive 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2018.094/0x0x44fc4302 want 2018.0939/0x0x44fc4301
+   !! int8 chunk planted all-negative 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted all-negative 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted cancel-halves 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.0941/0x0x44fc0303 want 2016.094/0x0x44fc0302
+   !! int8 chunk planted odd-windows 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.0941/0x0x44fc0303 want 2016.094/0x0x44fc0302
+   !! int8 chunk planted checkerboard 9x7x1025 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted checkerboard 9x7x1025 ROW (flat vs oracle): 63 of 63 cells differ; first at 0 got -2018.094/0x0xc4fc4302 want -2018.0939/0x0xc4fc4301
+   !! int8 chunk planted all-positive 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.6271/0x0x44fff411 want 2047.627/0x0x44fff410
+   !! int8 chunk planted all-positive 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.6271/0x0x44fff411 want 2047.627/0x0x44fff410
+   !! int8 chunk planted all-negative 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted all-negative 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted cancel-halves 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2045.6117/0x0x44ffb393 want 2045.6116/0x0x44ffb392
+   !! int8 chunk planted odd-windows 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2045.6117/0x0x44ffb393 want 2045.6116/0x0x44ffb392
+   !! int8 chunk planted checkerboard 3x5x1040 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted checkerboard 3x5x1040 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2047.6271/0x0xc4fff411 want -2047.627/0x0xc4fff410
+   !! int8 chunk planted all-positive 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-positive 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-negative 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-negative 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted cancel-halves 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted odd-windows 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted checkerboard 3x5x1041 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted checkerboard 3x5x1041 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-positive 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got 4097.223/0x0x458009c9 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-positive 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got 4097.223/0x0x458009c9 want 4097.2227/0x0x458009c8
+   !! int8 chunk planted all-negative 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-negative 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted cancel-halves 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got 4093.1767/0x0x457fd2d4 want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted odd-windows 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got 4093.1767/0x0x457fd2d4 want 4093.1765/0x0x457fd2d3
+   !! int8 chunk planted checkerboard 70x9x2081 WIDE (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted checkerboard 70x9x2081 ROW (flat vs oracle): 630 of 630 cells differ; first at 0 got -4097.223/0x0xc58009c9 want -4097.2227/0x0xc58009c8
+   !! int8 chunk planted all-positive 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.5005/0x0x45fc0401 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-positive 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8064.5005/0x0x45fc0401 want 8064.5/0x0x45fc0400
+   !! int8 chunk planted all-negative 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-negative 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted cancel-halves 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.563/0x0x45fbc481 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted odd-windows 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got 8056.563/0x0x45fbc481 want 8056.5625/0x0x45fbc480
+   !! int8 chunk planted checkerboard 65x67x4096 WIDE (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted checkerboard 65x67x4096 ROW (flat vs oracle): 4355 of 4355 cells differ; first at 0 got -8064.5005/0x0xc5fc0401 want -8064.5/0x0xc5fc0400
+   !! int8 chunk planted all-positive 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got 8066.469/0x0x45fc13c1 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-positive 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got 8066.469/0x0x45fc13c1 want 8066.4688/0x0x45fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-negative 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted cancel-halves 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got 8058.516/0x0x45fbd421 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted odd-windows 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got 8058.516/0x0x45fbd421 want 8058.5156/0x0x45fbd420
+   !! int8 chunk planted checkerboard 1x130x4097 WIDE (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted checkerboard 1x130x4097 ROW (flat vs oracle): 130 of 130 cells differ; first at 0 got -8066.469/0x0xc5fc13c1 want -8066.4688/0x0xc5fc13c0
+   !! int8 chunk planted all-positive 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28225.752/0x0x46dc8381 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-positive 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28225.752/0x0x46dc8381 want 28225.75/0x0x46dc8380
+   !! int8 chunk planted all-negative 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-negative 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted cancel-halves 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28197.97/0x0x46dc4bf1 want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted odd-windows 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got 28197.97/0x0x46dc4bf1 want 28197.969/0x0x46dc4bf0
+   !! int8 chunk planted checkerboard 8x129x14336 WIDE (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted checkerboard 8x129x14336 ROW (flat vs oracle): 1032 of 1032 cells differ; first at 0 got -28225.752/0x0xc6dc8381 want -28225.75/0x0xc6dc8380
+   !! int8 chunk planted all-positive 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 258064.02/0x0x487c0401 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-positive 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 258064.02/0x0x487c0401 want 258064.0/0x0x487c0400
+   !! int8 chunk planted all-negative 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-negative 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted cancel-halves 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got 257810.02/0x0x487bc481 want 257810.0/0x0x487bc480
+   !! int8 chunk planted odd-windows 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got 257810.02/0x0x487bc481 want 257810.0/0x0x487bc480
+   !! int8 chunk planted checkerboard 2x3x131072 WIDE (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted checkerboard 2x3x131072 ROW (flat vs oracle): 6 of 6 cells differ; first at 0 got -258064.02/0x0xc87c0401 want -258064.0/0x0xc87c0400
+   !! int8 chunk planted all-positive 3x5x1042 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2051.565/0x0x4500390a want 2051.5647/0x0x45003909
+   !! int8 chunk planted all-positive 3x5x1042 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2051.565/0x0x4500390a want 2051.5647/0x0x45003909
+   !! int8 chunk planted all-negative 3x5x1042 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2051.565/0x0xc500390a want -2051.5647/0x0xc5003909
+   !! int8 chunk planted all-negative 3x5x1042 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2051.565/0x0xc500390a want -2051.5647/0x0xc5003909
+   !! int8 chunk planted cancel-halves 3x5x1042 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted cancel-halves 3x5x1042 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 1.1754944e-38/0x0x800000 want 0.0/0x0x0
+   !! int8 chunk planted odd-windows 3x5x1042 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.534/0x0x4500188b want 2049.5337/0x0x4500188a
+   !! int8 chunk planted odd-windows 3x5x1042 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got 2049.534/0x0x4500188b want 2049.5337/0x0x4500188a
+   !! int8 chunk planted checkerboard 3x5x1042 WIDE (flat vs oracle): 15 of 15 cells differ; first at 0 got -2051.565/0x0xc500390a want -2051.5647/0x0xc5003909
+   !! int8 chunk planted checkerboard 3x5x1042 ROW (flat vs oracle): 15 of 15 cells differ; first at 0 got -2051.565/0x0xc500390a want -2051.5647/0x0xc5003909
+   !! int8 chunk planted all-positive 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-positive 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got 2049.596/0x0x45001989 want 2049.5957/0x0x45001988
+   !! int8 chunk planted all-negative 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted all-negative 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted cancel-halves 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted cancel-halves 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -1.9688722/0x0xbffc0401 want -1.9688721/0x0xbffc0400
+   !! int8 chunk planted odd-windows 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted odd-windows 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got 2047.565/0x0x44fff215 want 2047.565/0x0x44fff214
+   !! int8 chunk planted checkerboard 1x1x1041 WIDE (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   !! int8 chunk planted checkerboard 1x1x1041 ROW (flat vs oracle): 1 of 1 cells differ; first at 0 got -2049.596/0x0xc5001989 want -2049.5957/0x0xc5001988
+   planted: 110 cases, 110 failed
+!! GATE FAILED: check_apple_chunk_planted_worst_cases
+   110 of 110 planted cases differ; first: int8 chunk planted all-positive 9x7x1024 WIDE (flat vs oracle): 63 of 63 cells differ; first at 0 got 2016.1251/0x0x44fc0401 want 2016.125/0x0x44fc0400
+== 4 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 4 gates failed
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+chunk_job: box=m3ultra red=0
+######## phase chunk on m3ultra exit=0, finished 2026-09-29T03:21:43Z
+######## phase price on m3ultra, started 2026-09-29T03:21:43Z
+box=m3ultra
+started=2026-09-29T03:21:43Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=1
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:23:20Z
+== price.log (every line that is not a PRICE or device-bits line)
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:145:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:250:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:252:72: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:182:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + e) * ST + r] = v[e]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:183:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_int8_apple_chunk.mojo:184:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + r * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/gemm_lowbit_price_main.mojo:177:
+/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: flat (no int8 matrix unit on this column)
+sabotage: price none  lowbit none  apple chunk none
+repeats 5  mac budget 34359738368  only 
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 1.0240 0.9790 16.3840 GMAC/s 0x920cdd138650a8bd plan=0
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused 1.0150 0.9590 16.5293 GMAC/s 0xcd39e9d6e6d7179a dispatched
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen 1.5800 1.5620 10.6185 GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 0.7490 0.6600 22.3995 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 0.7640 0.6930 21.9597 GMAC/s 0x8a9227b93e430acd probe,geometry=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.1580 1.1220 0.0035 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 1.5550 1.5360 10.7892 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b 0.8700 0.7600 19.2842 Gelem/s 0x24efed638bb6b96b once-per-weight
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b 0.8710 0.8250 19.2620 Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b 1.1430 1.0740 14.6782 Gelem/s 0x2fd9ee536fd82325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.bf16f32.v1 0.9520 0.9270 17.6231 GMAC/s 0xcd39e9d6e6d7179a product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 1.5200 1.5040 11.0376 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.applechunk 1.5390 1.5290 10.9014 GMAC/s 0x8a9227b93e430acd quantize.a+probe
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.bf16f32.v1 1.5340 1.4900 10.9369 GMAC/s 0xcd39e9d6e6d7179a pack.b+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 2.8160 2.8010 5.9578 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.applechunk 2.8780 2.8650 5.8295 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+probe
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.5420 0.5400 247.6342 GMAC/s 0xd5677d8a13939709 plan=20
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused 1.7130 1.6290 78.3524 GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen 1.0750 1.0490 124.8537 GMAC/s 0xf36fe1a8828cefd9 dispatched
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 0.9800 0.8860 136.9569 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 0.7570 0.7170 177.3022 GMAC/s 0x484bd20aabe66ee5 probe,geometry=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.2090 1.2050 0.0271 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 1.5460 1.5070 10.8520 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b 0.8460 0.7940 19.8312 Gelem/s 0xdccc5a093a080c52 once-per-weight
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b 0.8580 0.7980 19.5539 Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b 1.1350 1.0670 14.7817 Gelem/s 0x24697157b3da2325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.bf16f32.v1 1.1190 1.0510 119.9444 GMAC/s 0xf36fe1a8828cefd9 product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 1.9230 1.8340 69.7960 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.applechunk 1.6450 1.6140 81.5913 GMAC/s 0x484bd20aabe66ee5 quantize.a+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.bf16f32.v1 1.6640 1.6470 80.6597 GMAC/s 0xf36fe1a8828cefd9 pack.b+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 3.2140 3.0770 41.7603 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.applechunk 2.9790 2.9530 45.0546 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+probe
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 3.3200 3.2830 2587.3297 GMAC/s 0x67d3d940546b834c plan=20
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused 54.7230 54.6230 156.9712 GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen 3.8250 3.8060 2245.7345 GMAC/s 0x4abd79a5b10221e5 dispatched
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 26.5880 26.5070 323.0756 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 2.2450 2.2090 3826.2515 GMAC/s 0xa5f2ce1f1b9a0ebd probe,geometry=0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 1.4230 1.4070 1.4738 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 1.5490 1.5160 10.8310 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b 0.8000 0.7870 20.9715 Gelem/s 0xaef2da473a8e2a10 once-per-weight
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b 0.8600 0.8060 19.5084 Gelem/s 0xc8e5243510392325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b 1.0760 1.0700 15.5922 Gelem/s 0x1798a32eac742325 per-call-when-materialized
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.bf16f32.v1 3.8350 3.8100 2239.8786 GMAC/s 0x4abd79a5b10221e5 product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 27.7370 27.6820 309.6923 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.applechunk 3.3780 3.3680 2542.9054 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.bf16f32.v1 4.4200 4.4050 1943.4241 GMAC/s 0x4abd79a5b10221e5 pack.b+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 29.0150 29.0080 296.0515 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.applechunk 4.6890 4.6690 1831.9332 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+probe
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 1.0440 0.9670 56.2455 GMAC/s 0x4965ea6af2ff5e61 plan=0
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused 1.0160 0.9990 57.7955 GMAC/s 0x5e3f5ff35a448024 dispatched
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen 2.9430 2.9080 19.9525 GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 0.7150 0.6980 82.1262 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.applechunk 0.8180 0.7930 71.7852 GMAC/s 0xff302668595b02d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.1790 1.1590 0.0035 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 1.5760 1.5670 37.2590 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b 2.2360 2.1870 26.2613 Gelem/s 0xed618e2333b13294 once-per-weight
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b 2.2340 2.1880 26.2848 Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b 3.2560 3.2290 18.0345 Gelem/s 0x5a7e8639220c2325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.bf16f32.v1 0.9630 0.9430 60.9764 GMAC/s 0x5e3f5ff35a448024 product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 1.5540 1.5430 37.7865 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.applechunk 1.6110 1.5990 36.4496 GMAC/s 0xff302668595b02d quantize.a+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.bf16f32.v1 2.9450 2.8830 19.9390 GMAC/s 0x5e3f5ff35a448024 pack.b+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 2.9160 2.8840 20.1373 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.applechunk 2.9750 2.9600 19.7379 GMAC/s 0xff302668595b02d quantize.a+pack.b+probe
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 1.0200 0.9330 460.5510 GMAC/s 0x7b30465d325906e plan=20
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused 3.6300 3.6100 129.4110 GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen 2.9720 2.8990 158.0626 GMAC/s 0x1531c10dcd152579 dispatched
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.1560 2.0730 217.8859 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.applechunk 0.8260 0.7120 568.7192 GMAC/s 0xbd4b3a783f9d9a0d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.2510 1.2130 0.0262 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 1.6320 1.5790 35.9805 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b 2.2410 2.1980 26.2027 Gelem/s 0xc5111a6224412c3f once-per-weight
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b 2.2470 2.2140 26.1327 Gelem/s 0x6a679200ae02325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b 3.2630 3.2630 17.9958 Gelem/s 0x89939dca58a02325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.bf16f32.v1 2.9900 2.9020 157.1111 GMAC/s 0x1531c10dcd152579 product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 3.0540 3.0120 153.8186 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.applechunk 1.7060 1.6920 275.3588 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.bf16f32.v1 4.9190 4.8840 95.4995 GMAC/s 0x1531c10dcd152579 pack.b+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 4.3630 4.3000 107.6695 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.applechunk 3.0480 2.9940 154.1214 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+probe
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 10.4170 10.4020 2886.1257 GMAC/s 0x27a166783c45f9f0 plan=20
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused 189.1560 188.6940 158.9417 GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen 12.3530 12.3370 2433.8032 GMAC/s 0x5b29318ad80be465 dispatched
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 91.1190 91.0800 329.9506 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.applechunk 6.0770 6.0600 4947.3048 GMAC/s 0x220ff5fe96f5ef55 probe,geometry=0
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 1.4460 1.4180 1.4503 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 1.6180 1.6020 36.2919 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b 2.2500 2.2410 26.0979 Gelem/s 0x1c04d570a3d23380 once-per-weight
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b 2.2460 2.2340 26.1444 Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b 3.2710 3.2600 17.9518 Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.bf16f32.v1 12.3630 12.3520 2431.8346 GMAC/s 0x5b29318ad80be465 product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 92.3240 92.2620 325.6442 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.applechunk 7.2710 7.2520 4134.8881 GMAC/s 0x220ff5fe96f5ef55 quantize.a+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.bf16f32.v1 14.3630 14.3520 2093.2097 GMAC/s 0x5b29318ad80be465 pack.b+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 93.6940 93.5990 320.8826 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.applechunk 8.5710 8.5660 3507.7320 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+probe
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 2.8720 2.8410 20.4458 GMAC/s 0x4efb8e54c724fa9 plan=0
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused 2.7150 2.6970 21.6281 GMAC/s 0xd044aebb510dc9 dispatched
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen 4.7860 4.7780 12.2692 GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 1.7910 1.7800 32.7863 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.applechunk 1.9240 1.9140 30.5199 GMAC/s 0x1ffdde3ffffb72c9 probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 3.3790 3.3240 0.0042 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 5.0710 5.0460 11.5796 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b 2.2580 2.2480 26.0054 Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b 2.2470 2.2150 26.1327 Gelem/s 0x45255120c9d82325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b 3.1630 3.1410 18.5647 Gelem/s 0x8e72f1c5a3402325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.bf16f32.v1 2.7100 2.6930 21.6680 GMAC/s 0xd044aebb510dc9 product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 4.8740 4.8470 12.0477 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.applechunk 5.0030 4.9720 11.7370 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.bf16f32.v1 4.6810 4.6650 12.5444 GMAC/s 0xd044aebb510dc9 pack.b+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 9.6470 9.6040 6.0869 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.applechunk 9.8710 9.7990 5.9488 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+probe
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 1.3680 1.3520 343.3933 GMAC/s 0xfb21004541ae3e8e plan=20
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused 5.2120 5.1730 90.1309 GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen 3.3250 3.2660 141.2818 GMAC/s 0xcbe807d3ae13612f dispatched
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 2.9650 2.9290 158.4358 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.applechunk 1.9530 1.9410 240.5336 GMAC/s 0x694aafd520fdadad probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 3.7820 3.7470 0.0303 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 5.0650 5.0150 11.5933 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b 2.2510 2.2270 26.0863 Gelem/s 0xfbacba127cf6177e once-per-weight
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b 2.2430 2.1960 26.1793 Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b 3.1630 3.1320 18.5647 Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.bf16f32.v1 3.3480 3.3330 140.3112 GMAC/s 0xcbe807d3ae13612f product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 6.4440 6.4260 72.8991 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.applechunk 5.4550 5.4370 86.1159 GMAC/s 0x694aafd520fdadad quantize.a+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.bf16f32.v1 5.3270 5.2810 88.1851 GMAC/s 0xcbe807d3ae13612f pack.b+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 11.3200 11.2430 41.4984 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.applechunk 10.3290 10.2710 45.4799 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+probe
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 11.4650 11.1980 2622.3089 GMAC/s 0x4743c97cb961339e plan=20
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused 191.1210 190.8750 157.3075 GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen 13.4240 13.1410 2239.6284 GMAC/s 0x508d64e0e41d3350 dispatched
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 117.6940 117.1610 255.4486 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.applechunk 7.1410 7.1350 4210.1626 GMAC/s 0x6120545eacb068ad probe,geometry=0
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 4.7690 4.7350 1.5391 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 5.0800 5.0630 11.5591 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b 2.2740 2.2400 25.8225 Gelem/s 0xd1b066f4e6a61fed once-per-weight
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b 2.2400 2.2270 26.2144 Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b 3.1610 3.1450 18.5765 Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.bf16f32.v1 13.4130 13.1410 2241.4651 GMAC/s 0x508d64e0e41d3350 product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 122.2080 122.1300 246.0131 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.applechunk 11.6260 11.5880 2585.9944 GMAC/s 0x6120545eacb068ad quantize.a+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.bf16f32.v1 15.1230 15.1040 1988.0163 GMAC/s 0x508d64e0e41d3350 pack.b+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 126.9410 126.4750 236.8405 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.applechunk 16.5030 16.4490 1821.7761 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+probe
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 4.0720 4.0460 129.0119 GMAC/s 0xcdc134cbce391535 plan=0
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused 4.0230 4.0150 130.5833 GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen 21.4810 21.4520 24.4559 GMAC/s 0x23f2e7e17341274a dispatched
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 2.1830 2.1610 240.6489 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.applechunk 2.8760 2.8580 182.6622 GMAC/s 0xe0222b2f9de835ed probe,geometry=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.1880 1.1800 0.0034 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 10.3390 10.2780 50.8112 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b 17.7460 17.7400 29.6031 Gelem/s 0xa3f53235cc152516 once-per-weight
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b 17.6730 17.6650 29.7254 Gelem/s 0x63450213e8e12325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b 30.5200 30.5110 17.2129 Gelem/s 0x23115689185e2325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.bf16f32.v1 21.4680 21.4630 24.4707 GMAC/s 0x23f2e7e17341274a product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 3.1180 3.0490 168.4851 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.applechunk 3.7660 3.7450 139.4946 GMAC/s 0xe0222b2f9de835ed quantize.a+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.bf16f32.v1 38.9350 38.9260 13.4927 GMAC/s 0x23f2e7e17341274a pack.b+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 13.2120 13.1520 39.7621 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.applechunk 13.9330 13.7540 37.7045 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+probe
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 5.7290 5.6690 733.5822 GMAC/s 0x3ebab59d0da21444 plan=20
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused 27.3660 27.2300 153.5735 GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen 23.0470 23.0160 182.3531 GMAC/s 0x82bad7b4e5c4c263 dispatched
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 13.4380 13.3840 312.7469 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.applechunk 2.9300 2.9160 1434.3661 GMAC/s 0x8151fd05ff287a5d probe,geometry=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.1910 1.1750 0.0275 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 10.3030 10.1710 50.9887 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b 17.8240 17.7480 29.4736 Gelem/s 0xbdac0264c773e6f1 once-per-weight
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b 17.7230 17.6700 29.6415 Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b 30.5390 30.5300 17.2022 Gelem/s 0xb8835a7fc2342325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.bf16f32.v1 23.1400 23.0270 181.6203 GMAC/s 0x82bad7b4e5c4c263 product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 14.3620 14.2660 292.6259 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.applechunk 3.9500 3.8130 1063.9728 GMAC/s 0x8151fd05ff287a5d quantize.a+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.bf16f32.v1 40.6730 40.5000 103.3288 GMAC/s 0x82bad7b4e5c4c263 pack.b+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 24.5000 24.4060 171.5385 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.applechunk 13.9350 13.8620 301.5926 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+probe
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 11.5820 11.5640 2902.9132 GMAC/s 0x84fd143bb625cf70 plan=20
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused 211.5180 210.7490 158.9536 GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen 13.7680 13.7420 2442.0062 GMAC/s 0xa75052ecc1e78b46 dispatched
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 102.7290 102.5350 327.2838 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma this column does not have the unit the arm runs on
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.applechunk 6.7970 6.6570 4946.5265 GMAC/s 0xaae4f3d3c69453cd probe,geometry=0
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 1.4530 1.4190 1.4433 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 1.8510 1.8410 35.4765 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b 2.4640 2.4050 26.6506 Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b 2.4600 2.4320 26.6939 Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b 3.6350 3.6030 18.0652 Gelem/s 0xf6a61b0da9142325 per-call-when-materialized
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.bf16f32.v1 13.7660 13.7430 2442.3610 GMAC/s 0xa75052ecc1e78b46 product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 103.8610 103.7820 323.7167 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.applechunk 7.8480 7.7930 4284.0903 GMAC/s 0xaae4f3d3c69453cd quantize.a+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.bf16f32.v1 15.9530 15.9340 2107.5372 GMAC/s 0xa75052ecc1e78b46 pack.b+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 105.4530 105.4240 318.8296 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.applechunk 9.5210 9.3620 3531.3035 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+probe
+
+== done [IDENTICAL]: 12 shapes ==
+== sabotage verdict
+DISAGREE (expected) llama8b.qkv.t1 fp32.v1: clean 0x920cdd138650a8bd sabotage 0x920cdc138650a70a
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.fused: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 bf16f32.v1.widen: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.flat: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.pack.b: clean 0x24efed638bb6b96b sabotage 0x24efec638bb6b7b8
+DISAGREE (expected) llama8b.qkv.t1 convert.bf16.widen.b: clean 0xd2c2d96392622325 sabotage 0xd2c2d86392622172
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.dequantize.b: clean 0x2fd9ee536fd82325 sabotage 0x2fd9ed536fd82172
+DISAGREE (expected) llama8b.qkv.t1 inference.bf16f32.v1: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.bf16f32.v1: clean 0xcd39e9d6e6d7179a sabotage 0xcd39ead6e6d7194d
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t8 fp32.v1: clean 0xd5677d8a13939709 sabotage 0xd5677c8a13939556
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.fused: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 bf16f32.v1.widen: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.flat: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.pack.b: clean 0xdccc5a093a080c52 sabotage 0xdccc5b093a080e05
+DISAGREE (expected) llama8b.qkv.t8 convert.bf16.widen.b: clean 0x944a5da41b4d2325 sabotage 0x944a5ca41b4d2172
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.dequantize.b: clean 0x24697157b3da2325 sabotage 0x24697057b3da2172
+DISAGREE (expected) llama8b.qkv.t8 inference.bf16f32.v1: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.bf16f32.v1: clean 0xf36fe1a8828cefd9 sabotage 0xf36fe0a8828cee26
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t512 fp32.v1: clean 0x67d3d940546b834c sabotage 0x67d3da40546b84ff
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.fused: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 bf16f32.v1.widen: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.flat: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.pack.b: clean 0xaef2da473a8e2a10 sabotage 0xaef2db473a8e2bc3
+DISAGREE (expected) llama8b.qkv.t512 convert.bf16.widen.b: clean 0xc8e5243510392325 sabotage 0xc8e5233510392172
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.dequantize.b: clean 0x1798a32eac742325 sabotage 0x1798a22eac742172
+DISAGREE (expected) llama8b.qkv.t512 inference.bf16f32.v1: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.bf16f32.v1: clean 0x4abd79a5b10221e5 sabotage 0x4abd78a5b1022032
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+sabotage comparison: 48 compared, 48 differed, 0 did not, 0 not compared
+VERDICT: the sabotage arm was seen at every arm and shape compared
+price_job: box=m3ultra red=0
+######## phase price on m3ultra exit=0, finished 2026-09-29T03:23:20Z
+######## phase vendor on m3ultra, started 2026-09-29T03:23:20Z
+== tools/vendor_gemm_price.py ==
+  device      : Apple GPU (mps)
+  library     : MPS/MPSGraph
+  build       : torch 2.13.0, torch 2.13.0
+  shapes      : 12 of 20, parsed from bench/gemm_shapes.mojo (--only llama8b)
+  COMPARISON ONLY: a vendor library's arithmetic is the vendor's; no arm
+                here carries an identity claim and none is hashed.
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict only, meaning torch's DEFAULT for this backend.
+                On ROCm that default is off, but CDNA3 does have an XF32
+                matrix mode that the same allow_tf32 switch reaches, so
+                this is strict FP32 by default rather than by assertion.
+                An XF32 arm is OWED here the way tf32 is measured on CUDA.
+  bf16 arm    : both operands torch.bfloat16, product in bf16 (allow_tf32 off).
+
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.6626 ms       50.6 GF/s
+VENDORPRICE bf16       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.3878 ms       86.5 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.9505 ms      282.4 GF/s
+VENDORPRICE bf16       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.3892 ms      689.7 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          1.6037 ms    10712.3 GF/s
+VENDORPRICE bf16       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          1.7423 ms     9860.5 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.5867 ms      200.2 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          1.0076 ms      116.6 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          1.3591 ms      691.3 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.5105 ms     1840.6 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          4.0949 ms    14683.9 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          3.7403 ms    16076.2 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.5458 ms      215.2 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.3942 ms      297.9 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         1.4128 ms      665.0 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.4995 ms     1880.9 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         4.8532 ms    12389.6 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         4.3217 ms    13913.5 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096          2.9303 ms      358.6 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          1.9377 ms      542.2 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096          5.2802 ms     1591.9 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          2.0810 ms     4039.0 GF/s
+VENDORPRICE strict     llama8b.lm_head.t512             NT m=512     n=128256  k=4096         40.3968 ms    13316.5 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t512             NT m=512     n=128256  k=4096         36.5396 ms    14722.2 GF/s
+
+  wrote /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/results/lowbit_units/m3ultra/vendor/vendor_price.json
+vendor_job: box=m3ultra exit=0
+######## phase vendor on m3ultra exit=0, finished 2026-09-29T03:24:53Z
+box_job: box=m3ultra phases: gate=0 chunk=0 price=0 vendor=0 red=0

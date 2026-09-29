@@ -1,0 +1,132 @@
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0xcd39e9d6e6d7179a dispatched
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0xcd39e9d6e6d7179a not-dispatched(cells<=16384)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x54279cbda1444726 per-call
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0x24efed638bb6b96b once-per-weight
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0xd2c2d96392622325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x2fd9ee536fd82325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0xf36fe1a8828cefd9 not-dispatched(cells>16384)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0xf36fe1a8828cefd9 dispatched
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xdccc5a093a080c52 once-per-weight
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x944a5da41b4d2325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x24697157b3da2325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x4abd79a5b10221e5 not-dispatched(cells>16384)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x4abd79a5b10221e5 dispatched
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xaef2da473a8e2a10 once-per-weight
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0xc8e5243510392325 per-call-when-materialized
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x1798a32eac742325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x5e3f5ff35a448024 dispatched
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x5e3f5ff35a448024 not-dispatched(cells<=16384)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xed618e2333b13294 once-per-weight
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x573b3a44b4012325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x5a7e8639220c2325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x7b30465d325906e plan=14
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x1531c10dcd152579 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x1531c10dcd152579 dispatched
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xc5111a6224412c3f once-per-weight
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x6a679200ae02325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x89939dca58a02325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x5b29318ad80be465 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x5b29318ad80be465 dispatched
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x8c503fb082856006 per-call
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0x1c04d570a3d23380 once-per-weight
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x5c9d5dc97a412325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0xb584f740e2d62325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0xd044aebb510dc9 dispatched
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0xd044aebb510dc9 not-dispatched(cells<=16384)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x160d734878c0f458 per-call
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0x9dba12f4fe0c9e9b once-per-weight
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x45255120c9d82325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x8e72f1c5a3402325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0xcbe807d3ae13612f not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0xcbe807d3ae13612f dispatched
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xfbacba127cf6177e once-per-weight
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0xcbcb5933d8352325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x9dcad54d7e462325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x508d64e0e41d3350 not-dispatched(cells>16384)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x508d64e0e41d3350 dispatched
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xd1b066f4e6a61fed once-per-weight
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0xf0fcf217ba5c2325 per-call-when-materialized
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0xd972f24f17be2325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x23f2e7e17341274a not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x23f2e7e17341274a dispatched
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xa3f53235cc152516 once-per-weight
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x63450213e8e12325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0x23115689185e2325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 not-timed not-timed not-timed GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0x82bad7b4e5c4c263 not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0x82bad7b4e5c4c263 dispatched
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xbdac0264c773e6f1 once-per-weight
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0x4e388bd358a22325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0xb8835a7fc2342325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 not-timed not-timed not-timed GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.fused not-timed not-timed not-timed GMAC/s 0xa75052ecc1e78b46 not-dispatched(cells>16384)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED bf16f32.v1.widen not-timed not-timed not-timed GMAC/s 0xa75052ecc1e78b46 dispatched
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat not-timed not-timed not-timed GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma not-timed not-timed not-timed GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.applechunk this column does not have the unit the arm runs on
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a not-timed not-timed not-timed Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b not-timed not-timed not-timed Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.pack.b not-timed not-timed not-timed Gelem/s 0xaabc0c6ba2a73e85 once-per-weight
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.bf16.widen.b not-timed not-timed not-timed Gelem/s 0xbd6a89a89fc02325 per-call-when-materialized
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.dequantize.b not-timed not-timed not-timed Gelem/s 0xf6a61b0da9142325 per-call-when-materialized

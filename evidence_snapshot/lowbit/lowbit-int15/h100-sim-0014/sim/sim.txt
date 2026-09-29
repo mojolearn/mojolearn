@@ -1,0 +1,12 @@
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100
+started=2026-09-29T03:26:02Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=17
+arith_pin=17337a5c2a83dd5592ee5ea1505afbcd2bb8e4b3  bench/lowbit_quality/arith.py  lane/lowbit-quality 59f445c6ce685956d6bf0a9970d80f6fa4d961c3
+export exit=0 (wrote the committed path)
+vectors_sha256=4fc64c503ab4cdffdc2d37e7f9b666ac3f82f6949d4ea344c32c3e11d8550cf5
+reach: sim-host-sabotage failed check_sim_host_product, as it must
+reach: sim-convert-sabotage failed check_sim_host_codes, as it must
+reach: sim-device-sabotage failed check_sim_device_product, as it must
+finished=2026-09-29T03:27:03Z
+verdict=GREEN every expected outcome held (see status.tsv)

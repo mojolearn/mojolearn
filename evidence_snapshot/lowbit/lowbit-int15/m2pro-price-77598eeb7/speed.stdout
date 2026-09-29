@@ -1,0 +1,1467 @@
+######## phase gate on m2pro, started 2026-09-29T03:50:33Z
+int15	0	7s	expected=pass	held=yes
+int15-force-flat	0	7s	expected=pass	held=yes
+int15-sabotage	1	6s	expected=fail	held=yes
+int15-host-sabotage	1	7s	expected=fail	held=yes
+int15-piece-sabotage	1	6s	expected=fail	held=yes
+int15-quant-sabotage	1	7s	expected=fail	held=yes
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m2pro vendor=apple gpu_archs=unset
+started=2026-09-29T03:50:33Z
+tree_head=77598eeb77ab4e52ab171e2a584184031acb8115 dirty_files=33
+machine=Apple M2 Pro macOS 26.7
+reach: int15-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-sabotage failed check_int15_plans_agree, as it must
+reach: int15-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-host-sabotage failed check_int15_pieces_oracle_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_plans_agree, as it must
+reach: int15-host-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-piece-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-piece-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-quant-sabotage failed check_int15_device_conversions_match_host, as it must
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+digests=825 digests_force_flat=825
+finished=2026-09-29T03:51:13Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== int15 (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15 in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 0 failed ==
+== int15-force-flat (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15-force-flat in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_FORCE_FLAT=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+ok check_int15_device_matches_oracle
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 0 failed ==
+== int15-sabotage (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.126932/0x0xc18903f5 want -17.12693/0x0xc18903f4
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e; plans-1x32x32 (dispatch-planes vs oracle): 32 of 32 cells differ; first at 0 got 57.35113/0x0x4265678f want 57.351128/0x0x4265678e
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.0-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got 4562846000.0/0x0x4f87fbc1 want 4562845700.0/0x0x4f87fbc0; planted-0.1-3x5x17 (flat vs oracle): 15 of
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 3 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 3 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-host-sabotage (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15-host-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: none  host sabotage: True ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+!! GATE FAILED: check_int15_pieces_oracle_matches_oracle
+   host pieces 1x32x32: 32 of 32 cells differ; first at 0 got 159.09662/0x0x431f18bc want 159.09663/0x0x431f18bd
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+ok check_int15_device_conversions_match_host
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32: 32 of 32 cells differ; first at 0 got -17.12693/0x0xc18903f4 want -17.126932/0x0xc18903f5
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (flat vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (pieces vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatch-codes vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f; plans-1x32x32 (dispatch-planes vs oracle): 32 of 32 cells differ; first at 0 got 57.351128/0x0x4265678e want 57.35113/0x0x4265678f
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.0-3x5x17 (flat vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (dispatch-codes vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.0-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got 4562845700.0/0x0x4f87fbc0 want 4562846000.0/0x0x4f87fbc1; planted-0.1-3x5x17 (flat vs oracle): 15 of
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 4 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 4 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-piece-sabotage (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15-piece-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_PIECE_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_PIECE_HI_CLAMP  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: planes at 259 are (-127, 1), want (-128, 1)
+ok check_int15_device_matches_oracle
+!! GATE FAILED: check_int15_plans_agree
+   plans-1x32x32 (pieces vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25; plans-1x32x32 (dispatch-planes vs oracle): 1 of 32 cells differ; first at 28 got 131.00386/0x0x430300fd want 130.67635/0x0x4302ad25
+!! GATE FAILED: check_int15_planted_worst_cases
+   planted-0.1-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.1-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got -4527196000.0/0x0xcf86ebc4 want -4562845700.0/0x0xcf87fbc0; planted-0.2-3x5x17 (pieces vs oracle): 15 of 15 cells differ; first at 0 got -4492103700.0/0x0xcf85e008 want -4527753000.0/0x0xcf86f004; planted-0.2-3x5x17 (dispatch-planes vs oracle): 15 of 15 cells differ; first at 0 got -4492103700.0/0x0xcf85e008 want -4527753000.0/0x0xcf86f004; planted-0.3-3x5x17 (pieces vs o
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 3 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 3 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== int15-quant-sabotage (every line that is not a digest or a per-shape ok; last 60)
+✨ Pixi task (check-gemm-int15-quant-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_QUANT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo
+== gemm/checks/gemm_int15_check.mojo [IDENTICAL]  sabotage: INT15_QUANT_TAIL_DROPPED  host sabotage: False ==
+   profile: mojolearn.identical.gemm.int15i64.v1
+   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md (THE FIFTEEN-BIT PROFILE)
+   column: apple  int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+ok check_int15_pieces_cover_every_code
+ok check_int15_sum_to_float_is_correctly_rounded
+ok check_int15_quantizer_is_the_rule
+ok check_int15_bounds_are_where_the_contract_says
+ok check_int15_pieces_oracle_matches_oracle
+   NATIVE apple: the column's own int64 to float32 conversion differs from the correctly rounded word on 0 of 2121 planted sums
+ok check_int15_device_integers_match_host
+!! GATE FAILED: check_int15_device_conversions_match_host
+   parallel quantizer: exponent of row 6 is -10 (codes) and -10 (planes), want -4
+!! GATE FAILED: check_int15_device_matches_oracle
+   int15 1x32x32 (from_f32): 32 of 32 cells differ; first at 0 got -25.0/0x0xc1c80000 want -17.12693/0x0xc18903f4
+ok check_int15_plans_agree
+ok check_int15_planted_worst_cases
+ok check_int15_is_batch_invariant
+ok check_int15_device_refuses_above_max_k
+== 12 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 gate(s) failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== gate digests (the clean run)
+DIGEST path-1x32x32 oracle 0x7b55f6c6c9a6d3d6
+DIGEST path-1x32x32 device 0x7b55f6c6c9a6d3d6
+DIGEST path-1x32x32 from-f32 0x7b55f6c6c9a6d3d6
+DIGEST path-1x64x128 oracle 0xf3201701ab9e453
+DIGEST path-1x64x128 device 0xf3201701ab9e453
+DIGEST path-1x64x128 from-f32 0xf3201701ab9e453
+DIGEST path-2x96x127 oracle 0xd86bd92d1750f1f0
+DIGEST path-2x96x127 device 0xd86bd92d1750f1f0
+DIGEST path-2x96x127 from-f32 0xd86bd92d1750f1f0
+DIGEST path-7x33x129 oracle 0xadc5f275fa0908bd
+DIGEST path-7x33x129 device 0xadc5f275fa0908bd
+DIGEST path-7x33x129 from-f32 0xadc5f275fa0908bd
+DIGEST path-16x64x1000 oracle 0x53296d682c3c50a
+DIGEST path-16x64x1000 device 0x53296d682c3c50a
+DIGEST path-16x64x1000 from-f32 0x53296d682c3c50a
+DIGEST path-129x129x256 oracle 0x747c54a1847118ca
+DIGEST path-129x129x256 device 0x747c54a1847118ca
+DIGEST path-129x129x256 from-f32 0x747c54a1847118ca
+DIGEST path-1x4096x512 oracle 0x893f5e045ad8c66d
+DIGEST path-1x4096x512 device 0x893f5e045ad8c66d
+DIGEST path-1x4096x512 from-f32 0x893f5e045ad8c66d
+DIGEST path-3x5x17 oracle 0xa575ec9cb636e6c
+DIGEST path-3x5x17 device 0xa575ec9cb636e6c
+DIGEST path-3x5x17 from-f32 0xa575ec9cb636e6c
+DIGEST path-17x33x31 oracle 0x6047182938989608
+DIGEST path-17x33x31 device 0x6047182938989608
+DIGEST path-17x33x31 from-f32 0x6047182938989608
+DIGEST path-33x17x33 oracle 0xd45745ab3d7cacce
+DIGEST path-33x17x33 device 0xd45745ab3d7cacce
+DIGEST path-33x17x33 from-f32 0xd45745ab3d7cacce
+DIGEST path-1x47x100 oracle 0x979b82aa889ee887
+DIGEST path-1x47x100 device 0x979b82aa889ee887
+DIGEST path-1x47x100 from-f32 0x979b82aa889ee887
+DIGEST path-50x70x1000 oracle 0x3189c0a475ad7065
+DIGEST path-50x70x1000 device 0x3189c0a475ad7065
+DIGEST path-50x70x1000 from-f32 0x3189c0a475ad7065
+DIGEST path-13x21x4097 oracle 0xe2520275fd137adf
+DIGEST path-13x21x4097 device 0xe2520275fd137adf
+DIGEST path-13x21x4097 from-f32 0xe2520275fd137adf
+DIGEST path-2x16x32 oracle 0xfbb0b98c34160f85
+DIGEST path-2x16x32 device 0xfbb0b98c34160f85
+DIGEST path-2x16x32 from-f32 0xfbb0b98c34160f85
+DIGEST path-100x3x64 oracle 0xa6aea0e1b1740a35
+DIGEST path-100x3x64 device 0xa6aea0e1b1740a35
+DIGEST path-100x3x64 from-f32 0xa6aea0e1b1740a35
+DIGEST plans-1x32x32 oracle 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 flat 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 pieces 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 dispatch-codes 0x11b4a8af5ba13ce2
+DIGEST plans-1x32x32 dispatch-planes 0x11b4a8af5ba13ce2
+DIGEST plans-1x64x128 oracle 0xcaac78b540d27589
+DIGEST plans-1x64x128 flat 0xcaac78b540d27589
+DIGEST plans-1x64x128 pieces 0xcaac78b540d27589
+DIGEST plans-1x64x128 dispatch-codes 0xcaac78b540d27589
+DIGEST plans-1x64x128 dispatch-planes 0xcaac78b540d27589
+DIGEST plans-2x96x127 oracle 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 flat 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 pieces 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 dispatch-codes 0xd8cf0f1b353ef33c
+DIGEST plans-2x96x127 dispatch-planes 0xd8cf0f1b353ef33c
+DIGEST plans-7x33x129 oracle 0x1043ec32934d91db
+DIGEST plans-7x33x129 flat 0x1043ec32934d91db
+DIGEST plans-7x33x129 pieces 0x1043ec32934d91db
+DIGEST plans-7x33x129 dispatch-codes 0x1043ec32934d91db
+DIGEST plans-7x33x129 dispatch-planes 0x1043ec32934d91db
+DIGEST plans-16x64x1000 oracle 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 flat 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 pieces 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 dispatch-codes 0x1ec0436a4ca8cff6
+DIGEST plans-16x64x1000 dispatch-planes 0x1ec0436a4ca8cff6
+DIGEST plans-129x129x256 oracle 0x277a9bc1632c8943
+DIGEST plans-129x129x256 flat 0x277a9bc1632c8943
+DIGEST plans-129x129x256 pieces 0x277a9bc1632c8943
+DIGEST plans-129x129x256 dispatch-codes 0x277a9bc1632c8943
+DIGEST plans-129x129x256 dispatch-planes 0x277a9bc1632c8943
+DIGEST plans-1x4096x512 oracle 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 flat 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 pieces 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 dispatch-codes 0x88fdbf813b4f71dc
+DIGEST plans-1x4096x512 dispatch-planes 0x88fdbf813b4f71dc
+DIGEST plans-3x5x17 oracle 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 flat 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 pieces 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 dispatch-codes 0x491cc7ccf4a9601d
+DIGEST plans-3x5x17 dispatch-planes 0x491cc7ccf4a9601d
+DIGEST plans-17x33x31 oracle 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 flat 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 pieces 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 dispatch-codes 0xfcd82c779d4e2b10
+DIGEST plans-17x33x31 dispatch-planes 0xfcd82c779d4e2b10
+DIGEST plans-33x17x33 oracle 0xa28da29115bb3516
+DIGEST plans-33x17x33 flat 0xa28da29115bb3516
+DIGEST plans-33x17x33 pieces 0xa28da29115bb3516
+DIGEST plans-33x17x33 dispatch-codes 0xa28da29115bb3516
+DIGEST plans-33x17x33 dispatch-planes 0xa28da29115bb3516
+DIGEST plans-1x47x100 oracle 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 flat 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 pieces 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 dispatch-codes 0xd3dca8e8f829030d
+DIGEST plans-1x47x100 dispatch-planes 0xd3dca8e8f829030d
+DIGEST plans-50x70x1000 oracle 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 flat 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 pieces 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 dispatch-codes 0xf69c1ab0a1c94533
+DIGEST plans-50x70x1000 dispatch-planes 0xf69c1ab0a1c94533
+DIGEST plans-13x21x4097 oracle 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 flat 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 pieces 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 dispatch-codes 0xc11511d4e4898ceb
+DIGEST plans-13x21x4097 dispatch-planes 0xc11511d4e4898ceb
+DIGEST plans-2x16x32 oracle 0x8c1af00da214dadd
+DIGEST plans-2x16x32 flat 0x8c1af00da214dadd
+DIGEST plans-2x16x32 pieces 0x8c1af00da214dadd
+DIGEST plans-2x16x32 dispatch-codes 0x8c1af00da214dadd
+DIGEST plans-2x16x32 dispatch-planes 0x8c1af00da214dadd
+DIGEST plans-100x3x64 oracle 0x2bc885b210500112
+DIGEST plans-100x3x64 flat 0x2bc885b210500112
+DIGEST plans-100x3x64 pieces 0x2bc885b210500112
+DIGEST plans-100x3x64 dispatch-codes 0x2bc885b210500112
+DIGEST plans-100x3x64 dispatch-planes 0x2bc885b210500112
+DIGEST planted-0.0-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-0.0-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-0.1-3x5x17 oracle 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 flat 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 pieces 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 dispatch-codes 0xb564081e55a67d6a
+DIGEST planted-0.1-3x5x17 dispatch-planes 0xb564081e55a67d6a
+DIGEST planted-0.2-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-0.2-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-0.3-3x5x17 oracle 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 flat 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 pieces 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 dispatch-codes 0x151529fff6423281
+DIGEST planted-0.3-3x5x17 dispatch-planes 0x151529fff6423281
+DIGEST planted-0.4-3x5x17 oracle 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 flat 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 pieces 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 dispatch-codes 0x5f0af7e8192efa35
+DIGEST planted-0.4-3x5x17 dispatch-planes 0x5f0af7e8192efa35
+DIGEST planted-0.5-3x5x17 oracle 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 flat 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 pieces 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 dispatch-codes 0x5a3fe7cd06505bd9
+DIGEST planted-0.5-3x5x17 dispatch-planes 0x5a3fe7cd06505bd9
+DIGEST planted-0.6-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-0.6-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-1.0-3x5x17 oracle 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 flat 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 pieces 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 dispatch-codes 0xb564081e55a67d6a
+DIGEST planted-1.0-3x5x17 dispatch-planes 0xb564081e55a67d6a
+DIGEST planted-1.1-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-1.1-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-1.2-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-1.2-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-1.3-3x5x17 oracle 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 flat 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 pieces 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 dispatch-codes 0xfd1d72216f254d01
+DIGEST planted-1.3-3x5x17 dispatch-planes 0xfd1d72216f254d01
+DIGEST planted-1.4-3x5x17 oracle 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 flat 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 pieces 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 dispatch-codes 0x207a21bf4cf27b35
+DIGEST planted-1.4-3x5x17 dispatch-planes 0x207a21bf4cf27b35
+DIGEST planted-1.5-3x5x17 oracle 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 flat 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 pieces 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 dispatch-codes 0x2d36d75a8d935059
+DIGEST planted-1.5-3x5x17 dispatch-planes 0x2d36d75a8d935059
+DIGEST planted-1.6-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-1.6-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-2.0-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-2.1-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-2.1-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-2.2-3x5x17 oracle 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 flat 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 pieces 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 dispatch-codes 0xf46c76fb950488eb
+DIGEST planted-2.2-3x5x17 dispatch-planes 0xf46c76fb950488eb
+DIGEST planted-2.3-3x5x17 oracle 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 flat 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 pieces 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 dispatch-codes 0xefdd1fba721a3818
+DIGEST planted-2.3-3x5x17 dispatch-planes 0xefdd1fba721a3818
+DIGEST planted-2.4-3x5x17 oracle 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 flat 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 pieces 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 dispatch-codes 0x1c8841aac16eced
+DIGEST planted-2.4-3x5x17 dispatch-planes 0x1c8841aac16eced
+DIGEST planted-2.5-3x5x17 oracle 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 flat 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 pieces 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 dispatch-codes 0x1f00862a46d2f28
+DIGEST planted-2.5-3x5x17 dispatch-planes 0x1f00862a46d2f28
+DIGEST planted-2.6-3x5x17 oracle 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 flat 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 pieces 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 dispatch-codes 0xcace0f495248a16b
+DIGEST planted-2.6-3x5x17 dispatch-planes 0xcace0f495248a16b
+DIGEST planted-3.0-3x5x17 oracle 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 flat 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 pieces 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 dispatch-codes 0x151529fff6423281
+DIGEST planted-3.0-3x5x17 dispatch-planes 0x151529fff6423281
+DIGEST planted-3.1-3x5x17 oracle 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 flat 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 pieces 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 dispatch-codes 0xfd1d72216f254d01
+DIGEST planted-3.1-3x5x17 dispatch-planes 0xfd1d72216f254d01
+DIGEST planted-3.2-3x5x17 oracle 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 flat 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 pieces 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 dispatch-codes 0xefdd1fba721a3818
+DIGEST planted-3.2-3x5x17 dispatch-planes 0xefdd1fba721a3818
+DIGEST planted-3.3-3x5x17 oracle 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 flat 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 pieces 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 dispatch-codes 0xcce8ff9f34f2a1ea
+DIGEST planted-3.3-3x5x17 dispatch-planes 0xcce8ff9f34f2a1ea
+DIGEST planted-3.4-3x5x17 oracle 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 flat 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 pieces 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 dispatch-codes 0xbef38be739ce54c5
+DIGEST planted-3.4-3x5x17 dispatch-planes 0xbef38be739ce54c5
+DIGEST planted-3.5-3x5x17 oracle 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 flat 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 pieces 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 dispatch-codes 0x64d0eb5ba6967141
+DIGEST planted-3.5-3x5x17 dispatch-planes 0x64d0eb5ba6967141
+DIGEST planted-3.6-3x5x17 oracle 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 flat 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 pieces 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 dispatch-codes 0x79d80a379b0b598
+DIGEST planted-3.6-3x5x17 dispatch-planes 0x79d80a379b0b598
+DIGEST planted-4.0-3x5x17 oracle 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 flat 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 pieces 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 dispatch-codes 0xa4e9d72699ad7965
+DIGEST planted-4.0-3x5x17 dispatch-planes 0xa4e9d72699ad7965
+DIGEST planted-4.1-3x5x17 oracle 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 flat 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 pieces 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 dispatch-codes 0x9dd7ec7ea442c065
+DIGEST planted-4.1-3x5x17 dispatch-planes 0x9dd7ec7ea442c065
+DIGEST planted-4.2-3x5x17 oracle 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 flat 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 pieces 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 dispatch-codes 0xc4c688abc8bbaa59
+DIGEST planted-4.2-3x5x17 dispatch-planes 0xc4c688abc8bbaa59
+DIGEST planted-4.3-3x5x17 oracle 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 flat 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 pieces 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 dispatch-codes 0xe5bfa54652cd279d
+DIGEST planted-4.3-3x5x17 dispatch-planes 0xe5bfa54652cd279d
+DIGEST planted-4.4-3x5x17 oracle 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 flat 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 pieces 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 dispatch-codes 0x45c3916e3afd3c95
+DIGEST planted-4.4-3x5x17 dispatch-planes 0x45c3916e3afd3c95
+DIGEST planted-4.5-3x5x17 oracle 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 flat 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 pieces 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 dispatch-codes 0xecfef9f9a4eb748d
+DIGEST planted-4.5-3x5x17 dispatch-planes 0xecfef9f9a4eb748d
+DIGEST planted-4.6-3x5x17 oracle 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 flat 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 pieces 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 dispatch-codes 0x9d3920241044cf59
+DIGEST planted-4.6-3x5x17 dispatch-planes 0x9d3920241044cf59
+DIGEST planted-5.0-3x5x17 oracle 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 flat 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 pieces 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 dispatch-codes 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.0-3x5x17 dispatch-planes 0x8cc7ee5cfa9eeab2
+DIGEST planted-5.1-3x5x17 oracle 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 flat 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 pieces 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 dispatch-codes 0x7cce0ff6a26f5532
+DIGEST planted-5.1-3x5x17 dispatch-planes 0x7cce0ff6a26f5532
+DIGEST planted-5.2-3x5x17 oracle 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 flat 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 pieces 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 dispatch-codes 0x399187c6f473448a
+DIGEST planted-5.2-3x5x17 dispatch-planes 0x399187c6f473448a
+DIGEST planted-5.3-3x5x17 oracle 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 flat 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 pieces 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 dispatch-codes 0xc7ad4b78eb7dd925
+DIGEST planted-5.3-3x5x17 dispatch-planes 0xc7ad4b78eb7dd925
+DIGEST planted-5.4-3x5x17 oracle 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 flat 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 pieces 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 dispatch-codes 0x9d4958f5fc10242d
+DIGEST planted-5.4-3x5x17 dispatch-planes 0x9d4958f5fc10242d
+DIGEST planted-5.5-3x5x17 oracle 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 flat 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 pieces 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 dispatch-codes 0xc151a0a976112028
+DIGEST planted-5.5-3x5x17 dispatch-planes 0xc151a0a976112028
+DIGEST planted-5.6-3x5x17 oracle 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 flat 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 pieces 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 dispatch-codes 0xb6907078b2832d0a
+DIGEST planted-5.6-3x5x17 dispatch-planes 0xb6907078b2832d0a
+DIGEST planted-6.0-3x5x17 oracle 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 flat 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 pieces 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 dispatch-codes 0xaad40ad0d4a1e55a
+DIGEST planted-6.0-3x5x17 dispatch-planes 0xaad40ad0d4a1e55a
+DIGEST planted-6.1-3x5x17 oracle 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 flat 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 pieces 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 dispatch-codes 0xe2fdb108394a3bda
+DIGEST planted-6.1-3x5x17 dispatch-planes 0xe2fdb108394a3bda
+DIGEST planted-6.2-3x5x17 oracle 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 flat 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 pieces 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 dispatch-codes 0xcace0f495248a16b
+DIGEST planted-6.2-3x5x17 dispatch-planes 0xcace0f495248a16b
+DIGEST planted-6.3-3x5x17 oracle 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 flat 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 pieces 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 dispatch-codes 0x79d80a379b0b598
+DIGEST planted-6.3-3x5x17 dispatch-planes 0x79d80a379b0b598
+DIGEST planted-6.4-3x5x17 oracle 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 flat 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 pieces 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 dispatch-codes 0x804f01342470bed
+DIGEST planted-6.4-3x5x17 dispatch-planes 0x804f01342470bed
+DIGEST planted-6.5-3x5x17 oracle 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 flat 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 pieces 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 dispatch-codes 0x15372a4197c9b7a8
+DIGEST planted-6.5-3x5x17 dispatch-planes 0x15372a4197c9b7a8
+DIGEST planted-6.6-3x5x17 oracle 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 flat 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 pieces 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 dispatch-codes 0xf46c76fb950488eb
+DIGEST planted-6.6-3x5x17 dispatch-planes 0xf46c76fb950488eb
+DIGEST planted-0.0-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-0.0-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-0.1-17x33x1000 oracle 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 flat 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 pieces 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 dispatch-codes 0x7756a1b254454b42
+DIGEST planted-0.1-17x33x1000 dispatch-planes 0x7756a1b254454b42
+DIGEST planted-0.2-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-0.2-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-0.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-0.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-0.4-17x33x1000 oracle 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 flat 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 pieces 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 dispatch-codes 0xb36825cd84a2efb5
+DIGEST planted-0.4-17x33x1000 dispatch-planes 0xb36825cd84a2efb5
+DIGEST planted-0.6-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-0.6-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-1.0-17x33x1000 oracle 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 flat 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 pieces 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 dispatch-codes 0x7756a1b254454b42
+DIGEST planted-1.0-17x33x1000 dispatch-planes 0x7756a1b254454b42
+DIGEST planted-1.1-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-1.1-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-1.2-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-1.2-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-1.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-1.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-1.4-17x33x1000 oracle 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 flat 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 pieces 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 dispatch-codes 0xf976bbb0212db1b5
+DIGEST planted-1.4-17x33x1000 dispatch-planes 0xf976bbb0212db1b5
+DIGEST planted-1.6-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-1.6-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-2.0-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-2.1-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-2.1-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-2.2-17x33x1000 oracle 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 flat 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 pieces 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 dispatch-codes 0xda82cd17e2bf4944
+DIGEST planted-2.2-17x33x1000 dispatch-planes 0xda82cd17e2bf4944
+DIGEST planted-2.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-2.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-2.4-17x33x1000 oracle 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 flat 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 pieces 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 dispatch-codes 0xedf1c59295af2cf5
+DIGEST planted-2.4-17x33x1000 dispatch-planes 0xedf1c59295af2cf5
+DIGEST planted-2.6-17x33x1000 oracle 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 flat 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 pieces 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 dispatch-codes 0xcf08f74251bc77c4
+DIGEST planted-2.6-17x33x1000 dispatch-planes 0xcf08f74251bc77c4
+DIGEST planted-3.0-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.0-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.1-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.2-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.3-17x33x1000 oracle 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 flat 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 pieces 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 dispatch-codes 0xe939e416194b24c2
+DIGEST planted-3.3-17x33x1000 dispatch-planes 0xe939e416194b24c2
+DIGEST planted-3.4-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.4-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-3.6-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-4.0-17x33x1000 oracle 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 flat 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 pieces 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 dispatch-codes 0x366ec63ade3a4655
+DIGEST planted-4.0-17x33x1000 dispatch-planes 0x366ec63ade3a4655
+DIGEST planted-4.1-17x33x1000 oracle 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 flat 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 pieces 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 dispatch-codes 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.1-17x33x1000 dispatch-planes 0xbfd8d1dcd8ca9f55
+DIGEST planted-4.2-17x33x1000 oracle 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 flat 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 pieces 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 dispatch-codes 0x4139285c38346ff5
+DIGEST planted-4.2-17x33x1000 dispatch-planes 0x4139285c38346ff5
+DIGEST planted-4.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-4.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-4.4-17x33x1000 oracle 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 flat 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 pieces 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 dispatch-codes 0xf4892fda91cd4ef5
+DIGEST planted-4.4-17x33x1000 dispatch-planes 0xf4892fda91cd4ef5
+DIGEST planted-4.6-17x33x1000 oracle 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 flat 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 pieces 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 dispatch-codes 0x8b4f498255b46ff5
+DIGEST planted-4.6-17x33x1000 dispatch-planes 0x8b4f498255b46ff5
+DIGEST planted-5.5-17x33x1000 oracle 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 flat 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 pieces 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 dispatch-codes 0x6d6fafdc5189925d
+DIGEST planted-5.5-17x33x1000 dispatch-planes 0x6d6fafdc5189925d
+DIGEST planted-6.0-17x33x1000 oracle 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 flat 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 pieces 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 dispatch-codes 0xbc9f9a500546e68b
+DIGEST planted-6.0-17x33x1000 dispatch-planes 0xbc9f9a500546e68b
+DIGEST planted-6.1-17x33x1000 oracle 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 flat 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 pieces 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 dispatch-codes 0x70fe7870e8298d0b
+DIGEST planted-6.1-17x33x1000 dispatch-planes 0x70fe7870e8298d0b
+DIGEST planted-6.2-17x33x1000 oracle 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 flat 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 pieces 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 dispatch-codes 0xcf08f74251bc77c4
+DIGEST planted-6.2-17x33x1000 dispatch-planes 0xcf08f74251bc77c4
+DIGEST planted-6.3-17x33x1000 oracle 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 flat 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 pieces 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 dispatch-codes 0xcb1e820bbe2ad2f5
+DIGEST planted-6.3-17x33x1000 dispatch-planes 0xcb1e820bbe2ad2f5
+DIGEST planted-6.4-17x33x1000 oracle 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 flat 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 pieces 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 dispatch-codes 0x65b04ea110af2cf5
+DIGEST planted-6.4-17x33x1000 dispatch-planes 0x65b04ea110af2cf5
+DIGEST planted-6.6-17x33x1000 oracle 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 flat 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 pieces 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 dispatch-codes 0xda82cd17e2bf4944
+DIGEST planted-6.6-17x33x1000 dispatch-planes 0xda82cd17e2bf4944
+DIGEST planted-0.0-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-0.0-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-0.1-1x40x4097 oracle 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 flat 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 pieces 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 dispatch-codes 0x7d5cd3eb9f4dff65
+DIGEST planted-0.1-1x40x4097 dispatch-planes 0x7d5cd3eb9f4dff65
+DIGEST planted-0.2-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-0.2-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-0.3-1x40x4097 oracle 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 flat 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 pieces 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 dispatch-codes 0x12a70d29738a5a45
+DIGEST planted-0.3-1x40x4097 dispatch-planes 0x12a70d29738a5a45
+DIGEST planted-0.4-1x40x4097 oracle 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 flat 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 pieces 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 dispatch-codes 0xd859e46b09ab2600
+DIGEST planted-0.4-1x40x4097 dispatch-planes 0xd859e46b09ab2600
+DIGEST planted-0.6-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-0.6-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-1.0-1x40x4097 oracle 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 flat 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 pieces 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 dispatch-codes 0x7d5cd3eb9f4dff65
+DIGEST planted-1.0-1x40x4097 dispatch-planes 0x7d5cd3eb9f4dff65
+DIGEST planted-1.1-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-1.1-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-1.2-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-1.2-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-1.3-1x40x4097 oracle 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 flat 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 pieces 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 dispatch-codes 0x63efb4fac09b8745
+DIGEST planted-1.3-1x40x4097 dispatch-planes 0x63efb4fac09b8745
+DIGEST planted-1.4-1x40x4097 oracle 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 flat 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 pieces 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 dispatch-codes 0x5ad18321450a0e80
+DIGEST planted-1.4-1x40x4097 dispatch-planes 0x5ad18321450a0e80
+DIGEST planted-1.6-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-1.6-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-2.0-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-2.1-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-2.1-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-2.2-1x40x4097 oracle 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 flat 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 pieces 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 dispatch-codes 0xa6be37d439cc33e5
+DIGEST planted-2.2-1x40x4097 dispatch-planes 0xa6be37d439cc33e5
+DIGEST planted-2.3-1x40x4097 oracle 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 flat 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 pieces 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 dispatch-codes 0x358668cfe7879875
+DIGEST planted-2.3-1x40x4097 dispatch-planes 0x358668cfe7879875
+DIGEST planted-2.4-1x40x4097 oracle 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 flat 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 pieces 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 dispatch-codes 0x2c748c535984555b
+DIGEST planted-2.4-1x40x4097 dispatch-planes 0x2c748c535984555b
+DIGEST planted-2.6-1x40x4097 oracle 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 flat 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 pieces 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 dispatch-codes 0x89753c5919a297e5
+DIGEST planted-2.6-1x40x4097 dispatch-planes 0x89753c5919a297e5
+DIGEST planted-3.0-1x40x4097 oracle 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 flat 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 pieces 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 dispatch-codes 0x12a70d29738a5a45
+DIGEST planted-3.0-1x40x4097 dispatch-planes 0x12a70d29738a5a45
+DIGEST planted-3.1-1x40x4097 oracle 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 flat 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 pieces 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 dispatch-codes 0x63efb4fac09b8745
+DIGEST planted-3.1-1x40x4097 dispatch-planes 0x63efb4fac09b8745
+DIGEST planted-3.2-1x40x4097 oracle 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 flat 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 pieces 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 dispatch-codes 0x358668cfe7879875
+DIGEST planted-3.2-1x40x4097 dispatch-planes 0x358668cfe7879875
+DIGEST planted-3.3-1x40x4097 oracle 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 flat 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 pieces 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 dispatch-codes 0xf1cd2c160ea14165
+DIGEST planted-3.3-1x40x4097 dispatch-planes 0xf1cd2c160ea14165
+DIGEST planted-3.4-1x40x4097 oracle 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 flat 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 pieces 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 dispatch-codes 0xa3d2b3d218e05431
+DIGEST planted-3.4-1x40x4097 dispatch-planes 0xa3d2b3d218e05431
+DIGEST planted-3.6-1x40x4097 oracle 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 flat 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 pieces 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 dispatch-codes 0x67da607282c77375
+DIGEST planted-3.6-1x40x4097 dispatch-planes 0x67da607282c77375
+DIGEST planted-4.0-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.0-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.1-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.2-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.3-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.4-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 oracle 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 flat 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 pieces 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 dispatch-codes 0x81b169c331cabfa5
+DIGEST planted-4.6-1x40x4097 dispatch-planes 0x81b169c331cabfa5
+DIGEST planted-5.5-1x40x4097 oracle 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 flat 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 pieces 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 dispatch-codes 0x63ddce03bdda7083
+DIGEST planted-5.5-1x40x4097 dispatch-planes 0x63ddce03bdda7083
+DIGEST planted-6.0-1x40x4097 oracle 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 flat 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 pieces 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 dispatch-codes 0xe929cb3b12380b85
+DIGEST planted-6.0-1x40x4097 dispatch-planes 0xe929cb3b12380b85
+DIGEST planted-6.1-1x40x4097 oracle 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 flat 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 pieces 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 dispatch-codes 0x6fd1f410698c9c85
+DIGEST planted-6.1-1x40x4097 dispatch-planes 0x6fd1f410698c9c85
+DIGEST planted-6.2-1x40x4097 oracle 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 flat 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 pieces 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 dispatch-codes 0x89753c5919a297e5
+DIGEST planted-6.2-1x40x4097 dispatch-planes 0x89753c5919a297e5
+DIGEST planted-6.3-1x40x4097 oracle 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 flat 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 pieces 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 dispatch-codes 0x67da607282c77375
+DIGEST planted-6.3-1x40x4097 dispatch-planes 0x67da607282c77375
+DIGEST planted-6.4-1x40x4097 oracle 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 flat 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 pieces 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 dispatch-codes 0x652ea6abfc47cdb
+DIGEST planted-6.4-1x40x4097 dispatch-planes 0x652ea6abfc47cdb
+DIGEST planted-6.6-1x40x4097 oracle 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 flat 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 pieces 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 dispatch-codes 0xa6be37d439cc33e5
+DIGEST planted-6.6-1x40x4097 dispatch-planes 0xa6be37d439cc33e5
+DIGEST planted-0.0-2x3x65536 oracle 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 flat 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 pieces 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 dispatch-codes 0x8952dd081175e95d
+DIGEST planted-0.0-2x3x65536 dispatch-planes 0x8952dd081175e95d
+DIGEST planted-0.1-2x3x65536 oracle 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 flat 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 pieces 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 dispatch-codes 0xaf6eb4ffcd6d505d
+DIGEST planted-0.1-2x3x65536 dispatch-planes 0xaf6eb4ffcd6d505d
+DIGEST planted-0.2-2x3x65536 oracle 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 flat 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 pieces 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 dispatch-codes 0x51abebeb479a1449
+DIGEST planted-0.2-2x3x65536 dispatch-planes 0x51abebeb479a1449
+DIGEST planted-1.0-2x3x65536 oracle 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 flat 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 pieces 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 dispatch-codes 0xaf6eb4ffcd6d505d
+DIGEST planted-1.0-2x3x65536 dispatch-planes 0xaf6eb4ffcd6d505d
+DIGEST planted-1.1-2x3x65536 oracle 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 flat 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 pieces 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 dispatch-codes 0x8952dd081175e95d
+DIGEST planted-1.1-2x3x65536 dispatch-planes 0x8952dd081175e95d
+DIGEST planted-1.2-2x3x65536 oracle 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 flat 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 pieces 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 dispatch-codes 0x48ec425bceb3249
+DIGEST planted-1.2-2x3x65536 dispatch-planes 0x48ec425bceb3249
+DIGEST planted-2.0-2x3x65536 oracle 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 flat 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 pieces 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 dispatch-codes 0x51abebeb479a1449
+DIGEST planted-2.0-2x3x65536 dispatch-planes 0x51abebeb479a1449
+DIGEST planted-2.1-2x3x65536 oracle 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 flat 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 pieces 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 dispatch-codes 0x48ec425bceb3249
+DIGEST planted-2.1-2x3x65536 dispatch-planes 0x48ec425bceb3249
+DIGEST planted-2.2-2x3x65536 oracle 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 flat 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 pieces 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 dispatch-codes 0x76d745ed091d068d
+DIGEST planted-2.2-2x3x65536 dispatch-planes 0x76d745ed091d068d
+DIGEST planted-3.0-2x3x65536 oracle 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 flat 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 pieces 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 dispatch-codes 0x81d23fd7003c2305
+DIGEST planted-3.0-2x3x65536 dispatch-planes 0x81d23fd7003c2305
+DIGEST scale-127 oracle 0x2124895549aba7c5
+DIGEST scale-127 flat 0x2124895549aba7c5
+DIGEST scale-127 pieces 0x2124895549aba7c5
+DIGEST scale-127 dispatch-codes 0x2124895549aba7c5
+DIGEST scale-127 dispatch-planes 0x2124895549aba7c5
+DIGEST scale-128 oracle 0x94b78aae0094ede8
+DIGEST scale-128 flat 0x94b78aae0094ede8
+DIGEST scale-128 pieces 0x94b78aae0094ede8
+DIGEST scale-128 dispatch-codes 0x94b78aae0094ede8
+DIGEST scale-128 dispatch-planes 0x94b78aae0094ede8
+DIGEST scale--126 oracle 0x5407f33bab7aef55
+DIGEST scale--126 flat 0x5407f33bab7aef55
+DIGEST scale--126 pieces 0x5407f33bab7aef55
+DIGEST scale--126 dispatch-codes 0x5407f33bab7aef55
+DIGEST scale--126 dispatch-planes 0x5407f33bab7aef55
+DIGEST scale--127 oracle 0xec9075e202d5c755
+DIGEST scale--127 flat 0xec9075e202d5c755
+DIGEST scale--127 pieces 0xec9075e202d5c755
+DIGEST scale--127 dispatch-codes 0xec9075e202d5c755
+DIGEST scale--127 dispatch-planes 0xec9075e202d5c755
+DIGEST scale-230 oracle 0x94b78aae0094ede8
+DIGEST scale-230 flat 0x94b78aae0094ede8
+DIGEST scale-230 pieces 0x94b78aae0094ede8
+DIGEST scale-230 dispatch-codes 0x94b78aae0094ede8
+DIGEST scale-230 dispatch-planes 0x94b78aae0094ede8
+DIGEST scale--278 oracle 0xec9075e202d5c755
+DIGEST scale--278 flat 0xec9075e202d5c755
+DIGEST scale--278 pieces 0xec9075e202d5c755
+DIGEST scale--278 dispatch-codes 0xec9075e202d5c755
+DIGEST scale--278 dispatch-planes 0xec9075e202d5c755
+DIGEST largest-sum-scale-84 oracle 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 flat 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 pieces 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 dispatch-codes 0x49a9902bce19a729
+DIGEST largest-sum-scale-84 dispatch-planes 0x49a9902bce19a729
+DIGEST largest-sum-scale-85 oracle 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 flat 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 pieces 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 dispatch-codes 0x9fe5c70e212a15
+DIGEST largest-sum-scale-85 dispatch-planes 0x9fe5c70e212a15
+gate_job: box=m2pro red=0
+######## phase gate on m2pro exit=0, finished 2026-09-29T03:51:13Z
+######## phase price on m2pro, started 2026-09-29T03:51:13Z
+profile=mojolearn.identical.gemm.int15i64.v1
+box=m2pro
+started=2026-09-29T03:51:13Z
+tree_head=77598eeb77ab4e52ab171e2a584184031acb8115 dirty_files=33
+mac_budget=default repeats=3 only=all
+machine=Apple M2 Pro macOS 26.7
+build exit=0 13s
+warm exit=1 154s (untimed, every arm once)
+others_before_the_timed_run:
+23137       03:27 bash             bash tools/lowbit_int15/box_job.sh m2pro gate price
+price exit=1 360s
+others_after_the_timed_run:
+23137       09:27 bash             bash tools/lowbit_int15/box_job.sh m2pro gate price
+warm-and-timed: the two runs printed the same digests (192)
+price-sabotage exit=0 (identity only)
+sabotage-comparison exit=0 (0: every sabotaged fifteen-bit digest differed from the clean one)
+finished=2026-09-29T04:00:40Z
+== price.log (every line that is not a PRICE, DIGEST or device-bits line)
+== bench/gemm_int15_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, int15i64.v1
+int15 dispatch: flat and pieces (no int8 matrix unit on this column)
+sabotage: none
+repeats 3  mac budget 34359738368  only 
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 1.5420 1.5080 10.8802 GMAC/s 0x920cdd138650a8bd OP_NT,plan=0
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.flat 1.3760 1.3660 12.1927 GMAC/s 0x6c0a74154145a04f dispatched-for-codes
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.pieces 3.0030 2.6030 5.5868 GMAC/s 0x6c0a74154145a04f dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a 1.3910 1.3460 0.0029 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a.parallel 0.2240 0.2210 0.0183 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.a.parallel 0.2170 0.2130 0.0189 Gelem/s 0xdd1cf024338b930d per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.a 0.1810 0.1770 0.0226 Gelem/s 0xdd1cf024338b930d per-call
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b 3.8220 3.7920 4.3896 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b.parallel 5.6270 5.1390 2.9816 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.b.parallel 5.1730 5.1600 3.2432 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.b 1.1150 1.0910 15.0468 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes 2.6050 2.6010 6.4404 GMAC/s 0x6c0a74154145a04f planes.a.parallel+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.codes 1.4310 1.4240 11.7241 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes.rowquant 3.7470 3.7460 4.4775 GMAC/s 0x6c0a74154145a04f quantize.a+split.a+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes 7.6030 7.5950 2.2067 GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.codes 6.4540 6.4240 2.5995 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes.rowquant 8.2880 8.2190 2.0243 GMAC/s 0x6c0a74154145a04f quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 1.5340 1.5130 87.4953 GMAC/s 0xd5677d8a13939709 OP_NT,plan=20
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.flat 9.8140 9.7500 13.6761 GMAC/s 0x81664edfe5ebeb5a dispatched-for-codes
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.pieces 19.2220 19.1240 6.9825 GMAC/s 0x81664edfe5ebeb5a dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a 1.4280 1.4050 0.0229 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a.parallel 0.2420 0.2180 0.1354 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.a.parallel 0.2560 0.2030 0.1280 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.a 0.1740 0.1590 0.1883 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b 3.7800 3.7670 4.4384 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b.parallel 5.1360 5.1270 3.2666 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.b.parallel 5.1900 5.1630 3.2326 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.b 1.1030 1.1010 15.2105 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes 19.2630 19.1790 6.9676 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.codes 9.8600 9.8330 13.6123 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes.rowquant 20.3940 20.3650 6.5812 GMAC/s 0x81664edfe5ebeb5a quantize.a+split.a+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes 24.2530 24.2510 5.5341 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.codes 14.7640 14.7640 9.0909 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes.rowquant 24.8610 24.7960 5.3987 GMAC/s 0x81664edfe5ebeb5a quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 17.8770 17.7380 480.5020 GMAC/s 0x67d3d940546b834c OP_NT,plan=20
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.flat 515.8010 515.6640 16.6536 GMAC/s 0xa9844dfadf1fd6da dispatched-for-codes
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.pieces 1033.4000 1033.3620 8.3123 GMAC/s 0xa9844dfadf1fd6da dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a 3.4840 3.4830 0.6019 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.7450 0.7240 2.8150 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.a.parallel 0.7330 0.7290 2.8611 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.a 0.2860 0.2800 7.3327 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b 3.7870 3.7840 4.4302 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b.parallel 5.1160 5.1060 3.2794 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.b.parallel 5.1420 5.1400 3.2628 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.b 1.0730 1.0640 15.6358 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes 1033.7780 1033.7670 8.3093 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.codes 516.3660 516.2490 16.6354 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+flat
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes.rowquant 1036.6180 1036.6080 8.2865 GMAC/s 0xa9844dfadf1fd6da quantize.a+split.a+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes 1038.9450 1038.9270 8.2679 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.codes 521.4320 520.7960 16.4737 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 1041.3860 1041.0470 8.2486 GMAC/s 0xa9844dfadf1fd6da quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512.bwd_dx  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL fp32.v1 18.3750 18.2770 467.4794 GMAC/s 0xef9cf5a7a4f7f63e OP_NN,plan=20
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.flat 516.3620 515.3920 16.6355 GMAC/s 0x6c4eff5b0480823a dispatched-for-codes
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.pieces 1033.4070 1033.1510 8.3122 GMAC/s 0x6c4eff5b0480823a dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a 3.4760 3.4580 0.6033 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.7480 0.7420 2.8037 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.a.parallel 0.7640 0.7130 2.7450 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.a 0.3160 0.2870 6.6366 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b 3.7310 3.7070 4.4967 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b.parallel 4.5010 4.4800 3.7274 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.b.parallel 4.5290 4.5240 3.7044 Gelem/s 0x22cb22fa7a9b88ff per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.b 1.0920 1.0850 15.3638 Gelem/s 0x22cb22fa7a9b88ff once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes 1038.2510 1038.1740 8.2735 GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.codes 520.5610 520.1720 16.5013 GMAC/s 0x6c4eff5b0480823a quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 1041.0890 1040.9870 8.2509 GMAC/s 0x6c4eff5b0480823a quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.qkv.t512.bwd_dw  m=4096 n=4096 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL fp32.v1 13.8950 13.8340 618.2033 GMAC/s 0xe489aab33323c201 OP_TN,plan=20
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.flat 509.9660 509.8460 16.8441 GMAC/s 0x8ef510e0780e450 dispatched-for-codes
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.pieces 1016.7040 1016.5090 8.4488 GMAC/s 0x8ef510e0780e450 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a 0.6380 0.6250 3.2871 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a.parallel 0.7460 0.7290 2.8112 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.a.parallel 0.7490 0.7350 2.7999 Gelem/s 0x660ec1446ce3f2a1 per-call,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.a 0.2940 0.2670 7.1332 Gelem/s 0x660ec1446ce3f2a1 per-call
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b 0.6310 0.5840 3.3235 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b.parallel 0.7610 0.7300 2.7558 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.b.parallel 0.7710 0.7260 2.7200 Gelem/s 0x7a7bbd8b4dfdf226 per-step,transposing
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.b 0.3020 0.2670 6.9442 Gelem/s 0x7a7bbd8b4dfdf226 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes 1017.7650 1017.6210 8.4400 GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.codes 511.1250 511.1190 16.8059 GMAC/s 0x8ef510e0780e450 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes.rowquant 1017.8240 1017.6120 8.4395 GMAC/s 0x8ef510e0780e450 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 5.2590 5.2320 11.1657 GMAC/s 0x4965ea6af2ff5e61 OP_NT,plan=0
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.flat 5.0370 4.9660 11.6578 GMAC/s 0xae35d8ef540f67ad dispatched-for-codes
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.pieces 9.7150 9.6520 6.0443 GMAC/s 0xae35d8ef540f67ad dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a 1.3580 1.3580 0.0030 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a.parallel 0.2180 0.2120 0.0188 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.a.parallel 0.2140 0.2040 0.0191 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.a 0.1480 0.1410 0.0277 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b 13.6440 13.6410 4.3037 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b.parallel 18.7760 18.7740 3.1274 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.b.parallel 18.8570 18.8530 3.1140 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.b 3.2190 3.1860 18.2418 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes 9.7810 9.7410 6.0035 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.codes 5.1000 5.0980 11.5138 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes.rowquant 10.8580 10.8470 5.4080 GMAC/s 0xae35d8ef540f67ad quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes 28.3430 28.3420 2.0718 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.codes 23.6400 23.6330 2.4839 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes.rowquant 27.2580 27.2460 2.1542 GMAC/s 0xae35d8ef540f67ad quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 4.1510 4.0930 113.1684 GMAC/s 0x7b30465d325906e OP_NT,plan=20
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.flat 29.5070 29.4420 15.9204 GMAC/s 0x5dd8142ffbce1023 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.pieces 58.7360 58.5090 7.9979 GMAC/s 0x5dd8142ffbce1023 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a 1.4740 1.4040 0.0222 Gelem/s 0xc41e630721b559a8 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a.parallel 0.2480 0.2360 0.1321 Gelem/s 0xc41e630721b559a8 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.a.parallel 0.2160 0.2140 0.1517 Gelem/s 0xa65514e80d97e412 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.a 0.1860 0.1850 0.1762 Gelem/s 0xa65514e80d97e412 per-call
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b 13.6760 13.6730 4.2937 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b.parallel 18.8030 18.7980 3.1229 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.b.parallel 18.8860 18.8650 3.1092 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.b 3.1750 3.1750 18.4946 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes 58.6970 58.6910 8.0032 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.codes 29.5840 29.5470 15.8789 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes.rowquant 59.9580 59.8770 7.8349 GMAC/s 0x5dd8142ffbce1023 quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes 77.4140 77.3960 6.0682 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.codes 48.0820 48.0630 9.7700 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes.rowquant 76.0580 76.0210 6.1764 GMAC/s 0x5dd8142ffbce1023 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 60.7360 60.5010 495.0074 GMAC/s 0x27a166783c45f9f0 OP_NT,plan=20
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.flat 1806.4010 1806.0860 16.6435 GMAC/s 0x31746954b2b719d4 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.pieces 3616.3350 3615.6400 8.3136 GMAC/s 0x31746954b2b719d4 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a 3.4640 3.4490 0.6054 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a.parallel 0.8280 0.7460 2.5328 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.a.parallel 0.7500 0.7340 2.7962 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.a 0.3090 0.3010 6.7869 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b 13.6830 13.6800 4.2915 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b.parallel 18.8180 18.7950 3.1204 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.b.parallel 19.0360 18.8870 3.0847 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.b 3.2160 3.1560 18.2588 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes 3617.0200 3616.3290 8.3120 GMAC/s 0x31746954b2b719d4 planes.a.parallel+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.codes 1806.9910 1806.7140 16.6380 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes.rowquant 3619.1680 3618.7800 8.3071 GMAC/s 0x31746954b2b719d4 quantize.a+split.a+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes 3636.0700 3635.4220 8.2685 GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.codes 1824.7290 1824.5050 16.4763 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes.rowquant 3636.7010 3634.6160 8.2670 GMAC/s 0x31746954b2b719d4 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512.bwd_dx  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL fp32.v1 70.1960 70.1090 428.2975 GMAC/s 0x88081a26a7d76edd OP_NN,plan=20
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.flat 1933.9140 1933.0650 15.5461 GMAC/s 0xd25adc12f122f248 dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.pieces 3677.0180 1764.2250 8.1764 GMAC/s 0xd25adc12f122f248 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a 12.0570 11.9830 0.6088 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a.parallel 2.1950 2.1900 3.3440 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.a.parallel 2.2190 2.1880 3.3078 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.a 0.6150 0.5840 11.9350 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b 12.6170 12.5660 4.6541 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b.parallel 27.0580 26.4320 2.1702 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.b.parallel 27.0230 26.9000 2.1730 Gelem/s 0xad29fb7fad789398 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.b 3.2060 3.1710 18.3157 Gelem/s 0xad29fb7fad789398 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes 3710.9070 108.0870 8.1017 GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.codes 1961.4010 1466.9850 15.3282 GMAC/s 0xd25adc12f122f248 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes.rowquant 3704.6690 123.9190 8.1154 GMAC/s 0xd25adc12f122f248 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_up.t512.bwd_dw  m=14336 n=4096 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL fp32.v1 47.6680 47.5620 630.7118 GMAC/s 0x64a7d4375083cf3f OP_TN,plan=20
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.flat 1785.4890 1785.4250 16.8384 GMAC/s 0x7f5a1c9a4096e46d dispatched-for-codes
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.pieces 3554.4690 3554.0060 8.4583 GMAC/s 0x7f5a1c9a4096e46d dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a 1.1240 1.1010 6.5303 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a.parallel 2.2570 2.2200 3.2521 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.a.parallel 2.2500 2.2370 3.2622 Gelem/s 0xeb86f345a0f5c39a per-call,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.a 0.6090 0.6060 12.0526 Gelem/s 0xeb86f345a0f5c39a per-call
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b 0.6210 0.5850 3.3771 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b.parallel 0.7550 0.7240 2.7777 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.b.parallel 0.7590 0.7250 2.7630 Gelem/s 0xe2e3bcc68ceb9073 per-step,transposing
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.b 0.3060 0.2620 6.8534 Gelem/s 0xe2e3bcc68ceb9073 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes 3557.0910 3557.0870 8.4521 GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.codes 1788.3490 1788.1270 16.8115 GMAC/s 0x7f5a1c9a4096e46d quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes.rowquant 3556.0120 3556.0000 8.4546 GMAC/s 0x7f5a1c9a4096e46d quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 5.5640 5.4960 10.5536 GMAC/s 0x4efb8e54c724fa9 OP_NT,plan=0
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.flat 4.7150 4.6950 12.4539 GMAC/s 0xbad9a98c45aa8707 dispatched-for-codes
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.pieces 8.8120 8.7940 6.6637 GMAC/s 0xbad9a98c45aa8707 dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t1 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a 4.3500 4.3340 0.0033 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a.parallel 0.2640 0.2430 0.0543 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.a.parallel 0.2160 0.2160 0.0664 Gelem/s 0x582710daad02888 per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.a 0.1790 0.1710 0.0801 Gelem/s 0x582710daad02888 per-call
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b 13.8810 13.8720 4.2303 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b.parallel 18.0100 17.9700 3.2604 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.b.parallel 18.0930 18.0240 3.2455 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.b 3.2260 3.1700 18.2022 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes 8.8680 8.8520 6.6216 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.codes 4.8250 4.8080 12.1700 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+flat
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes.rowquant 12.9150 12.9060 4.5467 GMAC/s 0xbad9a98c45aa8707 quantize.a+split.a+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes 26.6530 26.6450 2.2031 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.codes 22.5050 22.4890 2.6092 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes.rowquant 29.4180 29.3770 1.9961 GMAC/s 0xbad9a98c45aa8707 quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 4.9750 4.9610 94.4245 GMAC/s 0xfb21004541ae3e8e OP_NT,plan=20
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.flat 35.2130 34.8860 13.3406 GMAC/s 0x5d341feda0541b7c dispatched-for-codes
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.pieces 67.5850 67.5840 6.9507 GMAC/s 0x5d341feda0541b7c dispatched-for-planes
+INT15-NOT-RUN apple llama8b.mlp_down.t8 int15i64.v1.mma this-column-has-no-integer-matrix-unit
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a 4.4820 4.4800 0.0256 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a.parallel 0.2790 0.2740 0.4111 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.a.parallel 0.2470 0.2460 0.4643 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.a 0.1620 0.1620 0.7080 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b 13.8430 13.7980 4.2419 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b.parallel 17.9420 17.9360 3.2728 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.b.parallel 18.0150 18.0080 3.2595 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.b 3.2380 3.1640 18.1347 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes 67.8100 67.4530 6.9276 GMAC/s 0x5d341feda0541b7c planes.a.parallel+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.codes 35.4560 34.9800 13.2492 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+flat
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes.rowquant 71.9280 71.9130 6.5310 GMAC/s 0x5d341feda0541b7c quantize.a+split.a+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes 85.6240 85.5760 5.4863 GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+product
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.codes 52.7040 52.6240 8.9132 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+quantize.b.parallel+flat
+INT15 apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes.rowquant 88.4130 88.3470 5.3133 GMAC/s 0x5d341feda0541b7c quantize.a+quantize.b+split.a+split.b+product
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: POISON SURVIVED at cell 1723968 of int15.llama8b.mlp_down.t512.training.int15i64.v1.planes.rowquant: the kernel never wrote it, so the milliseconds beside it are a timing of a launch that did not produce an answer.
+== sabotage verdict
+5 shared cases; device digests equal to the clean run's: 0
+== price digests (the timed run)
+DIGEST fp32-llama8b.qkv.t1 fp32.v1 0x920cdd138650a8bd
+DIGEST price-llama8b.qkv.t1 int15i64.v1.flat 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 int15i64.v1.pieces 0x6c0a74154145a04f
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.a 0x4bfbfd4a194dd3c3
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.a.parallel 0x4bfbfd4a194dd3c3
+DIGEST conv-llama8b.qkv.t1 convert.int15.planes.a.parallel 0xdd1cf024338b930d
+DIGEST conv-llama8b.qkv.t1 convert.int15.split.a 0xdd1cf024338b930d
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.b 0xd7511d5a7d3792ec
+DIGEST conv-llama8b.qkv.t1 convert.int15.quantize.b.parallel 0xd7511d5a7d3792ec
+DIGEST conv-llama8b.qkv.t1 convert.int15.planes.b.parallel 0x3a9803f3b6c2415a
+DIGEST conv-llama8b.qkv.t1 convert.int15.split.b 0x3a9803f3b6c2415a
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.planes 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.codes 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 inference.int15i64.v1.planes.rowquant 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.planes 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.codes 0x6c0a74154145a04f
+DIGEST price-llama8b.qkv.t1 training.int15i64.v1.planes.rowquant 0x6c0a74154145a04f
+DIGEST fp32-llama8b.qkv.t8 fp32.v1 0xd5677d8a13939709
+DIGEST price-llama8b.qkv.t8 int15i64.v1.flat 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 int15i64.v1.pieces 0x81664edfe5ebeb5a
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.a 0xb78bf34e712fc6ae
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.a.parallel 0xb78bf34e712fc6ae
+DIGEST conv-llama8b.qkv.t8 convert.int15.planes.a.parallel 0x3adff9f2d64aa749
+DIGEST conv-llama8b.qkv.t8 convert.int15.split.a 0x3adff9f2d64aa749
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.b 0x7ada9833a1c6cf07
+DIGEST conv-llama8b.qkv.t8 convert.int15.quantize.b.parallel 0x7ada9833a1c6cf07
+DIGEST conv-llama8b.qkv.t8 convert.int15.planes.b.parallel 0x4f6ab0ce3273940
+DIGEST conv-llama8b.qkv.t8 convert.int15.split.b 0x4f6ab0ce3273940
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.planes 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.codes 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 inference.int15i64.v1.planes.rowquant 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.planes 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.codes 0x81664edfe5ebeb5a
+DIGEST price-llama8b.qkv.t8 training.int15i64.v1.planes.rowquant 0x81664edfe5ebeb5a
+DIGEST fp32-llama8b.qkv.t512 fp32.v1 0x67d3d940546b834c
+DIGEST price-llama8b.qkv.t512 int15i64.v1.flat 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 int15i64.v1.pieces 0xa9844dfadf1fd6da
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.a 0x96388d91a5c28f60
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.a.parallel 0x96388d91a5c28f60
+DIGEST conv-llama8b.qkv.t512 convert.int15.planes.a.parallel 0xb04426ef4d989cc2
+DIGEST conv-llama8b.qkv.t512 convert.int15.split.a 0xb04426ef4d989cc2
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.b 0x83c4a5fdce0c9ef8
+DIGEST conv-llama8b.qkv.t512 convert.int15.quantize.b.parallel 0x83c4a5fdce0c9ef8
+DIGEST conv-llama8b.qkv.t512 convert.int15.planes.b.parallel 0x547571ca5138fbe8
+DIGEST conv-llama8b.qkv.t512 convert.int15.split.b 0x547571ca5138fbe8
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.planes 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.codes 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 inference.int15i64.v1.planes.rowquant 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.planes 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.codes 0xa9844dfadf1fd6da
+DIGEST price-llama8b.qkv.t512 training.int15i64.v1.planes.rowquant 0xa9844dfadf1fd6da
+DIGEST fp32-llama8b.qkv.t512.bwd_dx fp32.v1 0xef9cf5a7a4f7f63e
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.flat 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.pieces 0x6c4eff5b0480823a
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.a 0x5412e9d77fa8f1b4
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.a.parallel 0x5412e9d77fa8f1b4
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.planes.a.parallel 0x4d900a1071a39cb2
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.split.a 0x4d900a1071a39cb2
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.b 0xc57f9785ab2999c0
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.quantize.b.parallel 0xc57f9785ab2999c0
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.planes.b.parallel 0x22cb22fa7a9b88ff
+DIGEST conv-llama8b.qkv.t512.bwd_dx convert.int15.split.b 0x22cb22fa7a9b88ff
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.planes 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.codes 0x6c4eff5b0480823a
+DIGEST price-llama8b.qkv.t512.bwd_dx training.int15i64.v1.planes.rowquant 0x6c4eff5b0480823a
+DIGEST fp32-llama8b.qkv.t512.bwd_dw fp32.v1 0xe489aab33323c201
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.flat 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.pieces 0x8ef510e0780e450
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.a 0xb2ac5568e254c666
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.a.parallel 0xb2ac5568e254c666
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.planes.a.parallel 0x660ec1446ce3f2a1
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.split.a 0x660ec1446ce3f2a1
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.b 0x12961c8aff1fa754
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.quantize.b.parallel 0x12961c8aff1fa754
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.planes.b.parallel 0x7a7bbd8b4dfdf226
+DIGEST conv-llama8b.qkv.t512.bwd_dw convert.int15.split.b 0x7a7bbd8b4dfdf226
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.planes 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.codes 0x8ef510e0780e450
+DIGEST price-llama8b.qkv.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x8ef510e0780e450
+DIGEST fp32-llama8b.mlp_up.t1 fp32.v1 0x4965ea6af2ff5e61
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.flat 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.pieces 0xae35d8ef540f67ad
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.a 0xb01c5164b78a8cd9
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.a.parallel 0xb01c5164b78a8cd9
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.planes.a.parallel 0x6ca381f7a412a406
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.split.a 0x6ca381f7a412a406
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.b 0xf305c69146315ce1
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.quantize.b.parallel 0xf305c69146315ce1
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.planes.b.parallel 0x4f08c5bb8eef630f
+DIGEST conv-llama8b.mlp_up.t1 convert.int15.split.b 0x4f08c5bb8eef630f
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.planes 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.codes 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 inference.int15i64.v1.planes.rowquant 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.planes 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.codes 0xae35d8ef540f67ad
+DIGEST price-llama8b.mlp_up.t1 training.int15i64.v1.planes.rowquant 0xae35d8ef540f67ad
+DIGEST fp32-llama8b.mlp_up.t8 fp32.v1 0x7b30465d325906e
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.flat 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.pieces 0x5dd8142ffbce1023
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.a 0xc41e630721b559a8
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.a.parallel 0xc41e630721b559a8
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.planes.a.parallel 0xa65514e80d97e412
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.split.a 0xa65514e80d97e412
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.b 0x5526319a1fd404eb
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.quantize.b.parallel 0x5526319a1fd404eb
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.planes.b.parallel 0x1a382def955ed027
+DIGEST conv-llama8b.mlp_up.t8 convert.int15.split.b 0x1a382def955ed027
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.planes 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.codes 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 inference.int15i64.v1.planes.rowquant 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.planes 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.codes 0x5dd8142ffbce1023
+DIGEST price-llama8b.mlp_up.t8 training.int15i64.v1.planes.rowquant 0x5dd8142ffbce1023
+DIGEST fp32-llama8b.mlp_up.t512 fp32.v1 0x27a166783c45f9f0
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.flat 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.pieces 0x31746954b2b719d4
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.a 0xb4bf94dcc3facd06
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.a.parallel 0xb4bf94dcc3facd06
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.planes.a.parallel 0xa995a6c363c89d21
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.split.a 0xa995a6c363c89d21
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.b 0x828a1731c89221c0
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.quantize.b.parallel 0x828a1731c89221c0
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.planes.b.parallel 0x74a888a8034727d3
+DIGEST conv-llama8b.mlp_up.t512 convert.int15.split.b 0x74a888a8034727d3
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.planes 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.codes 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 inference.int15i64.v1.planes.rowquant 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.planes 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.codes 0x31746954b2b719d4
+DIGEST price-llama8b.mlp_up.t512 training.int15i64.v1.planes.rowquant 0x31746954b2b719d4
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dx fp32.v1 0x88081a26a7d76edd
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.flat 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.pieces 0xd25adc12f122f248
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.a 0x702c87e35b5a7ee8
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.a.parallel 0x702c87e35b5a7ee8
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.planes.a.parallel 0x99df5fc34d66c8af
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.split.a 0x99df5fc34d66c8af
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.b 0xda60585d9b0dc19d
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.quantize.b.parallel 0xda60585d9b0dc19d
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.planes.b.parallel 0xad29fb7fad789398
+DIGEST conv-llama8b.mlp_up.t512.bwd_dx convert.int15.split.b 0xad29fb7fad789398
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.planes 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.codes 0xd25adc12f122f248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.int15i64.v1.planes.rowquant 0xd25adc12f122f248
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dw fp32.v1 0x64a7d4375083cf3f
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.flat 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.pieces 0x7f5a1c9a4096e46d
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.a 0xb5be61f74714be0b
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.a.parallel 0xb5be61f74714be0b
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.planes.a.parallel 0xeb86f345a0f5c39a
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.split.a 0xeb86f345a0f5c39a
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.b 0x4020b24addf55360
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.quantize.b.parallel 0x4020b24addf55360
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.planes.b.parallel 0xe2e3bcc68ceb9073
+DIGEST conv-llama8b.mlp_up.t512.bwd_dw convert.int15.split.b 0xe2e3bcc68ceb9073
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.planes 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.codes 0x7f5a1c9a4096e46d
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.int15i64.v1.planes.rowquant 0x7f5a1c9a4096e46d
+DIGEST fp32-llama8b.mlp_down.t1 fp32.v1 0x4efb8e54c724fa9
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.flat 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.pieces 0xbad9a98c45aa8707
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.a 0x1eb5f3ac580f624a
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.a.parallel 0x1eb5f3ac580f624a
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.planes.a.parallel 0x582710daad02888
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.split.a 0x582710daad02888
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.b 0xa7c3c54a8d0b275e
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.quantize.b.parallel 0xa7c3c54a8d0b275e
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.planes.b.parallel 0x43dfc5a2a3228278
+DIGEST conv-llama8b.mlp_down.t1 convert.int15.split.b 0x43dfc5a2a3228278
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.planes 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.codes 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 inference.int15i64.v1.planes.rowquant 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.planes 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.codes 0xbad9a98c45aa8707
+DIGEST price-llama8b.mlp_down.t1 training.int15i64.v1.planes.rowquant 0xbad9a98c45aa8707
+DIGEST fp32-llama8b.mlp_down.t8 fp32.v1 0xfb21004541ae3e8e
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.flat 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.pieces 0x5d341feda0541b7c
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.a 0xf9ccba3820fc369f
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.a.parallel 0xf9ccba3820fc369f
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.planes.a.parallel 0xaaaac9d17ce8bc07
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.split.a 0xaaaac9d17ce8bc07
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.b 0xf292ee1fa4d75016
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.quantize.b.parallel 0xf292ee1fa4d75016
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.planes.b.parallel 0x7c10177c2322eed
+DIGEST conv-llama8b.mlp_down.t8 convert.int15.split.b 0x7c10177c2322eed
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.planes 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.codes 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 inference.int15i64.v1.planes.rowquant 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.planes 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.codes 0x5d341feda0541b7c
+DIGEST price-llama8b.mlp_down.t8 training.int15i64.v1.planes.rowquant 0x5d341feda0541b7c
+price_job: box=m2pro red=1
+######## phase price on m2pro exit=1, finished 2026-09-29T04:00:40Z
+box_job: box=m2pro phases: gate=0 price=1 red=1

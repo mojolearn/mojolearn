@@ -1,0 +1,13 @@
+2026-09-29T02:54:22Z
+gpuq: dispatcher up, lease backstop up
+dev_pod: GitHub refused the box; shipping a4b906e81e351b0c6e56b1dd3e7c1482e9285321 from this checkout (less the HEAD the box holds: 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698)
+fatal: Not a valid object name a4b906e81e351b0c6e56b1dd3e7c1482e9285321^{commit}
+dev_pod: could not ship a4b906e81e351b0c6e56b1dd3e7c1482e9285321 to the box
+sync_exit=1
+2026-09-29T02:54:31Z
+box HEAD 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698
+shallow: 45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 a4b906e81e351b0c6e56b1dd3e7c1482e9285321
+fsck_exit=0
+26414
+355M
+check_exit=0

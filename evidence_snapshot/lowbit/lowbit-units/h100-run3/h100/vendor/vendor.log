@@ -1,0 +1,58 @@
+[vendor-torch] NVIDIA detected: GPU 0: NVIDIA H100 NVL (UUID: GPU-e4dc8aa1-a028-9b67-3cf7-e8b3e2687caf)
+[vendor-torch] installing torch from https://download.pytorch.org/whl/cu129 (this is the long step)
+/root/.venv-vendor-torch/lib/python3.11/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+[vendor-torch] torch 2.13.0+cu129 cuda 12.9 hip None available True
+/root/.venv-vendor-torch/lib/python3.11/site-packages/torch/_subclasses/functional_tensor.py:368: UserWarning: Failed to initialize NumPy: No module named 'numpy' (Triggered internally at /__w/pytorch/pytorch/torch/csrc/utils/tensor_numpy.cpp:84.)
+  cpu = _conversion_method_template(device=torch.device("cpu"))
+== tools/vendor_gemm_price.py ==
+  device      : NVIDIA H100 NVL (cuda)
+  library     : cuBLAS
+  build       : CUDA 12.9, torch 2.13.0+cu129
+  shapes      : 12 of 20, parsed from bench/gemm_shapes.mojo (--only llama8b)
+  COMPARISON ONLY: a vendor library's arithmetic is the vendor's; no arm
+                here carries an identity claim and none is hashed.
+  repeats     : 10 timed, 3 warm-up, median reported
+  arms        : strict (allow_tf32=False, true FP32) and tf32 (allow_tf32=True,
+                10 explicit mantissa bits -- NOT the same arithmetic as ours)
+  bf16 arm    : both operands torch.bfloat16, product in bf16 (allow_tf32 off).
+
+VENDORPRICE strict     llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0460 ms      729.3 GF/s
+VENDORPRICE tf32       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0443 ms      756.7 GF/s
+VENDORPRICE bf16       llama8b.qkv.t1                   NT m=1       n=4096    k=4096          0.0344 ms      974.5 GF/s
+VENDORPRICE strict     llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0692 ms     3877.9 GF/s
+VENDORPRICE tf32       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0526 ms     5103.3 GF/s
+VENDORPRICE bf16       llama8b.qkv.t8                   NT m=8       n=4096    k=4096          0.0268 ms    10013.0 GF/s
+VENDORPRICE strict     llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.4194 ms    40960.2 GF/s
+VENDORPRICE tf32       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.0790 ms   217482.3 GF/s
+VENDORPRICE bf16       llama8b.qkv.t512                 NT m=512     n=4096    k=4096          0.0428 ms   401767.3 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0889 ms     1320.5 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0882 ms     1332.2 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t1                NT m=1       n=14336   k=4096          0.0516 ms     2276.5 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.1527 ms     6154.5 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.0994 ms     9454.6 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t8                NT m=8       n=14336   k=4096          0.0531 ms    17689.4 GF/s
+VENDORPRICE strict     llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          1.6540 ms    36353.3 GF/s
+VENDORPRICE tf32       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.2469 ms   243488.8 GF/s
+VENDORPRICE bf16       llama8b.mlp_up.t512              NT m=512     n=14336   k=4096          0.1391 ms   432368.2 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0822 ms     1428.4 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0820 ms     1432.6 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t1              NT m=1       n=4096    k=14336         0.0557 ms     2107.4 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.1953 ms     4810.8 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.0940 ms     9994.1 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t8              NT m=8       n=4096    k=14336         0.0559 ms    16806.6 GF/s
+VENDORPRICE strict     llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         1.3826 ms    43491.3 GF/s
+VENDORPRICE tf32       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         0.2799 ms   214823.2 GF/s
+VENDORPRICE bf16       llama8b.mlp_down.t512            NT m=512     n=4096    k=14336         0.1374 ms   437688.2 GF/s
+VENDORPRICE strict     llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.7126 ms     1474.4 GF/s
+VENDORPRICE tf32       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.7116 ms     1476.6 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t1               NT m=1       n=128256  k=4096          0.3210 ms     3272.9 GF/s
+VENDORPRICE strict     llama8b.lm_head.t8               NT m=8       n=128256  k=4096          1.0853 ms     7744.4 GF/s
+VENDORPRICE tf32       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.8214 ms    10232.5 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t8               NT m=8       n=128256  k=4096          0.3227 ms    26045.0 GF/s
+VENDORPRICE strict     llama8b.lm_head.t512             NT m=512     n=128256  k=4096         15.5631 ms    34565.4 GF/s
+VENDORPRICE tf32       llama8b.lm_head.t512             NT m=512     n=128256  k=4096          2.3105 ms   232822.9 GF/s
+VENDORPRICE bf16       llama8b.lm_head.t512             NT m=512     n=128256  k=4096          1.2070 ms   445697.0 GF/s
+
+  wrote /root/mojolearn-lowbit-units/bench/results/lowbit_units/h100/vendor/vendor_price.json
+[vendor-torch] vendor_gemm_price exit=0

@@ -1,0 +1,186 @@
+{
+ "device": "AMD Instinct Mi325X VF",
+ "backend": "cuda",
+ "library": "hipBLASLt/rocBLAS",
+ "build": "ROCm 6.4.43484-123eb5128",
+ "torch": "2.9.1+rocm6.4",
+ "repeats": 10,
+ "rows": [
+  {
+   "i": 8,
+   "name": "llama8b.qkv.t1",
+   "op": 0,
+   "m": 1,
+   "n": 4096,
+   "k": 4096,
+   "skipped": false,
+   "macs": 16777216.0,
+   "strict": 0.06717500218655914,
+   "strict_best": 0.06642000516876578,
+   "bf16": 0.026794506993610412,
+   "bf16_best": 0.026390000130049884
+  },
+  {
+   "i": 9,
+   "name": "llama8b.qkv.t8",
+   "op": 0,
+   "m": 8,
+   "n": 4096,
+   "k": 4096,
+   "skipped": false,
+   "macs": 134217728.0,
+   "strict": 0.06978950113989413,
+   "strict_best": 0.06900900916662067,
+   "bf16": 0.026720495952758938,
+   "bf16_best": 0.025920002372004092
+  },
+  {
+   "i": 10,
+   "name": "llama8b.qkv.t512",
+   "op": 0,
+   "m": 512,
+   "n": 4096,
+   "k": 4096,
+   "skipped": false,
+   "macs": 8589934592.0,
+   "strict": 0.22005900245858356,
+   "strict_best": 0.1952800084836781,
+   "bf16": 0.05210548988543451,
+   "bf16_best": 0.05121999129187316
+  },
+  {
+   "i": 11,
+   "name": "llama8b.mlp_up.t1",
+   "op": 0,
+   "m": 1,
+   "n": 14336,
+   "k": 4096,
+   "skipped": false,
+   "macs": 58720256.0,
+   "strict": 0.08448449079878628,
+   "strict_best": 0.079699995694682,
+   "bf16": 0.05341949872672558,
+   "bf16_best": 0.0521100009791553
+  },
+  {
+   "i": 12,
+   "name": "llama8b.mlp_up.t8",
+   "op": 0,
+   "m": 8,
+   "n": 14336,
+   "k": 4096,
+   "skipped": false,
+   "macs": 469762048.0,
+   "strict": 0.08194000110961497,
+   "strict_best": 0.08067999442573637,
+   "bf16": 0.057139994169119745,
+   "bf16_best": 0.05276899901218712
+  },
+  {
+   "i": 13,
+   "name": "llama8b.mlp_up.t512",
+   "op": 0,
+   "m": 512,
+   "n": 14336,
+   "k": 4096,
+   "skipped": false,
+   "macs": 30064771072.0,
+   "strict": 0.8457724979962222,
+   "strict_best": 0.8032190089579672,
+   "bf16": 0.10839450260391459,
+   "bf16_best": 0.09888000204227865
+  },
+  {
+   "i": 14,
+   "name": "llama8b.mlp_down.t1",
+   "op": 0,
+   "m": 1,
+   "n": 4096,
+   "k": 14336,
+   "skipped": false,
+   "macs": 58720256.0,
+   "strict": 0.0748095044400543,
+   "strict_best": 0.072879993240349,
+   "bf16": 0.04257498949300498,
+   "bf16_best": 0.042289000703021884
+  },
+  {
+   "i": 15,
+   "name": "llama8b.mlp_down.t8",
+   "op": 0,
+   "m": 8,
+   "n": 4096,
+   "k": 14336,
+   "skipped": false,
+   "macs": 469762048.0,
+   "strict": 0.07597949297633022,
+   "strict_best": 0.0746709993109107,
+   "bf16": 0.04376499418867752,
+   "bf16_best": 0.0431789958383888
+  },
+  {
+   "i": 16,
+   "name": "llama8b.mlp_down.t512",
+   "op": 0,
+   "m": 512,
+   "n": 4096,
+   "k": 14336,
+   "skipped": false,
+   "macs": 30064771072.0,
+   "strict": 1.1844915061374195,
+   "strict_best": 1.1571669892873615,
+   "bf16": 0.12747450091410428,
+   "bf16_best": 0.1232390059158206
+  },
+  {
+   "i": 17,
+   "name": "llama8b.lm_head.t1",
+   "op": 0,
+   "m": 1,
+   "n": 128256,
+   "k": 4096,
+   "skipped": false,
+   "macs": 525336576.0,
+   "strict": 0.622287996520754,
+   "strict_best": 0.5671580001944676,
+   "bf16": 0.27865899755852297,
+   "bf16_best": 0.27498901181388646
+  },
+  {
+   "i": 18,
+   "name": "llama8b.lm_head.t8",
+   "op": 0,
+   "m": 8,
+   "n": 128256,
+   "k": 4096,
+   "skipped": false,
+   "macs": 4202692608.0,
+   "strict": 0.6488384969998151,
+   "strict_best": 0.5979379930067807,
+   "bf16": 0.28263949934626,
+   "bf16_best": 0.2774490130832419
+  },
+  {
+   "i": 19,
+   "name": "llama8b.lm_head.t512",
+   "op": 0,
+   "m": 512,
+   "n": 128256,
+   "k": 4096,
+   "skipped": false,
+   "macs": 268972326912.0,
+   "strict": 5.152085504960269,
+   "strict_best": 4.855176986893639,
+   "bf16": 0.9871225047390908,
+   "bf16_best": 0.943567996728234
+  }
+ ]
+}
+box=mi325x
+started=2026-09-29T03:20:01Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=30
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:20:30Z

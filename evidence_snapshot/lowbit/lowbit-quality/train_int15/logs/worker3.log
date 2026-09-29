@@ -1,0 +1,7 @@
+a.fwd.proj.s3 step 1000 train 1.8204 val 1.6744
+a.fwd.proj.s3 step 2000 train 1.4937 val 1.562
+a.fwd.proj.s3 step 3000 train 1.4122 val 1.5112
+a.fwd.proj.s3 step 4000 train 1.4127 val 1.4794
+a.fwd.proj.s3 step 5000 train 1.5027 val 1.4657
+a.fwd.proj.s3 step 6000 train 1.58 val 1.4483
+DONE a.fwd.proj.s3 val@4000 1.4793503644050043 val@6000 1.4483287889581562 nonfinite None seconds 126.1

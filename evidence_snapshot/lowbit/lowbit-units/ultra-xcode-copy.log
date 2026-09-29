@@ -1,0 +1,28 @@
+2026-09-29T02:47:47Z
+COPIED
+copy_exit=0
+2026-09-29T02:54:00Z
++zsh:1> sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
++zsh:1> sudo xcodebuild -license accept
++zsh:1> sudo xcodebuild -runFirstLaunch
+Install Started
+1%.........20.........40.........60.........80........Install Succeeded
++zsh:1> xcodebuild -version
+Xcode 26.6
+Build version 17F113
++zsh:1> xcodebuild -downloadComponent MetalToolchain
++zsh:1> tail -3
+    RequestedBuild = 17F113;
+}) 
+
++zsh:1> xcodebuild -showComponent MetalToolchain
++zsh:1> head -6
+Build Version: 17F109
+Status: uninstalled
++zsh:1> xcrun -f metal
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/metal
++zsh:1> xcrun metal --version
++zsh:1> head -2
+error: error: cannot execute tool 'metal' due to missing Metal Toolchain; use: xcodebuild -downloadComponent MetalToolchain
+toolchain_exit=0
+2026-09-29T02:54:29Z

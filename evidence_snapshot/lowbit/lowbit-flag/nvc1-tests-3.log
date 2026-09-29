@@ -1,0 +1,51 @@
+nvidia_central: lowbit-flag on GPU(s) 0 of nvc1 (r29w610uuwkfwy)
+installed package: /root/lowbit-flag-venv/lib/python3.14/site-packages/mojolearn
+mojolearn        0.8.25
+mojolearn-amd    0.8.25
+mojolearn-nvidia 0.8.25
+numpy            2.5.3
+pytest           9.1.1
+new file       _gemm_profile.py
+base==release  __init__.py
+base==release  _samba_impl.py
+base==release  models/causal_lm.py
+base==release  models/parallel_causal_lm.py
+new file       tests/test_gemm_profile.py
+import ok 0.8.25 fp32.v1 identical
+import_exit=0
+................                                                         [100%]
+=============================== warnings summary ===============================
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteLMSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteParallelTrainer has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteOffloadedReplay has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _ByteModelPool has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba1DecodeSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba2DecodeSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _Mamba3DecodeSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _TransformerDecodeSession has no __module__ attribute
+
+lowbit-flag-venv/lib/python3.14/site-packages/mojolearn/tests/test_gemm_profile.py::test_default_is_fp32_v1_and_is_available
+  <frozen importlib._bootstrap>:491: DeprecationWarning: builtin type _CausalLMSession has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+16 passed, 10 warnings in 0.28s
+pytest_exit=0
+run_exit=0

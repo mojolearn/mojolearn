@@ -1,0 +1,12 @@
+2	aws ec2 allocate-hosts --instance-type mac-m4.metal --quantity 1
+2	aws ec2 run-instances --instance-type mac-m3ultra.metal --placement HostId=h-04545dd0c2d7a2870
+2	aws ec2 run-instances --instance-type mac2-m2pro.metal
+2	aws ec2 modify-hosts --host-ids h-1
+2	bash tools/cloudmac.sh bootstrap m3ultra-b
+2	tools/cloudmac.sh launch m4-a
+2	AWS EC2 ALLOCATE-HOSTS --quantity 1
+0	git status
+0	bash tools/cloudmac.sh ssh m2pro uname
+0	bash tools/cloudmac.sh steward m3ultra-b status
+0	python3 tools/apple_steward.py status
+2	tools/dev_pod.sh up x --gpus "NVIDIA H200"

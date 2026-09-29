@@ -1,0 +1,2 @@
+name, driver_version, uuid, clocks.current.sm [MHz], temperature.gpu
+NVIDIA H100 NVL, 580.159.04, GPU-e4dc8aa1-a028-9b67-3cf7-e8b3e2687caf, 1785 MHz, 32

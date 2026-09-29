@@ -1,0 +1,9 @@
+== m3ultra-b (m3ultra)
+m3ultra-b: pushed 3c02e3529743 to its bare repo and fetched it into ~/mojolearn
+queued speed request 1790653289781-speed-lowbit-mma-speed-3c02e35297 on m3ultra-b
+== m2pro (m2pro)
+m2pro: pushed 3c02e3529743 to its bare repo and fetched it into ~/mojolearn
+queued speed request 1790653293863-speed-lowbit-mma-speed-3c02e35297 on m2pro
+== do-amd (mi325x)
+do-amd: fetched 3c02e3529743 from origin into ~/mojolearn
+queued speed request 1790653296353-speed-lowbit-mma-speed-3c02e35297 on do-amd

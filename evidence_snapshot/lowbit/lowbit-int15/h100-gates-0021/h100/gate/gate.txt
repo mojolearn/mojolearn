@@ -1,0 +1,21 @@
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100 vendor=nvidia gpu_archs=unset
+started=2026-09-29T04:02:53Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=36
+machine=NVIDIA H100 NVL, 580.159.04
+loads: stated and unstated alignment printed the same 981 digests
+reach: int15-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-sabotage failed check_int15_plans_agree, as it must
+reach: int15-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-host-sabotage failed check_int15_pieces_oracle_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_device_matches_oracle, as it must
+reach: int15-host-sabotage failed check_int15_plans_agree, as it must
+reach: int15-host-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-piece-sabotage failed check_int15_device_conversions_match_host, as it must
+reach: int15-piece-sabotage failed check_int15_planted_worst_cases, as it must
+reach: int15-quant-sabotage failed check_int15_device_conversions_match_host, as it must
+   column: nvidia  int15 dispatch: mma (lib_int8_matrix_unit_for)
+   column: nvidia  int15 dispatch: flat and pieces (MOJOLEARN_INT15_FORCE_FLAT)
+digests=981 digests_force_flat=981
+finished=2026-09-29T04:05:04Z
+verdict=GREEN every expected outcome held (see status.tsv)
