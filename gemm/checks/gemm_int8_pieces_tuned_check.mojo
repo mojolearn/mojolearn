@@ -50,12 +50,13 @@ from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
     INT8_PIECES_MAX_K_ANY_INT8,
-    INT8_PIECES_PLAN_COUNT,
+    INT8_PIECES_PLAN_ALL_COUNT,
     identical_gemm_int8_pieces_flat_into,
     identical_gemm_int8_pieces_tuned_fused_with_plan,
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
+    int8_pieces_plan_admits,
     int8_pieces_plan_name,
     int8_pieces_sabotage_name,
 )
@@ -239,7 +240,9 @@ def _run_every_pieces_plan(
         verdict = tag + " flat: " + String(e)
     tally.note(verdict)
     comptime if HAS_UNIT:
-        for plan in range(INT8_PIECES_PLAN_COUNT):
+        for plan in range(INT8_PIECES_PLAN_ALL_COUNT):
+            if not int8_pieces_plan_admits(plan, m, n, k):
+                continue
             var ptag = tag + " " + int8_pieces_plan_name(plan)
             var ds = _poisoned_sums(ctx, 3 * m * n)
             var got: String
@@ -476,7 +479,7 @@ def main() raises:
     else:
         var ctx = DeviceContext()
         comptime if HAS_UNIT:
-            for plan in range(INT8_PIECES_PLAN_COUNT):
+            for plan in range(INT8_PIECES_PLAN_ALL_COUNT):
                 print("   plan " + String(plan) + ": " + int8_pieces_plan_name(plan))
         else:
             print(

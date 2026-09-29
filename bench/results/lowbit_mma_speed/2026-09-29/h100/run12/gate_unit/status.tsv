@@ -1,0 +1,5 @@
+unit	0	28s	expected=pass	held=yes
+unit-sabotage	1	26s	expected=fail	held=yes
+unit-quant-sabotage	1	26s	expected=fail	held=yes
+unit-value-sabotage	1	24s	expected=fail	held=yes
+unit-unstated	0	24s	expected=pass	held=yes

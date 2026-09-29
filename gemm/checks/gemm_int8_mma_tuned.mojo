@@ -257,7 +257,16 @@ comptime INT8_PIECES_PLAN_WARPS16_K32 = 7
 comptime INT8_PIECES_PLAN_PIPE_WARPS16 = 8  #: 16x32 per warp, 4x4 warps, KB 32
 comptime INT8_PIECES_PLAN_PIPE_FRAG2 = 9  #: 32x32 per warp, 2x4 warps, KB 32
 comptime INT8_PIECES_PLAN_PIPE_SMALL = 10  #: 16x16 per warp, 2x2 warps, KB 64
+#: The plans that take EVERY shape on every column with the unit: a caller
+#: may loop over `range(INT8_PIECES_PLAN_COUNT)` at any shape.
 comptime INT8_PIECES_PLAN_COUNT = 11
+#: FOUR PRODUCTS AT THE DECODE ROWS (`identical_gemm_int8_pieces_decode_kernel`):
+#: `m <= 16` and NVIDIA only (`int8_pieces_plan_admits`), so they lie beyond
+#: `INT8_PIECES_PLAN_COUNT`; a caller that runs them loops over
+#: `range(INT8_PIECES_PLAN_ALL_COUNT)` and asks `int8_pieces_plan_admits`.
+comptime INT8_PIECES_PLAN_DECODE_W4 = 11  #: 4 warps a block
+comptime INT8_PIECES_PLAN_DECODE_W8 = 12  #: 8 warps a block
+comptime INT8_PIECES_PLAN_ALL_COUNT = 13
 
 #: Outputs of at most this many rows take the launcher's small plan: a
 #: 128-row block would multiply 112 rows of zero codes for them.
@@ -354,7 +363,20 @@ def int8_pieces_plan_name(plan: Int) -> String:
         return String("pipe2.w16x32.b64x128.k32.l16")
     if plan == INT8_PIECES_PLAN_PIPE_FRAG2:
         return String("pipe2.w32x32.b64x128.k32.l16")
-    return String("pipe2.w16x16.b32x32.k64.l16")
+    if plan == INT8_PIECES_PLAN_PIPE_SMALL:
+        return String("pipe2.w16x16.b32x32.k64.l16")
+    if plan == INT8_PIECES_PLAN_DECODE_W4:
+        return String("decode.n16.w4.c64")
+    return String("decode.n16.w8.c64")
+
+
+def int8_pieces_plan_admits(plan: Int, m: Int, n: Int, k: Int) -> Bool:
+    """Whether the plan runs this shape on this column: the decode plans take
+    `m <= 16` on NVIDIA; every other plan takes every shape the kernel's
+    bound admits."""
+    if plan == INT8_PIECES_PLAN_DECODE_W4 or plan == INT8_PIECES_PLAN_DECODE_W8:
+        return INT8_DECODE_AVAILABLE and m <= INT8_DECODE_MAX_M
+    return True
 
 
 def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
@@ -363,12 +385,18 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     measurement of 2026-09-29 (run 8, job nvc3-0030): TWO PAGES took the
     least time of the eleven plans at all twelve rows, the 32 x 32 warps of
     the 64 x 128 block at the four 512-token rows and the 32 x 32 block at
-    the eight decode rows."""
+    the eight decode rows. At the decode rows on NVIDIA the four-product
+    decode kernel of eight warps (run 11, job nvc3-0039: 0.20 to 0.40 of
+    fp32.v1 where the two-page plan read 0.27 to 1.22; four warps took more
+    time at every row, 1% more at the head's)."""
     if m <= INT8_TUNED_ROW_MAX_M:
         comptime if TARGET_COLUMN == COLUMN_AMD:
             # THE AMD COLUMN: the MI325X has not timed the two-page plans
             # yet; the one-page plan it measured is kept until it has.
             return INT8_PIECES_PLAN_SMALL
+        comptime if INT8_DECODE_AVAILABLE:
+            if m <= INT8_DECODE_MAX_M:
+                return INT8_PIECES_PLAN_DECODE_W8
         return INT8_PIECES_PLAN_PIPE_SMALL
     comptime if TARGET_COLUMN == COLUMN_AMD:
         # THE AMD COLUMN (lane/lowbit-amd-tuned, MI325X job 1790657862351):
@@ -1136,8 +1164,17 @@ def identical_gemm_int8_mma_tuned_into(
     n: Int,
     k: Int,
 ) raises:
-    """The tuned unit plan on the plan `int8_tuned_dispatch` names.
+    """The tuned unit plan on the plan `int8_tuned_dispatch` names; at the
+    decode rows (`m <= 16`) on NVIDIA, the decode kernel on the plan
+    `int8_decode_dispatch` names (run 10, job nvc3-0036: 0.12 to 0.34 of
+    fp32.v1 where the staged plan read 0.24 to 1.40).
     `identical_gemm_int8_mma_into`'s signature and its bits. Asynchronous."""
+    comptime if INT8_DECODE_AVAILABLE:
+        if m <= INT8_DECODE_MAX_M and k <= INT8_MAX_K:
+            identical_gemm_int8_mma_decode_with_plan(
+                ctx, c, qa, ea, qb, eb, m, n, k, int8_decode_dispatch(m, n, k)
+            )
+            return
     identical_gemm_int8_mma_tuned_with_plan(
         ctx, c, qa, ea, qb, eb, m, n, k, int8_tuned_dispatch(m, n, k)
     )
@@ -1192,8 +1229,12 @@ def int8_decode_plan_name(plan: Int) -> String:
 
 
 def int8_decode_dispatch(m: Int, n: Int, k: Int) -> Int:
-    """The plan `identical_gemm_int8_mma_decode_into` takes. Every plan is
-    the profile; not yet measured, so the middle one."""
+    """The decode plan the launchers take. Reads the shape and may: every
+    plan is the profile. Run 10 (job nvc3-0036): eight warps took the least
+    time, or within 1%, at six of the eight decode rows; at the head's rows
+    (n = 128256) four did."""
+    if n >= 65536:
+        return INT8_DECODE_PLAN_W4
     return INT8_DECODE_PLAN_W8
 
 
@@ -1242,8 +1283,14 @@ def _quant16_codes(
                 v[4 * q + i] = _code(f[i], ex)
     else:
         comptime for i in range(16):
-            if kb + i < k:
-                v[i] = _code(x.unsafe_load(base + kb + i), ex)
+            comptime if INT8_TUNED_SABOTAGE:
+                # SABOTAGE: the padding rule broken on this side too (the
+                # weights' side alone would meet zero codes here and hide).
+                if base + kb + i < rows * k:
+                    v[i] = _code(x.unsafe_load(base + kb + i), ex)
+            else:
+                if kb + i < k:
+                    v[i] = _code(x.unsafe_load(base + kb + i), ex)
     return bitcast[DType.int32, 4](v)
 
 
@@ -2038,6 +2085,153 @@ def identical_gemm_int8_pieces_tuned_kernel[
     )
 
 
+def identical_gemm_int8_pieces_decode_kernel[FUSED: Bool, NW: Int](
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    ah: MutPointer[Int8, MutAnyOrigin],
+    al: MutPointer[Int8, MutAnyOrigin],
+    bh: MutPointer[Int8, MutAnyOrigin],
+    bl: MutPointer[Int8, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    aligned_in: Int32,
+):
+    """FOUR PRODUCTS AT THE DECODE ROWS (`m <= 16`, NVIDIA): the decode
+    kernel's schedule (`identical_gemm_int8_mma_decode_kernel`: sixteen
+    columns a block, `k` split over its NW warps in 64-byte chunks loaded
+    straight from device memory, the same k order on both sides) with the two
+    planes of each side and three Int32 sums a cell, HH, HL + LH, LL. The
+    warps' sums are added in threadgroup memory, exact. `FUSED` False: the
+    three sums to `s`; True: `int15_store_cell` of them to `c`. Grid
+    `(ceil(n / 16), 1, 1)`, block `NW * WARP_SIZE`. Every thread reaches the
+    one `barrier()`."""
+    comptime NT = NW * WARP_SIZE
+    #: Values a lane holds: two halves, three sums, four registers.
+    comptime V = 24
+    comptime assert V * NW * WARP_SIZE * 4 <= column_shared_limit(TARGET_COLUMN), (
+        "identical_gemm_int8_pieces_decode_kernel: the warps' sums do not fit"
+    )
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
+    var tid = Int(thread_idx.x)
+    var w = tid // WARP_SIZE
+    var lane = Int(lane_id())
+    var g = lane >> 2
+    var t = lane & 3
+    var j0 = Int(block_idx.x) * 16
+
+    var red = stack_allocation[
+        V * NW * WARP_SIZE, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    # acc[h * 3 + p]: half `h` of the sixteen columns, sum `p` (HH, MID, LL).
+    var acc = InlineArray[SIMD[DType.int32, 4], 6](fill=SIMD[DType.int32, 4](0))
+    var chunks = (k + INT8_DECODE_CHUNK - 1) // INT8_DECODE_CHUNK
+    var ch = w
+    while ch < chunks:
+        var kb = ch * INT8_DECODE_CHUNK + t * 16
+        var ah0 = _load16_codes(ah, g, m, kb, k, aligned)
+        var ah1 = _load16_codes(ah, g + 8, m, kb, k, aligned)
+        var al0 = _load16_codes(al, g, m, kb, k, aligned)
+        var al1 = _load16_codes(al, g + 8, m, kb, k, aligned)
+        comptime for h in range(2):
+            var bhh = _load16_codes(bh, j0 + 8 * h + g, n, kb, k, aligned)
+            var blh = _load16_codes(bl, j0 + 8 * h + g, n, kb, k, aligned)
+            comptime for st in range(2):
+                var x0 = 2 * st
+                var x1 = 2 * st + 1
+                acc[h * 3] = _imma_m16n8k32(
+                    ah0[x0], ah1[x0], ah0[x1], ah1[x1], bhh[x0], bhh[x1], acc[h * 3]
+                )
+                acc[h * 3 + 1] = _imma_m16n8k32(
+                    ah0[x0], ah1[x0], ah0[x1], ah1[x1], blh[x0], blh[x1], acc[h * 3 + 1]
+                )
+                comptime if INT8_PIECES_SABOTAGE:
+                    # SABOTAGE: HL again where LH belongs.
+                    acc[h * 3 + 1] = _imma_m16n8k32(
+                        ah0[x0], ah1[x0], ah0[x1], ah1[x1], blh[x0], blh[x1], acc[h * 3 + 1]
+                    )
+                else:
+                    acc[h * 3 + 1] = _imma_m16n8k32(
+                        al0[x0], al1[x0], al0[x1], al1[x1], bhh[x0], bhh[x1], acc[h * 3 + 1]
+                    )
+                acc[h * 3 + 2] = _imma_m16n8k32(
+                    al0[x0], al1[x0], al0[x1], al1[x1], blh[x0], blh[x1], acc[h * 3 + 2]
+                )
+        ch += NW
+
+    comptime for a in range(6):
+        comptime for e in range(4):
+            red.unsafe_store((w * V + a * 4 + e) * WARP_SIZE + lane, acc[a][e])
+    barrier()
+    # One thread per (half, register, lane): the cell's three sums, each the
+    # warps' partial sums added (exact Int32).
+    var q = tid
+    while q < 8 * WARP_SIZE:
+        var v = q // WARP_SIZE
+        var ln = q - v * WARP_SIZE
+        var h = v >> 2
+        var e = v & 3
+        var hh = Int32(0)
+        var mid = Int32(0)
+        var ll = Int32(0)
+        for ww in range(NW):
+            hh += red.unsafe_load((ww * V + (h * 3) * 4 + e) * WARP_SIZE + ln)
+            mid += red.unsafe_load((ww * V + (h * 3 + 1) * 4 + e) * WARP_SIZE + ln)
+            ll += red.unsafe_load((ww * V + (h * 3 + 2) * 4 + e) * WARP_SIZE + ln)
+        var gi = (ln >> 2) + 8 * (e >> 1)
+        var gj = j0 + h * 8 + (ln & 3) * 2 + (e & 1)
+        _store_cell_of_sums[FUSED](s, c, ea, eb, hh, mid, ll, gi, gj, m, n)
+        q += NT
+
+
+def _launch_pieces_decode[FUSED: Bool, NW: Int](
+    ctx: DeviceContext,
+    s: MutPointer[Int32, MutAnyOrigin],
+    c: MutPointer[Float32, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    mut ah: DeviceBuffer[DType.int8],
+    mut al: DeviceBuffer[DType.int8],
+    mut bh: DeviceBuffer[DType.int8],
+    mut bl: DeviceBuffer[DType.int8],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    if m > INT8_DECODE_MAX_M:
+        raise Error(
+            "identical_gemm_int8_pieces: the decode plans take at most "
+            + String(INT8_DECODE_MAX_M) + " rows, got m=" + String(m)
+        )
+    comptime kern = identical_gemm_int8_pieces_decode_kernel[FUSED, NW]
+    var aligned = Int32(0)
+    if _bases_aligned(Int(ah.unsafe_ptr()), Int(al.unsafe_ptr()), 16) and _bases_aligned(
+        Int(bh.unsafe_ptr()), Int(bl.unsafe_ptr()), 16
+    ):
+        aligned = Int32(1)
+    ctx.enqueue_function[kern](
+        s,
+        c,
+        ea,
+        eb,
+        ah.unsafe_ptr(),
+        al.unsafe_ptr(),
+        bh.unsafe_ptr(),
+        bl.unsafe_ptr(),
+        Int32(m),
+        Int32(n),
+        Int32(k),
+        aligned,
+        grid_dim=((n + 15) // 16, 1, 1),
+        block_dim=(NW * WARP_SIZE, 1, 1),
+    )
+
+
 def _refuse_pieces_shape(m: Int, n: Int, k: Int) raises:
     if m <= 0 or n <= 0 or k <= 0 or k > INT8_PIECES_MAX_K:
         raise Error(
@@ -2183,6 +2377,17 @@ def _pieces_with_plan[FUSED: Bool](
             _launch_pieces[FUSED, True, 2, 2, 2, 4, 32, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
         elif plan == INT8_PIECES_PLAN_PIPE_SMALL:
             _launch_pieces[FUSED, True, 1, 1, 2, 2, 64, 16](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_DECODE_W4 or plan == INT8_PIECES_PLAN_DECODE_W8:
+            comptime if INT8_DECODE_AVAILABLE:
+                if plan == INT8_PIECES_PLAN_DECODE_W4:
+                    _launch_pieces_decode[FUSED, 4](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+                else:
+                    _launch_pieces_decode[FUSED, 8](ctx, s, c, ea, eb, ah, al, bh, bl, m, n, k)
+            else:
+                raise Error(
+                    "identical_gemm_int8_pieces_tuned: the decode plans are NVIDIA's only; column "
+                    + column_name(TARGET_COLUMN)
+                )
         else:
             raise Error("identical_gemm_int8_pieces_tuned: no plan " + String(plan))
 

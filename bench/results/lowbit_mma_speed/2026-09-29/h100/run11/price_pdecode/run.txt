@@ -1,0 +1,15 @@
+box=h100 name=pdecode
+started=2026-09-29T05:56:42Z
+tree_head=b42e019110f887d27f9c5c5052f8fa645524a9a0 dirty_files=18
+machine=NVIDIA H100 NVL, 580.159.04
+arms=fp32.v1,int8i32.v1.flat,int8i32.v1.mma,pieces.int8.flat,int8i32.v1.mma.staged.w16x16.b32x32.k64.l16,int8i32.v1.mma.decode*,convert.int8.quantize.a.par,inference.int8i32.v1.tuned,pieces.int8.mma.pipe2.w16x16.b32x32.k64.l16,pieces.int8.mma.decode*,inference.pieces.int8.tuned,inference.pieces.int8.fused only=t1,t8 repeats=default mac_budget=default identity_only=0
+build exit=0
+build-sabotage exit=0
+cold started=2026-09-29T05:59:00Z
+cold exit=0 (the first run after the build: its times are never read)
+price started=2026-09-29T05:59:07Z
+price exit=0 (the run of record)
+cold-vs-record exit=0 (0: the two runs' digests agree at every arm and shape)
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T05:59:20Z

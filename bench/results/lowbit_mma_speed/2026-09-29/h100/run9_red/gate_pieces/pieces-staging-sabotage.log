@@ -1,0 +1,698 @@
+✨ Pixi task (check-gemm-int8-pieces-tuned-staging-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo
+422121 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x332a80000000, nodemask=1)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:2148:41: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    _pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
+                                      ~~^~~~~~~~
+                                         unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1569:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1663:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    as_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1664:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    bs_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:735:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:293:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:292:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:291:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+== gemm/checks/gemm_int8_pieces_tuned_check.mojo [IDENTICAL]  sabotage: STAGING_PAD_NOT_WRITTEN ==
+   four int8 products of two-plane operands, one staging; three Int32 sums per cell
+   column: nvidia
+   plan 0: staged.w16x16.b32x32.k64.l16
+   plan 1: staged.w16x32.b64x128.k64.l16
+   plan 2: staged.w32x32.b64x128.k64.l16
+   plan 3: staged.w16x16.b64x64.k64.l16
+   plan 4: staged.w16x32.b128x64.k32.l16
+   plan 5: staged.w16x32.b256x32.k32.l16
+   plan 6: staged.w16x16.b256x16.k32.l16
+   plan 7: staged.w16x32.b64x128.k32.l16
+   plan 8: pipe2.w16x32.b64x128.k32.l16
+   plan 9: pipe2.w32x32.b64x128.k32.l16
+   plan 10: pipe2.w16x16.b32x32.k64.l16
+   ok int8 pieces 3x5x17 profile-ranges
+   ok int8 pieces 3x5x17 any-int8
+   ok int8 pieces 17x33x31 profile-ranges
+   ok int8 pieces 17x33x31 any-int8
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 42 of 1683 sums differ; first HH of cell (0, 13) got 3440 want 4426
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 36 of 561 cells differ; first at 13 got 0.0001037442/0x0x38d9913e want 0.00013312929/0x0x390b989f
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 220 of 1683 sums differ; first HL+LH of cell (0, 0) got -13412 want 3415
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 220 of 561 cells differ; first at 0 got -103.24273/0x0xc2ce7c47 want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.77167/0x0xc30cc58c want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.77167/0x0xc30cc58c want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.77167/0x0xc30cc58c want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.77167/0x0xc30cc58c want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 816 of 1683 sums differ; first HH of cell (0, 0) got 10207 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 20.00036/0x0x41a000bd want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 816 of 1683 sums differ; first HH of cell (0, 0) got 10207 want -52762
+   !! int8 pieces 33x17x33 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 20.00036/0x0x41a000bd want -102.98597/0x0xc2cdf8d1
+   !! int8 pieces 33x17x33 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 268 of 1683 sums differ; first HH of cell (0, 1) got -11945 want -12008
+   !! int8 pieces 33x17x33 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 184 of 561 cells differ; first at 1 got -2.7514586e-09/0x0xb13d142c want -2.74943e-09/0x0xb13cf07c
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 81 of 1683 sums differ; first HH of cell (0, 13) got -9951 want 4426
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 66 of 561 cells differ; first at 13 got -0.0003239403/0x0xb9a9d688 want 0.00010452767/0x0x38db35de
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 52 of 1683 sums differ; first HH of cell (0, 1) got -11945 want -12008
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 48 of 561 cells differ; first at 1 got -2.703362e-09/0x0xb139c60c want -2.7176865e-09/0x0xb13ac20c
+   !! int8 pieces 33x17x33 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 52 of 1683 sums differ; first HH of cell (0, 1) got -11945 want -12008
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 48 of 561 cells differ; first at 1 got -2.703362e-09/0x0xb139c60c want -2.7176865e-09/0x0xb13ac20c
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 338 of 1683 sums differ; first HL+LH of cell (0, 0) got 9121 want 9047
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 312 of 561 cells differ; first at 0 got -102.910545/0x0xc2cdd233 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.6434/0x0xc30ca4b6 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.6434/0x0xc30ca4b6 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.6434/0x0xc30ca4b6 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got -72307 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got -140.6434/0x0xc30ca4b6 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 816 of 1683 sums differ; first HH of cell (0, 0) got 10207 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 20.074655/0x0x41a098e5 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 816 of 1683 sums differ; first HH of cell (0, 0) got 10207 want -52762
+   !! int8 pieces 33x17x33 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 20.074655/0x0x41a098e5 want -102.911675/0x0xc2cdd2c7
+   !! int8 pieces 33x17x33 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 268 of 1683 sums differ; first HH of cell (0, 1) got -12073 want -12008
+   !! int8 pieces 33x17x33 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 184 of 561 cells differ; first at 1 got -2.748819e-09/0x0xb13ce5bc want -2.7176865e-09/0x0xb13ac20c
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.205016e-11/0x0xae0cf546 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.205016e-11/0x0xae0cf546 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.205016e-11/0x0xae0cf546 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.205016e-11/0x0xae0cf546 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8308838e-11/0x0xadf901d6 want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 91 of 141 sums differ; first HH of cell (0, 0) got -105256 want -122324
+   !! int8 pieces 1x47x100 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 32 of 47 cells differ; first at 0 got -2.3267414e-11/0x0xadcca98f want -2.7178251e-11/0x0xadef0ffb
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.2114027e-11/0x0xae0d3d2e want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.2114027e-11/0x0xae0d3d2e want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.2114027e-11/0x0xae0d3d2e want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -144162 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -3.2114027e-11/0x0xae0d3d2e want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 141 of 141 sums differ; first HH of cell (0, 0) got -127052 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 47 of 47 cells differ; first at 0 got -2.8267014e-11/0x0xadf8a3a8 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 1x47x100 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 91 of 141 sums differ; first HH of cell (0, 0) got -132136 want -122324
+   !! int8 pieces 1x47x100 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 32 of 47 cells differ; first at 0 got -2.9275533e-11/0x0xae00c152 want -2.7215811e-11/0x0xadef648f
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21848.309/0x0x46aab09e want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21848.309/0x0x46aab09e want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21848.309/0x0x46aab09e want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21848.309/0x0x46aab09e want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19308.453/0x0x4696d8e8 want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 251504 want 288726
+   !! int8 pieces 50x70x1000 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 15546.729/0x0x4672eaea want 17873.629/0x0x468ba342
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21949.117/0x0x46ab7a3c want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21949.117/0x0x46ab7a3c want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21949.117/0x0x46ab7a3c want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 352535 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 21949.117/0x0x46ab7a3c want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 311441 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 19359.998/0x0x46973fff want 17930.404/0x0x468c14cf
+   !! int8 pieces 50x70x1000 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 10500 of 10500 sums differ; first HH of cell (0, 0) got 251504 want 288726
+   !! int8 pieces 50x70x1000 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 3500 of 3500 cells differ; first at 0 got 15597.678/0x0x4673b6b6 want 17930.404/0x0x468c14cf
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388398.3/0x0xc8bda5ca want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388398.3/0x0xc8bda5ca want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388398.3/0x0xc8bda5ca want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388398.3/0x0xc8bda5ca want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398734.75/0x0xc8c2b1d8 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -735963 want -782071
+   !! int8 pieces 13x21x4097 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -371867.28/0x0xc8b59369 want -394716.94/0x0xc8c0bb9e
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388451.16/0x0xc8bdac65 want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388451.16/0x0xc8bdac65 want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388451.16/0x0xc8bdac65 want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -769455 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -388451.16/0x0xc8bdac65 want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -790112 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -398606.4/0x0xc8c2a1cd want -394678.3/0x0xc8c0b6ca
+   !! int8 pieces 13x21x4097 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 819 of 819 sums differ; first HH of cell (0, 0) got -735963 want -782071
+   !! int8 pieces 13x21x4097 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 273 of 273 cells differ; first at 0 got -371631.63/0x0xc8b575f4 want -394678.3/0x0xc8c0b6ca
+   ok int8 pieces 2x16x32 profile-ranges
+   ok int8 pieces 2x16x32 any-int8
+   ok int8 pieces 100x3x64 profile-ranges
+   ok int8 pieces 100x3x64 any-int8
+   ok int8 pieces 65x129x63 profile-ranges
+   ok int8 pieces 65x129x63 any-int8
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.5969784/0x0xc02634e5 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.5969784/0x0xc02634e5 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.5969784/0x0xc02634e5 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.5969784/0x0xc02634e5 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6123583/0x0x3fce61c2 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 18266 of 24003 sums differ; first HH of cell (0, 0) got 3502 want 5602
+   !! int8 pieces 63x127x65 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 6049 of 8001 cells differ; first at 0 got 0.035122756/0x0x3d0fdce1 want 0.3077537/0x0x3e9d91e5
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.6055815/0x0xc026c1d9 want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.6055815/0x0xc026c1d9 want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.6055815/0x0xc026c1d9 want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got -42073 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got -2.6055815/0x0xc026c1d9 want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 24003 of 24003 sums differ; first HH of cell (0, 0) got 27284 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 8001 of 8001 cells differ; first at 0 got 1.6355679/0x0x3fd15a4a want 0.3132178/0x0x3ea05e15
+   !! int8 pieces 63x127x65 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 18268 of 24003 sums differ; first HH of cell (0, 0) got 14254 want 5602
+   !! int8 pieces 63x127x65 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 6049 of 8001 cells differ; first at 0 got 0.040902976/0x0x3d2789e1 want 0.3132178/0x0x3ea05e15
+   ok int8 pieces 129x65x127 profile-ranges
+   ok int8 pieces 129x65x127 any-int8
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.028717434/0x0x3ceb40d3 want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.028717434/0x0x3ceb40d3 want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.028717434/0x0x3ceb40d3 want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.028717434/0x0x3ceb40d3 want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11866509/0x0x3df306af want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 21098 want 21797
+   !! int8 pieces 127x257x129 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.041652065/0x0x3d2a9b5b want 0.042559803/0x0x3d2e5330
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.02431037/0x0x3cc7268b want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.02431037/0x0x3cc7268b want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.02431037/0x0x3cc7268b want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 14264 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.02431037/0x0x3cc7268b want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 97916 of 97917 sums differ; first HH of cell (0, 0) got 61531 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.11503827/0x0x3deb992f want 0.038711503/0x0x3d1e8ff4
+   !! int8 pieces 127x257x129 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 97917 of 97917 sums differ; first HH of cell (0, 0) got 21098 want 21797
+   !! int8 pieces 127x257x129 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 32639 of 32639 cells differ; first at 0 got 0.037585985/0x0x3d19f3c3 want 0.038711503/0x0x3d1e8ff4
+   ok int8 pieces 130x255x191 profile-ranges
+   ok int8 pieces 130x255x191 any-int8
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 350.16418/0x0x43af1504 want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 350.16418/0x0x43af1504 want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 350.16418/0x0x43af1504 want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 350.16418/0x0x43af1504 want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 319.47736/0x0x439fbd1a want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 55668 want 77489
+   !! int8 pieces 17x300x4100 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 222.66762/0x0x435eaae9 want 307.4266/0x0x4399b69b
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 341.9949/0x0x43aaff59 want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 341.9949/0x0x43aaff59 want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 341.9949/0x0x43aaff59 want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 88174 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 341.9949/0x0x43aaff59 want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 80392 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 312.84564/0x0x439c6c3e want 301.2954/0x0x4396a5d0
+   !! int8 pieces 17x300x4100 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 15300 of 15300 sums differ; first HH of cell (0, 0) got 55668 want 77489
+   !! int8 pieces 17x300x4100 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 5100 of 5100 cells differ; first at 0 got 215.24303/0x0x43573e37 want 301.2954/0x0x4396a5d0
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -5.4783295e-10/0x0xb0169651 want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -5.4783295e-10/0x0xb0169651 want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -5.4783295e-10/0x0xb0169651 want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -5.4783295e-10/0x0xb0169651 want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 2.4955094e-10/0x0x2f89312c want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -8055 want -6484
+   !! int8 pieces 1x257x4104 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -1.0517863e-09/0x0xb0908e71 want -8.8650826e-10/0x0xb073ae79
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -2.633272e-10/0x0xaf90c402 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -2.633272e-10/0x0xaf90c402 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -2.633272e-10/0x0xaf90c402 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -3590 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -2.633272e-10/0x0xaf90c402 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got 3623 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 257 of 257 cells differ; first at 0 got 5.609827e-10/0x0x301a33a6 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 1x257x4104 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 771 of 771 sums differ; first HH of cell (0, 0) got -8055 want -6484
+   !! int8 pieces 1x257x4104 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 257 of 257 cells differ; first at 0 got -7.434259e-10/0x0xb04c59f2 want -6.0647093e-10/0x0xb026b499
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.31628e-07/0x0x35298d25 want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.31628e-07/0x0x35298d25 want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.31628e-07/0x0x35298d25 want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.31628e-07/0x0x35298d25 want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.911066e-07/0x0x3539847c want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 179364 want 191584
+   !! int8 pieces 16x513x4112 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.4230517e-07/0x0x352c6ae0 want 6.8645664e-07/0x0x353844f1
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.429132e-07/0x0x352c94a9 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.429132e-07/0x0x352c94a9 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.429132e-07/0x0x352c94a9 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 176775 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.429132e-07/0x0x352c94a9 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 24623 of 24624 sums differ; first HH of cell (0, 0) got 192442 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 7.0209035e-07/0x0x353c7748 want 6.9758033e-07/0x0x353b415b
+   !! int8 pieces 16x513x4112 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 24624 of 24624 sums differ; first HH of cell (0, 0) got 179364 want 191584
+   !! int8 pieces 16x513x4112 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 8208 of 8208 cells differ; first at 0 got 6.5464445e-07/0x0x352fbad3 want 6.9758033e-07/0x0x353b415b
+   ok int8 pieces 8x128x4096 profile-ranges
+   ok int8 pieces 8x128x4096 any-int8
+   ok int8 pieces 128x128x256 profile-ranges
+   ok int8 pieces 128x128x256 any-int8
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b64x128.k64.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w32x32.b64x128.k64.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b64x64.k64.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b128x64.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13949.84/0x0x4659f75c want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b256x32.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13949.84/0x0x4659f75c want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x16.b256x16.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13949.84/0x0x4659f75c want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges staged.w16x32.b64x128.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13949.84/0x0x4659f75c want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges pipe2.w16x32.b64x128.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges pipe2.w32x32.b64x128.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13598.863/0x0x46547b74 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 profile-ranges pipe2.w16x16.b32x32.k64.l16 (staged vs host): 49149 of 49152 sums differ; first HH of cell (0, 0) got 234107 want 226909
+   !! int8 pieces 64x256x1000 profile-ranges fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14598.941/0x0x46641bc4 want 14148.38/0x0x465d1185
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b32x32.k64.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b64x128.k64.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w32x32.b64x128.k64.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b64x64.k64.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b128x64.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14071.266/0x0x465bdd10 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b256x32.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14071.266/0x0x465bdd10 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x16.b256x16.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14071.266/0x0x465bdd10 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 staged.w16x32.b64x128.k32.l16 (staged vs host): 49152 of 49152 sums differ; first HH of cell (0, 0) got 223803 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14071.266/0x0x465bdd10 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 49151 of 49152 sums differ; first HH of cell (0, 0) got 217548 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 13684.598/0x0x4655d264 want 14269.411/0x0x465ef5a5
+   !! int8 pieces 64x256x1000 any-int8 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 49148 of 49152 sums differ; first HH of cell (0, 0) got 234107 want 226909
+   !! int8 pieces 64x256x1000 any-int8 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 16384 of 16384 cells differ; first at 0 got 14728.234/0x0x466620f0 want 14269.411/0x0x465ef5a5
+   ok int8 pieces 200x40x96 profile-ranges
+   ok int8 pieces 200x40x96 any-int8
+   shapes: 20, two fixtures each
+   hashed-plane: 920 cases, 436 failed
+!! GATE FAILED: check_pieces_plans_match_flat_and_host
+   436 of 920 hashed-plane cases differ; first: int8 pieces 33x17x33 profile-ranges staged.w16x16.b32x32.k64.l16 (staged vs host): 42 of 1683 sums differ; first HH of cell (0, 13) got 3440 want 4426
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 staged.w16x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted all-minus-128 9x7x1025 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted all-minus-128 9x7x1025 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.230893e-07/0x0x34042a88 want 1.2119745e-07/0x0x34022280
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b64x128.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w32x32.b64x128.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b64x64.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b128x64.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b256x32.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x16.b256x16.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 staged.w16x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   !! int8 pieces planted high-minus-128-low-plus-127 9x7x1025 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 63 of 63 cells differ; first at 0 got 1.1931685e-07/0x0x34001d91 want 1.17482976e-07/0x0x33fc4af3
+   ok int8 pieces planted only-a-high 9x7x1025
+   ok int8 pieces planted only-a-low 9x7x1025
+   ok int8 pieces planted only-b-high 9x7x1025
+   ok int8 pieces planted only-b-low 9x7x1025
+   ok int8 pieces planted all-minus-128 65x67x4096
+   ok int8 pieces planted high-minus-128-low-plus-127 65x67x4096
+   ok int8 pieces planted only-a-high 65x67x4096
+   ok int8 pieces planted only-a-low 65x67x4096
+   ok int8 pieces planted only-b-high 65x67x4096
+   ok int8 pieces planted only-b-low 65x67x4096
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 staged.w16x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted all-minus-128 1x130x4097 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted all-minus-128 1x130x4097 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 34213570.0/0x0x4c0283b0 want 34080440.0/0x0x4c0201ae
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b32x32.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b64x128.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w32x32.b64x128.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b64x64.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b128x64.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b256x32.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x16.b256x16.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 staged.w16x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 390 of 390 sums differ; first HH of cell (0, 0) got 67370368 want 67108224
+   !! int8 pieces planted high-minus-128-low-plus-127 1x130x4097 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 130 of 130 cells differ; first at 0 got 33164984.0/0x0x4bfd075c want 33035936.0/0x0x4bfc0b50
+   ok int8 pieces planted only-a-high 1x130x4097
+   ok int8 pieces planted only-a-low 1x130x4097
+   ok int8 pieces planted only-b-high 1x130x4097
+   ok int8 pieces planted only-b-low 1x130x4097
+   ok int8 pieces planted all-minus-128 8x129x14336
+   ok int8 pieces planted high-minus-128-low-plus-127 8x129x14336
+   ok int8 pieces planted only-a-high 8x129x14336
+   ok int8 pieces planted only-a-low 8x129x14336
+   ok int8 pieces planted only-b-high 8x129x14336
+   ok int8 pieces planted only-b-low 8x129x14336
+   ok int8 pieces planted all-minus-128 2x3x65535
+   ok int8 pieces planted high-minus-128-low-plus-127 2x3x65535
+   ok int8 pieces planted only-a-high 2x3x65535
+   ok int8 pieces planted only-a-low 2x3x65535
+   ok int8 pieces planted only-b-high 2x3x65535
+   ok int8 pieces planted only-b-low 2x3x65535
+   ok int8 pieces planted all-minus-128 129x257x96
+   ok int8 pieces planted high-minus-128-low-plus-127 129x257x96
+   ok int8 pieces planted only-a-high 129x257x96
+   ok int8 pieces planted only-a-low 129x257x96
+   ok int8 pieces planted only-b-high 129x257x96
+   ok int8 pieces planted only-b-low 129x257x96
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 staged.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted all-minus-128 17x33x4100 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted all-minus-128 17x33x4100 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 267556.06/0x0x4882a482 want 266516.0/0x0x48822280
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b32x32.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x16.b32x32.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b64x128.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x32.b64x128.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w32x32.b64x128.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w32x32.b64x128.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b64x64.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x16.b64x64.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b128x64.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x32.b128x64.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b256x32.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x32.b256x32.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x16.b256x16.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x16.b256x16.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 staged.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.staged.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 pipe2.w16x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.pipe2.w16x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 pipe2.w32x32.b64x128.k32.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.pipe2.w32x32.b64x128.k32.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 pipe2.w16x16.b32x32.k64.l16 (staged vs host): 1683 of 1683 sums differ; first HH of cell (0, 0) got 67436544 want 67174400
+   !! int8 pieces planted high-minus-128-low-plus-127 17x33x4100 fused.pipe2.w16x16.b32x32.k64.l16 (fused vs host): 561 of 561 cells differ; first at 0 got 259355.98/0x0x487d46ff want 258347.8/0x0x487c4af3
+   ok int8 pieces planted only-a-high 17x33x4100
+   ok int8 pieces planted only-a-low 17x33x4100
+   ok int8 pieces planted only-b-high 17x33x4100
+   ok int8 pieces planted only-b-low 17x33x4100
+   -- all-minus-128 is not run at k = 65536: its low planes are outside [0, 127]
+   ok int8 pieces planted high-minus-128-low-plus-127 3x2x65536
+   ok int8 pieces planted only-a-high 3x2x65536
+   ok int8 pieces planted only-a-low 3x2x65536
+   ok int8 pieces planted only-b-high 3x2x65536
+   ok int8 pieces planted only-b-low 3x2x65536
+   planted: 1081 cases, 132 failed
+!! GATE FAILED: check_pieces_planted_worst_cases
+   132 of 1081 planted cases differ; first: int8 pieces planted all-minus-128 9x7x1025 staged.w16x16.b32x32.k64.l16 (staged vs host): 189 of 189 sums differ; first HH of cell (0, 0) got 17055744 want 16793600
+   ok k = 65537 refused by name; bound 65536
+ok check_pieces_refuses_above_its_bound
+== 3 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 3 gates failed
+/root/mojolearn-lowbit-mma-speed/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

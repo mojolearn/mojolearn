@@ -1,19 +1,118 @@
 # lowbit-mma-speed: the tuned integer unit kernel and the parallel quantizer
 
 Lane D, branch `lane/lowbit-mma-speed`, worktree `~/mojolearn-wt/lowbit-mma-speed`,
-forked from `lane/lowbit-units`. Brief `~/mojolearn-evidence/lowbit-units/brief.md`
-(section "UPDATE 2026-09-29 ~03:30Z: Lane D" and every update after it). Lane files
+forked from `lane/lowbit-units`. Brief in force `~/mojolearn-evidence/lowbit-units/brief_current.md`
+(history: `brief.md`). Lane files
 `~/mojolearn-evidence/lowbit-mma-speed/`. Results in the repo:
-`bench/results/lowbit_mma_speed/2026-09-29/`. Nothing here is dispatched and no
-default moves: `identical_gemm_int8_into` still takes the reference plan.
-`gemm/checks/gemm_int8_mma.mojo`, `gemm/checks/gemm_lowbit.mojo` and fp32.v1's
-files are not edited by this lane.
+`bench/results/lowbit_mma_speed/2026-09-29/`. No default moves:
+`identical_gemm_int8_into` still takes the reference plan. `gemm/checks/gemm_int8_mma.mojo`
+and fp32.v1's files are not edited by this lane; `gemm/checks/gemm_lowbit.mojo` was edited
+once, on the fix branch the orchestrator merged (Apple launch slices).
 
 Every number below is a time, a rate, or a time over fp32.v1's at the same row on
 the same box in the same run. One run per table, five timed calls per arm, median.
 Every timing run was built first, run once cold (times never read, digests kept and
 compared with the run of record's), then run for the record, with nothing else of
 the lane's on the box.
+
+## SECOND AGENT, 2026-09-29 from ~04:50Z (brief: `~/mojolearn-evidence/lowbit-units/brief_current.md`)
+
+Everything above "## What exists" below this section is the second agent's; the
+rest is the first agent's record and stands. H100 = pod nvc3 (H100 NVL).
+Nothing went to m3ultra-b or to do-amd.
+
+### Tasks, verdicts
+
+| # | Task | Verdict | Where |
+|---|---|---|---|
+| 1 | read the tall-block arm (nvc3-0027) | taller blocks took MORE time at every 512-token row; the weights'-traffic reading refuted, confounded by registers (116 against 63) and blocks per multiprocessor (1 against 2) | `h100/run7`, table "The tall blocks" below |
+| 2 | why the M2 Pro quantizer job failed (1790656250587) | rule 10: the FLAT int8 product (gemm_lowbit.mojo), one launch of 1.83 s at mlp_down.t512, aborted by macOS in the cold run, cell 4352 (block 17) unwritten; a 1217 ms minimum against a 1854 ms median in the run of record is a second, unread abort. Not the quantizer. FIXED (rule 16): the flat plan launches in slices of at most 2^30 MACs on Apple (branch fix/lowbit-int8-flat-apple-slices aa9a2a61d, merged into main); the four products' reference device plan in this lane's file the same | `m2pro/run2_quant_red/CAUSE.txt`, `m2pro/run3_fix` |
+| 3 | four products one staging under four separate products at EVERY 512-token row | MET: TWO PAGES (the next window staged by `cp.async` while the unit runs, one barrier a window), 0.282 / 0.986 / 0.824 / 1.143 ms against 4 x one product 0.461 / 1.180 / 1.676 / 1.183 | `h100/run8`, `h100/run10` |
+| 4 | the decode rows: fuse the quantizer into the product's launch | the quantizer IN the launch is gated and COSTS time (every block reduces the rows' absmax: mlp_down.t1 0.101 ms against 0.055 for quantizer + product); NOT dispatched. The lever that worked: THE DECODE KERNEL (16 columns a block, k split over the warps in 64-byte chunks loaded straight from device memory, exact Int32 sums added at the end), one product and four products. The complete four-product call (quantizer + fused decode kernel, two launches) is 0.23 to 0.46 of fp32.v1 at all eight decode rows | `h100/run10`, `h100/run11` |
+| 5 | the fused epilogue (Lane C's interface) | `FUSED` form written, BUILT and gated at 8b2768883 on lane/lowbit-int15's `int15_store_cell` (gemm_int15_epilogue.mojo taken unchanged); fused against two launches 0.266 / 0.925 / 0.827 / 1.066 against 0.306 / 1.054 / 0.868 / 1.215 ms at the 512-token rows | `h100/run9_red` (build), `h100/run10` |
+
+### Gate and sabotage verdicts (second agent)
+
+| Gate | H100 | M2 Pro |
+|---|---|---|
+| four-product gate: every plan (staged, two-page, decode) in the sums AND the fused form against the host and the reference device plan; 920 hashed + 1081 planted cases (run 8) | GREEN runs 8, 9, 10, 11 | reference device plan vs host GREEN (sliced) |
+| its arms: middle sum HL twice; staging pad; value flip | seen failing, runs 8 to 11 | |
+| unit gate + the decode kernel on codes at every shape m <= 16 + `check_decode_quant_in_launch` (quantizer in the launch, planted row maxima) | GREEN runs 9, 10, 11 | not run (no unit) |
+| its arms: staging pad (both sides), value flip, quantizer butterfly skipped (new `check-gemm-int8-mma-tuned-quant-sabotage`) | seen failing runs 10, 11 (run 9: two not seen, Failures 9) | |
+| int8 flat plan sliced on Apple: check-gemm-lowbit 9/9, its value arm; sliced flat at mlp_up/mlp_down/lm_head t512 equal to the Apple chunk probe and to the unsliced digests | | GREEN (1790658996404) |
+| lane/lowbit-int15's check-gemm-int15-tuned on this tree | every plan equal to the oracle where it ran; `check_int15_tuned_refuses` fails on origin/main's stale copy (the branch has the fix); run 11's two further failures were this lane's (Failures 10), fixed, run 12 GREEN on both | |
+| timing runs: cold vs record digests, harness sabotage | every run GREEN (66/66, 57/57, all) | GREEN (9/9, 120 compared) |
+
+### The table of time after each lever, H100, median ms (over fp32.v1)
+
+512-token rows, the four-product kernel alone, qkv / mlp_up / mlp_down / lm_head:
+
+| lever | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 |
+|---|---:|---:|---:|---:|
+| fp32.v1 (run 8) | 1.039 | 3.339 | 3.365 | 3.723 |
+| four separate tuned products (4 x run 8's one product) | 0.461 | 1.180 | 1.676 | 1.183 |
+| one staging, the first agent's launcher plan w16x32.b64x128.k64 | 0.437 (0.420) | 1.567 (0.469) | 1.355 (0.403) | 1.757 (0.472) |
+| the same tiles, 32 k steps a window (the two-page plan's one-page control) | 0.579 | 2.081 | 1.913 | 2.339 |
+| TWO PAGES, w16x32.b64x128.k32 | 0.309 | 1.067 | 0.895 | 1.230 |
+| TWO PAGES, w32x32.b64x128.k32 (the launcher's plan now) | 0.282 (0.272) | 0.986 (0.295) | 0.824 (0.245) | 1.143 (0.307) |
+
+The complete operation, parallel quantizer + four products + Lane C's epilogue (run 10):
+
+| form | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 |
+|---|---:|---:|---:|---:|
+| two launches (sums, then `int15_store_cell`) | 0.306 (0.298) | 1.054 (0.316) | 0.868 (0.257) | 1.215 (0.326) |
+| FUSED, one product launch | 0.266 (0.259) | 0.925 (0.277) | 0.827 (0.245) | 1.066 (0.286) |
+
+Decode rows, t1 / t8, ms (over fp32.v1), runs 10 and 11:
+
+| lever | qkv | mlp_up | mlp_down | lm_head |
+|---|---|---|---|---|
+| fp32.v1 | 0.068 / 0.099 | 0.178 / 0.268 | 0.165 / 0.284 | 1.193 / 2.150 |
+| ONE product, staged 32x32 block (the old launcher) | 0.052 / 0.053 (0.77 / 0.54) | 0.079 / 0.086 (0.45 / 0.32) | 0.232 / 0.257 (1.41 / 0.91) | 0.281 / 0.299 (0.24 / 0.14) |
+| ONE product, THE DECODE KERNEL, 8 warps | 0.014 / 0.015 (0.21 / 0.15) | 0.037 / 0.037 (0.21 / 0.14) | 0.034 / 0.034 (0.21 / 0.12) | 0.232 / 0.242 (0.20 / 0.11); 4 warps 0.203 / 0.212 |
+| quantizer IN the launch + decode kernel, 8 warps, ONE launch | 0.033 / 0.035 | 0.082 / 0.104 | 0.101 / 0.107 | 0.570 / 0.751 |
+| parallel quantizer + the decode kernel (the launcher now), two launches | 0.020 (0.30) / 0.020 (0.20) | 0.041 (0.23) / 0.042 (0.16) | 0.047 (0.29) / 0.048 (0.17) | 0.211 (0.18) / 0.217 (0.10) |
+| FOUR products, two pages, 32x32 block | 0.059 / 0.059 | 0.082 / 0.085 | 0.200 / 0.199 | 0.549 / 0.573 |
+| FOUR products, THE DECODE KERNEL, 8 warps | 0.019 (0.27) / 0.020 (0.20) | 0.068 (0.38) / 0.069 (0.26) | 0.062 (0.38) / 0.062 (0.22) | 0.473 (0.40) / 0.487 (0.23) |
+| complete: quantizer + four products + epilogue, two-page plan, FUSED (run 10) | 0.051 (0.77) / 0.060 (0.62) | 0.092 (0.52) / 0.093 (0.35) | 0.215 (1.29) / 0.214 (0.75) | 0.562 (0.47) / 0.588 (0.27) |
+| complete, the decode kernel, FUSED (run 11, the launcher now) | 0.024 (0.35) / 0.024 (0.25) | 0.075 (0.42) / 0.076 (0.28) | 0.075 (0.46) / 0.076 (0.27) | 0.487 (0.41) / 0.495 (0.23) |
+
+### Failures of the second agent, each with its cause
+
+8. Compile checks on nvc3 through `nvidia_central.sh sh` (no GPU) at about
+   04:58 to 05:01Z overlapped lane/lowbit-int15's timing job nvc3-0029 and
+   loaded the host CPU; told to the orchestrator. Since then every build runs
+   inside this lane's own queued job and nothing is synced while one is queued.
+9. Run 9 (nvc3-0033) RED: two sabotage arms not seen on the quantizer-in-the-
+   launch gate. The padding arm broke only the weights' side (the left side,
+   quantized from floats, stayed zero beyond k, so every wrong byte met a zero
+   code); the hashed fixture never let the half-warp maximum change a row's
+   exponent. Fixed: the arm breaks both sides; each row's maximum is planted
+   where the upper half of a warp reads it. Seen failing in runs 10 and 11.
+10. Run 11: this lane placed the two decode plans below INT8_PIECES_PLAN_COUNT;
+   lane/lowbit-int15's gate loops over every index below it at every shape and
+   the decode plans refuse m > 16. Fixed: the count again holds only the plans
+   that take every shape (INT8_PIECES_PLAN_ALL_COUNT, int8_pieces_plan_admits).
+11. The quantizer in the product's launch costs time at every decode row
+   (above): gated, not dispatched.
+
+### Still owed
+
+- lane/lowbit-int15's `check_int15_tuned_refuses` on origin/main's copy of its
+  gate fails on this tree until main takes lane/lowbit-int15's fix (71db5bb26).
+  Run 12 (nvc3-0041, `h100/run12`): this lane's two gates GREEN with every arm
+  seen failing after Failures 10's fix; lane/lowbit-int15's matches_oracle and
+  planted checks pass on this tree again, the refusal check is the one failure.
+- The decode kernels and the two-page plans are NVIDIA's; AMD (Lane F) has
+  neither; the AMD launchers still take the staged plans, and the decode
+  kernels refuse there by name.
+- The one-page control and the two-page plan differ in the window (32 k steps
+  against 64 for the old launcher's plan); the window was held fixed only in
+  the control pair (0.579 against 0.309 at qkv.t512).
+- The two refused 1024-thread plans, `ldmatrix`, shapes between 17 and 511 rows:
+  as the first agent left them.
+- One run per table; no ratio near 1 is read from one run (lm_head.t512: 1.143
+  against 1.183 is the closest).
 
 ## What exists
 

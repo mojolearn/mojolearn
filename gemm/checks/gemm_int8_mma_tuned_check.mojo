@@ -328,7 +328,8 @@ def check_decode_quant_in_launch(ctx: DeviceContext) raises:
     """GATE: THE QUANTIZER IN THE PRODUCT'S LAUNCH. From float32 rows, every
     decode plan returns the host oracle's cells on the host quantizer's
     codes (the parallel quantizer's, by its own gate), and the exponents it
-    stores for the caller are the host quantizer's."""
+    stores for the caller are the host quantizer's. Each row's largest value
+    is planted where the upper half of a warp reads it (see THE PLANT)."""
     var tally = Tally()
     for s in range(DECODE_SHAPE_COUNT):
         var sh = _decode_shape(s)
@@ -336,6 +337,14 @@ def check_decode_quant_in_launch(ctx: DeviceContext) raises:
         var n = sh[1]
         var k = sh[2]
         var x = _fill(m * k, 911 + s)
+        # THE PLANT: in every row one value far above the rest, in a column
+        # that a lane of the upper half of the warp reads (columns 64 to 127
+        # of every 128), so a reduction that drops those lanes takes the
+        # wrong exponent. Rows whose `k` has no such column keep the fixture.
+        if k > 127:
+            for r in range(m):
+                var col = 64 + (r * 4 + 1) % 64
+                x[r * k + col] = Float32(1000.0 + 37.0 * Float32(r))
         var qa = quantize_rows_int8(x, m, k)
         var qb = quantize_rows_int8(_fill(n * k, 919 + s), n, k)
         var want = gemm_int8_oracle(qa.q, qa.e, qb.q, qb.e, m, n, k)

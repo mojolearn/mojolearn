@@ -1,0 +1,153 @@
+✨ Pixi task (check-gemm-int8-pieces-tuned in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo
+518046 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x719180000000, nodemask=1)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:2388:41: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    _pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
+                                      ~~^~~~~~~~
+                                         unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1630:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1727:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    as_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:1728:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    bs_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:51:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_mma_tuned.mojo:777:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:296:17: warning: assignment to 'k' was never used; assign to '_' instead?
+        var k = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:295:17: warning: assignment to 'n' was never used; assign to '_' instead?
+        var n = 0
+                ^
+/root/mojolearn-lowbit-mma-speed/gemm/checks/gemm_int8_pieces_tuned_check.mojo:294:17: warning: assignment to 'm' was never used; assign to '_' instead?
+        var m = 0
+                ^
+== gemm/checks/gemm_int8_pieces_tuned_check.mojo [IDENTICAL]  sabotage: none ==
+   four int8 products of two-plane operands, one staging; three Int32 sums per cell
+   column: nvidia
+   plan 0: staged.w16x16.b32x32.k64.l16
+   plan 1: staged.w16x32.b64x128.k64.l16
+   plan 2: staged.w32x32.b64x128.k64.l16
+   plan 3: staged.w16x16.b64x64.k64.l16
+   plan 4: staged.w16x32.b128x64.k32.l16
+   plan 5: staged.w16x32.b256x32.k32.l16
+   plan 6: staged.w16x16.b256x16.k32.l16
+   plan 7: staged.w16x32.b64x128.k32.l16
+   plan 8: pipe2.w16x32.b64x128.k32.l16
+   plan 9: pipe2.w32x32.b64x128.k32.l16
+   plan 10: pipe2.w16x16.b32x32.k64.l16
+   plan 11: decode.n16.w4.c64
+   plan 12: decode.n16.w8.c64
+   ok int8 pieces 3x5x17 profile-ranges
+   ok int8 pieces 3x5x17 any-int8
+   ok int8 pieces 17x33x31 profile-ranges
+   ok int8 pieces 17x33x31 any-int8
+   ok int8 pieces 33x17x33 profile-ranges
+   ok int8 pieces 33x17x33 any-int8
+   ok int8 pieces 1x47x100 profile-ranges
+   ok int8 pieces 1x47x100 any-int8
+   ok int8 pieces 50x70x1000 profile-ranges
+   ok int8 pieces 50x70x1000 any-int8
+   ok int8 pieces 13x21x4097 profile-ranges
+   ok int8 pieces 13x21x4097 any-int8
+   ok int8 pieces 2x16x32 profile-ranges
+   ok int8 pieces 2x16x32 any-int8
+   ok int8 pieces 100x3x64 profile-ranges
+   ok int8 pieces 100x3x64 any-int8
+   ok int8 pieces 65x129x63 profile-ranges
+   ok int8 pieces 65x129x63 any-int8
+   ok int8 pieces 63x127x65 profile-ranges
+   ok int8 pieces 63x127x65 any-int8
+   ok int8 pieces 129x65x127 profile-ranges
+   ok int8 pieces 129x65x127 any-int8
+   ok int8 pieces 127x257x129 profile-ranges
+   ok int8 pieces 127x257x129 any-int8
+   ok int8 pieces 130x255x191 profile-ranges
+   ok int8 pieces 130x255x191 any-int8
+   ok int8 pieces 17x300x4100 profile-ranges
+   ok int8 pieces 17x300x4100 any-int8
+   ok int8 pieces 1x257x4104 profile-ranges
+   ok int8 pieces 1x257x4104 any-int8
+   ok int8 pieces 16x513x4112 profile-ranges
+   ok int8 pieces 16x513x4112 any-int8
+   ok int8 pieces 8x128x4096 profile-ranges
+   ok int8 pieces 8x128x4096 any-int8
+   ok int8 pieces 128x128x256 profile-ranges
+   ok int8 pieces 128x128x256 any-int8
+   ok int8 pieces 64x256x1000 profile-ranges
+   ok int8 pieces 64x256x1000 any-int8
+   ok int8 pieces 200x40x96 profile-ranges
+   ok int8 pieces 200x40x96 any-int8
+   shapes: 20, two fixtures each
+   hashed-plane: 976 cases, 0 failed
+ok check_pieces_plans_match_flat_and_host
+   ok int8 pieces planted all-minus-128 9x7x1025
+   ok int8 pieces planted high-minus-128-low-plus-127 9x7x1025
+   ok int8 pieces planted only-a-high 9x7x1025
+   ok int8 pieces planted only-a-low 9x7x1025
+   ok int8 pieces planted only-b-high 9x7x1025
+   ok int8 pieces planted only-b-low 9x7x1025
+   ok int8 pieces planted all-minus-128 65x67x4096
+   ok int8 pieces planted high-minus-128-low-plus-127 65x67x4096
+   ok int8 pieces planted only-a-high 65x67x4096
+   ok int8 pieces planted only-a-low 65x67x4096
+   ok int8 pieces planted only-b-high 65x67x4096
+   ok int8 pieces planted only-b-low 65x67x4096
+   ok int8 pieces planted all-minus-128 1x130x4097
+   ok int8 pieces planted high-minus-128-low-plus-127 1x130x4097
+   ok int8 pieces planted only-a-high 1x130x4097
+   ok int8 pieces planted only-a-low 1x130x4097
+   ok int8 pieces planted only-b-high 1x130x4097
+   ok int8 pieces planted only-b-low 1x130x4097
+   ok int8 pieces planted all-minus-128 8x129x14336
+   ok int8 pieces planted high-minus-128-low-plus-127 8x129x14336
+   ok int8 pieces planted only-a-high 8x129x14336
+   ok int8 pieces planted only-a-low 8x129x14336
+   ok int8 pieces planted only-b-high 8x129x14336
+   ok int8 pieces planted only-b-low 8x129x14336
+   ok int8 pieces planted all-minus-128 2x3x65535
+   ok int8 pieces planted high-minus-128-low-plus-127 2x3x65535
+   ok int8 pieces planted only-a-high 2x3x65535
+   ok int8 pieces planted only-a-low 2x3x65535
+   ok int8 pieces planted only-b-high 2x3x65535
+   ok int8 pieces planted only-b-low 2x3x65535
+   ok int8 pieces planted all-minus-128 129x257x96
+   ok int8 pieces planted high-minus-128-low-plus-127 129x257x96
+   ok int8 pieces planted only-a-high 129x257x96
+   ok int8 pieces planted only-a-low 129x257x96
+   ok int8 pieces planted only-b-high 129x257x96
+   ok int8 pieces planted only-b-low 129x257x96
+   ok int8 pieces planted all-minus-128 17x33x4100
+   ok int8 pieces planted high-minus-128-low-plus-127 17x33x4100
+   ok int8 pieces planted only-a-high 17x33x4100
+   ok int8 pieces planted only-a-low 17x33x4100
+   ok int8 pieces planted only-b-high 17x33x4100
+   ok int8 pieces planted only-b-low 17x33x4100
+   -- all-minus-128 is not run at k = 65536: its low planes are outside [0, 127]
+   ok int8 pieces planted high-minus-128-low-plus-127 3x2x65536
+   ok int8 pieces planted only-a-high 3x2x65536
+   ok int8 pieces planted only-a-low 3x2x65536
+   ok int8 pieces planted only-b-high 3x2x65536
+   ok int8 pieces planted only-b-low 3x2x65536
+   planted: 1197 cases, 0 failed
+ok check_pieces_planted_worst_cases
+   ok k = 65537 refused by name; bound 65536
+ok check_pieces_refuses_above_its_bound
+== 3 gates, 0 failed ==

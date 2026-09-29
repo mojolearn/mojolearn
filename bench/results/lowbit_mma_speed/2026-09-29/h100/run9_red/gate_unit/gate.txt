@@ -1,0 +1,8 @@
+box=h100 gate=unit
+started=2026-09-29T05:16:12Z
+tree_head=b42e019110f887d27f9c5c5052f8fa645524a9a0 dirty_files=13
+machine=NVIDIA H100 NVL, 580.159.04
+reach: unit-sabotage did not fail check_decode_quant_in_launch
+reach: unit-quant-sabotage did not fail check_decode_quant_in_launch
+finished=2026-09-29T05:18:14Z
+verdict=RED an expected outcome did not hold (see status.tsv and the reach lines above)

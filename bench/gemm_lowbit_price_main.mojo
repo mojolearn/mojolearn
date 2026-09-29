@@ -270,13 +270,14 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_decode_dispatch,
     int8_decode_plan_name,
     INT8_PIECES_MAX_K,
-    INT8_PIECES_PLAN_COUNT,
+    INT8_PIECES_PLAN_ALL_COUNT,
     INT8_TUNED_PLAN_COUNT,
     identical_gemm_int8_pieces_flat_into,
     identical_gemm_int8_pieces_tuned_fused_into,
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
+    int8_pieces_plan_admits,
     int8_pieces_plan_name,
     identical_gemm_int8_mma_direct_into,
     identical_gemm_int8_mma_tuned_into,
@@ -354,7 +355,7 @@ comptime ARM_TRAIN_4X_TUNED = ARM_INF_INT8_TUNED + 3
 #: FOUR PRODUCTS, ONE STAGING.
 comptime ARM_PIECES_FLAT = ARM_INF_INT8_TUNED + 4
 comptime ARM_PIECES_BASE = ARM_PIECES_FLAT + 1
-comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_COUNT
+comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_ALL_COUNT
 comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
 #: The same operation as ARM_INF_PIECES in ONE launch: the four products and
 #: lane/lowbit-int15's epilogue fused into their last step.
@@ -1175,6 +1176,9 @@ def _time_shape(
         # The decode kernel takes at most sixteen rows.
         if arm >= ARM_DECODE_BASE and m > INT8_DECODE_MAX_M:
             runs = False
+        if arm >= ARM_PIECES_BASE and arm < ARM_INF_PIECES:
+            if not int8_pieces_plan_admits(arm - ARM_PIECES_BASE, m, n, k):
+                runs = False
         ran.append(runs)
         samples.append(List[Int]())
     var sb = ShapeBuffers(ctx, m, n, k, pieces)
