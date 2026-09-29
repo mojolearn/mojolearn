@@ -1,0 +1,13 @@
+diff --git a/x_cluster/device_ops.mojo b/x_cluster/device_ops.mojo
+index 489febe3d..dea8abe9f 100644
+--- a/x_cluster/device_ops.mojo
++++ b/x_cluster/device_ops.mojo
+@@ -1392,7 +1392,7 @@ struct DeviceOps(ClusterOps):
+             )
+             identical_gemm_into(self.ctx, raw, scaled, diff, ws, d, d, n, OP_TN)
+             self.ctx.enqueue_function[cov_finish_kernel](
+-                raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
++                raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(0),
+                 grid_dim=_grid(d * d), block_dim=TPB,
+             )
+         # the scratch buffers die with this call: drain first
