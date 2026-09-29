@@ -111,14 +111,39 @@ ALIASES = {
         "normalize": "normalize", "positive": "positive", "class_weight": "class_weight",
         "leaf_size": "leaf_size", "boosting_type": "boosting_type",
         "border_count": ("max_bin", _plus1),
+        # classical and classical2 (tools/classical_two_datasets.py, tools/bench_board_more.py)
+        "gamma": "gamma", "atol": "atol", "rtol": "rtol", "breadth_first": "breadth_first",
+        "cluster_selection_method": "cluster_selection_method",
+        "cluster_selection_epsilon": "cluster_selection_epsilon",
+        "max_cluster_size": "max_cluster_size", "allow_single_cluster": "allow_single_cluster",
+        "selection": "selection", "precompute": "precompute", "init_params": "init_params",
+        "n_restarts_optimizer": "n_restarts_optimizer", "max_iter_predict": "max_iter_predict",
+        "maxiter": "max_iter", "penalized_intercept": "penalized_intercept",
+        "set_op_mix_ratio": "set_op_mix_ratio", "local_connectivity": "local_connectivity",
+        "negative_sample_rate": "negative_sample_rate", "repulsion_strength": "repulsion_strength",
+        "assign_labels": "assign_labels", "start_periods": "start_periods",
     },
     # XGBoost's `gamma` is the minimum split loss reduction
     "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
     # LightGBM's `min_child_weight` is min_sum_hessian_in_leaf
     "lightgbm": {"min_child_weight": "min_child_weight", "boosting_type": "boosting_type"},
     # CatBoost and ours count borders, not bins: 254 borders = 255 bins
-    "catboost": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type"},
-    "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type"},
+    "catboost": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type",
+                 # trees: the CatBoost knobs ours carries under the same name
+                 "loss_function": "loss", "random_strength": "random_strength",
+                 "score_function": "score_function", "bootstrap_type": "bootstrap_type",
+                 "leaf_estimation_method": "leaf_estimation_method",
+                 "leaf_estimation_iterations": "leaf_estimation_iterations",
+                 "feature_border_type": "feature_border_type", "nan_mode": "nan_mode"},
+    "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type",
+                  "random_strength": "random_strength", "score_function": "score_function",
+                  "bootstrap_type": "bootstrap_type",
+                  "leaf_estimation_method": "leaf_estimation_method",
+                  "leaf_estimation_iterations": "leaf_estimation_iterations",
+                  "feature_border_type": "feature_border_type", "nan_mode": "nan_mode",
+                  # the RF quantile bin count (cuML's n_bins) is a bin count
+                  "n_bins": "max_bin"},
+    "cuml": {"n_bins": "max_bin"},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
 }
@@ -137,6 +162,128 @@ IGNORE = frozenset({
 #: arm glob, reason). A difference not listed here refuses the race.
 EXCEPTIONS = [
     # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+    # ---- trees (tools/speed_gbdt_arm.py lane_config; each also a FSPEED-NOTE mismatch line)
+    ("gbdt-*", "subsample", "*", "no row sampling on any arm: ours and CatBoost bootstrap_type "
+     "'No' (neither accepts subsample beside it, so it stays unset), XGBoost and LightGBM "
+     "subsample 1.0"),
+    ("gbdt-*", "boosting_type", "xgboost-*", "different vocabularies: ours and CatBoost 'Plain' "
+     "(not Ordered), XGBoost booster 'gbtree'; both plain gradient boosting"),
+    ("gbdt-*", "boosting_type", "lightgbm-*", "different vocabularies: ours and CatBoost 'Plain' "
+     "(not Ordered), LightGBM 'gbdt'; both plain gradient boosting"),
+    ("gbdt-*", "min_child_weight", "lightgbm-*", "LightGBM 4.7.0 aborts a boosted tree at "
+     "min_child_weight 0 (best_split_info.left_count > 0) and keeps 1e-3; ours has no hessian floor"),
+    ("gbdt-*", "min_samples_leaf", "lightgbm-*", "LightGBM keeps min_child_samples 20 (it aborts at "
+     "the other arms' value); ours and CatBoost min_data_in_leaf 1"),
+    ("gbdt-depthwise", "min_child_weight", "*", "ours takes min_child_hessian only with a Newton "
+     "score and Depthwise runs Cosine (CatBoost CPU has no Newton score), so ours has no hessian "
+     "floor: XGBoost min_child_weight 0"),
+    ("gbdt-lossguide", "score_function", "catboost-cpu", "CatBoost's CPU learner scores splits with "
+     "Cosine or L2 only; ours and catboost-gpu NewtonL2, the Newton L2 gain of XGBoost and LightGBM"),
+    ("gbdt-categorical", "score_function", "catboost-cpu", "CatBoost's CPU learner scores splits "
+     "with Cosine or L2 only; ours and catboost-gpu NewtonL2, the Newton L2 gain of XGBoost and "
+     "LightGBM"),
+] + [
+    (lane, "min_child_weight", "*", "ours takes min_child_hessian on Depthwise and Lossguide only; "
+     "on the symmetric grower it is unset (no hessian floor, as CatBoost; XGBoost 0)")
+    for lane in ("gbdt-symmetric", "gbdt-rank-*", "gbdt-multiclass")
+] + [
+    (lane, "min_split_gain", "*", "ours takes min_split_gain on Depthwise and Lossguide only; on "
+     "the symmetric grower it is unset (CatBoost has none; XGBoost gamma 0, LightGBM 0)")
+    for lane in ("gbdt-symmetric", "gbdt-rank-*", "gbdt-multiclass")
+] + [
+    (lane, "grow_policy", "xgboost-*", "ours and CatBoost fit this loss on the symmetric grower "
+     "only; XGBoost has none and runs depthwise at the same depth")
+    for lane in ("gbdt-rank-*", "gbdt-multiclass")
+] + [
+    ("rf", "max_leaves", "*", "no leaf cap on any arm: ours max_leaves -1 (cuML's sentinel), "
+     "sklearn max_leaf_nodes None (a value would switch it to best-first growth), LightGBM "
+     "num_leaves 65536 = 2 ** max_depth, never reached at depth 16"),
+    ("et", "max_leaves", "*", "no leaf cap on any arm: ours and sklearn max_leaf_nodes None, "
+     "LightGBM num_leaves 65536 = 2 ** max_depth, never reached at depth 16"),
+    ("rf", "class_weight", "*", "None on every arm is unit class weights, the value each library "
+     "defines for None"),
+    ("et", "class_weight", "*", "None on every arm is unit class weights, the value each library "
+     "defines for None"),
+    ("et", "max_samples", "*", "bootstrap False on ours and sklearn: every row in every tree; "
+     "sklearn refuses max_samples without bootstrap, so it stays None on both"),
+    ("iforest", "max_depth", "*", "ours None is the auto depth ceil(log2(max_samples)) = 8; "
+     "sklearn has no max_depth parameter and fixes the same value"),
+    # --- classical (tools/classical_two_datasets.py) and classical2 (tools/bench_board_more.py).
+    # A seed exception names each library that has NO seed argument (or refuses
+    # one); every arm that has one gets 7.
+    ("ols", "seed", "ours*", "mojolearn LinearRegression has no seed argument (closed-form fit)"),
+    ("ols", "seed", "sklearn-cpu*", "scikit-learn LinearRegression has no seed argument (closed-form fit)"),
+    ("ols", "seed", "cuml-gpu", "cuML LinearRegression has no seed argument (closed-form fit)"),
+    ("knn", "seed", "ours*", "mojolearn NearestNeighbors has no seed argument (exact search)"),
+    ("knn", "seed", "sklearn-cpu*", "scikit-learn NearestNeighbors has no seed argument (exact search)"),
+    ("knn", "seed", "cuml-gpu", "cuML NearestNeighbors has no seed argument (exact search)"),
+    ("kde", "seed", "ours*", "mojolearn KernelDensity has no seed argument (exact density)"),
+    ("kde", "seed", "sklearn-cpu*", "scikit-learn KernelDensity has no seed argument (exact density)"),
+    ("kde", "seed", "cuml-gpu", "cuML KernelDensity has no seed argument (exact density)"),
+    ("svc", "seed", "ours*", "mojolearn SVC refuses random_state without probability=True (the fit "
+     "draws nothing); scikit-learn and cuML get 7"),
+    ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("dbscan", "seed", "ours*", "mojolearn DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "seed", "sklearn-cpu*", "scikit-learn DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "seed", "cuml-gpu*", "cuML DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "algorithm", "sklearn-cpu*", "an exact eps search on every arm: ours 'rbc' (its "
+     "default), scikit-learn has no 'rbc' and runs 'auto' (a tree on taxi, brute on Istella-S)"),
+    ("dbscan", "algorithm", "cuml-gpu", "an exact eps search on every arm: ours 'rbc', cuml-gpu "
+     "'brute' (cuml-gpu-rbc races 'rbc')"),
+    ("hdbscan", "seed", "ours*", "mojolearn HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "seed", "sklearn-cpu*", "scikit-learn HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "seed", "cuml-gpu", "cuML HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "max_cluster_size", "sklearn-cpu*", "no limit on every arm: ours and cuML spell "
+     "it 0, scikit-learn None"),
+    ("umap", "seed", "umap-learn-cpu-unseeded", "raced unseeded on purpose: seeded umap-learn runs "
+     "one thread (its rule); this arm is random_state=None, n_jobs=-1 (umap-learn-cpu has 7)"),
+    ("logreg", "seed", "ours*", "mojolearn LogisticRegression has no seed argument (L-BFGS, deterministic)"),
+    ("logreg", "seed", "cuml-gpu", "cuML LogisticRegression has no seed argument (L-BFGS, deterministic)"),
+    ("logreg", "solver", "sklearn-cpu*", "L-BFGS on every arm: ours and cuML 'qn', scikit-learn 'lbfgs'"),
+    ("logreg", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("logreg", "l1_ratio", "*", "penalty='l2' on every arm: ours None, scikit-learn None or 0.0 "
+     "(its l2 spelling from 1.8)"),
+    ("linearsvc", "seed", "ours*", "mojolearn LinearSVC has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvc", "seed", "cuml-gpu", "cuML LinearSVC has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("ridge", "seed", "ours*", "mojolearn Ridge has no seed argument (closed-form fit)"),
+    ("ridge", "seed", "cuml-gpu", "cuML Ridge has no seed argument (closed-form fit)"),
+    ("ridge", "solver", "sklearn-cpu*", "ours and cuML 'eig' (eigendecomposition of the normal "
+     "equations); scikit-learn has no 'eig' and runs 'cholesky' on the same normal equations"),
+    ("lasso", "seed", "ours*", "mojolearn Lasso refuses random_state: it selects nothing with "
+     "selection='cyclic'"),
+    ("lasso", "seed", "cuml-gpu", "cuML Lasso has no seed argument"),
+    ("elasticnet", "seed", "ours*", "mojolearn ElasticNet refuses random_state: it selects nothing "
+     "with selection='cyclic'"),
+    ("elasticnet", "seed", "cuml-gpu", "cuML ElasticNet has no seed argument"),
+    ("linearsvr", "seed", "ours*", "mojolearn LinearSVR has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvr", "seed", "cuml-gpu", "cuML LinearSVR has no seed argument (L-BFGS, deterministic)"),
+    ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
+     "runs 'arpack' at tol=0"),
+    ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
+    ("knn-*", "seed", "ours*", "mojolearn KNeighbors* has no seed argument (exact search)"),
+    ("knn-*", "seed", "sklearn-cpu*", "scikit-learn KNeighbors* has no seed argument (exact search)"),
+    ("knn-*", "seed", "cuml-gpu", "cuML KNeighbors* has no seed argument (exact search)"),
+    ("spectral*", "gamma", "*", "affinity='nearest_neighbors' reads no gamma: ours refuses any "
+     "value (None), scikit-learn holds its default (1.0 clustering, None embedding)"),
+    ("spectral", "degree", "*", "affinity='nearest_neighbors' reads no degree: ours refuses any "
+     "value (None), scikit-learn holds 3"),
+    ("spectral", "coef0", "*", "affinity='nearest_neighbors' reads no coef0: ours refuses any "
+     "value (None), scikit-learn holds 1"),
+    ("agglomerative", "seed", "ours*", "mojolearn AgglomerativeClustering has no seed argument"),
+    ("agglomerative", "seed", "sklearn-cpu*", "scikit-learn AgglomerativeClustering has no seed argument"),
+    ("agglomerative", "seed", "cuml-gpu", "cuML AgglomerativeClustering has no seed argument"),
+    ("gp[rc]", "kernel", "sklearn-cpu*", "the same ConstantKernel(1.0) * RBF(sqrt(d)) (gpr: + "
+     "WhiteKernel(1e-2)) built from each library's own kernel classes; their reprs differ"),
+    ("gpc", "seed", "ours*", "mojolearn GaussianProcessClassifier refuses random_state "
+     "(optimizer=None draws nothing); scikit-learn gets 7"),
+    ("svr", "seed", "*", "no SVR takes a seed argument (ours, scikit-learn, cuML)"),
+    ("kernel-ridge", "seed", "*", "no KernelRidge takes a seed argument (ours, scikit-learn, cuML)"),
+    ("arima", "seed", "*", "no ARIMA takes a seed argument (maximum likelihood, deterministic): "
+     "ours, statsmodels, cuML"),
+    ("ets", "seed", "*", "no Holt-Winters takes a seed argument (deterministic): ours, "
+     "statsmodels, cuML"),
+    ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed; ours and faiss get 7"),
 ]
 
 

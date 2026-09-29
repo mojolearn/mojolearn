@@ -184,12 +184,11 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         border_count (BORDERS, not bins) grow_policy
         bootstrap_type='No'              random_state <- random_seed
 
-    `boost_from_average` is passed by NEITHER arm, deliberately. Both
-    libraries resolve the same data-dependent default -- auto-true for RMSE,
-    false for Logloss, since Logloss is not on CatBoost's
-    `AdjustBoostFromAverageDefaultValue` list -- and `check-bfa-oracle`
-    proves our bias bit-equal to their `get_scale_and_bias`. Passing it would
-    be overriding a default that already agrees.
+    `boost_from_average` is passed explicitly since 2026-09-29 (same seed,
+    same tuning parameters): True for RMSE and False for Logloss, the
+    data-dependent default both libraries resolve (`check-bfa-oracle` proves
+    our bias bit-equal to their `get_scale_and_bias`), and the value XGBoost
+    and LightGBM are now pinned to as well.
 
     MULTICLASS IS REFUSED BY NAME (DEVIATION 1838). The Mojo layer implements
     `MultiClass`; this Python wrapper is one-dimensional, so a 7-class
@@ -218,9 +217,25 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         bootstrap_type="No",                 # DEVIATION 1833
         grow_policy=cfg["grow_policy"],
         loss=task_loss or ("RMSE" if data.task == "regression" else "Logloss"),
+        # SAME SEED, SAME TUNING PARAMETERS (speed_gbdt_arm.lane_config): every
+        # knob the opponents also have, set to the value they are given
+        max_leaves=cfg["max_leaves"],        # 2 ** depth, accepted off Lossguide
+        min_data_in_leaf=cfg["min_data_in_leaf"],
+        random_strength=cfg["random_strength"],
+        score_function=cfg["score_function"],
+        leaf_estimation_method=cfg["leaf_estimation_method"],
+        leaf_estimation_iterations=cfg["leaf_estimation_iterations"],
+        feature_border_type=cfg["feature_border_type"],
+        nan_mode=cfg["nan_mode"],
+        boosting_type=cfg["boosting_type"],
     )
-    if cfg["grow_policy"] == "Lossguide":
-        params["max_leaves"] = cfg["max_leaves"]
+    if cfg.get("min_split_gain") is not None:
+        params["min_split_gain"] = cfg["min_split_gain"]
+    if cfg.get("min_child_hessian") is not None:
+        params["min_child_hessian"] = cfg["min_child_hessian"]
+    bfa = spec.boost_from_average_for(data)
+    if bfa is not None:
+        params["boost_from_average"] = bfa
     if data.cat_idx:
         # DEVIATION 2634's OTHER SIDE. `cat_features` is the only way to reach
         # the CTR target prep at all: with no categorical column 2634 skips it,
@@ -285,6 +300,7 @@ def our_rf_arm(lane, cfg, data, extra=None):
         min_samples_split=cfg["min_samples_split"],
         min_impurity_decrease=cfg["min_impurity_decrease"],
         bootstrap=cfg["bootstrap"],
+        max_samples=cfg["max_samples"],   # 1.0: n draws with replacement, as sklearn's
         random_state=cfg["seed"],
         device="gpu",
     )
@@ -938,6 +954,25 @@ def build_parser():
     return p
 
 
+def seed_draws(lane, cfg, data):
+    """What the seed drives in this lane's fit on the arms that draw random
+    numbers, or '' when no arm draws one (then the seed note says so)."""
+    if lane in ("rf", "et"):
+        return ("row bootstrap (rf), per-node feature draws, ET thresholds; LightGBM "
+                "derives its bagging, feature and extra-trees seeds from seed 7")
+    if lane == "iforest":
+        return "row subsamples, split features and thresholds"
+    parts = []
+    if cfg.get("random_strength"):
+        parts.append("split-score noise (random_strength %g) on ours and CatBoost"
+                     % cfg["random_strength"])
+    if cfg.get("loss") == "YetiRank":
+        parts.append("YetiRank's sampled permutations on ours and CatBoost")
+    if getattr(data, "cat_idx", None):
+        parts.append("CatBoost's and ours CTR permutations")
+    return "; ".join(parts)
+
+
 def main(argv=None):
     started = time.time()
     args = build_parser().parse_args(argv)
@@ -1062,6 +1097,38 @@ def main(argv=None):
         spec.emit_refused(lane, "all", "nothing could be constructed on this "
                                        "box; see the refusals above")
         return 1
+    # THE PARAMETER CHECK (tools/bench_board_params.py; Andrew, 2026-09-29:
+    # "same seed same tuning params"), before the first timed round. Each
+    # arm's model is constructed, not fitted, and its parameters are read
+    # back from the object; a seed or a shared parameter that differs
+    # refuses the race by name. The CPU proxy arms are ours on another
+    # column and carry the same parameters, so they are not compared.
+    # `ours-ab` differs from ours by the one key --ours-ab names, on purpose.
+    import bench_board_params as BP
+    proxy_names = {getattr(a, "name", None) for a in proxies}
+    records = {}
+    for arm in arms:
+        if arm.name in proxy_names:
+            continue
+        try:
+            records[arm.name] = arm.make()
+        except Exception as exc:  # noqa: BLE001
+            records[arm.name] = {"__record__": True, "library": "?",
+                                 "source": "construction failed (%s)" % exc, "params": {}}
+    extra = ()
+    if args.ours_ab:
+        extra = ((args.ours_ab.partition("=")[0].strip(), "ours-ab",
+                  "--ours-ab changes this one key on purpose (the A/B arm)"),)
+    try:
+        BP.enforce(lane, records, family="trees", extra_exceptions=extra)
+    except BP.ParamsRefused as exc:
+        spec.emit_refused(lane, "all", "PARAMETER CHECK REFUSED: %s" % exc)
+        return 1
+    # SAME SEED, SAME TUNING PARAMETERS: rule 1's note, then the board's check
+    # on one constructed estimator per arm, before any warm-up or timed round
+    spec.emit_seed_note(lane, [a.name for a in arms], seed_draws(lane, cfg, data))
+    if not spec.enforce_board_params(lane, arms, skip={p.name for p in proxies}):
+        return 2
     # `cfg` reaches the runner so the FIT-EQUIVALENCE check can hold each
     # arm's FITTED tree count against the count this lane asked for. Without
     # it the shapes are still reported and that one check is skipped; an
