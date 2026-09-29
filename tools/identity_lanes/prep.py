@@ -365,6 +365,12 @@ def _(ml, X, yc, yr, Xh=None):
     Y = np.tile(X[:256], (1, K // X.shape[1] + 1))[:, :K]
     parts["labels"] = _h(lb.inverse_transform(lb.transform(y[:256])), lb.inverse_transform(Y))
     lb2 = ml.LabelBinarizer().fit(yc)
+    # Four rows cover the binary two-column read window even on base.
+    # Assertion-only: preserve the existing returned reference hashes.
+    binary_scores = np.array([[99, 0], [-99, 0.5], [0, 0.75], [1, 1]], dtype=np.float32)
+    binary_expected = np.asarray(lb2.classes_)[[0, 0, 1, 1]]
+    np.testing.assert_array_equal(lb2.inverse_transform(binary_scores), binary_expected)
+    np.testing.assert_array_equal(lb2.inverse_transform(binary_scores[:, 1:]), binary_expected)
     parts["labels_binary"] = _h(lb2.inverse_transform(X[:256, :1]), lb2.inverse_transform(X[:256, :1], threshold=0.3))
     return _fit(parts, mn, lambda e: (e.inverse_transform(Xh[:256]),))
 
