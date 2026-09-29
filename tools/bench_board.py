@@ -108,7 +108,7 @@ SCHEMA = "mojolearn-bench-board/1"
 #: Fields added to schema /1 without breaking a resume: the `ours-cpu` arm and
 #: per cell `peak_host_mb`, `peak_gpu_mb`, `memory` and `ratio_ours_cpu_over`.
 SEED = 7                 # the drivers' own seed (lane_config seed=7); one seed only
-DEFAULT_ROUNDS = 5
+DEFAULT_ROUNDS = 1
 TREE_ROW_FLOOR = 1_000_000
 
 #: gbdt-symmetric-1000 is gbdt-symmetric at 1000 trees (CatBoost's own default
@@ -2154,7 +2154,7 @@ def build_parser():
                         "control shape, 4096^3 GEMM, L2048 blocks) or small (a smoke; the board "
                         "says SMOKE). --rows does not apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
-                   help="timed rounds after one warm-up (default 5)")
+                   help="timed rounds after one warm-up (default 1)")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
     p.add_argument("--mojolearn-wheel", default=None,
                    help="install this wheel file instead of downloading one (sha256 recorded)")
