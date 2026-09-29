@@ -1,0 +1,13 @@
+diff --git a/gemm/checks/gemm_int15.mojo b/gemm/checks/gemm_int15.mojo
+index 97acae272..bf8c773c1 100644
+--- a/gemm/checks/gemm_int15.mojo
++++ b/gemm/checks/gemm_int15.mojo
+@@ -342,7 +342,7 @@ def int15_absmax_chunk_kernel(
+     var c1 = c0 + INT15_ABSMAX_CHUNK
+     if c1 > cols:
+         c1 = cols
+-    comptime if INT15_QUANT_SABOTAGE:
++    comptime if True:  # SABOTAGE (int15 seam arm): INT15_QUANT_SABOTAGE at its use site, the ragged tail of a row never read
+         # THE DEFECT ARM: the ragged tail of the row is never read.
+         if ch == chunks - 1:
+             c1 = c0
