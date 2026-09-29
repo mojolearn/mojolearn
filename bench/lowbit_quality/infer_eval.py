@@ -44,6 +44,13 @@ from arith import Spec  # noqa: E402
 from llama_sim import LlamaSim, load_config, load_weights  # noqa: E402
 
 FP = ("fp32", "fp32")
+SWEEP_WIDTHS = (8, 10, 12, 15)
+
+
+def pieces(bits):
+    """int8 pieces a code of `bits` bits is carried in: 8 bits is one piece,
+    anything up to 15 bits is two."""
+    return 1 if bits <= 8 else 2
 
 
 def _arms():
@@ -131,6 +138,14 @@ def _arms():
                                            overrides={k: ("int15", "int15") for k in ("q_proj", "k_proj", "v_proj", "o_proj")},
                                            note="int8 weights on the SwiGLU products and the head, 15-bit weights "
                                                 "on the four attention projections, 15-bit activations"), "-")
+    # ---- THE WIDTH SWEEP (orchestrator, 2026-09-29): weight width by activation width, the
+    # contract's scale rule at every width, projections only. A width of 8 bits is one int8
+    # piece; any width up to 15 bits is two. Cells that are also a lettered arm repeat it.
+    for wb in SWEEP_WIDTHS:
+        for ab in SWEEP_WIDTHS:
+            add("sweep-w%d-a%d" % (wb, ab),
+                Spec("int%dw-int%da" % (wb, ab), w="int%d" % wb, a="int%d" % ab,
+                     note="width sweep: %d-bit weight codes, %d-bit activation codes, same scale rule" % (wb, ab)), "-")
     add("d-qk", Spec("int8i32.v1+qk", w="int8", a="int8", overrides={"attn_qk": ("int8", "int8")},
                      note="int8 both operands, QK replaced, PV kept fp32"), "-")
     add("d-pv", Spec("int8i32.v1+pv", w="int8", a="int8", overrides={"attn_pv": ("int8", "int8")},
@@ -150,7 +165,7 @@ def sha256(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def evaluation_ids(corpus, tokenizer_path, tail_from, windows, length):
+def evaluation_ids(corpus, tokenizer_path, tail_from, windows, length, corpus_key="corpus/enwik8/input.txt"):
     from tokenizers import Tokenizer
     with open(corpus, "rb") as fh:
         raw = fh.read()
@@ -160,7 +175,12 @@ def evaluation_ids(corpus, tokenizer_path, tail_from, windows, length):
     start = nl + 1
     end = raw.rfind(b"\n") + 1
     piece = raw[start:end]
-    text = piece.decode("utf-8", errors="strict")
+    # One character per invalid byte, so a character offset maps back to a
+    # byte offset exactly; the tokenizer is handed U+FFFD in its place.
+    exact = piece.decode("utf-8", errors="surrogateescape")
+    invalid = sum(1 for ch in exact if 0xDC80 <= ord(ch) <= 0xDCFF)
+    text = exact if invalid == 0 else "".join(
+        "\ufffd" if 0xDC80 <= ord(ch) <= 0xDCFF else ch for ch in exact)
     tok = Tokenizer.from_file(tokenizer_path)
     enc = tok.encode(text, add_special_tokens=False)
     ids = enc.ids
@@ -171,10 +191,13 @@ def evaluation_ids(corpus, tokenizer_path, tail_from, windows, length):
     offsets = enc.offsets
     # the character span the used ids cover, then its byte length
     last_char = offsets[need - 1][1]
-    used_bytes = len(text[:last_char].encode("utf-8"))
+    used_bytes = len(exact[:last_char].encode("utf-8", errors="surrogateescape"))
+    invalid_used = sum(1 for ch in exact[:last_char] if 0xDC80 <= ord(ch) <= 0xDCFF)
     ids_bytes = b"".join(int(t).to_bytes(4, "little", signed=True) for t in used)
     record = dict(
-        corpus_key="corpus/enwik8/input.txt", corpus_bytes=len(raw), corpus_sha256=sha256(raw),
+        corpus_key=corpus_key, corpus_bytes=len(raw), corpus_sha256=sha256(raw),
+        decoding="UTF-8; an invalid byte is one U+FFFD to the tokenizer",
+        invalid_bytes_in_tail=invalid, invalid_bytes_in_used=invalid_used,
         tail_from=tail_from, byte_start=start, byte_end=end, tail_bytes=len(piece),
         tail_sha256=sha256(piece), tail_ids=len(ids),
         used_byte_start=start, used_byte_end=start + used_bytes,
@@ -296,6 +319,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
     ap.add_argument("--corpus", required=True)
+    ap.add_argument("--corpus-key", default="corpus/enwik8/input.txt",
+                    help="the key of --corpus in the R2 dataset store, for the record")
     ap.add_argument("--out", required=True)
     ap.add_argument("--arms", default="a,floor,b,c,d,e,f,c+attn,d+attn,e+attn,f+attn")
     ap.add_argument("--tail-from", type=int, default=99_000_000)
@@ -321,11 +346,11 @@ def main(argv=None):
 
     cfg = load_config(args.model)
     ids, evalset = evaluation_ids(args.corpus, os.path.join(args.model, "tokenizer.json"),
-                                  args.tail_from, args.windows, args.length)
+                                  args.tail_from, args.windows, args.length, corpus_key=args.corpus_key)
     print("evaluation set", json.dumps(evalset), flush=True)
     weights, dtypes = load_weights(args.model, args.device)
     record = dict(
-        schema="mojolearn.lowbit_quality.inference.v1", commit=args.commit,
+        schema="mojolearn.lowbit_quality.inference.v2", commit=args.commit,
         stamp_utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         model=dict(key="models/SmolLM2-360M", path=args.model,
                    weights_sha256=sha256(open(os.path.join(args.model, "model.safetensors"), "rb").read()),
@@ -335,7 +360,9 @@ def main(argv=None):
                      device_name=torch.cuda.get_device_name(0) if args.device == "cuda" else None,
                      matmul_allow_tf32=torch.backends.cuda.matmul.allow_tf32,
                      float32_matmul_precision=torch.get_float32_matmul_precision()),
-        threshold=dict(rel_ppl_change_max=0.01), arms={},
+        threshold=dict(rel_ppl_change_max=0.01, rel_ppl_change_hi_max=0.01,
+                       rule="the change and the upper end of its interval both under 1 percent, on two texts"),
+        arms={},
     )
     if args.validate_hf:
         record["validate_hf"] = validate_hf(args.model, weights, cfg, ids, args.device, args.out)
@@ -367,7 +394,11 @@ def main(argv=None):
         if key in ("a", "floor"):
             continue
         change = cell["rel_ppl_change"]
-        cell["verdict"] = "PASS" if (cell["finite_logits"] and change < 0.01) else "MISS"
+        # A CANDIDATE NEEDS MARGIN (orchestrator, 2026-09-29): the change AND the
+        # upper end of its interval are both under 1 percent. This is the verdict
+        # on THIS text; a profile passes only when it passes on both texts.
+        cell["verdict"] = "PASS" if (cell["finite_logits"] and change < 0.01
+                                     and cell["rel_ppl_change_hi"] < 0.01) else "MISS"
         if floor is not None:
             cell["numerical_floor"] = abs(floor["rel_ppl_change"])
             cell["inside_numerical_floor"] = abs(change) <= abs(floor["rel_ppl_change"])
