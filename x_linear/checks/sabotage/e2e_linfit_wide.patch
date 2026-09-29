@@ -1,8 +1,8 @@
 diff --git a/x_linear/glm_wide.mojo b/x_linear/glm_wide.mojo
-index 7698198e0..7e84e716a 100644
+index d412b682a..21907c819 100644
 --- a/x_linear/glm_wide.mojo
 +++ b/x_linear/glm_wide.mojo
-@@ -301,7 +301,9 @@ def _objective(
+@@ -470,7 +470,9 @@ def _objective(
      lead's fold (rows ascending) and penalty, here on the host."""
      b.upload(ctx, theta, toff, power)
      var lt = b.rows(ctx, 0, link)
@@ -14,24 +14,82 @@ index 7698198e0..7e84e716a 100644
      for j in range(b.d):
          var w = ld(theta, toff + j)
 diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
-index a6e221ec4..ffedba4d9 100644
+index fecfdd935..f12bea170 100644
 --- a/x_linear/sgd.mojo
 +++ b/x_linear/sgd.mojo
-@@ -416,7 +416,7 @@ def _warp_row_dot_spec[K: Int](
+@@ -387,13 +387,6 @@ def _warp_row_folds_tree[K: Int, NORMS: Bool, SQ: Bool](
+     return (acc, n2, n1, sq)
+ 
+ 
+-@always_inline
+-def _is_subnormal(v: Float32) -> Bool:
+-    """A nonzero word with a zero exponent field: the words `fz` changes."""
+-    # |v|'s bits in [1, 0x007FFFFF]; unsigned wrap sends zero above the range
+-    return ((bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)) - UInt32(1)) < UInt32(0x007FFFFF)
+-
+-
+ @always_inline
+ def _warp_row_dot_spec[K: Int](
+     xr: InlineArray[Float32, K], wr: InlineArray[Float32, K], d: Int,
+@@ -405,28 +398,35 @@ def _warp_row_dot_spec[K: Int](
+     chain is the plain fma chain. This runs that chain (one fma per term on
+     the critical path instead of the fma, the flush's four integer steps and
+     the slot select) and watches every partial sum OFF the path; if any was
+-    subnormal it returns the exact flushed chain instead. Either way the word
++    subnormal (or exactly zero: the watch is one float compare) it returns
++    the exact flushed chain instead. Either way the word
+     is the flushed chain's. The whole warp takes the same branch (every lane
+     folds the same words)."""
+     comptime W = WARP_SIZE
++    # the smallest normal float32: |partial| below it is a subnormal or a
++    # zero (a zero only sends the row to the exact chain, which is harmless)
++    comptime MIN_NORMAL = Float32(1.17549435e-38)
+     var acc = Float32(0)
+     var bad = False
+     comptime for kk in range(K):
+         if (kk + 1) * W <= d:
++            # every x_j and w_j of the chunk fetched first, then the chain
++            var xs = InlineArray[Float32, W](fill=Float32(0))
++            var ws = InlineArray[Float32, W](fill=Float32(0))
              comptime for l in range(W):
-                 var xj = shuffle_idx(xr[kk], UInt32(l))
-                 var wj = shuffle_idx(wr[kk], UInt32(l))
+-                var xj = shuffle_idx(xr[kk], UInt32(l))
+-                var wj = shuffle_idx(wr[kk], UInt32(l))
 -                acc = xmad(xj, wj, acc)
-+                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
-                 bad = bad | _is_subnormal(acc)
-         elif kk * W < d:
+-                bad = bad | _is_subnormal(acc)
+-        elif kk * W < d:
++                xs[l] = shuffle_idx(xr[kk], UInt32(l))
++                ws[l] = shuffle_idx(wr[kk], UInt32(l))
              comptime for l in range(W):
-@@ -424,7 +424,7 @@ def _warp_row_dot_spec[K: Int](
-                 var live = j < d
+-                comptime j = kk * W + l
+-                var live = j < d
++                acc = fa(fm(xs[l], ws[l]), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
++                bad = bad | (abs(acc) < MIN_NORMAL)
++        elif kk * W < d:
++            # the last chunk: only its d - kk * W live slots (no dead slot
++            # and no per-slot select on the chain)
++            for l in range(d - kk * W):
                  var xj = shuffle_idx(xr[kk], UInt32(l))
                  var wj = shuffle_idx(wr[kk], UInt32(l))
 -                var a2 = xmad(xj, wj, acc)
-+                var a2 = fa(fm(xj, wj), acc)  # SABOTAGE e2e (the partial chunk)
-                 acc = a2 if live else acc
-                 bad = bad | _is_subnormal(acc)
+-                acc = a2 if live else acc
+-                bad = bad | _is_subnormal(acc)
++                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e (the last chunk)
++                bad = bad | (abs(acc) < MIN_NORMAL)
      if bad:
+         return _warp_row_folds[K, False, False](xr, wr, d)[0]
+     return acc
+@@ -670,8 +670,12 @@ def sgd_one_warp[K: Int](
+                     eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
+                 elif lr == LR_INVSCALING:
+                     eta = fd(eta0, identical_pow(i2f(t), power_t))
+-                var cur = sgd_loss(loss, yv, p, eps)
+-                objective = fa(objective, cur)
++                # the loss feeds only the objective (the stopping test) and
++                # PA's step: with tol None and a plain step nothing reads it
++                var cur = Float32(0)
++                if need_obj or pa:
++                    cur = sgd_loss(loss, yv, p, eps)
++                    objective = fa(objective, cur)
+                 if not pa and need_obj:
+                     if penalty != P_NONE:
+                         var n2 = folds[1]
