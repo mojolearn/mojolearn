@@ -1922,6 +1922,8 @@ def fit_with_test(
     # switch while the lane measures it: MOJOLEARN_SYMQ_SNAP_GRADIENTS=0
     # turns it off. Not for merge in this form.
     var snap_gradients_on = String(getenv("MOJOLEARN_SYMQ_SNAP_GRADIENTS")) != "0"
+    var snap_weights_on = (has_weights and not is_pair_logit
+                           and String(getenv("MOJOLEARN_SYMQ_SNAP_WEIGHTS")) != "0")
     var pair_buffers = Optional[PairwiseTargetBuffers]()
     var loss_norm = Float64(n_rows)
     if is_pair_logit:
@@ -2563,7 +2565,7 @@ def fit_with_test(
             opts.min_split_gain = min_split_gain
             opts.min_child_hessian = min_child_hessian
             # lane/sym-quality: see `snap_weights_to_grid_kernel`
-            opts.snap_stats = has_weights and not is_pair_logit
+            opts.snap_stats = snap_weights_on
             opts.snap_gradients = snap_gradients_on
             # `options.RandomStrength *= randomStrengthMult`
             # (`greedy_subsets_searcher.h:76`), the same multiply the
@@ -2870,7 +2872,7 @@ def fit_with_test(
                 # are on the grid already and keep their bits; PairLogit's
                 # per-row pair weights are left as they were (not measured
                 # by this lane).
-                snap_stats=has_weights and not is_pair_logit,
+                snap_stats=snap_weights_on,
                 snap_gradients=snap_gradients_on,
             )
             loop_times.stop_host("iter_tree_search", t_sym)
