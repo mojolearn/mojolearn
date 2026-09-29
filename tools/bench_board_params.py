@@ -32,6 +32,11 @@ A driver whose arms live in separate worker processes has each worker send
    that both our arm and that arm have differs, or is set on one side and
    left to the library default (None) on the other, unless that exact
    (lane, parameter, arm) is listed in `EXCEPTIONS` with its reason.
+   An arm whose constructor has NO seed parameter at all (no seed name in
+   its read-back, and for a constructed object none in its constructor's
+   signature either) is recorded as `seed: none (no argument)` without an
+   EXCEPTIONS entry. An arm that HAS a seed parameter holding anything but
+   the board's seed still refuses unless EXCEPTIONS names it.
    Execution-only settings (threads, device, verbosity, numeric mode) are in
    `IGNORE` and never compared.
 4. It prints one `BOARD-PARAMS <json>` line with every arm's resolved
@@ -209,118 +214,51 @@ EXCEPTIONS = [
     ("iforest", "max_depth", "*", "ours None is the auto depth ceil(log2(max_samples)) = 8; "
      "sklearn has no max_depth parameter and fixes the same value"),
     # --- classical (tools/classical_two_datasets.py) and classical2 (tools/bench_board_more.py).
-    # A seed exception names each library that has NO seed argument (or refuses
-    # one); every arm that has one gets 7.
-    ("ols", "seed", "ours*", "mojolearn LinearRegression has no seed argument (closed-form fit)"),
-    ("ols", "seed", "sklearn-cpu*", "scikit-learn LinearRegression has no seed argument (closed-form fit)"),
-    ("ols", "seed", "cuml-gpu", "cuML LinearRegression has no seed argument (closed-form fit)"),
-    ("knn", "seed", "ours*", "mojolearn NearestNeighbors has no seed argument (exact search)"),
-    ("knn", "seed", "sklearn-cpu*", "scikit-learn NearestNeighbors has no seed argument (exact search)"),
-    ("knn", "seed", "cuml-gpu", "cuML NearestNeighbors has no seed argument (exact search)"),
-    ("kde", "seed", "ours*", "mojolearn KernelDensity has no seed argument (exact density)"),
-    ("kde", "seed", "sklearn-cpu*", "scikit-learn KernelDensity has no seed argument (exact density)"),
-    ("kde", "seed", "cuml-gpu", "cuML KernelDensity has no seed argument (exact density)"),
+    # An arm with no seed argument at all needs no row (check() records it as
+    # `seed: none (no argument)`); a seed row below names an arm whose
+    # constructor HAS a seed parameter that is left None on purpose.
     ("svc", "seed", "ours*", "mojolearn SVC refuses random_state without probability=True (the fit "
      "draws nothing); scikit-learn and cuML get 7"),
     ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
-    ("dbscan", "seed", "ours*", "mojolearn DBSCAN has no seed argument (deterministic)"),
-    ("dbscan", "seed", "sklearn-cpu*", "scikit-learn DBSCAN has no seed argument (deterministic)"),
-    ("dbscan", "seed", "cuml-gpu*", "cuML DBSCAN has no seed argument (deterministic)"),
     ("dbscan", "algorithm", "sklearn-cpu*", "an exact eps search on every arm: ours 'rbc' (its "
      "default), scikit-learn has no 'rbc' and runs 'auto' (a tree on taxi, brute on Istella-S)"),
     ("dbscan", "algorithm", "cuml-gpu", "an exact eps search on every arm: ours 'rbc', cuml-gpu "
      "'brute' (cuml-gpu-rbc races 'rbc')"),
-    ("hdbscan", "seed", "ours*", "mojolearn HDBSCAN has no seed argument (deterministic)"),
-    ("hdbscan", "seed", "sklearn-cpu*", "scikit-learn HDBSCAN has no seed argument (deterministic)"),
-    ("hdbscan", "seed", "cuml-gpu", "cuML HDBSCAN has no seed argument (deterministic)"),
     ("hdbscan", "max_cluster_size", "sklearn-cpu*", "no limit on every arm: ours and cuML spell "
      "it 0, scikit-learn None"),
     ("umap", "seed", "umap-learn-cpu-unseeded", "raced unseeded on purpose: seeded umap-learn runs "
      "one thread (its rule); this arm is random_state=None, n_jobs=-1 (umap-learn-cpu has 7)"),
-    ("logreg", "seed", "ours*", "mojolearn LogisticRegression has no seed argument (L-BFGS, deterministic)"),
-    ("logreg", "seed", "cuml-gpu", "cuML LogisticRegression has no seed argument (L-BFGS, deterministic)"),
     ("logreg", "solver", "sklearn-cpu*", "L-BFGS on every arm: ours and cuML 'qn', scikit-learn 'lbfgs'"),
     ("logreg", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
     ("logreg", "l1_ratio", "*", "penalty='l2' on every arm: ours None, scikit-learn None or 0.0 "
      "(its l2 spelling from 1.8)"),
-    ("linearsvc", "seed", "ours*", "mojolearn LinearSVC has no seed argument (L-BFGS, deterministic)"),
-    ("linearsvc", "seed", "cuml-gpu", "cuML LinearSVC has no seed argument (L-BFGS, deterministic)"),
     ("linearsvc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
-    ("ridge", "seed", "ours*", "mojolearn Ridge has no seed argument (closed-form fit)"),
-    ("ridge", "seed", "cuml-gpu", "cuML Ridge has no seed argument (closed-form fit)"),
     ("ridge", "solver", "sklearn-cpu*", "ours and cuML 'eig' (eigendecomposition of the normal "
      "equations); scikit-learn has no 'eig' and runs 'cholesky' on the same normal equations"),
     ("lasso", "seed", "ours*", "mojolearn Lasso refuses random_state: it selects nothing with "
      "selection='cyclic'"),
-    ("lasso", "seed", "cuml-gpu", "cuML Lasso has no seed argument"),
     ("elasticnet", "seed", "ours*", "mojolearn ElasticNet refuses random_state: it selects nothing "
      "with selection='cyclic'"),
-    ("elasticnet", "seed", "cuml-gpu", "cuML ElasticNet has no seed argument"),
-    ("linearsvr", "seed", "ours*", "mojolearn LinearSVR has no seed argument (L-BFGS, deterministic)"),
-    ("linearsvr", "seed", "cuml-gpu", "cuML LinearSVR has no seed argument (L-BFGS, deterministic)"),
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
      "runs 'arpack' at tol=0"),
     ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
-    ("knn-*", "seed", "ours*", "mojolearn KNeighbors* has no seed argument (exact search)"),
-    ("knn-*", "seed", "sklearn-cpu*", "scikit-learn KNeighbors* has no seed argument (exact search)"),
-    ("knn-*", "seed", "cuml-gpu", "cuML KNeighbors* has no seed argument (exact search)"),
     ("spectral*", "gamma", "*", "affinity='nearest_neighbors' reads no gamma: ours refuses any "
      "value (None), scikit-learn holds its default (1.0 clustering, None embedding)"),
     ("spectral", "degree", "*", "affinity='nearest_neighbors' reads no degree: ours refuses any "
      "value (None), scikit-learn holds 3"),
     ("spectral", "coef0", "*", "affinity='nearest_neighbors' reads no coef0: ours refuses any "
      "value (None), scikit-learn holds 1"),
-    ("agglomerative", "seed", "ours*", "mojolearn AgglomerativeClustering has no seed argument"),
-    ("agglomerative", "seed", "sklearn-cpu*", "scikit-learn AgglomerativeClustering has no seed argument"),
-    ("agglomerative", "seed", "cuml-gpu", "cuML AgglomerativeClustering has no seed argument"),
     ("gp[rc]", "kernel", "sklearn-cpu*", "the same ConstantKernel(1.0) * RBF(sqrt(d)) (gpr: + "
      "WhiteKernel(1e-2)) built from each library's own kernel classes; their reprs differ"),
     ("gpc", "seed", "ours*", "mojolearn GaussianProcessClassifier refuses random_state "
      "(optimizer=None draws nothing); scikit-learn gets 7"),
-    ("svr", "seed", "*", "no SVR takes a seed argument (ours, scikit-learn, cuML)"),
-    ("kernel-ridge", "seed", "*", "no KernelRidge takes a seed argument (ours, scikit-learn, cuML)"),
-    ("arima", "seed", "*", "no ARIMA takes a seed argument (maximum likelihood, deterministic): "
-     "ours, statsmodels, cuML"),
-    ("ets", "seed", "*", "no Holt-Winters takes a seed argument (deterministic): ours, "
-     "statsmodels, cuML"),
-    ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed; ours and faiss get 7"),
-    # ---- neural (tools/bench_board_neural.py; lane ids "neural/<lane>")
-    ("neural/*", "seed", "ours*", "ours' neural classes take no seed argument: every parameter "
-     "and input of every arm is the conductor's default_rng(7) file; torch arms call "
-     "torch.manual_seed(7)"),
-    # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>")
-] + [
-    ("algos/" + lane, "seed", "*", "deterministic given its inputs: no arm of this lane (ours, "
-     "scikit-learn or the function-call opponent) takes a seed argument")
-    for lane in ("poisson", "gamma", "tweedie", "huber", "bayesian-ridge", "ard", "quantile",
-                 "ridge-cv", "isotonic", "meanshift", "optics", "lof", "nearest-centroid", "ocsvm",
-                 "additive-chi2", "label-propagation", "label-spreading", "knn-imputer",
-                 "incremental-pca", "cca", "pls-canonical", "pls", "isomap", "robust-scaler",
-                 "maxabs-scaler", "power-transformer", "normalizer", "binarizer", "poly-features",
-                 "spline", "onehot", "ordinal", "variance-threshold", "simple-imputer",
-                 "label-encoder", "label-binarizer", "multilabel-binarizer", "select-f-classif",
-                 "select-chi2", "select-f-regression", "select-mutual-info", "rfe", "gaussian-nb",
-                 "bernoulli-nb", "categorical-nb", "multinomial-nb", "complement-nb", "lda-clf",
-                 "qda", "voting-clf", "voting-reg", "stacking-clf", "stacking-reg",
-                 "multioutput-clf", "multioutput-reg", "ovr", "calibrated", "classical-mds",
-                 "pagerank", "connected-components", "lu-solve", "lstsq",
-                 "autoarima", "stl", "var", "theta", "croston", "damped-ets", "garch", "prophet",
-                 "rmsprop", "adagrad", "adamax", "nadam", "adafactor", "lion", "lamb")
-] + [
-    ("algos/" + lane, "seed", "ours*", "ours' layer has no weights to draw and takes no seed; the "
-     "torch arm calls torch.manual_seed(7) and both read the same seed-7 input")
-    for lane in ("layernorm", "maxpool2d", "avgpool2d", "maxpool1d", "avgpool1d", "batchnorm1d",
-                 "batchnorm2d", "global-avgpool", "global-maxpool")
-] + [
-    ("algos/svgp", "seed", "ours*", "ours' SVGP takes no seed: fixed inducing points and "
-     "hyperparameters, q(u) in closed form; nothing is drawn"),
-    ("algos/louvain", "seed", "cugraph-gpu", "cuGraph louvain takes no seed; ours and networkx get 7"),
-    ("algos/cagra", "seed", "faiss-cpu", "faiss IndexHNSWFlat takes no seed argument (its level "
-     "draw uses faiss' fixed internal seed)"),
-] + [
-    ("algos/" + lane, "seed", "cuvs-gpu", "cuVS IndexParams take no seed; ours and faiss get 7")
-    for lane in ("ivf-pq", "ivf-sq", "ivf-refine", "cagra")
-] + [
+    # ---- neural (tools/bench_board_neural.py; lane ids "neural/<lane>"): ours'
+    # neural classes take no seed argument (recorded automatically); torch arms
+    # call torch.manual_seed(7)
+    # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>"): the arms
+    # with no seed argument (the deterministic lanes, ours' weightless layers,
+    # SVGP, cuGraph louvain, faiss HNSW, the cuVS IndexParams) are recorded
+    # automatically
     ("algos/dart", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, no "
      "leaf cap); ours and LightGBM leaf-wise with num_leaves 255"),
     ("algos/dart-reg", "max_leaves", "xgboost-*", "XGBoost DART grows depth-wise (max_depth 8, "
@@ -476,6 +414,35 @@ def _equal(a, b):
     return a == b
 
 
+#: What the report records for an arm with no seed parameter at all.
+NO_SEED_ARGUMENT = "none (no argument)"
+
+
+def _seed_names():
+    """Every library spelling that maps to the canonical `seed`."""
+    return {n for table in ALIASES.values() for n, r in table.items()
+            if (r if isinstance(r, str) else r[0]) == "seed"}
+
+
+def has_no_seed_argument(obj, raw):
+    """True when the arm has no seed parameter at all: none of the seed
+    spellings is in its read-back `raw` and, for a constructed object, none
+    is in its constructor's signature (a constructor that takes one but whose
+    read-back lost it is NOT this case; the check refuses it by name). A
+    worker's record and a declared dict are what was really constructed or
+    passed, so their read-back is the whole answer."""
+    names = _seed_names()
+    if any(n in raw for n in names):
+        return False
+    if isinstance(obj, dict):
+        return True
+    try:
+        params = inspect.signature(type(obj).__init__).parameters
+    except (TypeError, ValueError):
+        return False
+    return not any(n in params for n in names)
+
+
 def exception_for(lane, param, arm):
     for lg, p, ag, why in EXCEPTIONS:
         if p == param and fnmatch.fnmatch(lane, lg) and fnmatch.fnmatch(arm, ag):
@@ -491,11 +458,13 @@ def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions
     """The report for one race. `arms`: {arm name: constructed object or
     declared dict}. `extra_exceptions`: (param, arm glob, reason) the driver
     adds for this race (the same shape as EXCEPTIONS without the lane)."""
-    resolved, sources, libs = {}, {}, {}
+    resolved, sources, libs, no_seed = {}, {}, {}, set()
     for name, obj in arms.items():
         lib, source, raw = read_params(obj)
         libs[name], sources[name] = lib, source
         resolved[name] = canonical(lib, raw)
+        if "seed" not in resolved[name] and has_no_seed_argument(obj, raw):
+            no_seed.add(name)
     ref = reference if reference in resolved else next(iter(resolved), None)
     problems, compared, applied = [], [], []
 
@@ -519,13 +488,14 @@ def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions
                 else:
                     problems.append("%s: seed is %r (%s), the board's seed is %d"
                                     % (name, got, canon["seed"][1], seed))
-        else:
+        elif name not in no_seed:
+            # the constructor takes a seed but the read-back lost it
             why = _excused("seed", name)
             if why:
                 applied.append({"arm": name, "param": "seed", "value": None, "reason": why})
             else:
-                problems.append("%s (%s): no seed parameter read back; list it in EXCEPTIONS "
-                                "with the reason if the library has none" % (name, libs[name]))
+                problems.append("%s (%s): its constructor takes a seed but none was read back"
+                                % (name, libs[name]))
         if name == ref:
             continue
         for param, (val, own_name) in sorted(canon.items()):
@@ -550,8 +520,11 @@ def check(lane, arms, family=None, reference="ours", seed=SEED, extra_exceptions
                                 % (name, param, rval, rname, ref, val, own_name, name))
     return {"lane": lane, "family": family, "reference": ref, "seed": seed,
             "arms": {n: {"library": libs[n], "source": sources[n],
-                         "params": {p: v for p, (v, _) in sorted(c.items())}}
+                         "params": dict(sorted(
+                             [(p, v) for p, (v, _) in c.items()]
+                             + ([("seed", NO_SEED_ARGUMENT)] if n in no_seed else [])))}
                      for n, c in resolved.items()},
+            "no_seed_argument": sorted(no_seed),
             "compared": compared, "exceptions": applied, "problems": problems,
             "verdict": "REFUSED" if problems else "MATCHED"}
 
