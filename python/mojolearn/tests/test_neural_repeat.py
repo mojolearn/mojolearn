@@ -23,6 +23,8 @@ Both paths retain every property, including batchgrad and ragged checks.
 The subprocesses use the same runtime imported by pytest, including an
 installed wheel; source builds also work after their bindings are staged:
 `python -m pytest python/mojolearn/tests/test_neural_repeat.py`."""
+import json
+import re
 import os
 import signal
 import subprocess
@@ -130,6 +132,64 @@ def _column(kind, backend, out):
     assert out.is_file()
 
 
+def _assert_records(gpu_path, cpu_path):
+    """Require complete repeated measurements, not merely a permissive diff."""
+    docs = [json.loads(path.read_text()) for path in (gpu_path, cpu_path)]
+    fixtures = set(FIXTURES.split(",")) if FIXTURES else set(docs[0]["fixtures"])
+    assert len(fixtures) == (9 if EXHAUSTIVE else 2)
+    expected = {f"{lane}/{fixture}" for lane in _lanes() for fixture in fixtures}
+    parts = ("train", "infer", "model", "batch", "stepfull", "batchgrad", "batchscale", "ragged")
+    # These six lanes have no sampler/trainer pair in the harness. Absence
+    # is structural here; every other neural lane must carry two rlpair hashes.
+    no_pair = {"mlp", "optim-sgd", "optim-adam-clip", "optim-maximize",
+               "training-primitives", "embedding"}
+    values = []
+    declared_na = {}
+    intentional_notes = {}
+    for doc in docs:
+        assert doc["complete"] is True and doc["mode"] == "identical"
+        assert doc["repeats"] == 2 and not doc.get("partial_column")
+        assert doc.get("parts_omitted") == []
+        assert set(doc["cells"]) == expected
+        assert set(doc["fixtures"]) == fixtures
+        assert set(doc["parts_collected"]) == {"batch", "batchgrad", "batchscale", "ragged", "rlpair", "stepfull"}
+        column = {}
+        for key, cell in doc["cells"].items():
+            lane = key.split("/")[0]
+            if lane in no_pair:
+                assert "rlpair" not in cell and "rlpair_verdict" not in cell
+                required = parts
+            else:
+                required = parts + ("rlpair",)
+            for part in required:
+                field, verdict = ("hashes", "verdict") if part == "train" else (part, part + "_verdict")
+                hashes = cell[field]
+                assert isinstance(hashes, list) and len(hashes) == 2, (key, part, "missing repeat")
+                assert hashes[0] == hashes[1], (key, part, "MOVED")
+                value = hashes[0]
+                if cell[verdict] == "N/A":
+                    assert part != "train" and isinstance(value, str) and value.startswith("n/a:") and len(value) > 4
+                    assert not value.startswith(("n/a:skipped", "n/a:UNDECLARED"))
+                    declared_na[key + "/" + part] = value
+                else:
+                    assert cell[verdict] == "STABLE" and isinstance(value, str) and re.fullmatch(r"[0-9a-f]{16}", value), (key, part, cell[verdict])
+                column[key + "/" + part] = value
+            if cell.get("batchgrad_notes"):
+                intentional_notes.setdefault(key, []).append(cell["batchgrad_notes"])
+        values.append(column)
+    for field in ("fixtures", "heldout", "lane_revisions", "batch_revisions"):
+        assert docs[0][field] == docs[1][field], field
+    assert docs[0]["resume_signature"]["options"]["require_backend"] in ("metal", "cuda", "hip")
+    assert docs[1]["resume_signature"]["options"]["require_backend"] == "cpu"
+    assert values[0] == values[1], "CPU/GPU part mismatch"
+    return dict(cells_per_arm=len(expected), repeats_per_part=2,
+                numeric_parts=sum(not v.startswith("n/a:") for v in values[0].values()),
+                structural_na=declared_na,
+                absent_rlpair={f"{lane}/{f}": "no sampler/trainer pair declared" for lane in sorted(no_pair) for f in sorted(fixtures)},
+                intentional_batchgrad_notes=intentional_notes,
+                fixtures=sorted(fixtures), exhaustive=EXHAUSTIVE)
+
+
 def test_every_neural_lane_twice_in_one_process_gpu_and_cpu(tmp_path):
     from mojolearn import _backend
     backend = _backend.vendor()
@@ -140,5 +200,6 @@ def test_every_neural_lane_twice_in_one_process_gpu_and_cpu(tmp_path):
     gpu, cpu = tmp_path / "gpu.json", tmp_path / "cpu.json"
     _column("gpu", backend, gpu)
     _column("cpu", backend, cpu)
+    (tmp_path / "strict-coverage.json").write_text(json.dumps(_assert_records(gpu, cpu), indent=2))
     _run(_command() + ["--diff", str(gpu), str(cpu), "--lanes", ",".join(_lanes()),
                        "--require-columns", "2"], "gpu", tmp_path / "compare.json", 30)
