@@ -34,6 +34,7 @@ from . import _portable_math as math
 from ._training_impl import _round_f32
 
 from . import _backend
+from . import _gemm_profile
 from . import _ragged
 from . import _training_impl as T
 from ._mamba_impl import Mamba3Block
@@ -613,6 +614,9 @@ class SambaStack(object):
             raise ValueError("mojolearn.SambaStack: state schema/profile mismatch")
         if state["config"] != self.config.to_dict():
             raise ValueError("mojolearn.SambaStack: state config differs from this stack's")
+        # A state written under another GEMM profile is refused by name; a
+        # state with no field is fp32.v1, which is what this stack computes.
+        _gemm_profile.check_saved(state, _gemm_profile.DEFAULT, "mojolearn.SambaStack state")
         p = _buffers.as_f32_c(state['parameters'], ndim=1, name='parameters')[0]
         if p.shape != (self.n_total,):
             raise ValueError("mojolearn.SambaStack: parameters hold %d floats, "

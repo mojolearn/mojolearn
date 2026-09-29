@@ -64,6 +64,21 @@ numeric_mode = _backend.numeric_mode
 #: estimator under a `fast` default raises rather than silently upgrading.
 set_numeric_mode = _backend.set_default_mode
 
+#: CHOOSE THE GEMM ARITHMETIC, OPT IN. The default is `fp32.v1` and does not
+#: move; another profile runs only where the caller names it, and one that
+#: no model class computes under yet is refused by name, never replaced by
+#: the default. `weight_format=` is how weights are STORED; this is how the
+#: products are COMPUTED. See `_gemm_profile.py`.
+#:
+#:     mojolearn.gemm_profiles()                      # every registered row
+#:     mojolearn.set_gemm_profile("fp32.v1")          # process default
+#:     mojolearn.models.CausalLM.load(path, gemm_profile="fp32.v1")
+from . import _gemm_profile as _gemm_profile
+
+gemm_profile = _gemm_profile.default_profile
+set_gemm_profile = _gemm_profile.set_default_profile
+gemm_profiles = _gemm_profile.profiles
+
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or
 #: 'hip', read back out of the binaries (`checks/vendor.mojo`). On Linux
 #: one wheel carries a CUDA set and a HIP set and `_backend._layout()` picks
@@ -444,6 +459,9 @@ __all__ = [
     "__version__",
     "numeric_mode",
     "set_numeric_mode",
+    "gemm_profile",
+    "set_gemm_profile",
+    "gemm_profiles",
     "vendor",
     "gpu_arch",
     "gpu_arch_how",
