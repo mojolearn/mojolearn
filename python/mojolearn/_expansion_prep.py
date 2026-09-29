@@ -3270,7 +3270,8 @@ class LabelBinarizer(_PrepBase):
             out = pr.alloc(n * W)
             pr.stage("binarize", n * W, xo, n * W, pr.put_scalar(threshold), out)
             pr.run(self.numeric_mode_)
-            vals = pr.values(out + (W - 1), n * W)[::W]
+            # Read only output words, then select the last binary column.
+            vals = pr.values(out, n * W)[W - 1::W]
             if K == 1:
                 return _classes_array([self._classes[0]] * n)
             idx = [1 if v == 1.0 else 0 for v in vals]

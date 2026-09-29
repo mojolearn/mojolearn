@@ -1,0 +1,9 @@
+box=mi325x
+started=2026-09-29T03:20:01Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=30
+mac_budget=default repeats=default only=all identity_only=0
+price exit=0
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T03:20:30Z
+box_job: box=mi325x phases: price=0 vendor=0 red=0

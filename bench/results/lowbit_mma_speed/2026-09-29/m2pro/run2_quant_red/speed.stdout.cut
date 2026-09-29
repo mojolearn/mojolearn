@@ -1,0 +1,1124 @@
+######## phase quant-gate on m2pro, started 2026-09-29T04:30:53Z
+quant	0	3s	expected=pass	held=yes
+quant-sabotage	1	3s	expected=fail	held=yes
+quant-value-sabotage	1	3s	expected=fail	held=yes
+box=m2pro gate=quant
+started=2026-09-29T04:30:53Z
+tree_head=464d5002a34c25a0c1693676c13d9518f0196dfc dirty_files=33
+machine=Apple M2 Pro macOS 26.7
+finished=2026-09-29T04:31:03Z
+verdict=GREEN every expected outcome held (see status.tsv)
+== quant.log
+✨ Pixi task (check-quantize-int8-par in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: none ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: apple  int8 dispatch: flat (no int8 matrix unit on this column)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   quantizer: 36 cases, 0 failed
+ok check_par_quantizer_matches
+   quantize-and-multiply: 4 cases, 0 failed
+ok check_par_quantizer_feeds_the_product
+== 2 gates, 0 failed ==
+== quant-sabotage.log
+✨ Pixi task (check-quantize-int8-par-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_QUANT_PAR_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: TREE_SKIPS_ITS_FIRST_LEVEL ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: apple  int8 dispatch: flat (no int8 matrix unit on this column)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   !! quantize 9x129 NARROW (parallel vs host): 2 of 9 exponents and 130 of 1161 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize 12x255 NARROW (parallel vs host): 3 of 12 exponents and 511 of 3060 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1000 NARROW (parallel vs host): 4 of 9 exponents and 3000 of 9000 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1000 WIDE (parallel vs host): 3 of 9 exponents and 2001 of 9000 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 2 want 0
+   !! quantize 9x1023 NARROW (parallel vs host): 4 of 9 exponents and 3069 of 9207 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 81 want 0
+   !! quantize 9x1023 WIDE (parallel vs host): 3 of 9 exponents and 2047 of 9207 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got 81 want 0
+   !! quantize 16x1024 NARROW (parallel vs host): 2 of 16 exponents and 1025 of 16384 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -7 want 0
+   !! quantize 16x1024 WIDE (parallel vs host): 4 of 16 exponents and 3072 of 16384 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -7 want 0
+   !! quantize 9x4096 NARROW (parallel vs host): 2 of 9 exponents and 4097 of 36864 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -14 want 0
+   !! quantize 9x4096 WIDE (parallel vs host): 2 of 9 exponents and 4097 of 36864 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -14 want 0
+   !! quantize 9x14336 NARROW (parallel vs host): 3 of 9 exponents and 28672 of 129024 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize 9x14336 WIDE (parallel vs host): 4 of 9 exponents and 43008 of 129024 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   quantizer: 36 cases, 12 failed
+!! GATE FAILED: check_par_quantizer_matches
+   12 of 36 quantizer cases differ; first: quantize 9x129 NARROW (parallel vs host): 2 of 9 exponents and 130 of 1161 codes differ; first exponent at row 1 got -3 want 13; first code at row 1 col 0 got -2 want 0
+   !! quantize and multiply 3x70x1000 (device vs oracle): 73 of 210 cells differ; first at 1 got -127.578125/0x0xc2ff2800 want 499712.0/0x0x48f40000
+   !! quantize and multiply 33x129x4096 (device vs oracle): 157 of 4257 cells differ; first at 1 got 2730.8438/0x0x452aad80 want 6371328.0/0x0x4ac27000
+   quantize-and-multiply: 4 cases, 2 failed
+!! GATE FAILED: check_par_quantizer_feeds_the_product
+   2 of 4 quantize-and-multiply cases differ; first: quantize and multiply 3x70x1000 (device vs oracle): 73 of 210 cells differ; first at 1 got -127.578125/0x0xc2ff2800 want 499712.0/0x0x48f40000
+== 2 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 2 gates failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+== quant-value-sabotage.log
+✨ Pixi task (check-quantize-int8-par-value-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: apple  int8 dispatch: flat (no int8 matrix unit on this column)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   !! quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x1 WIDE (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x5 NARROW (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 9x5 WIDE (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 10x32 NARROW (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 10x32 WIDE (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 9x129 NARROW (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x129 WIDE (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 12x255 NARROW (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 12x255 WIDE (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 9x1000 NARROW (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1000 WIDE (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1023 NARROW (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 9x1023 WIDE (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 16x1024 NARROW (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 16x1024 WIDE (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x4096 NARROW (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 9x4096 WIDE (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 11x4097 NARROW (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 11x4097 WIDE (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 9x14336 NARROW (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 9x14336 WIDE (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 300x96 NARROW (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   !! quantize 300x96 WIDE (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   quantizer: 36 cases, 24 failed
+!! GATE FAILED: check_par_quantizer_matches
+   24 of 36 quantizer cases differ; first: quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+   !! quantize and multiply 33x129x4096 (device vs oracle): 4257 of 4257 cells differ; first at 0 got 1101.5939/0x0x4489b301 want 1096.2344/0x0x44890780
+   !! quantize and multiply 1x300x4097 (device vs oracle): 300 of 300 cells differ; first at 0 got -2797.1721/0x0xc52ed2c1 want -2845.2031/0x0xc531d340
+   !! quantize and multiply 130x17x96 (device vs oracle): 2210 of 2210 cells differ; first at 0 got 329.75003/0x0x43a4e001 want 336.71875/0x0x43a85c00
+   quantize-and-multiply: 4 cases, 4 failed
+!! GATE FAILED: check_par_quantizer_feeds_the_product
+   4 of 4 quantize-and-multiply cases differ; first: quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+== 2 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 2 gates failed
+/Users/ec2-user/mojolearn-wt/steward-m2pro/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+gate_job: box=m2pro gate=quant red=0
+######## phase quant-gate on m2pro exit=0, finished 2026-09-29T04:31:03Z
+######## phase quant-price on m2pro, started 2026-09-29T04:31:03Z
+box=m2pro name=quant
+started=2026-09-29T04:31:03Z
+tree_head=464d5002a34c25a0c1693676c13d9518f0196dfc dirty_files=33
+machine=Apple M2 Pro macOS 26.7
+arms=fp32.v1,int8i32.v1.flat,int8i32.v1.mma,int8i32.v1.applechunk,convert.int8.quantize.a,convert.int8.pack.b,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1,training.int8i32.v1,inference.int8i32.v1.parq,training.int8i32.v1.parq,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk,inference.int8i32.v1.applechunk.parq,training.int8i32.v1.applechunk.parq only=all r
+build exit=0
+build-sabotage exit=0
+cold started=2026-09-29T04:31:28Z
+cold exit=1 (the first run after the build: its times are never read)
+price started=2026-09-29T04:33:01Z
+price exit=0 (the run of record)
+cold-vs-record exit=0 (0: the two runs' digests agree at every arm and shape)
+price-sabotage exit=0 (the in-run plan comparison may raise; the verdict is the digest comparison below)
+sabotage-comparison exit=0 (0: every sabotaged digest differed from the clean one)
+finished=2026-09-29T04:37:12Z
+== bench/gemm_lowbit_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, bf16f32.v1, int8i32.v1
+int8 dispatch: flat (no int8 matrix unit on this column)
+sabotage: price none  lowbit none  apple chunk none  parallel quantizer none  tuned unit none
+repeats 5  mac budget 34359738368  only   arms fp32.v1,int8i32.v1.flat,int8i32.v1.mma,int8i32.v1.applechunk,convert.int8.quantize.a,convert.int8.pack.b,convert.int8.quantize.a.par,convert.int8.pack.b.par,inference.int8i32.v1,training.int8i32.v1,inference.int8i32.v1.parq,training.int8i32.v1.parq,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk,inference.int8i32.v1.applechunk.parq,trai
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one synchronize per sample; the median of the timed calls is reported and the minimum beside it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 1.4870 1.4810 11.2826 GMAC/s 0x920cdd138650a8bd plan=0
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.3340 1.3270 12.5766 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.applechunk 1.2710 0.7650 13.2000 GMAC/s 0x8a9227b93e430acd probe,geometry=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a 1.3230 1.3030 0.0031 Gelem/s 0x54279cbda1444726 per-call
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b 3.7640 3.7590 4.4573 Gelem/s 0x305b1a502296caf6 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1 2.5050 2.4970 6.6975 GMAC/s 0x8a9227b93e430acd quantize.a+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.applechunk 1.9380 1.9260 8.6570 GMAC/s 0x8a9227b93e430acd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1 6.1200 6.1040 2.7414 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.applechunk 6.0560 5.5490 2.7703 GMAC/s 0x8a9227b93e430acd quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.1660 0.1610 0.0247 Gelem/s 0x54279cbda1444726 per-call,block=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.6940 0.6700 24.1747 Gelem/s 0x305b1a502296caf6 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.parq 1.3500 1.3430 12.4276 GMAC/s 0x8a9227b93e430acd quantize.a.par+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.parq 1.8730 1.8660 8.9574 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.applechunk.parq 0.7900 0.7780 21.2370 GMAC/s 0x8a9227b93e430acd quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.applechunk.parq 1.3290 1.3160 12.6239 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t1 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 1.4650 1.4460 91.6162 GMAC/s 0xd5677d8a13939709 plan=20
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 9.6990 9.6830 13.8383 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.applechunk 0.8020 0.7950 167.3538 GMAC/s 0x484bd20aabe66ee5 probe,geometry=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a 1.3440 1.3240 0.0244 Gelem/s 0xbd0b5aed2b83cb45 per-call
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b 3.8130 3.7740 4.4000 Gelem/s 0xa8ce17326c01345 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1 10.9340 10.8940 12.2753 GMAC/s 0x484bd20aabe66ee5 quantize.a+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.applechunk 2.0040 1.9840 66.9749 GMAC/s 0x484bd20aabe66ee5 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1 14.5370 14.4460 9.2328 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.applechunk 5.6250 5.6120 23.8609 GMAC/s 0x484bd20aabe66ee5 quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.1650 0.1620 0.1986 Gelem/s 0xbd0b5aed2b83cb45 per-call,block=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.6800 0.6760 24.6724 Gelem/s 0xa8ce17326c01345 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.parq 9.7130 9.7020 13.8184 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.parq 10.2670 10.2250 13.0727 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.applechunk.parq 0.8200 0.8180 163.6802 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.applechunk.parq 1.3140 1.3110 102.1444 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t8 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 17.7340 17.6010 484.3766 GMAC/s 0x67d3d940546b834c plan=20
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 515.2310 514.4140 16.6720 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.applechunk 8.5750 8.5420 1001.7416 GMAC/s 0xa5f2ce1f1b9a0ebd probe,geometry=0
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a 3.4900 3.4340 0.6009 Gelem/s 0xe8bb3ad105a4ae26 per-call
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b 3.8520 3.8000 4.3555 Gelem/s 0xd5ea46fdcb251db4 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1 518.0420 517.2000 16.5815 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.applechunk 11.8130 11.7930 727.1595 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1 521.6830 521.2930 16.4658 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.applechunk 15.4220 15.3940 556.9923 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a+pack.b+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.3120 0.2770 6.7216 Gelem/s 0xe8bb3ad105a4ae26 per-call,block=1
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.7210 0.7000 23.2694 Gelem/s 0xd5ea46fdcb251db4 once-per-weight,block=1
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.parq 514.7450 514.5140 16.6877 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.parq 515.5640 515.0700 16.6612 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.applechunk.parq 8.6690 8.6560 990.8795 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+probe
+LOWBIT apple llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.applechunk.parq 9.2170 9.1790 931.9664 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.qkv.t512 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 5.2440 5.1240 11.1976 GMAC/s 0x4965ea6af2ff5e61 plan=0
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 4.9870 4.9640 11.7747 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.applechunk 2.0450 2.0110 28.7141 GMAC/s 0xff302668595b02d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a 1.3500 1.3010 0.0030 Gelem/s 0x1343c750c1ded02 per-call
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b 13.6850 13.6690 4.2908 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1 6.1800 6.1650 9.5017 GMAC/s 0xff302668595b02d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.applechunk 3.2270 3.1610 18.1965 GMAC/s 0xff302668595b02d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1 19.6060 19.5820 2.9950 GMAC/s 0xff302668595b02d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.applechunk 16.6580 16.6150 3.5250 GMAC/s 0xff302668595b02d quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a.par 0.2150 0.1970 0.0191 Gelem/s 0x1343c750c1ded02 per-call,block=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b.par 1.9210 1.9120 30.5675 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.parq 5.0250 4.9540 11.6856 GMAC/s 0xff302668595b02d quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.parq 6.7680 6.7330 8.6762 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.applechunk.parq 2.0360 2.0250 28.8410 GMAC/s 0xff302668595b02d quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.applechunk.parq 3.7340 3.7150 15.7258 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t1 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 4.0670 4.0400 115.5058 GMAC/s 0x7b30465d325906e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 29.3690 29.3260 15.9952 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.applechunk 2.0160 2.0100 233.0169 GMAC/s 0xbd4b3a783f9d9a0d probe,geometry=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a 1.3460 1.3380 0.0243 Gelem/s 0x5e46321f760ef85d per-call
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b 13.6740 13.6600 4.2943 Gelem/s 0xa9e079afde494e3d once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1 30.5770 30.5240 15.3632 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.applechunk 3.2030 3.1900 146.6631 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1 43.9620 43.6090 10.6856 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.applechunk 16.6670 16.6570 28.1852 GMAC/s 0xbd4b3a783f9d9a0d quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a.par 0.1690 0.1630 0.1939 Gelem/s 0x5e46321f760ef85d per-call,block=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b.par 1.9590 1.9130 29.9746 Gelem/s 0xa9e079afde494e3d once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.parq 29.3570 29.3340 16.0017 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.parq 31.1660 30.7710 15.0729 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.applechunk.parq 2.0560 2.0180 228.4835 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.applechunk.parq 3.7620 3.7330 124.8703 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t8 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 60.5720 60.4000 496.3477 GMAC/s 0x27a166783c45f9f0 plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 1799.2170 1798.9180 16.7099 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.applechunk 27.9650 27.9170 1075.0857 GMAC/s 0x220ff5fe96f5ef55 probe,geometry=0
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a 3.4830 3.4330 0.6021 Gelem/s 0x8c503fb082856006 per-call
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b 13.7090 13.6960 4.2833 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1 1802.3550 1801.8910 16.6808 GMAC/s 0x220ff5fe96f5ef55 quantize.a+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.applechunk 31.1310 31.0940 965.7503 GMAC/s 0x220ff5fe96f5ef55 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1 1815.7790 1815.6730 16.5575 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.applechunk 44.5970 44.5880 674.1434 GMAC/s 0x220ff5fe96f5ef55 quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a.par 0.3080 0.2700 6.8089 Gelem/s 0x8c503fb082856006 per-call,block=1
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b.par 1.9760 1.9420 29.7167 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.parq 1799.2110 1799.1600 16.7100 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.parq 1801.0730 1800.7930 16.6927 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.applechunk.parq 28.0150 27.9660 1073.1669 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+probe
+LOWBIT apple llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.applechunk.parq 29.7350 29.7290 1011.0903 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_up.t512 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 5.5390 5.5170 10.6012 GMAC/s 0x4efb8e54c724fa9 plan=0
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 4.4290 4.4020 13.2581 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.applechunk 2.4950 2.4460 23.5352 GMAC/s 0x1ffdde3ffffb72c9 probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a 4.3030 4.2900 0.0033 Gelem/s 0x160d734878c0f458 per-call
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b 13.8880 13.8580 4.2281 Gelem/s 0x31274090cc79ba2f once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1 8.4750 8.4710 6.9286 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.applechunk 6.5290 6.5000 8.9938 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1 22.0760 21.9610 2.6599 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.applechunk 20.1080 20.0960 2.9202 GMAC/s 0x1ffdde3ffffb72c9 quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a.par 0.2150 0.1930 0.0667 Gelem/s 0x160d734878c0f458 per-call,block=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b.par 2.2220 2.1760 26.4268 Gelem/s 0x31274090cc79ba2f once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.parq 4.3760 4.3740 13.4187 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.parq 6.4300 6.4120 9.1322 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.applechunk.parq 2.4780 2.4680 23.6966 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.applechunk.parq 4.4210 4.4040 13.2821 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t1 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 4.9340 4.9090 95.2092 GMAC/s 0xfb21004541ae3e8e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 33.9390 33.8870 13.8414 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.applechunk 2.4470 2.4360 191.9747 GMAC/s 0x694aafd520fdadad probe,geometry=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a 4.4100 4.4040 0.0260 Gelem/s 0xbb4f2a7232392bfe per-call
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b 13.9630 13.9250 4.2054 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1 38.1690 38.1530 12.3074 GMAC/s 0x694aafd520fdadad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.applechunk 6.6420 6.6320 70.7260 GMAC/s 0x694aafd520fdadad quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1 51.8910 51.8190 9.0529 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.applechunk 20.3850 20.3270 23.0445 GMAC/s 0x694aafd520fdadad quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a.par 0.2020 0.1780 0.5678 Gelem/s 0xbb4f2a7232392bfe per-call,block=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b.par 2.2040 2.1750 26.6426 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.parq 33.9710 33.9260 13.8283 GMAC/s 0x694aafd520fdadad quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.parq 35.9850 35.9480 13.0544 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.applechunk.parq 2.4640 2.4570 190.6502 GMAC/s 0x694aafd520fdadad quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.applechunk.parq 4.4470 4.4080 105.6357 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t8 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 65.6140 64.8490 458.2066 GMAC/s 0x4743c97cb961339e plan=20
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 1828.8540 1828.6770 16.4391 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.applechunk 30.0160 29.9930 1001.6248 GMAC/s 0x6120545eacb068ad probe,geometry=0
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a 11.9890 11.9730 0.6122 Gelem/s 0x903f6ff84c6082 per-call
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b 13.8890 13.8510 4.2278 Gelem/s 0xa046020a81d05746 once-per-weight
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1 1841.4790 1840.7630 16.3264 GMAC/s 0x6120545eacb068ad quantize.a+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.applechunk 41.8660 41.7180 718.1190 GMAC/s 0x6120545eacb068ad quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1 1854.3670 1217.2510 16.2130 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.applechunk 55.4500 55.3730 542.1961 GMAC/s 0x6120545eacb068ad quantize.a+pack.b+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a.par 0.5060 0.4680 14.5060 Gelem/s 0x903f6ff84c6082 per-call,block=1
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b.par 2.2340 2.1920 26.2848 Gelem/s 0xa046020a81d05746 once-per-weight,block=1
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.parq 1829.5610 1829.3140 16.4328 GMAC/s 0x6120545eacb068ad quantize.a.par+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.parq 1831.0230 1830.8110 16.4197 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.applechunk.parq 30.3330 30.2710 991.1572 GMAC/s 0x6120545eacb068ad quantize.a.par+probe
+LOWBIT apple llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.applechunk.parq 32.2930 32.2230 930.9996 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.mlp_down.t512 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 33.1430 33.0040 15.8506 GMAC/s 0xcdc134cbce391535 plan=0
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 32.5790 32.5730 16.1250 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.applechunk 11.9150 11.8570 44.0904 GMAC/s 0xe0222b2f9de835ed probe,geometry=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a 1.3840 1.3470 0.0030 Gelem/s 0x67d2e298b047bf2b per-call
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b 96.3200 96.0610 5.4541 Gelem/s 0x1c75800d0b1054bd once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1 33.8910 33.7260 15.5008 GMAC/s 0xe0222b2f9de835ed quantize.a+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.applechunk 13.1820 13.0900 39.8526 GMAC/s 0xe0222b2f9de835ed quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1 130.0260 129.6600 4.0402 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.applechunk 109.2500 108.9720 4.8086 GMAC/s 0xe0222b2f9de835ed quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a.par 0.2190 0.2160 0.0187 Gelem/s 0x67d2e298b047bf2b per-call,block=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b.par 15.7580 15.7120 33.3378 Gelem/s 0x1c75800d0b1054bd once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.parq 32.6670 32.6230 16.0816 GMAC/s 0xe0222b2f9de835ed quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.parq 48.1770 48.0820 10.9043 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.applechunk.parq 11.9420 11.8990 43.9907 GMAC/s 0xe0222b2f9de835ed quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.applechunk.parq 27.5060 27.4630 19.0990 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t1 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 33.1990 33.1760 126.5909 GMAC/s 0x3ebab59d0da21444 plan=20
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 252.4940 251.7640 16.6447 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.applechunk 11.8790 11.8100 353.7918 GMAC/s 0x8151fd05ff287a5d probe,geometry=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a 1.4550 1.3860 0.0225 Gelem/s 0x443be8ad16d189a3 per-call
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b 96.2870 96.0380 5.4559 Gelem/s 0x8e01af3f075298bb once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1 253.7560 253.4180 16.5619 GMAC/s 0x8151fd05ff287a5d quantize.a+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.applechunk 13.0340 13.0160 322.4407 GMAC/s 0x8151fd05ff287a5d quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1 351.0340 348.8190 11.9723 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.applechunk 109.1650 108.6840 38.4985 GMAC/s 0x8151fd05ff287a5d quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a.par 0.2270 0.2140 0.1444 Gelem/s 0x443be8ad16d189a3 per-call,block=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b.par 15.7870 15.7690 33.2765 Gelem/s 0x8e01af3f075298bb once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.parq 252.3290 252.0370 16.6556 GMAC/s 0x8151fd05ff287a5d quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.parq 268.0420 267.4870 15.6792 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.applechunk.parq 11.9130 11.8820 352.7821 GMAC/s 0x8151fd05ff287a5d quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.applechunk.parq 27.4710 27.3900 152.9865 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t8 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 67.5820 67.5580 497.4925 GMAC/s 0x84fd143bb625cf70 plan=20
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 2011.6380 2011.2560 16.7135 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.applechunk 31.1690 31.1280 1078.6853 GMAC/s 0xaae4f3d3c69453cd probe,geometry=0
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a 3.4780 3.4610 0.6030 Gelem/s 0xfd89ee79d025dda7 per-call
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b 13.8910 13.8530 4.7273 Gelem/s 0xcc187b17bc36366d once-per-weight
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1 2015.3700 2014.6300 16.6826 GMAC/s 0xaae4f3d3c69453cd quantize.a+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.applechunk 34.3760 34.3020 978.0527 GMAC/s 0xaae4f3d3c69453cd quantize.a+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1 2029.1390 2029.0350 16.5694 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.applechunk 48.0840 47.9560 699.2251 GMAC/s 0xaae4f3d3c69453cd quantize.a+pack.b+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a.par 0.3150 0.2970 6.6576 Gelem/s 0xfd89ee79d025dda7 per-call,block=1
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b.par 2.1590 2.1530 30.4155 Gelem/s 0xcc187b17bc36366d once-per-weight,block=1
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.parq 2012.3710 2012.3450 16.7074 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.parq 2014.2710 2013.6240 16.6917 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+product
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.applechunk.parq 31.3250 31.2190 1073.3134 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+probe
+LOWBIT apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.applechunk.parq 33.3300 33.1840 1008.7471 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+probe
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 inference.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 training.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 inference.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 training.4x.int8i32.v1.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 pieces.int8.flat not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 pieces.int8.mma.staged.w16x16.b32x32.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 pieces.int8.mma.staged.w16x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 pieces.int8.mma.staged.w32x32.b64x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 pieces.int8.mma.staged.w16x16.b64x64.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 inference.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN apple llama8b.lm_head.t512 training.pieces.int8.tuned this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+
+== done [IDENTICAL]: 12 shapes ==
+== cold against the run of record
+compared 120, differ 0
+VERDICT: the two runs agree at every arm and shape compared
+== sabotage verdict
+DISAGREE (expected) llama8b.qkv.t1 fp32.v1: clean 0x920cdd138650a8bd sabotage 0x920cdc138650a70a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.flat: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1.applechunk: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.quantize.a.par: clean 0x54279cbda1444726 sabotage 0x542798bda1472383
+DISAGREE (expected) llama8b.qkv.t1 convert.int8.pack.b.par: clean 0x305b1a502296caf6 sabotage 0x890ef69c534d0ca9
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 inference.int8i32.v1.applechunk.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t1 training.int8i32.v1.applechunk.parq: clean 0x8a9227b93e430acd sabotage 0x8a9226b93e43091a
+DISAGREE (expected) llama8b.qkv.t8 fp32.v1: clean 0xd5677d8a13939709 sabotage 0xd5677c8a13939556
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.flat: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1.applechunk: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.quantize.a.par: clean 0xbd0b5aed2b83cb45 sabotage 0x9fe9a836780c4372
+DISAGREE (expected) llama8b.qkv.t8 convert.int8.pack.b.par: clean 0xa8ce17326c01345 sabotage 0xfedb09cb32b7d192
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 inference.int8i32.v1.applechunk.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t8 training.int8i32.v1.applechunk.parq: clean 0x484bd20aabe66ee5 sabotage 0x484bd10aabe66d32
+DISAGREE (expected) llama8b.qkv.t512 fp32.v1: clean 0x67d3d940546b834c sabotage 0x67d3da40546b84ff
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.flat: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1.applechunk: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.quantize.a.par: clean 0xe8bb3ad105a4ae26 sabotage 0xa4c29f2d55db77d9
+DISAGREE (expected) llama8b.qkv.t512 convert.int8.pack.b.par: clean 0xd5ea46fdcb251db4 sabotage 0xcd5a4c6ba3ec5f67
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 inference.int8i32.v1.applechunk.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+DISAGREE (expected) llama8b.qkv.t512 training.int8i32.v1.applechunk.parq: clean 0xa5f2ce1f1b9a0ebd sabotage 0xa5f2cd1f1b9a0d0a
+sabotage comparison: 45 compared, 45 differed, 0 did not, 0 not compared
+VERDICT: the sabotage arm was seen at every arm and shape compared
+== the lever table
+# lane/lowbit-mma-speed: time and rate per arm
+
+Written by `tools/lowbit_mma_speed/table.py --levers`. `over` is the arm's median
+over fp32.v1's at the same shape on the same box; above 1 the arm took longer.
+One run per box; the median of the timed calls, the minimum beside it.
+An arm named `probe.*` computes a WRONG product on purpose (a part of a kernel,
+timed alone): it has no identity and is no plan.
+
+## m2pro
+
+### llama8b.qkv.t1 (m=1 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 1.4870 | 1.4810 | 11.3 | GMAC/s | 1.000 | 0x920cdd138650a8bd | plan=0 |
+| int8i32.v1.flat | 1.3340 | 1.3270 | 12.6 | GMAC/s | 0.897 | 0x8a9227b93e430acd | dispatched |
+| int8i32.v1.applechunk | 1.2710 | 0.7650 | 13.2 | GMAC/s | 0.855 | 0x8a9227b93e430acd | probe,geometry=1 |
+| convert.int8.quantize.a | 1.3230 | 1.3030 | 0.0 | Gelem/s | 0.890 | 0x54279cbda1444726 | per-call |
+| convert.int8.pack.b | 3.7640 | 3.7590 | 4.5 | Gelem/s | 2.531 | 0x305b1a502296caf6 | once-per-weight |
+| inference.int8i32.v1 | 2.5050 | 2.4970 | 6.7 | GMAC/s | 1.685 | 0x8a9227b93e430acd | quantize.a+product |
+| inference.int8i32.v1.applechunk | 1.9380 | 1.9260 | 8.7 | GMAC/s | 1.303 | 0x8a9227b93e430acd | quantize.a+probe |
+| training.int8i32.v1 | 6.1200 | 6.1040 | 2.7 | GMAC/s | 4.116 | 0x8a9227b93e430acd | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 6.0560 | 5.5490 | 2.8 | GMAC/s | 4.073 | 0x8a9227b93e430acd | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.1660 | 0.1610 | 0.0 | Gelem/s | 0.112 | 0x54279cbda1444726 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.6940 | 0.6700 | 24.2 | Gelem/s | 0.467 | 0x305b1a502296caf6 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 1.3500 | 1.3430 | 12.4 | GMAC/s | 0.908 | 0x8a9227b93e430acd | quantize.a.par+product |
+| training.int8i32.v1.parq | 1.8730 | 1.8660 | 9.0 | GMAC/s | 1.260 | 0x8a9227b93e430acd | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 0.7900 | 0.7780 | 21.2 | GMAC/s | 0.531 | 0x8a9227b93e430acd | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 1.3290 | 1.3160 | 12.6 | GMAC/s | 0.894 | 0x8a9227b93e430acd | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.qkv.t8 (m=8 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 1.4650 | 1.4460 | 91.6 | GMAC/s | 1.000 | 0xd5677d8a13939709 | plan=20 |
+| int8i32.v1.flat | 9.6990 | 9.6830 | 13.8 | GMAC/s | 6.620 | 0x484bd20aabe66ee5 | dispatched |
+| int8i32.v1.applechunk | 0.8020 | 0.7950 | 167.4 | GMAC/s | 0.547 | 0x484bd20aabe66ee5 | probe,geometry=1 |
+| convert.int8.quantize.a | 1.3440 | 1.3240 | 0.0 | Gelem/s | 0.917 | 0xbd0b5aed2b83cb45 | per-call |
+| convert.int8.pack.b | 3.8130 | 3.7740 | 4.4 | Gelem/s | 2.603 | 0xa8ce17326c01345 | once-per-weight |
+| inference.int8i32.v1 | 10.9340 | 10.8940 | 12.3 | GMAC/s | 7.463 | 0x484bd20aabe66ee5 | quantize.a+product |
+| inference.int8i32.v1.applechunk | 2.0040 | 1.9840 | 67.0 | GMAC/s | 1.368 | 0x484bd20aabe66ee5 | quantize.a+probe |
+| training.int8i32.v1 | 14.5370 | 14.4460 | 9.2 | GMAC/s | 9.923 | 0x484bd20aabe66ee5 | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 5.6250 | 5.6120 | 23.9 | GMAC/s | 3.840 | 0x484bd20aabe66ee5 | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.1650 | 0.1620 | 0.2 | Gelem/s | 0.113 | 0xbd0b5aed2b83cb45 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.6800 | 0.6760 | 24.7 | Gelem/s | 0.464 | 0xa8ce17326c01345 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 9.7130 | 9.7020 | 13.8 | GMAC/s | 6.630 | 0x484bd20aabe66ee5 | quantize.a.par+product |
+| training.int8i32.v1.parq | 10.2670 | 10.2250 | 13.1 | GMAC/s | 7.008 | 0x484bd20aabe66ee5 | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 0.8200 | 0.8180 | 163.7 | GMAC/s | 0.560 | 0x484bd20aabe66ee5 | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 1.3140 | 1.3110 | 102.1 | GMAC/s | 0.897 | 0x484bd20aabe66ee5 | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.qkv.t512 (m=512 n=4096 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 17.7340 | 17.6010 | 484.4 | GMAC/s | 1.000 | 0x67d3d940546b834c | plan=20 |
+| int8i32.v1.flat | 515.2310 | 514.4140 | 16.7 | GMAC/s | 29.053 | 0xa5f2ce1f1b9a0ebd | dispatched |
+| int8i32.v1.applechunk | 8.5750 | 8.5420 | 1001.7 | GMAC/s | 0.484 | 0xa5f2ce1f1b9a0ebd | probe,geometry=0 |
+| convert.int8.quantize.a | 3.4900 | 3.4340 | 0.6 | Gelem/s | 0.197 | 0xe8bb3ad105a4ae26 | per-call |
+| convert.int8.pack.b | 3.8520 | 3.8000 | 4.4 | Gelem/s | 0.217 | 0xd5ea46fdcb251db4 | once-per-weight |
+| inference.int8i32.v1 | 518.0420 | 517.2000 | 16.6 | GMAC/s | 29.212 | 0xa5f2ce1f1b9a0ebd | quantize.a+product |
+| inference.int8i32.v1.applechunk | 11.8130 | 11.7930 | 727.2 | GMAC/s | 0.666 | 0xa5f2ce1f1b9a0ebd | quantize.a+probe |
+| training.int8i32.v1 | 521.6830 | 521.2930 | 16.5 | GMAC/s | 29.417 | 0xa5f2ce1f1b9a0ebd | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 15.4220 | 15.3940 | 557.0 | GMAC/s | 0.870 | 0xa5f2ce1f1b9a0ebd | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.3120 | 0.2770 | 6.7 | Gelem/s | 0.018 | 0xe8bb3ad105a4ae26 | per-call,block=1 |
+| convert.int8.pack.b.par | 0.7210 | 0.7000 | 23.3 | Gelem/s | 0.041 | 0xd5ea46fdcb251db4 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 514.7450 | 514.5140 | 16.7 | GMAC/s | 29.026 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+product |
+| training.int8i32.v1.parq | 515.5640 | 515.0700 | 16.7 | GMAC/s | 29.072 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 8.6690 | 8.6560 | 990.9 | GMAC/s | 0.489 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 9.2170 | 9.1790 | 932.0 | GMAC/s | 0.520 | 0xa5f2ce1f1b9a0ebd | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_up.t1 (m=1 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 5.2440 | 5.1240 | 11.2 | GMAC/s | 1.000 | 0x4965ea6af2ff5e61 | plan=0 |
+| int8i32.v1.flat | 4.9870 | 4.9640 | 11.8 | GMAC/s | 0.951 | 0xff302668595b02d | dispatched |
+| int8i32.v1.applechunk | 2.0450 | 2.0110 | 28.7 | GMAC/s | 0.390 | 0xff302668595b02d | probe,geometry=1 |
+| convert.int8.quantize.a | 1.3500 | 1.3010 | 0.0 | Gelem/s | 0.257 | 0x1343c750c1ded02 | per-call |
+| convert.int8.pack.b | 13.6850 | 13.6690 | 4.3 | Gelem/s | 2.610 | 0x9dd5dd0e7f10b4d0 | once-per-weight |
+| inference.int8i32.v1 | 6.1800 | 6.1650 | 9.5 | GMAC/s | 1.178 | 0xff302668595b02d | quantize.a+product |
+| inference.int8i32.v1.applechunk | 3.2270 | 3.1610 | 18.2 | GMAC/s | 0.615 | 0xff302668595b02d | quantize.a+probe |
+| training.int8i32.v1 | 19.6060 | 19.5820 | 3.0 | GMAC/s | 3.739 | 0xff302668595b02d | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 16.6580 | 16.6150 | 3.5 | GMAC/s | 3.177 | 0xff302668595b02d | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.2150 | 0.1970 | 0.0 | Gelem/s | 0.041 | 0x1343c750c1ded02 | per-call,block=1 |
+| convert.int8.pack.b.par | 1.9210 | 1.9120 | 30.6 | Gelem/s | 0.366 | 0x9dd5dd0e7f10b4d0 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 5.0250 | 4.9540 | 11.7 | GMAC/s | 0.958 | 0xff302668595b02d | quantize.a.par+product |
+| training.int8i32.v1.parq | 6.7680 | 6.7330 | 8.7 | GMAC/s | 1.291 | 0xff302668595b02d | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 2.0360 | 2.0250 | 28.8 | GMAC/s | 0.388 | 0xff302668595b02d | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 3.7340 | 3.7150 | 15.7 | GMAC/s | 0.712 | 0xff302668595b02d | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_up.t8 (m=8 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 4.0670 | 4.0400 | 115.5 | GMAC/s | 1.000 | 0x7b30465d325906e | plan=20 |
+| int8i32.v1.flat | 29.3690 | 29.3260 | 16.0 | GMAC/s | 7.221 | 0xbd4b3a783f9d9a0d | dispatched |
+| int8i32.v1.applechunk | 2.0160 | 2.0100 | 233.0 | GMAC/s | 0.496 | 0xbd4b3a783f9d9a0d | probe,geometry=1 |
+| convert.int8.quantize.a | 1.3460 | 1.3380 | 0.0 | Gelem/s | 0.331 | 0x5e46321f760ef85d | per-call |
+| convert.int8.pack.b | 13.6740 | 13.6600 | 4.3 | Gelem/s | 3.362 | 0xa9e079afde494e3d | once-per-weight |
+| inference.int8i32.v1 | 30.5770 | 30.5240 | 15.4 | GMAC/s | 7.518 | 0xbd4b3a783f9d9a0d | quantize.a+product |
+| inference.int8i32.v1.applechunk | 3.2030 | 3.1900 | 146.7 | GMAC/s | 0.788 | 0xbd4b3a783f9d9a0d | quantize.a+probe |
+| training.int8i32.v1 | 43.9620 | 43.6090 | 10.7 | GMAC/s | 10.809 | 0xbd4b3a783f9d9a0d | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 16.6670 | 16.6570 | 28.2 | GMAC/s | 4.098 | 0xbd4b3a783f9d9a0d | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.1690 | 0.1630 | 0.2 | Gelem/s | 0.042 | 0x5e46321f760ef85d | per-call,block=1 |
+| convert.int8.pack.b.par | 1.9590 | 1.9130 | 30.0 | Gelem/s | 0.482 | 0xa9e079afde494e3d | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 29.3570 | 29.3340 | 16.0 | GMAC/s | 7.218 | 0xbd4b3a783f9d9a0d | quantize.a.par+product |
+| training.int8i32.v1.parq | 31.1660 | 30.7710 | 15.1 | GMAC/s | 7.663 | 0xbd4b3a783f9d9a0d | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 2.0560 | 2.0180 | 228.5 | GMAC/s | 0.506 | 0xbd4b3a783f9d9a0d | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 3.7620 | 3.7330 | 124.9 | GMAC/s | 0.925 | 0xbd4b3a783f9d9a0d | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_up.t512 (m=512 n=14336 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 60.5720 | 60.4000 | 496.3 | GMAC/s | 1.000 | 0x27a166783c45f9f0 | plan=20 |
+| int8i32.v1.flat | 1799.2170 | 1798.9180 | 16.7 | GMAC/s | 29.704 | 0x220ff5fe96f5ef55 | dispatched |
+| int8i32.v1.applechunk | 27.9650 | 27.9170 | 1075.1 | GMAC/s | 0.462 | 0x220ff5fe96f5ef55 | probe,geometry=0 |
+| convert.int8.quantize.a | 3.4830 | 3.4330 | 0.6 | Gelem/s | 0.058 | 0x8c503fb082856006 | per-call |
+| convert.int8.pack.b | 13.7090 | 13.6960 | 4.3 | Gelem/s | 0.226 | 0xf8c1486c6aaba4c1 | once-per-weight |
+| inference.int8i32.v1 | 1802.3550 | 1801.8910 | 16.7 | GMAC/s | 29.756 | 0x220ff5fe96f5ef55 | quantize.a+product |
+| inference.int8i32.v1.applechunk | 31.1310 | 31.0940 | 965.8 | GMAC/s | 0.514 | 0x220ff5fe96f5ef55 | quantize.a+probe |
+| training.int8i32.v1 | 1815.7790 | 1815.6730 | 16.6 | GMAC/s | 29.977 | 0x220ff5fe96f5ef55 | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 44.5970 | 44.5880 | 674.1 | GMAC/s | 0.736 | 0x220ff5fe96f5ef55 | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.3080 | 0.2700 | 6.8 | Gelem/s | 0.005 | 0x8c503fb082856006 | per-call,block=1 |
+| convert.int8.pack.b.par | 1.9760 | 1.9420 | 29.7 | Gelem/s | 0.033 | 0xf8c1486c6aaba4c1 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 1799.2110 | 1799.1600 | 16.7 | GMAC/s | 29.704 | 0x220ff5fe96f5ef55 | quantize.a.par+product |
+| training.int8i32.v1.parq | 1801.0730 | 1800.7930 | 16.7 | GMAC/s | 29.734 | 0x220ff5fe96f5ef55 | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 28.0150 | 27.9660 | 1073.2 | GMAC/s | 0.463 | 0x220ff5fe96f5ef55 | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 29.7350 | 29.7290 | 1011.1 | GMAC/s | 0.491 | 0x220ff5fe96f5ef55 | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_down.t1 (m=1 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 5.5390 | 5.5170 | 10.6 | GMAC/s | 1.000 | 0x4efb8e54c724fa9 | plan=0 |
+| int8i32.v1.flat | 4.4290 | 4.4020 | 13.3 | GMAC/s | 0.800 | 0x1ffdde3ffffb72c9 | dispatched |
+| int8i32.v1.applechunk | 2.4950 | 2.4460 | 23.5 | GMAC/s | 0.450 | 0x1ffdde3ffffb72c9 | probe,geometry=1 |
+| convert.int8.quantize.a | 4.3030 | 4.2900 | 0.0 | Gelem/s | 0.777 | 0x160d734878c0f458 | per-call |
+| convert.int8.pack.b | 13.8880 | 13.8580 | 4.2 | Gelem/s | 2.507 | 0x31274090cc79ba2f | once-per-weight |
+| inference.int8i32.v1 | 8.4750 | 8.4710 | 6.9 | GMAC/s | 1.530 | 0x1ffdde3ffffb72c9 | quantize.a+product |
+| inference.int8i32.v1.applechunk | 6.5290 | 6.5000 | 9.0 | GMAC/s | 1.179 | 0x1ffdde3ffffb72c9 | quantize.a+probe |
+| training.int8i32.v1 | 22.0760 | 21.9610 | 2.7 | GMAC/s | 3.986 | 0x1ffdde3ffffb72c9 | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 20.1080 | 20.0960 | 2.9 | GMAC/s | 3.630 | 0x1ffdde3ffffb72c9 | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.2150 | 0.1930 | 0.1 | Gelem/s | 0.039 | 0x160d734878c0f458 | per-call,block=1 |
+| convert.int8.pack.b.par | 2.2220 | 2.1760 | 26.4 | Gelem/s | 0.401 | 0x31274090cc79ba2f | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 4.3760 | 4.3740 | 13.4 | GMAC/s | 0.790 | 0x1ffdde3ffffb72c9 | quantize.a.par+product |
+| training.int8i32.v1.parq | 6.4300 | 6.4120 | 9.1 | GMAC/s | 1.161 | 0x1ffdde3ffffb72c9 | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 2.4780 | 2.4680 | 23.7 | GMAC/s | 0.447 | 0x1ffdde3ffffb72c9 | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 4.4210 | 4.4040 | 13.3 | GMAC/s | 0.798 | 0x1ffdde3ffffb72c9 | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_down.t8 (m=8 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 4.9340 | 4.9090 | 95.2 | GMAC/s | 1.000 | 0xfb21004541ae3e8e | plan=20 |
+| int8i32.v1.flat | 33.9390 | 33.8870 | 13.8 | GMAC/s | 6.879 | 0x694aafd520fdadad | dispatched |
+| int8i32.v1.applechunk | 2.4470 | 2.4360 | 192.0 | GMAC/s | 0.496 | 0x694aafd520fdadad | probe,geometry=1 |
+| convert.int8.quantize.a | 4.4100 | 4.4040 | 0.0 | Gelem/s | 0.894 | 0xbb4f2a7232392bfe | per-call |
+| convert.int8.pack.b | 13.9630 | 13.9250 | 4.2 | Gelem/s | 2.830 | 0x4b12dcda2ab9acd4 | once-per-weight |
+| inference.int8i32.v1 | 38.1690 | 38.1530 | 12.3 | GMAC/s | 7.736 | 0x694aafd520fdadad | quantize.a+product |
+| inference.int8i32.v1.applechunk | 6.6420 | 6.6320 | 70.7 | GMAC/s | 1.346 | 0x694aafd520fdadad | quantize.a+probe |
+| training.int8i32.v1 | 51.8910 | 51.8190 | 9.1 | GMAC/s | 10.517 | 0x694aafd520fdadad | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 20.3850 | 20.3270 | 23.0 | GMAC/s | 4.132 | 0x694aafd520fdadad | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.2020 | 0.1780 | 0.6 | Gelem/s | 0.041 | 0xbb4f2a7232392bfe | per-call,block=1 |
+| convert.int8.pack.b.par | 2.2040 | 2.1750 | 26.6 | Gelem/s | 0.447 | 0x4b12dcda2ab9acd4 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 33.9710 | 33.9260 | 13.8 | GMAC/s | 6.885 | 0x694aafd520fdadad | quantize.a.par+product |
+| training.int8i32.v1.parq | 35.9850 | 35.9480 | 13.1 | GMAC/s | 7.293 | 0x694aafd520fdadad | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 2.4640 | 2.4570 | 190.7 | GMAC/s | 0.499 | 0x694aafd520fdadad | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 4.4470 | 4.4080 | 105.6 | GMAC/s | 0.901 | 0x694aafd520fdadad | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.mlp_down.t512 (m=512 n=4096 k=14336, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 65.6140 | 64.8490 | 458.2 | GMAC/s | 1.000 | 0x4743c97cb961339e | plan=20 |
+| int8i32.v1.flat | 1828.8540 | 1828.6770 | 16.4 | GMAC/s | 27.873 | 0x6120545eacb068ad | dispatched |
+| int8i32.v1.applechunk | 30.0160 | 29.9930 | 1001.6 | GMAC/s | 0.457 | 0x6120545eacb068ad | probe,geometry=0 |
+| convert.int8.quantize.a | 11.9890 | 11.9730 | 0.6 | Gelem/s | 0.183 | 0x903f6ff84c6082 | per-call |
+| convert.int8.pack.b | 13.8890 | 13.8510 | 4.2 | Gelem/s | 0.212 | 0xa046020a81d05746 | once-per-weight |
+| inference.int8i32.v1 | 1841.4790 | 1840.7630 | 16.3 | GMAC/s | 28.065 | 0x6120545eacb068ad | quantize.a+product |
+| inference.int8i32.v1.applechunk | 41.8660 | 41.7180 | 718.1 | GMAC/s | 0.638 | 0x6120545eacb068ad | quantize.a+probe |
+| training.int8i32.v1 | 1854.3670 | 1217.2510 | 16.2 | GMAC/s | 28.262 | 0x6120545eacb068ad | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 55.4500 | 55.3730 | 542.2 | GMAC/s | 0.845 | 0x6120545eacb068ad | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.5060 | 0.4680 | 14.5 | Gelem/s | 0.008 | 0x903f6ff84c6082 | per-call,block=1 |
+| convert.int8.pack.b.par | 2.2340 | 2.1920 | 26.3 | Gelem/s | 0.034 | 0xa046020a81d05746 | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 1829.5610 | 1829.3140 | 16.4 | GMAC/s | 27.884 | 0x6120545eacb068ad | quantize.a.par+product |
+| training.int8i32.v1.parq | 1831.0230 | 1830.8110 | 16.4 | GMAC/s | 27.906 | 0x6120545eacb068ad | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 30.3330 | 30.2710 | 991.2 | GMAC/s | 0.462 | 0x6120545eacb068ad | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 32.2930 | 32.2230 | 931.0 | GMAC/s | 0.492 | 0x6120545eacb068ad | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.lm_head.t1 (m=1 n=128256 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 33.1430 | 33.0040 | 15.9 | GMAC/s | 1.000 | 0xcdc134cbce391535 | plan=0 |
+| int8i32.v1.flat | 32.5790 | 32.5730 | 16.1 | GMAC/s | 0.983 | 0xe0222b2f9de835ed | dispatched |
+| int8i32.v1.applechunk | 11.9150 | 11.8570 | 44.1 | GMAC/s | 0.360 | 0xe0222b2f9de835ed | probe,geometry=1 |
+| convert.int8.quantize.a | 1.3840 | 1.3470 | 0.0 | Gelem/s | 0.042 | 0x67d2e298b047bf2b | per-call |
+| convert.int8.pack.b | 96.3200 | 96.0610 | 5.5 | Gelem/s | 2.906 | 0x1c75800d0b1054bd | once-per-weight |
+| inference.int8i32.v1 | 33.8910 | 33.7260 | 15.5 | GMAC/s | 1.023 | 0xe0222b2f9de835ed | quantize.a+product |
+| inference.int8i32.v1.applechunk | 13.1820 | 13.0900 | 39.9 | GMAC/s | 0.398 | 0xe0222b2f9de835ed | quantize.a+probe |
+| training.int8i32.v1 | 130.0260 | 129.6600 | 4.0 | GMAC/s | 3.923 | 0xe0222b2f9de835ed | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 109.2500 | 108.9720 | 4.8 | GMAC/s | 3.296 | 0xe0222b2f9de835ed | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.2190 | 0.2160 | 0.0 | Gelem/s | 0.007 | 0x67d2e298b047bf2b | per-call,block=1 |
+| convert.int8.pack.b.par | 15.7580 | 15.7120 | 33.3 | Gelem/s | 0.475 | 0x1c75800d0b1054bd | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 32.6670 | 32.6230 | 16.1 | GMAC/s | 0.986 | 0xe0222b2f9de835ed | quantize.a.par+product |
+| training.int8i32.v1.parq | 48.1770 | 48.0820 | 10.9 | GMAC/s | 1.454 | 0xe0222b2f9de835ed | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 11.9420 | 11.8990 | 44.0 | GMAC/s | 0.360 | 0xe0222b2f9de835ed | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 27.5060 | 27.4630 | 19.1 | GMAC/s | 0.830 | 0xe0222b2f9de835ed | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.lm_head.t8 (m=8 n=128256 k=4096, FULL)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 33.1990 | 33.1760 | 126.6 | GMAC/s | 1.000 | 0x3ebab59d0da21444 | plan=20 |
+| int8i32.v1.flat | 252.4940 | 251.7640 | 16.6 | GMAC/s | 7.605 | 0x8151fd05ff287a5d | dispatched |
+| int8i32.v1.applechunk | 11.8790 | 11.8100 | 353.8 | GMAC/s | 0.358 | 0x8151fd05ff287a5d | probe,geometry=1 |
+| convert.int8.quantize.a | 1.4550 | 1.3860 | 0.0 | Gelem/s | 0.044 | 0x443be8ad16d189a3 | per-call |
+| convert.int8.pack.b | 96.2870 | 96.0380 | 5.5 | Gelem/s | 2.900 | 0x8e01af3f075298bb | once-per-weight |
+| inference.int8i32.v1 | 253.7560 | 253.4180 | 16.6 | GMAC/s | 7.643 | 0x8151fd05ff287a5d | quantize.a+product |
+| inference.int8i32.v1.applechunk | 13.0340 | 13.0160 | 322.4 | GMAC/s | 0.393 | 0x8151fd05ff287a5d | quantize.a+probe |
+| training.int8i32.v1 | 351.0340 | 348.8190 | 12.0 | GMAC/s | 10.574 | 0x8151fd05ff287a5d | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 109.1650 | 108.6840 | 38.5 | GMAC/s | 3.288 | 0x8151fd05ff287a5d | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.2270 | 0.2140 | 0.1 | Gelem/s | 0.007 | 0x443be8ad16d189a3 | per-call,block=1 |
+| convert.int8.pack.b.par | 15.7870 | 15.7690 | 33.3 | Gelem/s | 0.476 | 0x8e01af3f075298bb | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 252.3290 | 252.0370 | 16.7 | GMAC/s | 7.601 | 0x8151fd05ff287a5d | quantize.a.par+product |
+| training.int8i32.v1.parq | 268.0420 | 267.4870 | 15.7 | GMAC/s | 8.074 | 0x8151fd05ff287a5d | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 11.9130 | 11.8820 | 352.8 | GMAC/s | 0.359 | 0x8151fd05ff287a5d | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 27.4710 | 27.3900 | 153.0 | GMAC/s | 0.827 | 0x8151fd05ff287a5d | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+### llama8b.lm_head.t512 (m=512 n=16032 k=4096, CAPPED)
+
+| arm | median ms | min ms | rate | unit | over fp32.v1 | digest | note |
+|---|---:|---:|---:|---|---:|---|---|
+| fp32.v1 | 67.5820 | 67.5580 | 497.5 | GMAC/s | 1.000 | 0x84fd143bb625cf70 | plan=20 |
+| int8i32.v1.flat | 2011.6380 | 2011.2560 | 16.7 | GMAC/s | 29.766 | 0xaae4f3d3c69453cd | dispatched |
+| int8i32.v1.applechunk | 31.1690 | 31.1280 | 1078.7 | GMAC/s | 0.461 | 0xaae4f3d3c69453cd | probe,geometry=0 |
+| convert.int8.quantize.a | 3.4780 | 3.4610 | 0.6 | Gelem/s | 0.051 | 0xfd89ee79d025dda7 | per-call |
+| convert.int8.pack.b | 13.8910 | 13.8530 | 4.7 | Gelem/s | 0.206 | 0xcc187b17bc36366d | once-per-weight |
+| inference.int8i32.v1 | 2015.3700 | 2014.6300 | 16.7 | GMAC/s | 29.821 | 0xaae4f3d3c69453cd | quantize.a+product |
+| inference.int8i32.v1.applechunk | 34.3760 | 34.3020 | 978.1 | GMAC/s | 0.509 | 0xaae4f3d3c69453cd | quantize.a+probe |
+| training.int8i32.v1 | 2029.1390 | 2029.0350 | 16.6 | GMAC/s | 30.025 | 0xaae4f3d3c69453cd | quantize.a+pack.b+product |
+| training.int8i32.v1.applechunk | 48.0840 | 47.9560 | 699.2 | GMAC/s | 0.711 | 0xaae4f3d3c69453cd | quantize.a+pack.b+probe |
+| convert.int8.quantize.a.par | 0.3150 | 0.2970 | 6.7 | Gelem/s | 0.005 | 0xfd89ee79d025dda7 | per-call,block=1 |
+| convert.int8.pack.b.par | 2.1590 | 2.1530 | 30.4 | Gelem/s | 0.032 | 0xcc187b17bc36366d | once-per-weight,block=1 |
+| inference.int8i32.v1.parq | 2012.3710 | 2012.3450 | 16.7 | GMAC/s | 29.777 | 0xaae4f3d3c69453cd | quantize.a.par+product |
+| training.int8i32.v1.parq | 2014.2710 | 2013.6240 | 16.7 | GMAC/s | 29.805 | 0xaae4f3d3c69453cd | quantize.a.par+pack.b.par+product |
+| inference.int8i32.v1.applechunk.parq | 31.3250 | 31.2190 | 1073.3 | GMAC/s | 0.464 | 0xaae4f3d3c69453cd | quantize.a.par+probe |
+| training.int8i32.v1.applechunk.parq | 33.3300 | 33.1840 | 1008.7 | GMAC/s | 0.493 | 0xaae4f3d3c69453cd | quantize.a.par+pack.b.par+probe |
+
+Unit plans whose digest differs from `int8i32.v1.flat`'s: none.
+
+Not run on this box: bf16f32.v1.fused, bf16f32.v1.widen, convert.bf16.pack.b, convert.bf16.widen.b, convert.int8.dequantize.b, inference.4x.int8i32.v1.tuned, inference.bf16f32.v1, inference.int8i32.v1.tuned, inference.pieces.int8.tuned, int8i32.v1.mma, int8i32.v1.mma.direct.aligned-loads, int8i32.v1.mma.direct.aligned-loads.scalar-acc, int8i32.v1.mma.direct.reference-loads, int8i32.v1.mma.staged.w
+price_job: box=m2pro name=quant red=1
+######## phase quant-price on m2pro exit=1, finished 2026-09-29T04:37:12Z
+box_job: box=m2pro phases: quant-gate=0 quant-price=1 red=1
