@@ -2374,6 +2374,31 @@ def catboost_arms(lane, cfg, data, devices):
 
 # ---- XGBoost --------------------------------------------------------------
 
+def _xgb_gpu_refusal(xgb):
+    """Why XGBoost's GPU arm cannot run on this box's GPU, or None.
+
+    `device='cuda'` on a build without this vendor's GPU backend does NOT
+    raise: XGBoost warns and trains on the CPU. On do-amd (MI325X, 2026-09-29)
+    the pinned PyPI wheel (a CUDA build) timed `xgboost-gpu` on the host CPU,
+    the same as `xgboost-cpu`, under the GPU arm's name. A ROCm build (AMD's
+    amd_xgboost) reports USE_HIP; a CUDA build reports USE_CUDA."""
+    vendor = accel_vendor()
+    try:
+        info = xgb.build_info()
+    except Exception as exc:                       # noqa: BLE001
+        return "xgboost.build_info() raised %s: %s" % (exc.__class__.__name__, exc)
+    if vendor == "amd" and not (info.get("USE_HIP") or info.get("USE_ROCM")):
+        return ("NO ROCm BUILD: xgboost %s is built for CUDA (USE_CUDA=%s, USE_HIP=%s); on an AMD "
+                "GPU device='cuda' falls back to the CPU, so the GPU arm would time the CPU"
+                % (xgb.__version__, info.get("USE_CUDA"), info.get("USE_HIP")))
+    if vendor == "nvidia" and not info.get("USE_CUDA"):
+        return ("NO CUDA BUILD: xgboost %s has USE_CUDA=%s; device='cuda' would fall back to the CPU"
+                % (xgb.__version__, info.get("USE_CUDA")))
+    if vendor is None:
+        return "no GPU on this box: device='cuda' would fall back to the CPU"
+    return None
+
+
 def xgboost_arms(lane, cfg, data, devices):
     """XGBoost `tree_method='hist'` on CPU and on CUDA.
 
@@ -2511,6 +2536,10 @@ def xgboost_arms(lane, cfg, data, devices):
             continue                   # LightGBM's device name only
         # "cuda" is also the device string of AMD's ROCm build (amd_xgboost).
         device = "cpu" if dev == "cpu" else "cuda"
+        why = None if dev == "cpu" else _xgb_gpu_refusal(xgb)
+        if why:
+            emit_refused(lane, "xgboost-" + dev, why)
+            continue
         out.append(Arm(
             "xgboost-" + dev,
             (lambda dv: (lambda: make(dv)))(device),
@@ -2758,6 +2787,10 @@ def xgboost_rank_arms(lane, cfg, data, devices):
         if dev == "opencl":
             continue
         device = "cpu" if dev == "cpu" else "cuda"
+        why = None if dev == "cpu" else _xgb_gpu_refusal(xgb)
+        if why:
+            emit_refused(lane, "xgboost-" + dev, why)
+            continue
         out.append(Arm("xgboost-" + dev, (lambda dv: (lambda: make(dv)))(device), fit, score,
                        sync=_cuda_sync, library="xgboost"))
     return out
