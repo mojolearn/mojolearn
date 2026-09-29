@@ -107,7 +107,7 @@ def main():
     # if the drop alone is not enough
     Xd = more.drop_constant_columns({"X": X})["X"]
     say("DROPPED", cols=int(Xd.shape[1]), dropped=int(X.shape[1] - Xd.shape[1]))
-    for rc in (1e-6, 1e-4, 1e-3):
+    for rc in [float(v) for v in os.environ.get("GMM_PROBE_REG_COVAR", "1e-6,1e-4,1e-3").split(",")]:
         kw2, bkw2 = dict(kw, reg_covar=rc), dict(bkw, reg_covar=rc)
         tag = "drop-rc%g" % rc
         if "ml" in dir():
