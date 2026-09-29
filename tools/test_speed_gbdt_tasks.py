@@ -111,8 +111,13 @@ def test_dry_run_lists_task_races_and_rank_data(capsys):
 def test_task_config_shares_the_gbdt_knobs_and_names_mismatches(lane):
     base = spec.lane_config("gbdt-symmetric", "shipped")
     cfg = spec.lane_config(lane, "shipped")
-    for k in ("n_estimators", "max_depth", "learning_rate", "l2", "borders", "seed", "max_leaves"):
+    for k in ("learning_rate", "l2", "borders", "seed"):
         assert cfg[k] == base[k], k
+    # gbm-bench's values where it has the task (multiclass, binary); the ranking
+    # lanes, which it lacks, keep 100 trees at depth 6 and 64 leaves
+    want = ((base["n_estimators"], base["max_depth"], base["max_leaves"]) if cfg.get("harness")
+            else (100, 6, 64))
+    assert (cfg["n_estimators"], cfg["max_depth"], cfg["max_leaves"]) == want, lane
     task = spec.TASK_LANES[lane]
     assert cfg["loss"] == task["loss"] and cfg["task"] == task["task"]
     assert cfg["objectives"]["mojolearn"] == task["loss"]
