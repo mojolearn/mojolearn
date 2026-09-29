@@ -121,7 +121,14 @@ MOJOLEARN_NUMERIC_MODE); gate:
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, read_f32, copy_f32
+from bindings.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
+# lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1".
+from transformer.impl.llama.int15_block import Int15Planes, LlamaInt15Weights
+from gemm.checks.gemm_int15 import (
+    INT15_PIECE_SABOTAGE,
+    INT15_QUANT_SABOTAGE,
+    INT15_SABOTAGE,
+)
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -635,9 +642,16 @@ struct TransformerWorkspace(Movable):
 
 
 struct TransformerSession(Movable, Writable):
-    """One Python-owned context/workspace; no retained host pointers or weights."""
+    """One Python-owned context/workspace; no retained host pointers or
+    float32 weights. Under `numeric_profile="fixed15_v1"` it RETAINS the
+    block's seven projection planes on the device (`planes`, keyed by
+    their addresses and the shape): those arrays are private to the Python
+    block, made once at its construction and never exposed or written, so
+    unlike a caller's float32 array their address is their version."""
     var ctx: Optional[DeviceContext]
     var workspace: Optional[TransformerWorkspace]
+    var planes: Optional[LlamaInt15Weights]
+    var planes_key: List[Int]
     var busy: Bool
     var closed: Bool
     var contexts: Int
@@ -646,6 +660,8 @@ struct TransformerSession(Movable, Writable):
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.workspace = Optional[TransformerWorkspace]()
+        self.planes = Optional[LlamaInt15Weights]()
+        self.planes_key = List[Int]()
         self.busy = False
         self.closed = False
         self.contexts = 0
@@ -661,6 +677,7 @@ struct TransformerSession(Movable, Writable):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
         _ = self.workspace^
+        _ = self.planes^
         if self.ctx:
             try:
                 self.ctx.value().synchronize()
@@ -672,6 +689,8 @@ struct TransformerSession(Movable, Writable):
         if self.ctx:
             self.ctx.value().synchronize()
         self.workspace = None
+        self.planes = None
+        self.planes_key = List[Int]()
         if self.ctx:
             self.ctx.value().synchronize()
 
@@ -795,6 +814,214 @@ def transformer_session_forward_binding(
                 # A failed call must not leave partially written scratch or
                 # queued references for the next caller. Caller arrays are
                 # still owned by its Python frame during this drain.
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(result)
+
+
+# ===========================================================================
+# THE PROFILE ENTRY (lane/lowbit-blocks, 2026-09-29): numeric_profile="fixed15_v1"
+#
+# `transformer_session_forward_int15(session, addrs, params)`. The float32
+# entries above keep their lists word for word; this one is separate.
+#   addrs, exactly 45: the 13 of `transformer_forward` with the seven
+#     projection slots (3..9) ZERO (never read), then the 11-address options
+#     tail (always sent), then 21 plane addresses, three per projection in
+#     the order q, k, v, o, gate, up, down: `hi` (int8, rows x cols), `lo`
+#     (int8, rows x cols), `exponents` (int32, rows). An ungated MLP sends
+#     zeros for gate's three.
+#   params, exactly 27: the 10 of `transformer_forward`, then the 17-int
+#     options tail (always sent).
+# The planes are uploaded on the session's first call and kept (the session
+# struct's docstring says why that is sound here). Norms, biases, the cache
+# and x are read per call as in the float32 entries.
+# ===========================================================================
+
+comptime INT15_ENTRY_ADDRS = 13 + BLOCK_OPTION_ADDRS + 21
+comptime INT15_ENTRY_PARAMS = 10 + BLOCK_OPTION_PARAMS
+
+
+def _upload_i8(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int8]:
+    var dev = ctx.enqueue_create_buffer[DType.int8](n)
+    ctx.enqueue_copy(dst_buf=dev, src_ptr=i8_ptr(addr))
+    return dev^
+
+
+def _upload_i32(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+    var dev = ctx.enqueue_create_buffer[DType.int32](n)
+    ctx.enqueue_copy(dst_buf=dev, src_ptr=i32_ptr(addr))
+    return dev^
+
+
+def _upload_planes_one(
+    ctx: DeviceContext, a: List[Int], at: Int, rows: Int, cols: Int, name: String
+) raises -> Int15Planes:
+    if a[at] == 0 or a[at + 1] == 0 or a[at + 2] == 0:
+        raise Error("transformer_session_forward_int15: " + name + " planes have a null address")
+    return Int15Planes(
+        _upload_i8(ctx, a[at], rows * cols), _upload_i8(ctx, a[at + 1], rows * cols),
+        _upload_i32(ctx, a[at + 2], rows), rows, cols,
+    )
+
+
+def _upload_planes(
+    ctx: DeviceContext, dims: LlamaDims, opts: BlockOptions, a: List[Int], base: Int
+) raises -> LlamaInt15Weights:
+    var dm = dims.d_model
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var it = dims.intermediate
+    var gated = opts.gated()
+    var gate: Int15Planes
+    if gated:
+        gate = _upload_planes_one(ctx, a, base + 12, it, dm, "gate_proj")
+    else:
+        if a[base + 12] != 0 or a[base + 13] != 0 or a[base + 14] != 0:
+            raise Error("transformer_session_forward_int15: gate_proj planes were passed but the MLP is ungated")
+        gate = Int15Planes(
+            ctx.enqueue_create_buffer[DType.int8](1), ctx.enqueue_create_buffer[DType.int8](1),
+            ctx.enqueue_create_buffer[DType.int32](1), 1, 1,
+        )
+    var out = LlamaInt15Weights(
+        _upload_planes_one(ctx, a, base + 0, qw, dm, "q_proj"),
+        _upload_planes_one(ctx, a, base + 3, kw, dm, "k_proj"),
+        _upload_planes_one(ctx, a, base + 6, kw, dm, "v_proj"),
+        _upload_planes_one(ctx, a, base + 9, dm, qw, "o_proj"),
+        gate^,
+        _upload_planes_one(ctx, a, base + 15, it, dm, "up_proj"),
+        _upload_planes_one(ctx, a, base + 18, dm, it, "down_proj"),
+        gated,
+    )
+    ctx.synchronize()
+    out.check_shapes(dm, qw, kw, it)
+    return out^
+
+
+def _transformer_run_session_int15(
+    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+    smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """`_transformer_run_session` under the profile: the same stages, cache
+    handling and downloads, with the weights' seven projections as the
+    session's retained planes."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    opts.validate(hd)
+    if s0 < 0 or s0 > smax:
+        raise Error(String("transformer: cached_tokens must be in [0, ")
+            + String(smax) + "] (the cache capacity, max_tokens), got "
+            + String(s0) + "; the two sides of this boundary disagree about the state")
+    if window < 0:
+        raise Error("transformer: window must be >= 0 (0 = full causal)")
+    for i in range(3, 10):
+        if a[i] != 0:
+            raise Error(
+                "transformer_session_forward_int15: float32 projection slot "
+                + String(i) + " must be 0 under the profile (the planes are the weights)"
+            )
+    if not session.ctx:
+        session.ctx = neural_ctx[_NEURAL_CTX]()
+        session.contexts += 1
+    ref ctx = session.ctx.value()
+    var pbase = 13 + BLOCK_OPTION_ADDRS
+    var pkey: List[Int] = [dm, nh, nkv, hd, it, Int(opts.gated())]
+    for i in range(21):
+        pkey.append(a[pbase + i])
+    var same = Bool(session.planes) and len(session.planes_key) == len(pkey)
+    if same:
+        for i in range(len(pkey)):
+            if pkey[i] != session.planes_key[i]:
+                same = False
+    if not same:
+        ctx.synchronize()
+        session.planes = None
+        session.planes = Optional[LlamaInt15Weights](_upload_planes(ctx, dims, opts, a, pbase))
+        session.planes_key = pkey^
+    var lean = False
+    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
+    var reused = False
+    if session.workspace:
+        reused = session.workspace.value().matches(key)
+    if not reused:
+        ctx.synchronize()
+        session.workspace = None
+        ctx.synchronize()
+    var what = String("transformer_session_forward_int15")
+    var t = _tail_of(a, 13)
+    var w = LlamaDeviceWeights(
+        ctx, dims, opts,
+        _upload_addr(ctx, a[1], dm),
+        _upload_addr(ctx, a[2], dm),
+        session.planes.value().copy(),
+        _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
+        _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
+        _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
+        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
+        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
+        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
+        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
+        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
+        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
+        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
+    )
+    if not reused:
+        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
+        session.workspaces += 1
+    ref ws = session.workspace.value()
+    if reused:
+        ws.stages.reset(ctx)
+    ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
+    ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
+    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+    ctx.synchronize()
+    ws.kv.s = s0
+    var trace = IdentityTrace.disabled()
+    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
+                                b, l, s0, trace, String("py"))
+    _download_addr(ctx, ws.stages.residual2, b * l * dm, a[12])
+    _download_addr(ctx, ws.kv.k, len(ws.kv.k), a[10])
+    _download_addr(ctx, ws.kv.v, len(ws.kv.v), a[11])
+    var result = ws.kv.s
+    var retain = ws.retained_bytes() <= 64 * 1024 * 1024
+    _ = w^
+    ctx.synchronize()
+    if not retain:
+        session.workspace = None
+        ctx.synchronize()
+    return result
+
+
+def transformer_session_forward_int15_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer: session is busy or closed")
+    var what = String("transformer_session_forward_int15")
+    if len(addrs) != INT15_ENTRY_ADDRS:
+        raise Error(what + ": addrs must contain " + String(INT15_ENTRY_ADDRS) + " addresses, got " + String(len(addrs)))
+    if len(params) != INT15_ENTRY_PARAMS:
+        raise Error(what + ": params must contain " + String(INT15_ENTRY_PARAMS) + " values, got " + String(len(params)))
+    var a = List[Int]()
+    for i in range(len(addrs)):
+        a.append(Int(py=addrs[i]))
+    _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
+    var p = _read_params(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    owner[].busy = True
+    var result = 0
+    try:
+        with GILReleased(Python()):
+            try:
+                result = _transformer_run_session_int15(owner[], a,
+                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
+            except error:
                 owner[].clear()
                 raise error
     except error:
@@ -2063,6 +2290,9 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         or BWD_ANY_SABOTAGE
         or GEMM_ANY_BWD_SABOTAGE
         or GEMM_ANY_SABOTAGE
+        or INT15_SABOTAGE
+        or INT15_PIECE_SABOTAGE
+        or INT15_QUANT_SABOTAGE
     ):
         abort(
             String(
@@ -2087,6 +2317,8 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_session_close_binding]("transformer_session_close")
         m.def_function[transformer_session_info_binding]("transformer_session_info")
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
+        # lane/lowbit-blocks: numeric_profile="fixed15_v1".
+        m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
         # NVIDIA's full public A/B gate admits discarded-cache prefill.
         # Apple retains its prior default until separately priced; the explicit
         # force flag remains available for its completed arithmetic gate.

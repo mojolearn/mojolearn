@@ -321,6 +321,17 @@ class CausalLM:
         kwargs = _block_kwargs(plan, cls) if plan.kind == "transformer" else dict(plan.block_kwargs)
         if plan.kind == "transformer":
             kwargs["n_heads"] = int(plan.n_heads)
+        # lane/lowbit-blocks (2026-09-29): a profile other than the default
+        # reaches the transformer block as its keyword; under the default no
+        # keyword is passed, so the model builds exactly as before. The head
+        # is packed below. Mamba blocks do not compute under a profile yet.
+        if self.numeric_profile != _numeric_profile.DEFAULT:
+            if plan.kind != "transformer":
+                raise NotImplementedError(
+                    f"mojolearn.models.CausalLM: numeric_profile={self.numeric_profile!r} is implemented for "
+                    f"transformer models only; model_type {plan.model_type!r} is {plan.kind!r}. It is never "
+                    "replaced by 'fp32_v1' silently.")
+            kwargs["numeric_profile"] = self.numeric_profile
         layers = weights["layers"]
         if len(layers) != self.n_layers:
             raise ValueError(f"mojolearn.models.CausalLM: {len(layers)} layer dicts for num_hidden_layers={self.n_layers}")
@@ -332,6 +343,13 @@ class CausalLM:
                 raise RuntimeError(
                     f"mojolearn.models.CausalLM: layer {i} reports weight_format {blk.weight_format!r}, asked {weight_format!r}")
         self._prims = _GpuPrimitives() if self.device == "gpu" else _CpuPrimitives()
+        # The head under the profile: its planes made ONCE here (one scale per
+        # vocabulary row, along d_model), `mojolearn.linalg.matmul_int15`
+        # per call (the activation quantized per token by the binding).
+        self._head_int15 = None
+        if self.numeric_profile != _numeric_profile.DEFAULT:
+            from .._linalg_impl import quantize_int15
+            self._head_int15 = quantize_int15(self._head)
 
     def _make_blocks(self, cls, layers, kwargs):
         return [cls(w, **kwargs) for w in layers]
@@ -471,7 +489,11 @@ class CausalLM:
             else:
                 x = blk.forward(x, state.layers[i])
         hn = self._prims.rms_norm(x.reshape((n, d)), self._norm, self.norm_eps)
-        logits = self._prims.linear(hn, self._head)
+        if self._head_int15 is not None:
+            from .._linalg_impl import matmul_int15
+            logits = matmul_int15(hn, self._head_int15)
+        else:
+            logits = self._prims.linear(hn, self._head)
         if state is not None:
             state.positions += l
         return logits.reshape((b, l, self.vocab_size))
@@ -573,6 +595,11 @@ class CausalLM:
         from .._buffer import hotpath_enabled
         from .._transformer_impl import TransformerDecodeSession, _exports
         if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
+            return None
+        # lane/lowbit-blocks: the resident session computes fp32_v1 only;
+        # under another profile the per-layer route below is the one that
+        # computes it (owed: the resident session under the profile).
+        if self.numeric_profile != _numeric_profile.DEFAULT:
             return None
         ext = self._blocks[0]._extension()
         if not (_exports(ext, "causal_lm_session_run")
