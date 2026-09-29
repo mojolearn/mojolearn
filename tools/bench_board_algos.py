@@ -3884,10 +3884,13 @@ def _build_als(lane, arm, D):
         def outputs():
             return {"U": _arr(S["e"].user_factors_, np.float32), "V": _arr(S["e"].item_factors_, np.float32)}
         return Runner(info, fit, outputs, record=_BP().arm_record(cls(**p)))
-    import implicit
     gpu = arm == "implicit-gpu"
     if gpu:
+        # BEFORE `import implicit`: its __init__ imports implicit.gpu, which
+        # decides HAS_CUDA once, at that import
         _preload_cuda_libs(("cudart", "cublasLt", "cublas", "curand"))
+    import implicit
+    if gpu:
         import implicit.gpu
         if not implicit.gpu.HAS_CUDA:
             raise RuntimeError("REFUSED: the pinned implicit wheel was built without CUDA "
@@ -3902,7 +3905,10 @@ def _build_als(lane, arm, D):
                iterations=p["iterations"], random_state=p["random_state"], use_gpu=gpu,
                calculate_training_loss=p["calculate_training_loss"])
     if not gpu:                        # implicit's GPU model has only its CG solver
-        akw.update(use_cg=p["use_cg"], cg_steps=p["cg_steps"])
+        # implicit 0.7.3 takes no cg_steps (its CG runs its own fixed steps);
+        # with use_cg=False on both sides no CG step runs, so ours' cg_steps
+        # has no effect either
+        akw.update(use_cg=p["use_cg"])
     rec = dict(akw, __library__="implicit")
 
     def fit():
