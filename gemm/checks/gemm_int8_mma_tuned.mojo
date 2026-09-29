@@ -195,7 +195,17 @@ comptime INT8_TUNED_PLAN_WARPS32 = 12  #: 16x32 per warp, 8x4 warps: block 128x1
 #: that launches reads 47. The plan keeps its number and
 #: `int8_tuned_plan_available` answers False for it.
 comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13
-comptime INT8_TUNED_PLAN_COUNT = 14
+#: The third round (2026-09-29): TALL blocks. A block reads `BM` rows of
+#: the left operand and `BN` of the right per window, so over the whole
+#: product the right operand (the weights, `n k` codes, the large one) is
+#: read `m / BM` times and the left `n / BN` times. At the wide rows the
+#: 128 x 128 block reads the weights four times over, about as many bytes a
+#: second as the box's memory gives. A taller, narrower block of the same
+#: sixteen warps reads them twice, or once.
+comptime INT8_TUNED_PLAN_TALL256 = 14  #: 32x32 per warp, 8x2 warps: block 256x64
+comptime INT8_TUNED_PLAN_TALL512 = 15  #: 32x32 per warp, 16x1 warps: block 512x32
+comptime INT8_TUNED_PLAN_TALL512_N16 = 16  #: 32x16 per warp, 16x1 warps: block 512x16
+comptime INT8_TUNED_PLAN_COUNT = 17
 
 #: The most threads a block may hold on the columns that have the unit.
 comptime INT8_TUNED_MAX_TPB = 1024
@@ -205,7 +215,12 @@ comptime INT8_PIECES_PLAN_SMALL = 0  #: 16x16 per warp, 2x2 warps: block 32x32
 comptime INT8_PIECES_PLAN_WARPS16 = 1  #: 16x32 per warp, 4x4 warps: block 64x128
 comptime INT8_PIECES_PLAN_FRAG2 = 2  #: 32x32 per warp, 2x4 warps: block 64x128
 comptime INT8_PIECES_PLAN_SQUARE = 3  #: 16x16 per warp, 4x4 warps: block 64x64
-comptime INT8_PIECES_PLAN_COUNT = 4
+#: TALL blocks (see the one-product plans): both planes of the weights are
+#: read `m / BM` times over.
+comptime INT8_PIECES_PLAN_TALL128 = 4  #: 16x32 per warp, 8x2 warps: block 128x64, KB 32
+comptime INT8_PIECES_PLAN_TALL256 = 5  #: 16x32 per warp, 16x1 warps: block 256x32, KB 32
+comptime INT8_PIECES_PLAN_TALL256_N16 = 6  #: 16x16 per warp, 16x1 warps: block 256x16, KB 32
+comptime INT8_PIECES_PLAN_COUNT = 7
 
 #: Outputs of at most this many rows take the launcher's small plan: a
 #: 128-row block would multiply 112 rows of zero codes for them.
@@ -258,7 +273,13 @@ def int8_tuned_plan_name(plan: Int) -> String:
         return String("staged.w32x32.b128x128.k64.l16")
     if plan == INT8_TUNED_PLAN_WARPS32:
         return String("staged.w16x32.b128x128.k64.l16")
-    return String("staged.w16x32.b64x256.k64.l16")
+    if plan == INT8_TUNED_PLAN_WARPS32_WIDE:
+        return String("staged.w16x32.b64x256.k64.l16")
+    if plan == INT8_TUNED_PLAN_TALL256:
+        return String("staged.w32x32.b256x64.k64.l16")
+    if plan == INT8_TUNED_PLAN_TALL512:
+        return String("staged.w32x32.b512x32.k64.l16")
+    return String("staged.w32x16.b512x16.k64.l16")
 
 
 def int8_tuned_plan_available(plan: Int) -> Bool:
@@ -282,7 +303,13 @@ def int8_pieces_plan_name(plan: Int) -> String:
         return String("staged.w16x32.b64x128.k64.l16")
     if plan == INT8_PIECES_PLAN_FRAG2:
         return String("staged.w32x32.b64x128.k64.l16")
-    return String("staged.w16x16.b64x64.k64.l16")
+    if plan == INT8_PIECES_PLAN_SQUARE:
+        return String("staged.w16x16.b64x64.k64.l16")
+    if plan == INT8_PIECES_PLAN_TALL128:
+        return String("staged.w16x32.b128x64.k32.l16")
+    if plan == INT8_PIECES_PLAN_TALL256:
+        return String("staged.w16x32.b256x32.k32.l16")
+    return String("staged.w16x16.b256x16.k32.l16")
 
 
 def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
@@ -1002,6 +1029,12 @@ def identical_gemm_int8_mma_tuned_with_plan(
             _launch_tuned[2, 2, 2, 2, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
         elif plan == INT8_TUNED_PLAN_WARPS16:
             _launch_tuned[2, 2, 4, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_TALL256:
+            _launch_tuned[2, 2, 8, 2, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_TALL512:
+            _launch_tuned[2, 2, 16, 1, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+        elif plan == INT8_TUNED_PLAN_TALL512_N16:
+            _launch_tuned[2, 1, 16, 1, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
         elif plan == INT8_TUNED_PLAN_WARPS32 or plan == INT8_TUNED_PLAN_WARPS32_WIDE:
             comptime if 32 * WARP_SIZE <= INT8_TUNED_MAX_TPB:
                 if plan == INT8_TUNED_PLAN_WARPS32:
@@ -1443,6 +1476,12 @@ def identical_gemm_int8_pieces_tuned_with_plan(
             _launch_pieces[2, 2, 2, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
         elif plan == INT8_PIECES_PLAN_SQUARE:
             _launch_pieces[1, 1, 4, 4, 64, 16](ctx, s, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL128:
+            _launch_pieces[1, 2, 8, 2, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256:
+            _launch_pieces[1, 2, 16, 1, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
+        elif plan == INT8_PIECES_PLAN_TALL256_N16:
+            _launch_pieces[1, 1, 16, 1, 32, 16](ctx, s, ah, al, bh, bl, m, n, k)
         else:
             raise Error("identical_gemm_int8_pieces_tuned: no plan " + String(plan))
 
