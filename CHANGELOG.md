@@ -24,6 +24,14 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ### Measured
 - The time of the complete 15-bit inference call over our own fp32.v1 call at the same 512-token rows, on the same box, in the same run: H100 0.43 to 0.50 (run 5); MI325X 0.19 to 0.30, with a stand-in recombination, one run; M3 Ultra 3.4 to 3.6, on the float unit, untuned.
 
+## 0.8.26 — 2026-09-29
+
+### Changed
+- Verifier-only wheel update of 0.8.25: algorithm Python, native binaries, fixtures and reference hashes are reused byte-for-byte. Unreleased algorithm changes above are not included.
+- Bare `verify` combines inference and classical training on the base fixture; `--quick` samples the same scope, and `--all` / `--full` use all nine fixtures. Neural training is separately selected with `--neural-training`.
+- Routine GPU verification includes direct CPU/GPU inference comparisons. Full cross-checks have no lane cap, run sequential batches, include forest/GBDT routes, and fail on missing comparisons. Spectral batch comparisons now receive the same held-out affinity input on both devices.
+- Verifier-only publication checks every wheel member against its published PyPI base, allowing only committed verifier files and version metadata changes. Existing numerical results are retained without repeating algorithm certification.
+
 ## 0.8.25 (published 2026-09-29)
 
 ### Added

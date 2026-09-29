@@ -185,7 +185,7 @@ def family_map(lanes):
     return out
 
 
-def select_lanes(harness, table, vendor_class, depth, asked, include_pending=False):
+def select_lanes(harness, table, vendor_class, depth, asked, include_pending=False, profile_lanes=None):
     """(lanes, fixtures) for this run, or raises ValueError naming the problem."""
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
@@ -211,6 +211,8 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
         exposure = host_surface().lane_exposure(all_lanes, vendor_class)
         allowed = [lane for lane in all_lanes if asked or
                    exposure[lane]["status"] != LANE_NOT_APPLICABLE]
+    if profile_lanes is not None:
+        allowed = [lane for lane in allowed if lane in profile_lanes]
     if asked:
         unknown = [l for l in asked if l not in harness.LANES]
         if unknown:
@@ -1108,6 +1110,14 @@ def _cmd_self_test(args, ml):
 CROSS_CHECK_DEFAULT_LANES = 24
 #: Full checks use fresh, sequential processes to bound accumulated resources.
 CROSS_CHECK_BATCH_LANES = 24
+# Saved-model CPU loaders for these public tree algorithms already ship.
+# Their host family has no inference_lanes entry, so the old selector omitted
+# them despite being able to compare the same GPU-trained model on the CPU.
+CROSS_CHECK_FOREST_LANES = (
+    'rf-clf', 'rf-reg', 'et-clf', 'et-reg', 'gbdt-symmetric', 'gbdt-rmse',
+    'gbdt-depthwise', 'gbdt-lossguide', 'gbdt-ordered-rmse', 'gbdt-feature-freq',
+    'gbdt-pointwise-l2-bayesian-eval', 'gbdt-categorical-ctr',
+)
 
 
 def cross_check_lanes(harness, scope="default"):
@@ -1136,6 +1146,11 @@ def cross_check_lanes(harness, scope="default"):
                 continue
             every.append(lane)
             per_family.setdefault(f["family"], lane)
+    if any(f['family'] == 'forest' and f['ships_in_wheel'] for f in hs.FAMILIES):
+        forest = [lane for lane in CROSS_CHECK_FOREST_LANES if lane in harness.LANES]
+        every.extend(forest)
+        if forest:
+            per_family['forest'] = forest[0]
     every = sorted(set(every))
     representative = sorted(set(per_family.values()))
     if scope == "quick":
@@ -3490,6 +3505,17 @@ def format_human(report):
         for part in ("batchgrad", "batchscale", "ragged", "rlpair"):
             if part in report["properties"]:
                 lines.append(part + ": " + ", ".join(f"{state}={n}" for state, n in report["properties"][part].items()))
+    profile = report.get('selection', {}).get('profile')
+    if profile:
+        lines.append(f"Profile: {profile['name']} — {profile['description']}.")
+        excluded = profile['excluded_neural_training']
+        if excluded:
+            lines.append(f"Neural training excluded ({len(excluded)} lanes): " + ', '.join(excluded))
+            lines.append('Run explicitly: ' + profile['neural_training_command'])
+    cross = report.get('cross_check', {})
+    if cross.get('ran'):
+        lines.append(f"GPU/CPU inference: {cross['agree']} agreeing parts, {cross['differ']} differences; "
+                     f"complete={cross.get('complete', False)}.")
     lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
@@ -3507,7 +3533,7 @@ def _depth(args):
         raise ValueError("--models-only cannot be combined with lane, fixture, pending, batch, quick or no-models selection")
     if getattr(args, "quick", False):
         return "quick"
-    return "full" if getattr(args, "full", False) else "base"
+    return "full" if getattr(args, "full", False) or getattr(args, 'all', False) else "base"
 
 
 def _extra_parts(args):
@@ -3619,6 +3645,12 @@ def cmd_verify_all(args):
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"unknown vendor read-back {vendor!r}")
     from . import _verification_coverage as coverage
     coverage_report = coverage.inventory(harness, table, vclass)
+    from . import _verification_profiles as profiles
+    neural_lanes = profiles.neural_training_lanes(harness, host_surface())
+    coverage_report['verification_profiles'] = dict(
+        default='routine', routine='classical training and inference plus saved-model inference',
+        quick='representative routine checks', neural_training='explicit --neural-training',
+        neural_training_lanes=sorted(neural_lanes))
     if getattr(args, "coverage", False):
         _emit(json.dumps(coverage_report, indent=1, sort_keys=True) if json_out
               else coverage.format_human(coverage_report))
@@ -3632,10 +3664,17 @@ def cmd_verify_all(args):
     asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
     include_pending = getattr(args, "include_pending", False)
     models_only = getattr(args, "models_only", False)
+    profile = None
     try:
-        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked, include_pending)
+        profile_lanes, _ = profiles.select(harness, host_surface(), list(harness.LANES),
+            neural=getattr(args, 'neural_training', False), asked=asked)
+        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked, include_pending,
+                                      profile_lanes=set(profile_lanes))
         if models_only:
             lanes, fixtures = [], []
+        else:
+            lanes, profile = profiles.select(harness, host_surface(), lanes,
+                neural=getattr(args, 'neural_training', False), asked=asked)
     except ValueError as exc:
         _emit(f"USAGE: {exc}", sys.stderr)
         return EXIT_USAGE
@@ -3835,6 +3874,8 @@ def cmd_verify_all(args):
         # base fixture only, for the same reason: the tier exists to say more
         # than nothing, not to double the cost of every run.
         smokeable = smokeable_lanes(harness, surface, exposure, vclass, lanes)
+        smokeable, _ = profiles.select(harness, surface, smokeable,
+            neural=getattr(args, 'neural_training', False))
         if asked:
             smokeable = [l for l in smokeable if l in asked]
         sfix = "base" if "base" in harness.FIXTURES else harness.FIXTURES[0]
@@ -3856,7 +3897,8 @@ def cmd_verify_all(args):
     elif depth == "quick":
         verdict_scope = list(lanes)            # --quick is a declared sample of the families
     else:
-        verdict_scope = harness_lanes          # --all means all 256, not the 186 that ran
+        verdict_scope = [name for name in harness_lanes if
+                         (name in neural_lanes) == bool(getattr(args, 'neural_training', False))]
     scope_summary = lane_scope(accounting, verdict_scope)
     lane_gaps = scope_summary["gaps"]
     for name, why in lane_gaps.items():
@@ -3898,7 +3940,7 @@ def cmd_verify_all(args):
         lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds, execution=execution,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
-        selection=dict(include_pending=include_pending, models_only=models_only,
+        selection=dict(include_pending=include_pending, models_only=models_only, profile=profile,
                        cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
@@ -3944,31 +3986,26 @@ def cmd_verify_all(args):
         report.update(exit=code, verdict=headline,
                       detail=report["detail"] + "; comparator self-test failed")
 
-    # THE THIRD CHECK, in the same artifact (lane/verify-cross-check,
-    # 2026-09-16). A reader's agent should see all three at once, because they
-    # answer different questions and only together mean much:
-    #   1 this machine's GPU against its own CPU  -- trusts nobody
-    #   2 this machine against our recorded columns -- trusts the table, which
-    #     is auditable because the raw columns are committed
-    #   3 the self-test -- shows the comparison can fail at all
-    # On a CPU-only install (1) records that it did not run and why, which is
-    # not a pass; it is never silently omitted.
-    # IT IS NOT RUN IMPLICITLY, and that is a deliberate reversal. Folding a
-    # cross-check into every --all seemed right (one artifact, all three
-    # checks) until the shape of it was clear: on a GPU box it makes a
-    # documented command ACQUIRE THE GPU as a side effect. Two runs at once, or
-    # a run beside a gate, would then contend for the single Metal device --
-    # the concurrency that previously returned NaN, constant and zero outputs
-    # in two lanes. A command that quietly grabs a scarce device is the hidden
-    # coupling this lane exists to remove, so --all records that the
-    # cross-check was not run AND HOW TO RUN IT, which is not a pass, and
-    # `verify --cross-check` stays the explicit door.
-    report["cross_check"] = dict(
-        ran=False, passed=None, scope=None,
-        reason=("not run: --all does not take the GPU implicitly, because that would make this "
-                "command contend for the single GPU with any other run. Use "
-                "`python -m mojolearn verify --cross-check` to compare this machine's GPU "
-                "against its CPU; on a CPU-only install that will say so rather than skip."))
+    # Routine verification bundles classical fits and inference. All GPU
+    # work remains sequential; neural training is an explicit separate scope.
+    report['cross_check'] = dict(ran=False, passed=None,
+        reason='not part of this selected scope, or no GPU is available')
+    if (getattr(args, 'routine', False) and not models_only
+            and not getattr(args, 'neural_training', False)
+            and not getattr(args, 'training_only', False)
+            and vendor != 'cpu' and not execution['interrupted']):
+        selected, _, _ = cross_check_lanes(harness, 'quick' if depth == 'quick' else 'all')
+        if asked:
+            selected = [lane for lane in selected if lane in asked]
+        if selected:
+            cross = _cross_check_batched(selected, fixtures, getattr(args, 'cpu_threads', 1), log)
+            report['cross_check'] = cross
+            if not cross['passed']:
+                code = EXIT_MISMATCH if cross['differ'] or code == EXIT_MISMATCH else EXIT_CANNOT_RUN
+                headline = 'MISMATCH' if code == EXIT_MISMATCH else 'INCOMPLETE'
+                report.update(exit=code, verdict=headline,
+                              detail=report['detail'] + '; GPU/CPU inference did not pass')
+    report['elapsed_s'] = round(time.time() - started, 2)
 
     progress("finished")
     if json_out:

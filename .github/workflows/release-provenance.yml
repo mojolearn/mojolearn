@@ -114,6 +114,7 @@ on:
         options:
           - full
           - light
+          - verifier-patch
 
       light_platform:
         description: Explicit platform batch for light publication; each wheel needs its own successful installed smoke.
@@ -151,7 +152,7 @@ jobs:
           VALIDATION_PROFILE: ${{ inputs.validation_profile }}
           CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
         run: |
-          if [ "$VALIDATION_PROFILE" = light ] && [ -z "$CANDIDATE_TAG" ]; then
+          if [ "$VALIDATION_PROFILE" != full ] && [ -z "$CANDIDATE_TAG" ]; then
             echo '::error::Light releases need alpha_candidate_tag and its manifest SHA. Select full only when a fresh native build/certification is intended.'
             exit 2
           fi
@@ -159,7 +160,7 @@ jobs:
   cpu_certification:
     name: Full CPU reference certification
     needs: validate_inputs
-    if: inputs.publish != 'none' && inputs.validation_profile != 'light'
+    if: inputs.publish != 'none' && inputs.validation_profile == 'full'
     uses: ./.github/workflows/cpu-identity-gate.yml
     with:
       confirm: RUN-HEAVY
@@ -169,7 +170,7 @@ jobs:
   build:
     name: Build and verify the wheel
     needs: validate_inputs
-    if: inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light'
+    if: inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full'
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
@@ -663,7 +664,7 @@ jobs:
     needs: [build, cpu_certification, publish_plugins]
     if: >-
       always() && !cancelled() &&
-      inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light' &&
+      inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile == 'full' &&
       needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
       (needs.publish_plugins.result == 'success' ||
        (needs.publish_plugins.result == 'skipped' && needs.build.outputs.linux_plugins == '[]'))
@@ -897,6 +898,7 @@ jobs:
           gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern linux-qualification.tar.gz --dir qualification
       - name: Check exact alpha artifact bytes without GPU execution
+        if: inputs.validation_profile != 'verifier-patch'
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
         run: |
@@ -909,6 +911,15 @@ jobs:
           timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
             dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}" > alpha-admission.json
           cat alpha-admission.json
+      - name: Admit verifier-only changes against published PyPI wheel bytes
+        if: inputs.validation_profile == 'verifier-patch'
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+        run: |
+          python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+            --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
+            --manifest-sha256 "$EXPECTED_MANIFEST_SHA" | tee alpha-admission.json
       - name: Admit the exact prepared wheels under the light release policy
         if: inputs.validation_profile == 'light'
         env:
@@ -960,8 +971,8 @@ jobs:
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
       (needs.publish_alpha_plugins.result == 'success' ||
        (needs.publish_alpha_plugins.result == 'skipped' && needs.alpha_stage.outputs.plugins == '[]')) &&
-      ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
-       (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
+      ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
+       (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -995,8 +1006,14 @@ jobs:
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
-          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
-            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          if [ "$VALIDATION_PROFILE" = verifier-patch ]; then
+            python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+              --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
+              --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
+          else
+            timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+              dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          fi
           if [ "$VALIDATION_PROFILE" = light ]; then
             python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
           fi
@@ -1039,8 +1056,8 @@ jobs:
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.plugins != '[]' &&
-      ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
-       (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
+      ((inputs.validation_profile != 'full' && needs.cpu_certification.result == 'skipped') ||
+       (inputs.validation_profile == 'full' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -1080,8 +1097,14 @@ jobs:
           if [ -f qualification/linux-qualification.tar.gz ]; then
             qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
           fi
-          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
-            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          if [ "$VALIDATION_PROFILE" = verifier-patch ]; then
+            python3 packaging/verifier_patch.py dist --cache "$RUNNER_TEMP/verifier-base" \
+              --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" \
+              --manifest-sha256 "$EXPECTED_MANIFEST_SHA"
+          else
+            timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+              dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          fi
           if [ "$VALIDATION_PROFILE" = light ]; then
             python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
           fi

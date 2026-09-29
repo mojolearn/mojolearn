@@ -26,11 +26,23 @@ every input, parameter combination or GPU generation.
 Inspect the installed package's scope before running the checks:
 
 ```sh
-python -m mojolearn verify          # the quick sample (--quick) when no card ships
+python -m mojolearn verify          # inference + classical training, base fixture
+python -m mojolearn verify --quick  # representative checks, same combined scope
+python -m mojolearn verify --neural-training  # explicit neural training scope
 python -m mojolearn verify --coverage
 python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
 ```
+
+Default and quick verification combine inference with classical training. Neither
+runs neural training. `--all` (or `--full`) expands this same routine scope to
+all nine fixtures; `--neural-training` selects neural training, backward and
+optimizer fixtures separately, and can be combined with `--all`. Quick selects
+one eligible referenced lane per family after excluding neural training.
+Routine runs include saved-model inference and, when a GPU is present, local
+GPU/CPU inference comparisons. Default uses all eligible cross-check lanes on
+the base fixture; quick uses family representatives. Coverage and result JSON
+name the selected profile and excluded neural lanes.
 
 The inventory maps **all 246 algorithms and variants of the algorithm inventory**
 to lanes or named alternative gates. It also lists every additional registered
@@ -109,7 +121,7 @@ requires equal values.
   second seed. Their hashes are checked against the record before any fit;
   a machine that draws different bytes stops with exit 4 rather than
   reporting divergences that are not arithmetic.
-- **On a GPU install** every lane runs (one per public estimator, plus one
+- **On a GPU install** every applicable lane in the selected profile runs (one per public estimator, plus one
   per constructor value that selects a different numeric path, the linalg
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
@@ -586,7 +598,8 @@ Explicit `--lanes` or `--fixtures` selections override the tier and are labeled
 missing cell parts and completeness. A skipped lane, missing fixture or failed
 batch prevents a successful exit even if every completed comparison agrees.
 These checks cover GPU-fitted models' inference and batch behavior;
-`verify --all` is the separate comparison against bundled reference hashes.
+Routine `verify` and `verify --all` combine bundled reference hashes with these
+local GPU/CPU comparisons. Explicit `--cross-check` runs only the latter.
 
 **On a CPU-only install it says so and exits 4.** There is no second piece of
 hardware to compare against, so the cross-check did not run: that is neither a
@@ -934,10 +947,8 @@ in the installation.
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify
 ```
 
-When the installation ships only the card placeholder, bare `verify` runs
-`verify --quick` against the reference table instead, says so in one line,
-and points to `verify --all` for the full check. A request that names the
-card path (`--all-stages`, `--keep`, `--reference-name`, `--emit-reference`,
+Bare `verify` runs the combined routine suite regardless of whether a card
+is installed. A request that names the legacy card path (`--all-stages`, `--keep`, `--reference-name`, `--emit-reference`,
 `--confirm-reference`) still exits 5 when no card is installed.
 
 Use `--json` for automation, `--all-stages` to list every divergent stage,

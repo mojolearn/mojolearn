@@ -873,3 +873,17 @@ python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
 
 Run it on a Linux GPU box and on a Mac. Both wheels are listed at
 https://pypi.org/project/mojolearn/#files.
+
+
+## Verifier-only wheel updates
+
+When only the shipped verifier changes, `packaging/verifier_patch.py --build`
+reuses published PyPI wheels and changes only `__main__.py`, `_verify_all.py`,
+`_verification_profiles.py` and package version metadata. It preserves every
+algorithm implementation, binary, fixture, model, reference and native provenance
+member byte-for-byte. A separate `VERIFIER_PATCH.json` records the verifier source
+commit and original members. The `verifier-patch` release workflow profile checks
+the entire payload against independently downloaded PyPI bases both at admission
+and immediately before publication. It does not rerun numerical certification.
+Verifier changes still need focused tests; existing numerical receipts describe
+the original payload, not a newly executed full run on the repackaged wheel.

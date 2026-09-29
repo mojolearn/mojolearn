@@ -92,6 +92,8 @@ def _wants_suite(args):
                 or getattr(args, "include_pending", False)
                 or getattr(args, "models_only", False)
                 or getattr(args, "training_only", False)
+                or getattr(args, "neural_training", False)
+                or getattr(args, "routine", False)
                 or getattr(args, "batch_checks", False))
 
 
@@ -120,19 +122,10 @@ QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
 
 
 def _verify_dispatch(args):
-    if getattr(args, "training_only", False):
+    if getattr(args, "training_only", False) or getattr(args, 'neural_training', False):
         args.no_models = True
-    if not _wants_suite(args) and not _asks_for_card(args) and not _ships_card():
-        # Bare `verify` is the first command anyone types. With no real card
-        # in the wheel it would always end NO REFERENCE, so it runs the
-        # table's quick sample instead, and says so in one line. A request
-        # that names the card path (the flags above) still gets exit 5.
-        args.quick = True
-        if getattr(args, "argv", None) is not None and "--quick" not in args.argv:
-            args.argv = list(args.argv) + ["--quick"]
-        print(QUICK_FALLBACK_NOTE,
-              file=sys.stderr if getattr(args, "json", False) else sys.stdout,
-              flush=True)
+    if not _asks_for_card(args):
+        args.routine = True
     if _wants_suite(args):
         return _verify_all.cmd_verify_all(args)
     return _verify.cmd_verify(args)
@@ -247,20 +240,19 @@ def build_parser():
 
     v = sub.add_parser(
         "verify",
-        help="run the pinned fixture and compare its stage card to the "
-             "reference shipped in this install",
+        help="verify classical training and inference; neural training is opt-in",
         description=(
-            "Runs one pinned k-means fit with the identity trace enabled, "
-            "then compares the stage card it emits against the reference "
-            "card in mojolearn/reference_cards/ using "
-            "tools/identity_trace_diff.py. Refuses unless "
-            "MOJOLEARN_NUMERIC_MODE=identical was set before import, because "
-            "the FAST arm makes no cross-vendor claim."),
+            "Default: every applicable routine lane on the base fixture, combining "
+            "classical training and inference with bundled saved-model inference. "
+            "--quick selects representative routine checks. --all or --full runs "
+            "the complete routine scope on every fixture. Neural training and "
+            "backward/optimizer fixtures require --neural-training. Reports name "
+            "the selected scope and every excluded neural lane."),
         formatter_class=argparse.RawDescriptionHelpFormatter)
     v.add_argument("--json", action="store_true",
                    help="emit one JSON object instead of the human report")
     v.add_argument("--all", action="store_true",
-                   help="check every applicable lane on the base fixture (--full selects all fixtures): the "
+                   help="check every applicable routine lane on every fixture: the "
                         "identity_break lanes (every lane on a GPU install, the "
                         "public CPU reference lanes on a CPU-only one) plus the "
                         "portable GPU-trained models, including applicable gradient, "
@@ -284,7 +276,9 @@ def build_parser():
     scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
     scope.add_argument("--training", dest="training_only", action="store_true",
-                   help="run fit-based algorithm verification and learned-model properties, excluding the separate bundled-model suite; narrow with --lanes and --fixtures")
+                   help="classical fit-based checks only; the default already combines these with inference")
+    scope.add_argument('--neural-training', action='store_true',
+                       help='explicitly run neural training, backward and optimizer fixtures; separate from routine verification')
     v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
                    help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",

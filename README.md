@@ -121,19 +121,26 @@ mojolearn doctor
 
 reports what the installed wheel supports on this machine.
 
-Direct GPU/CPU cross-checks have three explicit tiers:
+Verification combines inference and classical training in one routine scope.
+Neural training is a separate opt-in:
 
-- `verify --cross-check quick`: one eligible lane per family, base fixture.
-- `verify --cross-check default`: up to 24 eligible lanes, base fixture.
-- `verify --cross-check all`: every eligible lane on every fixture, including
-  Apple Metal, using sequential batches in fresh processes.
+```sh
+python -m mojolearn verify                    # every applicable routine lane, base fixture
+python -m mojolearn verify --quick            # representative routine checks
+python -m mojolearn verify --all              # entire routine scope, all nine fixtures
+python -m mojolearn verify --neural-training  # neural training/backward/optimizer checks
+```
 
-Use `python -m mojolearn verify --cross-check all --cpu-threads 1 --json`
-for the complete cross-check. Explicit `--lanes` or `--fixtures` selections
-are labeled custom scope. Missing comparisons and execution failures prevent
-a successful exit. This compares inference and batch behavior on routes with
-both GPU and CPU implementations; `verify --all` separately compares the
-broader algorithm surface with bundled reference hashes.
+Routine checks include bundled reference hashes, saved-model inference, and,
+on a GPU installation, direct GPU/CPU inference comparisons. Neural training
+is excluded from default, quick and all; combine `--neural-training --all`
+to exercise its complete fixture set. Reports name excluded and missing checks.
+
+The advanced `--cross-check quick|default|all` option runs only direct GPU/CPU
+comparisons. Its `default` scope retains the 24-lane diagnostic sample;
+`all` has no lane cap and runs every eligible lane on every fixture using
+sequential child processes. Bare `verify` uses all eligible cross-check lanes
+on the base fixture, without that diagnostic sample cap.
 
 ## Quick start
 
@@ -167,8 +174,9 @@ Optional ANN, CNN and sequence APIs that use NumPy are supported by
 The base install does not require NumPy. See [verification support](docs/VERIFY.md).
 
 ```sh
-python -m mojolearn verify --quick   # one lane per family
-python -m mojolearn verify --all     # every available lane on the base fixture; --full adds all nine
+python -m mojolearn verify          # inference and classical training, base fixture
+python -m mojolearn verify --quick  # representative checks from the same scope
+python -m mojolearn verify --all    # the same scope on all nine fixtures
 ```
 
 In 0.8.25, `--all` also includes applicable gradient, batch-size,

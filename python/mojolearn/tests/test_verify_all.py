@@ -1194,7 +1194,8 @@ def test_quick_is_one_lane_per_family_on_base():
 
 def test_default_sweep_keeps_all_algorithms_with_one_fixture():
     from types import SimpleNamespace
-    assert va._depth(SimpleNamespace(all=True)) == "base"
+    assert va._depth(SimpleNamespace()) == "base"
+    assert va._depth(SimpleNamespace(all=True)) == "full"
     assert va._depth(SimpleNamespace(full=True)) == "full"
     assert va._depth(SimpleNamespace(quick=True)) == "quick"
     for vendor in ("cpu", "apple", "nvidia", "amd"):
@@ -1260,10 +1261,8 @@ def test_flags_route_to_the_suite_or_the_card():
     assert va.cmd_verify_all(args) == va.EXIT_USAGE
 
 
-def test_bare_verify_without_a_card_runs_quick(monkeypatch, capsys):
-    """Bare `verify` must not dead-end at NO REFERENCE when the wheel ships
-    only the card placeholder: it runs `--quick` against the table and says
-    so. A flag that names the card path still reaches the card check."""
+def test_bare_verify_runs_combined_routine_regardless_of_card(monkeypatch, capsys):
+    """Bare verify must never silently select a sample or neural training."""
     from mojolearn import _verify
     parser = cli.build_parser()
     suite, card = [], []
@@ -1278,20 +1277,16 @@ def test_bare_verify_without_a_card_runs_quick(monkeypatch, capsys):
         args = parser.parse_args(argv)
         args.argv = argv
         assert cli._verify_dispatch(args) == 0
-        assert suite[-1].quick and "--quick" in suite[-1].argv
-        out = capsys.readouterr()
-        shown = out.err if "--json" in argv else out.out
-        assert cli.QUICK_FALLBACK_NOTE in shown and "--all" in shown
-        if "--json" in argv:
-            assert cli.QUICK_FALLBACK_NOTE not in out.out
+        assert suite[-1].routine and not suite[-1].quick
+        assert not suite[-1].neural_training and not suite[-1].no_models
     for argv in (["verify", "--all-stages"], ["verify", "--keep"],
                  ["verify", "--reference-name", "other.card"]):
         assert cli._verify_dispatch(parser.parse_args(argv)) == 5, argv
     assert len(suite) == 2 and len(card) == 3
-    # With a real card shipped, bare `verify` is the card check as before.
+    # The combined default is independent of whether a legacy card ships.
     monkeypatch.setattr(_verify, "read_reference", lambda name=None: ("card", [], 1))
-    assert cli._verify_dispatch(parser.parse_args(["verify"])) == 5
-    assert len(suite) == 2 and len(card) == 4
+    assert cli._verify_dispatch(parser.parse_args(["verify"])) == 0
+    assert len(suite) == 3 and len(card) == 3
 
 
 def test_explicit_training_and_inference_scopes(monkeypatch):
@@ -1556,7 +1551,7 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
         "a pass that does not say its own scope overstates itself: " + result)
     assert "1 not applicable" in result, result
 
-    nothing = _run_cli(["verify", "--lanes", "par-forest,par-mlp", "--fixtures", "base", "--no-models"])
+    nothing = _run_cli(["verify", "--lanes", "par-forest,par-kmeans", "--fixtures", "base", "--no-models"])
     result = [l for l in nothing.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert nothing.returncode == va.EXIT_CANNOT_RUN, result
     assert "CANNOT RUN" in result and "0 verified" in result and "of 2 lanes" in result, result
