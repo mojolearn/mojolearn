@@ -4,6 +4,12 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.31 (published 2026-09-29)
+
+- Ship the merged HDBSCAN sparse mutual-reachability MST, preserving exact tie order and avoiding the quadratic graph above 46,340 rows. The lane passed Apple, NVIDIA and AMD identity checks, including matching 70,000-row card hashes.
+- Ship the merged Nystroem stable radix basis sort, replacing quadratic ranking and removing the 4,096-row pool bound. The lane passed Apple, NVIDIA and AMD checks, including 100,000 rows.
+- Reuse completed checks on merged main and unchanged native binaries. No fresh numerical verification or installed wheel smoke is run for this release.
+
 ## 0.8.30 (published 2026-09-29)
 
 - Ship the merged LLE iterative route above 200 rows and bounded dense QR/Jacobi SVD launches with poisoned read-back on Metal.
