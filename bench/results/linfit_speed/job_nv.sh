@@ -10,9 +10,10 @@ DATA=${DATA:-/root/linfit-data}
 OUT=$LANE_DIR/bench/results/linfit_speed/out-$(date -u +%Y%m%dT%H%M%SZ)-${STAGE:-gate}
 mkdir -p "$OUT"
 export MOJOLEARN_NUMERIC_MODE=identical
+export MOJOLEARN_GPU_ARCHS=${MOJOLEARN_GPU_ARCHS:-sm_89}
 PY="pixi run -e default python"
 for t in "$LANE_DIR" "$BASE_DIR"; do
-  (cd "$t" && git log --oneline -1 2>/dev/null || true; cd "$t" && sh bindings/build_x_linear.sh) 2>&1 | tail -3
+  (cd "$t" && git log --oneline -1 2>/dev/null || true; cd "$t" && sh bindings/build_x_linear.sh) 2>&1 | grep -A8 " error:\|^built"
 done
 if [ ! -f "$DATA/reg-istella.npz" ] || [ ! -f "$DATA/cls-istella.npz" ]; then
   (cd "$LANE_DIR" && $PY tools/bench_board_algos.py prep --data "$DATA" --lanes sgd-clf,sgd-reg,poisson --datasets taxi,istella) 2>&1 | tail -5
