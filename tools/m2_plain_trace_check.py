@@ -85,48 +85,66 @@ def main():
         print("  host sum(y-0.5):", [round(v, 3) for v in g.tolist()])
         hrec = next((r for r in recs if r[1].endswith(".depth%02d.hist" % depth)), None)
         hbin = None if hrec is None else "%s.%s.%s.bin" % (trace, hrec[0], hrec[1])
-        if depth > 1 or hbin is None or not os.path.exists(hbin):
+        if depth > 2 or hbin is None or not os.path.exists(hbin):
             continue
-        hist = np.fromfile(hbin, dtype="<f4")
         feats = sorted(borders)
-        nbf = sum(len(borders[f]) for f in feats)
-        # host: per leaf, per binFeature (feature-major, border order), rows
-        # strictly above the border (count, sum g)
-        host = np.zeros((n_leaves, 2, nbf))
-        col = 0
+        cand = []   # (feature, border index, form) per host column
         for f in feats:
-            for bb in borders[f]:
-                above = x[:, f] > bb
-                for lf in range(n_leaves):
-                    m = above & (leaf == lf)
-                    host[lf, 0, col] = m.sum()
-                    host[lf, 1, col] = (y[m] - 0.5).sum()
-                col += 1
+            for bi in range(len(borders[f])):
+                cand.append((f, bi))
+        hist = np.fromfile(hbin, dtype="<f4")
+        nbf = len(cand)
         devh = hist.reshape(-1, 2, nbf)
-        print("  hist device shape", devh.shape, "binFeatures", nbf)
-        for lf in range(devh.shape[0]):
-            for st in range(2):
-                dv = devh[lf, st]
-                best = None
-                for hl in range(n_leaves):
-                    for form in ("above", "below"):
-                        ref = host[hl, st] if form == "above" else (
-                            (cnt[hl] if st == 0 else g[hl]) - host[hl, st])
-                        bad = int(np.sum(np.abs(dv - ref) > 1e-3 * (1 + np.abs(ref))))
-                        if best is None or bad < best[0]:
-                            best = (bad, hl, form)
-                col = 0
-                worst = []
-                for f in feats:
-                    for bi in range(len(borders[f])):
-                        worst.append((f, bi))
-                        col += 1
-                bad, hl, form = best
-                ref = host[hl, st] if form == "above" else ((cnt[hl] if st == 0 else g[hl]) - host[hl, st])
-                idx = np.nonzero(np.abs(dv - ref) > 1e-3 * (1 + np.abs(ref)))[0]
-                print("  dev leaf", lf, "stat", st, "best host leaf", hl, form,
-                      "mismatched cells", bad, "first:",
-                      [(worst[i], float(dv[i]), float(ref[i])) for i in idx[:6]])
+        # host per leaf: rows above / at-or-below each border
+        above = np.zeros((n_leaves, 2, nbf))
+        for ci, (f, bi) in enumerate(cand):
+            a = x[:, f] > borders[f][bi]
+            for lf in range(n_leaves):
+                m = a & (leaf == lf)
+                above[lf, 0, ci] = m.sum()
+                above[lf, 1, ci] = (y[m] - 0.5).sum()
+        below = np.stack([cnt[:, None] - above[:, 0], g[:, None] - above[:, 1]], axis=1)
+        if depth == 0:
+            # the column map from the (trusted) root histogram
+            key = {}
+            for ci in range(nbf):
+                for form, arr in (("above", above), ("below", below)):
+                    key.setdefault((round(arr[0, 0, ci], 1), round(arr[0, 1, ci], 1)), []).append((ci, form))
+            colmap = []
+            unmatched = 0
+            for dc in range(nbf):
+                k = (round(float(devh[0, 0, dc]), 1), round(float(devh[0, 1, dc]), 1))
+                c = key.get(k)
+                colmap.append(c[0] if c else None)
+                unmatched += c is None
+            globals()["COLMAP"] = colmap
+            print("  depth 0: device columns with no host match:", unmatched, "of", nbf)
+            forms = {}
+            for c in colmap:
+                if c:
+                    forms[c[1]] = forms.get(c[1], 0) + 1
+            print("  forms:", forms, "first columns:", [(cand[c[0]], c[1]) if c else None for c in colmap[:12]])
+            continue
+        colmap = globals().get("COLMAP")
+        for slot in range(devh.shape[0]):
+            best = None
+            for hl in range(n_leaves):
+                bad_feats = {}
+                bad = 0
+                for dc in range(nbf):
+                    c = colmap[dc]
+                    if c is None:
+                        continue
+                    arr = above if c[1] == "above" else below
+                    for st in range(2):
+                        if abs(devh[slot, st, dc] - arr[hl, st, c[0]]) > 1e-3 * (1 + abs(arr[hl, st, c[0]])):
+                            bad += 1
+                            f = cand[c[0]][0]
+                            bad_feats[f] = bad_feats.get(f, 0) + 1
+                if best is None or bad < best[0]:
+                    best = (bad, hl, bad_feats)
+            print("  depth", depth, "device slot", slot, "best host leaf", best[1],
+                  "mismatched cells", best[0], "by feature", best[2])
 
 
 if __name__ == "__main__":
