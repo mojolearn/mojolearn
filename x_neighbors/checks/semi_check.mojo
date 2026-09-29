@@ -39,11 +39,13 @@ def main() raises:
     op_col_degree(fa(a), fa(dd), n)
     var dg = zf(n * n)
     op_ls_laplacian_deg(fa(a), fa(dd), fa(dg), n)
+    _ = dd^                                           # alive past the op (seam_util.fa)
     same("5214 ls_laplacian_deg device", count_diff_f32(dg, wl))
     var hd = zf(n)
     h_col_degree(fa(a), fa(hd), n)
     var hg = zf(n * n)
     h_ls_laplacian_deg(fa(a), fa(hd), fa(hg), n)
+    _ = hd^
     same("5214 ls_laplacian_deg host", count_diff_f32(hg, wl))
     tr.record_list_f32("x_neighbors.laplacian", dl)
 
