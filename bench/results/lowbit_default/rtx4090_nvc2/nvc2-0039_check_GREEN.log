@@ -1,0 +1,125 @@
+gpuq: job 0039 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T09:13:27Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/check_job.sh sha256 at submit eddab4cef34fc13fcd22551363b7fad69dcffc60acd91dac103aec9af310d12d, now eddab4cef34fc13fcd22551363b7fad69dcffc60acd91dac103aec9af310d12d
+tree_head=cc25b1d16ae21089b3058469ff6e36747f5d13d0 dirty_files=48
+machine=NVIDIA GeForce RTX 4090, 580.126.20
+started=2026-09-29T09:13:27Z
+PHASE install-default                              exit=0   expected=pass held
+PHASE install-test                                 exit=0   expected=pass held
+PHASE build-linalg                                 exit=0   expected=pass held
+PHASE build-linalg-host                            exit=0   expected=pass held
+PHASE build-base                                   exit=0   expected=pass held
+PHASE build-training                               exit=0   expected=pass held
+PHASE build-transformer                            exit=0   expected=pass held
+PHASE build-mamba                                  exit=0   expected=pass held
+PHASE build-byte-lm                                exit=0   expected=pass held
+PHASE build-portable-math                          exit=0   expected=pass held
+built 61 of 61 further bindings
+PHASE build-core-host                              exit=0   expected=pass held
+PHASE build-neural-host                            exit=0   expected=pass held
+PHASE build-transformer-host                       exit=0   expected=pass held
+PHASE build-mamba-host                             exit=0   expected=pass held
+PHASE build-training-host                          exit=0   expected=pass held
+PHASE build-tokenizer-host                         exit=0   expected=pass held
+PHASE build-byte_lm-host                           exit=0   expected=pass held
+PHASE gate-gemm-identity                           exit=0   expected=pass held
+PHASE gate-lowbit                                  exit=0   expected=pass held
+PHASE gate-lowbit-sabotage                         exit=1   expected=fail held
+PHASE gate-int15                                   exit=0   expected=pass held
+PHASE gate-int15-sabotage                          exit=1   expected=fail held
+PHASE gate-int15-tuned                             exit=0   expected=pass held
+PHASE gate-int8-mma-tuned                          exit=0   expected=pass held
+PHASE gate-int8-mma-tuned-sabotage                 exit=1   expected=fail held
+PHASE gate-int8-pieces-tuned                       exit=0   expected=pass held
+PHASE gate-int8-pieces-tuned-sabotage              exit=1   expected=fail held
+PHASE gate-transformer                             exit=0   expected=pass held
+PHASE gate-transformer-int15                       exit=0   expected=pass held
+PHASE gate-transformer-int15-sabotage              exit=1   expected=fail held
+PHASE python-tests                                 exit=0   expected=pass held
+    | 3513 passed, 144 skipped, 75 warnings, 95 subtests passed in 245.46s (0:04:05)
+    | SKIPPED [1] mojolearn/tests/test_neighbors_weighted_largek.py:13: unittest.case.SkipTest: Explicit root-only Linux CUDA/HIP opt-in required
+    | SKIPPED [1] mojolearn/tests/test_cholesky_cpu_inference.py:174: a GPU set loaded; the plain class binds the GPU
+    | SKIPPED [3] mojolearn/tests/test_classical_partition_native.py:42: opt-in native check; requires shared slot
+    | SKIPPED [6] mojolearn/tests/test_classical_partition_native.py:52: opt-in native check; requires shared slot
+    | SKIPPED [2] mojolearn/tests/test_classical_partition_native.py:63: opt-in native check; requires shared slot
+    | SKIPPED [23] mojolearn/tests/test_cpu_kernel_variants.py:46: requires a CPU-only package
+    | SKIPPED [5] mojolearn/tests/test_cpu_parallel_rbf_sampler.py:39: requires a CPU-only package
+    | SKIPPED [12] mojolearn/tests/test_distributed_ivf.py:118: requires freshly built partial IVF binding under native slot
+    | SKIPPED [2] mojolearn/tests/test_distributed_ivf.py:145: requires freshly built partial IVF binding under native slot
+    | SKIPPED [1] mojolearn/tests/test_gbdt_multirmse.py:92: could not import 'catboost': No module named 'catboost'
+    | SKIPPED [1] mojolearn/tests/test_ivf_embedding_cpu_inference.py:181: a GPU set loaded; the reference fit would run on the GPU
+    | SKIPPED [1] mojolearn/tests/test_ivf_embedding_cpu_inference.py:272: a GPU set loaded; the reference fit would run on the GPU
+    | SKIPPED [12] mojolearn/tests/test_kde_fused_fast.py:64: DEVIATION 2490 is a FAST-only arm
+    | SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:106: DEVIATION 2490 is a FAST-only arm
+    | SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:125: DEVIATION 2490 is a FAST-only arm
+    | SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:140: DEVIATION 2490 is a FAST-only arm
+    | SKIPPED [5] ../.pixi/envs/test/lib/python3.14/site-packages/_pytest/unittest.py:523: optional PyTorch autograd oracle is not installed
+    | SKIPPED [1] mojolearn/tests/test_mamba23_backward_surface.py:179: root must opt in on RunPod NVIDIA; host ABI checks are not GPU qualification
+    | SKIPPED [1] mojolearn/tests/test_mamba23_backward_surface.py:212: root must opt in on RunPod NVIDIA; host ABI checks are not GPU qualification
+    | SKIPPED [16] mojolearn/tests/test_native_convert.py:299: already float32 in the target layout: a borrow, tested below
+    | SKIPPED [16] mojolearn/tests/test_native_convert.py:315: already float32 in the target layout: a borrow, tested below
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:200: the source reference training and transformer host bindings are not built here (a wheel has neither)
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:397: the source reference training and transformer host bindings are not built here
+    | SKIPPED [1] mojolearn/tests/test_pca_full_surface.py:83: root-only numerical opt-in
+    | SKIPPED [3] mojolearn/tests/test_pca_whitening_surface.py:133: root-only opt-in remote PCA whitening gate
+    | SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:55: root-only opt-in remote Linux CUDA/HIP numerical tests
+    | SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:70: root-only opt-in remote Linux CUDA/HIP numerical tests
+    | SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:83: root-only opt-in remote Linux CUDA/HIP numerical tests
+    | SKIPPED [2] mojolearn/tests/test_small_mlp_numerical_edges.py:94: root-only opt-in remote Linux CUDA/HIP numerical tests
+    | SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:136: root-only opt-in remote Linux CUDA/HIP numerical tests
+    | SKIPPED [3] mojolearn/tests/test_small_mlp_surface.py:275: root-only opt-in remote NVIDIA/AMD numerical gate
+    | SKIPPED [1] mojolearn/tests/test_tokenizer_surface.py:52: MOJOLEARN_GPT2_ENCODER_JSON and MOJOLEARN_GPT2_VOCAB_BPE do not name the GPT-2 files
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_batchnorm.py:70: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_batchnorm.py:119: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_blocks.py:126: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_conv.py:109: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_conv.py:203: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_gnn.py:141: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_pool.py:123: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_cnn_pool.py:169: could not import 'torch': No module named 'torch'
+    | SKIPPED [1] mojolearn/tests/test_x_neighbors_sanity.py:156: could not import 'networkx': No module named 'networkx'
+    | SKIPPED [1] mojolearn/tests/test_x_neighbors_sanity.py:176: could not import 'networkx': No module named 'networkx'
+    | SKIPPED [1] mojolearn/tests/test_x_neighbors_sanity.py:318: could not import 'networkx': No module named 'networkx'
+    | SKIPPED [1] mojolearn/tests/test_x_trees_sanity.py:123: could not import 'lightgbm': No module named 'lightgbm'
+    | SKIPPED [1] mojolearn/tests/test_x_trees_sanity.py:137: could not import 'lightgbm': No module named 'lightgbm'
+    | SKIPPED [1] mojolearn/tests/test_x_trees_sanity.py:289: could not import 'shap': No module named 'shap'
+    | SKIPPED [1] mojolearn/tests/test_x_trees_sanity.py:323: could not import 'shap': No module named 'shap'
+    | SKIPPED [1] mojolearn/tests/test_x_trees_sanity.py:357: could not import 'shap': No module named 'shap'
+PHASE profile-tests-ran                            exit=1   expected=fail held
+PHASE verify-causal-lm-default                     exit=0   expected=pass held
+PHASE verify-causal-lm-fp32env                     exit=0   expected=pass held
+    | compared 27 parts, 0 not equal
+PHASE smollm2-default-gate                         exit=0   expected=pass held
+    | RESULT hash default d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f
+    | RESULT hash fp32_v1 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32_reports fp32_v1
+    | RESULT hash env_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash env_fp32_reports fp32_v1
+    | RESULT check default is fixed15_v1: HELD
+    | RESULT check default hash d37c2ea81d13743a: HELD
+    | RESULT check fp32_v1 hash 833c9a8947bdd619: HELD
+    | RESULT check set_numeric_profile(fp32_v1) == fp32_v1 bits: HELD
+    | RESULT check MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits: HELD
+    | RESULT generate box=447c5c6d4d39 arm=default route=resident prompt=512 new=32 median 1044.9 ms (32.65 ms/token) runs 1050.3 1043.6 1044.9 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1164.0 ms (36.37 ms/token) runs 1236.9 1132.5 1164.0 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 default/fp32_v1 = 0.898 (default QUICKER)
+    | DEFAULT GATE GREEN
+PHASE smollm2-resident-gate                        exit=0   expected=pass held
+    | RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+    | RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+    | RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 the resident route ran: HELD
+    | RESULT check fixed15_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+    | RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+    | RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 the resident route ran: HELD
+    | RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESIDENT GATE GREEN
+finished=2026-09-29T09:25:18Z
+MERGE CHECK GREEN
+gpuq: job 0039 done exit=0 at 2026-09-29T09:25:23Z after 716s
