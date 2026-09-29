@@ -8,7 +8,10 @@ from max.gpu.host.device_attribute import DeviceAttribute
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
-from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from gbdt.gpu_util.kernel.radix_sort import (
+    launch_radix_sort_bins,
+    launch_radix_sort_bit_carry,
+)
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from gbdt.gpu_util.kernel.transform import launch_gather_with_mask_f32
 from gbdt.methods.kernel.pointwise_scores import update_partition_props
@@ -93,6 +96,10 @@ struct TOptimizationSubsets(Movable):
 
     var gathered_weight: DeviceBuffer[DType.float32]
     var gathered_target: DeviceBuffer[DType.float32]
+    #: the split's landing columns for the two gathered planes
+    #: (`split_subsets_from_desc`, lane/ordered-speed)
+    var tmp_weight: DeviceBuffer[DType.float32]
+    var tmp_target: DeviceBuffer[DType.float32]
     """`Weights` and `WeightedTarget` AFTER `GatherTarget`, in current partition order. Handing it `buf.unsafe_ptr()` and `buf.unsafe_ptr().unsafe_offset(doc_count)` is refused: error: aliasing values passed mutably to 'target' argument and passed mutably to 'weight' argument `unsafe_bitcast[Float32]()` does not launder the origin, and the check fires at `enqueue_function` itself rather than only at `def` boundaries, so..."""
 
     var doc_count: Int
@@ -138,6 +145,8 @@ struct TOptimizationSubsets(Movable):
         var count_dummy: DeviceBuffer[DType.float32],
         var gathered_weight: DeviceBuffer[DType.float32],
         var gathered_target: DeviceBuffer[DType.float32],
+        var tmp_weight: DeviceBuffer[DType.float32],
+        var tmp_target: DeviceBuffer[DType.float32],
         var tmp_bins: DeviceBuffer[DType.uint32],
         var tmp_indices: DeviceBuffer[DType.uint32],
         var scan_offsets: DeviceBuffer[DType.int32],
@@ -159,6 +168,8 @@ struct TOptimizationSubsets(Movable):
         self.count_dummy = count_dummy^
         self.gathered_weight = gathered_weight^
         self.gathered_target = gathered_target^
+        self.tmp_weight = tmp_weight^
+        self.tmp_target = tmp_target^
         self.tmp_bins = tmp_bins^
         self.tmp_indices = tmp_indices^
         self.scan_offsets = scan_offsets^
@@ -547,6 +558,8 @@ def create_subsets(
     )
     var gathered_weight = ctx.enqueue_create_buffer[DType.float32](doc_count)
     var gathered_target = ctx.enqueue_create_buffer[DType.float32](doc_count)
+    var tmp_weight = ctx.enqueue_create_buffer[DType.float32](doc_count)
+    var tmp_target = ctx.enqueue_create_buffer[DType.float32](doc_count)
 
     var tmp_bins = ctx.enqueue_create_buffer[DType.uint32](doc_count)
     var tmp_indices = ctx.enqueue_create_buffer[DType.uint32](doc_count)
@@ -581,6 +594,8 @@ def create_subsets(
         count_dummy^,
         gathered_weight^,
         gathered_target^,
+        tmp_weight^,
+        tmp_target^,
         tmp_bins^,
         tmp_indices^,
         scan_offsets^,
@@ -719,19 +734,49 @@ def split_subsets_from_desc(
             block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
 
-    launch_radix_sort_bins(
+    # the one-bit stable reorder, carrying the two gathered planes with the
+    # indices (lane/ordered-speed): `gathered_*[i] == source.*[indices[i]]`
+    # holds before the split (every reset and fold seeding gathers) and the
+    # same permutation keeps it after, so `UpdateSubsetsStats`' two random
+    # gathers over every concatenated document are not repeated
+    launch_radix_sort_bit_carry(
         ctx,
         subsets.doc_count,
         Int(depth),
-        Int(depth) + 1,
         subsets.bins,
         subsets.indices,
+        subsets.gathered_weight,
+        subsets.gathered_target,
         subsets.tmp_bins,
         subsets.tmp_indices,
+        subsets.tmp_weight,
+        subsets.tmp_target,
         subsets.scan_offsets,
         subsets.block_sums,
     )
 
     subsets.current_depth += 1
 
-    update_subsets_stats(ctx, source, subsets)
+    # `UpdateSubsetsStats` without its gathers: the partition dimensions,
+    # then the partition sums over the carried planes
+    var part_count = subsets.current_part_count()
+    launch_update_partition_dimensions(
+        ctx,
+        subsets.partitions,
+        part_count,
+        subsets.bins,
+        subsets.doc_count,
+    )
+    update_partition_props(
+        ctx,
+        subsets.gathered_target,
+        subsets.gathered_weight,
+        subsets.count_dummy,
+        True,
+        True,
+        False,
+        subsets.partitions,
+        subsets.partition_stats,
+        part_count,
+    )
+    _ = source.line_size
