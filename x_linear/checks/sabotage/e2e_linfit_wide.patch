@@ -1,8 +1,8 @@
 diff --git a/x_linear/glm_wide.mojo b/x_linear/glm_wide.mojo
-index 4aeff3b15..bdafa5e02 100644
+index 3181cc8b6..2415cbbcc 100644
 --- a/x_linear/glm_wide.mojo
 +++ b/x_linear/glm_wide.mojo
-@@ -481,7 +481,9 @@ def _objective(
+@@ -490,7 +490,9 @@ def _objective(
      lead's fold (rows ascending) and penalty, here on the host."""
      b.upload(ctx, theta, toff, power)
      var lt = b.rows(ctx, 0, link)
@@ -14,24 +14,24 @@ index 4aeff3b15..bdafa5e02 100644
      for j in range(b.d):
          var w = ld(theta, toff + j)
 diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
-index b2be7910b..f12bea170 100644
+index 7afe8619f..a90f55f71 100644
 --- a/x_linear/sgd.mojo
 +++ b/x_linear/sgd.mojo
-@@ -417,7 +417,7 @@ def _warp_row_dot_spec[K: Int](
-                 xs[l] = shuffle_idx(xr[kk], UInt32(l))
-                 ws[l] = shuffle_idx(wr[kk], UInt32(l))
+@@ -413,7 +413,7 @@ def _warp_row_dot_spec[K: Int](
              comptime for l in range(W):
--                acc = xmad(xs[l], ws[l], acc)
-+                acc = fa(fm(xs[l], ws[l]), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
+                 var xj = shuffle_idx(xr[kk], UInt32(l))
+                 var wj = shuffle_idx(wr[kk], UInt32(l))
+-                acc = xmad(xj, wj, acc)
++                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
                  bad = bad | (abs(acc) < MIN_NORMAL)
          elif kk * W < d:
              # the last chunk: only its d - kk * W live slots (no dead slot
-@@ -425,7 +425,7 @@ def _warp_row_dot_spec[K: Int](
+@@ -421,7 +421,7 @@ def _warp_row_dot_spec[K: Int](
              for l in range(d - kk * W):
                  var xj = shuffle_idx(xr[kk], UInt32(l))
                  var wj = shuffle_idx(wr[kk], UInt32(l))
 -                acc = xmad(xj, wj, acc)
-+                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e (the last chunk)
++                acc = fa(fm(xj, wj), acc)  # SABOTAGE e2e: the speculative row dot rounds the product alone
                  bad = bad | (abs(acc) < MIN_NORMAL)
      if bad:
          return _warp_row_folds[K, False, False](xr, wr, d)[0]
