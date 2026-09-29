@@ -128,6 +128,52 @@ def test_a_state_is_read_only_under_the_profile_that_wrote_it(monkeypatch):
         g.check_saved({"gemm_profile": "nonsense.v9"}, "fp32.v1")
 
 
+def test_measured_rows_are_only_what_was_measured(monkeypatch):
+    g = _fresh(monkeypatch)
+    for profile, rows in g.MEASURED.items():
+        assert profile in g.PROFILES
+        for vendor, row in rows.items():
+            assert vendor in ("cuda", "hip", "metal")
+            lo, hi = row["over"]
+            assert 0 < lo <= hi
+            assert row["box"] and row["what"] and row["source"]
+    assert g.measured("fp32.v1") == {}
+    assert g.measured("int8i32.v1", "no-such-vendor") is None
+    by_name = {r["name"]: r for r in g.profiles()}
+    assert by_name["fp32.v1"]["measured"] == {}
+
+
+def test_a_profile_measured_slower_here_warns_once_and_still_resolves(monkeypatch):
+    import warnings
+    g = _fresh(monkeypatch)
+    g.PROFILES["int8i32.v1"] = dict(g.PROFILES["int8i32.v1"], models=True)
+    g.MEASURED["int8i32.v1"] = {
+        "cuda": {"over": (2.0, 4.0), "box": "a box", "what": "w", "source": "s"},
+        "metal": {"over": (0.5, 0.7), "box": "a Mac", "what": "w", "source": "s"},
+        "hip": {"over": (0.9, 1.3), "box": "straddles", "what": "w", "source": "s"},
+    }
+    monkeypatch.setattr(g, "_this_vendor", lambda: "cuda")
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        assert g.resolve("int8i32.v1") == "int8i32.v1"
+        assert g.resolve("int8i32.v1") == "int8i32.v1"
+    slow = [w for w in seen if issubclass(w.category, g.GemmProfileSpeedWarning)]
+    assert len(slow) == 1 and "2 to 4" in str(slow[0].message) and "a box" in str(slow[0].message)
+    # quicker here, or a range that reaches below 1, or not measured here: silent
+    for vendor in ("metal", "hip", None, "no-such-vendor"):
+        monkeypatch.setattr(g, "_this_vendor", lambda v=vendor: v)
+        with warnings.catch_warnings(record=True) as seen:
+            warnings.simplefilter("always")
+            assert g.resolve("int8i32.v1") == "int8i32.v1"
+        assert not [w for w in seen if issubclass(w.category, g.GemmProfileSpeedWarning)], vendor
+    # the default never warns
+    monkeypatch.setattr(g, "_this_vendor", lambda: "cuda")
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        assert g.resolve(None) == "fp32.v1"
+    assert not seen
+
+
 # --------------------------------------------------------------- the package
 
 

@@ -25,6 +25,16 @@ with `gemm_profile="fp32.v1"` is what the package has done since
 products run in fp32. `gemm_profile="int8i32.v1"` would run the products
 on the codes.
 
+QUICK ON ONE VENDOR, SLOW ON ANOTHER. A profile is ONE arithmetic on every
+vendor, so it cannot be switched per box: a model that ran `fp32.v1` on
+NVIDIA and another profile on Apple would not be the same model. What
+differs per box is the time, and `MEASURED` records it per vendor. Choosing
+a profile that was measured slower than `fp32.v1` on the vendor in use
+raises a `GemmProfileSpeedWarning` once and then runs, because the bits are
+what was asked for. WITHIN a profile every plan gives the same bits (the
+integer unit, the flat kernel, Apple's exact chunks), so which plan runs is
+the dispatcher's choice per box and shape and is no flag at all.
+
 REFUSES, NEVER WIDENS. A registered profile that no model class computes
 under yet is refused BY NAME at the line that asked for it. It never falls
 back to `fp32.v1`: a caller who asked for one arithmetic and silently got
@@ -44,9 +54,9 @@ it is measured; a row never carries an estimate.
 """
 import os
 
-__all__ = ["DEFAULT", "PREFIX", "PROFILES", "canonical", "default_profile",
-           "set_default_profile", "resolve", "profiles", "state_field",
-           "check_saved"]
+__all__ = ["DEFAULT", "PREFIX", "PROFILES", "MEASURED", "GemmProfileSpeedWarning",
+           "canonical", "default_profile", "set_default_profile", "resolve",
+           "profiles", "measured", "state_field", "check_saved"]
 
 PREFIX = "mojolearn.identical.gemm."
 DEFAULT = "fp32.v1"
@@ -78,7 +88,66 @@ PROFILES = {
     },
 }
 
+#: MEASURED TIME, because a profile is quick on one vendor and slow on
+#: another. profile -> vendor (what `mojolearn.vendor()` answers) -> a row:
+#: `over` is the range, over the shapes timed, of the profile's time over
+#: fp32.v1's at the same shape on the same box (above 1 it took LONGER),
+#: `what` says which operation was timed and `source` where the run is.
+#: ONLY WHAT WAS MEASURED: a vendor with no row reads "not measured", never
+#: a number borrowed from another box. The profile is the same bits on every
+#: vendor whatever these say; they are why the choice is the caller's.
+MEASURED = {
+    "int8i32.v1": {
+        "cuda": {"over": (2.06, 4.63), "box": "NVIDIA H100",
+                 "what": "GEMM on the integer unit with activations quantized per call, training rows",
+                 "source": "bench/results/lowbit_units/2026-09-29/TABLE.md"},
+        "metal": {"over": (0.51, 0.68), "box": "Apple M2 Pro",
+                  "what": "GEMM on the float unit in exact chunks with activations quantized per call, "
+                          "training rows; a probe, not dispatched",
+                  "source": "bench/results/lowbit_units/2026-09-29/TABLE.md"},
+    },
+}
+
+
+class GemmProfileSpeedWarning(UserWarning):
+    """The selected profile was measured to take longer than fp32.v1 on this
+    vendor. The bits are the profile's either way."""
+
+
+_warned = set()
 _default = None
+
+
+def measured(profile, vendor=None):
+    """The measured rows of `profile`: every vendor's, or one vendor's row
+    (None when that vendor was not measured)."""
+    rows = MEASURED.get(canonical(profile), {})
+    return dict(rows) if vendor is None else rows.get(vendor)
+
+
+def _this_vendor():
+    try:
+        from . import _backend
+        return _backend.vendor()
+    except Exception:  # noqa: BLE001  (loaded by path, or no binding on this box)
+        return None
+
+
+def _warn_if_slow_here(short, vendor=None):
+    """Once per profile and vendor: say so when the profile was measured to
+    take longer than fp32.v1 on the vendor this process runs on."""
+    vendor = _this_vendor() if vendor is None else vendor
+    row = MEASURED.get(short, {}).get(vendor) if vendor else None
+    if row is None or row["over"][0] <= 1.0 or (short, vendor) in _warned:
+        return None
+    _warned.add((short, vendor))
+    import warnings
+    lo, hi = row["over"]
+    msg = (f"mojolearn: GEMM profile {short!r} was measured on {row['box']} to take {lo:g} to {hi:g} "
+           f"times fp32.v1's time ({row['what']}; {row['source']}). Its bits are the same on every "
+           f"vendor; on this one it costs time.")
+    warnings.warn(msg, GemmProfileSpeedWarning, stacklevel=3)
+    return msg
 
 
 def canonical(name, what="gemm_profile"):
@@ -127,14 +196,16 @@ def set_default_profile(name):
 def resolve(name=None, what="gemm_profile"):
     """What a model class calls with its keyword: None is the process
     default, a name is validated and refused by name when unavailable."""
-    if name is None:
-        return default_profile()
-    return _refuse_unavailable(canonical(name, what), what)
+    short = default_profile() if name is None else _refuse_unavailable(canonical(name, what), what)
+    _warn_if_slow_here(short)
+    return short
 
 
 def profiles():
-    """Every registered row, the default first, as plain dicts."""
-    return tuple({"name": k, "full_name": PREFIX + k, "default": k == DEFAULT, **v}
+    """Every registered row, the default first, as plain dicts, each with
+    its measured times per vendor (`measured`, empty when none)."""
+    return tuple({"name": k, "full_name": PREFIX + k, "default": k == DEFAULT, **v,
+                  "measured": dict(MEASURED.get(k, {}))}
                  for k, v in PROFILES.items())
 
 

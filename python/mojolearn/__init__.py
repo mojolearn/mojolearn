@@ -78,6 +78,7 @@ from . import _gemm_profile as _gemm_profile
 gemm_profile = _gemm_profile.default_profile
 set_gemm_profile = _gemm_profile.set_default_profile
 gemm_profiles = _gemm_profile.profiles
+gemm_profile_measured = _gemm_profile.measured
 
 #: WHICH GPU API THE LOADED BINARIES WERE COMPILED FOR: 'metal', 'cuda' or
 #: 'hip', read back out of the binaries (`checks/vendor.mojo`). On Linux
@@ -462,6 +463,7 @@ __all__ = [
     "gemm_profile",
     "set_gemm_profile",
     "gemm_profiles",
+    "gemm_profile_measured",
     "vendor",
     "gpu_arch",
     "gpu_arch_how",
