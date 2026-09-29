@@ -1,0 +1,131 @@
+gpuq: job 0029 lane=lowbit-default gpus=0,1 cap=240min started 2026-09-29T07:47:21Z
+gpuq: script /root/mojolearn-lowbit-default/tools/lowbit_default/check_job.sh sha256 at submit be50276ffe5e0ab9c75a5f190b7927f17ae588a6bed930635fc3d2212c74039d, now be50276ffe5e0ab9c75a5f190b7927f17ae588a6bed930635fc3d2212c74039d
+tree_head=cc25b1d16ae21089b3058469ff6e36747f5d13d0 dirty_files=18
+machine=NVIDIA GeForce RTX 4090, 580.126.20
+started=2026-09-29T07:47:21Z
+PHASE install-default                              exit=0   expected=pass held
+PHASE install-test                                 exit=0   expected=pass held
+PHASE build-linalg                                 exit=0   expected=pass held
+PHASE build-linalg-host                            exit=0   expected=pass held
+PHASE build-base                                   exit=0   expected=pass held
+PHASE build-training                               exit=0   expected=pass held
+PHASE build-transformer                            exit=0   expected=pass held
+PHASE build-mamba                                  exit=0   expected=pass held
+PHASE build-byte-lm                                exit=0   expected=pass held
+PHASE build-portable-math                          exit=0   expected=pass held
+PHASE build-core-host                              exit=0   expected=pass held
+PHASE build-neural-host                            exit=0   expected=pass held
+PHASE build-transformer-host                       exit=0   expected=pass held
+PHASE build-mamba-host                             exit=0   expected=pass held
+PHASE build-training-host                          exit=0   expected=pass held
+PHASE build-tokenizer-host                         exit=0   expected=pass held
+PHASE build-byte_lm-host                           exit=0   expected=pass held
+PHASE gate-gemm-identity                           exit=0   expected=pass held
+PHASE gate-lowbit                                  exit=0   expected=pass held
+PHASE gate-lowbit-sabotage                         exit=1   expected=fail held
+PHASE gate-int15                                   exit=0   expected=pass held
+PHASE gate-int15-sabotage                          exit=1   expected=fail held
+PHASE gate-int15-tuned                             exit=0   expected=pass held
+PHASE gate-int8-mma-tuned                          exit=0   expected=pass held
+PHASE gate-int8-mma-tuned-sabotage                 exit=1   expected=fail held
+PHASE gate-int8-pieces-tuned                       exit=0   expected=pass held
+PHASE gate-int8-pieces-tuned-sabotage              exit=1   expected=fail held
+PHASE gate-transformer                             exit=0   expected=pass held
+PHASE gate-transformer-int15                       exit=0   expected=pass held
+PHASE gate-transformer-int15-sabotage              exit=1   expected=fail held
+PHASE python-tests                                 exit=0   expected=pass held
+    | 564 passed, 2 skipped, 13 warnings, 4 subtests passed in 51.54s
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:200: the source reference training and transformer host bindings are not built here (a wheel has neither)
+    | SKIPPED [1] mojolearn/tests/test_neural_inference.py:397: the source reference training and transformer host bindings are not built here
+PHASE profile-tests-ran                            exit=1   expected=fail held
+PHASE verify-causal-lm-default                     exit=1   expected=pass BROKEN
+    | | neural |     2 |         0 |         0 |    0 |      10 |   0 |
+    | | all    |     2 |         0 |         0 |    0 |      10 |   0 |
+    | 
+    | REFUSED (10):
+    |   hf-causal-lm train: not run after interruption: comparator self-test did not pass
+    |   par-causal-lm train: not run after interruption: comparator self-test did not pass
+    | 
+    | LANE ACCOUNTING: 505 of 505 harness lanes accounted for; 0 VERIFIED, 505 not.
+    |   a lane that is not VERIFIED is not checked, whatever its state says:
+    |   NOT RUN (444): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 438 more
+    |       exposed, but this run did not select it
+    |   NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+    |       claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+    |   OWED (1): gemm-int15
+    |       no committed record carries a hash for this lane, so every part of it would read OWED; owed: a release record that runs it
+    |   REFUSED (1)  [not checked]: hf-causal-lm
+    |       a part raised, so it did not run
+    |   NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+    |   this run's scope is 2 lanes, 0 VERIFIED, 1 not applicable, 1 not checked; the verdict cannot be VERIFIED
+    | 
+    | UNVERIFIED LANES (1):
+    |   hf-causal-lm: REFUSED: a part raised, so it did not run
+    | Batch invariance: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=2, N/A=0
+    | Scope: selected fixtures and properties only; use verify --coverage for omissions.
+    | RESULT: MISMATCH (verified 0 of 10 cell parts (0 divergent, 0 owed, 10 refused, 0 n/a); 0 verified, 1 not applicable, 0 owed, 0 held, 1 REFUSED, of 2 lanes; stopped: comparator self-test did not pass; comparator self-test failed). 1.1s. exit 1
+PHASE verify-causal-lm-fp32env                     exit=1   expected=pass BROKEN
+    | | neural |     2 |         0 |         0 |    0 |      10 |   0 |
+    | | all    |     2 |         0 |         0 |    0 |      10 |   0 |
+    | 
+    | REFUSED (10):
+    |   hf-causal-lm train: not run after interruption: comparator self-test did not pass
+    |   par-causal-lm train: not run after interruption: comparator self-test did not pass
+    | 
+    | LANE ACCOUNTING: 505 of 505 harness lanes accounted for; 0 VERIFIED, 505 not.
+    |   a lane that is not VERIFIED is not checked, whatever its state says:
+    |   NOT RUN (444): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 438 more
+    |       exposed, but this run did not select it
+    |   NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+    |       claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES). A single-device run can check local numerical behavior or logical sharding, but cannot establish physical multi-device identity. Default verification skips execution; --lanes selects a local diagnostic explicitly. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+    |   OWED (1): gemm-int15
+    |       no committed record carries a hash for this lane, so every part of it would read OWED; owed: a release record that runs it
+    |   REFUSED (1)  [not checked]: hf-causal-lm
+    |       a part raised, so it did not run
+    |   NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+    |   this run's scope is 2 lanes, 0 VERIFIED, 1 not applicable, 1 not checked; the verdict cannot be VERIFIED
+    | 
+    | UNVERIFIED LANES (1):
+    |   hf-causal-lm: REFUSED: a part raised, so it did not run
+    | Batch invariance: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=2, N/A=0
+    | Scope: selected fixtures and properties only; use verify --coverage for omissions.
+    | RESULT: MISMATCH (verified 0 of 10 cell parts (0 divergent, 0 owed, 10 refused, 0 n/a); 0 verified, 1 not applicable, 0 owed, 0 held, 1 REFUSED, of 2 lanes; stopped: comparator self-test did not pass; comparator self-test failed). 1.0s. exit 1
+    | | family | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+    |   this run's scope is 2 lanes, 0 VERIFIED, 1 not applicable, 1 not checked; the verdict cannot be VERIFIED
+    | Batch invariance: IDENTICAL=0, DIVERGENT=0, OWED=0, REFUSED=2, N/A=0
+    | RESULT: MISMATCH (verified 0 of 10 cell parts (0 divergent, 0 owed, 10 refused, 0 n/a); 0 verified, 1 not applicable, 0 owed, 0 held, 1 REFUSED, of 2 lanes; stopped: comparator self-test did not pass; comparator self-test failed). 1.1s. exit 1
+PHASE smollm2-default-gate                         exit=0   expected=pass held
+    | RESULT hash default d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f
+    | RESULT hash fp32_v1 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash set_numeric_profile_fp32_reports fp32_v1
+    | RESULT hash env_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+    | RESULT hash env_fp32_reports fp32_v1
+    | RESULT check default is fixed15_v1: HELD
+    | RESULT check default hash d37c2ea81d13743a: HELD
+    | RESULT check fp32_v1 hash 833c9a8947bdd619: HELD
+    | RESULT check set_numeric_profile(fp32_v1) == fp32_v1 bits: HELD
+    | RESULT check MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits: HELD
+    | RESULT generate box=447c5c6d4d39 arm=default route=resident prompt=512 new=32 median 1968.0 ms (61.50 ms/token) runs 2140.5 1936.9 1968.0 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 arm=fp32_v1 route=resident prompt=512 new=32 median 1383.6 ms (43.24 ms/token) runs 1383.6 1576.0 1313.1 ids AGREE 2077bb0591d060ce
+    | RESULT generate box=447c5c6d4d39 default/fp32_v1 = 1.422 (default SLOWER)
+    | DEFAULT GATE GREEN
+PHASE smollm2-resident-gate                        exit=0   expected=pass held
+    | RESULT check fixed15_v1 per-layer hash d37c2ea81d13743a: HELD
+    | RESULT check fixed15_v1 resident prefill == per-layer (d37c2ea81d13743a): HELD
+    | RESULT check fixed15_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fixed15_v1 the resident route ran: HELD
+    | RESULT check fixed15_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fixed15_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESULT check fp32_v1 per-layer hash 833c9a8947bdd619: HELD
+    | RESULT check fp32_v1 resident prefill == per-layer (833c9a8947bdd619): HELD
+    | RESULT check fp32_v1 resident decode prefix 1: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 resident decode prefix 7: 0 of 64 positions differ: HELD
+    | RESULT check fp32_v1 the resident route ran: HELD
+    | RESULT check fp32_v1 resident generate ids == per-layer (2077bb0591d060ce): HELD
+    | RESULT check fp32_v1 resident last-pass logits == per-layer forward at position 542: HELD
+    | RESIDENT GATE GREEN
+finished=2026-09-29T07:53:42Z
+MERGE CHECK RED
+gpuq: job 0029 failed exit=1 at 2026-09-29T07:53:46Z after 385s
