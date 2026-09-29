@@ -42,7 +42,7 @@ def _depths(model_leaf_counts):
     return " ".join(f"d{d}:{n}" for d, n in sorted(hist.items()))
 
 
-def _report(name, ms, leaf_counts, d, pred):
+def _report(name, ms, leaf_counts, d, pred, train=None):
     y = np.asarray(d.y_test)
     p = np.asarray(pred, dtype=np.float64)
     h = hashlib.sha256(np.asarray(pred, dtype=np.float32).tobytes()).hexdigest()[:16]
@@ -51,6 +51,9 @@ def _report(name, ms, leaf_counts, d, pred):
         q = f"auc={spec.auc(y, p):.6f} logloss={spec.logloss(y, p):.6f}"
     else:
         q = f"rmse={spec.rmse(y, p):.6f}"
+    if train is not None and d.task == "binary":
+        ty, tp = train
+        q += f" train_auc={spec.auc(np.asarray(ty), np.asarray(tp, dtype=np.float64)):.6f}"
     lc = [int(c) for c in leaf_counts]
     print(f"ORD-PROFILE arm={name} dataset={d.name} rows={d.X_train.shape[0]} "
           f"trees={len(lc)} leaves={sum(lc)} fit_ms={ms:.1f} {q} pred_hash={h} "
@@ -64,6 +67,8 @@ def main():
     ap.add_argument("--trees", type=int, default=20)
     ap.add_argument("--catboost-cpu", action="store_true")
     ap.add_argument("--no-ours", action="store_true")
+    ap.add_argument("--train-auc", action="store_true",
+                    help="also score the first 500,000 training rows")
     ap.add_argument("--ours-ab", action="append", default=[],
                     metavar="PARAM=VALUE", help="one estimator keyword changed")
     a = ap.parse_args()
@@ -94,7 +99,11 @@ def main():
             pred = np.asarray(m.predict_proba(d._ours_Xtest))[:, 1]
         else:
             pred = np.asarray(m.predict(d._ours_Xtest))
-        _report("ours", ms, np.asarray(m.get_tree_leaf_counts()), d, pred)
+        train = None
+        if a.train_auc and d.task == "binary":
+            xt = d._ours_X[:500000]
+            train = (d.y_train[:500000], np.asarray(m.predict_proba(xt))[:, 1])
+        _report("ours", ms, np.asarray(m.get_tree_leaf_counts()), d, pred, train)
 
     if a.catboost_cpu:
         import catboost
