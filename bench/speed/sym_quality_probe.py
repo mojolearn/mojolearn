@@ -113,18 +113,22 @@ def main():
             v = leaves[off[b]:off[e]]
             print("PROBE ours block %4d-%4d mean|leaf|=%.3e max|leaf|=%.3e" % (
                 b, e, float(np.mean(np.abs(v))), float(np.max(np.abs(v)))), flush=True)
-        full = m.model_
-        head = [ln for ln in full.splitlines()
-                if not ln.split() or ln.split()[0] not in ("split", "leaf")]
-        print("PROBE ours model-head:\n" + "\n".join(head[:12]), flush=True)
-        for k in list(range(100, len(counts) + 1, 100)):
-            m._release_resident()
-            m.model_ = _truncate(full, k)
-            p = np.asarray(m.predict_proba(xte))[:, 1]
-            print("PROBE ours trees=%4d auc=%.6f logloss=%.6f" % (
-                k, spec.auc(yte, p), spec.logloss(yte, p)), flush=True)
-        m._release_resident()
-        m.model_ = full
+        # THE BOARD'S OWN SCORING PATH, on the untouched fitted model:
+        # tools/speed_gbdt_arm._score_sklearn_like (predict_proba, float64)
+        proba = np.asarray(m.predict_proba(xte), dtype=np.float64)
+        print("PROBE ours proba shape=%s dtype=%s" % (proba.shape, proba.dtype), flush=True)
+        p1 = proba[:, 1] if proba.ndim == 2 else proba
+        print("PROBE ours trees=%4d auc=%.6f logloss=%.6f (untouched model)" % (
+            len(counts), spec.auc(yte, p1), spec.logloss(yte, p1)), flush=True)
+        raw = np.asarray(m.predict(xte), dtype=np.float64).reshape(-1)
+        p_raw = 1.0 / (1.0 + np.exp(-raw))
+        print("PROBE ours raw-sigmoid auc=%.6f logloss=%.6f raw mean=%.4f std=%.4f" % (
+            spec.auc(yte, p_raw), spec.logloss(yte, p_raw), float(raw.mean()), float(raw.std())),
+            flush=True)
+        ptr = np.asarray(m.predict_proba(xtr[:500000]), dtype=np.float64)
+        ptr = ptr[:, 1] if ptr.ndim == 2 else ptr
+        print("PROBE ours train-rows auc=%.6f logloss=%.6f" % (
+            spec.auc(ytr[:500000], ptr), spec.logloss(ytr[:500000], ptr)), flush=True)
     else:
         import catboost
         p = spec.catboost_tree_params(dict(cfg, n_estimators=n_trees), "CPU")
@@ -150,6 +154,9 @@ def main():
                   "learning_rate", "iterations", "boosting_type", "random_score_type"):
             if k in allp:
                 print("PROBE cat param %s=%r" % (k, allp[k]), flush=True)
+        pr = np.asarray(m.predict_proba(xtr[:500000]))[:, 1]
+        print("PROBE cat train-rows auc=%.6f logloss=%.6f" % (
+            spec.auc(ytr[:500000], pr), spec.logloss(ytr[:500000], pr)), flush=True)
         for i, pr in enumerate(m.staged_predict_proba(xte, eval_period=100)):
             k = (i + 1) * 100
             q = pr[:, 1]
