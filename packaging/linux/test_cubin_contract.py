@@ -154,3 +154,34 @@ def test_patch_refuses_a_module_of_another_arch(tmp_path):
         assert "sm_89" in str(e)
     else:
         raise AssertionError("a module of another architecture was accepted")
+
+
+def test_registered_glue_requires_real_matching_delegate_fatbins(tmp_path):
+    directory = tmp_path / 'mojolearn/cuda/sm_89/identical'
+    directory.mkdir(parents=True)
+    glue = directory / '_mojolearn_x_trees.so'
+    glue.write_bytes(blob())
+    for name in ('rf', 'gbdt'):
+        (directory / ('_mojolearn_'+name+'.so')).write_bytes(blob(fake_fatbin(89)))
+    row = cc.audit_file(glue, 'sm_89')
+    assert row['errors'] == [] and row['device_code'] == 'NONE-DELEGATED'
+    assert row['fatbins'] == 0 and len(row['delegates']) == 2
+    assert cc.audit_tree(tmp_path)[0] == []
+    (directory / '_mojolearn_rf.so').write_bytes(blob(fake_fatbin(90)))
+    assert cc.audit_file(glue, 'sm_89')['errors']
+    (directory / '_mojolearn_rf.so').unlink()
+    assert cc.audit_file(glue, 'sm_89')['errors']
+
+
+def test_missing_device_images_are_not_generally_exempt(tmp_path):
+    directory = tmp_path / 'identical'; directory.mkdir()
+    for name in ('rf', 'gbdt'):
+        (directory / ('_mojolearn_'+name+'.so')).write_bytes(blob(fake_fatbin(89)))
+    arbitrary = directory / '_mojolearn_gp.so'; arbitrary.write_bytes(blob())
+    assert cc.audit_file(arbitrary, 'sm_89')['errors'] == ['no fatbin embedded']
+    glue = directory / '_mojolearn_x_trees.so'
+    for data in (blob(PTX89), blob(b'embedded sm_89')):
+        glue.write_bytes(data)
+        assert cc.audit_file(glue, 'sm_89')['errors']
+    # Byte-only auditing has no scoped delegate evidence and stays strict.
+    assert cc.audit_bytes(blob(), 'sm_89')['errors'] == ['no fatbin embedded']

@@ -338,6 +338,36 @@ def audit_bytes(data, arch=None):
             "arches": arches, "errors": errors}
 
 
+
+def audit_file(path, arch=None):
+    """Audit device-free registered glue through actual same-tier delegates."""
+    from device_glue import ARCH, DEVICE_GLUE
+    path = Path(path)
+    data = path.read_bytes()
+    row = audit_bytes(data, arch)
+    delegates = DEVICE_GLUE.get((path.parent.name, path.stem))
+    if (not delegates or not arch or row["errors"] != ["no fatbin embedded"]
+            or row["ptx_modules"] or ARCH.search(data)):
+        return row
+    witnesses = []
+    for name in delegates:
+        other = path.with_name(name + ".so")
+        if not other.is_file():
+            row["errors"].append(f"missing device delegate {name}")
+            return row
+        delegate_bytes = other.read_bytes()
+        checked = audit_bytes(delegate_bytes, arch)
+        if checked["errors"] or checked["arches"] != [arch]:
+            row["errors"].append(f"invalid device delegate {name}: {checked}")
+            return row
+        witnesses.append(dict(file=other.name, sha256=hashlib.sha256(delegate_bytes).hexdigest(),
+                              arches=checked["arches"], fatbins=checked["fatbins"]))
+    row["errors"] = []
+    row["device_code"] = "NONE-DELEGATED"
+    row["delegates"] = witnesses
+    return row
+
+
 def audit_tree(root):
     """(errors, rows) for every IDENTICAL-tier CUDA binary under an unpacked wheel root."""
     root = Path(root)
@@ -346,7 +376,7 @@ def audit_tree(root):
         rel = p.relative_to(root).as_posix()
         if not is_identical_cuda(rel):
             continue
-        r = audit_bytes(p.read_bytes(), arch=Path(rel).parts[2])
+        r = audit_file(p, arch=Path(rel).parts[2])
         rows.append(dict(r, file=rel))
         errors.extend(f"{rel}: {e}" for e in r["errors"])
     return errors, rows
@@ -375,7 +405,7 @@ def main():
         return int(any(not u["jit_invariant"] for r in rows for u in r["unplaced"]))
     rc = 0
     for p in a.paths:
-        r = audit_bytes(p.read_bytes(), a.arch)
+        r = audit_file(p, a.arch)
         print(json.dumps(dict(r, file=str(p))))
         rc |= bool(r["errors"])
     return rc
