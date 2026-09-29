@@ -67,6 +67,8 @@ def main():
     ap.add_argument("--trees", type=int, default=20)
     ap.add_argument("--catboost-cpu", action="store_true")
     ap.add_argument("--no-ours", action="store_true")
+    ap.add_argument("--boosting", default=None,
+                    help="override the lane's boosting_type (Plain / Ordered)")
     ap.add_argument("--train-auc", action="store_true",
                     help="also score the first 500,000 training rows")
     ap.add_argument("--ours-ab", action="append", default=[],
@@ -76,6 +78,8 @@ def main():
     lane = "gbdt-ordered"
     cfg = dict(spec.lane_config(lane, "shipped"))
     cfg["n_estimators"] = a.trees
+    if a.boosting:
+        cfg["boosting_type"] = a.boosting
     t0 = time.perf_counter()
     d = spec.load_dataset(a.dataset, "shipped", a.rows)
     print(f"ORD-PROFILE load dataset={d.name} shape={d.X_train.shape} "
