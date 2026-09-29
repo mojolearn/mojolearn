@@ -1,0 +1,27 @@
+gpuq: job 0046 lane=lowbit-default-h100 gpus=0 cap=240min started 2026-09-29T07:17:19Z
+gpuq: script /root/mojolearn-lowbit-default-h100/tools/lowbit_default/gen_job.sh sha256 at submit e31519ecab874e4a183e8d94521305832468965cc866a4dac7c13e37ff5c0ebe, now e31519ecab874e4a183e8d94521305832468965cc866a4dac7c13e37ff5c0ebe
+0, NVIDIA H100 NVL, 580.159.04
+build build exit 0
+build build_linalg exit 0
+build build_training exit 0
+build build_transformer exit 0
+default model reports numeric_profile=fixed15_v1; named model fp32_v1; device gpu
+RESULT hash default d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f
+RESULT hash fp32_v1 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+RESULT hash set_numeric_profile_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+RESULT hash set_numeric_profile_fp32_reports fp32_v1
+RESULT hash env_fp32 833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d
+RESULT hash env_fp32_reports fp32_v1
+RESULT check default is fixed15_v1: HELD
+RESULT check default hash d37c2ea81d13743a: HELD
+RESULT check fp32_v1 hash 833c9a8947bdd619: HELD
+RESULT check set_numeric_profile(fp32_v1) == fp32_v1 bits: HELD
+RESULT check MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits: HELD
+RESULT generate box=90d2c7e3d6aa arm=default route=per-layer prompt=512 new=32 median 4468.3 ms (139.63 ms/token) runs 4468.3 4727.2 4411.6 ids AGREE 2077bb0591d060ce
+RESULT generate box=90d2c7e3d6aa arm=fp32_v1 route=resident prompt=512 new=32 median 1162.6 ms (36.33 ms/token) runs 1167.0 1040.9 1162.6 ids AGREE 2077bb0591d060ce
+RESULT generate box=90d2c7e3d6aa default/fp32_v1 = 3.843 (default SLOWER)
+wrote /root/mojolearn-lowbit-default-h100/bench/results/lowbit_default/90d2c7e3d6aa/generate/default_gate_90d2c7e3d6aa.json
+DEFAULT GATE GREEN
+gpuq: job 0046 done exit=0 at 2026-09-29T07:23:15Z after 356s
+
+[exited with code 0]

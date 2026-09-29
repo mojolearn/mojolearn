@@ -1,0 +1,50 @@
+{
+ "box": "90d2c7e3d6aa",
+ "commit": "",
+ "vendor": "cuda",
+ "env_profile": null,
+ "hash": {
+  "default": "d37c2ea81d13743a91f33e32f2d44e1a17b5c3f0add1408bcbf70be99bee291f",
+  "fp32_v1": "833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d",
+  "set_numeric_profile_fp32": "833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d",
+  "set_numeric_profile_fp32_reports": "fp32_v1",
+  "env_fp32": "833c9a8947bdd6195e259cb36411966dd245f380bdff70ab712f1f26a268c84d",
+  "env_fp32_reports": "fp32_v1"
+ },
+ "hash_checks": {
+  "default is fixed15_v1": true,
+  "default hash d37c2ea81d13743a": true,
+  "fp32_v1 hash 833c9a8947bdd619": true,
+  "set_numeric_profile(fp32_v1) == fp32_v1 bits": true,
+  "MOJOLEARN_NUMERIC_PROFILE=fp32_v1 == fp32_v1 bits": true
+ },
+ "generate": {
+  "default": {
+   "median_s": 4.468307949602604,
+   "runs_s": [
+    4.468307949602604,
+    4.727170259691775,
+    4.411632093600929
+   ],
+   "route": [
+    "per-layer"
+   ],
+   "ids_sha256": "2077bb0591d060ce3d55bc03ea22aa6d58c1fc1c7d0ace5273528048afe92177",
+   "ids_agree": true
+  },
+  "fp32_v1": {
+   "median_s": 1.1626427192240953,
+   "runs_s": [
+    1.1670331424102187,
+    1.0408746376633644,
+    1.1626427192240953
+   ],
+   "route": [
+    "resident"
+   ],
+   "ids_sha256": "2077bb0591d060ce3d55bc03ea22aa6d58c1fc1c7d0ace5273528048afe92177",
+   "ids_agree": true
+  },
+  "ratio_default_over_fp32": 3.84323393224755
+ }
+}
