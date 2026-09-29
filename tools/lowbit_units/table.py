@@ -52,9 +52,10 @@ def read_lowbit(path):
             continue
         if len(f) != 14:
             sys.exit(f"table.py: {path}: a LOWBIT line has {len(f)} fields, not 14: {line.strip()!r}")
+        timed = f[8] != "not-timed"
         row = dict(column=f[1], shape=f[2], m=int(f[3]), n=int(f[4]), k=int(f[5]), extent=f[6], arm=f[7],
-                   median_ms=float(f[8]), min_ms=float(f[9]), rate=float(f[10]), unit=f[11], digest=f[12],
-                   note=f[13])
+                   median_ms=float(f[8]) if timed else None, min_ms=float(f[9]) if timed else None,
+                   rate=float(f[10]) if timed else None, unit=f[11], digest=f[12], note=f[13])
         if (row["shape"], row["arm"]) in rows:
             sys.exit(f"table.py: {path}: {row['shape']} {row['arm']} appears twice")
         rows[(row["shape"], row["arm"])] = row
@@ -104,6 +105,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--box", action="append", default=[], metavar="NAME=lowbit.tsv")
     ap.add_argument("--vendor", action="append", default=[], metavar="NAME=vendor_price.json")
+    ap.add_argument("--identity-only", action="append", default=[], metavar="NAME",
+                    help="a box judged on bitwise identity only: its time columns read "
+                         "'not timed (identity only)' whatever its file holds")
     ap.add_argument("--expect-disagree", nargs=2, metavar=("CLEAN", "SABOTAGE"))
     ap.add_argument("--out", default="")
     a = ap.parse_args()
@@ -116,6 +120,14 @@ def main():
         name, _, path = spec.partition("=")
         boxes[name] = read_lowbit(path)
         order.append(name)
+        if name in a.identity_only:
+            # The decision is about the BOX: a file from a run that did time
+            # it is read for its digests and its times are dropped here.
+            for r in boxes[name][0].values():
+                r["median_ms"] = r["min_ms"] = r["rate"] = None
+    for name in a.identity_only:
+        if name not in boxes:
+            sys.exit(f"table.py: --identity-only {name} names no --box")
     vendors = {}
     for spec in a.vendor:
         name, _, path = spec.partition("=")
@@ -139,6 +151,28 @@ def main():
         column = next(iter(rows.values()))["column"]
         w(f"## {box} (column {column})")
         w("")
+        if box in a.identity_only:
+            if box in vendors:
+                sys.exit(f"table.py: {box} is identity only; it takes no --vendor")
+            w("NOT TIMED (IDENTITY ONLY). This box is judged on bitwise identity (Andrew, 2026-09-29); the speed")
+            w("gate is judged on NVIDIA and on Apple. Its digests are in the last section.")
+            w("")
+            for shape in shapes:
+                first = next(r for (s, _), r in rows.items() if s == shape)
+                w(f"### {shape}: m={first['m']} n={first['n']} k={first['k']} ({first['extent']})")
+                w("")
+                w("| arm | median ms | min ms | rate | arm over fp32.v1 | note |")
+                w("|---|---:|---:|---:|---:|---|")
+                for arm in PRODUCTS + CONVERSIONS:
+                    r = rows.get((shape, arm))
+                    if r is None:
+                        if (shape, arm) in not_run:
+                            w(f"| {arm} | not run | | | | the column does not have the unit |")
+                        continue
+                    w(f"| {arm} | not timed (identity only) | not timed (identity only) | "
+                      f"not timed (identity only) | not timed (identity only) | {r['note']} |")
+                w("")
+            continue
         if box in vendors:
             v = vendors[box][0]
             w(f"Vendor comparison: {v['library']} on {v['device']}, torch {v['torch']}, {v['build']}, "

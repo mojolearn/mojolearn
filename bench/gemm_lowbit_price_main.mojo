@@ -86,7 +86,14 @@ THE LINES.
         The rate is G MAC/s (multiply-accumulates, `m n k`) for a product and
         G elem/s for a conversion.
 
+IDENTITY ONLY (Andrew, 2026-09-29: the AMD box is judged on bitwise
+identity and is not timed). `MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1` runs
+every arm ONCE, for its digest, and times nothing: no timed loop, no `PRICE`
+line, and the three number fields of every `LOWBIT` line read `not-timed`.
+The in-run plan comparisons still run.
+
 ENVIRONMENT.
+    MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY  1: digests only, nothing timed
     MOJOLEARN_LOWBIT_PRICE_REPEATS     timed calls per arm (default 5)
     MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET  see above (default 2^35; 0 = no cap)
     MOJOLEARN_LOWBIT_PRICE_ONLY        comma separated substrings of shape
@@ -501,6 +508,7 @@ def _time_shape(
     k: Int,
     capped: Bool,
     repeats: Int,
+    identity_only: Bool,
 ) raises -> String:
     """Every arm at one shape. Returns the plan disagreements found (empty
     when there are none); `main` raises on them after every shape has
@@ -546,7 +554,7 @@ def _time_shape(
         ctx.synchronize()
         dig[arm] = _arm_digest(ctx, sb, arm, m, n, k, tag)
 
-    for _ in range(repeats):
+    for _ in range(0 if identity_only else repeats):
         for arm in range(ARM_COUNT):
             if not ran[arm]:
                 continue
@@ -562,6 +570,14 @@ def _time_shape(
             print(
                 "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
                 "this column does not have the unit the arm runs on",
+            )
+            continue
+        if identity_only:
+            print(
+                "LOWBIT", column_name(TARGET_COLUMN), name, m, n, k, cap_word, arm_name,
+                "not-timed", "not-timed", "not-timed",
+                "GMAC/s" if _arm_is_product(arm) else "Gelem/s",
+                hex(dig[arm]), _arm_note(arm, m, n, k),
             )
             continue
         var med = _median_ms(samples[arm])
@@ -612,6 +628,7 @@ def main() raises:
         if bs != "":
             budget = Int(atol(bs))
         var only = String(getenv("MOJOLEARN_LOWBIT_PRICE_ONLY"))
+        var identity_only = String(getenv("MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY")) == "1"
 
         print("== bench/gemm_lowbit_price_main.mojo [" + _mode() + "] ==")
         print("column", column_name(TARGET_COLUMN))
@@ -622,11 +639,17 @@ def main() raises:
             " apple chunk", int8_apple_chunk_sabotage_name(),
         )
         print("repeats", repeats, " mac budget", budget, " only", only)
-        print(
-            "EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one",
-            "synchronize per sample; the median of the timed calls is reported",
-            "and the minimum beside it.",
-        )
+        if identity_only:
+            print(
+                "IDENTITY ONLY: every arm runs once for its digest and NOTHING",
+                "IS TIMED on this box.",
+            )
+        else:
+            print(
+                "EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one",
+                "synchronize per sample; the median of the timed calls is reported",
+                "and the minimum beside it.",
+            )
 
         var bad = String("")
         var shapes = 0
@@ -648,7 +671,9 @@ def main() raises:
                     var cap = _capped(m, n, k, budget)
                     dm = cap[0]
                     dn = cap[1]
-                bad += _time_shape(ctx, i, name, dm, dn, k, dm != m or dn != n, repeats)
+                bad += _time_shape(
+                    ctx, i, name, dm, dn, k, dm != m or dn != n, repeats, identity_only
+                )
                 shapes += 1
 
         print()

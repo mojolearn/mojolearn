@@ -6,7 +6,8 @@
 #                    EXPECTED exit 0.
 #   price-sabotage   -D MOJOLEARN_LOWBIT_PRICE_SABOTAGE=1 (one bit of one
 #                    cell of every arm's output flipped before the digest),
-#                    one timed call per arm, the qkv rows only. Its digests
+#                    one timed call per arm, the qkv rows only (or the
+#                    clean run's own rows when it names some). Its digests
 #                    must DIFFER from the clean run's at every arm, which
 #                    tools/lowbit_units/table.py --expect-disagree checks
 #                    here. EXPECTED: the comparison exits 0 (every digest
@@ -42,7 +43,7 @@ red=0
     # and the lane's commit lies over it as a patch; on a steward's worktree
     # HEAD is the submitted commit.
     echo "tree_head=$(git rev-parse HEAD 2>/dev/null) dirty_files=$(git status --porcelain 2>/dev/null | grep -c .)"
-    echo "mac_budget=${MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET:-default} repeats=${MOJOLEARN_LOWBIT_PRICE_REPEATS:-default} only=${MOJOLEARN_LOWBIT_PRICE_ONLY:-all}"
+    echo "mac_budget=${MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET:-default} repeats=${MOJOLEARN_LOWBIT_PRICE_REPEATS:-default} only=${MOJOLEARN_LOWBIT_PRICE_ONLY:-all} identity_only=${MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY:-0}"
 } > "$OUT/run.txt"
 
 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/gemm_lowbit_price_main.mojo > "$OUT/price.log" 2>&1
@@ -51,7 +52,12 @@ echo "price exit=$rc" >> "$OUT/run.txt"
 [ "$rc" -eq 0 ] || red=1
 grep -E '^LOWBIT(-NOT-RUN)? ' "$OUT/price.log" > "$OUT/lowbit.tsv"
 
-MOJOLEARN_LOWBIT_PRICE_ONLY=qkv MOJOLEARN_LOWBIT_PRICE_REPEATS=1 \
+# One timed call per arm; under MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1 (which
+# this run inherits) none.
+# The rows: the clean run's own filter when it has one (a sabotage run over
+# rows the clean run did not take compares nothing, and nothing compared is
+# a failure: job nvc3-0008), else the qkv rows.
+MOJOLEARN_LOWBIT_PRICE_ONLY=${MOJOLEARN_LOWBIT_PRICE_ONLY:-qkv} MOJOLEARN_LOWBIT_PRICE_REPEATS=1 \
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_PRICE_SABOTAGE=1 \
     -I . bench/gemm_lowbit_price_main.mojo > "$OUT/price_sabotage.log" 2>&1
 echo "price-sabotage exit=$? (the in-run plan comparison may raise; the verdict is the digest comparison below)" >> "$OUT/run.txt"
