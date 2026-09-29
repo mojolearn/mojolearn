@@ -1165,6 +1165,8 @@ class TorchArm:
         if MODEL_OF[lane] == "samba":
             rec.update(dropout=SAMBA_DROPOUT, max_grad_norm=None if self.train else "n/a")
         self.record = rec
+        if self.compile and where == "cpu":
+            self.info["openmp"] = _pin_inductor_openmp(torch)
         self.fn = torch.compile(self.module) if self.compile else self.module
         sync()
 
@@ -1669,6 +1671,34 @@ class MambaSsmArm:
 
     def digest(self):
         return _sha(self.np.ascontiguousarray(self.out).data)[:16]
+
+
+def _pin_inductor_openmp(torch):
+    """A CPU torch.compile arm on macOS runs torch's own OpenMP runtime, once.
+
+    inductor links its kernel with `-L <python's lib dir> -L torch/lib -lomp`
+    (torch/_inductor/cpp_builder.py, _get_openmp_args with Apple clang). The
+    board's venv is built from the pixi Python, whose lib dir holds its own
+    libomp.dylib, so the kernel loaded that second copy beside the one torch
+    had already loaded, and the process aborted with "OMP: Error #15"
+    (tools/torch_cpu_compile_omp_probe.sh, M3 Ultra 2026-09-29): every
+    torch-cpu-compile arm refused. With OMP_PREFIX naming a prefix that has
+    include/omp.h, inductor takes its header from there and adds no -lomp;
+    the kernel is linked with `-undefined dynamic_lookup`, so its OpenMP
+    symbols bind to the runtime torch loaded. torch ships that header in
+    torch/include. Not KMP_DUPLICATE_LIB_OK, which lets two runtimes run.
+    Returns what was done, for the arm's info."""
+    if sys.platform != "darwin":
+        return "not macOS: inductor's own OpenMP choice"
+    root = os.path.dirname(torch.__file__)
+    if os.environ.get("OMP_PREFIX"):
+        return "OMP_PREFIX=%s (set by the caller)" % os.environ["OMP_PREFIX"]
+    if not os.path.exists(os.path.join(root, "include", "omp.h")):
+        raise RuntimeError("REFUSED: torch at %s ships no include/omp.h, so a CPU torch.compile "
+                           "cannot be kept on torch's own libomp; it would load a second one" % root)
+    os.environ["OMP_PREFIX"] = root
+    return ("OMP_PREFIX=%s: inductor's kernel binds to torch's own libomp (no -lomp, "
+            "no second OpenMP runtime)" % root)
 
 
 def build_runner(lane, arm, shape, data):
