@@ -1451,6 +1451,9 @@ QUALITY_TEXT = {
 }
 
 
+QUALITY_TEXT.update(_EXTRA.QUALITY_TEXT)
+
+
 def quality_kind(lane):
     s = LANES[lane]
     if s.get("quality"):
