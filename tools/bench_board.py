@@ -111,7 +111,10 @@ SEED = 7                 # the drivers' own seed (lane_config seed=7); one seed 
 DEFAULT_ROUNDS = 5
 TREE_ROW_FLOOR = 1_000_000
 
-TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
+#: gbdt-symmetric-1000 is gbdt-symmetric at 1000 trees (CatBoost's own default
+#: iteration count; oblivious trees are weaker per tree), same arms and datasets.
+TREE_LANES = ("gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-depthwise", "gbdt-lossguide",
+              "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 FAMILIES = ("trees", "classical", "classical2", "neural", "algos")
 NEURAL_SHAPES = ("full", "small")
@@ -138,6 +141,7 @@ TREE_OPPONENTS = {
     # on every core (resolve_devices' `auto` is cpu on the Mac).
     "apple": {
         "gbdt-symmetric": ("catboost-cpu",),
+        "gbdt-symmetric-1000": ("catboost-cpu",),
         "gbdt-depthwise": ("catboost-cpu", "xgboost-cpu"),
         "gbdt-lossguide": ("catboost-cpu", "xgboost-cpu", "lightgbm-cpu"),
         "rf": ("sklearn-rf-cpu", "lightgbm-cpu"),
@@ -147,6 +151,7 @@ TREE_OPPONENTS = {
     # NVIDIA: the vendor GPU path only; bench_all_ours.sh's tree_arms_for.
     "nvidia": {
         "gbdt-symmetric": ("catboost-gpu",),
+        "gbdt-symmetric-1000": ("catboost-gpu",),
         "gbdt-depthwise": ("catboost-gpu", "xgboost-gpu"),
         "gbdt-lossguide": ("catboost-gpu", "xgboost-gpu", "lightgbm-cuda"),
         "rf": ("cuml-rf-gpu",),
@@ -160,6 +165,7 @@ TREE_OPPONENTS = {
     # carries one, and xgboost-cpu stands beside it.
     "amd": {
         "gbdt-symmetric": ("catboost-cpu",),
+        "gbdt-symmetric-1000": ("catboost-cpu",),
         "gbdt-depthwise": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu"),
         "gbdt-lossguide": ("catboost-cpu", "xgboost-gpu", "xgboost-cpu", "lightgbm-cpu"),
         "rf": ("sklearn-rf-cpu", "lightgbm-cpu"),
