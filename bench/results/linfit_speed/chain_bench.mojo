@@ -14,7 +14,7 @@ from x_linear.ops import FP, fz, xmad, ld, st, fmad
 from x_linear.tops import chain_fmad, chain_fmad_scaled, fold_fa
 
 
-def k_plain(x: FP, v: FP, out: FP, n: Int, d: Int, mode: Int):
+def k_plain(x: FP, v: FP, res: FP, n: Int, d: Int, mode: Int):
     if Int(thread_idx.x) != 0:
         return
     var acc = Float32(0)
@@ -44,7 +44,7 @@ def k_plain(x: FP, v: FP, out: FP, n: Int, d: Int, mode: Int):
         var b = ld(v, 1)
         for i in range(n):
             acc = fz(xmad(a, b, acc))
-    st(out, 0, acc)
+    st(res, 0, acc)
 
 
 def main() raises:
