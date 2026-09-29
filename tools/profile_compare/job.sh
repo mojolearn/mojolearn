@@ -5,7 +5,11 @@ export PATH="$HOME/.pixi/bin:/opt/rocm/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_HOTPATH=native
 unset MOJOLEARN_NUMERIC_PROFILE
 export PYTHONPATH="$PWD/python"
-export MOJOLEARN_COMMIT=$(git rev-parse HEAD)
+if [ -f .profile_compare_commit ]; then
+    export MOJOLEARN_COMMIT=$(< .profile_compare_commit)
+else
+    export MOJOLEARN_COMMIT=$(git rev-parse HEAD)
+fi
 MODEL=${LB_MODEL:-/root/models/SmolLM2-360M}
 test -f "$MODEL/model.safetensors"
 OUT=$(mktemp -d "$PWD/bench/results/profile-compare-XXXXXXXX")
