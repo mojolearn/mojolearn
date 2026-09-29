@@ -1221,6 +1221,78 @@ def invalidate_memory(out, prefixes, reason, fixed_at, store_path=None):
     return n_board, n_store
 
 
+# ---------------------------------------------------------------------------
+# --invalidate-arm: an arm that did not run what its name says, refused after the fact
+# ---------------------------------------------------------------------------
+
+def _refuse_cell(cell, reason):
+    cell["status"] = "REFUSED(%s)" % reason
+    cell["withdrawn"] = {"median_ms": cell.get("median_ms"), "min_ms": cell.get("min_ms"),
+                         "max_ms": cell.get("max_ms"), "times_ms": cell.get("times_ms"),
+                         "quality": cell.get("quality")}
+    for k in ("median_ms", "min_ms", "max_ms", "warmup_ms", "quality", "peak_gpu_mb", "peak_host_mb",
+              "ratio_ours_identical_over", "ratio_ours_fast_over", "ratio_ours_cpu_over"):
+        if k in cell:
+            cell[k] = None
+    cell["times_ms"] = []
+    cell["rounds"] = 0
+
+
+def invalidate_arm(out, arm, reason, store_path=None, vendor=None):
+    """Mark every finished cell of `arm` (fit and inference, run or stored) as
+    REFUSED(reason): its times and quality are withdrawn (kept under
+    `withdrawn`), the rest of the race stays, and the ratios are recomputed
+    without it. For an arm whose measurement was not what its name says (on
+    do-amd, 2026-09-29, `xgboost-gpu` trained on the host CPU), so the races
+    need not be run again. The opponent store gets a refused copy of each of
+    its records of the arm (of `vendor` when given). Idempotent. Returns
+    (board cells refused, store records refused)."""
+    rpath = os.path.join(out, "board.json")
+    result = load_result(rpath)
+    if result is None:
+        raise SystemExit("--invalidate-arm: no board.json under %s" % out)
+    n_board = 0
+    for rid, rec in (result.get("races") or {}).items():
+        hit = False
+        for c in rec.get("cells") or []:
+            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
+                _refuse_cell(c, reason)
+                n_board += 1
+                hit = True
+        infer = rec.get("infer_cells") or []
+        for c in infer:
+            if c.get("arm") == arm and not str(c.get("status", "")).startswith("REFUSED"):
+                _refuse_cell(c, reason)
+                n_board += 1
+                hit = True
+        if hit:
+            rec["cells"] = add_ratios(rec.get("cells") or [])
+            if infer:
+                INFER._ratios(infer, _bb())
+    n_store = 0
+    if store_path and os.path.exists(store_path):
+        for r in STORE.load(store_path).values():
+            k = r.get("key") or {}
+            cell = r.get("cell") or {}
+            if k.get("arm") != arm or (vendor and k.get("vendor") != vendor) \
+                    or str(cell.get("status", "")).startswith("REFUSED"):
+                continue
+            fixed = json.loads(json.dumps(r))
+            _refuse_cell(fixed["cell"], reason)
+            for ic in fixed.get("infer_cells") or []:
+                _refuse_cell(ic, reason)
+            fixed["corrected_at"] = now_utc()
+            STORE.append(store_path, fixed)
+            n_store += 1
+    if n_board:
+        result.setdefault("corrections", []).append(
+            {"at": now_utc(), "what": "arm refused after the fact", "arm": arm, "reason": reason,
+             "cells": n_board, "store_records": n_store})
+        save_result(rpath, result)
+        write_board(out, result)
+    return n_board, n_store
+
+
 def load_result(path):
     if not os.path.exists(path):
         return None
@@ -2980,6 +3052,11 @@ def build_parser():
                         "figure a non-torch arm read from torch's allocator; needs "
                         "--invalidate-reason and --invalidate-fixed-at")
     p.add_argument("--invalidate-reason", default=None)
+    p.add_argument("--invalidate-arm", action="append", default=[], metavar="ARM",
+                   help="before the run (or alone with --render-only): mark every finished cell "
+                        "of this arm REFUSED(--invalidate-arm-reason), times withdrawn and ratios "
+                        "recomputed, for an arm that did not run what its name says (repeatable)")
+    p.add_argument("--invalidate-arm-reason", default=None)
     p.add_argument("--invalidate-fixed-at", default=None, metavar="COMMIT")
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
@@ -3192,6 +3269,18 @@ def main(argv=None):
                                    args.invalidate_fixed_at, store)
         print("bench_board: --invalidate-memory %s: withdrew %d GPU memory figures on the board, "
               "corrected %d opponent-store records" % (args.invalidate_memory, nb, ns), flush=True)
+
+    if args.invalidate_arm:
+        if not (args.out and args.invalidate_arm_reason):
+            raise SystemExit("--invalidate-arm needs --out and --invalidate-arm-reason")
+        iout = os.path.abspath(os.path.expanduser(args.out))
+        store = os.path.abspath(os.path.expanduser(
+            args.opponent_store or os.path.join(os.path.dirname(iout), "opponent-store.jsonl")))
+        for arm in args.invalidate_arm:
+            nb, ns = invalidate_arm(iout, arm, args.invalidate_arm_reason, store,
+                                    vendor=None if args.vendor == "auto" else args.vendor)
+            print("bench_board: --invalidate-arm %s: refused %d cells on the board, %d opponent-store "
+                  "records" % (arm, nb, ns), flush=True)
 
     if args.render_only:
         if not args.out:
