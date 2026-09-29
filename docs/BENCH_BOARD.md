@@ -27,7 +27,9 @@ full contract. In short:
   `BOARD.md`. Bulky state (venv, wheel download, classical blocks) goes in
   `--cache`, which defaults to `<out>/cache`. Rerunning the same command
   resumes: finished races are skipped and failed ones are retried
-  (`--skip-failed` turns that off). A resume on a different box or a
+  (`--skip-failed` turns that off). `--rerun trees/rf/,trees/et/ --rerun-before <UTC ISO>` runs
+  finished races again (after a driver fix), keeping each earlier record under
+  `superseded` in `board.json`. A resume on a different box or a
   different wheel is refused.
 - Data is never downloaded. taxi and Istella-S come from R2
   (`docs/REMOTE_DATA_R2.md`), and the ranking lanes also read

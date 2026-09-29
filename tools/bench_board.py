@@ -2104,6 +2104,12 @@ def build_parser():
     p.add_argument("--no-cpu-arm", action="store_true",
                    help="skip our CPU tier: no `ours-cpu` arm (by default it races on every lane "
                         "whose estimator has a CPU path, on every vendor)")
+    p.add_argument("--rerun", default=None,
+                   help="comma list of race id prefixes (e.g. trees/rf/,trees/et/) to run again "
+                        "although done; the old record is kept under `superseded`")
+    p.add_argument("--rerun-before", default=None,
+                   help="with --rerun: only races that finished before this UTC time "
+                        "(ISO, e.g. 2026-09-29T13:00:00Z)")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -2121,6 +2127,18 @@ def build_parser():
     p.add_argument("--algos-data", default=None,
                    help="algos block dir (default <cache>/algos-data); prep is untimed and once")
     return p
+
+
+def _rerun_wanted(args, race_id, prev):
+    """--rerun: a finished race whose id starts with one of the prefixes and
+    that finished before --rerun-before (UTC, ISO) runs again. The earlier
+    record is kept under `superseded` in board.json. The time bound makes a
+    resumed rerun job skip the races it already reran."""
+    if not args.rerun:
+        return False
+    if not any(race_id.startswith(p.strip()) for p in args.rerun.split(",") if p.strip()):
+        return False
+    return str(prev.get("finished") or "") < (args.rerun_before or "9999")
 
 
 def parse_rows(text):
@@ -2350,9 +2368,13 @@ def main(argv=None):
     todo = []
     for r in races:
         prev = result["races"].get(r["id"])
-        if prev and prev.get("status") == "done":
+        if prev and prev.get("status") == "done" and not _rerun_wanted(args, r["id"], prev):
             print("bench_board: skip %s (done %s)" % (r["id"], prev.get("finished")), flush=True)
             continue
+        if prev and prev.get("status") == "done":
+            print("bench_board: RERUN %s (done %s, before --rerun-before %s)"
+                  % (r["id"], prev.get("finished"), args.rerun_before), flush=True)
+            result.setdefault("superseded", []).append(prev)
         if prev and prev.get("status") == "failed" and args.skip_failed:
             print("bench_board: skip %s (failed earlier; --skip-failed)" % r["id"], flush=True)
             continue
