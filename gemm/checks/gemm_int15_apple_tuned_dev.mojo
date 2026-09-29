@@ -49,7 +49,7 @@ compiles.
 from std.ffi import external_call
 from std.gpu import block_idx, thread_idx
 from std.sys import is_defined
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
 
 from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, column_name
 from checks.numerics_int15 import dequant_int15_pinned, int15_recombine
@@ -67,6 +67,7 @@ from gemm.checks.gemm_int15_apple_tuned import (
     INT15_TUNED_FORM_TWO,
     INT15_TUNED_VALUE_SABOTAGE,
     _flush_deferred,
+    int15_apple_refuse_block,
 )
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
@@ -419,6 +420,12 @@ def _launch_dev[
     comptime BN = 8 * FN * SGN
     var mp = _pad(m, DEV_ROW_PAD)
     var kp = _pad(k, DEV_STEP_PAD)
+    var admits = -1
+    try:
+        admits = Int(ctx.compile_function[kern]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
+    except:
+        admits = -1
+    int15_apple_refuse_block(SGM * SGN * 32, admits, "identical_gemm_int15_apple_dev")
     var left0 = pl.aw.unsafe_ptr() if FORM == INT15_TUNED_FORM_TWO else pl.a0.unsafe_ptr()
     var nbm = (m + BM - 1) // BM
     var nbn = (n + BN - 1) // BN

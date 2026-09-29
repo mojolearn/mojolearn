@@ -124,7 +124,7 @@ from std.memory import stack_allocation
 from std.sys import is_defined
 from std.gpu import MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
@@ -647,6 +647,48 @@ def identical_gemm_int15_apple_tuned_kernel_b128[
     _tuned_body[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER](c, ah, al, ea, bh, bl, eb, m_in, n_in, k_in, tile_row0_in, aligned_in)
 
 
+#: The block every Apple plan here stays under when the pipeline's limit
+#: cannot be read: 256 threads ran on the M2 Pro at 2 x 2 fragments of form
+#: FOUR (job 2's probe), 512 did not.
+comptime INT15_APPLE_SAFE_THREADS = 256
+
+
+def int15_apple_refuse_block(threads: Int, admits: Int, who: String) raises:
+    """Raise, naming both numbers, when a block of `threads` passes what
+    the pipeline admits (`admits`, -1 when it could not be read: then the
+    bound is `INT15_APPLE_SAFE_THREADS`)."""
+    if admits >= 0 and threads > admits:
+        raise Error(
+            who + ": REFUSED, the block has " + String(threads)
+            + " threads and the pipeline admits " + String(admits)
+            + " (maxTotalThreadsPerThreadgroup); Metal would launch nothing and report nothing"
+        )
+    if admits < 0 and threads > INT15_APPLE_SAFE_THREADS:
+        raise Error(
+            who + ": REFUSED, the block has " + String(threads)
+            + " threads, the pipeline's limit could not be read and the bound is "
+            + String(INT15_APPLE_SAFE_THREADS)
+        )
+
+
+def int15_apple_tuned_pipeline_admits[
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool
+](ctx: DeviceContext) -> Int:
+    """What the pipeline of one schedule admits, -1 when it cannot be read
+    (for the probe)."""
+    try:
+        comptime if BOUND:
+            return Int(ctx.compile_function[
+                identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
+            ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
+        else:
+            return Int(ctx.compile_function[
+                identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
+            ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
+    except:
+        return -1
+
+
 def _launch_tuned[
     SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool
 ](
@@ -668,6 +710,19 @@ def _launch_tuned[
     comptime kern = identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
     comptime kern_b = identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
     comptime assert not BOUND or SGM * SGN * 32 <= INT15_TUNED_LAUNCH_BOUND, "the block passes its declared bound"
+    # A LAUNCH METAL WOULD DROP IS REFUSED HERE (job 2's probe): a pipeline
+    # admits at most `maxTotalThreadsPerThreadgroup` threads, which falls
+    # with its registers (on the M2 Pro, below 512 for 4 x 4 simdgroups of
+    # 2 x 2 fragments); a larger block launches nothing and says nothing.
+    var admits = -1
+    try:
+        comptime if BOUND:
+            admits = Int(ctx.compile_function[kern_b]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
+        else:
+            admits = Int(ctx.compile_function[kern]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
+    except:
+        admits = -1
+    int15_apple_refuse_block(SGM * SGN * 32, admits, "identical_gemm_int15_apple_tuned")
     comptime BM = 8 * FM * SGM
     comptime BN = 8 * FN * SGN
     var nbm = (m + BM - 1) // BM

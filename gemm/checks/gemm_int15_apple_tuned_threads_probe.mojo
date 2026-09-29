@@ -20,8 +20,11 @@ many and with few registers a thread:
 A tile that writes nothing at 512 threads with FEW registers says the limit
 is the threads a threadgroup may have on this chip; one that writes with
 few and not with many says the pipeline's limit falls with its registers
-(`maxTotalThreadsPerThreadgroup`). The validation layer, where it is on,
-names the limit. Lines: `THREADS <tile> <threads> wrote|NEVER-WROTE
+(`maxTotalThreadsPerThreadgroup`). Job 2 (8fcd8be81, M2 Pro) found the
+second, and the validation layer named nothing. Since then the launcher
+REFUSES a block above what the pipeline admits: `ADMITS <tile> <n>` is the
+pipeline's number, and the 512-thread tile of 2 x 2 fragments must now print
+`REFUSED` on the M2 Pro instead of `NEVER-WROTE` (the fix seen working). Lines: `THREADS <tile> <threads> wrote|NEVER-WROTE
 equal|DIFFER`. It certifies nothing and times nothing.
 """
 
@@ -33,6 +36,7 @@ from gemm.checks.gemm_int15_apple_tuned import (
     INT15_TUNED_FORM_FOUR,
     INT15_TUNED_FORM_TWO,
     _launch_tuned,
+    int15_apple_tuned_pipeline_admits,
 )
 from gemm.checks.gemm_int15_check import _bits, _download, _poisoned, _upload, POISON
 
@@ -92,29 +96,45 @@ def main() raises:
         var want = _download[DType.float32](ctx, c0, m * n)
         _report(String("ref.t32"), 128, want, List[Float32]())
         var c1 = _poisoned(ctx, m * n)
-        _launch_tuned[4, 2, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](
-            ctx, c1, dah, dal, dea, dbh, dbl, deb, m, n, k, S
-        )
-        ctx.synchronize()
-        _report(String("sg8.2x2"), 256, _download[DType.float32](ctx, c1, m * n), want)
+        print("ADMITS sg8.2x2 " + String(int15_apple_tuned_pipeline_admits[4, 2, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](ctx)))
+        try:
+            _launch_tuned[4, 2, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](
+                ctx, c1, dah, dal, dea, dbh, dbl, deb, m, n, k, S
+            )
+            ctx.synchronize()
+            _report(String("sg8.2x2"), 256, _download[DType.float32](ctx, c1, m * n), want)
+        except e:
+            print("THREADS sg8.2x2 256 REFUSED " + String(e))
         var c2 = _poisoned(ctx, m * n)
-        _launch_tuned[4, 4, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](
-            ctx, c2, dah, dal, dea, dbh, dbl, deb, m, n, k, S
-        )
-        ctx.synchronize()
-        _report(String("sg16.2x2"), 512, _download[DType.float32](ctx, c2, m * n), want)
+        print("ADMITS sg16.2x2 " + String(int15_apple_tuned_pipeline_admits[4, 4, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](ctx)))
+        try:
+            _launch_tuned[4, 4, 2, 2, 16, INT15_TUNED_FORM_FOUR, False, False, False, False](
+                ctx, c2, dah, dal, dea, dbh, dbl, deb, m, n, k, S
+            )
+            ctx.synchronize()
+            _report(String("sg16.2x2"), 512, _download[DType.float32](ctx, c2, m * n), want)
+        except e:
+            print("THREADS sg16.2x2 512 REFUSED " + String(e))
         var c3 = _poisoned(ctx, m * n)
-        _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_FOUR, False, False, False, False](
-            ctx, c3, dah, dal, dea, dbh, dbl, deb, m, n, k, S
-        )
-        ctx.synchronize()
-        _report(String("sg16.1x1"), 512, _download[DType.float32](ctx, c3, m * n), want)
+        print("ADMITS sg16.1x1 " + String(int15_apple_tuned_pipeline_admits[4, 4, 1, 1, 32, INT15_TUNED_FORM_FOUR, False, False, False, False](ctx)))
+        try:
+            _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_FOUR, False, False, False, False](
+                ctx, c3, dah, dal, dea, dbh, dbl, deb, m, n, k, S
+            )
+            ctx.synchronize()
+            _report(String("sg16.1x1"), 512, _download[DType.float32](ctx, c3, m * n), want)
+        except e:
+            print("THREADS sg16.1x1 512 REFUSED " + String(e))
         var c4 = _poisoned(ctx, m * n)
-        _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_TWO, False, False, True, False](
-            ctx, c4, dah, dal, dea, dbh, dbl, deb, m, n, k, S
-        )
-        ctx.synchronize()
-        _report(String("sg16.1x1.f2d"), 512, _download[DType.float32](ctx, c4, m * n), want)
+        print("ADMITS sg16.1x1.f2d " + String(int15_apple_tuned_pipeline_admits[4, 4, 1, 1, 32, INT15_TUNED_FORM_TWO, False, False, True, False](ctx)))
+        try:
+            _launch_tuned[4, 4, 1, 1, 32, INT15_TUNED_FORM_TWO, False, False, True, False](
+                ctx, c4, dah, dal, dea, dbh, dbl, deb, m, n, k, S
+            )
+            ctx.synchronize()
+            _report(String("sg16.1x1.f2d"), 512, _download[DType.float32](ctx, c4, m * n), want)
+        except e:
+            print("THREADS sg16.1x1.f2d 512 REFUSED " + String(e))
         _ = dah
         _ = dal
         _ = dbh
