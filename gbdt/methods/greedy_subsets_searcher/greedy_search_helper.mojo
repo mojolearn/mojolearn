@@ -64,6 +64,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
     snap_gradients_to_scale_kernel,
+    snap_plane_to_scale_kernel,
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
@@ -1947,6 +1948,27 @@ def enqueue_snap_gradients(
         grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
         block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
     )
+
+
+def enqueue_snap_plane(
+    ctx: DeviceContext,
+    mut plane: DeviceBuffer[DType.float32],
+    n: Int,
+    fixed_scale: Float32,
+) raises:
+    """lane/sym-quality: the POINTWISE searcher's gradient plane onto the
+    tree's fixed-point grid (`snap_plane_to_scale_kernel`), after its scale
+    and before `fit_oblivious_tree_structure`. Gated on the SAME comptime
+    truth as the greedy snap (`acc_i32_is_live`): where no histogram
+    quantizes, nothing moves. Row-parallel, no reduction."""
+    comptime if acc_i32_is_live[HIST2_SMEM_MODE]():
+        if n < 1:
+            return
+        ctx.enqueue_function[snap_plane_to_scale_kernel](
+            plane.unsafe_ptr(), Int32(n), fixed_scale,
+            grid_dim=((n + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+            block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+        )
 
 
 def launch_hist2_width_group[bits: Int, preq: Bool, col_map: Bool](
