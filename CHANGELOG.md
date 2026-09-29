@@ -2,7 +2,7 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## 0.8.25 (unreleased 2026-09-28)
+## 0.8.25 (published 2026-09-29)
 
 ### Added
 - Optional `mojolearn[verify]` and `mojolearn[numpy]` extras. The base package does not require NumPy; optional array-based APIs provide installation guidance when it is absent.
