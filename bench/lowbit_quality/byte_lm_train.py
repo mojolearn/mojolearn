@@ -125,6 +125,12 @@ ZERO_CODE_WIDTHS = ("bf16", "int8", "int10", "int12", "int15")
 COLLECT = None
 
 
+#: When a list, `QMatmulNT` appends to it, per product, the float32 operands
+#: it was handed and the float32 results it computed, forward and backward.
+#: Set only by `backward_export.py`.
+EXPORT = None
+
+
 def zero_code_record(x):
     """For one backward operand, rows along its last extent as its GEMM
     sees them: how many entries are exactly zero as float32, and under each
@@ -225,7 +231,10 @@ class QMatmulNT(torch.autograd.Function):
     def forward(ctx, A, B, ka, kb, quant_backward, sabotage, name):
         ctx.save_for_backward(A, B)
         ctx.meta = (ka, kb, quant_backward, sabotage, name)
-        return arith.product_nt(A, B, ka, kb)
+        out = arith.product_nt(A, B, ka, kb)
+        if EXPORT is not None:
+            ctx.exported_forward = out.detach().clone()
+        return out
 
     @staticmethod
     def backward(ctx, G):
@@ -246,6 +255,10 @@ class QMatmulNT(torch.autograd.Function):
         else:
             dA = G @ B
             dB = Gt @ A
+        if EXPORT is not None:
+            EXPORT.append(dict(name=name, kinds=(ka, kb), quant_backward=quant_backward,
+                               X=A.detach().clone(), W=B.detach().clone(), dY=G.detach().clone(),
+                               Y=ctx.exported_forward, dX=dA.detach().clone(), dW=dB.detach().clone()))
         if sabotage:
             dB = -dB
         return dA, dB, None, None, None, None, None

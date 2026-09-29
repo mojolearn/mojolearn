@@ -198,10 +198,67 @@ Interim table, 03:36Z, three seeds per arm (five are queued in nvc1-0011):
 | 15-bit both | projections | forward | -0.229% | -0.877% to +0.424% | yes | median 4000 | PASS |
 | 15-bit both | projections | forward + backward | -0.184% | -1.400% to +1.046% | yes | median 4000 | UNDERPOWERED at three seeds |
 
+## The backward quantization rule: what the training simulation does
+
+The rule (brief, 06:50Z): every product quantizes its own operands from
+their float32 values, along that product's own contracted extent. Codes are
+never carried from one product to another and never transposed.
+
+**The simulation follows the rule in all three products. It differs in
+none.** The code is `QMatmulNT` in `bench/lowbit_quality/byte_lm_train.py`.
+Every product is a call of `arith.product_nt(A, B, ...)`, which computes
+`A @ B^T` and scales each row of each operand it is handed along that row's
+last extent, the contracted one. What is handed over is float32: the saved
+forward operands `X` and `W` as they were before any rounding
+(`ctx.save_for_backward`), and the incoming gradient `dY` as autograd
+delivers it. No code and no exponent of the forward product is kept.
+
+| Product | Call in the simulation | Left operand is scaled | Right operand is scaled |
+|---|---|---|---|
+| Forward, `Y = X W^T` | `product_nt(X, W)` | X by token (each row of X over the features) | W by output feature (each row of W over the input features) |
+| Weight gradient, `dW = dY^T X` | `product_nt(dY^T, X^T)`, the transposes taken of the float32 tensors | dY by output feature over all tokens | X by input feature over all tokens |
+| Input gradient, `dX = dY W` | `product_nt(dY, W^T)`, the transpose taken of the float32 tensor | dY by token over the output features | W by input feature over the output features (the columns of W) |
+
+"All tokens" is every row of the batch: a projection's `X` is flattened to
+`[batch * length, features]` before the product, so the weight gradient
+contracts over 32 * 128 = 4096 tokens at this shape.
+
+The attention products follow the same rule through the same code, with
+the leading extents (batch, head) kept:
+
+| Product | Left operand is scaled | Right operand is scaled |
+|---|---|---|
+| Forward `S = Q K^T` | Q by query position over the head channels | K by key position over the head channels |
+| `dQ = dS K` | dS by query position over the key positions | K by head channel over the key positions |
+| `dK = dS^T Q` | dS by key position over the query positions | Q by head channel over the query positions |
+| Forward `O = P V` | P by query position over the key positions | V by head channel over the key positions |
+| `dP = dO V^T` | dO by query position over the head channels | V by key position over the head channels |
+| `dV = P^T dO` | P by key position over the query positions | dO by head channel over the query positions |
+
+Two things a reader comparing line by line should know:
+
+- In the FORWARD ONLY arms the two backward products are float32 products
+  of the saved float32 operands. Nothing is quantized there, so the rule
+  has nothing to act on.
+- The self-test holds the orientation of the backward calls: with float32
+  kinds the forward and backward path equals torch's own autograd (cosine
+  1.0, relative norm error 1.4e-7), and the arm with the weight gradient
+  negated fails.
+
+Vectors. This lane exported none, forward or backward. Lane C exported the
+forward vectors itself, from a copy of `arith.py` pinned at blob 17337a5c
+(this branch at 59f445c6c). `arith.py` has changed since that pin by 18
+added lines, none of them arithmetic (the dropped note and a method that
+reads it); its blob is now c60a455c. Backward vectors are exported by
+`bench/lowbit_quality/backward_export.py` in Lane C's file format, from one
+real training step, with the operands exactly as `QMatmulNT` hands them to
+the three products.
+
 ## Failures, with cause
 
 | What | Cause | State |
 |---|---|---|
+| Jobs nvc2-0005 and nvc2-0006 exit 4 after 5 seconds, before any run: `SyntaxError: name 'ZERO_CODE_WIDTHS' is used prior to global declaration` | A `global` statement placed after the name's use in `main`. The laptop check parsed the file and did not compile it. The same file was in nvc1's tree from 03:46Z to 03:55Z; no job started from it. | fixed (d44962ac3); files are compiled on the pod before a submit; resubmitted as nvc2-0007 and nvc2-0008 |
 | Job nvc1-0005 (smoke) exit 1: `QUANTIZER CHECK FAIL`, `materialized_bits_differing` 27,461 of 921,600 on the first weight | A negative value that rounds to zero was `-0.0` in the simulation's float64 code and dequantized to `-0.0`; the int8 code 0 dequantizes to `+0.0`. Codes, exponents and the product were already equal. | fixed (`arith.py`: an integer code has one zero); PASS in nvc1-0006 |
 
 ## Owed
