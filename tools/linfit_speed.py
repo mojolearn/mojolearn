@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--rows", type=int, default=0, help="first N fit rows (0 = all)")
     ap.add_argument("--max-iter", type=int, default=0, help="override max_iter (0 = the board's)")
     ap.add_argument("--env", action="append", default=[])
+    ap.add_argument("--set", action="append", default=[], help="param override K=V (V as Python literal)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     for kv in a.env:
@@ -49,6 +50,10 @@ def main():
         params.update(s["params"])
         if a.max_iter:
             params["max_iter"] = a.max_iter
+        import ast
+        for kv in a.set:
+            k, v = kv.split("=", 1)
+            params[k] = ast.literal_eval(v)
         for ds in [x for x in a.datasets.split(",") if x]:
             with np.load(os.path.join(a.data, "%s-%s.npz" % (s["block"], ds))) as z:
                 X = np.ascontiguousarray(z["X"], dtype=np.float32)
@@ -68,7 +73,7 @@ def main():
             r = dict(lane=lane, dataset=ds, shape=list(X.shape), fit_s=round(sec, 3),
                      n_iter=int(getattr(m, "n_iter_", -1)), sha=h.hexdigest()[:16],
                      env={k: os.environ[k] for k in os.environ if k.startswith("MOJOLEARN_X_LINEAR")},
-                     max_iter=params.get("max_iter"))
+                     max_iter=params.get("max_iter"), set=a.set)
             print(json.dumps(r), flush=True)
             recs.append(r)
     with open(a.out, "w") as fh:
