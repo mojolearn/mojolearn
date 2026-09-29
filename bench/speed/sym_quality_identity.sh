@@ -16,15 +16,20 @@ OUT=${1:?outdir}
 BK=${2:-metal}
 mkdir -p "$OUT"
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$PWD/python"
+HOSTD="$PWD/python/mojolearn/host"
 if [ "${3:-}" = build ]; then
     pixi run -e default sh bindings/build.sh > "$OUT/build_base.log" 2>&1 || { echo "base build failed"; tail -40 "$OUT/build_base.log"; exit 1; }
-    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_core_host.sh > "$OUT/build_core_host.log" 2>&1 || { echo "core host build failed"; tail -40 "$OUT/build_core_host.log"; exit 1; }
     pixi run -e default sh bindings/build_gbdt.sh > "$OUT/build.log" 2>&1 || { echo "build failed"; tail -40 "$OUT/build.log"; exit 1; }
+fi
+if [ "${3:-}" = build ] || [ "${3:-}" = hostbuild ]; then
+    # the host builds never overwrite: this tree's stale host objects go first
+    rm -f "$HOSTD/_mojolearn_core_host.so" "$HOSTD/_mojolearn_gbdt_host.so"
+    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_core_host.sh > "$OUT/build_core_host.log" 2>&1 || { echo "core host build failed"; tail -40 "$OUT/build_core_host.log"; exit 1; }
     env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
 fi
 R="pixi run -e default python -u"
 L=gbdt-class-weights,gbdt-multiclass,gbdt-multiclass-defaults,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide
-HOST="$PWD/python/mojolearn/host"
+HOST="$HOSTD"
 rc=0
 $R tools/identity_break.py --lanes $L --json "$OUT/$BK.json" --require-backend $BK --vendor $BK-symq || rc=1
 MOJOLEARN_VENDOR=cpu MOJOLEARN_HOST_DIR="$HOST" $R tools/identity_break.py --lanes $L --json "$OUT/cpu.json" \
