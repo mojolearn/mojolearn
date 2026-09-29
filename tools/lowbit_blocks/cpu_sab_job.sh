@@ -17,6 +17,7 @@ OUT=$T/bench/results/lowbit_blocks/$BOX/cpu_sab
 mkdir -p "$OUT"
 PX="pixi run --manifest-path $T/pixi.toml -e default"
 ARCH=sm_$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d '. ')
+rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
 echo "== build build_byte_lm ($ARCH)"
 env MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 $PX sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1; echo "build byte_lm exit $?"; tail -2 "$OUT/build_byte_lm.log"
 echo "== sabotage tree"
