@@ -208,3 +208,17 @@ It is another arithmetic than the one whose perplexity was measured for
 - Merged lane/lowbit-mma-speed 15e9ecf47 (fused form calls this lane's
   int15_store_cell). RUN 6 queued: nvc3-0032 at de690f1d4 (gate, then the
   clock only if GREEN). MI325X tuned gate + gate: 1790658677079.
+- RUN 6 (the epilogue fold): nvc3-0032 RED at its gate (the exponent arm
+  could not fail: every fixture gives an operand one exponent), fixed with
+  check_int15_tuned_row_scales; nvc3-0034 at 71db5bb26 GREEN, timed:
+  `tables/H100_RECORD_run6_fold.md`. Weight gradient fused 0.50 to 0.58 of
+  fp32.v1 (two-launch 0.89 to 1.02); fused/two-launch 0.555 to 0.566.
+  Inference t512 0.42 to 0.47. Three products added 0.59 to 0.64. MI325X
+  tuned gate GREEN (1790659063533), digests equal to the H100's (149 cases).
+  Anomaly, not claimed: qkv.t1/t8 complete fused 1.41x/1.31x two-launch
+  while the product alone is 0.98x/1.05x; cause not established.
+- The reference gate had the same blind spot: check_int15_row_scales and the
+  exponent arm in every plan's store (0efab762e). Jobs: M2 Pro 1790659752178,
+  MI325X 1790659755804; the H100 after run 7.
+- RUN 7 queued: nvc3-0037 at b9db1a41b (lane/lowbit-mma-speed 8b2768883:
+  the dispatcher's two-page plans), Lane D's lever. MI325X 1790659664486.
