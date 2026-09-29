@@ -27,10 +27,10 @@ its control on the host. NOTHING about any value's sequence changes:
     are the lead thread's code, run on the host: the CPU column runs this
     same source and every column agrees with it bit for bit.
 
-Every launch is BOUNDED in work (macOS aborts a Metal launch that holds the
-GPU for seconds, leaving its output partly written, with no error): the
-rows are cut into launches of at most GW_ROW_STEPS row terms and
-GW_CELL_STEPS cell-rows. Every output of every launch is POISONED first
+Every Apple launch is BOUNDED in work (macOS aborts a Metal launch that
+holds the GPU for seconds, leaving its output partly written, with no
+error): the rows are cut into launches of at most GW_ROW_STEPS row terms
+and GW_CELL_STEPS cell-rows (elsewhere a pass is one launch). Every output of every launch is POISONED first
 (a quiet NaN word no computation here produces), read back after the launch
 and checked; a surviving poison word raises. The cut is scheduling only
 (the chains carry across it), so the words do not depend on it:
@@ -39,10 +39,11 @@ gate uses to prove exactly that. MOJOLEARN_X_LINEAR_GLM_TEAM=1 runs the
 one-block team fit instead (the A/B arm). MOJOLEARN_X_LINEAR_GW_TRACE=1
 prints where the fit's wall time went (`GLM-WIDE ...`, stdout).
 MOJOLEARN_X_LINEAR_GW_GRAM=0 runs every cell on the one-cell kernel
-instead of the tiled Gram kernel (the A/B arm; the same words).
+instead of the tiled kernel (the A/B arm; the same words).
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.os import getenv
+from std.sys.info import has_apple_gpu_accelerator
 from std.time import perf_counter_ns
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -58,10 +59,14 @@ from x_linear.glm import _unit, GLM_LINK_LOG
 
 #: Threads per block (<= 256: the M2 Pro silently drops larger dispatches).
 comptime GW_TPB = 256
-#: Row terms (rows x d) per row-map launch. SCHEDULING only.
+#: Row terms (rows x d) per row-map launch on Apple. SCHEDULING only.
 comptime GW_ROW_STEPS = 1 << 26
-#: Cell-rows (cells x rows) per gradient/Hessian launch. SCHEDULING only.
+#: Cell-rows (cells x rows) per gradient/Hessian launch on Apple. SCHEDULING only.
 comptime GW_CELL_STEPS = 1 << 27
+#: Elsewhere (no watchdog on a compute GPU) a pass is one launch unless it
+#: exceeds these. SCHEDULING only.
+comptime GW_ROW_STEPS_OTHER = 1 << 40
+comptime GW_CELL_STEPS_OTHER = 1 << 40
 #: The poison word: a quiet NaN whose payload no operation here produces
 #: (the inputs are finite, and a computed NaN is the default NaN).
 comptime GW_POISON = UInt32(0x7FC0DEAD)
@@ -110,7 +115,7 @@ def gw_cells_kernel(
     """Cell c (`glm_fit`'s order: m gradient cells, then the Hessian's lower
     triangle row by row) over rows [r0, r0 + rows): its chain continued
     from src[c] (from zero when `first`), into dst[c]. `edge`: only the
-    cells `gw_gram_kernel` does not take (the gradient, and the intercept's
+    cells a tiled kernel does not take (the gradient, and the intercept's
     Hessian row when m = d + 1), thread t -> the t-th of them."""
     var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var n = Int(n_in)
@@ -148,142 +153,150 @@ def gw_cells_kernel(
     st(dst, c, acc)
 
 
-#: The Gram tile: a block owns a GT x GT square of (j, k) cells, j, k < d
-#: (the lower-triangle squares only), each thread a GS x GS sub-square.
-comptime GT = 32
-comptime GS = 2
-comptime GW_GRAM_TPB = (GT // GS) * (GT // GS)
-#: Rows a block stages in threadgroup memory at a time (two buffers).
+#: THE TILED CELL PASS. Every cell of the pass is a chain
+#: acc = fz(fma(t_ij, u_ik, acc)) over rows i ascending, for one (j, k) of a
+#: table of "rows" j = 0..m and "columns" k = 0..m-1:
+#:   t_ij = fm(h_i, x_ij) (j < d), fm(h_i, 1) = fz(h_i) (j = d, the intercept),
+#:          fm(g_i, 1) = fz(g_i) (j = m, the gradient);
+#:   u_ik = fz(x_ik) (k < d), 1 (k = d).
+#: Each is EXACTLY the one-cell kernel's chain for that cell:
+#:   Hessian (j, k < d): chain_fmad_scaled, acc = fz(fma(fm(h, x_j), fz(x_k), acc));
+#:   Hessian (d, k < d): chain_fmad(h, x_k), acc = fz(fma(fz(h), fz(x_k), acc));
+#:   Hessian (d, d): fold_fa(h), acc = fz(acc + fz(h)) = fz(fma(fz(h), 1, acc))
+#:     (a * 1 + c rounds once, to the sum's word);
+#:   gradient (k < d): chain_fmad(g, x_k); gradient (d): fold_fa(g), the same way
+#:   (fm(v, 1) = fz(v): v * 1 is exact).
+#: A block owns a GT x GT square of (j, k), one cell per thread; per row it
+#: stages the GT t's and GT u's in threadgroup memory once, so a thread's
+#: step is two shared loads, one fma and one compare.
+comptime GT = 16
+comptime GW_GRAM_TPB = GT * GT
+#: Rows a block stages at a time (two buffers of GR x 2GT words).
 comptime GR = 16
-#: Words per staged row: the GT j columns, the GT k columns, d2/deta2.
-comptime GROW = 2 * GT + 1
-
-
+comptime GROW = 2 * GT
 #: Staged words per thread per chunk.
 comptime GPER = (GR * GROW + GW_GRAM_TPB - 1) // GW_GRAM_TPB
 
 
 @always_inline
-def _gram_fetch(
-    x: FP, rw: FP, n: Int, d: Int, r0: Int, rows: Int, bj: Int, bk: Int, tid: Int, cix: Int,
+def _tile_fetch(
+    x: FP, rw: FP, n: Int, d: Int, m: Int, r0: Int, rows: Int, bj: Int, bk: Int, tid: Int, cix: Int,
 ) -> InlineArray[Float32, GPER]:
-    """This thread's share of chunk `cix`'s staged words (row r of the chunk
-    at r * GROW: the block's GT j columns, its GT k columns, d2/deta2),
-    zero past the rows or the columns; loaded, not yet stored."""
+    """This thread's share of chunk `cix`'s staged words: row r of the chunk
+    at r * GROW, the block's GT t's then its GT u's (zero past the rows or
+    the table); computed from loads, not yet stored."""
     var stage = InlineArray[Float32, GPER](fill=Float32(0))
-    comptime for u in range(GPER):
-        var e = tid + u * GW_GRAM_TPB
+    comptime for q in range(GPER):
+        var e = tid + q * GW_GRAM_TPB
         var v = Float32(0)
         if e < GR * GROW:
             var r = e // GROW
-            var q = e % GROW
+            var c = e % GROW
             var i = cix * GR + r
             if i < rows:
                 var gi = r0 + i
-                if q < GT:
-                    var j = bj * GT + q
+                if c < GT:
+                    var j = bj * GT + c
                     if j < d:
-                        v = ld(x, gi * d + j)
-                elif q < 2 * GT:
-                    var k = bk * GT + (q - GT)
-                    if k < d:
-                        v = ld(x, gi * d + k)
+                        v = _fm(ld(rw, n + gi), ld(x, gi * d + j))
+                    elif j < m:
+                        v = _fm(ld(rw, n + gi), Float32(1))
+                    elif j == m:
+                        v = _fm(ld(rw, gi), Float32(1))
                 else:
-                    v = ld(rw, n + gi)
-        stage[u] = v
+                    var k = bk * GT + (c - GT)
+                    if k < d:
+                        v = fz(ld(x, gi * d + k))
+                    elif k < m:
+                        v = Float32(1)
+        stage[q] = v
     return stage^
 
 
-@always_inline
-def _subnormal(v: Float32) -> Bool:
-    """A nonzero word with a zero exponent field: the words `fz` changes."""
-    return ((bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)) - UInt32(1)) < UInt32(0x007FFFFF)
-
-
-def gw_gram_kernel(
+def gw_tile_kernel(
     x: FP, rw: FP, src: FP, dst: FP, r0_in: Int32, rows_in: Int32, n_in: Int32, d_in: Int32,
     m_in: Int32, first_in: Int32,
 ):
-    """The Hessian cells (j, k), k <= j < d, over rows [r0, r0 + rows):
-    `chain_fmad_scaled`'s chain for each cell, the SAME WORD, with the rows
-    staged once per block in threadgroup memory (the one-thread-per-cell
-    form read three words of device memory per cell per row).
-
-    Per row i a thread takes t_j = fm(h_i, x_ij) for its GS j's and
-    fz(x_ik) for its GS k's (both are what the one-cell chain computes for
-    that cell at that row), then per cell acc = fma(t_j, fz(x_ik), acc).
-    That is `_acc_fmad` without its final flush, the same word while no
-    partial sum is subnormal; every partial is watched off the chain, and a
-    cell that saw one is recomputed exactly (`chain_fmad_scaled` from the
-    same init over the same rows) before it is stored."""
-    comptime SUB = GT // GS
+    """Every cell of the pass (see THE TILED CELL PASS) over rows
+    [r0, r0 + rows), each chain continued from src (zero when `first`) into
+    dst in `glm_fit`'s cell order. The chain runs without its flush while no
+    partial is subnormal (then the flush is the identity); a compare off the
+    chain watches every partial, and a cell that saw one below the smallest
+    normal (a subnormal, or a zero) is recomputed exactly by the one-cell
+    function from the same init over the same rows. The same word either way."""
+    comptime MIN_NORMAL = Float32(1.17549435e-38)
     var n = Int(n_in)
     var d = Int(d_in)
     var m = Int(m_in)
     var r0 = Int(r0_in)
     var rows = Int(rows_in)
-    var first = Int(first_in) != 0
     var tid = Int(thread_idx.x)
-    # this block's square (bj, bk), bk <= bj, in lower-triangle order
     var p = Int(block_idx.x)
     var bj = 0
     while (bj + 1) * (bj + 2) // 2 <= p:
         bj += 1
     var bk = p - bj * (bj + 1) // 2
-    var j0 = bj * GT + (tid // SUB) * GS
-    var k0 = bk * GT + (tid % SUB) * GS
-    var acc = InlineArray[Float32, GS * GS](fill=Float32(0))
-    var bad = InlineArray[Bool, GS * GS](fill=False)
-    comptime for a in range(GS):
-        comptime for b in range(GS):
-            var j = j0 + a
-            var k = k0 + b
-            if not first and j < d and k <= j:
-                acc[a * GS + b] = ld(src, m + j * (j + 1) // 2 + k)
-    var init = acc.copy()
+    var j = bj * GT + tid // GT
+    var k = bk * GT + tid % GT
+    # this thread's cell in glm_fit's order, or -1
+    var cell = -1
+    if j < m and k <= j:
+        cell = m + j * (j + 1) // 2 + k
+    elif j == m and k < m:
+        cell = k
+    var init = Float32(0)
+    if Int(first_in) == 0 and cell >= 0:
+        init = ld(src, cell)
+    var acc = init
+    var bad = False
     var sm = stack_allocation[2 * GR * GROW, Float32, address_space=AddressSpace.SHARED]()
     var chunks = (rows + GR - 1) // GR
-    var stage = _gram_fetch(x, rw, n, d, r0, rows, bj, bk, tid, 0)
-    comptime for u in range(GPER):
-        var e = tid + u * GW_GRAM_TPB
+    var stage = _tile_fetch(x, rw, n, d, m, r0, rows, bj, bk, tid, 0)
+    comptime for q in range(GPER):
+        var e = tid + q * GW_GRAM_TPB
         if e < GR * GROW:
-            sm[e] = stage[u]
+            sm[e] = stage[q]
     barrier()
+    var tj = tid // GT
+    var tk = GT + tid % GT
     for cix in range(chunks):
         if cix + 1 < chunks:
-            stage = _gram_fetch(x, rw, n, d, r0, rows, bj, bk, tid, cix + 1)
+            stage = _tile_fetch(x, rw, n, d, m, r0, rows, bj, bk, tid, cix + 1)
         var base = (cix % 2) * GR * GROW
-        var nr = min(GR, rows - cix * GR)
-        for r in range(nr):
-            var row = base + r * GROW
-            var h = sm[row + 2 * GT]
-            var t = InlineArray[Float32, GS](fill=Float32(0))
-            var xk = InlineArray[Float32, GS](fill=Float32(0))
-            comptime for a in range(GS):
-                t[a] = _fm(h, sm[row + (tid // SUB) * GS + a])
-            comptime for b in range(GS):
-                xk[b] = fz(sm[row + GT + (tid % SUB) * GS + b])
-            comptime for a in range(GS):
-                comptime for b in range(GS):
-                    var v = xmad(t[a], xk[b], acc[a * GS + b])
-                    acc[a * GS + b] = v
-                    bad[a * GS + b] = bad[a * GS + b] | _subnormal(v)
+        if (cix + 1) * GR <= rows:
+            comptime for r in range(GR):
+                var v = xmad(sm[base + r * GROW + tj], sm[base + r * GROW + tk], acc)
+                acc = v
+                bad = bad | (abs(v) < MIN_NORMAL)
+        else:
+            for r in range(rows - cix * GR):
+                var v = xmad(sm[base + r * GROW + tj], sm[base + r * GROW + tk], acc)
+                acc = v
+                bad = bad | (abs(v) < MIN_NORMAL)
         if cix + 1 < chunks:
             var nb = ((cix + 1) % 2) * GR * GROW
-            comptime for u in range(GPER):
-                var e = tid + u * GW_GRAM_TPB
+            comptime for q in range(GPER):
+                var e = tid + q * GW_GRAM_TPB
                 if e < GR * GROW:
-                    sm[nb + e] = stage[u]
+                    sm[nb + e] = stage[q]
         barrier()
-    comptime for a in range(GS):
-        comptime for b in range(GS):
-            var j = j0 + a
-            var k = k0 + b
-            if j < d and k <= j:
-                var v = acc[a * GS + b]
-                if bad[a * GS + b]:
-                    v = chain_fmad_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows, init[a * GS + b])
-                st(dst, m + j * (j + 1) // 2 + k, v)
+    if cell < 0:
+        return
+    if bad:
+        # the exact one-cell chain (gw_cells_kernel's) from the same init
+        if j < d:
+            acc = chain_fmad_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows, init)
+        elif j < m:
+            if k < d:
+                acc = chain_fmad(rw, n + r0, 1, x, r0 * d + k, d, rows, init)
+            else:
+                acc = fold_fa(rw, n + r0, 1, rows, init)
+        else:
+            if k < d:
+                acc = chain_fmad(rw, r0, 1, x, r0 * d + k, d, rows, init)
+            else:
+                acc = fold_fa(rw, r0, 1, rows, init)
+    st(dst, cell, acc)
 
 
 def _budget(default: Int) -> Int:
@@ -349,8 +362,12 @@ struct GW(Movable):
         self.m = m
         self.cells = m + m * (m + 1) // 2
         self.flags = flags
-        self.row_steps = _budget(GW_ROW_STEPS)
-        self.cell_steps = _budget(GW_CELL_STEPS)
+        comptime if has_apple_gpu_accelerator():
+            self.row_steps = _budget(GW_ROW_STEPS)
+            self.cell_steps = _budget(GW_CELL_STEPS)
+        else:
+            self.row_steps = _budget(GW_ROW_STEPS_OTHER)
+            self.cell_steps = _budget(GW_CELL_STEPS_OTHER)
         self.rows_ns = 0
         self.cells_ns = 0
         self.n_rows = 0
@@ -408,9 +425,8 @@ struct GW(Movable):
         return hp
 
     def launch(mut self, ctx: DeviceContext, src: FP, dst: FP, r0: Int, rows: Int, first: Int32) raises:
-        """One bounded pass of every cell: the tiled Gram kernel for the
-        Hessian cells j, k < d and the one-cell kernel for the rest (or the
-        one-cell kernel for all of them with MOJOLEARN_X_LINEAR_GW_GRAM=0)."""
+        """One bounded pass of every cell: the tiled kernel (or the one-cell
+        kernel with MOJOLEARN_X_LINEAR_GW_GRAM=0)."""
         if not self.gram:
             ctx.enqueue_function[gw_cells_kernel](
                 self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), src, dst,
@@ -418,16 +434,11 @@ struct GW(Movable):
                 grid_dim=(self.cells + GW_TPB - 1) // GW_TPB, block_dim=GW_TPB,
             )
             return
-        var nb = (self.d + GT - 1) // GT
-        ctx.enqueue_function[gw_gram_kernel](
+        var nbj = (self.m + 1 + GT - 1) // GT
+        ctx.enqueue_function[gw_tile_kernel](
             self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), src, dst,
             Int32(r0), Int32(rows), Int32(self.n), Int32(self.d), Int32(self.m), first,
-            grid_dim=nb * (nb + 1) // 2, block_dim=GW_GRAM_TPB,
-        )
-        ctx.enqueue_function[gw_cells_kernel](
-            self.dx.unsafe_ptr(), self.drw.unsafe_ptr(), src, dst,
-            Int32(r0), Int32(rows), Int32(self.n), Int32(self.d), Int32(self.m), first, Int32(1),
-            grid_dim=(2 * self.m + GW_TPB - 1) // GW_TPB, block_dim=GW_TPB,
+            grid_dim=nbj * (nbj + 1) // 2, block_dim=GW_GRAM_TPB,
         )
 
     def cell_pass(mut self, ctx: DeviceContext) raises -> FP:
