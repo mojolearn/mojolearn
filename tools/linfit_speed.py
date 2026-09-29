@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--env", action="append", default=[])
     ap.add_argument("--set", action="append", default=[], help="param override K=V (V as Python literal)")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--no-warm", action="store_true")
     a = ap.parse_args()
     for kv in a.env:
         k, v = kv.split("=", 1)
@@ -75,6 +76,11 @@ def main():
             if a.rows:
                 X, y = np.ascontiguousarray(X[:a.rows]), np.ascontiguousarray(y[:a.rows])
             y = y.astype(np.float32) if s["task"] == "reg" else y
+            if not a.no_warm:
+                # the process's first call into a kernel pays its load (the
+                # board's warm-up round does too): warm on 2,000 rows, 1 pass
+                wp = dict(params, max_iter=1)
+                getattr(ml, s["ours"][0])(**wp).fit(np.ascontiguousarray(X[:2000]), np.ascontiguousarray(y[:2000]))
             m = getattr(ml, s["ours"][0])(**params)
             t0 = time.perf_counter()
             m.fit(X, y)
