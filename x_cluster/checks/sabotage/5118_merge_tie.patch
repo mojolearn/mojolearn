@@ -1,13 +1,13 @@
 diff --git a/x_cluster/agglo.mojo b/x_cluster/agglo.mojo
-index 800d03ce6..930d7cbf1 100644
+index 8e225c988..d9e594320 100644
 --- a/x_cluster/agglo.mojo
 +++ b/x_cluster/agglo.mojo
-@@ -171,7 +171,7 @@ def agglo_tree[O: ClusterOps](
+@@ -403,7 +403,7 @@ def agglo_tree[O: ClusterOps](
      for step in range(n_merges):
          var a = -1
          for i in range(n):
 -            if live[i] and nn[i] >= 0 and (a < 0 or md[i] < md[a]):
 +            if live[i] and nn[i] >= 0 and (a < 0 or md[i] <= md[a]):
                  a = i
-         if a < 0:
-             raise Error("AgglomerativeClustering: no connected pair is left to merge")
+         if ph_on:
+             var now = Int(perf_counter_ns())

@@ -2215,7 +2215,8 @@ def worker(args):
         runner.info.update(_probe().library_identity(runner.info))
     say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
     # peak memory per round, reset and read OUTSIDE the clock
-    mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"))
+    mem = _probe().MemProbe((runner.info or {}).get("device", "gpu"),
+        library=(runner.info or {}).get("library") or "?")
     inf = None
     for line in sys.stdin:
         parts = line.split()

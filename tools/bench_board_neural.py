@@ -1395,7 +1395,8 @@ def worker(args):
     say({"event": "ready", "info": runner.info, "pid": os.getpid(),
          "params_record": getattr(runner, "record", None)})
     # peak memory per round, reset and read OUTSIDE the clock
-    mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
+    mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"),
+        library=(runner.info or {}).get("library") or "?")
     for line in sys.stdin:
         parts = line.split()
         if not parts:
