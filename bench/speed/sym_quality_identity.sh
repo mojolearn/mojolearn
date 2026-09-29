@@ -25,10 +25,17 @@ if [ "${3:-}" = build ]; then
     pixi run -e default sh bindings/build_gbdt.sh > "$OUT/build.log" 2>&1 || { echo "build failed"; tail -40 "$OUT/build.log"; exit 1; }
 fi
 if [ "${3:-}" = build ] || [ "${3:-}" = hostbuild ]; then
+    # the metrics binding gbdt-adapter-score-weighted's score() reaches
+    [ -f python/mojolearn/identical/_mojolearn_metrics.so ] || pixi run -e default sh bindings/build_metrics.sh > "$OUT/build_metrics.log" 2>&1 || echo "metrics build failed (gbdt-adapter-score-weighted will refuse)"
+fi
+if [ "${3:-}" = build ] || [ "${3:-}" = hostbuild ]; then
     # the host builds never overwrite: this tree's stale host objects go first
-    rm -f "$HOSTD/_mojolearn_core_host.so" "$HOSTD/_mojolearn_gbdt_host.so"
+    rm -f "$HOSTD/_mojolearn_core_host.so" "$HOSTD/_mojolearn_gbdt_host.so" "$HOSTD/_mojolearn_forest_host.so" "$HOSTD/_mojolearn_metrics_host.so"
     env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_core_host.sh > "$OUT/build_core_host.log" 2>&1 || { echo "core host build failed"; tail -40 "$OUT/build_core_host.log"; exit 1; }
     env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
+    # the CTR-table lanes' CPU route and the weighted adapter's score()
+    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_forest_host.sh > "$OUT/build_forest_host.log" 2>&1 || echo "forest host build failed (the CTR-table lanes will refuse)"
+    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_metrics_host.sh > "$OUT/build_metrics_host.log" 2>&1 || echo "metrics host build failed"
 fi
 R="pixi run -e default python -u"
 # libMojolearnMath, which `_portable_math` dlopens on the CPU arm (the
