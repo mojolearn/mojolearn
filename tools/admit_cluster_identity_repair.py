@@ -118,7 +118,7 @@ def main():
     result = admit(initial, repair, json.loads(table_bytes), selection['lanes'], commit)
     result['inputs'] = [dict(path=str(p.resolve()), sha256=sha(p.read_bytes())) for p in
                        [args.initial, args.repair, args.selection, *args.initial_wheel, *args.final_wheel]]
-    result['unchanged_native_files'] = sum(name.endswith(('.so', '.dylib')) for name in before)
+    result['unchanged_native_files'] = sum(name.endswith('.dylib') or '.so' in Path(name).name for name in before)
     with args.output.open('x') as stream:
         json.dump(result, stream, indent=2)
         stream.write('\n')
