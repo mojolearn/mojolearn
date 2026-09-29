@@ -2504,6 +2504,153 @@ def write_board(out, result):
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# The smoke check: every planned race, small, must produce a time, a quality
+# and a MATCHED parameter check on every arm before a full board may start
+# ---------------------------------------------------------------------------
+
+SMOKE_SCHEMA = "mojolearn-bench-board-smoke/1"
+SMOKE_ROWS = 2000
+#: The board and driver files a smoke result vouches for (with the vendor).
+SMOKE_FILE_GLOBS = ("tools/bench_board*.py", "tools/speed_gbdt_arm.py",
+                    "tools/classical_two_datasets.py", "bench/speed/forest_speed_arm.py")
+#: Arms the plan races although they refuse by name on that vendor. A smoke
+#: race passes with such an arm only when its cell is a named REFUSED(...).
+#: (vendor glob, race key glob family/lane/dataset, arm glob, why)
+PLANNED_REFUSALS = [
+    ("nvidia", "trees/*", "lightgbm-cuda",
+     "the pip LightGBM wheel has no CUDA build (tools/speed_gbdt_arm.py lightgbm_arms)"),
+    ("amd", "*", "xgboost-gpu",
+     "the pinned XGBoost wheel is CUDA; the image carries no ROCm build"),
+    ("nvidia", "classical2/spectral*", "cuml-gpu",
+     "cuML SpectralClustering / SpectralEmbedding are absent from the pinned cuML 26.8.0"),
+]
+#: Race keys whose arms produce no comparable output (a random mask), so a
+#: smoke pass needs a time but no quality value.
+QUALITY_EXEMPT = ("algos/dropout2d/*",)
+
+
+def smoke_files_sha256(repo=REPO):
+    import glob
+    h = hashlib.sha256()
+    for pat in SMOKE_FILE_GLOBS:
+        for path in sorted(glob.glob(os.path.join(repo, pat))):
+            h.update(os.path.relpath(path, repo).encode())
+            h.update(sha256_file(path).encode())
+    return h.hexdigest()
+
+
+def smoke_key(race):
+    """family/lane/dataset: the same race in a smoke run and a full run."""
+    return "%s/%s/%s" % (race["family"], race["lane"], race["dataset"])
+
+
+def shard_races(races, shard):
+    """'i/n': the i-th of n round-robin shares of the races, ordered by race id."""
+    try:
+        i, n = (int(x) for x in shard.split("/"))
+    except (AttributeError, ValueError):
+        raise SystemExit("--shard wants i/n (1 <= i <= n), got %r" % (shard,))
+    if not 1 <= i <= n:
+        raise SystemExit("--shard wants i/n (1 <= i <= n), got %r" % (shard,))
+    ordered = sorted(races, key=lambda r: r["id"])
+    return [r for k, r in enumerate(ordered) if k % n == i - 1]
+
+
+def _planned_refusal(vendor, key, arm):
+    import fnmatch
+    for v, kg, ag, why in PLANNED_REFUSALS:
+        if fnmatch.fnmatch(vendor, v) and fnmatch.fnmatch(key, kg) and fnmatch.fnmatch(arm, ag):
+            return why
+    return None
+
+
+def smoke_verdict(race, rec, vendor):
+    """[(arm, reason)] of what keeps this race from passing ([] = PASS)."""
+    import fnmatch
+    if rec is None:
+        return [("-", "not run")]
+    fails = []
+    if rec.get("status") != "done":
+        fails.append(("-", "status %s%s" % (rec.get("status"), (": " + str(rec.get("failure")))
+                                            if rec.get("failure") else "")))
+    if rec.get("params_check") != "MATCHED":
+        fails.append(("-", "BOARD-PARAMS %s" % rec.get("params_check")))
+    key = smoke_key(race)
+    cells = {c.get("arm"): c for c in rec.get("cells") or []}
+    exempt = any(fnmatch.fnmatch(key, g) for g in QUALITY_EXEMPT)
+    for arm in race["arms"]:
+        c = cells.get(arm)
+        if c is None:
+            fails.append((arm, "no cell"))
+            continue
+        status = str(c.get("status"))
+        why = _planned_refusal(vendor, key, arm)
+        if why and status.startswith("REFUSED"):
+            continue
+        if status != "ok":
+            fails.append((arm, "status %s" % status[:200]))
+            continue
+        if not isinstance(c.get("median_ms"), (int, float)):
+            fails.append((arm, "no time"))
+        if not exempt and not any(v is not None for v in (c.get("quality") or {}).values()):
+            fails.append((arm, "no quality value"))
+    return fails
+
+
+def write_smoke(out, races, result, vendor, shard):
+    """smoke.json and the SMOKE PASS/FAIL lines; returns the number failing."""
+    verdicts = {}
+    for r in races:
+        fails = smoke_verdict(r, result["races"].get(r["id"]), vendor)
+        verdicts[smoke_key(r)] = {"id": r["id"], "pass": not fails,
+                                  "failures": [{"arm": a, "reason": w} for a, w in fails]}
+    bad = sorted(k for k, v in verdicts.items() if not v["pass"])
+    doc = {"schema": SMOKE_SCHEMA, "created": now_utc(), "commit": repo_commit(),
+           "files_sha256": smoke_files_sha256(), "vendor": vendor, "shard": shard,
+           "rows": SMOKE_ROWS, "total": len(verdicts), "passed": len(verdicts) - len(bad),
+           "races": verdicts}
+    with open(os.path.join(out, "smoke.json"), "w") as fh:
+        json.dump(doc, fh, indent=1, sort_keys=True)
+    if bad:
+        print("SMOKE FAIL %d/%d" % (len(bad), len(verdicts)), flush=True)
+        for k in bad:
+            for f in verdicts[k]["failures"]:
+                print("SMOKE-FAIL %s arm=%s %s" % (verdicts[k]["id"], f["arm"], f["reason"]), flush=True)
+    else:
+        print("SMOKE PASS %d/%d" % (len(verdicts), len(verdicts)), flush=True)
+    return len(bad)
+
+
+def smoke_gate(out, vendor, races, extra_paths=()):
+    """None when every planned race passed a smoke run of the same board and
+    driver files on this vendor (the union of every smoke.json found: the
+    <out>-smoke* directories beside --out and --smoke-json), else why not."""
+    import glob
+    paths = list(extra_paths or ()) + sorted(glob.glob(os.path.abspath(out) + "-smoke*/smoke.json"))
+    want = smoke_files_sha256()
+    passed, seen = set(), []
+    for p in paths:
+        try:
+            with open(p) as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if doc.get("schema") != SMOKE_SCHEMA or doc.get("vendor") != vendor \
+                or doc.get("files_sha256") != want:
+            continue
+        seen.append(p)
+        passed |= {k for k, v in (doc.get("races") or {}).items() if v.get("pass")}
+    missing = sorted({smoke_key(r) for r in races} - passed)
+    if not missing:
+        return None
+    return ("no SMOKE PASS for %d of %d planned races with these board and driver files on %s "
+            "(smoke results read: %s): %s%s. Run `tools/bench_board.py --smoke --out %s` (or its "
+            "--shard halves) first, or pass --no-smoke-gate."
+            % (len(missing), len({smoke_key(r) for r in races}), vendor, ", ".join(seen) or "none",
+               ", ".join(missing[:12]), " ..." if len(missing) > 12 else "", out))
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="bench_board", description=__doc__.split("\n")[0])
     p.add_argument("--out", default=None, help="the run's result directory (resumable)")
@@ -2578,6 +2725,20 @@ def build_parser():
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
                         "print how many were imported and skipped, and exit")
+    p.add_argument("--smoke", action="store_true",
+                   help="the measurement check: every planned race at --rows %d, one round, the "
+                        "small neural shape, into <out>-smoke (never the board's own directory), "
+                        "no opponent store; writes smoke.json and prints SMOKE PASS n/n or SMOKE "
+                        "FAIL k/n (exit 1)" % SMOKE_ROWS)
+    p.add_argument("--shard", default=None, metavar="I/N",
+                   help="run the I-th of N round-robin shares of the planned races (by race id), "
+                        "so two boxes can run halves")
+    p.add_argument("--smoke-json", action="append", default=[],
+                   help="a smoke.json the gate reads besides <out>-smoke*/smoke.json (repeatable; "
+                        "e.g. another box's shard)")
+    p.add_argument("--no-smoke-gate", action="store_true",
+                   help="start a full board without a SMOKE PASS for every planned race (recorded "
+                        "in board.json as overridden)")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -2734,6 +2895,13 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     if args.rounds < 1:
         raise SystemExit("--rounds must be >= 1")
+    if args.smoke:
+        # small and once, into its own directory, never the board's
+        args.rows, args.rounds, args.neural_shape = str(SMOKE_ROWS), 1, "small"
+        if not args.dry_run and not args.out:
+            raise SystemExit("bench_board: --smoke needs --out (it writes <out>-smoke)")
+        if args.out and not os.path.abspath(args.out).rstrip("/").endswith("-smoke"):
+            args.out = os.path.abspath(os.path.expanduser(args.out)).rstrip("/") + "-smoke"
 
     if args.backfill_store:
         board_json = os.path.abspath(os.path.expanduser(args.backfill_store))
@@ -2768,6 +2936,8 @@ def main(argv=None):
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
                        cpu_arm=not args.no_cpu_arm)
+    if args.shard:
+        races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
     # run needs no R2 data.
     needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
@@ -2811,6 +2981,18 @@ def main(argv=None):
             raise SystemExit("bench_board: sha256 mismatch against the manifest for %s" % ",".join(bad))
 
     out = os.path.abspath(os.path.expanduser(args.out))
+    # THE SMOKE GATE: a full board (full rows, the full neural shape) starts only
+    # after every planned race passed a smoke run of these board and driver files
+    full = not args.smoke and rows is None and not (
+        any(r["family"] == "neural" for r in races) and args.neural_shape != "full")
+    gate = None
+    if full:
+        gate = "overridden (--no-smoke-gate)" if args.no_smoke_gate else None
+        if not args.no_smoke_gate:
+            why = smoke_gate(out, vendor, races, args.smoke_json)
+            if why:
+                raise SystemExit("bench_board: REFUSING to start a full board: " + why)
+            gate = "passed (SMOKE PASS for every planned race, files %s)" % smoke_files_sha256()[:16]
     os.makedirs(os.path.join(out, "logs"), exist_ok=True)
     rpath = os.path.join(out, "board.json")
     result = load_result(rpath)
@@ -2847,6 +3029,8 @@ def main(argv=None):
     ctx["store_path"] = os.path.abspath(os.path.expanduser(
         args.opponent_store or os.path.join(os.path.dirname(out), "opponent-store.jsonl")))
     ctx["data_sha"] = {}
+    if args.smoke:
+        ctx["store_path"] = None          # a smoke run neither reads nor writes the store
 
     if result is None:
         result = {"schema": SCHEMA, "created": now_utc(), "box": box, "races": {}}
@@ -2873,7 +3057,9 @@ def main(argv=None):
                         # sha256 of each data file a race read (the store's data key)
                         "data_sha256": ctx["data_sha"],
                         "opponent_store": ctx["store_path"],
-                        "retime_opponents": ctx["retime"]}
+                        "retime_opponents": ctx["retime"],
+                        "smoke_check": bool(args.smoke), "shard": args.shard,
+                        "smoke_gate": gate}
     result["plan"] = [r["id"] for r in races]
     save_result(rpath, result)
     write_board(out, result)
@@ -2915,6 +3101,8 @@ def main(argv=None):
         write_board(out, result)
         print("bench_board:   %s rc=%s %.0fs" % (rec["status"], rec["rc"], rec["wall_s"]), flush=True)
     print("bench_board: board %s" % os.path.join(out, "BOARD.md"), flush=True)
+    if args.smoke:
+        return 1 if write_smoke(out, races, result, vendor, args.shard) else 0
     failed = [rid for rid, rec in result["races"].items()
               if rid in result["plan"] and rec.get("status") != "done"]
     return 1 if failed else 0

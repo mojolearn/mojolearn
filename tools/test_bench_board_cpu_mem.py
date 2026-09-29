@@ -48,13 +48,15 @@ def test_plan_puts_ours_cpu_on_every_lane_with_a_cpu_path():
     for vendor in bb.VENDORS:
         races = bb.plan_races(vendor, bb.modes_for(vendor), bb.FAMILIES[:-1])
         for r in races:
-            infer_lane = r["family"] == "neural" and r["lane"].endswith("-infer")
-            assert (bb.CPU_ARM in r["arms"]) == (not infer_lane), r["id"]
+            # a neural lane whose `ours` already runs on the CPU (the *-infer
+            # classes, lm-host-train-step) has no separate CPU arm
+            cpu_lane = r["family"] == "neural" and bb.NEURAL.DEVICE_OF[r["lane"]] == "cpu"
+            assert (bb.CPU_ARM in r["arms"]) == (not cpu_lane), r["id"]
             if bb.CPU_ARM in r["arms"]:
                 assert r["our_arms"][bb.CPU_ARM] == "identical"
                 # right after our GPU arms, before every opponent
                 assert r["arms"].index(bb.CPU_ARM) < len(r["our_arms"])
-        assert bb.plan_summary(races)["cpu_cells"] == 87
+        assert bb.plan_summary(races)["cpu_cells"] == 93
         # the algos family: ours-cpu on every race, right after our GPU arms
         algos = bb.plan_races(vendor, bb.modes_for(vendor), ["algos"])
         assert all(r["arms"].index(bb.CPU_ARM) < len(r["our_arms"]) for r in algos)
@@ -68,20 +70,20 @@ def test_plan_puts_ours_cpu_on_every_lane_with_a_cpu_path():
     assert bb.cpu_arm_reason("neural", "mlp-infer") and bb.cpu_arm_reason("trees", "rf") is None
 
 
-@pytest.mark.parametrize("vendor,cells,off", [("apple", 423, 336), ("nvidia", 367, 280),
-                                              ("amd", 357, 270)])
+@pytest.mark.parametrize("vendor,cells,off", [("apple", 455, 362), ("nvidia", 397, 304),
+                                              ("amd", 385, 292)])
 def test_dry_run_counts_with_and_without_the_cpu_arm(vendor, cells, off, capsys):
     fams = ["--families", "trees,classical,classical2,neural"]
     assert bb.main(["--dry-run", "--vendor", vendor] + fams) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=%d" % cells in text
-    assert "ours-cpu cells=87" in text and "MOJOLEARN_VENDOR=cpu" in text
+    assert "TOTAL races=101 cells=%d" % cells in text
+    assert "ours-cpu cells=93" in text and "MOJOLEARN_VENDOR=cpu" in text
     # lanes without the arm are named, never dropped silently
     assert "ours-cpu NOT PLANNED: neural mlp-infer" in text
     assert "memory: peak_host_mb and peak_gpu_mb" in text
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm"] + fams) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=93 cells=%d" % off in text and "ours-cpu: off" in text
+    assert "TOTAL races=101 cells=%d" % off in text and "ours-cpu: off" in text
 
 
 # --- a run with the stub drivers ------------------------------------------------

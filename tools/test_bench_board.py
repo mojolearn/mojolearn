@@ -1115,3 +1115,112 @@ def test_backfill_corpus_pin_and_venv_version(tmp_path, monkeypatch):
     assert v is None and "changed in the venv after the board started" in why
     v, why = bb._venv_version(py, "xgboost", "2026-09-29T10:00:00Z")
     assert v is None and "not in the recorded venv" in why
+
+
+# --- the smoke check and its gate --------------------------------------------
+
+def _smoke_cell(arm, status="ok", median=10.0, quality=None):
+    return {"arm": arm, "status": status, "median_ms": median,
+            "quality": {"r2": 0.5} if quality is None else quality}
+
+
+def _smoke_race(arms=("ours", "sklearn-cpu"), lane="kmeans"):
+    return {"id": "classical/%s/taxi/rows=2000" % lane, "family": "classical", "lane": lane,
+            "dataset": "taxi", "arms": list(arms)}
+
+
+def test_smoke_verdict_pass_and_each_failure():
+    race = _smoke_race()
+    ok = {"status": "done", "params_check": "MATCHED",
+          "cells": [_smoke_cell("ours"), _smoke_cell("sklearn-cpu")]}
+    assert bb.smoke_verdict(race, ok, "apple") == []
+    assert bb.smoke_verdict(race, None, "apple") == [("-", "not run")]
+    assert ("-", "BOARD-PARAMS NOT CHECKED") in bb.smoke_verdict(
+        race, dict(ok, params_check="NOT CHECKED"), "apple")
+    assert bb.smoke_verdict(race, dict(ok, status="failed"), "apple")[0][1].startswith("status failed")
+    bad = dict(ok, cells=[_smoke_cell("ours"), _smoke_cell("sklearn-cpu", median=None)])
+    assert bb.smoke_verdict(race, bad, "apple") == [("sklearn-cpu", "no time")]
+    bad = dict(ok, cells=[_smoke_cell("ours", quality={}), _smoke_cell("sklearn-cpu")])
+    assert bb.smoke_verdict(race, bad, "apple") == [("ours", "no quality value")]
+    bad = dict(ok, cells=[_smoke_cell("ours")])
+    assert bb.smoke_verdict(race, bad, "apple") == [("sklearn-cpu", "no cell")]
+    bad = dict(ok, cells=[_smoke_cell("ours"), _smoke_cell("sklearn-cpu", "REFUSED(x)")])
+    assert bb.smoke_verdict(race, bad, "apple") == [("sklearn-cpu", "status REFUSED(x)")]
+
+
+def test_smoke_planned_refusal_passes_only_as_a_named_refusal():
+    race = {"id": "trees/gbdt-lossguide/taxi/rows=2000", "family": "trees",
+            "lane": "gbdt-lossguide", "dataset": "taxi", "arms": ["ours", "lightgbm-cuda"]}
+    rec = {"status": "done", "params_check": "MATCHED",
+           "cells": [_smoke_cell("ours"), _smoke_cell("lightgbm-cuda", "REFUSED(no CUDA build)")]}
+    assert bb.smoke_verdict(race, rec, "nvidia") == []
+    # on another vendor the same refusal is a failure: the plan does not declare it there
+    assert bb.smoke_verdict(race, rec, "apple")
+    rec["cells"][1] = _smoke_cell("lightgbm-cuda", "UNKNOWN(not in log)")
+    assert bb.smoke_verdict(race, rec, "nvidia")
+
+
+def test_shards_split_the_plan_round_robin_by_id():
+    races = bb.plan_races("nvidia", ["identical"], ["classical", "classical2"], cpu_arm=False)
+    a, b = bb.shard_races(races, "1/2"), bb.shard_races(races, "2/2")
+    ids = sorted(r["id"] for r in races)
+    assert sorted(r["id"] for r in a + b) == ids and not {r["id"] for r in a} & {r["id"] for r in b}
+    assert [r["id"] for r in a] == ids[0::2] and [r["id"] for r in b] == ids[1::2]
+    assert bb.shard_races(races, "1/2") == a
+    for bad in ("0/2", "3/2", "x"):
+        with pytest.raises(SystemExit):
+            bb.shard_races(races, bad)
+
+
+def _write_smoke(path, races, vendor="apple", files=None, fail=()):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "schema": bb.SMOKE_SCHEMA, "vendor": vendor,
+        "files_sha256": files or bb.smoke_files_sha256(),
+        "races": {bb.smoke_key(r): {"id": r["id"], "pass": bb.smoke_key(r) not in fail,
+                                    "failures": []} for r in races}}))
+
+
+def test_smoke_gate_needs_every_planned_race_in_the_union_of_shards(tmp_path):
+    races = bb.plan_races("apple", ["identical"], ["classical"], cpu_arm=False)
+    out = tmp_path / "board"
+    assert "no SMOKE PASS for" in bb.smoke_gate(str(out), "apple", races)
+    one, two = bb.shard_races(races, "1/2"), bb.shard_races(races, "2/2")
+    _write_smoke(tmp_path / "board-smoke" / "smoke.json", one)
+    assert bb.smoke_gate(str(out), "apple", races)                  # half the plan
+    _write_smoke(tmp_path / "board-smoke-2" / "smoke.json", two)
+    assert bb.smoke_gate(str(out), "apple", races) is None          # the union covers it
+    assert bb.smoke_gate(str(out), "nvidia", races)                 # another vendor
+    _write_smoke(tmp_path / "board-smoke-2" / "smoke.json", two, fail={bb.smoke_key(two[0])})
+    assert bb.smoke_key(two[0]) in bb.smoke_gate(str(out), "apple", races)
+    _write_smoke(tmp_path / "board-smoke-2" / "smoke.json", two, files="0" * 64)
+    assert bb.smoke_gate(str(out), "apple", races)                  # other board files
+
+
+def test_smoke_run_writes_its_own_dir_and_fails_by_name(env, capsys):
+    assert _run(env, "--smoke") == 1        # the stubs print no BOARD-PARAMS line
+    text = capsys.readouterr().out
+    assert re.search(r"SMOKE FAIL \d+/\d+", text) and "BOARD-PARAMS" in text
+    smoke = env["tmp"] / "out-smoke"
+    doc = json.loads((smoke / "smoke.json").read_text())
+    assert doc["schema"] == bb.SMOKE_SCHEMA and doc["total"] == len(doc["races"]) > 0
+    assert not env["out"].exists()          # never the board's own directory
+    res = json.loads((smoke / "board.json").read_text())
+    assert res["config"]["opponent_store"] is None and res["config"]["rounds"] == 1
+
+
+def test_full_board_refuses_without_smoke_and_records_an_override(env):
+    with pytest.raises(SystemExit, match="REFUSING to start a full board"):
+        _run(env, "--rows", "full")
+    assert _run(env, "--rows", "full", "--no-smoke-gate") == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    assert res["config"]["smoke_gate"] == "overridden (--no-smoke-gate)"
+
+
+def test_full_board_starts_after_a_smoke_pass(env):
+    races = bb.plan_races("apple", bb.modes_for("apple"), bb.FAMILIES, ["rf", "kmeans"],
+                          bb.DATASETS, None, "full", cpu_arm=False)
+    _write_smoke(env["tmp"] / "out-smoke" / "smoke.json", races)
+    assert _run(env, "--rows", "full") == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    assert res["config"]["smoke_gate"].startswith("passed")
