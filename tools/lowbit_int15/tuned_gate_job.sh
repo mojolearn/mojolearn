@@ -74,6 +74,13 @@ for arm in sabotage pieces-sabotage epilogue-sabotage host-sabotage; do
     must_name "tuned-$arm" check_int15_tuned_planted_worst_cases
     must_pass "tuned-$arm" check_int15_tuned_refuses
 done
+# The epilogue fold's own arm: the column exponent read at the row index.
+# The planted cases give every row one exponent, so only the shapes gate can
+# see it; the planted gate's outcome is recorded, not required.
+run tuned-exponent-sabotage fail pixi run check-gemm-int15-tuned-exponent-sabotage
+must_name tuned-exponent-sabotage check_int15_tuned_matches_oracle
+must_pass tuned-exponent-sabotage check_int15_tuned_refuses
+grep -h "^   fused path: " "$OUT/tuned.log" 2>/dev/null | head -1 >> "$OUT/gate.txt"
 grep -h "^   DIGEST " "$OUT/tuned.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
 {
     echo "digests=$(grep -c . "$OUT/digests.tsv")"
@@ -85,7 +92,7 @@ grep -h "^   DIGEST " "$OUT/tuned.log" 2>/dev/null | sed 's/^   //' > "$OUT/dige
     fi
 } >> "$OUT/gate.txt"
 cat "$OUT/status.tsv" "$OUT/gate.txt"
-for f in pieces tuned tuned-sabotage tuned-pieces-sabotage tuned-epilogue-sabotage tuned-host-sabotage; do
+for f in pieces tuned tuned-sabotage tuned-pieces-sabotage tuned-epilogue-sabotage tuned-host-sabotage tuned-exponent-sabotage; do
     echo "== $f (every line that is not a digest or a per-shape ok; last 40)"
     grep -v -E '^   (DIGEST|ok) |mbind' "$OUT/$f.log" 2>/dev/null | cut -c1-500 | tail -40
 done

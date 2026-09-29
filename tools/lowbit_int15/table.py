@@ -39,6 +39,9 @@ PRODUCTS = ("int15i64.v1.mma", "int15i64.v1.flat", "int15i64.v1.pieces")
 #: The TUNED plan (clause W-13), present only in a run that has it. It is
 #: NEVER mixed into another plan's column: it has columns of its own.
 TUNED = ("int15i64.v1.tuned", "inference.int15i64.v1.tuned", "training.int15i64.v1.tuned")
+#: The epilogue fold (run 6): the tuned plan's TWO-LAUNCH path, beside the
+#: fused path the `TUNED` arms time. One lever.
+TUNED2 = tuple(t + ".two_launch" for t in TUNED)
 #: Apple's float-unit plans (clause W-12), present only in a run on Apple
 #: that has them.
 APPLE_PRODUCTS = ("int15i64.v1.apple.two", "int15i64.v1.apple.four")
@@ -173,6 +176,32 @@ def table(label, path):
                     t = sum(g[0] for g in got)
                     cells.append(f"{ms(t)} | {over(t, b)}")
             out.append(f"| {r.replace('llama8b.', '')} | {ms(b)} | " + " | ".join(cells) + " |")
+        out.append("")
+    if any(TUNED2[0] in row["arms"] for row in rows.values()):
+        stub = any("STUB" in row["arms"].get(TUNED[0], (0, 0, ""))[2] for row in rows.values())
+        out += ["### The epilogue fold: fused beside two-launch, one lever", "",
+                ("THIS RUN'S FUSED PATH IS THE STUB (the two-launch path under the fused name): "
+                 "the two columns time the same launches and say nothing of the fold." if stub else
+                 "Fused: the sums kernel calls the epilogue at its store, one launch, no sums in device "
+                 "memory. Two-launch: the sums stored (12 bytes per cell), then the epilogue launch."),
+                "`fused/two` is the fused time over the two-launch time in this run; below 1 the fold "
+                "took less time.", "",
+                "| row | fp32.v1 ms | product two-launch ms | product fused ms | fused/two | "
+                "complete two-launch ms | over fp32.v1 | complete fused ms | over fp32.v1 | fused/two |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+        for r in order:
+            row = rows[r]
+            base = row["arms"]["fp32.v1"][0]
+            fwd_row = ".bwd_" not in r
+            ci = 1 if fwd_row else 2
+            p2, pf = row["arms"].get(TUNED2[0]), row["arms"].get(TUNED[0])
+            c2, cf = row["arms"].get(TUNED2[ci]), row["arms"].get(TUNED[ci])
+            if not (p2 and pf and c2 and cf):
+                out.append(f"| {r.replace('llama8b.', '')} | {ms(base)} | refused | refused | | refused | | refused | | |")
+                continue
+            out.append(f"| {r.replace('llama8b.', '')} ({'inference' if fwd_row else 'both operands'}) | {ms(base)} | "
+                       f"{ms(p2[0])} | {ms(pf[0])} | {over(pf[0], p2[0])} | {ms(c2[0])} | {over(c2[0], base)} | "
+                       f"{ms(cf[0])} | {over(cf[0], base)} | {over(cf[0], c2[0])} |")
         out.append("")
     if apple_unit:
         out += ["### The Apple float unit: the two forms beside the flat kernel, the product alone", "",

@@ -125,6 +125,13 @@ not a sum of medians.
         inference.int15i64.v1.tuned    A straight to planes, the tuned plan
         training.int15i64.v1.tuned     A and B straight to planes, the
                                        tuned plan
+    and, for the epilogue fold (run 6, one lever), on its two-launch path:
+        int15i64.v1.tuned.two_launch, inference.int15i64.v1.tuned.two_launch,
+        training.int15i64.v1.tuned.two_launch
+    The `.tuned` arms are the FUSED path the entry points take (the sums
+    kernel calls the epilogue at its store); `.two_launch` stores the sums
+    and launches the epilogue. While `INT15_FUSED_IS_STUB` the two are the
+    same launches and the row's note says STUB.
 
     ON APPLE each complete operation is measured on the float unit too:
         inference.int15i64.v1.apple.two, .apple.four
@@ -232,8 +239,10 @@ from gemm.checks.gemm_int15_apple import (
     identical_gemm_int15_apple_into,
 )
 from gemm.checks.gemm_int15_tuned import (
+    INT15_FUSED_IS_STUB,
     Int15SumsWorkspace,
     identical_gemm_int15_tuned_into,
+    identical_gemm_int15_tuned_two_launch_into,
 )
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN
@@ -272,7 +281,10 @@ comptime ARM_TRAIN_APPLE4 = 23
 comptime ARM_TUNED = 24
 comptime ARM_INF_TUNED = 25
 comptime ARM_TRAIN_TUNED = 26
-comptime ARM_COUNT = 27
+comptime ARM_TUNED2 = 27
+comptime ARM_INF_TUNED2 = 28
+comptime ARM_TRAIN_TUNED2 = 29
+comptime ARM_COUNT = 30
 
 #: The kinds of row.
 comptime ROW_FORWARD = 0
@@ -336,7 +348,13 @@ def _arm_name(arm: Int) -> String:
         return String("int15i64.v1.tuned")
     if arm == ARM_INF_TUNED:
         return String("inference.int15i64.v1.tuned")
-    return String("training.int15i64.v1.tuned")
+    if arm == ARM_TRAIN_TUNED:
+        return String("training.int15i64.v1.tuned")
+    if arm == ARM_TUNED2:
+        return String("int15i64.v1.tuned.two_launch")
+    if arm == ARM_INF_TUNED2:
+        return String("inference.int15i64.v1.tuned.two_launch")
+    return String("training.int15i64.v1.tuned.two_launch")
 
 
 def _arm_is_left(arm: Int) -> Bool:
@@ -348,6 +366,7 @@ def _arm_is_inference(arm: Int) -> Bool:
     return (
         arm == ARM_INF_PLANES or arm == ARM_INF_CODES or arm == ARM_INF_ROWQUANT
         or arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4 or arm == ARM_INF_TUNED
+        or arm == ARM_INF_TUNED2
     )
 
 
@@ -360,7 +379,7 @@ def _arm_is_tuned(arm: Int) -> Bool:
 
 
 #: Arms of the first block of the alternation; the rest are the slow block.
-comptime ARM_FIRST_BLOCK = 21
+comptime ARM_FIRST_BLOCK = 24
 
 
 def _arm_at(i: Int) -> Int:
@@ -371,6 +390,7 @@ def _arm_at(i: Int) -> Int:
         ARM_QUANTIZE_A_PAR, ARM_PLANES_A_PAR, ARM_SPLIT_A,
         ARM_QUANTIZE_B_PAR, ARM_PLANES_B_PAR, ARM_SPLIT_B,
         ARM_INF_TUNED, ARM_TRAIN_TUNED,
+        ARM_TUNED2, ARM_INF_TUNED2, ARM_TRAIN_TUNED2,
         ARM_INF_APPLE2, ARM_INF_APPLE4, ARM_TRAIN_APPLE2, ARM_TRAIN_APPLE4,
         ARM_INF_PLANES, ARM_INF_CODES,
         ARM_TRAIN_PLANES, ARM_TRAIN_CODES,
@@ -718,13 +738,18 @@ def _enqueue_arm(
         identical_gemm_int15_planes_into(ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k)
     elif _arm_is_tuned(arm):
         comptime if HAS_UNIT:
-            if arm != ARM_TUNED:
+            if arm != ARM_TUNED and arm != ARM_TUNED2:
                 _planes_par(ctx, rb.ah, rb.al, rb.ea, rb.a, rb.quant, _a_transposed(kind), m, k)
-            if arm == ARM_TRAIN_TUNED:
+            if arm == ARM_TRAIN_TUNED or arm == ARM_TRAIN_TUNED2:
                 _planes_par(ctx, rb.bh, rb.bl, rb.eb, rb.b, rb.quant, _b_transposed(kind), n, k)
-            identical_gemm_int15_tuned_into(
-                ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, rb.sums, m, n, k
-            )
+            if arm >= ARM_TUNED2:
+                identical_gemm_int15_tuned_two_launch_into(
+                    ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, rb.sums, m, n, k
+                )
+            else:
+                identical_gemm_int15_tuned_into(
+                    ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, rb.sums, m, n, k
+                )
     else:
         comptime if IS_APPLE:
             var form = INT15_APPLE_FORM_TWO
@@ -814,11 +839,20 @@ def _arm_note(arm: Int, kind: Int, m: Int, n: Int, k: Int) -> String:
         return String("planes.a.parallel+float-unit-product")
     if arm == ARM_TRAIN_APPLE2 or arm == ARM_TRAIN_APPLE4:
         return String("planes.a.parallel+planes.b.parallel+float-unit-product")
+    var fused = String("four-products-one-staging,epilogue-at-the-store")
+    comptime if INT15_FUSED_IS_STUB:
+        fused = String("STUB-fused-is-two-launch")
     if arm == ARM_TUNED:
-        return String("not-dispatched,four-products-one-staging+epilogue")
+        return String("not-dispatched,") + fused
     if arm == ARM_INF_TUNED:
-        return String("planes.a.parallel+four-products-one-staging+epilogue")
-    return String("planes.a.parallel+planes.b.parallel+four-products-one-staging+epilogue")
+        return String("planes.a.parallel+") + fused
+    if arm == ARM_TRAIN_TUNED:
+        return String("planes.a.parallel+planes.b.parallel+") + fused
+    if arm == ARM_TUNED2:
+        return String("not-dispatched,four-products-one-staging+epilogue-launch")
+    if arm == ARM_INF_TUNED2:
+        return String("planes.a.parallel+four-products-one-staging+epilogue-launch")
+    return String("planes.a.parallel+planes.b.parallel+four-products-one-staging+epilogue-launch")
 
 
 def _time_row(
