@@ -63,6 +63,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_8bit import (
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
     hist2_level_quantize_kernel,
+    snap_gradients_to_scale_kernel,
     snap_weights_to_grid_kernel,
 )
 from checks.numerics import numeric_mode_name
@@ -1945,6 +1946,25 @@ def enqueue_snap_weights(
         return
     ctx.enqueue_function[snap_weights_to_grid_kernel](
         stats.unsafe_ptr(), Int32(n_rows), weight_sum,
+        grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
+        block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
+    )
+
+
+def enqueue_snap_gradients(
+    ctx: DeviceContext,
+    mut stats: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    stat_count: Int,
+    fixed_scale: MutPointer[Float32, MutAnyOrigin],
+) raises:
+    """lane/sym-quality: `snap_gradients_to_scale_kernel` over the gradient
+    planes (line `n_rows`), after the tree's scale is on the device and
+    before its first histogram. Row-parallel, no reduction."""
+    if n_rows < 1 or stat_count < 2:
+        return
+    ctx.enqueue_function[snap_gradients_to_scale_kernel](
+        stats.unsafe_ptr(), Int32(n_rows), Int32(stat_count), fixed_scale,
         grid_dim=((n_rows + LEVEL_QUANT_BLOCK - 1) // LEVEL_QUANT_BLOCK, 1, 1),
         block_dim=(LEVEL_QUANT_BLOCK, 1, 1),
     )
@@ -4785,6 +4805,10 @@ def run_tree_layout_traced[
     # the first histogram (`snap_weights_to_grid_kernel`). The boosting loop
     # sets it for weighted fits only; False keeps every caller's bits.
     snap_stats: Bool = False,
+    # lane/sym-quality: the gradient planes onto the tree's fixed-point grid
+    # (`snap_gradients_to_scale_kernel`), so the float partition totals and
+    # the quantized histograms sum the same values. False keeps the bits.
+    snap_gradients: Bool = False,
 ) raises -> List[Int]:
     """`FitImpl` over a LAYOUT: mixed feature widths, one launch per policy.
 
@@ -5047,6 +5071,8 @@ def run_tree_layout_traced[
     # where a histogram quantizes at all (`_ACC_LIVE`); a float-flush build
     # sums floats on both sides of `right = total - left`.
     comptime if _ACC_LIVE:
+        if snap_gradients:
+            enqueue_snap_gradients(ctx, stats, n_rows, stat_count, fixed_scale)
         if snap_stats:
             if mags_dev:
                 enqueue_snap_weights(
@@ -6021,6 +6047,10 @@ def run_tree_layout[
     # the first histogram (`snap_weights_to_grid_kernel`). The boosting loop
     # sets it for weighted fits only; False keeps every caller's bits.
     snap_stats: Bool = False,
+    # lane/sym-quality: the gradient planes onto the tree's fixed-point grid
+    # (`snap_gradients_to_scale_kernel`), so the float partition totals and
+    # the quantized histograms sum the same values. False keeps the bits.
+    snap_gradients: Bool = False,
 ) raises -> List[Int]:
     """The un-instrumented entry: the exact pre-instrumentation signature,
     forwarding to `run_tree_layout_traced` with BOTH instruments off.
@@ -6058,6 +6088,7 @@ def run_tree_layout[
         dynamic_fold_counts=dynamic_fold_counts,
         dynamic_one_hot=dynamic_one_hot,
         snap_stats=snap_stats,
+        snap_gradients=snap_gradients,
     )
 
 
