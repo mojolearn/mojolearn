@@ -1324,10 +1324,35 @@ def _work_parallel(a):
         time.sleep(5 if (running or builder["t"] is not None) else 30)
 
 
+def _recover_stranded(steward):
+    """At start, before anything is claimed: a request left in working/ by
+    this steward ran in the steward that just died (a restart, or systemd
+    stopping the service after the kernel OOM-killed one of its jobs,
+    2026-09-29), and its processes died with it. It gets a FAIL verdict
+    naming the interruption, so `status` shows it and the lane resubmits;
+    before this it stayed in working/ forever and looked like a running job
+    (the do-amd trees request of 2026-09-28)."""
+    for w in sorted(WORK.glob(f"[0-9]*.{steward}.json")):
+        try:
+            req = json.loads(w.read_text())
+        except (OSError, ValueError):
+            req = {"name": w.name.split(".")[0]}
+        out = DONE / req["name"]
+        out.mkdir(parents=True, exist_ok=True)
+        verdict = {**req, "steward": steward, "host": os.uname().nodename, "result": "FAIL",
+                   "failed_step": "interrupted: the steward restarted while this request ran (its "
+                                  "processes died with it); resubmit it",
+                   "finished": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        (out / "verdict.json").write_text(json.dumps(verdict, indent=2))
+        w.unlink(missing_ok=True)
+        print(f"{req['name']}: FAIL at {verdict['failed_step']}", flush=True)
+
+
 def work(a):
     _dirs()
     if not (REPO / ".git").exists():
         sys.exit(f"no clone at {REPO} (set MOJOLEARN_STEWARD_REPO)")
+    _recover_stranded(a.steward)
     if a.steward in AMD_STEWARDS and AMD_PARALLEL > 1:
         return _work_parallel(a)
     last_prune = 0.0
