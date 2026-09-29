@@ -163,7 +163,7 @@ def quantize_rows_int8_par_kernel[NT: Int](
     while s < slots:
         var c0 = s * QUANT_PAR_SLOT
         if c0 + QUANT_PAR_SLOT <= cols:
-            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+            var v = x.unsafe_load[width=QUANT_PAR_SLOT, alignment=4](base + c0)
             comptime for i in range(QUANT_PAR_SLOT):
                 best = _absmax_step(v[i], best)
         else:
@@ -202,11 +202,11 @@ def quantize_rows_int8_par_kernel[NT: Int](
     while s < slots:
         var c0 = s * QUANT_PAR_SLOT
         if whole:
-            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+            var v = x.unsafe_load[width=QUANT_PAR_SLOT, alignment=4](base + c0)
             var codes = SIMD[DType.int8, QUANT_PAR_SLOT](0)
             comptime for i in range(QUANT_PAR_SLOT):
                 codes[i] = _code(v[i], ex)
-            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+            q.unsafe_store[alignment=QUANT_PAR_SLOT](base + c0, codes)
         else:
             comptime for i in range(QUANT_PAR_SLOT):
                 if c0 + i < cols:

@@ -53,6 +53,28 @@ equal the reference's:
     inference.int8i32.v1.applechunk.parq   the same two with the Apple probe
     training.int8i32.v1.applechunk.parq    as the product (Apple only)
 
+and the TUNED UNIT PLANS (`gemm/checks/gemm_int8_mma_tuned.mojo`), each a
+schedule of the same product, so each one's digest must equal the flat
+plan's:
+
+    int8i32.v1.mma.staged.*         one arm per staged plan; the name is the
+                                    plan's (warp tile, block tile, k steps
+                                    per window, bytes per staging load)
+    int8i32.v1.mma.direct.*         NVIDIA: the reference's schedule with one
+                                    thing changed
+    probe.int8.mma.*                NVIDIA: a part of the reference's kernel
+                                    timed alone. ITS PRODUCT IS WRONG ON
+                                    PURPOSE; its digest is printed and
+                                    compared with nothing
+    inference.int8i32.v1.tuned      parallel quantize A, the tuned product
+    training.int8i32.v1.tuned       parallel quantize A and B, the same
+    inference.4x.int8i32.v1.tuned   parallel quantize A, then FOUR tuned
+    training.4x.int8i32.v1.tuned    products (the same one, four times): the
+                                    count the 15-bit profile needs, measured
+                                    as one operation with one wait. Its
+                                    split and its recombination are
+                                    lane/lowbit-int15's and are not in it.
+
 THE CONVERSIONS ARE THEIR OWN ROWS, because a low-bit product's operands do
 not arrive low-bit for free:
 
@@ -147,7 +169,8 @@ ENVIRONMENT.
                                        names; unset runs every OP_NT
                                        transformer row
     MOJOLEARN_LOWBIT_PRICE_ARMS        comma separated arm names, whole
-                                       names and not substrings; unset runs
+                                       names and not substrings (a name
+                                       ending in * is a prefix); unset runs
                                        every arm the column has. An arm left
                                        out prints a LOWBIT-NOT-RUN line. The
                                        in-run comparisons need both of their
@@ -203,6 +226,19 @@ from gemm.checks.gemm_int8_apple_chunk import (
     int8_apple_chunk_sabotage_name,
 )
 from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
+from gemm.checks.gemm_int8_mma_tuned import (
+    INT8_DIRECT_AVAILABLE,
+    INT8_DIRECT_COUNT,
+    INT8_TUNED_PLAN_COUNT,
+    identical_gemm_int8_mma_direct_into,
+    identical_gemm_int8_mma_tuned_into,
+    identical_gemm_int8_mma_tuned_with_plan,
+    int8_direct_is_probe,
+    int8_direct_name,
+    int8_tuned_dispatch,
+    int8_tuned_plan_name,
+    int8_tuned_sabotage_name,
+)
 from gemm.checks.quantize_int8_par import (
     quantize_par_block,
     quantize_par_sabotage_name,
@@ -258,7 +294,18 @@ comptime ARM_INF_INT8_PARQ = 19
 comptime ARM_TRAIN_INT8_PARQ = 20
 comptime ARM_INF_INT8_APPLE_CHUNK_PARQ = 21
 comptime ARM_TRAIN_INT8_APPLE_CHUNK_PARQ = 22
-comptime ARM_COUNT = 23
+#: lane/lowbit-mma-speed: one arm per staged plan, one per instantiation of
+#: the direct kernel, and the complete operations on the tuned product.
+comptime ARM_TUNED_BASE = 23
+comptime ARM_DIRECT_BASE = ARM_TUNED_BASE + INT8_TUNED_PLAN_COUNT
+comptime ARM_INF_INT8_TUNED = ARM_DIRECT_BASE + INT8_DIRECT_COUNT
+comptime ARM_TRAIN_INT8_TUNED = ARM_INF_INT8_TUNED + 1
+comptime ARM_INF_4X_TUNED = ARM_INF_INT8_TUNED + 2
+comptime ARM_TRAIN_4X_TUNED = ARM_INF_INT8_TUNED + 3
+comptime ARM_COUNT = ARM_INF_INT8_TUNED + 4
+
+#: Products per GEMM of the 15-bit profile (the brief: HH, HL, LH, LL).
+comptime PIECE_PRODUCTS = 4
 
 #: The arm of the digest and the comparison: one bit of one cell of every
 #: arm's output is flipped before the digest. Off in every build that does
@@ -315,7 +362,29 @@ def _arm_name(arm: Int) -> String:
         return String("training.int8i32.v1.parq")
     if arm == ARM_INF_INT8_APPLE_CHUNK_PARQ:
         return String("inference.int8i32.v1.applechunk.parq")
-    return String("training.int8i32.v1.applechunk.parq")
+    if arm == ARM_TRAIN_INT8_APPLE_CHUNK_PARQ:
+        return String("training.int8i32.v1.applechunk.parq")
+    if arm < ARM_DIRECT_BASE:
+        return String("int8i32.v1.mma.") + int8_tuned_plan_name(arm - ARM_TUNED_BASE)
+    if arm < ARM_INF_INT8_TUNED:
+        if int8_direct_is_probe(arm - ARM_DIRECT_BASE):
+            return String("probe.int8.mma.") + int8_direct_name(arm - ARM_DIRECT_BASE)
+        return String("int8i32.v1.mma.") + int8_direct_name(arm - ARM_DIRECT_BASE)
+    if arm == ARM_INF_INT8_TUNED:
+        return String("inference.int8i32.v1.tuned")
+    if arm == ARM_TRAIN_INT8_TUNED:
+        return String("training.int8i32.v1.tuned")
+    if arm == ARM_INF_4X_TUNED:
+        return String("inference.4x.int8i32.v1.tuned")
+    return String("training.4x.int8i32.v1.tuned")
+
+
+def _arm_is_probe(arm: Int) -> Bool:
+    """Whether the arm computes a wrong product on purpose: a time and no
+    identity."""
+    if arm < ARM_DIRECT_BASE or arm >= ARM_INF_INT8_TUNED:
+        return False
+    return int8_direct_is_probe(arm - ARM_DIRECT_BASE)
 
 
 def _arm_is_product(arm: Int) -> Bool:
@@ -339,6 +408,10 @@ def _arm_runs(arm: Int) -> Bool:
         or arm == ARM_TRAIN_INT8_APPLE_CHUNK_PARQ
     ):
         return HAS_APPLE_CHUNK
+    if arm >= ARM_DIRECT_BASE and arm < ARM_INF_INT8_TUNED:
+        return INT8_DIRECT_AVAILABLE
+    if arm >= ARM_TUNED_BASE:
+        return HAS_INT8_MMA
     return True
 
 
@@ -641,11 +714,31 @@ def _enqueue_arm(
         comptime if HAS_APPLE_CHUNK:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
             identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
-    else:
+    elif arm == ARM_TRAIN_INT8_APPLE_CHUNK_PARQ:
         comptime if HAS_APPLE_CHUNK:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
             quantize_rows_int8_par_device(ctx, sb.qb, sb.eb, sb.b, n, k)
             identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm < ARM_DIRECT_BASE:
+        comptime if HAS_INT8_MMA:
+            identical_gemm_int8_mma_tuned_with_plan(
+                ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_TUNED_BASE
+            )
+    elif arm < ARM_INF_INT8_TUNED:
+        comptime if INT8_DIRECT_AVAILABLE:
+            identical_gemm_int8_mma_direct_into(
+                ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k, arm - ARM_DIRECT_BASE
+            )
+    else:
+        comptime if HAS_INT8_MMA:
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            if arm == ARM_TRAIN_INT8_TUNED or arm == ARM_TRAIN_4X_TUNED:
+                quantize_rows_int8_par_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+            var products = 1
+            if arm == ARM_INF_4X_TUNED or arm == ARM_TRAIN_4X_TUNED:
+                products = PIECE_PRODUCTS
+            for _ in range(products):
+                identical_gemm_int8_mma_tuned_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
 
 
 def _arm_digest(
@@ -722,7 +815,24 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         return String("quantize.a.par+pack.b.par+product")
     if arm == ARM_INF_INT8_APPLE_CHUNK_PARQ:
         return String("quantize.a.par+probe")
-    return String("quantize.a.par+pack.b.par+probe")
+    if arm == ARM_TRAIN_INT8_APPLE_CHUNK_PARQ:
+        return String("quantize.a.par+pack.b.par+probe")
+    if arm < ARM_DIRECT_BASE:
+        if arm - ARM_TUNED_BASE == int8_tuned_dispatch(m, n, k):
+            return String("the-tuned-launcher's-plan")
+        return String("plan")
+    if arm < ARM_INF_INT8_TUNED:
+        if _arm_is_probe(arm):
+            return String("WRONG-ON-PURPOSE,a-time-and-no-identity")
+        return String("the-reference's-schedule,one-thing-changed")
+    var plan_name = int8_tuned_plan_name(int8_tuned_dispatch(m, n, k))
+    if arm == ARM_INF_INT8_TUNED:
+        return String("quantize.a.par+") + plan_name
+    if arm == ARM_TRAIN_INT8_TUNED:
+        return String("quantize.a.par+pack.b.par+") + plan_name
+    if arm == ARM_INF_4X_TUNED:
+        return String("quantize.a.par+4x.") + plan_name
+    return String("quantize.a.par+pack.b.par+4x.") + plan_name
 
 
 def _must_agree(
@@ -874,6 +984,11 @@ def _time_shape(
     bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_PARQ, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_INF_INT8_APPLE_CHUNK_PARQ, dig, ran, name)
     bad += _must_agree(ARM_INT8_FLAT, ARM_TRAIN_INT8_APPLE_CHUNK_PARQ, dig, ran, name)
+    # Every tuned plan, every direct plan and every operation that ends in
+    # one is the profile's product. A probe is compared with nothing.
+    for arm in range(ARM_TUNED_BASE, ARM_COUNT):
+        if not _arm_is_probe(arm):
+            bad += _must_agree(ARM_INT8_FLAT, arm, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^
@@ -882,11 +997,16 @@ def _time_shape(
 
 def _arm_asked(arms: String, name: String) -> Bool:
     """Whether `MOJOLEARN_LOWBIT_PRICE_ARMS` names the arm: whole names,
-    since one arm's name is the start of another's."""
+    since one arm's name is the start of another's; a part that ends in `*`
+    names every arm that starts with what is before it."""
     if arms == "":
         return True
     for part in arms.split(","):
-        if String(part) == name:
+        var want = String(part)
+        if want.endswith("*"):
+            if name.startswith(String(want.removesuffix("*"))):
+                return True
+        elif want == name:
             return True
     return False
 
@@ -924,6 +1044,7 @@ def main() raises:
             "sabotage: price", price_sabotage_name(), " lowbit", lowbit_sabotage_name(),
             " apple chunk", int8_apple_chunk_sabotage_name(),
             " parallel quantizer", quantize_par_sabotage_name(),
+            " tuned unit", int8_tuned_sabotage_name(),
         )
         print("repeats", repeats, " mac budget", budget, " only", only, " arms", arms)
         if identity_only:

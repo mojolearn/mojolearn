@@ -247,7 +247,7 @@ def _pack4_aligned(
         return Int32(0)
     var base = row * k
     if k0 + 4 <= k and (k & 3) == 0:
-        return bitcast[DType.int32, 1]((p + base + k0).load[width=4, alignment=4]())[0]
+        return bitcast[DType.int32, 1](p.unsafe_load[width=4, alignment=4](base + k0))[0]
     var v = SIMD[DType.int8, 4](0)
     comptime for i in range(4):
         if k0 + i < k:
@@ -526,7 +526,7 @@ def _stage_window[
             if inside:
                 var base = gr * k + k0 + kq
                 if k0 + kq + LW <= k and (k & (LW - 1)) == 0:
-                    v = (q + base).load[width=LW, alignment=LW]()
+                    v = q.unsafe_load[width=LW, alignment=LW](base)
                 else:
                     comptime for i in range(LW):
                         if k0 + kq + i < k:
@@ -535,12 +535,12 @@ def _stage_window[
                 # SABOTAGE: the padding rule broken. What lies wholly
                 # outside the operand is not written.
                 if inside:
-                    (dst + r * SW + kq // 4).store[alignment=LW](
-                        bitcast[DType.int32, LW // 4](v)
+                    dst.unsafe_store[alignment=LW](
+                        r * SW + kq // 4, bitcast[DType.int32, LW // 4](v)
                     )
             else:
-                (dst + r * SW + kq // 4).store[alignment=LW](
-                    bitcast[DType.int32, LW // 4](v)
+                dst.unsafe_store[alignment=LW](
+                    r * SW + kq // 4, bitcast[DType.int32, LW // 4](v)
                 )
 
 
@@ -679,15 +679,15 @@ def identical_gemm_int8_mma_tuned_kernel[
                         var bfr = InlineArray[Int64, FN](fill=Int64(0))
                         comptime for fq in range(FN):
                             bfr[fq] = bitcast[DType.int64, 1](
-                                (bs_ + (lcol + fq * 16 + i16) * SW + kw).load[
-                                    width=2, alignment=8
-                                ]()
+                                bs_.unsafe_load[width=2, alignment=8](
+                                    (lcol + fq * 16 + i16) * SW + kw
+                                )
                             )[0]
                         comptime for fm in range(FM):
                             var a = bitcast[DType.int64, 1](
-                                (as_ + (lrow + fm * 16 + i16) * SW + kw).load[
-                                    width=2, alignment=8
-                                ]()
+                                as_.unsafe_load[width=2, alignment=8](
+                                    (lrow + fm * 16 + i16) * SW + kw
+                                )
                             )[0]
                             comptime for fq in range(FN):
                                 acc[fm * FN + fq] = llvm_intrinsic[

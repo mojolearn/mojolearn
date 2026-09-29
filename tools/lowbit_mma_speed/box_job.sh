@@ -31,6 +31,11 @@ QUANT_ARMS="$QUANT_ARMS,inference.int8i32.v1,training.int8i32.v1"
 QUANT_ARMS="$QUANT_ARMS,inference.int8i32.v1.parq,training.int8i32.v1.parq"
 QUANT_ARMS="$QUANT_ARMS,inference.int8i32.v1.applechunk,training.int8i32.v1.applechunk"
 QUANT_ARMS="$QUANT_ARMS,inference.int8i32.v1.applechunk.parq,training.int8i32.v1.applechunk.parq"
+#: The unit phase's arms. A name ending in * is a prefix.
+UNIT_ARMS="fp32.v1,int8i32.v1.flat,int8i32.v1.mma*,probe.int8.mma*"
+UNIT_ARMS="$UNIT_ARMS,convert.int8.quantize.a.par,convert.int8.pack.b.par"
+UNIT_ARMS="$UNIT_ARMS,inference.int8i32.v1.tuned,training.int8i32.v1.tuned"
+UNIT_ARMS="$UNIT_ARMS,inference.4x.int8i32.v1.tuned,training.4x.int8i32.v1.tuned"
 red=0
 summary=""
 for phase in "$@"; do
@@ -39,7 +44,7 @@ for phase in "$@"; do
         quant-gate) bash tools/lowbit_mma_speed/gate_job.sh quant ;;
         unit-gate) bash tools/lowbit_mma_speed/gate_job.sh unit ;;
         quant-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$QUANT_ARMS} bash tools/lowbit_mma_speed/price_job.sh quant ;;
-        unit-price) bash tools/lowbit_mma_speed/price_job.sh unit ;;
+        unit-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS} bash tools/lowbit_mma_speed/price_job.sh unit ;;
         ptx) bash tools/lowbit_mma_speed/ptx_probe.sh ;;
         *) echo "box_job.sh: unknown phase $phase" >&2; exit 2 ;;
     esac

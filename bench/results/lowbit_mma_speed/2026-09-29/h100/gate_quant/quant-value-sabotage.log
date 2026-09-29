@@ -1,0 +1,95 @@
+✨ Pixi task (check-quantize-int8-par-value-sabotage in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo
+231624 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a1640000000, nodemask=2)
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:166:36: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                    ~~~~~~~~~~~~~~~^~~~~
+                                    unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                     ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:205:36: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var v = (x + base + c0).load[width=QUANT_PAR_SLOT, alignment=4]()
+                    ~~~~~~~~~~~~~~~^~~~~
+                                    unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+             ~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+             ~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:71:
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par.mojo:209:28: warning: 'store' is deprecated, use 'unsafe_store' instead
+            (q + base + c0).store[alignment=QUANT_PAR_SLOT](codes)
+            ~~~~~~~~~~~~~~~^~~~~~
+                            unsafe_store
+<unknown>:0: note: 'store' declared here
+/root/mojolearn-lowbit-mma-speed/gemm/checks/quantize_int8_par_check.mojo:340:29: warning: assignment to 'verdict' was never used; assign to '_' instead?
+        var verdict = String("")
+                            ^
+== gemm/checks/quantize_int8_par_check.mojo [IDENTICAL]  sabotage: LOWBIT_VALUE_FLIP ==
+   profile: mojolearn.identical.gemm.int8i32.v1, the parallel quantizer
+   column: nvidia  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   blocks: NARROW 64 threads per row; WIDE 256 threads per row
+   !! quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x1 WIDE (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize 9x5 NARROW (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 9x5 WIDE (parallel vs host): 0 of 9 exponents and 45 of 45 codes differ; first code at row 0 col 0 got -3 want -4
+   !! quantize 10x32 NARROW (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 10x32 WIDE (parallel vs host): 0 of 10 exponents and 320 of 320 codes differ; first code at row 0 col 0 got -21 want -22
+   !! quantize 9x129 NARROW (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x129 WIDE (parallel vs host): 0 of 9 exponents and 1161 of 1161 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 12x255 NARROW (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 12x255 WIDE (parallel vs host): 0 of 12 exponents and 3060 of 3060 codes differ; first code at row 0 col 0 got -2 want -1
+   !! quantize 9x1000 NARROW (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1000 WIDE (parallel vs host): 0 of 9 exponents and 9000 of 9000 codes differ; first code at row 0 col 0 got -53 want -54
+   !! quantize 9x1023 NARROW (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 9x1023 WIDE (parallel vs host): 0 of 9 exponents and 9207 of 9207 codes differ; first code at row 0 col 0 got -1 want -2
+   !! quantize 16x1024 NARROW (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 16x1024 WIDE (parallel vs host): 0 of 16 exponents and 16384 of 16384 codes differ; first code at row 0 col 0 got -8 want -7
+   !! quantize 9x4096 NARROW (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 9x4096 WIDE (parallel vs host): 0 of 9 exponents and 36864 of 36864 codes differ; first code at row 0 col 0 got 29 want 28
+   !! quantize 11x4097 NARROW (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 11x4097 WIDE (parallel vs host): 0 of 11 exponents and 45067 of 45067 codes differ; first code at row 0 col 0 got 11 want 10
+   !! quantize 9x14336 NARROW (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 9x14336 WIDE (parallel vs host): 0 of 9 exponents and 129024 of 129024 codes differ; first code at row 0 col 0 got 5 want 4
+   !! quantize 300x96 NARROW (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   !! quantize 300x96 WIDE (parallel vs host): 0 of 300 exponents and 28800 of 28800 codes differ; first code at row 0 col 0 got -6 want -5
+   quantizer: 36 cases, 24 failed
+!! GATE FAILED: check_par_quantizer_matches
+   24 of 36 quantizer cases differ; first: quantize 9x1 NARROW (parallel vs host): 0 of 9 exponents and 9 of 9 codes differ; first code at row 0 col 0 got 106 want 107
+   !! quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+   !! quantize and multiply 33x129x4096 (device vs oracle): 4257 of 4257 cells differ; first at 0 got 1101.5939/0x0x4489b301 want 1096.2344/0x0x44890780
+   !! quantize and multiply 1x300x4097 (device vs oracle): 300 of 300 cells differ; first at 0 got -2797.1721/0x0xc52ed2c1 want -2845.2031/0x0xc531d340
+   !! quantize and multiply 130x17x96 (device vs oracle): 2210 of 2210 cells differ; first at 0 got 329.75003/0x0x43a4e001 want 336.71875/0x0x43a85c00
+   quantize-and-multiply: 4 cases, 4 failed
+!! GATE FAILED: check_par_quantizer_feeds_the_product
+   4 of 4 quantize-and-multiply cases differ; first: quantize and multiply 3x70x1000 (device vs oracle): 210 of 210 cells differ; first at 0 got -1427.9064/0x0xc4b27d01 want -1445.3438/0x0xc4b4ab00
+== 2 gates, 2 failed ==
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: 2 of 2 gates failed
+/root/mojolearn-lowbit-mma-speed/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1

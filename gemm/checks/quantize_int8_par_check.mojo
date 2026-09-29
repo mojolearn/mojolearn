@@ -337,7 +337,7 @@ def check_par_quantizer_feeds_the_product(ctx: DeviceContext) raises:
         quantize_rows_int8_par_device(ctx, dqb, deb, db, n, k)
         identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
         ctx.synchronize()
-        var verdict = String("")
+        var verdict: String
         try:
             var got = _download_f32(ctx, dc, m * n, tag)
             verdict = _diff(got, want, tag + " (device vs oracle)")
