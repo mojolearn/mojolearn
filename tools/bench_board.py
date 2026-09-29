@@ -341,8 +341,15 @@ THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 #: Torch pins. Mac: the version the skgpu pixi env solved (pixi.lock
 #: osx-arm64/pytorch-2.13.0). AMD: the ROCm 6.4.1 wheels (cp312, hash-pinned)
 #: of tools/classical_two_datasets_leg.sh, so the venv must be Python 3.12
-#: there (tools/bench_board_leg.sh arranges it). NVIDIA: the image's own CUDA
-#: torch through `--system-site-packages` unless --torch-spec names one.
+#: there (tools/bench_board_leg.sh arranges it). NVIDIA: the Mac's torch
+#: version built for CUDA 12.9 (torch==2.13.0+cu129 from the PyTorch cu129
+#: index, which requires cuda-toolkit 12.9.1, inside the RAPIDS 26.8 sets'
+#: cuda-toolkit 12.*), in a CLEAN venv. 2026-09-29: the image's torch
+#: 2.4.1+cu124 through --system-site-packages broke cuML: the image's
+#: dist-packages/nvidia/__init__.py is a regular package, which shadows the
+#: venv's `nvidia` namespace, so nvidia.libnvcomp did not import, libcudf.so
+#: did not load, and every cuML arm refused (ImportError: libcudf.so).
+#: --system-site-packages is refused on NVIDIA for that reason.
 AMD_TORCH_ROCM = (
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1."
     "git6da9e660-cp312-cp312-linux_x86_64.whl"
@@ -350,7 +357,10 @@ AMD_TORCH_ROCM = (
     "https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-"
     "cp312-cp312-linux_x86_64.whl"
     "#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d")
-DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "", "amd": AMD_TORCH_ROCM}
+DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "torch==2.13.0+cu129",
+                      "amd": AMD_TORCH_ROCM}
+#: an EXTRA index for the default torch spec (PyPI stays the main index)
+DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129"}
 #: OUR CPU ARM. The wheel's public CPU switch is MOJOLEARN_VENDOR=cpu before
 #: import (python/mojolearn/_backend.py): no GPU set loads and the host
 #: bindings under mojolearn/host/ answer, IDENTICAL only. `ours-cpu` is our
@@ -971,6 +981,19 @@ def setup_python(args, vendor, out, log):
              "bytes": os.path.getsize(wfile)}
     if run_logged(pip + [wfile], None, log, 3600) != 0:
         raise SystemExit("bench_board: installing %s failed; see %s" % (wfile, log))
+    # torch FIRST: the opponent sets that depend on torch (torch-geometric,
+    # gpytorch, ...) then resolve against the pinned build instead of pulling
+    # PyPI's newest torch (another CUDA major on Linux)
+    torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
+    if torch_spec:
+        cmd = list(pip)
+        if args.torch_index_url:
+            cmd += ["--index-url", args.torch_index_url]
+        elif args.torch_spec is None and DEFAULT_TORCH_EXTRA_INDEX.get(vendor):
+            cmd += ["--extra-index-url", DEFAULT_TORCH_EXTRA_INDEX[vendor]]
+        if run_logged(cmd + shlex.split(torch_spec), None, log, 3600) != 0:
+            print("bench_board: torch install failed (%s); torch arms will refuse by name"
+                  % torch_spec, flush=True)
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -1018,14 +1041,6 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
                   "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
-    torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
-    if torch_spec:
-        cmd = list(pip)
-        if args.torch_index_url:
-            cmd += ["--index-url", args.torch_index_url]
-        if run_logged(cmd + shlex.split(torch_spec), None, log, 3600) != 0:
-            print("bench_board: torch install failed (%s); torch arms will refuse by name"
-                  % torch_spec, flush=True)
     return python, wheel
 
 
@@ -1063,6 +1078,31 @@ def gpu_set_refusal(python, vendor):
     if p.returncode == 0:
         return None
     return ((p.stdout or "") + (p.stderr or "")).strip()[-2000:] or "rc %d" % p.returncode
+
+
+def setup_arm_venvs(args, vendor, out, log):
+    """{arm: interpreter} for the arms whose library needs its own clean venv
+    (tools/bench_board_algos.py ARM_VENVS), created and installed under the
+    cache. A failed install is not fatal: the arm then refuses by name in its
+    race, in the board's venv."""
+    if args.skip_install or args.python_env or "algos" not in (args.families or ""):
+        return {}
+    got = {}
+    for arm, reqs in sorted(ALGOS.ARM_VENVS.get(vendor, {}).items()):
+        vdir = os.path.join(cache_dir(args, out), "venv-" + arm)
+        py = os.path.join(vdir, "bin", "python")
+        if not os.path.exists(py) and run_logged([args.base_python, "-m", "venv", vdir], None,
+                                                 log, 1800) != 0:
+            print("bench_board: venv for %s failed (it refuses by name)" % arm, flush=True)
+            continue
+        cmd = [py, "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+               "--extra-index-url", ALGOS.ARM_VENV_INDEX] + list(reqs)
+        if run_logged(cmd, None, log, 3600) != 0:
+            print("bench_board: %s install failed for %s (it refuses by name)"
+                  % (" ".join(reqs), arm), flush=True)
+            continue
+        got[arm] = py
+    return got
 
 
 def data_status(data_root, datasets, verify=False):
@@ -1458,6 +1498,9 @@ def algos_cmd(ctx, race):
            "--theirs-python", shlex.quote(ctx["python"]),
            "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
            "--round-seconds", str(rsec)]
+    for arm, py in sorted((ctx.get("arm_python") or {}).items()):
+        if arm in race["arms"]:
+            cmd += ["--arm-python", "%s=%s" % (arm, py)]
     if race["rows"]:
         cmd += ["--smoke-rows", str(int(race["rows"]))]
     n = len(race["arms"])
@@ -2935,7 +2978,9 @@ def print_plan(vendor, modes, races, args, rows, data):
     for idx, reqs in opponent_requirements(vendor, opponent_pins()):
         print("opponents pinned: %s%s" % (" ".join(reqs), (" (index %s)" % idx) if idx else ""))
     ts = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
-    print("torch: %s" % (ts or "the image's own (use --system-site-packages)"))
+    print("torch: %s%s" % (ts or "the image's own (use --system-site-packages)",
+                           " (extra index %s)" % DEFAULT_TORCH_EXTRA_INDEX[vendor]
+                           if args.torch_spec is None and DEFAULT_TORCH_EXTRA_INDEX.get(vendor) else ""))
     if any(r["family"] == "classical2" for r in races):
         print("classical2 opponents pinned: %s" % " ".join(MORE_PINS[vendor]))
         for why in MORE.NOT_PLANNED[vendor]:
@@ -3039,6 +3084,11 @@ def main(argv=None):
     vendor = detect_vendor() if args.vendor == "auto" else args.vendor
     if vendor is None:
         raise SystemExit("bench_board: no Metal, nvidia-smi or rocm-smi found; pass --vendor")
+    if vendor == "nvidia" and args.system_site_packages:
+        raise SystemExit("bench_board: REFUSING --system-site-packages on NVIDIA: an image's "
+                         "dist-packages/nvidia/__init__.py shadows the venv's CUDA libraries and "
+                         "cuML cannot load libcudf (2026-09-29). The board installs its own torch "
+                         "(%s)." % DEFAULT_TORCH_SPEC["nvidia"])
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
     lanes = (_csv(args.lanes, TREE_LANES + TREE_TASK_LANES + CLASSICAL_LANES + MORE_LANES
@@ -3110,6 +3160,7 @@ def main(argv=None):
     result = load_result(rpath)
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    arm_python = setup_arm_venvs(args, vendor, out, os.path.join(out, "logs", "setup.log"))
     why = gpu_set_refusal(python, vendor)
     if why:
         raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
@@ -3137,7 +3188,7 @@ def main(argv=None):
            "neural_driver": os.path.abspath(args.neural_driver),
            "more_driver": os.path.abspath(args.more_driver),
            "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
-           "algos_driver": os.path.abspath(args.algos_driver),
+           "algos_driver": os.path.abspath(args.algos_driver), "arm_python": arm_python,
            "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
     ctx["box"] = box

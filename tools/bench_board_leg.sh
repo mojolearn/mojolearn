@@ -23,14 +23,18 @@
 # THE INTERPRETER. AMD's pinned torch ROCm wheels are cp312, so on AMD the
 # venv is Python 3.12: the image's python3 when it is 3.12 with venv, else a
 # uv-managed 3.12 (the recipe of tools/classical_two_datasets_leg.sh). NVIDIA
-# uses the image's python3 with --system-site-packages so its CUDA torch is
-# visible. POSIX sh.
+# uses the image's python3 in a CLEAN venv (no --system-site-packages: the
+# image's nvidia/__init__.py shadowed the venv's CUDA libraries and cuML could
+# not load libcudf, 2026-09-29); the board installs torch==2.13.0+cu129 there.
+# POSIX sh.
 set -u
 : "${MOJOLEARN_BOARD_VERSION:?set MOJOLEARN_BOARD_VERSION through the leg env words}"
 OUT="${MOJOLEARN_BOARD_OUT:-/root/gemm_leg_out/bench-board}"
 mkdir -p "$OUT"
 PY=python3
+SSP=
 if [ -e /dev/kfd ] && ! command -v nvidia-smi > /dev/null 2>&1; then
+    SSP=--system-site-packages
     if python3 -c 'import sys, venv, ensurepip; sys.exit(0 if sys.version_info[:2] == (3, 12) else 3)' > /dev/null 2>&1; then
         PY=python3
     else
@@ -45,7 +49,7 @@ elif ! python3 -c 'import ensurepip' > /dev/null 2>&1; then
     (apt-get update -qq && apt-get install -y -qq python3-venv) > "$OUT/apt_venv.log" 2>&1 || true
 fi
 set -- --mojolearn-version "$MOJOLEARN_BOARD_VERSION" --out "$OUT" \
-    --base-python "$PY" --system-site-packages --cache "${MOJOLEARN_BOARD_CACHE:-/root/board-cache}" \
+    --base-python "$PY" $SSP --cache "${MOJOLEARN_BOARD_CACHE:-/root/board-cache}" \
     --data-root "${GBM_BENCH_DATA:-/root/datasets/gbm-bench}"
 [ -n "${MOJOLEARN_BOARD_ROWS:-}" ] && set -- "$@" --rows "$MOJOLEARN_BOARD_ROWS"
 [ -n "${MOJOLEARN_BOARD_LANES:-}" ] && set -- "$@" --lanes "$MOJOLEARN_BOARD_LANES"
