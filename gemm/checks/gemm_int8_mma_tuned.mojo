@@ -108,7 +108,8 @@ THE SABOTAGE ARMS.
       in the flat kernel and the reference unit kernel (DEVIATION 2908).
 """
 
-from std.gpu import WARP_SIZE, block_idx, lane_id, thread_idx
+from std.gpu import MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE, block_idx, lane_id, thread_idx
+from std.utils import StaticTuple
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined, llvm_intrinsic
@@ -826,6 +827,13 @@ def _stage_window[
                 )
 
 
+#: THE LAUNCH BOUND (lane/lowbit-amd-tuned, MI325X jobs 1790659453776 and
+#: 1790660119759): without it the compiler assumes 1024 threads, which on
+#: gfx942 caps a lane at 128 vector registers, and the larger AMD plans of
+#: this kernel spill (196 to 476 bytes of scratch a lane). SCHEDULING.
+@__llvm_metadata(
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(WM * WN * WARP_SIZE))
+)
 def identical_gemm_int8_mma_tuned_kernel[
     FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
@@ -2011,6 +2019,13 @@ def _pieces_block[
                 )
 
 
+#: THE LAUNCH BOUND (lane/lowbit-amd-tuned, MI325X jobs 1790659453776 and
+#: 1790660119759): without it the compiler assumes 1024 threads, which on
+#: gfx942 caps a lane at 128 vector registers, and the larger AMD plans of
+#: this kernel spill (196 to 476 bytes of scratch a lane). SCHEDULING.
+@__llvm_metadata(
+    MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(WM * WN * WARP_SIZE))
+)
 def identical_gemm_int8_pieces_tuned_kernel[
     FUSED: Bool, PIPE: Bool, FM: Int, FN: Int, WM: Int, WN: Int, KB: Int, LW: Int
 ](
