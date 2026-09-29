@@ -234,6 +234,9 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         nan_mode=cfg["nan_mode"],
         boosting_type=cfg["boosting_type"],
     )
+    for k in ("permutation_count", "fold_len_multiplier", "fold_permutation_block"):
+        if cfg.get(k) is not None:
+            params[k] = cfg[k]      # the Ordered lane's knobs, as CatBoost's arm
     if cfg.get("min_split_gain") is not None:
         params["min_split_gain"] = cfg["min_split_gain"]
     if cfg.get("min_child_hessian") is not None:
