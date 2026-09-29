@@ -1,0 +1,8 @@
+{
+ "corpus": "/root/mojolearn-wt/lowbit-quality/training/corpus/pile_github/input.txt",
+ "tail_from": 96000000,
+ "byte_start": 96000030,
+ "windows": 200,
+ "length": 512,
+ "ids_sha256": "2d337ff1deeb3846125e558b8521f9f47f92e51abf03396d083255a9827a2f86"
+}

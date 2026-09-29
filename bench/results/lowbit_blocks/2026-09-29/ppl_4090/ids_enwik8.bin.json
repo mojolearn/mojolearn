@@ -1,0 +1,8 @@
+{
+ "corpus": "/root/mojolearn-wt/lowbit-quality/training/corpus/enwik8/input.txt",
+ "tail_from": 99000000,
+ "byte_start": 99000022,
+ "windows": 200,
+ "length": 512,
+ "ids_sha256": "d5be2324ffc522bc306eaa9baa63e626c9fe8df690eec7c552b4117f1ad8a56f"
+}
