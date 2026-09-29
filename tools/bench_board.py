@@ -1029,6 +1029,42 @@ def setup_python(args, vendor, out, log):
     return python, wheel
 
 
+#: Run in the board's interpreter: can the installed wheel's GPU set load on
+#: this device? (2026-09-29: an A40 is sm_86 and 0.8.25 carries sm_89 and
+#: sm_90a only; the wheel fell back to its CPU set and 18 NVIDIA races
+#: refused our arm one by one.)
+_GPU_SET_PROBE = r"""
+import importlib.util, sys
+if importlib.util.find_spec("mojolearn") is None:
+    print("NO-MOJOLEARN"); sys.exit(0)
+try:
+    import mojolearn._backend as b
+except Exception as e:
+    print("%s: %s" % (type(e).__name__, e)); sys.exit(3)
+try:
+    b.tier_dir("identical")
+except Exception as e:
+    print("%s: %s" % (type(e).__name__, e)); sys.exit(3)
+print("OK")
+"""
+
+
+def gpu_set_refusal(python, vendor):
+    """None when our GPU set loads here (or on Apple, or no mojolearn is
+    installed in the interpreter, as in the unit tests); else the wheel's own
+    reason."""
+    if vendor not in ("nvidia", "amd"):
+        return None
+    try:
+        p = subprocess.run([python, "-c", _GPU_SET_PROBE], capture_output=True, text=True,
+                           timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return "the probe did not run: %s" % e
+    if p.returncode == 0:
+        return None
+    return ((p.stdout or "") + (p.stderr or "")).strip()[-2000:] or "rc %d" % p.returncode
+
+
 def data_status(data_root, datasets, verify=False):
     """{dataset: {path, present, bytes, pinned_bytes, sha256_ok}}."""
     pins = {}
@@ -3074,6 +3110,10 @@ def main(argv=None):
     result = load_result(rpath)
 
     python, wheel = setup_python(args, vendor, out, os.path.join(out, "logs", "setup.log"))
+    why = gpu_set_refusal(python, vendor)
+    if why:
+        raise SystemExit("bench_board: REFUSING: our IDENTICAL GPU set cannot load on this %s box, "
+                         "so every race would refuse our arm:\n%s" % (vendor, why))
     if wheel is None and result:
         wheel = ((result.get("box") or {}).get("mojolearn") or {}).get("wheel")
     ptxas = None

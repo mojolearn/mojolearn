@@ -534,6 +534,18 @@ def test_repo_commit_names_the_patch_synced_commit_not_the_pods_base(tmp_path):
     assert bb.repo_commit(str(repo)) == base + "-dirty"
 
 
+def test_gpu_set_refusal_names_the_wheels_reason(tmp_path):
+    fake = tmp_path / "py"
+    fake.write_text("#!/bin/sh\necho 'ImportError: this device is sm_86 ... Carried: sm_89'; exit 3\n")
+    fake.chmod(0o755)
+    assert "sm_86" in bb.gpu_set_refusal(str(fake), "nvidia")
+    assert bb.gpu_set_refusal(str(fake), "apple") is None
+    ok = tmp_path / "ok"
+    ok.write_text("#!/bin/sh\necho OK\n")
+    ok.chmod(0o755)
+    assert bb.gpu_set_refusal(str(ok), "amd") is None
+
+
 def _nv_box(host="pod-a", gpu="NVIDIA A40", driver="580.159.04", cuml="26.8.0"):
     return {"host": {"hostname": host}, "gpu": {"vendor": "nvidia", "name": gpu, "driver": driver},
             "mojolearn": {"version": "0.8.25", "wheel": {"sha256": "ab"}},
