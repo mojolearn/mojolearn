@@ -190,7 +190,7 @@ Reference plan (the default). Records `bench/results/lowbit_blocks/2026-09-29/ti
 |---|---|---|---|---|---|
 | RTX 4090 | nvc2-0024 | 583.7 / 641.6, 409.9 / 1446.7 | 0.91, 0.28 | 117.2 / 221.2, 89.8 / 303.2 | 0.53, 0.30 |
 | H100 NVL | nvc3-0045 | 266.9 / 413.9, 272.0 / 454.7 | 0.64, 0.60 | 133.9 / 281.8, 135.2 / 285.4 | 0.48, 0.47 |
-| MI325X | 1790664369046 | MI325X_PREFILL | | MI325X_DECODE | |
+| MI325X | 1790664369046 (3 of 4 runs; the 4th hung, Failures 7) | 232.9 / 266.2, (hung) / 264.6 | 0.87, 0.88 | 103.8 / 160.6, (hung) / 160.4 | 0.65 |
 | M2 Pro | 1790664365442 | 4863.8 / 1077.7, 4884.3 / 1074.4 | 4.51, 4.55 | 1470.3 / 579.3, 1505.1 / 574.8 | 2.54, 2.62 |
 
 The 4090's fp32_v1 prefill swings by 2x between the two runs of one job (641.6
@@ -238,6 +238,20 @@ on the H100. On the M2 Pro the profile costs 4.5 times fp32_v1's prefill.
 5. The first gate job read its default gate as "OUTPUT DIFFERS": the only
    differing lines were tcmalloc's mbind warning and the card's own path.
    The filter now drops those two; the cards were identical throughout.
+7. MI325X, 1790664369046, the 4th timed run (fixed15_v1) HUNG: the process
+   at 100 percent CPU, the GPU at 0 percent use, 80 minutes and counting at
+   08:11Z; the three runs before it in the same job finished and agreed.
+   Stack (`time_checked/mi325x_1790664369046.HANG_stack.txt`):
+   `hipFree`-side `sched_yield` inside `DeviceBuffer::~DeviceBuffer` in
+   `core/device_scan.mojo::device_first_nonfinite`, called by
+   `llama_refuse_bad_call` in `llama_decoder_layer_forward_planted` under
+   `_transformer_run_session_int15`: a buffer release waiting on the stream,
+   which never drains. No amdgpu fault for this process in dmesg (faults at
+   05:20Z and 05:26Z belong to other lanes' processes). CAUSE NOT
+   ESTABLISHED; the same code finished every other MI325X run (identity at
+   two commits, three timed runs here, four in 1790663724684). Not
+   cancelled (rule 4). Owed: the same job again on the MI325X, and a stack
+   of the stream's last kernels if it recurs.
 6. In the progress file I first wrote an invented commit id for the gate
    run; replaced by the real one (013429062).
 

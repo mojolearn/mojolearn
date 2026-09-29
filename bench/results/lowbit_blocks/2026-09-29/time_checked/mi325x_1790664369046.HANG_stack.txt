@@ -1,0 +1,18 @@
+#0  0x00007eb19eb0e90b in __GI_sched_yield () at ../sysdeps/unix/syscall-template.S:120
+#1  0x00007eb140da43ad in ?? () from /opt/rocm-6.4.0/lib/libamdhip64.so
+#2  0x00007eb140da5f79 in ?? () from /opt/rocm-6.4.0/lib/libamdhip64.so
+#3  0x00007eb140a9b4c6 in ?? () from /opt/rocm-6.4.0/lib/libamdhip64.so
+#4  0x00007eb140b9253a in ?? () from /opt/rocm-6.4.0/lib/libamdhip64.so
+#5  0x00007eb140b9bc9a in ?? () from /opt/rocm-6.4.0/lib/libamdhip64.so
+#6  0x00007eb19d348f2c in ?? () from /root/mojolearn-wt/steward-do-amd/.pixi/envs/default/lib/libKGENCompilerRTShared.so
+#7  0x00007eb19d35f5ca in ?? () from /root/mojolearn-wt/steward-do-amd/.pixi/envs/default/lib/libKGENCompilerRTShared.so
+#8  0x00007eb19d33c804 in M::Driver::DeviceBuffer::~DeviceBuffer() () from /root/mojolearn-wt/steward-do-amd/.pixi/envs/default/lib/libKGENCompilerRTShared.so
+#9  0x00007eb19d1d6cd3 in AsyncRT_DeviceBuffer_release () from /root/mojolearn-wt/steward-do-amd/.pixi/envs/default/lib/libAsyncRTMojoBindings.so
+#10 0x00007eb143918ae3 in core::device_scan::device_first_nonfinite(max::gpu::host::device_context::DeviceContext,max::gpu::host::device_context::DeviceBuffer[::DType(float32)],::SIMD[::DType(int), ::SIMDLength(1)]) () from /root/mojolearn-
+#11 0x00007eb1438ce301 in transformer::impl::llama::modeling_llama::llama_refuse_bad_call(max::gpu::host::device_context::DeviceContext,transformer::impl::llama::modeling_llama::LlamaDeviceWeights,transformer::impl::llama::modeling_llama::L
+#12 0x00007eb1438f0d77 in transformer::impl::llama::modeling_llama::llama_decoder_layer_forward_planted(max::gpu::host::device_context::DeviceContext,transformer::impl::llama::modeling_llama::LlamaDeviceStages,transformer::impl::llama::mode
+#13 0x00007eb143814833 in _mojolearn_transformer::_transformer_run_session_int15(_mojolearn_transformer::TransformerSession,::List[::SIMD[::DType(int), ::SIMDLength(1)]],::SIMD[::DType(int), ::SIMDLength(1)],::SIMD[::DType(int), ::SIMDLengt
+#14 0x00007eb14386aca1 in std::python::bindings::fastcall(::PyObjectPtr,::Pointer[::Bool(True), MutUntrackedOrigin, ::PyObjectPtr, *?, ::AddressSpace(::SIMDLength(0))],::SIMD[::DType(int), ::SIMDLength(1)])`0x5,method_type=[typevalue<#kgen.
+    PID     ELAPSED %CPU
+ 164160    01:23:22  100
+Tue Sep 29 08:12:05 UTC 2026
