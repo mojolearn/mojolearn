@@ -222,3 +222,15 @@ It is another arithmetic than the one whose perplexity was measured for
   MI325X 1790659755804; the H100 after run 7.
 - RUN 7 queued: nvc3-0037 at b9db1a41b (lane/lowbit-mma-speed 8b2768883:
   the dispatcher's two-page plans), Lane D's lever. MI325X 1790659664486.
+- RUN 7 (nvc3-0037, b9db1a41b, Lane D's two-page plans) GREEN:
+  `tables/H100_RECORD_run7.md`. Complete inference call fused 0.26 to 0.31 of
+  fp32.v1 at t512; weight gradient 0.45 to 0.51; three products 0.45 to 0.50.
+  The qkv.t1/t8 complete-call anomaly repeats (cause not established).
+- The reference gate's row-scales case and exponent arm GREEN on the H100
+  (nvc3-0040), the M2 Pro (1790659752178) and the MI325X (1790659755804);
+  178 clean digests agree on three boxes.
+- LANE F'S AMD FUSED COLUMN (patch int15_tuned_amd_fused_column.patch, via
+  a9c13231d, Lane F's job 7 GREEN) merged at 5f209cd4b: both gates GREEN on
+  the H100 (nvc3-0042) and the MI325X (1790662046184). The M2 Pro's build
+  (1790662042389) is queued behind Lane G's job; if it fails, the merge is
+  undone by a new commit.
