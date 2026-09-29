@@ -114,6 +114,10 @@ from gbdt.gpu_util.kernel.transform import (
     launch_split_planes_f32,
 )
 from gbdt.methods.pointwise_optimization_subsets import GATHER_NO_MASK
+from gbdt.methods.pointwise_optimization_subsets import (
+    SPLIT_BLOCK_SIZE, SPLIT_MAX_BLOCKS, update_bins_from_desc_kernel,
+)
+from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
 from gbdt.methods.dynamic_boosting_folds import TFold
 from gbdt.methods.kernel.pointwise_scores import (
     SCORE_FUNCTION_COSINE,
@@ -639,16 +643,29 @@ def fit_oblivious_tree_structure_traced(
         # (`PointwiseTreeWorkspace.__init__`), where its history -- the raw
         # column reading column 0's bits and stopping every tree at depth
         # 1 -- is the reason the table stores `offset * n_rows`.
+        # DIAGNOSTIC: the split's three phases on the stage clock
+        var depth_s = subsets.current_depth + subsets.fold_bits
         times.begin(ctx)
-        split_subsets_from_desc(
-            ctx,
-            target,
-            cindex,
-            docs2,
-            pool[0].d_split_desc,
-            subsets,
+        var nb = (subsets.doc_count + SPLIT_BLOCK_SIZE - 1) // SPLIT_BLOCK_SIZE
+        if nb > SPLIT_MAX_BLOCKS:
+            nb = SPLIT_MAX_BLOCKS
+        ctx.enqueue_function[update_bins_from_desc_kernel](
+            cindex.unsafe_ptr(), docs2.unsafe_ptr(), Int32(subsets.doc_count),
+            pool[0].d_split_desc.unsafe_ptr(), depth_s, subsets.bins.unsafe_ptr(),
+            grid_dim=(nb, 1, 1), block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
         )
-        times.end(ctx, "pw.split")
+        times.end(ctx, "pw.split.bins")
+        times.begin(ctx)
+        launch_radix_sort_bins(
+            ctx, subsets.doc_count, Int(depth_s), Int(depth_s) + 1,
+            subsets.bins, subsets.indices, subsets.tmp_bins,
+            subsets.tmp_indices, subsets.scan_offsets, subsets.block_sums,
+        )
+        times.end(ctx, "pw.split.radix")
+        subsets.current_depth += 1
+        times.begin(ctx)
+        update_subsets_stats(ctx, target, subsets)
+        times.end(ctx, "pw.split.stats")
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner
