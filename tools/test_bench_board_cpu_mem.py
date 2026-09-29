@@ -210,6 +210,34 @@ def test_probe_reads_this_process():
     assert g["gpu_mb"] is None and "unified memory" in g["gpu_method"]
 
 
+def test_probe_reads_torch_counter_only_for_torch_arms(monkeypatch):
+    """do-amd 2026-09-29: torch had initialized ROCm in the trees driver, so
+    our arm read torch's allocator peak (0.0 MB). A non-torch GPU arm reads
+    the driver's per-process figure; a torch arm reads torch's counter."""
+    class _Cuda(object):
+        def is_available(self):
+            return True
+
+        def is_initialized(self):
+            return True
+
+        def max_memory_allocated(self):
+            return 0
+
+        def reset_peak_memory_stats(self):
+            pass
+
+    fake = types.SimpleNamespace(cuda=_Cuda(), backends=types.SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "torch", fake)
+    monkeypatch.setattr(probe.MemProbe, "_smi", lambda self: (512.0, "driver per-process"))
+    ours = probe.MemProbe("gpu", vendor="amd", shared=True, library="mojolearn")
+    assert ours._read_gpu() == (512.0, "driver per-process")
+    torch_arm = probe.MemProbe("gpu", vendor="amd", library="torch")
+    mb, method = torch_arm._read_gpu()
+    assert mb == 0.0 and method.startswith("torch.cuda.max_memory_allocated")
+    assert probe.MemProbe("gpu", vendor="amd", library="gpytorch")._read_gpu()[1].startswith("torch.cuda")
+
+
 # --- the trees driver's plumbing -----------------------------------------------------
 
 def test_tree_mem_lines_parse_into_cells(tmp_path):
