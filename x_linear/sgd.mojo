@@ -417,7 +417,7 @@ def _warp_row_dot_spec[K: Int](
                 var xj = shuffle_idx(xr[kk], UInt32(l))
                 var wj = shuffle_idx(wr[kk], UInt32(l))
                 acc = xmad(xj, wj, acc)
-                bad = bad or _is_subnormal(acc)
+                bad = bad | _is_subnormal(acc)
         elif kk * W < d:
             comptime for l in range(W):
                 comptime j = kk * W + l
@@ -426,7 +426,7 @@ def _warp_row_dot_spec[K: Int](
                 var wj = shuffle_idx(wr[kk], UInt32(l))
                 var a2 = xmad(xj, wj, acc)
                 acc = a2 if live else acc
-                bad = bad or _is_subnormal(acc)
+                bad = bad | _is_subnormal(acc)
     if bad:
         return _warp_row_folds[K, False, False](xr, wr, d)[0]
     return acc
