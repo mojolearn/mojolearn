@@ -259,3 +259,53 @@ def test_tree_mem_lines_parse_into_cells(tmp_path):
     assert parsed["mem"]["sklearn-rf-cpu"][1]["gpu_method"].startswith("cpu arm")
     f = bb.memory_fields(parsed["mem"]["ours"])
     assert isinstance(f["peak_host_mb"], float) and f["memory"]["rounds_sampled"] == 2
+
+
+def test_invalidate_memory_withdraws_only_torch_counter_figures(tmp_path, monkeypatch):
+    """--invalidate-memory: a non-torch GPU arm whose figure came from torch's
+    allocator loses the figure (times untouched); a torch arm, a CPU arm and
+    a driver-counter figure keep theirs; the store gets a corrected copy; a
+    second pass changes nothing."""
+    torch_m = {"gpu_method": "torch.cuda.max_memory_allocated, reset before the round",
+               "peak_gpu_mb": 0.0, "warmup_gpu_mb": 0.0}
+    smi_m = {"gpu_method": "rocm-smi --showpids VRAM USED", "peak_gpu_mb": 900.0}
+
+    def cell(arm, lib, dev, mem):
+        return {"arm": arm, "library": lib, "device": dev, "median_ms": 10.0,
+                "peak_gpu_mb": mem.get("peak_gpu_mb"), "memory": dict(mem)}
+    ours = cell("ours", "mojolearn", "gpu", torch_m)
+    races = {
+        "trees/gbdt-symmetric/taxi/rows=full": {"status": "done", "cells": [
+            ours, cell("xgboost-gpu", "xgboost", "gpu", torch_m),
+            cell("catboost-cpu", "catboost", "cpu", {"gpu_method": "cpu arm: no device memory"})]},
+        "neural/linear/synthetic": {"status": "done", "cells": [
+            cell("torch-eager-fp32", "torch", "gpu", torch_m),
+            cell("ours", "mojolearn", "gpu", smi_m)]},
+        "classical/kmeans/taxi/rows=full": {"status": "done", "cells": [
+            cell("ours", "mojolearn", "gpu", torch_m)]},
+    }
+    out = tmp_path / "run"
+    out.mkdir()
+    (out / "board.json").write_text(json.dumps({"races": races}))
+    store = tmp_path / "opponent-store.jsonl"
+    key = {"family": "trees", "lane": "gbdt-symmetric", "dataset": "taxi", "arm": "xgboost-gpu",
+           "box": "b", "machine": "m", "vendor": "amd", "device": "gpu"}
+    store.write_text(json.dumps({"key": key, "cell": cell("xgboost-gpu", "xgboost", "gpu", torch_m)}) + "\n")
+    rendered = []
+    monkeypatch.setattr(bb, "write_board", lambda o, r: rendered.append(o))   # the records here are minimal
+    nb, ns = bb.invalidate_memory(str(out), "trees/,neural/", "wrong counter", "abc123", str(store))
+    assert rendered == [str(out)]
+    assert (nb, ns) == (2, 1)
+    got = json.loads((out / "board.json").read_text())["races"]
+    t = {c["arm"]: c for c in got["trees/gbdt-symmetric/taxi/rows=full"]["cells"]}
+    for arm in ("ours", "xgboost-gpu"):
+        assert t[arm]["peak_gpu_mb"] is None and t[arm]["median_ms"] == 10.0
+        assert t[arm]["memory"]["gpu_method"] == "not measured (wrong counter; fixed at abc123)"
+    assert t["catboost-cpu"]["memory"]["gpu_method"] == "cpu arm: no device memory"
+    n = {c["arm"]: c for c in got["neural/linear/synthetic"]["cells"]}
+    assert n["torch-eager-fp32"]["peak_gpu_mb"] == 0.0 and n["ours"]["peak_gpu_mb"] == 900.0
+    # outside the prefixes: untouched
+    assert got["classical/kmeans/taxi/rows=full"]["cells"][0]["peak_gpu_mb"] == 0.0
+    latest = bb.STORE.load(str(store))
+    assert list(latest.values())[0]["cell"]["peak_gpu_mb"] is None
+    assert bb.invalidate_memory(str(out), "trees/,neural/", "wrong counter", "abc123", str(store)) == (0, 0)

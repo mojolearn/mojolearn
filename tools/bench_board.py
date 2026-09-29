@@ -1138,6 +1138,75 @@ def data_status(data_root, datasets, verify=False):
 # Result file
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# --invalidate-memory: a GPU figure read with the wrong counter, withdrawn
+# ---------------------------------------------------------------------------
+
+#: The GPU counters that are only valid for a torch arm (tools/bench_board_probe.py).
+TORCH_GPU_METHODS = ("torch.cuda.max_memory_allocated", "torch.mps.driver_allocated_memory")
+
+
+def _wrong_gpu_counter(cell):
+    """A GPU cell of a non-torch arm whose GPU figure came from torch's
+    allocator (before bench_board_probe took the arm's library, 2026-09-29)."""
+    m = cell.get("memory") or {}
+    return (cell.get("device") == "gpu"
+            and str(cell.get("library") or "") not in PROBE.TORCH_LIBRARIES
+            and str(m.get("gpu_method") or "").startswith(TORCH_GPU_METHODS))
+
+
+def _withdraw_gpu_figure(cell, note):
+    cell["peak_gpu_mb"] = None
+    m = cell.setdefault("memory", {})
+    m["peak_gpu_mb"] = None
+    m["warmup_gpu_mb"] = None
+    m["gpu_method_withdrawn"] = m.get("gpu_method")
+    m["gpu_method"] = note
+
+
+def invalidate_memory(out, prefixes, reason, fixed_at, store_path=None):
+    """Mark the GPU memory of every finished cell whose figure came from the
+    wrong counter (_wrong_gpu_counter) as not measured, in the races whose id
+    starts with one of `prefixes` (comma list; "all" for every race). The
+    times are untouched: the probe only read memory. The opponent store gets
+    a corrected copy of each such record (the store keeps the latest per
+    key). Idempotent: a withdrawn figure no longer carries a torch counter.
+    Returns (board cells marked, store records corrected)."""
+    rpath = os.path.join(out, "board.json")
+    result = load_result(rpath)
+    if result is None:
+        raise SystemExit("--invalidate-memory: no board.json under %s" % out)
+    want = [x.strip() for x in (prefixes or "").split(",") if x.strip()]
+    note = "not measured (%s; fixed at %s)" % (reason, fixed_at)
+    n_board = 0
+    for rid, rec in (result.get("races") or {}).items():
+        if not ("all" in want or any(rid.startswith(x) for x in want)):
+            continue
+        for c in rec.get("cells") or []:
+            if _wrong_gpu_counter(c):
+                _withdraw_gpu_figure(c, note)
+                n_board += 1
+    n_store = 0
+    if store_path and os.path.exists(store_path):
+        for r in STORE.load(store_path).values():
+            k = r.get("key") or {}
+            rid = "%s/%s/%s" % (k.get("family"), k.get("lane"), k.get("dataset"))
+            cell = r.get("cell") or {}
+            if ("all" in want or any(rid.startswith(x) for x in want)) and _wrong_gpu_counter(cell):
+                fixed = json.loads(json.dumps(r))
+                _withdraw_gpu_figure(fixed["cell"], note)
+                fixed["corrected_at"] = now_utc()
+                STORE.append(store_path, fixed)
+                n_store += 1
+    if n_board:
+        result.setdefault("corrections", []).append(
+            {"at": now_utc(), "what": "peak_gpu_mb withdrawn", "prefixes": want, "note": note,
+             "cells": n_board, "store_records": n_store})
+        save_result(rpath, result)
+        write_board(out, result)
+    return n_board, n_store
+
+
 def load_result(path):
     if not os.path.exists(path):
         return None
@@ -2871,6 +2940,13 @@ def build_parser():
                         "cell joins the race (tools/bench_board_store.py)")
     p.add_argument("--retime-opponents", action="store_true",
                    help="measure every opponent again (and store the new measurement)")
+    p.add_argument("--invalidate-memory", default=None, metavar="PREFIXES",
+                   help="before the run (or alone with --render-only): in the finished races whose "
+                        "id starts with one of these (comma list, or all), withdraw every GPU memory "
+                        "figure a non-torch arm read from torch's allocator; needs "
+                        "--invalidate-reason and --invalidate-fixed-at")
+    p.add_argument("--invalidate-reason", default=None)
+    p.add_argument("--invalidate-fixed-at", default=None, metavar="COMMIT")
     p.add_argument("--backfill-store", default=None, metavar="BOARD_JSON",
                    help="import the opponent cells of an existing board.json into the store, "
                         "print how many were imported and skipped, and exit")
@@ -3070,6 +3146,18 @@ def main(argv=None):
         for why, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
             print("bench_board:   skipped %d: %s" % (n, why), flush=True)
         return 0
+
+    if args.invalidate_memory:
+        if not (args.out and args.invalidate_reason and args.invalidate_fixed_at):
+            raise SystemExit("--invalidate-memory needs --out, --invalidate-reason and "
+                             "--invalidate-fixed-at")
+        iout = os.path.abspath(os.path.expanduser(args.out))
+        store = os.path.abspath(os.path.expanduser(
+            args.opponent_store or os.path.join(os.path.dirname(iout), "opponent-store.jsonl")))
+        nb, ns = invalidate_memory(iout, args.invalidate_memory, args.invalidate_reason,
+                                   args.invalidate_fixed_at, store)
+        print("bench_board: --invalidate-memory %s: withdrew %d GPU memory figures on the board, "
+              "corrected %d opponent-store records" % (args.invalidate_memory, nb, ns), flush=True)
 
     if args.render_only:
         if not args.out:

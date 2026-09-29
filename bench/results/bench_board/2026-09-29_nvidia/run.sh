@@ -10,7 +10,8 @@
 #   tools/nvidia_central.sh submit bench-board-nvidia --cap 240 bench/results/bench_board/2026-09-29_nvidia/run.sh
 #
 # Extra arguments for bench_board.py (e.g. --rerun <prefixes>) are read from
-# $ARGS_FILE when it exists (the queue takes one script path, no arguments).
+# $ARGS_FILE when it exists, one argument per line (the queue takes one script
+# path, no arguments); it is renamed .used-<UTC> once read.
 #
 # Resumable: every finished race is in board.json, and the next queued copy of
 # this job skips it. The queue kills a job at its 240-minute cap, which would
@@ -42,7 +43,7 @@ done
 
 extra=()
 if [ -s "$ARGS_FILE" ]; then
-    read -r -a extra < "$ARGS_FILE"
+    mapfile -t extra < "$ARGS_FILE"      # ONE argument per line (a reason may hold spaces)
     say "extra args from $ARGS_FILE: ${extra[*]}"
     mv "$ARGS_FILE" "$ARGS_FILE.used-$(date -u +%Y%m%dT%H%M%SZ)"
 fi
