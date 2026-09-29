@@ -10,8 +10,9 @@ loop, `abs(change) < tol`, the best of `n_init`) and `_gaussian_mixture.py`
 THE n-SIZED WORK IS THE DEVICE'S, float32: the Mahalanobis squares against
 the upper-triangular precision Cholesky factors (`bodies.gauss_q_cell`), the
 row log-sum-exp of the E-step (`bodies.resp_row`, the portable exp and log),
-and the M-step moments (`nk_cell`, `xk_cell`, `cov_cell`), every fold over the
-rows ascending. THE k-SIZED WORK IS HOST FLOAT64, one source in both
+and the M-step moments (`nk_cell` rows ascending; the means and covariances
+through the identical GEMM, DEVIATION 5110 revised 2026-09-29,
+`x_cluster/host/moments_gemm.mojo`). THE k-SIZED WORK IS HOST FLOAT64, one source in both
 bindings: the Wishart and Dirichlet(-process) updates, the d x d Cholesky and
 its triangular inverse, digamma and log-gamma (series on the portable
 `identical_log64`), the lower bound. Every host product that feeds an add is
