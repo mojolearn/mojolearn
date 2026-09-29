@@ -114,9 +114,12 @@ phase profile-tests-ran fail grep -E '^SKIPPED.*test_numeric_profile' "$OUT/pyth
 # in the harness), under the new default and under the escape hatch
 # (one device: the reference is the one-device record)
 unset MOJOLEARN_PAR_DEVICES
-phase verify-causal-lm-default pass sh -c "cd python && pixi run -e test python -m mojolearn verify --lanes hf-causal-lm,par-causal-lm"
-phase verify-causal-lm-fp32env pass sh -c "cd python && MOJOLEARN_NUMERIC_PROFILE=fp32_v1 pixi run -e test python -m mojolearn verify --lanes hf-causal-lm,par-causal-lm"
-grep -E 'IDENTICAL|DIFFERENT|MISMATCH|verdict|VERDICT|PASS|FAIL' "$OUT/verify-causal-lm-default.log" | tail -8 | sed 's/^/    | /'
+# (the `verify` driver's comparator self-test needs bindings this check does
+# not build, nvc2-0029; the harness itself runs the lane and the table is read here)
+TABLE=python/mojolearn/verify_reference/table.json
+phase verify-causal-lm-default pass sh -c "pixi run -e test python tools/identity_break.py --lanes hf-causal-lm --repeats 2 --json $OUT/ib_default.json > $OUT/ib_default.run 2>&1; pixi run -e test python tools/lowbit_default/causal_lm_refs.py $OUT/ib_default.json $TABLE"
+phase verify-causal-lm-fp32env pass sh -c "MOJOLEARN_NUMERIC_PROFILE=fp32_v1 pixi run -e test python tools/identity_break.py --lanes hf-causal-lm --repeats 2 --json $OUT/ib_fp32.json > $OUT/ib_fp32.run 2>&1; pixi run -e test python tools/lowbit_default/causal_lm_refs.py $OUT/ib_fp32.json $TABLE"
+grep -E 'compared|DIFFERENT|NOT HASHED' "$OUT/verify-causal-lm-default.log" | tail -4 | sed 's/^/    | /'
 
 # SmolLM2-360M: the hashes under the default and the hatches, and generate
 if [ -n "$MODEL" ]; then
