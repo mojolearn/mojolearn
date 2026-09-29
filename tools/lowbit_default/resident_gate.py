@@ -50,7 +50,7 @@ def main():
         if not ok:
             bad.append(name)
 
-    for kw in ({}, {"numeric_profile": "fp32_v1"}):
+    for kw in ({}, {"numeric_profile": "fixed15_v1"}, {"numeric_profile": "fp32_v1"}):
         lm = CausalLM.load(args.model, **kw)
         prof = lm.numeric_profile
         v, d = lm.vocab_size, lm.d_model

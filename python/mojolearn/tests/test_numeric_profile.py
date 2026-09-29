@@ -435,7 +435,7 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     test files' job, which the default lane's check runs unchanged."""
     ml = _package()
     g = _clean_default(ml)
-    assert ml.numeric_profile() == "fixed15_v1"
+    assert ml.numeric_profile() == "fp32_v1"
     from mojolearn import _training_impl as T
     # past the profile line: the next refusal is the empty registry's
     with pytest.raises(ValueError, match="params is empty"):
