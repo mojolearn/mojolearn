@@ -3698,7 +3698,8 @@ class LocallyLinearEmbedding(_Base):
         # cannot order them; the one-sided Jacobi SVD of I - W resolves its
         # small singular values to high RELATIVE accuracy.
         got = None
-        if self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
+        if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
+                and nc + 1 < _LLE_ITER_MAX_K):
             got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state))
         if got is not None:
             self.embedding_m_, sv = got
