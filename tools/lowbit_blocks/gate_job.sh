@@ -22,7 +22,8 @@ $MJ build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_c
 pixi run -e default bash -c "cd $B && mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_check.mojo -o $OUT/tcheck_base" 2>&1 | tail -20
 MOJOLEARN_IDENTITY_TRACE="$OUT/card_branch.card" "$OUT/tcheck_branch" > "$OUT/tcheck_branch.log" 2>&1; echo "branch transformer_check exit $?"
 (cd "$B" && MOJOLEARN_IDENTITY_TRACE="$OUT/card_base.card" "$OUT/tcheck_base" > "$OUT/tcheck_base.log" 2>&1; echo "base transformer_check exit $?")
-sed -E 's/[0-9]+\.[0-9]+ ?(ms|s)\b/T/g' "$OUT/tcheck_branch.log" > "$OUT/a.txt"; sed -E 's/[0-9]+\.[0-9]+ ?(ms|s)\b/T/g' "$OUT/tcheck_base.log" > "$OUT/b.txt"
+# tcmalloc's mbind warning and the card's own path are the only lines that may differ.
+grep -v -e tcmalloc -e '^card: ' "$OUT/tcheck_branch.log" | sed -E 's/[0-9]+\.[0-9]+ ?(ms|s)\b/T/g' > "$OUT/a.txt"; grep -v -e tcmalloc -e '^card: ' "$OUT/tcheck_base.log" | sed -E 's/[0-9]+\.[0-9]+ ?(ms|s)\b/T/g' > "$OUT/b.txt"
 if cmp -s "$OUT/a.txt" "$OUT/b.txt"; then echo "DEFAULT GATE: transformer_check output identical ($(wc -l < "$OUT/a.txt") lines)"; else echo "DEFAULT GATE: OUTPUT DIFFERS"; diff "$OUT/b.txt" "$OUT/a.txt" | head -20; fi
 if [ -f "$OUT/card_branch.card" ] && [ -f "$OUT/card_base.card" ]; then
   if cmp -s "$OUT/card_branch.card" "$OUT/card_base.card"; then echo "DEFAULT GATE: identity card identical ($(wc -l < "$OUT/card_base.card") lines, sha256 $(sha256sum < "$OUT/card_base.card" | cut -c1-16))"; else echo "DEFAULT GATE: CARD DIFFERS"; fi

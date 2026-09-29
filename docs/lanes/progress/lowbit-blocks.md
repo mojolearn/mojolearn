@@ -109,7 +109,30 @@ against fp32_v1 per box.
 
 ## Verdicts
 
-(none yet)
+### (b) and the block half of (c): GREEN on the 4090 (nvc2), job nvc2-0016, commit 2d8e7e3b2-era tree (patch-synced at the lane's head of 05:03Z)
+
+`pixi run check-transformer-int15` (`transformer/checks/transformer_int15_check.mojo`),
+logs in `bench/results/lowbit_blocks/2026-09-29/gate_4090/`:
+- PROFILE, device against the host oracle (`transformer_block_oracle(..., int15=True)`):
+  11 fixture cases (B 1 to 3, L 1 to 64, head_dim 16 and 24, intermediate 64 and 300,
+  n_rep 1 and 2, windows 3, 4, 5, 20), 30 of 30 stages bit-identical in every case,
+  every projection and S11 included. The device's weight planes came from the
+  parallel quantizer on the device; the oracle's codes from `quantize_rows_int15`.
+- DECODE == PREFILL: cases base_b3_l16_nrep2 and win4_b1_l16_nrep2, prefix 1, 7
+  and 15, every token's block output equals the full prefill's (0 cells) and
+  the host oracle's decode (0 cells).
+- BATCH: B=3 against each row alone at B=1, 0 cells differ, three rows.
+- SABOTAGE (`-D MOJOLEARN_LOWBIT_SABOTAGE=1`, the same program): exit 1, all 11
+  profile cases MOVED, the 6 decode comparisons against the oracle failed, 0
+  default cases moved (17 failures). Seen failing.
+- THE DEFAULT DID NOT MOVE: `transformer/checks/transformer_check.mojo` built
+  from this branch and from a clean worktree at the merge base 45464ced2
+  (whose block sources, `transformer/`, `gemm/checks/gemm_identical.mojo`,
+  `gemm/host/`, `checks/numerics.mojo`, `core/`, `mamba/impl/`, equal
+  origin/main's byte for byte), run on the same GPU: identity cards identical
+  (31 lines), every output line identical except tcmalloc's mbind warning and
+  the card's own path. The check's own default phase: 11 cases fp32 device ==
+  fp32 host oracle, digests printed (`int15 default digest`).
 
 ## Failures
 
