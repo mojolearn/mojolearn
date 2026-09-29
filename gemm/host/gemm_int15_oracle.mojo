@@ -134,6 +134,19 @@ def quantize_rows_int15(x: List[Float32], rows: Int, cols: Int) -> Int15Rows:
     return Int15Rows(q^, e^, rows, cols)
 
 
+def quantize_cols_int15(x: List[Float32], rows: Int, cols: Int) -> Int15Rows:
+    """The codes of the COLUMNS of a `rows x cols` matrix, written as the
+    rows of its transpose (`cols x rows`): what a product that contracts
+    over the matrix's row index reads (OP_NN's right operand, both of
+    OP_TN's). Clauses W-1 and W-2 on the transposed values and nothing
+    else, so it is `quantize_rows_int15` of the transpose, bit for bit."""
+    var xt = List[Float32]()
+    for c in range(cols):
+        for r in range(rows):
+            xt.append(x[r * cols + c])
+    return quantize_rows_int15(xt, cols, rows)
+
+
 def dequantize_rows_int15(qr: Int15Rows) -> List[Float32]:
     """`q * 2^e`, exact unless it leaves the normal range: the float32
     matrix a fifteen-bit store stands for."""

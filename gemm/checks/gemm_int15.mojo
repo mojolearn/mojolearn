@@ -41,6 +41,27 @@ two int8 PLANES and the same exponents (what the pieces and the matrix
 unit read). `split_int15_device` makes the second from the first. A weight
 is split once and kept; an activation is split per call.
 
+THE CONVERSIONS, AND TWO SCHEDULES OF ONE QUANTIZER (DEVIATION 2974)
+--------------------------------------------------------------------
+  ROWS      `quantize_rows_int15_kernel` and `quantize_cols_int15_kernel`:
+            one thread per row (per column, for an operand stored the
+            other way). `quantize_rows_int15`'s own order. THE REFERENCE.
+  PARALLEL  three launches on the one in-order context: the absmax of each
+            row in chunks of `INT15_ABSMAX_CHUNK` values, one thread per
+            chunk; the chunk maxima of a row reduced to its exponent, one
+            thread per row; the codes (or the two planes directly), one
+            thread per VALUE. No thread waits on another and nothing is
+            shared inside a launch.
+Both are the quantizer because the absmax is a MAXIMUM of magnitudes that a
+NaN never enters: it is the same float under every grouping, so the
+exponent is, and a code is a function of its own value and its row's
+exponent. The choice is SCHEDULING and
+`check_int15_device_conversions_match_host` requires the two schedules'
+codes, exponents and planes to be the host's on every planted row. A row
+that is one thread's work takes the row's whole length in time whatever the
+device; lane/lowbit-units measured that the row quantizer takes longer than
+the product it feeds.
+
 THE SABOTAGE ARMS (DEVIATION 2973)
 ----------------------------------
 `-D MOJOLEARN_LOWBIT_SABOTAGE=1`, the low-bit family's device arm, flips the
@@ -52,6 +73,10 @@ written for a symmetric int8 range would do. It changes no code above
 -16257: a handful of the codes of a random fixture, and EVERY code of two
 of the planted worst cases. It does not reach the FLAT plan, which reads
 no plane.
+`-D MOJOLEARN_INT15_QUANT_SABOTAGE=1` is the DEFECT ARM of the parallel
+quantizer: the last chunk of every row is left out of the absmax, the
+mistake a chunked loop makes at a ragged tail. It moves the exponent of a
+row whose largest value lies in that tail and of no other row.
 """
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, lane_id, thread_idx
@@ -95,6 +120,13 @@ comptime INT15_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
 #: DEVIATION 2973, the defect arm of the split (clause W-3).
 comptime INT15_PIECE_SABOTAGE = is_defined["MOJOLEARN_INT15_PIECE_SABOTAGE"]()
 
+#: DEVIATION 2973, the defect arm of the parallel quantizer.
+comptime INT15_QUANT_SABOTAGE = is_defined["MOJOLEARN_INT15_QUANT_SABOTAGE"]()
+
+#: DEVIATION 2974: values per chunk of the parallel absmax. SCHEDULING: a
+#: maximum is the same under every grouping.
+comptime INT15_ABSMAX_CHUNK = 256
+
 #: DEVIATION 2972: `-D MOJOLEARN_INT15_FORCE_FLAT=1` keeps the two
 #: one-thread-per-cell plans on every column, the unit's columns included.
 #: SCHEDULING; cannot move a bit (clause W-8).
@@ -124,6 +156,8 @@ def int15_sabotage_name() -> String:
         return String("LOWBIT_VALUE_FLIP")
     elif INT15_PIECE_SABOTAGE:
         return String("INT15_PIECE_HI_CLAMP")
+    elif INT15_QUANT_SABOTAGE:
+        return String("INT15_QUANT_TAIL_DROPPED")
     else:
         return String("none")
 
@@ -181,6 +215,36 @@ def quantize_rows_int15_kernel(
         q.unsafe_store(r * cols + c, quantize_int15_value(x.unsafe_load(r * cols + c), ex))
 
 
+def quantize_cols_int15_kernel(
+    q: MutPointer[Int16, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+):
+    """THE TRANSPOSING QUANTIZER. `x` is `rows x cols` row-major; one
+    thread per COLUMN of it: the column's absmax, its exponent, and its
+    codes written as row `c` of the `cols x rows` transpose. The values a
+    thread reads are one column's and the rule is W-1 and W-2, so the codes
+    are `quantize_rows_int15`'s on the transposed matrix."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c >= cols:
+        return
+    var best = Float32(0.0)
+    for r in range(rows):
+        var v = ftz(x.unsafe_load(r * cols + c))
+        if v < Float32(0.0):
+            v = -v
+        if v > best:
+            best = v
+    var ex = int15_row_exponent(best)
+    e.unsafe_store(c, Int32(ex))
+    for r in range(rows):
+        q.unsafe_store(c * rows + r, quantize_int15_value(x.unsafe_load(r * cols + c), ex))
+
+
 def dequantize_rows_int15_kernel(
     y: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Int16, MutAnyOrigin],
@@ -219,6 +283,252 @@ def split_int15_kernel(
     lo.unsafe_store(i, int15_piece_lo(c))
 
 
+# ---------------------------------------------------------------------------
+# the PARALLEL schedule of the quantizer (DEVIATION 2974)
+# ---------------------------------------------------------------------------
+# The operand is addressed by two strides so one set of kernels serves an
+# operand stored either way: value `(r, c)` of the `rows x cols` matrix
+# being quantized is `x[r * s_row + c * s_col]`, with `(s_row, s_col)`
+# `(cols, 1)` when `x` is that matrix row-major and `(1, rows)` when `x` is
+# its transpose row-major (`cols x rows`).
+
+
+def int15_absmax_chunk_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+    chunks_in: Int32,
+    s_row_in: Int32,
+    s_col_in: Int32,
+):
+    """One thread per chunk of a row: the largest magnitude of its values
+    after the flush, `row_absmax`'s own comparison, into `part[r * chunks +
+    chunk]`."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var chunks = Int(chunks_in)
+    var s_row = Int(s_row_in)
+    var s_col = Int(s_col_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= rows * chunks:
+        return
+    var r = t // chunks
+    var ch = t - r * chunks
+    var c0 = ch * INT15_ABSMAX_CHUNK
+    var c1 = c0 + INT15_ABSMAX_CHUNK
+    if c1 > cols:
+        c1 = cols
+    comptime if INT15_QUANT_SABOTAGE:
+        # THE DEFECT ARM: the ragged tail of the row is never read.
+        if ch == chunks - 1:
+            c1 = c0
+    var best = Float32(0.0)
+    var base = r * s_row
+    for c in range(c0, c1):
+        var v = ftz(x.unsafe_load(base + c * s_col))
+        if v < Float32(0.0):
+            v = -v
+        if v > best:
+            best = v
+    part.unsafe_store(t, best)
+
+
+def int15_exponent_kernel(
+    e: MutPointer[Int32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    chunks_in: Int32,
+):
+    """One thread per row: the largest of the row's chunk maxima, then
+    clause W-1."""
+    var rows = Int(rows_in)
+    var chunks = Int(chunks_in)
+    var r = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if r >= rows:
+        return
+    var best = Float32(0.0)
+    for ch in range(chunks):
+        var v = part.unsafe_load(r * chunks + ch)
+        if v > best:
+            best = v
+    e.unsafe_store(r, Int32(int15_row_exponent(best)))
+
+
+def int15_codes_kernel(
+    q: MutPointer[Int16, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+    s_row_in: Int32,
+    s_col_in: Int32,
+):
+    """One thread per value: clause W-2 under the row's exponent."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= rows * cols:
+        return
+    var r = i // cols
+    var c = i - r * cols
+    var v = x.unsafe_load(r * Int(s_row_in) + c * Int(s_col_in))
+    q.unsafe_store(i, quantize_int15_value(v, Int(e.unsafe_load(r))))
+
+
+def int15_planes_kernel(
+    hi: MutPointer[Int8, MutAnyOrigin],
+    lo: MutPointer[Int8, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+    s_row_in: Int32,
+    s_col_in: Int32,
+):
+    """One thread per value: clause W-2, then clause W-3, the code never
+    stored. What a call pays for an activation whose product reads planes."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= rows * cols:
+        return
+    var r = i // cols
+    var c = i - r * cols
+    var v = x.unsafe_load(r * Int(s_row_in) + c * Int(s_col_in))
+    var code = quantize_int15_value(v, Int(e.unsafe_load(r)))
+    var h = int15_piece_hi(code)
+    comptime if INT15_PIECE_SABOTAGE:
+        if h == Int8(-128):
+            h = Int8(-127)
+    hi.unsafe_store(i, h)
+    lo.unsafe_store(i, int15_piece_lo(code))
+
+
+struct Int15QuantWorkspace(Movable):
+    """The chunk maxima of the parallel quantizer, on ONE in-order
+    context. Grown on demand; growth drains the context first."""
+
+    var part: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext) raises:
+        step_count_device_alloc()
+        self.part = ctx.enqueue_create_buffer[DType.float32](1)
+
+    def ensure(mut self, ctx: DeviceContext, floats: Int) raises:
+        if floats > len(self.part):
+            step_count_sync()
+            ctx.synchronize()
+            step_count_device_alloc()
+            self.part = ctx.enqueue_create_buffer[DType.float32](floats)
+
+
+def int15_quant_chunks(cols: Int) -> Int:
+    return (cols + INT15_ABSMAX_CHUNK - 1) // INT15_ABSMAX_CHUNK
+
+
+def _parallel_exponents(
+    ctx: DeviceContext,
+    mut e: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut work: Int15QuantWorkspace,
+    rows: Int,
+    cols: Int,
+    s_row: Int,
+    s_col: Int,
+) raises:
+    """The first two launches: chunk maxima, then one exponent per row."""
+    var chunks = int15_quant_chunks(cols)
+    work.ensure(ctx, rows * chunks)
+    ctx.enqueue_function[int15_absmax_chunk_kernel](
+        work.part.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(rows),
+        Int32(cols),
+        Int32(chunks),
+        Int32(s_row),
+        Int32(s_col),
+        grid_dim=((rows * chunks + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+    ctx.enqueue_function[int15_exponent_kernel](
+        e.unsafe_ptr(),
+        work.part.unsafe_ptr(),
+        Int32(rows),
+        Int32(chunks),
+        grid_dim=((rows + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+
+
+def quantize_int15_parallel_device(
+    ctx: DeviceContext,
+    mut q: DeviceBuffer[DType.int16],
+    mut e: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut work: Int15QuantWorkspace,
+    rows: Int,
+    cols: Int,
+    transposed: Bool,
+) raises:
+    """The PARALLEL schedule, to codes: `rows x cols` codes and `rows`
+    exponents. `x` is that matrix row-major, or with `transposed` its
+    transpose row-major (`cols x rows`). Asynchronous."""
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int15_parallel: rows and cols must be positive")
+    var s_row = cols
+    var s_col = 1
+    if transposed:
+        s_row = 1
+        s_col = rows
+    _parallel_exponents(ctx, e, x, work, rows, cols, s_row, s_col)
+    ctx.enqueue_function[int15_codes_kernel](
+        q.unsafe_ptr(),
+        e.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(rows),
+        Int32(cols),
+        Int32(s_row),
+        Int32(s_col),
+        grid_dim=((rows * cols + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+
+
+def quantize_planes_int15_parallel_device(
+    ctx: DeviceContext,
+    mut hi: DeviceBuffer[DType.int8],
+    mut lo: DeviceBuffer[DType.int8],
+    mut e: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut work: Int15QuantWorkspace,
+    rows: Int,
+    cols: Int,
+    transposed: Bool,
+) raises:
+    """The PARALLEL schedule, straight to planes. Asynchronous."""
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_planes_int15_parallel: rows and cols must be positive")
+    var s_row = cols
+    var s_col = 1
+    if transposed:
+        s_row = 1
+        s_col = rows
+    _parallel_exponents(ctx, e, x, work, rows, cols, s_row, s_col)
+    ctx.enqueue_function[int15_planes_kernel](
+        hi.unsafe_ptr(),
+        lo.unsafe_ptr(),
+        e.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(rows),
+        Int32(cols),
+        Int32(s_row),
+        Int32(s_col),
+        grid_dim=((rows * cols + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+
+
 def quantize_rows_int15_device(
     ctx: DeviceContext,
     mut q: DeviceBuffer[DType.int16],
@@ -236,6 +546,29 @@ def quantize_rows_int15_device(
         Int32(rows),
         Int32(cols),
         grid_dim=((rows + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+
+
+def quantize_cols_int15_device(
+    ctx: DeviceContext,
+    mut q: DeviceBuffer[DType.int16],
+    mut e: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    rows: Int,
+    cols: Int,
+) raises:
+    """`x` is `rows x cols`; `q` receives `cols x rows` codes and `e` one
+    exponent per column of `x`."""
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_cols_int15: rows and cols must be positive")
+    ctx.enqueue_function[quantize_cols_int15_kernel](
+        q.unsafe_ptr(),
+        e.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(rows),
+        Int32(cols),
+        grid_dim=((cols + INT15_TPB - 1) // INT15_TPB, 1, 1),
         block_dim=(INT15_TPB, 1, 1),
     )
 
@@ -757,24 +1090,38 @@ def identical_gemm_int15_from_f32(
     k: Int,
 ) raises:
     """Quantize both float32 operands on the device by the profile's rule,
-    then the product. Synchronizes before it returns."""
+    then the product. The PARALLEL schedule of the quantizer, straight to
+    the form this column's plan reads: planes where the column has the
+    unit, codes elsewhere. Synchronizes before it returns."""
     _refuse(m, n, k, String("identical_gemm_int15"))
-    step_count_device_alloc()
-    var qa = ctx.enqueue_create_buffer[DType.int16](m * k)
     step_count_device_alloc()
     var ea = ctx.enqueue_create_buffer[DType.int32](m)
     step_count_device_alloc()
-    var qb = ctx.enqueue_create_buffer[DType.int16](n * k)
-    step_count_device_alloc()
     var eb = ctx.enqueue_create_buffer[DType.int32](n)
-    var work = Int15Workspace(ctx)
-    quantize_rows_int15_device(ctx, qa, ea, a, m, k)
-    quantize_rows_int15_device(ctx, qb, eb, b, n, k)
-    identical_gemm_int15_into(ctx, c, qa, ea, qb, eb, work, m, n, k)
-    step_count_sync()
-    ctx.synchronize()
-    _ = qa
+    var quant = Int15QuantWorkspace(ctx)
+    comptime if INT15_MMA_ENABLED:
+        var work = Int15Workspace(ctx)
+        work.ensure(ctx, m * k, n * k)
+        quantize_planes_int15_parallel_device(ctx, work.ah, work.al, ea, a, quant, m, k, False)
+        quantize_planes_int15_parallel_device(ctx, work.bh, work.bl, eb, b, quant, n, k, False)
+        identical_gemm_int15_mma_into(
+            ctx, c, work.ah, work.al, ea, work.bh, work.bl, eb, m, n, k
+        )
+        step_count_sync()
+        ctx.synchronize()
+        _ = work^
+    else:
+        step_count_device_alloc()
+        var qa = ctx.enqueue_create_buffer[DType.int16](m * k)
+        step_count_device_alloc()
+        var qb = ctx.enqueue_create_buffer[DType.int16](n * k)
+        quantize_int15_parallel_device(ctx, qa, ea, a, quant, m, k, False)
+        quantize_int15_parallel_device(ctx, qb, eb, b, quant, n, k, False)
+        identical_gemm_int15_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
+        step_count_sync()
+        ctx.synchronize()
+        _ = qa
+        _ = qb
     _ = ea
-    _ = qb
     _ = eb
-    _ = work^
+    _ = quant^

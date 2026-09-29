@@ -1096,6 +1096,7 @@ check-gemm-int15-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJO
 check-gemm-int15-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-piece-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_PIECE_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+check-gemm-int15-quant-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_QUANT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 # The host oracle and the device against the quality lane's PyTorch simulation (contract 6.6).
 check-gemm-int15-sim = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
 check-gemm-int15-sim-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"

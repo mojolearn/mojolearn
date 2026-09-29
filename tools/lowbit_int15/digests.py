@@ -55,6 +55,14 @@ def main(argv):
         if not shared:
             print("REFUSED: the two files share no case")
             return 1
+        # The value arm reaches the fifteen-bit kernels' stored cells. The
+        # timing harness also prints `fp32-` cases (another profile) and
+        # `conv-` cases (codes and planes, which the arm does not touch);
+        # they are not what this comparison is about.
+        shared = [c for c in shared if not c.startswith(("fp32-", "conv-"))]
+        if not shared:
+            print("REFUSED: the two files share no fifteen-bit product case")
+            return 1
         same = []
         for c in shared:
             for plan, d in bad[c].items():

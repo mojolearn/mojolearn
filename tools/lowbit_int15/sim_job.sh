@@ -117,8 +117,10 @@ grep -h "^   DIGEST " "$OUT/sim.log" 2>/dev/null | sed 's/^   //' > "$OUT/digest
 } >> "$OUT/sim.txt"
 cat "$OUT/status.tsv" "$OUT/sim.txt"
 for f in sim sim-host-sabotage sim-convert-sabotage sim-device-sabotage; do
-    echo "== $f (last 40)"
-    cut -c1-600 "$OUT/$f.log" 2>/dev/null | grep -v mbind | tail -40
+    echo "== $f (every line that is not a digest; last 40)"
+    grep -v -E '^   DIGEST |mbind' "$OUT/$f.log" 2>/dev/null | cut -c1-600 | tail -40
 done
+echo "== sim digests (the clean run)"
+cat "$OUT/digests.tsv"
 echo "sim_job: box=$BOX red=$red"
 exit "$red"

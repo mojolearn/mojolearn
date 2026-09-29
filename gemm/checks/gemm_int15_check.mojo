@@ -51,8 +51,14 @@ from checks.numerics_int15 import (
     int15_recombine,
 )
 from gemm.checks.gemm_int15 import (
+    Int15QuantWorkspace,
     Int15Workspace,
     dequantize_rows_int15_device,
+    identical_gemm_int15_from_f32,
+    int15_quant_chunks,
+    quantize_cols_int15_device,
+    quantize_int15_parallel_device,
+    quantize_planes_int15_parallel_device,
     identical_gemm_int15_flat_into,
     identical_gemm_int15_into,
     identical_gemm_int15_mma_into,
@@ -69,6 +75,7 @@ from gemm.host.gemm_int15_oracle import (
     INT15_PIECE_BOUND_K,
     Int15Rows,
     dequantize_rows_int15,
+    quantize_cols_int15,
     gemm_int15_oracle,
     gemm_int15_pieces_oracle,
     int15_dot_cell,
@@ -848,11 +855,13 @@ def check_int15_device_integers_match_host(ctx: DeviceContext) raises:
     _ = dv
     _ = dp
     _ = dn
+    # Recorded, never trusted: a line of its own so a job's summary carries it.
     print(
-        "   ok " + String(count) + " recombinations and " + String(ns)
-        + " conversions equal the host; this column's OWN int64 conversion differs from the correctly rounded word on "
-        + String(native_differs) + " of " + String(ns)
+        "   NATIVE " + column_name(TARGET_COLUMN)
+        + ": the column's own int64 to float32 conversion differs from the correctly rounded word on "
+        + String(native_differs) + " of " + String(ns) + " planted sums"
     )
+    print("   ok " + String(count) + " recombinations and " + String(ns) + " conversions equal the host")
 
 
 def check_int15_device_conversions_match_host(ctx: DeviceContext) raises:
@@ -874,7 +883,16 @@ def check_int15_device_conversions_match_host(ctx: DeviceContext) raises:
     x[3 * cols] = Float32(8192.0)
     x[4 * cols + 5] = nan
     x[5 * cols + 7] = -inf
+    # Row 6 has its largest value in the LAST chunk of the parallel
+    # quantizer's absmax, a chunk of one value: a schedule that drops the
+    # ragged tail takes another exponent here. Column 256 of every row is
+    # that chunk; a column's own tail is planted the same way.
+    if int15_quant_chunks(cols) != 2 or int15_quant_chunks(rows) != 1:
+        raise Error("the fixture no longer has a ragged last chunk; move the planted row with the chunk size")
+    x[6 * cols + cols - 1] = Float32(1000.0)
     var want = quantize_rows_int15(x, rows, cols)
+    if Int(want.e[6]) != -4:
+        raise Error("the planted row 6 took exponent " + String(want.e[6]) + ", want -4 (absmax 1000)")
     var dx = _upload[DType.float32](ctx, x)
     var dq = ctx.enqueue_create_buffer[DType.int16](rows * cols)
     var de = ctx.enqueue_create_buffer[DType.int32](rows)
@@ -892,6 +910,74 @@ def check_int15_device_conversions_match_host(ctx: DeviceContext) raises:
         if got_q[i] != want.q[i]:
             raise Error("device code at " + String(i) + " (row " + String(i // cols) + ") is " + String(Int(got_q[i])) + ", the host's is " + String(Int(want.q[i])))
     _first_diff(got_y, dequantize_rows_int15(want), "dequantized image")
+    # THE TRANSPOSING QUANTIZER: the codes of the COLUMNS of the same
+    # matrix, written as the rows of its transpose. The host's are the
+    # row quantizer's on the transposed values, spelled here and not
+    # taken from `quantize_cols_int15`, which is then held to it too.
+    var xt = List[Float32]()
+    for c in range(cols):
+        for r in range(rows):
+            xt.append(x[r * cols + c])
+    var want_t = quantize_rows_int15(xt, cols, rows)
+    var host_t = quantize_cols_int15(x, rows, cols)
+    var dqt = ctx.enqueue_create_buffer[DType.int16](rows * cols)
+    var det = ctx.enqueue_create_buffer[DType.int32](cols)
+    quantize_cols_int15_device(ctx, dqt, det, dx, rows, cols)
+    ctx.synchronize()
+    var got_qt = _download[DType.int16](ctx, dqt, rows * cols)
+    var got_et = _download[DType.int32](ctx, det, cols)
+    for r in range(cols):
+        if got_et[r] != want_t.e[r] or host_t.e[r] != want_t.e[r]:
+            raise Error("transposing quantizer: exponent of column " + String(r) + " is " + String(got_et[r]) + " on the device and " + String(host_t.e[r]) + " on the host, want " + String(want_t.e[r]))
+    for i in range(rows * cols):
+        if got_qt[i] != want_t.q[i] or host_t.q[i] != want_t.q[i]:
+            raise Error("transposing quantizer: code at " + String(i) + " is " + String(Int(got_qt[i])) + " on the device and " + String(Int(host_t.q[i])) + " on the host, want " + String(Int(want_t.q[i])))
+    # THE PARALLEL SCHEDULE, to codes and straight to planes, the operand
+    # stored either way: the same codes, exponents and planes.
+    var quant = Int15QuantWorkspace(ctx)
+    var want_p = split_int15(want.q)
+    var want_tp = split_int15(want_t.q)
+    comptime way_count = 2
+    for way in range(way_count):
+        var transposed = way == 1
+        var r_out = cols if transposed else rows
+        var c_out = rows if transposed else cols
+        var dpq = ctx.enqueue_create_buffer[DType.int16](rows * cols)
+        var dpe = ctx.enqueue_create_buffer[DType.int32](r_out)
+        var dph = ctx.enqueue_create_buffer[DType.int8](rows * cols)
+        var dpl = ctx.enqueue_create_buffer[DType.int8](rows * cols)
+        var dpe2 = ctx.enqueue_create_buffer[DType.int32](r_out)
+        # The transposed way reads `x` as the transpose of the matrix it
+        # quantizes, so its codes are the transposing quantizer's.
+        quantize_int15_parallel_device(ctx, dpq, dpe, dx, quant, r_out, c_out, transposed)
+        quantize_planes_int15_parallel_device(ctx, dph, dpl, dpe2, dx, quant, r_out, c_out, transposed)
+        ctx.synchronize()
+        var got_pq = _download[DType.int16](ctx, dpq, rows * cols)
+        var got_pe = _download[DType.int32](ctx, dpe, r_out)
+        var got_ph = _download[DType.int8](ctx, dph, rows * cols)
+        var got_pl = _download[DType.int8](ctx, dpl, rows * cols)
+        var got_pe2 = _download[DType.int32](ctx, dpe2, r_out)
+        var what = String("parallel quantizer (transposed)") if transposed else String("parallel quantizer")
+        for r in range(r_out):
+            var we = want_t.e[r] if transposed else want.e[r]
+            if got_pe[r] != we or got_pe2[r] != we:
+                raise Error(what + ": exponent of row " + String(r) + " is " + String(got_pe[r]) + " (codes) and " + String(got_pe2[r]) + " (planes), want " + String(we))
+        for i in range(rows * cols):
+            var wq = want_t.q[i] if transposed else want.q[i]
+            var wh = want_tp.hi[i] if transposed else want_p.hi[i]
+            var wl = want_tp.lo[i] if transposed else want_p.lo[i]
+            if got_pq[i] != wq:
+                raise Error(what + ": code at " + String(i) + " is " + String(Int(got_pq[i])) + ", want " + String(Int(wq)))
+            if got_ph[i] != wh or got_pl[i] != wl:
+                raise Error(what + ": planes at " + String(i) + " are (" + String(Int(got_ph[i])) + ", " + String(Int(got_pl[i])) + "), want (" + String(Int(wh)) + ", " + String(Int(wl)) + ")")
+        _ = dpq
+        _ = dpe
+        _ = dph
+        _ = dpl
+        _ = dpe2
+    _ = quant^
+    _ = dqt
+    _ = det
     _ = dx
     _ = dq
     _ = de
@@ -952,6 +1038,13 @@ def check_int15_device_matches_oracle(ctx: DeviceContext) raises:
         print("   DIGEST path-" + _tag(m, n, k) + " oracle " + _digest(want))
         print("   DIGEST path-" + _tag(m, n, k) + " device " + _digest(got))
         _first_diff(got, want, tag)
+        # the one-call form: the parallel quantizer and the dispatched plan
+        var dc1 = _poisoned(ctx, m * n)
+        identical_gemm_int15_from_f32(ctx, dc1, da, db, m, n, k)
+        var got1 = _download_cells(ctx, dc1, m * n, tag + " from_f32")
+        print("   DIGEST path-" + _tag(m, n, k) + " from-f32 " + _digest(got1))
+        _first_diff(got1, want, tag + " (from_f32)")
+        _ = dc1
         _ = da
         _ = db
         _ = dqa

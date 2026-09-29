@@ -23,6 +23,10 @@
 #                         THE DEFECT ARM: the split writes -127 for a high
 #                         piece of -128. EXPECTED non-zero, naming the
 #                         conversions gate and the planted worst cases.
+#   int15-quant-sabotage  pixi run check-gemm-int15-quant-sabotage
+#                         THE DEFECT ARM of the parallel quantizer: the last
+#                         chunk of a row never enters its absmax. EXPECTED
+#                         non-zero, naming the conversions gate.
 #
 # Runs from the tree the queue or the steward starts it in; writes
 # bench/results/lowbit_int15/<box>/gate/ and prints the gate lines and the
@@ -126,6 +130,10 @@ run int15-piece-sabotage fail pixi run check-gemm-int15-piece-sabotage
 must_name int15-piece-sabotage check_int15_device_conversions_match_host
 must_name int15-piece-sabotage check_int15_planted_worst_cases
 must_pass int15-piece-sabotage check_int15_pieces_oracle_matches_oracle
+run int15-quant-sabotage fail pixi run check-gemm-int15-quant-sabotage
+must_name int15-quant-sabotage check_int15_device_conversions_match_host
+must_pass int15-quant-sabotage check_int15_plans_agree
+must_pass int15-quant-sabotage check_int15_planted_worst_cases
 
 grep -h "int15 dispatch:" "$OUT/int15.log" "$OUT/int15-force-flat.log" 2>/dev/null >> "$OUT/gate.txt"
 grep -h "^   DIGEST " "$OUT/int15.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
@@ -141,11 +149,11 @@ grep -h "^   DIGEST " "$OUT/int15-force-flat.log" 2>/dev/null | sed 's/^   //' >
 } >> "$OUT/gate.txt"
 
 cat "$OUT/status.tsv" "$OUT/gate.txt"
-for f in int15 int15-force-flat int15-sabotage int15-host-sabotage int15-piece-sabotage; do
+for f in int15 int15-force-flat int15-sabotage int15-host-sabotage int15-piece-sabotage int15-quant-sabotage; do
     echo "== $f (every line that is not a digest or a per-shape ok; last 60)"
     grep -v -E '^   (DIGEST|ok) ' "$OUT/$f.log" 2>/dev/null | cut -c1-600 | tail -60
 done
-echo "== digests (the clean run)"
+echo "== gate digests (the clean run)"
 cat "$OUT/digests.tsv"
 echo "gate_job: box=$BOX red=$red"
 exit "$red"
