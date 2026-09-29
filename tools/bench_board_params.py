@@ -215,6 +215,9 @@ IGNORE = frozenset({
 #: arm glob, reason). A difference not listed here refuses the race.
 EXCEPTIONS = [
     # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+    ("gbdt-ordered", "permutation_count", "catboost-*", "CatBoost's Python constructor does not "
+     "take permutation_count (TypeError, 1.2.10), so their arm runs its default 4 "
+     "(boosting_options.cpp:14); ours is given 4 explicitly"),
     # ---- trees (tools/speed_gbdt_arm.py lane_config; each also a FSPEED-NOTE mismatch line)
     ("gbdt-*", "subsample", "*", "no row sampling on any arm: ours and CatBoost bootstrap_type "
      "'No' (neither accepts subsample beside it, so it stays unset), XGBoost and LightGBM "
