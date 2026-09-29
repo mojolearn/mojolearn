@@ -2063,10 +2063,10 @@ def lane_config(lane, size):
                     "random_strength 1.0 on ours and CatBoost (the symmetric-grower default "
                     "on both, each from its own seeded generator); XGBoost and LightGBM have "
                     "no split-score noise",
-                    "split floors: ours takes min_split_gain and min_child_hessian on "
-                    "Depthwise and Lossguide only, so on this symmetric grower ours has no "
-                    "hessian floor and no gain threshold (CatBoost none either); XGBoost "
-                    "min_child_weight 0 and gamma 0, LightGBM min_split_gain 0",
+                    "split floors: ours takes min_split_gain and min_child_hessian off the "
+                    "symmetric grower only, so here ours and CatBoost have no hessian floor or "
+                    "gain threshold; XGBoost min_child_weight 0, gamma 0, LightGBM "
+                    "min_split_gain 0",
                 ]
         return cfg
     if lane in ("rf", "et"):
