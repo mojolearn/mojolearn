@@ -18,7 +18,7 @@ mkdir -p "$OUT"
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$PWD/python"
 if [ "${3:-}" = build ]; then
     pixi run -e default sh bindings/build_gbdt.sh > "$OUT/build.log" 2>&1 || { echo "build failed"; tail -40 "$OUT/build.log"; exit 1; }
-    pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
+    env -u MOJOLEARN_GPU_ARCHS pixi run -e default sh bindings/build_gbdt_host.sh > "$OUT/build_host.log" 2>&1 || { echo "host build failed"; tail -40 "$OUT/build_host.log"; exit 1; }
 fi
 R="pixi run -e default python -u"
 L=gbdt-class-weights,gbdt-multiclass,gbdt-multiclass-defaults,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide
