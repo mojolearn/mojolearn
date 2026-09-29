@@ -1308,11 +1308,9 @@ class TransformerBlock(NumericModeMixin):
         use and which rereads the weights and the caller's cache on every
         call. The decode session owns its own context and its entry points
         are `transformer_decode_session_*`; the two coexist on one block."""
-        if getattr(self, "_int15", None) is not None:
-            raise NotImplementedError(
-                "mojolearn TransformerBlock.decode_session: the resident decode session does "
-                "not compute under numeric_profile='fixed15_v1' yet; use forward/step (the "
-                "profile's session entry keeps the planes on the device)")
+        # lane/lowbit-default: under numeric_profile="fixed15_v1" the session
+        # opens through the profile's entry (TransformerDecodeSession refuses
+        # by name a binding without it).
         return TransformerDecodeSession(self, state)
 
     __call__ = forward
@@ -1401,6 +1399,17 @@ class TransformerDecodeSession:
         # THE HOST ARM. No device session entry, but the two per-call entries
         # the session would have run are right there under their own names.
         host = create is None and _exports(ext, "transformer_decode_step")
+        # lane/lowbit-default (2026-09-29): under numeric_profile="fixed15_v1"
+        # the device arm opens through the profile's entry (the planes
+        # resident); the host arm has no profile session and is refused by
+        # name, never run as fp32_v1.
+        int15 = getattr(block, "_int15", None) is not None
+        if int15 and (create is None or not _exports(ext, "transformer_decode_session_open_int15")):
+            raise NotImplementedError(
+                f"mojolearn {what}: numeric_profile='fixed15_v1' needs a GPU transformer binding "
+                "that exports transformer_decode_session_open_int15 (rebuild "
+                "bindings/build_transformer.sh); the host route has no resident session under "
+                "the profile. It is never run as 'fp32_v1'.")
         if create is None and not host:
             raise NotImplementedError(
                 f"mojolearn {what}: the loaded {type(block).__name__} binding "
@@ -1440,6 +1449,21 @@ class TransformerDecodeSession:
             self._kc = _private_copy(kc)
             self._vc = _private_copy(vc)
             s0 = int(state.cached_tokens)
+        elif int15:
+            # the open's eleven with the projection slots zero, the options
+            # tail always, then the 21 plane addresses (q, k, v, o, gate, up,
+            # down; hi, lo, exponents), `_call_int15`'s layout
+            self._native = create()
+            planes = block._int15  # noqa: F841  (kept alive on the block)
+            addrs = ([addr_ro(w[0], name="weight"), addr_ro(w[1], name="weight")] + [0] * 7
+                     + [addr(kc, name="k_cache"), addr(vc, name="v_cache")]
+                     + block._tail_addrs())
+            for trip in block._int15:
+                addrs += [0, 0, 0] if trip is None else [addr_ro(t, name="planes") for t in trip]
+            params = ([b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
+                       block.intermediate, int(state.max_tokens), int(state.cached_tokens),
+                       block.window] + list(block._opts_tail))
+            s0 = int(ext.transformer_decode_session_open_int15(self._native, addrs, params))
         else:
             self._native = create()
             addrs, params = block._with_tails(

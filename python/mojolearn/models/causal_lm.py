@@ -595,7 +595,7 @@ class CausalLM:
             nxt = _argmax_last(lg, b, 1, self.vocab_size)
         return Array.from_list(rows, "<i4")
 
-    def _generate_resident(self, ids, n_new, total):
+    def _generate_resident(self, ids, n_new, total, last_logits=None):
         """`generate`'s greedy loop in ONE native call (lane/py-lm,
         2026-09-28), or None where it does not apply: a GPU transformer
         stack whose binding exports `causal_lm_session_*`, and
@@ -610,14 +610,18 @@ class CausalLM:
         from .._transformer_impl import TransformerDecodeSession, _exports
         if self.device != "gpu" or self.kind != "transformer" or not hotpath_enabled():
             return None
-        # lane/lowbit-blocks: the resident session computes fp32_v1 only;
-        # under another profile the per-layer route below is the one that
-        # computes it (owed: the resident session under the profile).
-        if self.numeric_profile != _numeric_profile.BASELINE:
-            return None
+        # lane/lowbit-default (2026-09-29): under fixed15_v1 the resident
+        # session opens through the profile's entries (the blocks' planes
+        # and the head's planes resident, `causal_lm_session_open_int15`);
+        # a binding without them takes the per-layer route below, which
+        # computes the same profile.
+        int15 = self._head_int15 is not None
         ext = self._blocks[0]._extension()
         if not (_exports(ext, "causal_lm_session_run")
                 and _exports(ext, "transformer_decode_session_create")):
+            return None
+        if int15 and not (_exports(ext, "causal_lm_session_open_int15")
+                          and _exports(ext, "transformer_decode_session_open_int15")):
             return None
         b, l = int(ids.shape[0]), int(ids.shape[1])
         state = self.allocate_state(b, total)
@@ -627,14 +631,23 @@ class CausalLM:
             for blk, st in zip(self._blocks, state.layers):
                 sessions.append(TransformerDecodeSession(blk, st))
             head = self._head
-            ext.causal_lm_session_open(
-                lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
-                     0 if head is self._embed else addr_ro(head, name="head")],
-                [b, self.vocab_size, self.d_model, float(self.norm_eps)])
+            if int15:
+                hh, hl, he = self._head_int15
+                ext.causal_lm_session_open_int15(
+                    lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
+                         addr_ro(hh, name="head hi"), addr_ro(hl, name="head lo"),
+                         addr_ro(he, name="head exponents")],
+                    [b, self.vocab_size, self.d_model, float(self.norm_eps)])
+            else:
+                ext.causal_lm_session_open(
+                    lm, [addr_ro(self._embed, name="embed"), addr_ro(self._norm, name="norm"),
+                         0 if head is self._embed else addr_ro(head, name="head")],
+                    [b, self.vocab_size, self.d_model, float(self.norm_eps)])
             out = empty((b, n_new), "<i4")
             ext.causal_lm_session_run(
                 lm, [ss._native for ss in sessions],
-                [addr_ro(ids, name="ids"), addr(out, name="ids_out"), 0], [l, n_new, 0])
+                [addr_ro(ids, name="ids"), addr(out, name="ids_out"),
+                 0 if last_logits is None else addr(last_logits, name="last_logits")], [l, n_new, 0])
         finally:
             ext.causal_lm_session_close(lm)
             for ss in sessions:

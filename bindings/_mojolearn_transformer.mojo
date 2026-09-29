@@ -123,7 +123,12 @@ MOJOLEARN_NUMERIC_MODE); gate:
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, read_f32, copy_f32, i8_ptr, i32_ptr
 # lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1".
-from transformer.impl.llama.int15_block import Int15Planes, LlamaInt15Weights
+from transformer.impl.llama.int15_block import (
+    Int15Planes,
+    LlamaInt15Stage,
+    LlamaInt15Weights,
+    llama_int15_proj,
+)
 from gemm.checks.gemm_int15 import (
     INT15_PIECE_SABOTAGE,
     INT15_QUANT_SABOTAGE,
@@ -564,6 +569,15 @@ def _lean_for(hd: Int, opts: BlockOptions) -> Bool:
     if opts.has_softcap():
         return False
     return transformer_lean_stages(hd)
+
+
+def _lean_for_w(hd: Int, w: LlamaDeviceWeights) -> Bool:
+    """`_lean_for` for weights that may carry the profile's planes: never
+    lean under `fixed15_v1`, as `_transformer_run_session_int15` builds its
+    stages (lane/lowbit-default: the resident sessions under the profile)."""
+    if w.int15:
+        return False
+    return _lean_for(hd, w.opts)
 
 
 def _workspace_key(
@@ -1506,9 +1520,82 @@ def _session_open_run(
     kv.s = s0
     s.kv = kv^
     s.rope = LlamaRopeTable(s.ctx.value(), dims, opts, smax)
-    s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=_lean_for(hd, opts))
+    s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=_lean_for_w(hd, s.w.value()))
     s.dx = s.ctx.value().enqueue_create_buffer[DType.float32](b * dm)
     s.ctx.value().synchronize()
+    s.b = b
+    s.dm = dm
+    s.nh = nh
+    s.nkv = nkv
+    s.hd = hd
+    s.it = it
+    s.smax = smax
+    s.window = window
+    return s0
+
+
+def _session_open_run_int15(
+    mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
+    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
+) raises -> Int:
+    """`_session_open_run` under numeric_profile="fixed15_v1"
+    (lane/lowbit-default): the weights are the profile constructor's, with
+    the seven projections as the planes `a` carries after the options tail
+    (`_upload_planes`, the layout of `transformer_session_forward_int15`),
+    uploaded ONCE here and resident for the session's life. Every later
+    step and forward runs `llama_decoder_layer_forward` on them exactly as
+    `_transformer_run_session_int15` does, so the bytes are the per-call
+    profile entry's."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    opts.validate(hd)
+    if s0 < 0 or s0 > smax:
+        raise Error(
+            String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
+            + "], got " + String(s0))
+    if window < 0:
+        raise Error("transformer decode session: window must be >= 0 (0 = full causal)")
+    for i in range(3, 10):
+        if a[i] != 0:
+            raise Error(
+                "transformer_decode_session_open_int15: float32 projection slot "
+                + String(i) + " must be 0 under the profile (the planes are the weights)"
+            )
+    var cap = smax
+    if window > 0:
+        cap = window
+    var cache_n = b * nkv * cap * hd
+    s.ctx = neural_ctx[_NEURAL_CTX]()
+    ref ctx = s.ctx.value()
+    var what = String("transformer_decode_session_open_int15")
+    var t = _tail_of(a, 13)
+    var planes = _upload_planes(ctx, dims, opts, a, 13 + BLOCK_OPTION_ADDRS)
+    s.w = LlamaDeviceWeights(
+        ctx, dims, opts,
+        _upload_addr(ctx, a[1], dm),
+        _upload_addr(ctx, a[2], dm),
+        planes^,
+        _optional_upload(ctx, t[0], dims.q_width(), opts.qkv_bias, "q_proj.bias", what),
+        _optional_upload(ctx, t[1], dims.kv_width(), opts.qkv_bias, "k_proj.bias", what),
+        _optional_upload(ctx, t[2], dims.kv_width(), opts.qkv_bias, "v_proj.bias", what),
+        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
+        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
+        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
+        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
+        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
+        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
+        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
+    )
+    var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
+    kv.k = _upload_addr(ctx, a[10], cache_n)
+    kv.v = _upload_addr(ctx, a[11], cache_n)
+    kv.s = s0
+    s.kv = kv^
+    s.rope = LlamaRopeTable(ctx, dims, opts, smax)
+    s.stages = LlamaDeviceStages(ctx, b, 1, smax, dims, window, lean=False)
+    s.dx = ctx.enqueue_create_buffer[DType.float32](b * dm)
+    ctx.synchronize()
     s.b = b
     s.dm = dm
     s.nh = nh
@@ -1546,7 +1633,7 @@ def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: I
     ref ctx = s.ctx.value()
     var dims = LlamaDims(s.dm, s.nh, s.nkv, s.hd, s.it)
     var n = s.b * l * s.dm
-    var stages = LlamaDeviceStages(ctx, s.b, l, s.smax, dims, s.window, lean=_lean_for(s.hd, s.w.value().opts))
+    var stages = LlamaDeviceStages(ctx, s.b, l, s.smax, dims, s.window, lean=_lean_for_w(s.hd, s.w.value()))
     var dx = _upload_addr(ctx, px, n)
     var trace = IdentityTrace.disabled()
     var pos0 = s.kv.value().s
@@ -1644,6 +1731,63 @@ def transformer_decode_session_open_binding(
     try:
         with GILReleased(Python()):
             out_len = _session_open_run(owner[], a, b, dm, nh, nkv, hd, it, smax, s0, window, opts)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(out_len)
+
+
+def transformer_decode_session_open_int15_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_decode_session_open` under numeric_profile="fixed15_v1"
+    (lane/lowbit-default, 2026-09-29). `addrs` is EXACTLY 11 + the 11-address
+    options tail + 21: the open's eleven with the seven projection slots
+    ZERO (never read), the options tail (always sent), then the planes,
+    three per projection in the order q, k, v, o, gate, up, down (`hi`,
+    `lo`, `exponents`; zeros for gate under an ungated MLP). `params` is
+    EXACTLY the open's nine scalars and the 17-int options tail. The planes
+    are COPIED to the device once and stay there; every other entry of the
+    session (step, forward, export, load, close, `causal_lm_session_run`)
+    is the float32 session's own."""
+    var owner = session.downcast_value_ptr[TransformerDecodeSession]()
+    var what = String("transformer_decode_session_open_int15")
+    if len(addrs) != 11 + BLOCK_OPTION_ADDRS + 21 or len(params) != 9 + BLOCK_OPTION_PARAMS:
+        raise Error(
+            what + ": expected " + String(11 + BLOCK_OPTION_ADDRS + 21) + " addresses and "
+            + String(9 + BLOCK_OPTION_PARAMS) + " scalars, got " + String(len(addrs)) + " and "
+            + String(len(params))
+        )
+    if owner[].busy:
+        raise Error("transformer decode session: busy")
+    if owner[].is_open():
+        raise Error("transformer decode session: already open; close it first")
+    var raw = List[Int]()
+    for i in range(len(addrs)):
+        raw.append(Int(py=addrs[i]))
+    # into `transformer_forward`'s 13 + 11 layout, then the 21 planes
+    var a = List[Int]()
+    a.append(0)
+    for i in range(11):
+        a.append(raw[i])
+    a.append(0)
+    for i in range(BLOCK_OPTION_ADDRS + 21):
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [1, 2, 10, 11], what)
+    var p = _read_params(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    if p[0] <= 0:
+        raise Error(what + ": B must be positive")
+    owner[].busy = True
+    owner[].usable = False
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _session_open_run_int15(
+                owner[], a, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], opts)
     except error:
         owner[].busy = False
         owner[].release()
@@ -1842,6 +1986,10 @@ struct CausalLMSession(Movable, Writable):
     var embed: Optional[DeviceBuffer[DType.float32]]
     var norm: Optional[DeviceBuffer[DType.float32]]
     var head: Optional[DeviceBuffer[DType.float32]]
+    # lane/lowbit-default: the head under numeric_profile="fixed15_v1", its
+    # planes resident, and the profile's per-call scratch
+    var head15: Optional[Int15Planes]
+    var st15: Optional[LlamaInt15Stage]
     var tied: Bool
     var b: Int
     var v: Int
@@ -1855,6 +2003,8 @@ struct CausalLMSession(Movable, Writable):
         self.embed = Optional[DeviceBuffer[DType.float32]]()
         self.norm = Optional[DeviceBuffer[DType.float32]]()
         self.head = Optional[DeviceBuffer[DType.float32]]()
+        self.head15 = Optional[Int15Planes]()
+        self.st15 = Optional[LlamaInt15Stage]()
         self.tied = False
         self.b = 0
         self.v = 0
@@ -1873,6 +2023,8 @@ struct CausalLMSession(Movable, Writable):
         return Bool(self.ctx) and Bool(self.embed)
 
     def release(mut self):
+        self.st15 = None
+        self.head15 = None
         self.head = None
         self.norm = None
         self.embed = None
@@ -1916,6 +2068,37 @@ def _lm_open_run(mut s: CausalLMSession, pe: Int, pn: Int, ph: Int, b: Int, v: I
     s.eps = eps
 
 
+def _lm_open_run_int15(
+    mut s: CausalLMSession, pe: Int, pn: Int, planes: List[Int], b: Int, v: Int, d: Int, eps: Float32,
+) raises:
+    """`_lm_open_run` under numeric_profile="fixed15_v1" (lane/lowbit-default):
+    the embedding and the final norm as there, and the head as its planes
+    (`planes` = [hi, lo, exponents] of the head, tied or not, as
+    `CausalLM` made them with `mojolearn.linalg.quantize_int15`), resident.
+    The head product is then `llama_int15_proj`: the parallel quantizer on
+    the normed rows and `identical_gemm_int15_planes_into`, the calls
+    `mojolearn.linalg.matmul_int15` makes on the per-layer route."""
+    if b < 1 or v < 1 or d < 1:
+        raise Error("causal_lm_session_open: B, vocab and d_model must be positive")
+    if not isfinite(eps) or eps < Float32(0.0):
+        raise Error("mojolearn samba ops: rms_norm eps must be finite and >= 0")
+    _lm_refuse_nonfinite("embedding weight", _f32_ptr(pe), v * d)
+    _lm_refuse_nonfinite("rms_norm weight", _f32_ptr(pn), d)
+    s.ctx = neural_ctx[_NEURAL_CTX]()
+    ref ctx = s.ctx.value()
+    s.embed = _upload_addr(ctx, pe, v * d)
+    s.norm = _upload_addr(ctx, pn, d)
+    s.tied = False
+    var a: List[Int] = [planes[0], planes[1], planes[2]]
+    s.head15 = _upload_planes_one(ctx, a, 0, v, d, "head")
+    s.st15 = LlamaInt15Stage(ctx)
+    ctx.synchronize()
+    s.b = b
+    s.v = v
+    s.d = d
+    s.eps = eps
+
+
 def _lm_layers_run(
     ctx: DeviceContext, layers: List[Int], mut x: DeviceBuffer[DType.float32], b: Int, l: Int,
 ) raises:
@@ -1936,7 +2119,7 @@ def _lm_layers_run(
         else:
             var dims = LlamaDims(sp[].dm, sp[].nh, sp[].nkv, sp[].hd, sp[].it)
             var stages = LlamaDeviceStages(ctx, sp[].b, l, sp[].smax, dims, sp[].window,
-                                           lean=_lean_for(sp[].hd, sp[].w.value().opts))
+                                           lean=_lean_for_w(sp[].hd, sp[].w.value()))
             var dx = ctx.enqueue_create_buffer[DType.float32](b * l * sp[].dm)
             ctx.enqueue_copy(dst_buf=dx, src_buf=x)
             llama_decoder_layer_forward(
@@ -1976,8 +2159,13 @@ def _lm_run(
         var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
         llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
         var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
-        var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, v, d))
-        if s.tied:
+        var ws_n = 1
+        if not s.head15:
+            ws_n = identical_gemm_workspace_max_floats(m, v, d)
+        var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
+        if s.head15:
+            llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
+        elif s.tied:
             identical_gemm_into(ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
         else:
             identical_gemm_into(ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
@@ -2053,6 +2241,43 @@ def causal_lm_session_open_binding(
     try:
         with GILReleased(Python()):
             _lm_open_run(owner[], pe, pn, ph, b, v, d, eps)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(0)
+
+
+def causal_lm_session_open_int15_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`causal_lm_session_open` under numeric_profile="fixed15_v1"
+    (lane/lowbit-default, 2026-09-29): `addrs` = [embed (V * D f32), norm
+    (D f32), head hi (V * D int8), head lo (V * D int8), head exponents (V
+    int32)], the head's planes whether or not it is tied; `params` = [B, V,
+    D, eps (float)]. Every tensor is COPIED to the device."""
+    var owner = session.downcast_value_ptr[CausalLMSession]()
+    if len(addrs) != 5 or len(params) != 4:
+        raise Error("causal_lm_session_open_int15: expected 5 addresses and 4 scalars")
+    if owner[].busy:
+        raise Error("causal lm session: busy")
+    if owner[].is_open():
+        raise Error("causal lm session: already open; close it first")
+    var pe = Int(py=addrs[0])
+    var pn = Int(py=addrs[1])
+    var planes: List[Int] = [Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4])]
+    if pe == 0 or pn == 0 or planes[0] == 0 or planes[1] == 0 or planes[2] == 0:
+        raise Error("causal_lm_session_open_int15: null buffer address")
+    var b = Int(py=params[0])
+    var v = Int(py=params[1])
+    var d = Int(py=params[2])
+    var eps = Float32(Float64(py=params[3]))
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _lm_open_run_int15(owner[], pe, pn, planes, b, v, d, eps)
     except error:
         owner[].busy = False
         owner[].release()
@@ -2334,6 +2559,8 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
         m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
         m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
+        # lane/lowbit-default: the resident sessions under numeric_profile="fixed15_v1".
+        m.def_function[transformer_decode_session_open_int15_binding]("transformer_decode_session_open_int15")
         m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")
         m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
         m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
@@ -2344,6 +2571,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         _ = m.add_type[CausalLMSession]("_CausalLMSession")
         m.def_function[causal_lm_session_create_binding]("causal_lm_session_create")
         m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
+        m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
         m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         return m.finalize()
