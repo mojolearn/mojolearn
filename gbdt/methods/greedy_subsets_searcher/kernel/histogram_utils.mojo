@@ -149,68 +149,92 @@ def hist2_level_quantize_kernel(
         k += stripe
 
 
-def snap_stats_to_grid_kernel(
+@always_inline
+def weight_grid_for(weight_sum: Float32, n_rows: Int) -> Float32:
+    """The weight grid `g` of `snap_weights_to_grid_kernel`: the largest
+    power of two with `weight_sum * g <= 2^24 - 1 - n_rows`, or 0.0 when
+    none of 2^-40 .. 2^40 fits (no snap). Every step is a multiply by a
+    power of two, exact in Float32, so every vendor and the host oracle
+    derive the same `g` from the same `weight_sum` bits."""
+    var limit = Float32(16777215 - n_rows)
+    if n_rows >= 16777215 or not (weight_sum > Float32(0.0)):
+        return Float32(0.0)
+    var g = Float32(1.0)
+    var k = 0
+    while weight_sum * g > limit and k < 40:
+        g = g * Float32(0.5)
+        k += 1
+    if weight_sum * g > limit:
+        return Float32(0.0)
+    k = 0
+    while weight_sum * (g * Float32(2.0)) <= limit and k < 40:
+        g = g * Float32(2.0)
+        k += 1
+    return g
+
+
+def snap_weights_to_grid_kernel(
     stats: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
-    stat_line_size_in: Int32,
-    stat_count_in: Int32,
-    fixed_scale_ptr: MutPointer[Float32, MutAnyOrigin],
+    weight_sum_ptr: MutPointer[Float32, MutAnyOrigin],
 ):
-    """lane/sym-quality (2026-09-29): every search stat, in place, ONTO the
-    tree's fixed-point grid: `v <- dequant(hist2_quantize(v, scale,
-    hist2_dither(pos)))`, the SAME dither key, rule and dequantization
-    (`fixed_to_float_kernel`'s `Float32(Int(q)) / scale`) the histograms
-    already apply. NO CATBOOST COUNTERPART (their histograms add floats).
+    """lane/sym-quality (2026-09-29): the WEIGHT plane (stat plane 0) of a
+    weighted fit, in place, onto a dyadic grid coarse enough that every sum
+    the search forms over it is EXACT in Float32. NO CATBOOST COUNTERPART
+    (their histograms and partition stats are float sums with no grid).
 
-    WHY. The fixed-point histograms dither each row onto the grid, while the
-    partition totals the score subtracts them from (`sumRight = partStat -
-    sumLeft`, `compute_scores.mojo`) are FLOAT sums of the unquantized
-    stats. With unit weights the weight plane is already on the grid (a
-    power-of-two scale times 1.0 is an integer), so an empty side weighs
-    exactly zero. With class or sample weights it is not (1.3101 x 128 =
-    167.7): every leaf total then carries sqrt(rows) units of dither
-    mismatch in BOTH planes, an empty or near-empty side gets a phantom
-    weight of a few units and a phantom gradient near 1, and at l2 = 1 that
-    scores `S^2 / (W + l2)`, as large as a real split's gain once the
-    ensemble has converged. Measured on gbm-bench taxi (scale_pos_weight
-    1.31): 156,448 of 256,000 leaves at 1000 trees, the extra trees fitting
-    nothing (AUC 0.6213 at 500 and at 1000 trees, CatBoost 0.6303/0.6316).
+        g = weight_grid_for(sum of weights, rows)     (a power of two)
+        w <- floor(w * g + hist2_dither(row)) / g     (unbiased)
 
-    After the snap every stat is an integer multiple of `1 / scale`, so
-    every histogram arm quantizes it EXACTLY (an integral `v * scale` is
-    unchanged by any dither), the float partition totals are exact sums of
-    the same values while they stay under 2^24 units, and `right = total -
-    left` is consistent to float rounding. The snap is idempotent, the
-    grid does not move within a tree, and the dither is zero mean, so the
-    stats move by at most one grid unit per row, unbiased.
+    WHY. The score takes each split's right side as `partStat - left`
+    (`compute_scores.mojo`), the partition total a float reduction of the
+    raw plane and the left side a float prefix scan over dequantized
+    fixed-point cells. With UNIT weights both are sums of integers under
+    2^24, so they are exact and an EMPTY side weighs exactly zero, and
+    `_add_leaf` then adds nothing for it. With class or sample weights
+    neither is exact (1.3101 x 128 = 167.7 dithers, and a cell above 2^24
+    rounds when it is converted to float), an empty side is left a phantom
+    weight of order one and a phantom gradient, and at l2 = 1 that scores
+    `S^2 / (W + l2)`, as large as a real split's gain once the ensemble has
+    converged: the searcher then picks splits that isolate nothing and
+    repeats them until `HasSplit` ends the tree. Measured on gbm-bench taxi
+    (scale_pos_weight 1.31): 156,448 of 256,000 leaves at 1000 trees and
+    the same AUC at 500 and at 1000 trees; Istella (8.86): every tree past
+    ~550 a depth-1 stump with leaves of 1e-8. Class weights of [1, 2] (on
+    every grid) grew full trees.
 
-    Called once per tree at depth 0, where the storage position is the row
-    (the root is pre-split and the index is the identity), so the key is
-    the one the depth-0 direct kernels use. Only weighted fits call it: a
-    unit-weight fit keeps its bits (its weight plane is already exact)."""
+    After the snap every weight is a multiple of 1/g with the total under
+    2^24 / g, so the partition totals, every fixed-point cell (w * scale is
+    an integer: scale >= g, both powers of two) and every prefix of the scan
+    are exact, as with unit weights. A weight already on the grid does not
+    move (unit and dyadic class weights keep their bits); any other moves by
+    less than 1/g, unbiased. The gradient plane is untouched, and the
+    leaf VALUES are estimated from the unsnapped weights
+    (`_estimate_and_apply`), so this changes which splits the search sees,
+    not what a leaf is worth.
+
+    The dither is keyed on the row (the depth-0 storage position). Launched
+    once per tree after the target kernel wrote the planes and before the
+    first histogram, for weighted fits only."""
     var n_rows = Int(n_rows_in)
-    var line = Int(stat_line_size_in)
-    var stat_count = Int(stat_count_in)
-    var fixed_scale = fixed_scale_ptr.unsafe_load(0)
+    var g = weight_grid_for(weight_sum_ptr.unsafe_load(0), n_rows)
+    if g == Float32(0.0):
+        return
     var stride = Int(block_dim.x) * Int(grid_dim.x)
     var pos = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     while pos < n_rows:
         var u = hist2_dither(pos)
         # THE SABOTAGE ARM (`-D MOJOLEARN_SNAP_SABOTAGE=1`, never in a
-        # release build): the dither keyed one row off, on the device only,
-        # so a column whose host oracle restates the snap must DISAGREE on
-        # every weighted lane the snap reaches (gbdt-class-weights,
-        # gbdt-multiclass, gbdt-multiclass-defaults).
+        # release build): the dither keyed one row off on the device, so a
+        # weighted lane whose weights are off the grid must DISAGREE with
+        # every clean column (gbdt-class-weights).
         comptime if is_defined["MOJOLEARN_SNAP_SABOTAGE"]():
             u = hist2_dither(pos + 1)
-        for s in range(stat_count):
-            var q = hist2_quantize(
-                stats.unsafe_load(s * line + pos), fixed_scale, u
-            )
-            var v = Float32(0.0)
-            if q != Int32(0):
-                v = ftz(Float32(Int(q)) / fixed_scale)
-            stats.unsafe_store(s * line + pos, v)
+        var q = hist2_quantize(stats.unsafe_load(pos), g, u)
+        var v = Float32(0.0)
+        if q != Int32(0):
+            v = ftz(Float32(Int(q)) / g)
+        stats.unsafe_store(pos, v)
         pos += stride
 
 
