@@ -407,7 +407,7 @@ struct GW(Movable):
         self.n_rows += 1
         return hp
 
-    def launch(self, ctx: DeviceContext, src: FP, dst: FP, r0: Int, rows: Int, first: Int32) raises:
+    def launch(mut self, ctx: DeviceContext, src: FP, dst: FP, r0: Int, rows: Int, first: Int32) raises:
         """One bounded pass of every cell: the tiled Gram kernel for the
         Hessian cells j, k < d and the one-cell kernel for the rest (or the
         one-cell kernel for all of them with MOJOLEARN_X_LINEAR_GW_GRAM=0)."""
@@ -445,11 +445,11 @@ struct GW(Movable):
             var f = Int32(1 if first else 0)
             if into_b:
                 self.dca.enqueue_fill(_poison())
-                self.launch(ctx, self.dcb.unsafe_ptr(), self.dca.unsafe_ptr(), r0, rows, f)
+                self.launch(ctx, self.dcb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), self.dca.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), r0, rows, f)
                 ctx.enqueue_copy(dst_buf=self.hc, src_buf=self.dca)
             else:
                 self.dcb.enqueue_fill(_poison())
-                self.launch(ctx, self.dca.unsafe_ptr(), self.dcb.unsafe_ptr(), r0, rows, f)
+                self.launch(ctx, self.dca.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), self.dcb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), r0, rows, f)
                 ctx.enqueue_copy(dst_buf=self.hc, src_buf=self.dcb)
             ctx.synchronize()
             var hp = FP(unsafe_from_address=Int(self.hc.unsafe_ptr()))
