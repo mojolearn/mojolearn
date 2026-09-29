@@ -141,6 +141,7 @@ from neighbors.impl.ball_cover.common import (
 )
 from neighbors.impl.ball_cover.fast_rbc_eps import FAST_RBC_EPS, fast_rbc_eps_pass
 from neighbors.impl.ball_cover.scan import (
+    rbc_exact_edge_total,
     RBC_SCAN_TPB,
     rbc_clamp_kernel,
     rbc_exclusive_scan_kernel,
@@ -757,7 +758,10 @@ def rbc_eps_pass_count(
     var h = ctx.enqueue_create_host_buffer[DType.int32](n_queries + 1)
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=adj_ia)
     ctx.synchronize()
-    var nnz = Int(h.unsafe_ptr().unsafe_load(n_queries))
+    # THE TRUE COUNT, NOT `ia[n]`: the int32 scan wraps past 2^31 edges and
+    # can wrap back to a positive value past 2^32. The caller refuses or
+    # splits on this number, so it must never be the wrapped one.
+    var nnz = rbc_exact_edge_total(h, n_queries)
 
     # `vd + n_query_rows` stores the total number of edges, `:1486-1490`.
     var t = ctx.enqueue_create_host_buffer[DType.int32](1)
