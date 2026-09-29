@@ -17,10 +17,15 @@ stored):
 
     box, machine          hostname and machine model (GPU name, else CPU model)
     vendor, device, os    the board's vendor, the arm's device (and its name), the OS
-    library, library_version
+    library, library_version   the version the arm's own worker imported
     family, lane, dataset, rows, neural_shape, arm
+    params_sha256         sha256 of the arm's parameters READ BACK from the
+                          constructed object (the BOARD-PARAMS check): before a
+                          race the board constructs each candidate opponent
+                          (the drivers' --params-only), so a stored cell is
+                          reused only when the read-back is the same
     settings_sha256       sha256 of the race's settings (lane config, seed,
-                          harness source): what every arm is constructed with
+                          harness source), kept as an extra key field
     data_sha256           sha256 of the data file(s) the race reads
     rounds
 
@@ -35,7 +40,11 @@ import os
 
 KEY_FIELDS = ("box", "machine", "vendor", "device", "os", "library", "library_version",
               "family", "lane", "dataset", "rows", "neural_shape", "arm",
-              "settings_sha256", "data_sha256", "rounds")
+              "params_sha256", "settings_sha256", "data_sha256", "rounds")
+#: the fields known before any arm is constructed (the pre-filter: is there
+#: anything stored that could match, so constructing the arm is worth it?)
+PRE_FIELDS = ("box", "machine", "vendor", "os", "library", "family", "lane", "dataset", "rows",
+              "neural_shape", "arm", "settings_sha256", "data_sha256", "rounds")
 #: key fields that may legitimately be None (not every race has them)
 OPTIONAL = ("rows", "neural_shape")
 
@@ -91,6 +100,12 @@ def lookup(store, key):
         return None
     rec = store.get(key_id(key))
     return rec if rec is not None and reusable(rec) else None
+
+
+def candidates(store, partial):
+    """The reusable stored records whose PRE_FIELDS equal `partial`'s."""
+    return [r for r in store.values() if reusable(r)
+            and all(r["key"].get(f) == partial.get(f) for f in PRE_FIELDS)]
 
 
 def source_text(record):
