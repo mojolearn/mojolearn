@@ -1,0 +1,9 @@
+nvc3-0036 (run 10). The job exits 1 only because lane/lowbit-int15's gate as
+it stands on origin/main (check-gemm-int15-tuned) fails its
+check_int15_tuned_refuses on this tree ("only 2 of 3 launches refused"): it
+expects the sums kernel to refuse k = 65536, which the kernel admits since
+520406a38; lane/lowbit-int15's branch carries the gate's fix (71db5bb26).
+Every other check of that gate passed. This lane's two gates are GREEN with
+every sabotage arm seen failing (gate_unit/status.tsv, gate_pieces/status.tsv);
+the timing run, its cold run and its sabotage comparison are GREEN
+(price_decode/run.txt, sabotage_verdict.txt: 57 of 57 differed).
