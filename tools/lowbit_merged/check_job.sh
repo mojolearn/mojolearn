@@ -48,9 +48,11 @@ phase build-linalg-host pass sh bindings/build_linalg_host.sh
 # (nvc2-0012) instead of running. Built here so they really run.
 phase build-base pass sh bindings/build.sh
 # The loader's block tests (test_models_loader: bfloat16 reads, mamba) need the
-# training binding; the merge changes models/causal_lm.py, so they must run
+# training, transformer and mamba bindings (nvc2-0013, nvc2-0014); the merge changes models/causal_lm.py, so they must run
 # rather than fail on ImportError (nvc2-0013).
 phase build-training pass sh bindings/build_training.sh
+phase build-transformer pass sh bindings/build_transformer.sh
+phase build-mamba pass sh bindings/build_mamba.sh
 
 phase gate-gemm-identity pass pixi run check-gemm-identity
 phase gate-lowbit pass pixi run check-gemm-lowbit
