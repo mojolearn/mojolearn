@@ -193,3 +193,18 @@ It is another arithmetic than the one whose perplexity was measured for
   `identical_gemm_int8_pieces_tuned_fused_with_plan`), the two-launch arms in
   the gate and the price harness, the exponent sabotage arm. Jobs:
   `fold_gate_job_h100.sh` (the gate on the stub), `run6_job_h100.sh`.
+- HARNESS (step 2) at d07ecd201: GREEN on H100 nvc3-0029, MI325X
+  1790657543156, M2 Pro 1790657540572, M3 Ultra 1790657536591 (lane check
+  PASS with its sabotage seen, 4 seam patches fail then restore, neighbors
+  AGREE); 8 clean columns IDENTICAL x8 on 9 fixtures
+  (`bench/results/lowbit_int15/2026-09-29/harness/`). verify: OWED on
+  MI325X and M2 Pro (no reference record); stopped at the comparator
+  self-test on H100 and M3 Ultra (estimators binding unbuilt): FIXED in
+  harness_job.sh. nvc3-0029's times are not used (CPU compiles overlapped).
+- FIXED: the refusal gates assumed the sums kernel refuses k = 65536 and
+  launched on one-byte buffers (MI325X out-of-bounds read, Lane F, job
+  1790657862351, after 520406a38 raised INT8_PIECES_MAX_K to 65536). They
+  now probe each kernel's stated bound with operands as long as the shape.
+- Merged lane/lowbit-mma-speed 15e9ecf47 (fused form calls this lane's
+  int15_store_cell). RUN 6 queued: nvc3-0032 at de690f1d4 (gate, then the
+  clock only if GREEN). MI325X tuned gate + gate: 1790658677079.
