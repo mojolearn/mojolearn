@@ -459,66 +459,14 @@ def _warp_draws(lane: Int, seed: UInt64, n: Int, epoch: Int, dst: IP):
         tt += WARP_SIZE
 
 
-#: Swaps per batch of `_shuffle_drawn` (SCHEDULING only).
-comptime FY_B = 16
-
-
-@always_inline
-def _swap_drawn(idx: IP, n: Int, dr: IP, tt: Int):
-    var i = n - 1 - tt
-    var j = Int(dr.unsafe_load(tt))
-    var a = ldi(idx, i)
-    sti(idx, i, ldi(idx, j))
-    sti(idx, j, a)
-
-
 def _shuffle_drawn(idx: IP, n: Int, dr: IP):
-    """ops.shuffle with its draws read from `dr`: the same swaps, the same
-    permutation (lane/linfit-speed, 2026-09-29).
-
-    Swap t exchanges positions i_t = n - 1 - t and j_t <= i_t. The serial
-    loop waited on one memory round trip per swap (the load of idx[j_t]
-    after the previous swap's stores). Here FY_B consecutive swaps go at
-    once when they are DISJOINT transpositions: every j_t lies below the
-    batch's window of i's [i_0 - FY_B + 1, i_0] and no two j's are equal.
-    Disjoint transpositions commute, so all loads first, then all stores, is
-    the serial result exactly. A batch that is not disjoint (a j in the
-    window, a self swap, a repeated j; near the end of the array) runs its
-    swaps one by one. The next batch's draws are loaded before this batch's
-    stores."""
-    var tt = 0
-    var nxt = InlineArray[Int, FY_B](fill=0)
-    if FY_B <= n - 1:
-        comptime for u in range(FY_B):
-            nxt[u] = Int(dr.unsafe_load(u))
-    while tt + FY_B <= n - 1:
-        var js = nxt.copy()
-        if tt + 2 * FY_B <= n - 1:
-            comptime for u in range(FY_B):
-                nxt[u] = Int(dr.unsafe_load(tt + FY_B + u))
-        var i0 = n - 1 - tt
-        var lo = i0 - FY_B + 1
-        var ok = True
-        comptime for u in range(FY_B):
-            ok = ok & (js[u] < lo)
-            comptime for v in range(u):
-                ok = ok & (js[u] != js[v])
-        if ok:
-            var vi = InlineArray[Int32, FY_B](fill=Int32(0))
-            var vj = InlineArray[Int32, FY_B](fill=Int32(0))
-            comptime for u in range(FY_B):
-                vi[u] = idx.unsafe_load(i0 - u)
-                vj[u] = idx.unsafe_load(js[u])
-            comptime for u in range(FY_B):
-                idx.unsafe_store(i0 - u, vj[u])
-                idx.unsafe_store(js[u], vi[u])
-        else:
-            comptime for u in range(FY_B):
-                _swap_drawn(idx, n, dr, tt + u)
-        tt += FY_B
-    while tt < n - 1:
-        _swap_drawn(idx, n, dr, tt)
-        tt += 1
+    """ops.shuffle with its draws read from `dr` (the same swaps)."""
+    for tt in range(n - 1):
+        var i = n - 1 - tt
+        var j = Int(dr.unsafe_load(tt))
+        var a = ldi(idx, i)
+        sti(idx, i, ldi(idx, j))
+        sti(idx, j, a)
 
 
 def sgd_one_warp[K: Int](
