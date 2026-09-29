@@ -37,9 +37,9 @@ def _tensors(seed):
     for k in range(len(SHAPES)):
         ps[k].reshape(-1)[:3] = np.float32(-0.0)
         for g in gs:
-            g.reshape(-1)[0] = np.float32(0.0)
-            g.reshape(-1)[1] = np.float32(-0.0)
-            g.reshape(-1)[2] = np.float32(0.0)
+            g[k].reshape(-1)[0] = np.float32(0.0)
+            g[k].reshape(-1)[1] = np.float32(-0.0)
+            g[k].reshape(-1)[2] = np.float32(0.0)
     return ps, gs
 
 

@@ -4,7 +4,8 @@
 Default execution is host-only ABI/refusal validation with a fake extension.
 Set MOJOLEARN_MAMBA23_BACKWARD_NVIDIA=1 only on a RunPod NVIDIA host to run
 actual tiny VJPs against float64 autograd, and optionally exact native dumps.
-Fixture dependency: only x.f32 and the nine constructor weight files in
+Host ABI tests use deterministic arrays and run from an installed wheel.
+NVIDIA fixture dependency: x.f32 and the nine constructor weight files in
 mamba/corpus/mamba{2,3}/m{2,3}_base_b2_l4_d32; no ref32/ref64 files or full
 corpus generation is required. The NVIDIA oracle additionally imports the
 repository gen_corpus.py and requires CUDA PyTorch plus NumPy.
@@ -32,6 +33,31 @@ def fixture(family):
     return loader(str(directory), 32), f32(str(directory / "x.f32"), (2, 4, 32))
 
 
+
+def host_fixture(family):
+    """Tiny nonuniform ABI inputs; no corpus or numerical oracle is needed."""
+    if family == 2:
+        shapes = {
+            "block_norm.weight": (32,), "in_proj.weight": (385, 32),
+            "conv1d.weight": (320, 1, 4), "conv1d.bias": (320,),
+            "dt_bias": (1,), "A_log": (1,), "D": (1,),
+            "norm.weight": (64,), "out_proj.weight": (32, 64),
+        }
+    else:
+        assert family == 3
+        shapes = {
+            "block_norm.weight": (32,), "in_proj.weight": (419, 32),
+            "dt_bias": (1,), "B_norm.weight": (128,),
+            "C_norm.weight": (128,), "B_bias": (1, 128),
+            "C_bias": (1, 128), "D": (1,), "out_proj.weight": (32, 64),
+        }
+    def values(shape, offset):
+        count = int(np.prod(shape))
+        return (((np.arange(count) + offset) % 127 - 63) / 128).astype(np.float32).reshape(shape)
+    return ({name: values(shape, index * 7) for index, (name, shape) in enumerate(shapes.items())},
+            values((2, 4, 32), 19))
+
+
 def cotangent(x, fixture_objective=False):
     i = np.arange(x.size).reshape(x.shape)
     if fixture_objective:
@@ -44,7 +70,7 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
     def test_folded_abi_names_layout_and_ownership(self):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
             with self.subTest(family=family):
-                weights, x = fixture(family)
+                weights, x = host_fixture(family)
                 if family == 2:
                     weights["conv1d.weight"] = weights["conv1d.weight"].reshape(-1, 4)
                 block = cls(weights, numeric_mode="identical")
@@ -89,7 +115,7 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
 
     def test_refusals_precede_loading_native_extension(self):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
-            weights, x = fixture(family)
+            weights, x = host_fixture(family)
             dy = cotangent(x)
             for mode in ("deterministic",):  # FAST runs the backward since 2026-09-27 (lane neural)
                 block = cls(weights, numeric_mode=mode)
@@ -122,7 +148,7 @@ class Mamba23BackwardHostSurface(unittest.TestCase):
 
     def test_stale_binary_has_actionable_error(self):
         for family, cls in ((2, Mamba2Block), (3, Mamba3Block)):
-            weights, x = fixture(family)
+            weights, x = host_fixture(family)
             block = cls(weights, numeric_mode="identical")
             with patch.object(block, "_extension", return_value=SimpleNamespace()):
                 with self.assertRaisesRegex(RuntimeError, f"lacks mamba{family}_backward"):

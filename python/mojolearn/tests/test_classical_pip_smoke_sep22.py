@@ -138,6 +138,17 @@ def test_get_params_and_clone(name):
     assert base.clone(est).get_params(deep=False).keys() == params.keys()
 
 
+@pytest.mark.parametrize("name", ("SVC", "SVR"))
+@pytest.mark.parametrize("gamma", ("auto", "scale", "AUTO", "SCALE"))
+def test_clone_named_gamma(name, gamma):
+    from mojolearn.model_selection import _clone
+    est = getattr(mojolearn, name)(gamma=gamma)
+    twin = _clone(est)
+    assert twin.get_params(deep=False)["gamma"] == gamma.lower()
+    base = pytest.importorskip("sklearn.base")
+    assert base.clone(est).get_params(deep=False)["gamma"] == gamma.lower()
+
+
 def test_set_params_rebuilds_through_the_constructor():
     est = mojolearn.Ridge(alpha=1.0)
     assert est.set_params(alpha=3.0) is est and est.alpha == 3.0

@@ -33,7 +33,10 @@ def test_mode_set_reuses_only_the_canonical_binary(monkeypatch, tmp_path, same_b
             assert sys.modules[alias] is canonical
             assert checked == [(canonical, name, str(binary))]
         else:
-            with pytest.raises(RuntimeError, match='separate binary'):
-                _backend.load_set('identical')
+            # Type-registering extensions load lazily and refuse a second
+            # binary before entering PyInit, which would otherwise abort.
+            result = _backend.load_set('identical')
+            with pytest.raises(ImportError, match='one tier'):
+                getattr(result, name)
     finally:
         sys.modules.pop(alias, None)

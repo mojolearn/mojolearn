@@ -716,7 +716,7 @@ class SVC(NumericModeMixin):
                 f"the others by name ({sorted(_SVC_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
-            g = gamma.lower()
+            g = gamma if gamma == gamma.lower() else gamma.lower()
             if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVC: gamma={gamma!r} is not a name; it is "
@@ -1751,7 +1751,7 @@ class SVR(NumericModeMixin):
                 f"the others by name ({sorted(_SVR_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
-            g = gamma.lower()
+            g = gamma if gamma == gamma.lower() else gamma.lower()
             if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVR: gamma={gamma!r} is not a name; it is "

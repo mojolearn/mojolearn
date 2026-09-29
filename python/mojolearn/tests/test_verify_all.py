@@ -62,21 +62,15 @@ def test_shipped_table_loads_and_is_small():
     path = vref.table_path()
     table = vref.load_table(path)
     assert table["format"] == vref.FORMAT
-    # THE BOUND IS ON WHAT THE WHEEL CARRIES, and it moved once, with the
-    # measurement (lane/reference-regen, 2026-09-17). The regeneration that
-    # closed the optional properties took the table from 6,680 cell parts to
-    # 15,426: `stepfull`, `batchgrad`, `batchscale`, `ragged` and `rlpair` are
-    # emitted now, where before only the four default parts were, and every
-    # registered lane has a cell on every fixture (2,052 = 228 x 9). 1.21 MB
-    # for 2.3x the content is proportionate, and the old 1 MB would be met
-    # only by dropping parts a user can check.
-    #
-    # 192 KB of that, 16 percent of the file, is THIRTY distinct `n/a:` reason
-    # strings repeated 7,402 times, one per cell part. Storing each once and
-    # referring to it would take the file to about 1.02 MB and is the obvious
-    # saving; it is a format change to `ref`, which every reader of the table
-    # destructures, so it is not made here in passing.
-    assert os.path.getsize(path) < 2_000_000, "the wheel's reference table must stay under 2 MB"
+    # The inventory grew from 228 to 504 lanes (4,536 fixture cells and
+    # 35,352 recorded parts). The current table is 3.39 MB uncompressed but
+    # 239 KB compressed. Keep both a proportional raw budget and a strict
+    #download-size budget; do not discard evidence to meet the older 2 MB cap.
+    import gzip
+    with open(path, "rb") as source:
+        payload = source.read()
+    assert len(payload) < 4_500_000, "reference table exceeds its 4.5 MB raw budget"
+    assert len(gzip.compress(payload, mtime=0)) < 512_000, "reference table exceeds its 512 KB compressed budget"
     assert table["cells"], "the shipped table carries no cell"
     for rec in table["records"]:
         assert set(("dir", "file", "vendor", "class", "commit")) <= set(rec)
