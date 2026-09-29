@@ -16,7 +16,10 @@ COMMIT=$(cat "$TREE/.lowbit_quality_commit" 2>/dev/null || git -C "$TREE" rev-pa
 export MOJOLEARN_HOST_DIR="$WORK/host"
 export PYTHONPATH="$TREE/python"
 export PYTHONUNBUFFERED=1
-[ -f "$MODEL/model.safetensors" ] || { echo "REFUSED: $MODEL is not staged (tools/dataset_store.sh stage ... models/SmolLM2-360M)"; exit 3; }
+# A training job reads the corpus only: LOWBIT_QUALITY_NEED_MODEL=0 before this file is sourced.
+if [ "${LOWBIT_QUALITY_NEED_MODEL:-1}" = 1 ]; then
+    [ -f "$MODEL/model.safetensors" ] || { echo "REFUSED: $MODEL is not staged (tools/dataset_store.sh stage ... models/SmolLM2-360M)"; exit 3; }
+fi
 [ -f "$CORPUS" ] || { echo "REFUSED: $CORPUS is not staged (tools/dataset_store.sh stage ... corpus/enwik8/input.txt)"; exit 3; }
 cd "$TREE"
 echo "job=${NVQ_JOB_ID:-none} lane=${NVQ_LANE:-none} gpus=${CUDA_VISIBLE_DEVICES:-unset} commit=$COMMIT started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
