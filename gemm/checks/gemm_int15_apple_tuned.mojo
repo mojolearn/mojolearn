@@ -219,7 +219,10 @@ comptime TUNED_F2_SG8_KB16 = 25
 comptime TUNED_F2_T16_KB16 = 26
 comptime TUNED_F2_T32_KB16_B128 = 27
 comptime TUNED_F2_ROW64_KB16 = 28
-comptime TUNED_VARIANT_COUNT = 29
+comptime TUNED_F2_T32_KB16_PF = 29
+comptime TUNED_F2_T32_KB32_PF = 30
+comptime TUNED_F4_T32_KB32_PF = 31
+comptime TUNED_VARIANT_COUNT = 32
 
 
 def int15_apple_tuned_sabotage_name() -> String:
@@ -241,7 +244,9 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
     row an 8 x 128 tile and row64 an 8 x 64 tile of 1 x 4 simdgroups, for
     the decode rows; t32x64 32 x 64 (2 x 4 fragments), t64x32 64 x 32
     (4 x 2); sg8 4 x 2 simdgroups of 2 x 2 fragments (64 x 32, 256
-    threads); kb8 a window of one step of the unit. Every other tile has
+    threads); kb8 a window of one step of the unit; `.pf` PREFETCHES the
+    next window's codes into registers while the unit works on this one
+    (`_fetch_planes`, `_put_planes`). Every other tile has
     128 threads. `.b128` declares that
     launch bound to the compiler (`identical_gemm_int15_apple_tuned_kernel_b128`)."""
     if variant == TUNED_F4_T32_KB32:
@@ -302,13 +307,19 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
         return String("f2.t32.kb16.b128")
     if variant == TUNED_F2_ROW64_KB16:
         return String("f2.row64.kb16")
+    if variant == TUNED_F2_T32_KB16_PF:
+        return String("f2.t32.kb16.pf")
+    if variant == TUNED_F2_T32_KB32_PF:
+        return String("f2.t32.kb32.pf")
+    if variant == TUNED_F4_T32_KB32_PF:
+        return String("f4.t32.kb32.pf")
     return String("unknown")
 
 
 def int15_apple_tuned_chunk_steps(variant: Int) -> Int:
     """The steps of `k` in one chunk of the variant's form: the steps the
     float accumulators run before they are carried."""
-    if variant == TUNED_F2_T32_KB16 or variant == TUNED_F2_T32_KB32 or variant == TUNED_F2D_T32_KB16 or variant == TUNED_F2D_T32_KB32 or variant == TUNED_F2_W64_KB16 or variant == TUNED_F2D_T16_KB32 or variant == TUNED_F2D_T32X16_KB32 or variant == TUNED_F2D_T32_KB32_B128 or variant == TUNED_F2D_W64_KB16_B128 or variant == TUNED_F2D_ROW64_KB16 or variant == TUNED_F2_T32_KB8 or variant == TUNED_F2_T32X64_KB16 or variant == TUNED_F2_T64X32_KB16 or variant == TUNED_F2_SG8_KB16 or variant == TUNED_F2_T16_KB16 or variant == TUNED_F2_T32_KB16_B128 or variant == TUNED_F2_ROW64_KB16:
+    if variant == TUNED_F2_T32_KB16 or variant == TUNED_F2_T32_KB32 or variant == TUNED_F2D_T32_KB16 or variant == TUNED_F2D_T32_KB32 or variant == TUNED_F2_W64_KB16 or variant == TUNED_F2D_T16_KB32 or variant == TUNED_F2D_T32X16_KB32 or variant == TUNED_F2D_T32_KB32_B128 or variant == TUNED_F2D_W64_KB16_B128 or variant == TUNED_F2D_ROW64_KB16 or variant == TUNED_F2_T32_KB8 or variant == TUNED_F2_T32X64_KB16 or variant == TUNED_F2_T64X32_KB16 or variant == TUNED_F2_SG8_KB16 or variant == TUNED_F2_T16_KB16 or variant == TUNED_F2_T32_KB16_B128 or variant == TUNED_F2_ROW64_KB16 or variant == TUNED_F2_T32_KB16_PF or variant == TUNED_F2_T32_KB32_PF:
         return INT15_TUNED2_CHUNK_STEPS
     if variant == TUNED_F3_T32_KB16 or variant == TUNED_F3R_T32_KB16 or variant == TUNED_F3R_T32_KB32 or variant == TUNED_F3R_T16_KB32 or variant == TUNED_F3_ROW64_KB16:
         return INT15_TUNED3_CHUNK_STEPS
@@ -415,8 +426,89 @@ def _flush_deferred[
 
 
 @always_inline
+def _fetch_planes[
+    ROWS: Int, KB: Int, NT: Int, SL: Int
+](
+    mut hs: InlineArray[SIMD[DType.float32, 4], SL],
+    mut ls: InlineArray[SIMD[DType.float32, 4], SL],
+    qh: MutPointer[Int8, MutAnyOrigin],
+    ql: MutPointer[Int8, MutAnyOrigin],
+    row0: Int,
+    rows: Int,
+    k0: Int,
+    k: Int,
+    tid: Int,
+    aligned: Bool,
+):
+    """The PREFETCH half of `_stage_planes`: this thread's slots of one
+    window of both pieces, read from device memory into registers (the same
+    slots, the same loads, the same zeros)."""
+    comptime SLOTS = (ROWS * KB) // 4
+    comptime assert SL == (SLOTS + NT - 1) // NT, "_fetch_planes: SL is the slots a thread owns"
+    comptime for sl in range(SL):
+        hs[sl] = SIMD[DType.float32, 4](0.0)
+        ls[sl] = SIMD[DType.float32, 4](0.0)
+        var s = sl * NT + tid
+        if s < SLOTS:
+            var r = s // (KB // 4)
+            var p4 = (s % (KB // 4)) * 4
+            var gr = row0 + r
+            if gr < rows:
+                var base = gr * k + k0 + p4
+                if aligned and k0 + p4 + 4 <= k and (k & 3) == 0:
+                    hs[sl] = qh.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                    ls[sl] = ql.unsafe_load[width=4, alignment=4](base).cast[DType.float32]()
+                else:
+                    comptime for e in range(4):
+                        if k0 + p4 + e < k:
+                            hs[sl][e] = qh.unsafe_load(base + e).cast[DType.float32]()
+                            ls[sl][e] = ql.unsafe_load(base + e).cast[DType.float32]()
+
+
+@always_inline
+def _put_planes[
+    ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int, MODE: Int, SL: Int
+](
+    dh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    dl: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    ds: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    hs: InlineArray[SIMD[DType.float32, 4], SL],
+    ls: InlineArray[SIMD[DType.float32, 4], SL],
+    tid: Int,
+):
+    """The STORE half of `_stage_planes`: the fetched slots into
+    threadgroup memory, laid out and combined exactly as it lays them."""
+    comptime SLOTS = (ROWS * KB) // 4
+    comptime for sl in range(SL):
+        var s = sl * NT + tid
+        if s < SLOTS:
+            var r = s // (KB // 4)
+            var p4 = (s % (KB // 4)) * 4
+            var vh = hs[sl]
+            var vl = ls[sl]
+            comptime if MODE == STAGE_WHOLE:
+                vh = vh * SIMD[DType.float32, 4](128.0) + vl
+            comptime if PMAJOR:
+                comptime for e in range(4):
+                    dh[(p4 + e) * ST + r] = vh[e]
+                comptime if MODE != STAGE_WHOLE:
+                    comptime for e in range(4):
+                        dl[(p4 + e) * ST + r] = vl[e]
+                comptime if MODE == STAGE_PAIR_SUM:
+                    var vs = vh + vl
+                    comptime for e in range(4):
+                        ds[(p4 + e) * ST + r] = vs[e]
+            else:
+                (dh + r * ST + p4).store[alignment=16](vh)
+                comptime if MODE != STAGE_WHOLE:
+                    (dl + r * ST + p4).store[alignment=16](vl)
+                comptime if MODE == STAGE_PAIR_SUM:
+                    (ds + r * ST + p4).store[alignment=16](vh + vl)
+
+
+@always_inline
 def _tuned_body[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, PF: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
@@ -463,6 +555,8 @@ def _tuned_body[
     comptime STEP_MAX = INT15_TUNED2_STEP_MAX if TWO else (INT15_TUNED3_STEP_MAX if THREE else INT15_TUNED4_STEP_MAX)
     comptime CHUNK_WINDOWS = 1 if TWO else CHUNK // KB
     comptime ASZ = KB * AST
+    comptime PSLA = (((BM * KB) // 4) + NT - 1) // NT
+    comptime PSLB = (((BN * KB) // 4) + NT - 1) // NT
     comptime BSZ = BN * BST
     comptime assert FORM >= INT15_TUNED_FORM_TWO and FORM <= INT15_TUNED_FORM_FOUR, "the form is TWO, THREE or FOUR"
     comptime assert TWO or not DEFER, "the deferred carry is TWO's"
@@ -514,13 +608,41 @@ def _tuned_body[
         # the LAST plane as the low one, which under THREE with staged sums
         # wrote the low plane over the sums: its gate failed f3.t32.kb16 and
         # f3.row64.kb16 on every case, as it had to.
-        _stage_planes[BM, KB, NT, True, AST, MODE_A, SCALAR](
-            at, at + ASZ, at + (NPLA - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
-        )
-        _stage_planes[BN, KB, NT, False, BST, MODE_B, SCALAR](
-            bt, bt + BSZ, bt + (NPLB - 1) * BSZ, bh, bl, n0, n, k0, k, tid, aligned
-        )
-        barrier()
+        comptime if PF:
+            # PREFETCH: window 0 staged before the loop; here the NEXT
+            # window's codes go into registers, read while the unit works
+            # on this one, and are stored after the barrier below.
+            if w == 0:
+                var h0 = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+                var l0 = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+                var h1 = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+                var l1 = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+                _fetch_planes[BM, KB, NT, PSLA](h0, l0, ah, al, m0, m, 0, k, tid, aligned)
+                _fetch_planes[BN, KB, NT, PSLB](h1, l1, bh, bl, n0, n, 0, k, tid, aligned)
+                _put_planes[BM, KB, NT, True, AST, MODE_A, PSLA](
+                    at, at + ASZ, at + (NPLA - 1) * ASZ, h0, l0, tid
+                )
+                _put_planes[BN, KB, NT, False, BST, MODE_B, PSLB](
+                    bt, bt + BSZ, bt + (NPLB - 1) * BSZ, h1, l1, tid
+                )
+                barrier()
+        else:
+            _stage_planes[BM, KB, NT, True, AST, MODE_A, SCALAR](
+                at, at + ASZ, at + (NPLA - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
+            )
+            _stage_planes[BN, KB, NT, False, BST, MODE_B, SCALAR](
+                bt, bt + BSZ, bt + (NPLB - 1) * BSZ, bh, bl, n0, n, k0, k, tid, aligned
+            )
+            barrier()
+        # Under PF the next window (zeros past `k`: every load is guarded).
+        var fah = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+        var fal = InlineArray[SIMD[DType.float32, 4], PSLA](fill=SIMD[DType.float32, 4](0.0))
+        var fbh = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+        var fbl = InlineArray[SIMD[DType.float32, 4], PSLB](fill=SIMD[DType.float32, 4](0.0))
+        comptime if PF:
+            if w + 1 < windows:
+                _fetch_planes[BM, KB, NT, PSLA](fah, fal, ah, al, m0, m, k0 + KB, k, tid, aligned)
+                _fetch_planes[BN, KB, NT, PSLB](fbh, fbl, bh, bl, n0, n, k0 + KB, k, tid, aligned)
         comptime for p8 in range(KB // 8):
             var ahf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
             var alf = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
@@ -581,6 +703,15 @@ def _tuned_body[
                     if step % INT15_TUNED2D_FLUSH_STEPS == 0:
                         _flush_deferred[NC](hh_total, ll_total, mid_total, run_l)
         barrier()
+        comptime if PF:
+            if w + 1 < windows:
+                _put_planes[BM, KB, NT, True, AST, MODE_A, PSLA](
+                    at, at + ASZ, at + (NPLA - 1) * ASZ, fah, fal, tid
+                )
+                _put_planes[BN, KB, NT, False, BST, MODE_B, PSLB](
+                    bt, bt + BSZ, bt + (NPLB - 1) * BSZ, fbh, fbl, tid
+                )
+                barrier()
         comptime if not TWO:
             var chunk_end = w + 1 == windows
             comptime if not INT15_TUNED_CHUNK_SABOTAGE:
@@ -624,7 +755,7 @@ def _tuned_body[
 
 
 def identical_gemm_int15_apple_tuned_kernel[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, PF: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
@@ -640,7 +771,7 @@ def identical_gemm_int15_apple_tuned_kernel[
     aligned_in: Int32,
 ):
     """The tuned kernel (`_tuned_body`), no launch bound declared."""
-    _tuned_body[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER](c, ah, al, ea, bh, bl, eb, m_in, n_in, k_in, tile_row0_in, aligned_in)
+    _tuned_body[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF](c, ah, al, ea, bh, bl, eb, m_in, n_in, k_in, tile_row0_in, aligned_in)
 
 
 #: The launch bound the `b128` variants declare: their real block size.
@@ -649,7 +780,7 @@ comptime INT15_TUNED_LAUNCH_BOUND = 128
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(INT15_TUNED_LAUNCH_BOUND)))
 def identical_gemm_int15_apple_tuned_kernel_b128[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, PF: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     ah: MutPointer[Int8, MutAnyOrigin],
@@ -668,7 +799,7 @@ def identical_gemm_int15_apple_tuned_kernel_b128[
     lane/amd-step-time found on gfx942: a compiler that assumes 1,024
     threads a block budgets registers for them and spills a big register
     tile). SCHEDULING: the arithmetic is `_tuned_body`'s."""
-    _tuned_body[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER](c, ah, al, ea, bh, bl, eb, m_in, n_in, k_in, tile_row0_in, aligned_in)
+    _tuned_body[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF](c, ah, al, ea, bh, bl, eb, m_in, n_in, k_in, tile_row0_in, aligned_in)
 
 
 #: The block every Apple plan here stays under when the pipeline's limit
@@ -696,25 +827,25 @@ def int15_apple_refuse_block(threads: Int, admits: Int, who: String) raises:
 
 
 def int15_apple_tuned_pipeline_admits[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool, PF: Bool = False
 ](ctx: DeviceContext) -> Int:
     """What the pipeline of one schedule admits, -1 when it cannot be read
     (for the probe)."""
     try:
         comptime if BOUND:
             return Int(ctx.compile_function[
-                identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
+                identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
             ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
         else:
             return Int(ctx.compile_function[
-                identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
+                identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
             ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
     except:
         return -1
 
 
 def _launch_tuned[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool
+    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool, PF: Bool = False
 ](
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -731,8 +862,8 @@ def _launch_tuned[
 ) raises:
     """One variant, in slices of whole rows of tiles, a wait between two
     slices and none after the last."""
-    comptime kern = identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
-    comptime kern_b = identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER]
+    comptime kern = identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
+    comptime kern_b = identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
     comptime assert not BOUND or SGM * SGN * 32 <= INT15_TUNED_LAUNCH_BOUND, "the block passes its declared bound"
     # A LAUNCH METAL WOULD DROP IS REFUSED HERE (job 2's probe): a pipeline
     # admits at most `maxTotalThreadsPerThreadgroup` threads, which falls
@@ -952,6 +1083,18 @@ def identical_gemm_int15_apple_tuned_into(
             )
         elif variant == TUNED_F2_ROW64_KB16:
             _launch_tuned[1, 4, 1, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, False](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32_KB16_PF:
+            _launch_tuned[2, 2, 2, 2, 16, INT15_TUNED_FORM_TWO, False, False, False, False, True](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F2_T32_KB32_PF:
+            _launch_tuned[2, 2, 2, 2, 32, INT15_TUNED_FORM_TWO, False, False, False, False, True](
+                ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
+            )
+        elif variant == TUNED_F4_T32_KB32_PF:
+            _launch_tuned[2, 2, 2, 2, 32, INT15_TUNED_FORM_FOUR, False, False, False, False, True](
                 ctx, c, ah, al, ea, bh, bl, eb, m, n, k, slice_macs
             )
         else:
