@@ -448,9 +448,17 @@ def check_int15_bounds_are_where_the_contract_says() raises:
     """Section W, THE BOUNDS, (b) to (f): a planted case AT each bound that
     must be exact and one ABOVE it that must not be. A bound with no case
     above it would be a number nobody tested."""
-    # (b) one step of a unit: 32 products of magnitude at most 128 * 128.
-    if 32 * 128 * 128 != 524288:
-        raise Error("one unit step's bound is not 2^19")
+    # (b) one step of a unit: 32 products, each at the largest magnitude a
+    # piece product has, 128 * 128. The sum of the step is 2^19.
+    var step_q = _const_codes(32, -16383)
+    var step_p = split_int15(step_q)
+    var step_hh = Int32(0)
+    for p in range(32):
+        step_hh = step_hh + Int32(step_p.hi[p]) * Int32(step_p.hi[p])
+    if step_hh != Int32(524288):
+        raise Error("one unit step of the largest piece products sums to " + String(step_hh) + ", want 2^19")
+    if not _wrapped_equals_exact(-16383, 32):
+        raise Error("one unit step is not exact")
     # (c) one piece sum. The code -16383 is (hi, lo) = (-128, 1): every HH
     # term is 16384, the largest a piece product can be.
     if not _wrapped_equals_exact(-16383, INT15_PIECE_BOUND_K):
@@ -464,8 +472,14 @@ def check_int15_bounds_are_where_the_contract_says() raises:
     if _wrapped_equals_exact(-16257, INT15_MID_BOUND_K + 1):
         raise Error("HL + LH did not wrap at k = " + String(INT15_MID_BOUND_K + 1) + ": the bound of clause W-4 (d) is not tight")
     # The profile's bound is below both, and exact on both planted codes.
-    if INT15_MAX_K > INT15_MID_BOUND_K or INT15_MAX_K > INT15_PIECE_BOUND_K:
-        raise Error("INT15_MAX_K is above a derived bound")
+    var max_k = INT15_MAX_K
+    var smallest_bound = INT15_MID_BOUND_K
+    if INT15_PIECE_BOUND_K < smallest_bound:
+        smallest_bound = INT15_PIECE_BOUND_K
+    if max_k > smallest_bound:
+        raise Error("INT15_MAX_K " + String(max_k) + " is above the smallest derived bound " + String(smallest_bound))
+    if max_k * 2 <= smallest_bound:
+        raise Error("INT15_MAX_K " + String(max_k) + " is not the largest power of two at or below " + String(smallest_bound))
     if not _wrapped_equals_exact(-16257, INT15_MAX_K) or not _wrapped_equals_exact(-16383, INT15_MAX_K) or not _wrapped_equals_exact(16383, INT15_MAX_K):
         raise Error("a planted code is not exact at INT15_MAX_K")
     # (e) the recombination at the ends of each accumulator.
@@ -740,7 +754,7 @@ def int15_seam_probe_kernel(
 
 
 def int15_recombine_probe_kernel(
-    out: MutPointer[Int64, MutAnyOrigin],
+    dst: MutPointer[Int64, MutAnyOrigin],
     hh: MutPointer[Int32, MutAnyOrigin],
     mid: MutPointer[Int32, MutAnyOrigin],
     ll: MutPointer[Int32, MutAnyOrigin],
@@ -751,7 +765,7 @@ def int15_recombine_probe_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n_in):
         return
-    out.unsafe_store(i, int15_recombine(hh.unsafe_load(i), mid.unsafe_load(i), ll.unsafe_load(i)))
+    dst.unsafe_store(i, int15_recombine(hh.unsafe_load(i), mid.unsafe_load(i), ll.unsafe_load(i)))
 
 
 def check_int15_device_integers_match_host(ctx: DeviceContext) raises:
@@ -984,7 +998,7 @@ def _planted_rows(rows: Int, k: Int, kind: Int, e: Int) -> Int15Rows:
     var q = List[Int16]()
     for r in range(rows):
         for p in range(k):
-            var c = 0
+            var c: Int
             if kind == 0:
                 c = 16383
             elif kind == 1:

@@ -158,3 +158,177 @@ layouts are read from the two ISA documents and unverified until
 plan, which needs the k16 MFMA; and a bf16 activation seam (L-2 applied
 between blocks), which no block uses today because the inference classes
 keep activations in float32 and store only weights low-bit.
+
+## 6. THE FIFTEEN-BIT PROFILE: `mojolearn.identical.gemm.int15i64.v1`
+
+Lane lane/lowbit-int15, 2026-09-29. DEVIATIONS 2965 to 2973. Clauses W-1 to
+W-8. Answers: `gemm/host/gemm_int15_oracle.mojo`. Device:
+`gemm/checks/gemm_int15.mojo`. Gates: `gemm/checks/gemm_int15_check.mojo` and
+`gemm/checks/gemm_int15_sim_check.mojo`. Seams: `checks/numerics_int15.mojo`,
+a file of its own so that no binding which imports `checks/numerics.mojo` is
+built from a changed source.
+
+This section changes no character of `fp32.v1`, `bf16f32.v1` or
+`int8i32.v1`. Sections 0 to 5 above are as they were.
+
+### 6.0 What the profile is, and why it exists
+
+`int8i32.v1` one step wider. Both operands are integer codes with one
+power-of-two scale per row; the dot product is an exact integer sum; the
+only floating steps are the conversion of that sum to float32, one multiply
+by `2^(ea + eb)` and the flush. OP_NT only, for `int8i32.v1`'s reason.
+
+The quality lane (`lane/lowbit-quality`, `bench/lowbit_quality/`) measured
+fifteen-bit codes on both operands inside the noise of the fp32 baseline on
+SmolLM2-360M, and `int8i32.v1` far outside it. THE CODES OF THIS PROFILE
+ARE THAT LANE'S, `bench/lowbit_quality/arith.py`, kind `int15`. The number
+belongs to the model path and is recorded there; this section pins the
+arithmetic and claims no quality.
+
+### 6.1 The clauses
+
+| clause | what | spelling | deviation |
+|---|---|---|---|
+| W-1 | row scale | `int15_row_exponent`: `e = floor(log2 absmax) - 13`, read from the exponent field, so `absmax * 2^-e` lies in `[8192, 16384)`; an all-zero row takes `e = 0`; the absmax is `int8i32.v1`'s, a maximum after the flush, which a NaN never wins and an infinity does | 2965 |
+| W-2 | code | `quantize_int15_value`: `clamp(rne(ftz(ftz(x) * 2^-e)), -16383, 16383)`, stored as Int16; `rne` is `f32_round_half_even`; a NaN codes to 0, BEFORE the scaling and AFTER it (a zero of a row whose scale is the infinity is `0 * inf`); an integer has one zero | 2966 |
+| W-3 | pieces | `int15_piece_lo`: `c mod 128` as a floor modulus, a mask, in `[0, 127]`; `int15_piece_hi`: `floor(c / 128)`, an arithmetic shift, in `[-128, 127]`; `c = hi * 128 + lo`; both are int8 | 2967 |
+| W-4 | piece accumulation | three Int32 accumulators: `HH`, `MID = HL + LH`, `LL`. Exact for `k <= 65536` (`INT15_MAX_K`); a larger `k` is refused by name, by every plan and by the oracle | 2968 |
+| W-5 | recombination | `int15_recombine`: `HH * 2^14 + MID * 2^7 + LL` in Int64, two shifts and two additions | 2969 |
+| W-6 | sum to float | `i64_to_f32_pinned`: the magnitude split into two 24-bit parts, each converted exactly from an Int32, the high part scaled by `2^24` exactly, ONE IEEE addition; at and above `2^48` the low sixteen bits fold into a sticky bit first and the result is scaled by `2^16` exactly | 2970 |
+| W-7 | dequantization | `dequant_int15_pinned`: `ftz(identical_mul(f, 2^(ea + eb)))`, `pow2_f32` as in L-6 | 2971 |
+| W-8 | execution plans | FLAT (the Int16 codes, one Int32 product per step, the sum in Int64, one thread per cell), PIECES (the int8 planes, the three accumulators of W-4, one thread per cell), MMA (the planes on the vendor's integer matrix unit through `gemm_int8_mma.mojo`'s own fragment loads and step, four products per k-tile of 32, zero-code padding). All three are the profile; `check_int15_plans_agree` requires their bits to match on every shape, so the choice is scheduling | 2972 |
+
+### 6.2 THE BOUNDS
+
+Every bound below is derived here and has a planted case AT it, which must
+be exact, and where the bound is a limit on `k` a planted case ABOVE it,
+which must not be (`check_int15_bounds_are_where_the_contract_says`).
+`int8i32.v1`'s bound on `k` does not carry over: L-7 assumes a magnitude of
+127, and a high piece reaches -128.
+
+**(a) The range of each piece.** A code lies in `[-16383, 16383]`.
+`lo = c mod 128` is in `[0, 127]` by the definition of a floor modulus.
+`hi = floor(c / 128)`: the smallest is `floor(-16383 / 128) = -128`, the
+largest `floor(16383 / 128) = 127`. `hi = -128` holds for the 127 codes
+from -16383 to -16257 and for no other, and there `lo = c + 16384` is in
+`[1, 127]`. So a piece takes the one int8 value whose negation is not an
+int8. Nothing in the profile negates a piece, and the integer matrix units
+take `-128` as the signed byte it is: the gate plants it on every lane of
+both vendors' units (the code -16383 on both operands). Planted:
+`check_int15_pieces_cover_every_code`, all 32767 codes.
+
+**(b) One piece product, and one step of a unit.** The largest magnitude of
+a piece product is `128 * 128 = 16384 = 2^14` (`HH`, both pieces -128). The
+others: `|hi * lo| <= 128 * 127 = 16256`, `lo * lo <= 127 * 127 = 16129`.
+One step of a unit adds 32 products to an Int32: at most
+`32 * 16384 = 2^19` in magnitude, and the step is an integer addition with
+no saturation asked for, so the accumulator after a step is the accumulator
+before it plus the exact sum of the 32 products, provided that sum of the
+whole `k` fits, which is (c) and (d).
+
+**(c) Each piece sum over the whole `k`.** Every partial sum of `k` terms of
+magnitude at most `B` has magnitude at most `B * k`, under any order and
+any grouping. `HH`: `16384 * k <= 2^31 - 1` holds up to `k = 131071`, and
+at `k = 131072` every term at its largest gives `2^31` exactly, one past
+the largest Int32. `LL`, `HL` and `LH` alone are smaller. Planted: the code
+-16383 on both operands, `(hi, lo) = (-128, 1)`, exact at `k = 131071` and
+wrapped at `k = 131072`.
+
+**(d) The cross term.** `HL` and `LH` each reach -16256 on the same term
+(the code -16257 on both operands, `(hi, lo) = (-128, 127)`), so their sum
+reaches -32512 per term. CHOSEN: `HL` and `LH` SHARE ONE INT32
+ACCUMULATOR, and the bound on `k` is taken for the sum:
+`32512 * k <= 2^31 - 1` holds up to `k = 66052` (`32512 * 66052 =
+2147482624`) and fails at `k = 66053`. WHY: the alternative, two
+accumulators kept apart until they are Int64, admits `k` up to 131071 by
+(c), but the profile stops at a power of two, and the power of two below
+131071 and the power of two below 66052 are the same number, 65536. So the
+shared accumulator costs no admitted `k`, and it saves one Int32 register
+per output cell of every thread of a matrix-unit kernel and one Int64
+widening per cell. Planted: the code -16257 on both operands, exact at
+`k = 66052` and wrapped at `k = 66053`.
+
+**(e) The recombination.** `S = HH * 2^14 + MID * 2^7 + LL` in Int64.
+At `k <= 65536`: `|HH * 2^14| <= 2^30 * 2^14 = 2^44`,
+`|MID * 2^7| <= 2130706432 * 128 < 2^38`, `0 <= LL <= 16129 * 65536 <
+2^30`, so every intermediate is below `2^45` in magnitude and `S` itself,
+being the sum of `k` code products of magnitude at most `16383^2`, is at
+most `16383^2 * 65536 = 2^44 - 2^31 + 2^16`. The shifts are shifts of a
+two's complement Int64 and are the multiplications by the powers of two.
+No 64-bit multiply and no 64-bit division appears in any plan. Planted: the
+accumulators at their ends, on the host and in a kernel on every column
+(`check_int15_device_integers_match_host`).
+
+**(f) The scale exponent.** A row exponent is `floor(log2 absmax) - 13`
+with the field's exponent in `[-126, 128]` (128 is the infinity), or 0 for
+a row of zeros, so `e` lies in `[-139, 115]` and `ea + eb` in
+`[-278, 230]`. `pow2_f32` gives the infinity above 127 and `+0.0` below
+-126: the contract has no subnormal scale. So under `ea + eb >= 128` a
+nonzero sum dequantizes to the infinity of its sign and a sum of zero to a
+NaN (`0 * inf`), and under `ea + eb <= -127` every sum dequantizes to the
+zero of its sign. Both are what the simulation computes. A finite scale can
+still overflow: the largest sum converts to `2^44 - 2^31` and is finite
+under `2^84` and the infinity under `2^85`. Planted: `ea + eb` at 127, 128,
+230, -126, -127 and -278 on every plan, and the largest sum at 84 and 85.
+
+**(g) The final rounding.** W-6. The exact sum of the two addends of the
+one addition is the integer itself, so the addition's rounding is the
+conversion's, round to nearest even. A code generator that fuses the
+scaling of the high part into the addition changes nothing, because that
+product is exact. Planted, on the host and in a kernel on every column,
+each against an integer-only spelling of the correctly rounded word that
+shares no step with the seam: exact values; the ties `2^24 + 1` (even
+neighbor below) and `2^24 + 3` (even neighbor above), which separate round
+to nearest even from truncation and from round half away; `2^40 + 2^16`
+and `2^40 + 3 * 2^16` with the integer one above and one below each; the
+largest admitted sum and its two neighbors; `2^44`; the reduced branch at
+`2^48` and its ties; and the two ends of Int64. The column's OWN int64
+conversion is run beside the seam and the count of words on which it
+differs from the correctly rounded one is printed, never trusted.
+
+**THE LARGEST ADMITTED `k`** is the smallest of the bounds, 66052 from (d),
+rounded down to a power of two so the bound is a number a reader can check:
+`INT15_MAX_K = 65536`. Above it every plan and the oracle refuse by name.
+
+### 6.3 What is promised
+
+Given the same operand bits, `m`, `n` and `k`, the same output bits on
+every certified backend and from every plan, under section 2's scope rules
+(NaN cells compared as NaN). The promise covers the codes, the exponents
+and the planes the conversions produce from a float32 row as well as the
+product.
+
+### 6.4 What is not promised
+
+- Agreement with the float32 product, with `int8i32.v1`, or with any
+  vendor's own quantized product.
+- Quality. It is measured on the model path by the quality lane and
+  recorded in `python/mojolearn/_gemm_profile.py` only when a model class
+  computes under the profile.
+- Speed. Section 6.7 records what was measured.
+- Any orientation but OP_NT.
+
+### 6.5 The sabotage arms
+
+`-D MOJOLEARN_LOWBIT_SABOTAGE=1`, the family's device arm, flips the value
+of every cell the three kernels store. `-D MOJOLEARN_HOST_SABOTAGE=1`, the
+family's host arm, flips every cell of `gemm_int15_oracle`; it does not
+reach `gemm_int15_pieces_oracle`, so `check_int15_pieces_oracle_matches_oracle`
+fails under it on a box with no GPU at all. `-D
+MOJOLEARN_INT15_PIECE_SABOTAGE=1` is a DEFECT arm, not a value arm: the
+device split writes -127 where the high piece is -128, the mistake a split
+written for a symmetric int8 range makes. It changes no code above -16257
+and it does not reach the FLAT plan. `-D MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1`
+reaches the host conversions, as it does for `int8i32.v1`.
+
+### 6.6 The cross-check against the simulation
+
+No other profile has this gate. `bench/lowbit_quality/int15_export.py` runs
+the quality lane's `arith.py` (its blob hash is written into the export) on
+float32 operands that include the planted rows of W-2, and writes the
+operands, the simulation's codes and exponents and its float32 product.
+`gemm/checks/gemm_int15_sim_check.mojo` reads them and requires the host
+quantizer's codes and exponents and `gemm_int15_oracle`'s product to be the
+simulation's, bit for bit, NaN cells as NaN. So the arithmetic whose quality
+was measured is the arithmetic that ships. Under the host arm the check
+must fail.

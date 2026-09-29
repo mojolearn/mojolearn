@@ -81,7 +81,10 @@ run() {
     _code=$?
     _held=no
     if [ "$_want" = pass ] && [ "$_code" -eq 0 ]; then _held=yes; fi
-    if [ "$_want" = fail ] && [ "$_code" -ne 0 ]; then _held=yes; fi
+    # An arm HELD only when the program ran to its verdict line and failed
+    # there: a build that does not compile also exits non-zero, and that is
+    # not a sabotage seen failing (job nvc3-0012).
+    if [ "$_want" = fail ] && [ "$_code" -ne 0 ] && grep -q -E '^== [0-9]+ gates, [1-9][0-9]* failed ==$' "$OUT/$_name.log"; then _held=yes; fi
     printf '%s\t%s\t%s\texpected=%s\theld=%s\n' "$_name" "$_code" "$(( $(date +%s) - _t0 ))s" "$_want" "$_held" >> "$OUT/status.tsv"
     [ "$_held" = yes ] || red=1
     return "$_code"
