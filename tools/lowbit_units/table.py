@@ -12,8 +12,10 @@ one, the vendor comparison's vendor_price.json (tools/vendor_gemm_price.py).
              [--vendor h100=.../vendor_price.json ...] [--out table.md]
         the table: per box, per shape, per arm, the median and minimum time,
         the rate, and the arm's time over fp32.v1's at the same shape on the
-        same box; the conversion costs; where a low-bit plan costs more time
-        than fp32.v1; the hash verdict per arm and shape across the boxes.
+        same box; the complete operation twice (inference, training); the
+        conversion costs; where a low-bit plan costs more time than fp32.v1;
+        the hash verdict per arm and shape across the boxes. A box with no
+        timed run reads "not run yet" in every time cell.
         Exits 1 when any arm's digests DISAGREE across boxes.
 
     table.py --expect-disagree clean.tsv sabotage.tsv
@@ -109,9 +111,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--box", action="append", default=[], metavar="NAME=lowbit.tsv")
     ap.add_argument("--vendor", action="append", default=[], metavar="NAME=vendor_price.json")
-    ap.add_argument("--identity-only", action="append", default=[], metavar="NAME",
-                    help="a box judged on bitwise identity only: its time columns read "
-                         "'not timed (identity only)' whatever its file holds")
+    ap.add_argument("--digests-only", action="append", default=[], metavar="NAME",
+                    help="a box whose file is read for its digests alone (a run that was not taken "
+                         "alone, or a digest run): every time cell of it reads 'not run yet'")
     ap.add_argument("--note", action="append", default=[], metavar="NAME=TEXT",
                     help="a sentence printed under the box's name (whether its run was taken alone)")
     ap.add_argument("--expect-disagree", nargs=2, metavar=("CLEAN", "SABOTAGE"))
@@ -126,14 +128,16 @@ def main():
         name, _, path = spec.partition("=")
         boxes[name] = read_lowbit(path)
         order.append(name)
-        if name in a.identity_only:
-            # The decision is about the BOX: a file from a run that did time
-            # it is read for its digests and its times are dropped here.
+        if name in a.digests_only:
             for r in boxes[name][0].values():
                 r["median_ms"] = r["min_ms"] = r["rate"] = None
-    for name in a.identity_only:
+        # A file of a digest run (MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1)
+        # holds no time: the box is digests only whatever the flags say.
+        if all(r["median_ms"] is None for r in boxes[name][0].values()) and name not in a.digests_only:
+            a.digests_only.append(name)
+    for name in a.digests_only:
         if name not in boxes:
-            sys.exit(f"table.py: --identity-only {name} names no --box")
+            sys.exit(f"table.py: --digests-only {name} names no --box")
     vendors = {}
     for spec in a.vendor:
         name, _, path = spec.partition("=")
@@ -175,13 +179,13 @@ def main():
         w("")
         for box in order:
             rows, shapes, _ = boxes[box]
-            if box in a.identity_only:
+            if box in a.digests_only:
                 w(f"### {box}")
                 w("")
                 w("| shape | fp32.v1 ms | bf16f32.v1 ms | over | int8i32.v1 ms | over | Apple probe ms | over |")
                 w("|---|---:|---:|---:|---:|---:|---:|---:|")
                 for shape in shapes:
-                    w(f"| {shape} | " + " | ".join(["not timed (identity only)"] * 7) + " |")
+                    w(f"| {shape} | " + " | ".join(["not run yet"] * 7) + " |")
                 w("")
                 continue
             if not any((shape, arms[0]) in rows for shape in shapes):
@@ -220,8 +224,8 @@ def main():
     w("")
     for box in order:
         rows, shapes, _ = boxes[box]
-        if box in a.identity_only:
-            w(f"### {box}: not timed (identity only)")
+        if box in a.digests_only:
+            w(f"### {box}: no timed run yet (digests only)")
             w("")
             continue
         w(f"### {box}")
@@ -265,11 +269,10 @@ def main():
         for text in notes.get(box, []):
             w(text)
             w("")
-        if box in a.identity_only:
+        if box in a.digests_only:
             if box in vendors:
-                sys.exit(f"table.py: {box} is identity only; it takes no --vendor")
-            w("NOT TIMED (IDENTITY ONLY). This box is judged on bitwise identity (Andrew, 2026-09-29); the speed")
-            w("gate is judged on NVIDIA and on Apple. Its digests are in the last section.")
+                sys.exit(f"table.py: {box} is digests only; it takes no --vendor")
+            w("NO TIMED RUN YET. This file holds the box's digests, which are in the last section.")
             w("")
             for shape in shapes:
                 first = next(r for (s, _), r in rows.items() if s == shape)
@@ -283,8 +286,7 @@ def main():
                         if (shape, arm) in not_run:
                             w(f"| {arm} | not run | | | | the column does not have the unit |")
                         continue
-                    w(f"| {arm} | not timed (identity only) | not timed (identity only) | "
-                      f"not timed (identity only) | not timed (identity only) | {r['note']} |")
+                    w(f"| {arm} | not run yet | not run yet | not run yet | not run yet | {r['note']} |")
                 w("")
             continue
         if box in vendors:
