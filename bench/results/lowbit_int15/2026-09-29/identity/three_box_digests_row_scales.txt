@@ -1,0 +1,7 @@
+# clean gate digests with the row-scales case: H100 nvc3-0040 (187c29942), MI325X 1790659755804 and M2 Pro 1790659752178 (0efab762e; the gate's sources are the same at both)
+boxes: h100, mi325x, m2pro
+  h100: 178 cases, plans device, dispatch-codes, dispatch-planes, flat, from-f32, mma, oracle, pieces, 1022 digests
+  mi325x: 178 cases, plans device, dispatch-codes, dispatch-planes, flat, from-f32, mma, oracle, pieces, 1022 digests
+  m2pro: 178 cases, plans apple-four-row, apple-four-wide, apple-two-row, apple-two-wide, device, dispatch-codes, dispatch-planes, flat, from-f32, oracle, pieces, 1509 digests
+cases: 178; missing on a box: 0; disagreeing: 0
+verdict=AGREE: every plan of every box and every host oracle printed the same digest for every case
