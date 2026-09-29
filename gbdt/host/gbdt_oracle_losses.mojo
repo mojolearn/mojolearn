@@ -114,6 +114,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_POISSON,
     GBDT_BOOT_SEEDS,
     _bootstrap_pass,
+    _snap_gradients,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
@@ -939,6 +940,7 @@ def gbdt_losses_host_fit(
         else:
             var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
             fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        _snap_gradients(stats, n_rows, 2, fixed_scale)  # lane/sym-quality
         var score_std_dev = Float32(0.0)
         if random_strength != Float32(0.0):
             score_std_dev = Float32(
