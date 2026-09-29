@@ -31,10 +31,13 @@ HL + LH and LL of the right cell, read from the right plane. So:
                      position, so a fragment read from the wrong plane, or
                      paired with the wrong one, changes a sum;
     ragged extents   lane/lowbit-units' and the one-product gate's;
-    the bound        every code -128 on all four planes, at the largest `k`
-                     the kernel admits, 65535: the middle sum is 2147450880,
-                     the largest Int32 it may hold; the same with the low
-                     planes at +127, where the middle sum is -2130673920;
+    the bound        high planes -128 and low planes +127 at the largest
+                     `k` the kernel admits, 65536, the fifteen-bit
+                     profile's own: the middle sum is -2130706432 and HH is
+                     2^30; and every code -128 on ALL FOUR planes (outside
+                     the operands the bound is stated for, inside any
+                     int8's) at 65535, where the middle sum is 2147450880,
+                     the largest any input gives;
     one plane alone  three planes of zero codes and one of +127, in turn,
                      so each plane's path to each sum is seen alone.
 """
@@ -46,8 +49,10 @@ from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_uni
 from checks.numerics import numeric_mode_name
 from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_MAX_K,
+    INT8_PIECES_MAX_K_ANY_INT8,
     INT8_PIECES_PLAN_COUNT,
     identical_gemm_int8_pieces_flat_into,
+    identical_gemm_int8_pieces_tuned_fused_with_plan,
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
@@ -55,16 +60,19 @@ from gemm.checks.gemm_int8_mma_tuned import (
     int8_pieces_sabotage_name,
 )
 from gemm.checks.gemm_int8_mma_tuned_check import TUNED_SHAPE_COUNT, _tuned_shape
+from checks.numerics import ftz, identical_mul, pow2_f32
 from gemm.checks.gemm_lowbit_check import (
     MMA_SHAPE_COUNT,
+    _download_f32,
     _download_i32,
+    _poisoned,
     _gate,
     _hash64,
     _mma_shape,
     _upload_i32,
     _upload_i8,
 )
-from gemm.checks.quantize_int8_par_check import Tally, _verdict
+from gemm.checks.quantize_int8_par_check import Tally, _diff, _verdict
 
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
 
@@ -126,6 +134,36 @@ def piece_sums_host(
     return out^
 
 
+def _exponents(count: Int, salt: Int) -> List[Int32]:
+    """Row exponents in [-40, 9], hashed: the fused form's scale."""
+    var e = List[Int32]()
+    for i in range(count):
+        e.append(Int32(Int(_hash64(i, salt) % UInt64(50)) - 40))
+    return e^
+
+
+def fused_stub_host(
+    sums: List[Int32], ea: List[Int32], eb: List[Int32], m: Int, n: Int
+) -> List[Float32]:
+    """What the FUSED form stores per cell under the stand-in epilogue
+    (`gemm_int8_pieces_epilogue_stub.mojo`): the harness's stand-in
+    recombination of the host's three sums, scaled by `ea[i] + eb[j]`. When
+    lane/lowbit-int15's `int15_store_cell` replaces the stand-in, this
+    becomes its host form."""
+    var out = List[Float32]()
+    for i in range(m):
+        for j in range(n):
+            var at_ = 3 * (i * n + j)
+            var v = (
+                Int64(sums[at_]) * Int64(16384)
+                + Int64(sums[at_ + 1]) * Int64(128)
+                + Int64(sums[at_ + 2])
+            )
+            var e = Int(ea[i]) + Int(eb[j])
+            out.append(ftz(identical_mul(Float32(v), pow2_f32(e))))
+    return out^
+
+
 def _sums_diff(got: List[Int32], want: List[Int32], n: Int, tag: String) -> String:
     """Empty when every sum agrees; else the count and the first."""
     var bad = 0
@@ -184,6 +222,11 @@ def _run_every_pieces_plan(
     a column that has the unit, every staged plan, each against the host
     and the staged ones against the reference device plan too."""
     var want = piece_sums_host(ah, al, bh, bl, m, n, k)
+    var ea = _exponents(m, 733 + k)
+    var eb = _exponents(n, 739 + k)
+    var fwant = fused_stub_host(want, ea, eb, m, n)
+    var dea = _upload_i32(ctx, ea)
+    var deb = _upload_i32(ctx, eb)
     var dah = _upload_i8(ctx, ah)
     var dal = _upload_i8(ctx, al)
     var dbh = _upload_i8(ctx, bh)
@@ -219,11 +262,29 @@ def _run_every_pieces_plan(
                 got = ptag + ": " + String(e)
             tally.note(got)
             _ = ds
+            # THE FUSED FORM of the same plan: one launch, the stand-in
+            # epilogue's float32 per cell, against the host's.
+            var ftag = tag + " fused." + int8_pieces_plan_name(plan)
+            var dc = _poisoned(ctx, m * n)
+            var fgot: String
+            try:
+                identical_gemm_int8_pieces_tuned_fused_with_plan(
+                    ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, plan
+                )
+                ctx.synchronize()
+                var cout = _download_f32(ctx, dc, m * n, ftag)
+                fgot = _diff(cout, fwant, ftag + " (fused vs host)")
+            except e:
+                fgot = ftag + ": " + String(e)
+            tally.note(fgot)
+            _ = dc
     _ = dah
     _ = dal
     _ = dbh
     _ = dbl
     _ = dflat
+    _ = dea
+    _ = deb
 
 
 def check_pieces_plans_match_flat_and_host(ctx: DeviceContext) raises:
@@ -302,11 +363,11 @@ def _pieces_plant_value(plant: Int, plane: Int) -> Int:
     return 0
 
 
-comptime PIECES_PLANT_SHAPE_COUNT = 7
+comptime PIECES_PLANT_SHAPE_COUNT = 8
 
 
 def _pieces_plant_shape(i: Int) -> Tuple[Int, Int, Int]:
-    """Off every tile and window of the plans, and the largest `k`."""
+    """Off every tile and window of the plans, and the two largest `k`."""
     if i == 0:
         return (9, 7, 1025)
     if i == 1:
@@ -316,10 +377,12 @@ def _pieces_plant_shape(i: Int) -> Tuple[Int, Int, Int]:
     if i == 3:
         return (8, 129, 14336)
     if i == 4:
-        return (2, 3, INT8_PIECES_MAX_K)
+        return (2, 3, INT8_PIECES_MAX_K_ANY_INT8)
     if i == 5:
         return (129, 257, 96)
-    return (17, 33, 4100)
+    if i == 6:
+        return (17, 33, 4100)
+    return (3, 2, INT8_PIECES_MAX_K)
 
 
 def check_pieces_planted_worst_cases(ctx: DeviceContext) raises:
@@ -333,13 +396,22 @@ def check_pieces_planted_worst_cases(ctx: DeviceContext) raises:
         var n = sh[1]
         var k = sh[2]
         for plant in range(PIECES_PLANT_COUNT):
+            if plant == PIECES_PLANT_ALL_MIN and k > INT8_PIECES_MAX_K_ANY_INT8:
+                # Low planes of -128 are outside the operands the larger
+                # bound is stated for: at this `k` their middle sum is 2^31.
+                print(
+                    "   -- " + _pieces_plant_name(plant) + " is not run at k = " + String(k)
+                    + ": its low planes are outside [0, 127]"
+                )
+                continue
             var ah = _constant_plane(m * k, _pieces_plant_value(plant, 0))
             var al = _constant_plane(m * k, _pieces_plant_value(plant, 1))
             var bh = _constant_plane(n * k, _pieces_plant_value(plant, 2))
             var bl = _constant_plane(n * k, _pieces_plant_value(plant, 3))
-            # One nonzero code of each plane differs from its constant, at
-            # a row and a step that differ per plane, so a cell is not
-            # every other cell.
+            # One code of each plane differs from its constant, at a row
+            # and a step that differ per plane, so a cell is not every
+            # other cell. Each is smaller in magnitude than the constant it
+            # replaces or sits in a plane of zero codes, so no sum grows.
             ah[(m - 1) * k + k // 3] = Int8(5)
             al[(m // 2) * k + k - 1] = Int8(7)
             bh[(n - 1) * k] = Int8(-3)

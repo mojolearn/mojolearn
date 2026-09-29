@@ -15,6 +15,9 @@
 #   target-price tools/lowbit_mma_speed/price_job.sh target: fp32.v1, the
 #                tuned launcher's plans, FOUR PRODUCTS (four launches, and
 #                one launch of one staging) and the conversions
+#   full-price   tools/lowbit_mma_speed/price_job.sh full: the unit
+#                phase's arms and the target phase's in ONE run, for a box
+#                that is given one job (the MI325X)
 #   ptx          tools/lowbit_mma_speed/ptx_probe.sh (NVIDIA): the kernels'
 #                PTX, counted; launches nothing, times nothing
 #
@@ -55,6 +58,7 @@ for phase in "$@"; do
         quant-gate) bash tools/lowbit_mma_speed/gate_job.sh quant ;;
         unit-gate) bash tools/lowbit_mma_speed/gate_job.sh unit ;;
         pieces-gate) bash tools/lowbit_mma_speed/gate_job.sh pieces ;;
+        full-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS,pieces.int8*,inference.pieces.int8.tuned,training.pieces.int8.tuned} bash tools/lowbit_mma_speed/price_job.sh full ;;
         target-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$TARGET_ARMS} bash tools/lowbit_mma_speed/price_job.sh target ;;
         quant-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$QUANT_ARMS} bash tools/lowbit_mma_speed/price_job.sh quant ;;
         unit-price) MOJOLEARN_LOWBIT_PRICE_ARMS=${MOJOLEARN_LOWBIT_PRICE_ARMS:-$UNIT_ARMS} bash tools/lowbit_mma_speed/price_job.sh unit ;;

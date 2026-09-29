@@ -14,7 +14,9 @@
 #   DeviceContext.compile_function[kern, dump_asm=Path(...)]()
 # (tools/gemm_kernel_census_leg.sh's route), prints the runtime's own
 # NUM_REGS and SHARED_SIZE_BYTES, and this script counts the load, store,
-# unit and barrier instructions of each PTX. Launches nothing, times nothing.
+# unit and barrier instructions of each PTX, and prints the runtime's own
+# count of blocks of the launch's size that one multiprocessor holds at
+# once. Launches nothing, times nothing.
 # It builds under a PRIVATE Mojo cache (MODULAR_CACHE_DIR), never the tree's.
 # NVIDIA only; on any other box it is NOT RUN.
 set -u
@@ -44,6 +46,7 @@ from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_kernel
 from gemm.checks.gemm_int8_mma_tuned import (
     identical_gemm_int8_mma_direct_kernel,
     identical_gemm_int8_mma_tuned_kernel,
+    identical_gemm_int8_pieces_tuned_kernel,
 )
 from gemm.checks.gemm_lowbit import quantize_rows_int8_kernel
 from gemm.checks.quantize_int8_par import quantize_rows_int8_par_kernel
@@ -59,29 +62,52 @@ def stat_$1(ctx: DeviceContext) raises:
         " regs=", f.get_attribute(Attribute.NUM_REGS),
         " local=", f.get_attribute(Attribute.LOCAL_SIZE_BYTES),
         " shared=", f.get_attribute(Attribute.SHARED_SIZE_BYTES),
+        " threads=$3",
+        " blocks_per_multiprocessor=", f.occupancy_max_active_blocks_per_multiprocessor($3, 0),
         sep="",
     )
 
 MOJO
 }
 LABELS=""
-add() { gen "$1" "$2"; LABELS="$LABELS $1"; }
-add reference "identical_gemm_int8_mma_kernel"
-add direct_reference_loads "identical_gemm_int8_mma_direct_kernel[0]"
-add direct_aligned_loads "identical_gemm_int8_mma_direct_kernel[1]"
-add direct_scalar_acc "identical_gemm_int8_mma_direct_kernel[2]"
-add probe_loads_hoisted "identical_gemm_int8_mma_direct_kernel[3]"
-add staged_w16_b32_k32_l4 "identical_gemm_int8_mma_tuned_kernel[1, 1, 2, 2, 32, 4]"
-add staged_w64_b128_k32_l4 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 2, 32, 4]"
-add staged_w64_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 2, 64, 16]"
-add staged_w64_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 4, 64, 16]"
-add staged_w32_b64_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 2, 2, 64, 16]"
-add staged_w32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 4, 64, 16]"
-add staged_w16x32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 8, 4, 64, 16]"
-add refused_w16x32_b64x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 4, 8, 64, 16]"
-add refused_w32_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 8, 64, 16]"
-add quantize_reference "quantize_rows_int8_kernel"
-add quantize_par_256 "quantize_rows_int8_par_kernel[256]"
+# add <label> <kernel> <threads per block>: the third is what the launch
+# passes as its block, so the runtime's own occupancy is the launch's.
+add() { gen "$1" "$2" "$3"; LABELS="$LABELS $1"; }
+add reference "identical_gemm_int8_mma_kernel" 128
+add direct_reference_loads "identical_gemm_int8_mma_direct_kernel[0]" 128
+add direct_aligned_loads "identical_gemm_int8_mma_direct_kernel[1]" 128
+add direct_scalar_acc "identical_gemm_int8_mma_direct_kernel[2]" 128
+add probe_loads_hoisted "identical_gemm_int8_mma_direct_kernel[3]" 128
+add staged_w16_b32_k32_l4 "identical_gemm_int8_mma_tuned_kernel[1, 1, 2, 2, 32, 4]" 128
+add staged_w64_b128_k32_l4 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 2, 32, 4]" 128
+add staged_w64_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 2, 64, 16]" 128
+add staged_w64_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[4, 4, 2, 4, 64, 16]" 256
+add staged_w32_b64_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 2, 2, 64, 16]" 128
+add staged_w32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 4, 64, 16]" 512
+add staged_w16x32_b128_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 8, 4, 64, 16]" 1024
+add refused_w16x32_b64x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[1, 2, 4, 8, 64, 16]" 1024
+add refused_w32_b128x256_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 4, 8, 64, 16]" 1024
+add pieces_w16_b32_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 1, 2, 2, 64, 16]" 128
+add pieces_w16x32_b64x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 4, 4, 64, 16]" 512
+add pieces_w32_b64x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 2, 2, 2, 4, 64, 16]" 256
+add pieces_w16_b64_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 1, 4, 4, 64, 16]" 512
+add pieces_w16x32_b32x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 2, 4, 64, 16]" 256
+add pieces_w16x32_b64x64_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 4, 2, 64, 16]" 256
+add staged_w32_b256x64_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 8, 2, 64, 16]" 512
+add staged_w32_b512x32_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 2, 16, 1, 64, 16]" 512
+add staged_w32x16_b512x16_k64_l16 "identical_gemm_int8_mma_tuned_kernel[2, 1, 16, 1, 64, 16]" 512
+add pieces_w16x32_b128x64_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 8, 2, 32, 16]" 512
+add pieces_w16x32_b256x32_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 16, 1, 32, 16]" 512
+add pieces_w16_b256x16_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 1, 16, 1, 32, 16]" 512
+add pieces_w16x32_b64x128_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, False, 1, 2, 4, 4, 32, 16]" 512
+add pipe2_w16x32_b64x128_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, True, 1, 2, 4, 4, 32, 16]" 512
+add pipe2_w32_b64x128_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[False, True, 2, 2, 2, 4, 32, 16]" 256
+add pipe2_w16_b32_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[False, True, 1, 1, 2, 2, 64, 16]" 128
+add fused_w16x32_b64x128_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[True, False, 1, 2, 4, 4, 64, 16]" 512
+add fused_w16_b32_k64_l16 "identical_gemm_int8_pieces_tuned_kernel[True, False, 1, 1, 2, 2, 64, 16]" 128
+add fused_pipe2_w16x32_b64x128_k32_l16 "identical_gemm_int8_pieces_tuned_kernel[True, True, 1, 2, 4, 4, 32, 16]" 512
+add quantize_reference "quantize_rows_int8_kernel" 256
+add quantize_par_256 "quantize_rows_int8_par_kernel[256]" 256
 echo 'def main() raises:'
 echo '    var ctx = DeviceContext()'
 for l in $LABELS; do
@@ -110,12 +136,12 @@ rc=$?
 echo "run exit=$rc" >> "$OUT/probe.txt"
 grep -h '^PTX_PROBE' "$OUT/probe.log" >> "$OUT/probe.txt"
 {
-    printf 'label\tmma.sync\tbar.sync\tloads and stores by kind\n'
+    printf 'label\tmma.sync\tbar.sync\tcp.async\tloads and stores by kind\n'
     for p in "$WORK"/dumps/*.ptx; do
         [ -f "$p" ] || continue
         label=$(basename "$p" .ptx)
         kinds=$(grep -oE '\b(ld|st)\.(global|shared|local|param)?\.?(v[24]\.)?[a-z][0-9]+\b' "$p" | sort | uniq -c | awk '{printf "%s=%s ", $2, $1}')
-        printf '%s\t%s\t%s\t%s\n' "$label" "$(grep -c 'mma\.sync' "$p")" "$(grep -c 'bar\.sync' "$p")" "$kinds"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$label" "$(grep -c 'mma\.sync' "$p")" "$(grep -c 'bar\.sync' "$p")" "$(grep -c 'cp\.async\.c[ag]' "$p")" "$kinds"
         gzip -9 -c "$p" > "$OUT/$label.ptx.gz"
     done
 } > "$OUT/counts.tsv"

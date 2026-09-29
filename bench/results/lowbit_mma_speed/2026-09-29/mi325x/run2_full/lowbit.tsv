@@ -1,0 +1,648 @@
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0604 0.0587 277.9526 GMAC/s 0x920cdd138650a8bd plan=13
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.flat 1.0776 1.0649 15.5691 GMAC/s 0x8a9227b93e430acd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma 0.0499 0.0480 336.0888 GMAC/s 0x8a9227b93e430acd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.quantize.a.par 0.0166 0.0159 0.2473 Gelem/s 0x54279cbda1444726 per-call,block=1
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL convert.int8.pack.b.par 0.0427 0.0422 392.5413 Gelem/s 0x305b1a502296caf6 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.0695 0.0688 241.4335 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.1221 0.1213 137.3943 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.2006 0.1994 83.6439 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.1918 0.1887 87.4948 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1164 0.1136 144.1602 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.0945 0.0924 177.6137 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.0830 0.0825 202.2326 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1160 0.1141 144.5813 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1051 0.1024 159.5718 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0522 0.0515 321.2180 GMAC/s 0x8a9227b93e430acd the-tuned-launcher's-plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0608 0.0597 276.1227 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0710 0.0690 236.2988 GMAC/s 0x8a9227b93e430acd plan
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.int8i32.v1.tuned 0.0632 0.0626 265.4203 GMAC/s 0x8a9227b93e430acd quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.int8i32.v1.tuned 0.0962 0.0950 174.4193 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.4x.int8i32.v1.tuned 0.1823 0.1800 92.0207 GMAC/s 0x8a9227b93e430acd quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.4x.int8i32.v1.tuned 0.2186 0.2173 76.7629 GMAC/s 0x8a9227b93e430acd quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL pieces.int8.flat 2.1047 2.0988 31.8848 GMAC/s 0x7b9b7c41a8e5d2f the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.0938 0.0931 715.5226 GMAC/s 0x7b9b7c41a8e5d2f the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.1161 0.1158 577.9268 GMAC/s 0x7b9b7c41a8e5d2f plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.1218 0.1205 550.9804 GMAC/s 0x7b9b7c41a8e5d2f plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.0969 0.0967 692.5579 GMAC/s 0x7b9b7c41a8e5d2f plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL inference.pieces.int8.tuned 0.1090 0.1075 153.9335 GMAC/s 0xc963ae177f77e590 quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.qkv.t1 1 4096 4096 FULL training.pieces.int8.tuned 0.1435 0.1417 116.9551 GMAC/s 0xc963ae177f77e590 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.0731 0.0731 1835.0797 GMAC/s 0xd5677d8a13939709 plan=14
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.flat 1.1433 1.1238 117.3974 GMAC/s 0x484bd20aabe66ee5 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma 0.0497 0.0496 2699.4716 GMAC/s 0x484bd20aabe66ee5 dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.quantize.a.par 0.0165 0.0162 1.9908 Gelem/s 0xbd0b5aed2b83cb45 per-call,block=1
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL convert.int8.pack.b.par 0.0416 0.0416 403.3954 Gelem/s 0xa8ce17326c01345 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.0711 0.0707 1887.4663 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.1245 0.1238 1078.1406 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.2057 0.2038 652.5592 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.1955 0.1932 686.5708 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1193 0.1190 1125.0533 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.0976 0.0968 1374.6183 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.0874 0.0862 1535.1450 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1200 0.1191 1118.4811 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1046 0.1041 1282.9192 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0531 0.0523 2528.1169 GMAC/s 0x484bd20aabe66ee5 the-tuned-launcher's-plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0633 0.0629 2119.0042 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0711 0.0704 1887.4663 GMAC/s 0x484bd20aabe66ee5 plan
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.int8i32.v1.tuned 0.0648 0.0647 2070.3028 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.int8i32.v1.tuned 0.0979 0.0963 1371.1077 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.4x.int8i32.v1.tuned 0.1866 0.1865 719.1301 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.4x.int8i32.v1.tuned 0.2259 0.2227 594.1440 GMAC/s 0x484bd20aabe66ee5 quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL pieces.int8.flat 2.2374 2.2267 239.9556 GMAC/s 0x26ef868bdf607d55 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.1035 0.1021 5186.2065 GMAC/s 0x26ef868bdf607d55 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.1170 0.1161 4589.0325 GMAC/s 0x26ef868bdf607d55 plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.1311 0.1308 4096.6564 GMAC/s 0x26ef868bdf607d55 plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.0977 0.0969 5497.9100 GMAC/s 0x26ef868bdf607d55 plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL inference.pieces.int8.tuned 0.1124 0.1113 1194.1185 GMAC/s 0xbdf60e51b093f874 quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.qkv.t8 8 4096 4096 FULL training.pieces.int8.tuned 0.1497 0.1495 896.6978 GMAC/s 0xbdf60e51b093f874 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 0.9580 0.9440 8966.8190 GMAC/s 0x67d3d940546b834c plan=10
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.flat 41.5753 41.5657 206.6113 GMAC/s 0xa5f2ce1f1b9a0ebd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma 0.2673 0.2652 32139.6593 GMAC/s 0xa5f2ce1f1b9a0ebd dispatched
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.quantize.a.par 0.0207 0.0195 101.0773 Gelem/s 0xe8bb3ad105a4ae26 per-call,block=1
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL convert.int8.pack.b.par 0.0423 0.0413 396.8121 Gelem/s 0xd5ea46fdcb251db4 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.1827 0.1818 47026.9057 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.1583 0.1577 54256.7875 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.2933 0.2913 29288.2945 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.2743 0.2713 31313.6698 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1673 0.1653 51335.2931 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1582 0.1570 54287.6483 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.1582 0.1567 54308.5851 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1685 0.1673 50984.8919 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1375 0.1347 62472.2516 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.1370 0.1344 62714.4434 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0826 0.0788 104020.8115 GMAC/s 0xa5f2ce1f1b9a0ebd plan
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.1073 0.1072 80040.3894 GMAC/s 0xa5f2ce1f1b9a0ebd the-tuned-launcher's-plan
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.qkv.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.int8i32.v1.tuned 0.1333 0.1314 64416.9404 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.int8i32.v1.tuned 0.1653 0.1648 51956.6113 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.4x.int8i32.v1.tuned 0.3965 0.3924 21662.7609 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.4x.int8i32.v1.tuned 0.4253 0.4238 20197.8762 GMAC/s 0xa5f2ce1f1b9a0ebd quantize.a.par+pack.b.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL pieces.int8.flat 81.9759 81.4939 419.1444 GMAC/s 0x2c68ccfdf4f48cdb the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.2361 0.2356 145530.4463 GMAC/s 0x2c68ccfdf4f48cdb plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.1658 0.1646 207198.5670 GMAC/s 0x2c68ccfdf4f48cdb the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.1798 0.1772 191111.4605 GMAC/s 0x2c68ccfdf4f48cdb plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.2608 0.2593 131727.2595 GMAC/s 0x2c68ccfdf4f48cdb plan,rate-over-4mnk
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL inference.pieces.int8.tuned 0.1828 0.1816 46983.1789 GMAC/s 0x2ccc280d4e256d0d quantize.a.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.qkv.t512 512 4096 4096 FULL training.pieces.int8.tuned 0.2133 0.2130 40281.0532 GMAC/s 0x2ccc280d4e256d0d quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1691 0.1660 347.1716 GMAC/s 0x4965ea6af2ff5e61 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.flat 1.1046 1.1039 53.1603 GMAC/s 0xff302668595b02d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma 0.0542 0.0531 1083.2197 GMAC/s 0xff302668595b02d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.quantize.a.par 0.0166 0.0158 0.2467 Gelem/s 0x1343c750c1ded02 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL convert.int8.pack.b.par 0.1152 0.1114 509.6758 Gelem/s 0x9dd5dd0e7f10b4d0 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.0813 0.0802 722.1864 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.1249 0.1239 469.9876 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.2019 0.2009 290.9104 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.1941 0.1919 302.5897 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1167 0.1166 503.1296 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1106 0.1083 530.7326 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.1088 0.1080 539.8571 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1211 0.1178 485.0909 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1294 0.1288 453.6520 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0587 0.0575 999.6639 GMAC/s 0xff302668595b02d the-tuned-launcher's-plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0655 0.0654 896.0684 GMAC/s 0xff302668595b02d plan
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0706 0.0697 832.2032 GMAC/s 0xff302668595b02d plan
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.int8i32.v1.tuned 0.0666 0.0640 881.8179 GMAC/s 0xff302668595b02d quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.int8i32.v1.tuned 0.1672 0.1652 351.2838 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.4x.int8i32.v1.tuned 0.2049 0.2048 286.5535 GMAC/s 0xff302668595b02d quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.4x.int8i32.v1.tuned 0.3078 0.3065 190.7437 GMAC/s 0xff302668595b02d quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL pieces.int8.flat 2.6744 2.6505 87.8245 GMAC/s 0x8a0980720bc0da43 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.1206 0.1136 1946.9742 GMAC/s 0x8a0980720bc0da43 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.1403 0.1396 1674.0387 GMAC/s 0x8a0980720bc0da43 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.1598 0.1596 1469.5586 GMAC/s 0x8a0980720bc0da43 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.1214 0.1197 1934.1482 GMAC/s 0x8a0980720bc0da43 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL inference.pieces.int8.tuned 0.1193 0.1191 492.0788 GMAC/s 0xf8590f0a905d46af quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t1 1 14336 4096 FULL training.pieces.int8.tuned 0.2363 0.2348 248.4567 GMAC/s 0xf8590f0a905d46af quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.1685 0.1681 2787.2602 GMAC/s 0x7b30465d325906e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.flat 2.8834 2.8542 162.9186 GMAC/s 0xbd4b3a783f9d9a0d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma 0.0734 0.0720 6402.6448 GMAC/s 0xbd4b3a783f9d9a0d dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.quantize.a.par 0.0170 0.0163 1.9298 Gelem/s 0x5e46321f760ef85d per-call,block=1
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL convert.int8.pack.b.par 0.1102 0.1087 533.0452 Gelem/s 0xa9e079afde494e3d once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.0891 0.0882 5272.3013 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.1293 0.1279 3633.4263 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.2089 0.2082 2248.5367 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.2010 0.1997 2337.5898 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.1228 0.1215 3824.1471 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1152 0.1147 4077.7956 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.1142 0.1141 4112.0627 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.1246 0.1229 3769.5558 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.1317 0.1315 3567.4518 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.0610 0.0605 7697.2317 GMAC/s 0xbd4b3a783f9d9a0d the-tuned-launcher's-plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.0687 0.0681 6835.8854 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.0726 0.0711 6466.9885 GMAC/s 0xbd4b3a783f9d9a0d plan
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.int8i32.v1.tuned 0.0676 0.0673 6952.2280 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.int8i32.v1.tuned 0.1704 0.1669 2756.1725 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.4x.int8i32.v1.tuned 0.2180 0.2172 2154.9805 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.4x.int8i32.v1.tuned 0.3217 0.3198 1460.4350 GMAC/s 0xbd4b3a783f9d9a0d quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL pieces.int8.flat 8.2819 8.0225 226.8849 GMAC/s 0x6cb41f1bce2dd583 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.1304 0.1268 14408.7738 GMAC/s 0x6cb41f1bce2dd583 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.1417 0.1414 13257.0071 GMAC/s 0x6cb41f1bce2dd583 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.1628 0.1622 11542.0651 GMAC/s 0x6cb41f1bce2dd583 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.1340 0.1333 14025.8878 GMAC/s 0x6cb41f1bce2dd583 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL inference.pieces.int8.tuned 0.1372 0.1355 3424.4458 GMAC/s 0x8034d87ae4de51d3 quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t8 8 14336 4096 FULL training.pieces.int8.tuned 0.2438 0.2401 1926.5255 GMAC/s 0x8034d87ae4de51d3 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 2.6339 2.5232 11414.7361 GMAC/s 0x27a166783c45f9f0 plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.flat 151.8071 150.4084 198.0459 GMAC/s 0x220ff5fe96f5ef55 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma 0.8834 0.8813 34031.1337 GMAC/s 0x220ff5fe96f5ef55 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.quantize.a.par 0.0216 0.0196 97.3156 Gelem/s 0x8c503fb082856006 per-call,block=1
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL convert.int8.pack.b.par 0.1094 0.1090 536.8464 Gelem/s 0xf8c1486c6aaba4c1 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.3596 0.3575 83617.5426 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.2280 0.2267 131834.6981 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.3530 0.3502 85179.2165 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.4053 0.4010 74179.2382 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.2134 0.2078 140897.7930 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.1909 0.1839 157530.8937 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.3534 0.3492 85077.7380 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.2045 0.2005 147008.8068 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.4118 0.4084 73004.8178 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.2667 0.2577 112716.5440 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.1314 0.1259 228890.5297 GMAC/s 0x220ff5fe96f5ef55 plan
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.2287 0.2276 131476.6741 GMAC/s 0x220ff5fe96f5ef55 the-tuned-launcher's-plan
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_up.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.int8i32.v1.tuned 0.2358 0.2342 127511.9648 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.int8i32.v1.tuned 0.3317 0.3277 90633.2500 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.4x.int8i32.v1.tuned 0.9080 0.8922 33112.5130 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.4x.int8i32.v1.tuned 0.9996 0.9974 30076.5310 GMAC/s 0x220ff5fe96f5ef55 quantize.a.par+pack.b.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL pieces.int8.flat 444.9525 440.7596 270.2740 GMAC/s 0xaad41af8f30bb56f the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.5832 0.5815 206202.3808 GMAC/s 0xaad41af8f30bb56f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.5449 0.5437 220712.3272 GMAC/s 0xaad41af8f30bb56f the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.4282 0.4258 280854.4905 GMAC/s 0xaad41af8f30bb56f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 1.0142 0.9819 118578.9393 GMAC/s 0xaad41af8f30bb56f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL inference.pieces.int8.tuned 0.6638 0.6469 45290.5472 GMAC/s 0x13c1882fd90c4172 quantize.a.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_up.t512 512 14336 4096 FULL training.pieces.int8.tuned 0.7774 0.7681 38674.0869 GMAC/s 0x13c1882fd90c4172 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1584 0.1568 370.7344 GMAC/s 0x4efb8e54c724fa9 plan=13
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.flat 3.8030 3.7654 15.4405 GMAC/s 0x1ffdde3ffffb72c9 not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma 0.1372 0.1363 427.9590 GMAC/s 0x1ffdde3ffffb72c9 dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.quantize.a.par 0.0288 0.0274 0.4973 Gelem/s 0x160d734878c0f458 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL convert.int8.pack.b.par 0.1233 0.1204 476.3162 Gelem/s 0x31274090cc79ba2f once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.2184 0.2163 268.9026 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.3930 0.3922 149.4234 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.6600 0.6584 88.9677 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.6254 0.6226 93.8865 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.3578 0.3560 164.0969 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.3291 0.3285 178.4485 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.3288 0.3273 178.5679 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.3600 0.3591 163.1032 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.4119 0.4089 142.5564 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.1614 0.1610 363.9309 GMAC/s 0x1ffdde3ffffb72c9 the-tuned-launcher's-plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.1879 0.1875 312.5396 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.2089 0.2085 281.1317 GMAC/s 0x1ffdde3ffffb72c9 plan
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.int8i32.v1.tuned 0.1787 0.1782 328.6888 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.int8i32.v1.tuned 0.2918 0.2908 201.2208 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.4x.int8i32.v1.tuned 0.6300 0.6288 93.2056 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.4x.int8i32.v1.tuned 0.7470 0.7432 78.6094 GMAC/s 0x1ffdde3ffffb72c9 quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL pieces.int8.flat 7.4973 7.4825 31.3286 GMAC/s 0xbe5dc39f3377fcc1 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.3054 0.3035 769.1183 GMAC/s 0xbe5dc39f3377fcc1 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.3723 0.3713 630.8257 GMAC/s 0xbe5dc39f3377fcc1 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.4263 0.4227 550.9126 GMAC/s 0xbe5dc39f3377fcc1 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.3132 0.3121 749.9658 GMAC/s 0xbe5dc39f3377fcc1 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL inference.pieces.int8.tuned 0.3209 0.3204 182.9981 GMAC/s 0xedb6a1688fbc0275 quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t1 1 4096 14336 FULL training.pieces.int8.tuned 0.4805 0.4767 122.1941 GMAC/s 0xedb6a1688fbc0275 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.1932 0.1906 2431.0905 GMAC/s 0xfb21004541ae3e8e plan=14
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.flat 3.7481 3.7356 125.3323 GMAC/s 0x694aafd520fdadad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma 0.1422 0.1411 3303.2750 GMAC/s 0x694aafd520fdadad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.quantize.a.par 0.0260 0.0258 4.4060 Gelem/s 0xbb4f2a7232392bfe per-call,block=1
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL convert.int8.pack.b.par 0.1226 0.1179 478.9190 Gelem/s 0x4b12dcda2ab9acd4 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.2324 0.2317 2021.4383 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.4072 0.4059 1153.5575 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.6769 0.6707 693.9401 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.6487 0.6430 724.1603 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.3669 0.3652 1280.1835 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.3422 0.3404 1372.7303 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.3402 0.3399 1380.7637 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.3683 0.3658 1275.3836 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.4246 0.4221 1106.2361 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.1684 0.1681 2789.8922 GMAC/s 0x694aafd520fdadad the-tuned-launcher's-plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.1975 0.1951 2378.3132 GMAC/s 0x694aafd520fdadad plan
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.2182 0.2166 2152.6007 GMAC/s 0x694aafd520fdadad plan
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.int8i32.v1.tuned 0.1871 0.1860 2510.3648 GMAC/s 0x694aafd520fdadad quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.int8i32.v1.tuned 0.3064 0.3024 1533.1159 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.4x.int8i32.v1.tuned 0.6615 0.6600 710.1907 GMAC/s 0x694aafd520fdadad quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.4x.int8i32.v1.tuned 0.7810 0.7805 601.4810 GMAC/s 0x694aafd520fdadad quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL pieces.int8.flat 7.4488 7.4298 252.2609 GMAC/s 0x144eb98eb45cc4b5 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.3172 0.3154 5924.5878 GMAC/s 0x144eb98eb45cc4b5 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.3763 0.3731 4993.0996 GMAC/s 0x144eb98eb45cc4b5 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.4273 0.4264 4396.9875 GMAC/s 0x144eb98eb45cc4b5 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.3292 0.3269 5708.1136 GMAC/s 0x144eb98eb45cc4b5 plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL inference.pieces.int8.tuned 0.3350 0.3346 1402.0697 GMAC/s 0xdd46c01809ebb9ec quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t8 8 4096 14336 FULL training.pieces.int8.tuned 0.4909 0.4882 957.0008 GMAC/s 0xdd46c01809ebb9ec quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 2.6316 2.5865 11424.4087 GMAC/s 0x4743c97cb961339e plan=10
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.flat 139.5023 139.3416 215.5146 GMAC/s 0x6120545eacb068ad not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma 0.8464 0.8422 35521.6411 GMAC/s 0x6120545eacb068ad dispatched
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.quantize.a.par 0.0357 0.0354 205.8338 Gelem/s 0x903f6ff84c6082 per-call,block=1
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL convert.int8.pack.b.par 0.1289 0.1281 455.3758 Gelem/s 0xa046020a81d05746 once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.3630 0.3621 82814.1634 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.5167 0.5157 58186.1256 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.9874 0.9733 30446.9102 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.8372 0.8309 35911.6125 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.4655 0.4569 64583.3383 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.4428 0.4418 67890.9741 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.4854 0.4848 61940.6879 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.4735 0.4730 63490.8761 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.4299 0.4293 69936.1255 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.3688 0.3681 81527.3818 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.2276 0.2272 132118.5762 GMAC/s 0x6120545eacb068ad plan
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.3414 0.3401 88073.5033 GMAC/s 0x6120545eacb068ad the-tuned-launcher's-plan
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.mlp_down.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.int8i32.v1.tuned 0.3646 0.3645 82452.8181 GMAC/s 0x6120545eacb068ad quantize.a.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.int8i32.v1.tuned 0.5016 0.4981 59933.0815 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.4x.int8i32.v1.tuned 1.3511 1.3486 22251.9377 GMAC/s 0x6120545eacb068ad quantize.a.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.4x.int8i32.v1.tuned 1.4830 1.4793 20273.3918 GMAC/s 0x6120545eacb068ad quantize.a.par+pack.b.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL pieces.int8.flat 314.9525 312.7546 381.8324 GMAC/s 0x539fdd31d133591f the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.6988 0.6965 172084.1056 GMAC/s 0x539fdd31d133591f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.5164 0.5148 232884.6747 GMAC/s 0x539fdd31d133591f the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.5314 0.5233 226306.5687 GMAC/s 0x539fdd31d133591f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.9120 0.8989 131861.8743 GMAC/s 0x539fdd31d133591f plan,rate-over-4mnk
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL inference.pieces.int8.tuned 0.6008 0.5832 50039.6477 GMAC/s 0x19a0bcbb110ac415 quantize.a.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.mlp_down.t512 512 4096 14336 FULL training.pieces.int8.tuned 0.7768 0.7709 38701.9663 GMAC/s 0x19a0bcbb110ac415 quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.4906 1.4636 352.4384 GMAC/s 0xcdc134cbce391535 plan=13
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.flat 6.5660 6.3172 80.0085 GMAC/s 0xe0222b2f9de835ed not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma 0.2845 0.2785 1846.7205 GMAC/s 0xe0222b2f9de835ed dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.quantize.a.par 0.0190 0.0172 0.2155 Gelem/s 0x67d2e298b047bf2b per-call,block=1
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL convert.int8.pack.b.par 0.8528 0.8496 616.0225 Gelem/s 0x1c75800d0b1054bd once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.3093 0.3008 1698.3101 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.3400 0.3393 1545.1530 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.4383 0.4258 1198.4956 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.4300 0.4201 1221.7442 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.3951 0.3912 1329.7337 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.3494 0.3448 1503.4574 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.5267 0.5134 997.4114 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.2425 0.2403 2166.5240 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.2474 0.2433 2123.6961 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.2505 0.2471 2096.8172 GMAC/s 0xe0222b2f9de835ed the-tuned-launcher's-plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.2566 0.2458 2047.3056 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.3375 0.3263 1556.6912 GMAC/s 0xe0222b2f9de835ed plan
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t1 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.int8i32.v1.tuned 0.2698 0.2658 1946.9241 GMAC/s 0xe0222b2f9de835ed quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.int8i32.v1.tuned 1.1160 1.1089 470.7368 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.4x.int8i32.v1.tuned 1.0285 1.0111 510.7759 GMAC/s 0xe0222b2f9de835ed quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.4x.int8i32.v1.tuned 1.8897 1.8863 278.0048 GMAC/s 0xe0222b2f9de835ed quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL pieces.int8.flat 18.1355 18.0679 115.8690 GMAC/s 0x7d5cfa313bd84845 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.4882 0.4838 4303.8415 GMAC/s 0x7d5cfa313bd84845 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.5936 0.5917 3539.8846 GMAC/s 0x7d5cfa313bd84845 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.4925 0.4890 4266.5197 GMAC/s 0x7d5cfa313bd84845 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.8603 0.8495 2442.4915 GMAC/s 0x7d5cfa313bd84845 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL inference.pieces.int8.tuned 0.5009 0.4983 1048.7456 GMAC/s 0x1a9cdbe7914cb2ee quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t1 1 128256 4096 FULL training.pieces.int8.tuned 1.3634 1.3587 385.3029 GMAC/s 0x1a9cdbe7914cb2ee quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 1.6534 1.5177 2541.8533 GMAC/s 0x3ebab59d0da21444 plan=14
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.flat 46.6833 45.4797 90.0256 GMAC/s 0x8151fd05ff287a5d not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma 0.3251 0.3229 12927.8216 GMAC/s 0x8151fd05ff287a5d dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.quantize.a.par 0.0201 0.0170 1.6278 Gelem/s 0x443be8ad16d189a3 per-call,block=1
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL convert.int8.pack.b.par 0.8567 0.8530 613.1816 Gelem/s 0x8e01af3f075298bb once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.3220 0.3166 13051.0298 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.3552 0.3456 11831.9382 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.4524 0.4407 9290.5929 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.4524 0.4457 9289.5661 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.4160 0.4110 10103.3551 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.3838 0.3765 10951.0998 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.5535 0.5491 7592.9543 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.2558 0.2537 16432.8157 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.2594 0.2537 16203.5271 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.2711 0.2674 15502.4276 GMAC/s 0x8151fd05ff287a5d the-tuned-launcher's-plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.2677 0.2624 15700.4356 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.3434 0.3391 12237.0861 GMAC/s 0x8151fd05ff287a5d plan
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t8 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.int8i32.v1.tuned 0.2856 0.2846 14715.3618 GMAC/s 0x8151fd05ff287a5d quantize.a.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.int8i32.v1.tuned 1.1355 1.1302 3701.2541 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.4x.int8i32.v1.tuned 1.1133 1.0599 3775.0239 GMAC/s 0x8151fd05ff287a5d quantize.a.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.4x.int8i32.v1.tuned 1.9502 1.9226 2154.9651 GMAC/s 0x8151fd05ff287a5d quantize.a.par+pack.b.par+4x.staged.w16x16.b32x32.k64.l16
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL pieces.int8.flat 107.5478 105.7609 156.3098 GMAC/s 0x8b43841667458c8d the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.4991 0.4979 33680.1443 GMAC/s 0x8b43841667458c8d the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.6378 0.6350 26357.8871 GMAC/s 0x8b43841667458c8d plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.5188 0.5118 32401.3076 GMAC/s 0x8b43841667458c8d plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL pieces.int8.mma.staged.w16x16.b64x64.k64.l16 0.9861 0.9759 17047.4400 GMAC/s 0x8b43841667458c8d plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL inference.pieces.int8.tuned 0.5268 0.5201 7977.7915 GMAC/s 0x3f7fc47a7e30974d quantize.a.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t8 8 128256 4096 FULL training.pieces.int8.tuned 1.3832 1.3795 3038.4125 GMAC/s 0x3f7fc47a7e30974d quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x16.b32x32.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 2.9031 2.8999 11581.4343 GMAC/s 0x84fd143bb625cf70 plan=10
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.fused not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 bf16f32.v1.widen not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.flat 250.1692 248.5162 134.3952 GMAC/s 0xaae4f3d3c69453cd not-dispatched(the-column-has-the-unit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma 1.0129 1.0103 33193.0518 GMAC/s 0xaae4f3d3c69453cd dispatched
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.int8.quantize.a not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.int8.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.pack.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.bf16.widen.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 convert.int8.dequantize.b not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.bf16f32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1 not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.quantize.a.par 0.0228 0.0220 92.1420 Gelem/s 0xfd89ee79d025dda7 per-call,block=1
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int8.pack.b.par 0.1204 0.1197 545.4982 Gelem/s 0xcc187b17bc36366d once-per-weight,block=1
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.parq not asked for (MOJOLEARN_LOWBIT_PRICE_ARMS)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 inference.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 training.int8i32.v1.applechunk.parq this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w16x16.b32x32.k32.l4 0.5484 0.5352 61310.8857 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w32x32.b64x64.k32.l4 0.4006 0.3989 83927.9602 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x128.k32.l4 0.5163 0.5057 65122.8132 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x256.k32.l4 0.4253 0.4220 79059.2820 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x128.k32.l16 0.2866 0.2839 117315.8200 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x128.k64.l16 0.2187 0.2153 153713.9318 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x128.k128.l16 0.3609 0.3576 93170.3367 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w64x64.b128x256.k64.l16 0.2237 0.2206 150284.0196 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w16x64.b16x256.k64.l16 0.8014 0.7924 41952.5128 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w16x16.b32x32.k64.l16 0.3498 0.3420 96119.4916 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w32x32.b64x64.k64.l16 0.2930 0.2857 114733.6229 GMAC/s 0xaae4f3d3c69453cd plan
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED int8i32.v1.mma.staged.w32x32.b128x128.k64.l16 0.2788 0.2741 120589.8693 GMAC/s 0xaae4f3d3c69453cd the-tuned-launcher's-plan
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x32.b128x128.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.mma.staged.w16x32.b64x256.k64.l16 this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.mma.direct.reference-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.mma.direct.aligned-loads this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 int8i32.v1.mma.direct.aligned-loads.scalar-acc this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 probe.int8.mma.loads-hoisted this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 probe.int8.mma.one-half this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT-NOT-RUN amd llama8b.lm_head.t512 probe.int8.mma.raw-store this column cannot run the arm (it has no such unit, or a block of the plan is above its thread limit)
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int8i32.v1.tuned 0.2860 0.2841 117541.8068 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.int8i32.v1.tuned 0.3999 0.3950 84083.4916 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.4x.int8i32.v1.tuned 1.0780 1.0758 31187.7140 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.4x.int8i32.v1.tuned 1.1735 1.1675 28650.2132 GMAC/s 0xaae4f3d3c69453cd quantize.a.par+pack.b.par+4x.staged.w32x32.b128x128.k64.l16
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED pieces.int8.flat 649.0626 640.2897 207.2006 GMAC/s 0x8e9f764b67baa807 the-reference-device-plan,three-sums-a-cell
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED pieces.int8.mma.staged.w16x16.b32x32.k64.l16 0.7382 0.7365 182181.6958 GMAC/s 0x8e9f764b67baa807 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED pieces.int8.mma.staged.w16x32.b64x128.k64.l16 0.7427 0.7370 181087.1239 GMAC/s 0x8e9f764b67baa807 the-launcher's-plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED pieces.int8.mma.staged.w32x32.b64x128.k64.l16 0.5526 0.5403 243370.7025 GMAC/s 0x8e9f764b67baa807 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED pieces.int8.mma.staged.w16x16.b64x64.k64.l16 1.3498 1.1650 99632.0742 GMAC/s 0x8e9f764b67baa807 plan,rate-over-4mnk
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED inference.pieces.int8.tuned 0.8691 0.8484 38684.1779 GMAC/s 0xfc64cdfdc3ca6c4c quantize.a.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination
+LOWBIT amd llama8b.lm_head.t512 512 16032 4096 CAPPED training.pieces.int8.tuned 0.9572 0.9485 35126.4273 GMAC/s 0xfc64cdfdc3ca6c4c quantize.a.par+pack.b.par+four-products-one-staging.staged.w16x32.b64x128.k64.l16+stand-in-recombination

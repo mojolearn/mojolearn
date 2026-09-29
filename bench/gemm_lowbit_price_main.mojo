@@ -82,8 +82,10 @@ arithmetic (`_pieces_fixture_kernel`), the same on every box:
 
     pieces.int8.flat                the reference device plan, one thread
                                     per cell: the digest the plans must equal
-    pieces.int8.mma.staged.*        one arm per staged plan. The rate is
-                                    over `4 m n k` multiply-accumulates
+    pieces.int8.mma.staged.*        one arm per staged plan (pipe2.*: two
+    pieces.int8.mma.pipe2.*         pages, the next window staged by
+                                    cp.async). The rate is over `4 m n k`
+                                    multiply-accumulates
     inference.pieces.int8.tuned     parallel quantize A (the int8
     training.pieces.int8.tuned      quantizer, standing in for the
                                     fifteen-bit one, which is
@@ -95,6 +97,12 @@ arithmetic (`_pieces_fixture_kernel`), the same on every box:
                                     time is read, its digest is compared
                                     between these two arms and with nothing
                                     else.
+    inference.pieces.int8.fused     the inference arm's operation in ONE
+                                    launch: the stand-in epilogue
+                                    (`gemm_int8_pieces_epilogue_stub.mojo`,
+                                    the same arithmetic) fused into the
+                                    four-product kernel's last step. Its
+                                    digest must equal the inference arm's.
 
 THE CONVERSIONS ARE THEIR OWN ROWS, because a low-bit product's operands do
 not arrive low-bit for free:
@@ -255,6 +263,7 @@ from gemm.checks.gemm_int8_mma_tuned import (
     INT8_PIECES_PLAN_COUNT,
     INT8_TUNED_PLAN_COUNT,
     identical_gemm_int8_pieces_flat_into,
+    identical_gemm_int8_pieces_tuned_fused_into,
     identical_gemm_int8_pieces_tuned_into,
     identical_gemm_int8_pieces_tuned_with_plan,
     int8_pieces_dispatch,
@@ -337,7 +346,10 @@ comptime ARM_PIECES_FLAT = ARM_INF_INT8_TUNED + 4
 comptime ARM_PIECES_BASE = ARM_PIECES_FLAT + 1
 comptime ARM_INF_PIECES = ARM_PIECES_BASE + INT8_PIECES_PLAN_COUNT
 comptime ARM_TRAIN_PIECES = ARM_INF_PIECES + 1
-comptime ARM_COUNT = ARM_TRAIN_PIECES + 1
+#: The same operation as ARM_INF_PIECES in ONE launch: the four products and
+#: the stand-in epilogue fused into their last step.
+comptime ARM_INF_PIECES_FUSED = ARM_TRAIN_PIECES + 1
+comptime ARM_COUNT = ARM_INF_PIECES_FUSED + 1
 
 #: What no sum of the four-product kernel is (its largest is 2147450880).
 comptime SUM_POISON = Int32(2147483647)
@@ -422,7 +434,9 @@ def _arm_name(arm: Int) -> String:
         return String("pieces.int8.mma.") + int8_pieces_plan_name(arm - ARM_PIECES_BASE)
     if arm == ARM_INF_PIECES:
         return String("inference.pieces.int8.tuned")
-    return String("training.pieces.int8.tuned")
+    if arm == ARM_TRAIN_PIECES:
+        return String("training.pieces.int8.tuned")
+    return String("inference.pieces.int8.fused")
 
 
 def _arm_is_sums(arm: Int) -> Bool:
@@ -940,6 +954,12 @@ def _enqueue_arm(
                 ctx, sb.ps, sb.pah, sb.pal, sb.pbh, sb.pbl, m, n, k
             )
             _pieces_recombine_probe(ctx, sb.c, sb.ps, sb.ea, sb.eb, m, n)
+    elif arm == ARM_INF_PIECES_FUSED:
+        comptime if HAS_INT8_MMA:
+            quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+            identical_gemm_int8_pieces_tuned_fused_into(
+                ctx, sb.c, sb.pah, sb.pal, sb.ea, sb.pbh, sb.pbl, sb.eb, m, n, k
+            )
     else:
         comptime if HAS_INT8_MMA:
             quantize_rows_int8_par_device(ctx, sb.qa, sb.ea, sb.a, m, k)
@@ -1053,6 +1073,12 @@ def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
         return (
             String("quantize.a.par+pack.b.par+four-products-one-staging.")
             + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k)) + "+stand-in-recombination"
+        )
+    if arm == ARM_INF_PIECES_FUSED:
+        return (
+            String("quantize.a.par+four-products-one-staging.")
+            + int8_pieces_plan_name(int8_pieces_dispatch(m, n, k))
+            + "+stand-in-epilogue-FUSED,one-launch"
         )
     var plan_name = int8_tuned_plan_name(int8_tuned_dispatch(m, n, k))
     if arm == ARM_INF_INT8_TUNED:
@@ -1237,6 +1263,8 @@ def _time_shape(
     for arm in range(ARM_PIECES_BASE, ARM_INF_PIECES):
         bad += _must_agree(ARM_PIECES_FLAT, arm, dig, ran, name)
     bad += _must_agree(ARM_INF_PIECES, ARM_TRAIN_PIECES, dig, ran, name)
+    # The fused launch computes the two-launch operation's cells, bit for bit.
+    bad += _must_agree(ARM_INF_PIECES, ARM_INF_PIECES_FUSED, dig, ran, name)
     if bad.byte_length() > 0:
         print(bad)
     _ = sb^
