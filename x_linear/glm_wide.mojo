@@ -36,10 +36,12 @@ and checked; a surviving poison word raises. The cut is scheduling only
 (the chains carry across it), so the words do not depend on it:
 MOJOLEARN_X_LINEAR_GW_STEPS=<k> sets both budgets at run time, which the
 gate uses to prove exactly that. MOJOLEARN_X_LINEAR_GLM_TEAM=1 runs the
-one-block team fit instead (the A/B arm).
+one-block team fit instead (the A/B arm). MOJOLEARN_X_LINEAR_GW_TRACE=1
+prints where the fit's wall time went (`GLM-WIDE ...`, stdout).
 """
 from std.gpu import block_idx, block_dim, thread_idx
 from std.os import getenv
+from std.time import perf_counter_ns
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from x_linear.ops import (
@@ -183,6 +185,10 @@ struct GW(Movable):
     var flags: Int
     var row_steps: Int
     var cell_steps: Int
+    var rows_ns: Int
+    var cells_ns: Int
+    var n_rows: Int
+    var n_cells: Int
 
     def __init__(
         out self, ctx: DeviceContext, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int, m: Int, flags: Int,
@@ -194,6 +200,10 @@ struct GW(Movable):
         self.flags = flags
         self.row_steps = _budget(GW_ROW_STEPS)
         self.cell_steps = _budget(GW_CELL_STEPS)
+        self.rows_ns = 0
+        self.cells_ns = 0
+        self.n_rows = 0
+        self.n_cells = 0
         self.dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
         self.dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
         self.dth = ctx.enqueue_create_buffer[DType.float32](d + 2)
@@ -222,6 +232,7 @@ struct GW(Movable):
     def rows(mut self, ctx: DeviceContext, what: Int, link: Int) raises -> FP:
         """The row map over every row (bounded launches), read back and
         checked: the host copy of rw (n words, or 2n for what 1)."""
+        var t0 = perf_counter_ns()
         var words = self.n if what == 0 else 2 * self.n
         self.drw.enqueue_fill(_poison())
         var per = max(1, self.row_steps // max(self.d, 1))
@@ -240,6 +251,8 @@ struct GW(Movable):
         ctx.synchronize()
         var hp = FP(unsafe_from_address=Int(self.hrw.unsafe_ptr()))
         _check(hp, 0, words, "row map")
+        self.rows_ns += perf_counter_ns() - t0
+        self.n_rows += 1
         return hp
 
     def cell_pass(mut self, ctx: DeviceContext) raises -> FP:
@@ -247,6 +260,7 @@ struct GW(Movable):
         d2/deta2 rows `rows(1)` left in drw: the chains cut into bounded
         launches (ping-pong), each launch's cells poisoned, read back and
         checked. The host copy of the cells."""
+        var t0 = perf_counter_ns()
         var per = max(1, self.cell_steps // self.cells)
         var r0 = 0
         var first = True
@@ -274,6 +288,8 @@ struct GW(Movable):
             first = False
             into_b = not into_b
             r0 += rows
+            self.n_cells += 1
+        self.cells_ns += perf_counter_ns() - t0
         return FP(unsafe_from_address=Int(self.hc.unsafe_ptr()))
 
 
@@ -307,6 +323,7 @@ def glm_fit_wide(
     var power = fp[0]
     var alpha = fp[1]
     var tol = fp[2]
+    var t_start = perf_counter_ns()
     var m = d + 1 if fi else d
     var flags = (1 if fi else 0) | (2 if sw else 0)
     var b = GW(ctx, x, n_x, y, n_y, n, d, m, flags)
@@ -401,5 +418,13 @@ def glm_fit_wide(
         st(res, d, Float32(0))
     st(res, d + 1, i2f(iters))
     st(res, d + 2, Float32(1) if converged else Float32(0))
+    if getenv("MOJOLEARN_X_LINEAR_GW_TRACE", "") != "":
+        var total = perf_counter_ns() - t_start
+        print(
+            "GLM-WIDE n", n, "d", d, "iters", iters, "row_passes", b.n_rows, "cell_launches", b.n_cells,
+            "total_ms", Float64(total) / 1.0e6, "rows_ms", Float64(b.rows_ns) / 1.0e6,
+            "cells_ms", Float64(b.cells_ns) / 1.0e6,
+            "host_ms", Float64(total - b.rows_ns - b.cells_ns) / 1.0e6,
+        )
     _ = hw^
     _ = b^
