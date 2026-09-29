@@ -102,6 +102,19 @@ def main():
     fit("sk-f32", lambda: GaussianMixture(**kw), X)
     fit("sk-f64", lambda: GaussianMixture(**kw), X.astype(np.float64))
     fit("sk-bgmm-f32", lambda: BayesianGaussianMixture(**bkw), X)
+    # the board's fix: the columns constant on the fit rows dropped (the same for
+    # every arm; bench_board_more.drop_constant_columns), then one shared reg_covar
+    # if the drop alone is not enough
+    Xd = more.drop_constant_columns({"X": X})["X"]
+    say("DROPPED", cols=int(Xd.shape[1]), dropped=int(X.shape[1] - Xd.shape[1]))
+    for rc in (1e-6, 1e-4, 1e-3):
+        kw2, bkw2 = dict(kw, reg_covar=rc), dict(bkw, reg_covar=rc)
+        tag = "drop-rc%g" % rc
+        if "ml" in dir():
+            fit("ours-" + tag, lambda: ml.GaussianMixture(**kw2), Xd)
+            fit("ours-bgmm-" + tag, lambda: ml.BayesianGaussianMixture(**bkw2), Xd)
+        fit("sk-f32-" + tag, lambda: GaussianMixture(**kw2), Xd)
+        fit("sk-bgmm-f32-" + tag, lambda: BayesianGaussianMixture(**bkw2), Xd)
     return 0
 
 
