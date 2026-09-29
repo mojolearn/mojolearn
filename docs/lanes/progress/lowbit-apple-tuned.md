@@ -17,7 +17,7 @@ the steward only.
 | 3 (fragments from float32 planes in device memory) | d69b5917b | m2pro | 1790658417171 | GREEN; the device-fragment lever costs (1.59 vs 1.40) |
 | 4 (TWO's tiles and windows; launcher refusal) | 897fed01d | m2pro | 1790659592875 | GREEN; 512-thread tiles REFUSED; nothing beats f2.t32.kb16 on the worst row |
 | 5 (prefetch) | 16bb4bc6b | m2pro | 1790660873689 | GREEN; prefetch costs (1.26) |
-| 6 (best forms on every row) | efb596bcd | m2pro | 1790661638487 | running |
+| 6 (best forms on every row) | efb596bcd | m2pro | 1790661638487 | GREEN; decode rows: inference f2.row64.kb16 0.40-0.56, f2.t32.kb16 0.72-0.96 of fp32.v1 (fp32.v1 runs FLAT at t1) |
 
 Nothing more goes to m3ultra-b (the orchestrator, 2026-09-29 ~05:00Z).
 
@@ -67,3 +67,13 @@ Form TWO was never timed on the M3 Ultra in this lane.
 - The handover commit staged THREE's low plane over its sums plane (job 2's gate caught it on every case; fixed d69b5917b).
 - A 512-thread block of 2 x 2 fragments launches nothing and reports nothing on the M2 Pro (the pipeline's thread limit falls with registers; Metal does not answer the attribute query): the launchers now refuse a block above 256 threads when the limit cannot be read (seen refusing in job 4).
 - The generic kernel pointer passed to the device simdgroup load fails in the Metal compiler; cast to AddressSpace.GLOBAL first (job 3's probes).
+
+## Where it stands (2026-09-29 ~06:40Z)
+
+Best exact 15-bit form on the M2 Pro: f2.t32.kb16, the complete inference
+call 1.01-1.03 of fp32.v1 at the four 512-token rows (jobs 2, 4, 5, 6),
+training call 1.29-1.32. On the M3 Ultra only FOUR and THREE were timed
+tuned (job 1): 2.04-2.38. Owed: form TWO tuned on an M3 or M4 (no Apple box
+of this lane left but the M2 Pro); the same 256-thread bound for fp32.v1's
+APPLE_MMA defines (another lane's file); dispatching the best form (not
+dispatched; nothing a caller gets by default moved).
