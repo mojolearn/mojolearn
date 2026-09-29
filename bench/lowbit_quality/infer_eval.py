@@ -95,6 +95,18 @@ def _arms():
                      note="15-bit both operands, QK replaced, PV kept fp32"), "-")
     add("e-pv", Spec("int15-both+pv", w="int15", a="int15", overrides={"attn_pv": ("int15", "int15")},
                      note="15-bit both operands, PV replaced, QK kept fp32"), "-")
+    add("int8w-int15a", Spec("int8w-int15a", w="int8", a="int15",
+                             note="int8 weight codes, 15-bit activation codes (more integer pieces on the activation only)"), "-")
+    add("int8w-int12a", Spec("int8w-int12a", w="int8", a="int12",
+                             note="int8 weight codes, 12-bit activation codes, same scale rule"), "-")
+    add("int8w-int10a", Spec("int8w-int10a", w="int8", a="int10",
+                             note="int8 weight codes, 10-bit activation codes, same scale rule"), "-")
+    add("int8w-int8s1a", Spec("int8w-int8s1a", w="int8", a="int8s1",
+                              note="int8 both; the ACTIVATION scale saturates: row absmax to [128, 256), clamp at 127"), "-")
+    add("int8w-int8s2a", Spec("int8w-int8s2a", w="int8", a="int8s2",
+                              note="int8 both; the ACTIVATION scale saturates: row absmax to [256, 512), clamp at 127"), "-")
+    add("int8m-both", Spec("int8m-both", w="int8m", a="int8m",
+                           note="int8 both, a finer scale that is NOT a power of two: row absmax maps to exactly 127"), "-")
     add("d-qk", Spec("int8i32.v1+qk", w="int8", a="int8", overrides={"attn_qk": ("int8", "int8")},
                      note="int8 both operands, QK replaced, PV kept fp32"), "-")
     add("d-pv", Spec("int8i32.v1+pv", w="int8", a="int8", overrides={"attn_pv": ("int8", "int8")},

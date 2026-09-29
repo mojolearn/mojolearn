@@ -56,9 +56,24 @@ import torch
 F32_MIN_NORMAL = 1.1754943508222875e-38
 
 #: kind -> (target exponent, largest code magnitude)
-INT_SPECS = {"int8": (6, 127), "int15": (13, 16383)}
+INT_SPECS = {
+    "int8": (6, 127), "int15": (13, 16383),
+    # ---- FOLLOW-UP KINDS, not candidates of the plan. Each is a different
+    # rule and carries its own name in every table it appears in.
+    # a bit sweep between the two candidates, same scale rule:
+    "int10": (8, 511), "int12": (10, 2047),
+    # a SATURATING scale: the row's largest magnitude lands one (two)
+    # exponents above the int8 range and the clamp cuts it, which buys one
+    # (two) more bits for everything below the cut:
+    "int8s1": (7, 127), "int8s2": (8, 127),
+}
+#: FOLLOW-UP: a scale that is NOT a power of two. The row's largest
+#: magnitude maps to exactly 127 (16383), the step is `absmax / qmax` as a
+#: float32, and the dequantizing multiply is by the product of the two
+#: steps, which rounds. kind -> largest code magnitude
+ABSMAX_SPECS = {"int8m": 127, "int15m": 16383}
 FLOAT_KINDS = ("fp32", "bf16")
-KINDS = FLOAT_KINDS + tuple(INT_SPECS)
+KINDS = FLOAT_KINDS + tuple(INT_SPECS) + tuple(ABSMAX_SPECS)
 
 #: Sabotage arms of the quantizer, for `quantizer_check.py` only. A check
 #: that cannot fail is not a check: each of these must be SEEN to disagree
@@ -111,7 +126,24 @@ def quantize_rows(x, kind, rounding="rne", target_shift=0):
     else:
         raise ValueError(rounding)
     r = torch.nan_to_num(r, nan=0.0, posinf=float(qmax), neginf=-float(qmax))
-    return r.clamp(-qmax, qmax).to(torch.float64), e
+    # `+ 0.0`: a code is an INTEGER and an integer has one zero. A negative
+    # value that rounds to zero is `-0.0` as a float and would dequantize to
+    # `-0.0`, where the int8 code 0 dequantizes to `+0.0`.
+    return r.clamp(-qmax, qmax).to(torch.float64) + 0.0, e
+
+
+def quantize_rows_absmax(x, kind):
+    """FOLLOW-UP rule `int8m` / `int15m`: `(codes, step)`, the step a
+    float32 per row, `absmax / qmax`; an all-zero row takes step 1."""
+    qmax = ABSMAX_SPECS[kind]
+    xf = ftz(x)
+    a = xf.abs()
+    a = torch.where(torch.isfinite(a), a, torch.zeros_like(a))
+    absmax = a.amax(dim=-1)
+    step = torch.where(absmax == 0, torch.ones_like(absmax), absmax / qmax)
+    r = torch.round(xf.to(torch.float64) / step.to(torch.float64).unsqueeze(-1))
+    r = torch.nan_to_num(r, nan=0.0, posinf=float(qmax), neginf=-float(qmax))
+    return r.clamp(-qmax, qmax) + 0.0, step
 
 
 def round_bf16(x, return_bits=False):
@@ -135,26 +167,36 @@ def dequantize_rows(codes, e):
 
 
 class Operand:
-    """One prepared operand: integer codes with exponents, or a float32."""
+    """One prepared operand: integer codes with a scale per row (an
+    exponent `e` under the contract's rule, a float32 `step` under a
+    follow-up rule), or a float32."""
 
-    __slots__ = ("codes", "e", "f", "qmax", "k")
+    __slots__ = ("codes", "e", "step", "f", "qmax", "k")
 
-    def __init__(self, codes=None, e=None, f=None, qmax=None):
-        self.codes, self.e, self.f, self.qmax = codes, e, f, qmax
+    def __init__(self, codes=None, e=None, step=None, f=None, qmax=None):
+        self.codes, self.e, self.step, self.f, self.qmax = codes, e, step, f, qmax
         self.k = (codes if codes is not None else f).shape[-1]
 
     @property
     def is_int(self):
         return self.codes is not None
 
+    def steps(self):
+        return pow2_f32(self.e) if self.e is not None else self.step
+
     def as_f32(self):
-        return dequantize_rows(self.codes, self.e) if self.is_int else self.f
+        if not self.is_int:
+            return self.f
+        if self.e is not None:
+            return dequantize_rows(self.codes, self.e)
+        return ftz(self.codes.to(torch.float32) * self.step.unsqueeze(-1))
 
     def rows(self, lo, hi):
         """Rows `lo:hi` of a 2-D operand. Row scales are per row, so a
         product over a slice of rows is the same cells of the whole."""
         if self.is_int:
-            return Operand(codes=self.codes[lo:hi], e=self.e[lo:hi], qmax=self.qmax)
+            return Operand(codes=self.codes[lo:hi], e=None if self.e is None else self.e[lo:hi],
+                           step=None if self.step is None else self.step[lo:hi], qmax=self.qmax)
         return Operand(f=self.f[lo:hi])
 
 
@@ -162,6 +204,9 @@ def prepare(x, kind):
     if kind in INT_SPECS:
         codes, e = quantize_rows(x, kind)
         return Operand(codes=codes, e=e, qmax=INT_SPECS[kind][1])
+    if kind in ABSMAX_SPECS:
+        codes, step = quantize_rows_absmax(x, kind)
+        return Operand(codes=codes, step=step, qmax=ABSMAX_SPECS[kind])
     if kind == "bf16":
         return Operand(f=round_bf16(x))
     if kind == "fp32":
@@ -186,8 +231,11 @@ def product_prepared(a, b, acc64=False):
         raise ValueError(f"contracted extents differ: {a.k} and {b.k}")
     if a.is_int and b.is_int:
         _check_exact(a, b)
-        acc = a.codes @ b.codes.transpose(-1, -2)
-        scale = pow2_f32(a.e.unsqueeze(-1).to(torch.int64) + b.e.unsqueeze(-2).to(torch.int64))
+        acc = a.codes @ b.codes.transpose(-1, -2) + 0.0  # an integer sum of zero is +0
+        if a.e is not None and b.e is not None:
+            scale = pow2_f32(a.e.unsqueeze(-1).to(torch.int64) + b.e.unsqueeze(-2).to(torch.int64))
+        else:  # a follow-up rule on either side: the product of the two float32 steps
+            scale = a.steps().unsqueeze(-1) * b.steps().unsqueeze(-2)
         return ftz(acc.to(torch.float32) * scale)
     fa, fb = a.as_f32(), b.as_f32()
     if acc64:
