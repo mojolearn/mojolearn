@@ -299,7 +299,14 @@ EXCEPTIONS = [
     # ---- algos (tools/bench_board_algos.py; lane ids "algos/<slug>"): the arms
     # with no seed argument that draw nothing (the deterministic lanes, ours'
     # weightless layers, SVGP) are recorded automatically; the third-party arms
-    # below draw random numbers and take no seed
+    # below draw random numbers and take no seed, or draw through a seeded
+    # function argument rather than a seed argument of their own
+] + [
+    ("algos/" + lane, "seed", "*", "SelectKBest takes no seed argument on either side; the "
+     "noise seed 7 is bound into score_func=%s(random_state=7) on both arms" % fn)
+    for lane, fn in (("select-mutual-info", "mutual_info_classif"),
+                     ("select-mutual-info-reg", "mutual_info_regression"))
+] + [
     ("algos/louvain", "seed", "cugraph-gpu", "cuGraph louvain takes no seed; its GPU move order "
      "is not seeded; ours and networkx get 7"),
     ("algos/cagra", "seed", "faiss-cpu", "faiss IndexHNSWFlat takes no seed argument (its level "

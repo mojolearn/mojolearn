@@ -54,6 +54,8 @@ scikit-learn shaped unless a line below says otherwise)
                .item_factors_
   explainers   Cls(model, ...).shap_values(X)   (the shap package's shape)
   linalg       mojolearn.linalg.<name>(...) as numpy/scipy name it
+  functions    mojolearn.resample.bootstrap / permutation_test / resample and
+               mojolearn.cross_val_score, SciPy's and scikit-learn's call shapes
 
 Every lane's settings, datasets, rows, quality metric and each mismatch that
 cannot be avoided are in LANES below; tools/bench_board.py copies them into
@@ -269,6 +271,17 @@ _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block=
      sk_params=dict(n_neighbors=20, algorithm="brute", n_jobs=-1))
 _add("nearest-centroid", xlane="neighbors", ours="NearestCentroid", task="clf", block="cls",
      sk="sklearn.neighbors:NearestCentroid")
+_add("radius-neighbors", xlane="neighbors", ours=("RadiusNeighbors",), task="radius",
+     block="cls", sub={"X": SUB["knn"], "Xq": SUB["small"]}, radius=True,
+     sk="sklearn.neighbors:NearestNeighbors",
+     params=dict(metric="euclidean", algorithm="auto", p=2),
+     sk_params=dict(metric="euclidean", algorithm="auto", p=2, n_jobs=-1),
+     notes=["radius = the 0.1% quantile of the pairwise distances of 1,000 fit rows (about 200 "
+            "neighbours per query), the same value on both arms; fit(X) then "
+            "radius_neighbors(Xq) (the inference column)"],
+     mism=["algorithm='auto' on both: ours' auto is its random ball cover (exact, triangle-"
+           "inequality pruning), scikit-learn's picks a KD/ball tree or brute force; both return "
+           "the exact neighbour set"])
 _add("ocsvm", xlane="neighbors", ours="OneClassSVM", task="outlier", block="cls",
      sub={"X": SUB["quad"], "Xq": SUB["quad"]}, gamma=True, sk="sklearn.svm:OneClassSVM",
      params=dict(kernel="rbf", nu=0.1, tol=1e-3), sk_params=dict(kernel="rbf", nu=0.1, tol=1e-3,
@@ -375,6 +388,34 @@ _add("randomized-svd", xlane="decomp", ours=("randomized_svd", "linalg.randomize
      other={"sklearn-cpu": "sklearn", "torch-gpu": "torch"},
      params=dict(n_components=8, n_oversamples=10, n_iter=4, random_state=SEED),
      mism=["torch-gpu is torch.svd_lowrank(q=18, niter=4), its randomized range finder"])
+# the rest of mojolearn's dense linear algebra (README family "linear algebra"),
+# raced from 2026-09-29: numpy/scipy on the CPU, torch on this box's GPU, CuPy on NVIDIA
+_add("lu-factor", xlane="decomp", ours=("lu_factor", "linalg.lu_factor"), kind="linalg",
+     task="lufac", quality="lu", block="dense", datasets=("synthetic",),
+     other={"scipy-cpu": "scipy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["the lu-solve lane's system (A 8192 x 8192 + 2 sqrt(8192) I, B 8192 x 64, seed 7) "
+            "through the two-call form: lu_solve(lu_factor(A), B) (scipy.linalg's; torch.linalg."
+            "lu_factor + lu_solve; cupyx.scipy.linalg's)"])
+_add("cholesky", xlane="decomp", ours=("Cholesky", "linalg.Cholesky"), kind="linalg",
+     task="chol", block="sym", datasets=("synthetic",), params=dict(jitter=0.0),
+     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["A = (M + M^T) / 2 + 2 sqrt(n) I, M N(0,1) 8192 x 8192 seed 7 (symmetric positive "
+            "definite); ours Cholesky(jitter=0.0).fit(A) (no ridge, as numpy.linalg.cholesky)"])
+_add("qr", xlane="decomp", ours=("linalg.qr",), kind="linalg", task="qr", block="reg",
+     params=dict(mode="reduced"),
+     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["qr(X, mode='reduced') of the reg block's fit rows (1,000,000 x d) on every arm "
+            "(Householder, Q and R formed)"])
+_add("eigh", xlane="decomp", ours=("linalg.eigh",), kind="linalg", task="eigh", block="sym",
+     datasets=("synthetic",), params=dict(UPLO="L"),
+     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["eigh(A, UPLO='L') of the cholesky lane's symmetric matrix at n = 4096: every "
+            "eigenvalue and eigenvector"])
+_add("svd", xlane="decomp", ours=("linalg.svd",), kind="linalg", task="svd", block="reg",
+     params=dict(full_matrices=False),
+     other={"numpy-cpu": "numpy", "torch-gpu": "torch", "cupy-gpu": "cupy"},
+     notes=["svd(X, full_matrices=False) of the reg block's fit rows (1,000,000 x d): U, S, "
+            "Vh on every arm"])
 _add("cca", xlane="decomp", ours="CCA", task="transform", block="cls", quality="cca", xy_split=True,
      sk="sklearn.cross_decomposition:CCA", params=dict(n_components=2, max_iter=500, tol=1e-6),
      notes=["X = the first half of the columns, Y = the second half"])
@@ -418,6 +459,16 @@ _add("mb-dict-learning", xlane="decomp", ours="MiniBatchDictionaryLearning", tas
                  transform_algorithm="lasso_cd", random_state=SEED),
      sk_params=dict(n_components=16, alpha=1.0, batch_size=256, max_iter=10,
                     transform_algorithm="lasso_cd", random_state=SEED, n_jobs=-1))
+_add("sparse-coder", xlane="decomp", ours=("SparseCoder",), task="transform", block="cls",
+     sub={"X": SUB["tiny"], "Xq": SUB["mid"]}, quality="vs-sklearn", dictionary=True,
+     sk="sklearn.decomposition:SparseCoder",
+     params=dict(transform_algorithm="omp", transform_n_nonzero_coefs=4, transform_alpha=None,
+                 split_sign=False, positive_code=False, transform_max_iter=1000),
+     notes=["dictionary = 64 stride rows of the fit block, each scaled to unit norm, the same "
+            "array on both arms; SparseCoder has no fit (fit returns self), so the work is "
+            "transform(Xq), the inference column: OMP with 4 nonzero coefficients per row",
+            "mojolearn.sparse_encode is the same encoder as a function (SparseCoder.transform "
+            "calls it); this lane is its race"])
 _add("isomap", xlane="decomp", ours="Isomap", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:Isomap",
      params=dict(n_neighbors=10, n_components=2), sk_params=dict(n_neighbors=10, n_components=2,
@@ -470,7 +521,10 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False), "cat", True),
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
-        ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False)):
+        ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False),
+        # the two scalers of mojolearn.preprocessing (public since 0.8; raced from 2026-09-29)
+        ("minmax-scaler", "MinMaxScaler", dict(feature_range=(0, 1), clip=False), "raw", True),
+        ("standard-scaler", "StandardScaler", dict(with_mean=True, with_std=True), "raw", True)):
     # cuML takes no subsample and no quantile_method (its quantile edges are np.percentile's
     # linear ones, the method ours and scikit-learn are set to above)
     _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")
@@ -513,7 +567,9 @@ _add("multilabel-binarizer", xlane="prep", ours="MultiLabelBinarizer", task="mul
 for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
                              ("select-chi2", "chi2", "nonneg", 0.5),
                              ("select-f-regression", "f_regression", "reg", 0.5),
-                             ("select-mutual-info", "mutual_info_classif", "cls", 0.5)):
+                             ("select-mutual-info", "mutual_info_classif", "cls", 0.5),
+                             ("select-r-regression", "r_regression", "reg", 0.5),
+                             ("select-mutual-info-reg", "mutual_info_regression", "reg", 0.5)):
     _add(_slug, xlane="prep", ours="SelectKBest", task="select", block=_blk, score_func=_fn,
          sub=({"X": SUB["mid"]} if _fn.startswith("mutual") else {}),
          sk="sklearn.feature_selection:SelectKBest", params=dict(k="half"),
@@ -541,6 +597,45 @@ _add("lda-clf", xlane="prep", ours="LinearDiscriminantAnalysis", task="clf", blo
      sk="sklearn.discriminant_analysis:LinearDiscriminantAnalysis", params=dict(solver="svd"))
 _add("qda", xlane="prep", ours="QuadraticDiscriminantAnalysis", task="clf", block="cls",
      sk="sklearn.discriminant_analysis:QuadraticDiscriminantAnalysis", params=dict(reg_param=1e-3))
+
+# ---- resampling and model selection (mojolearn.resample, cross_val_score) --
+# public since 0.8 and raced from 2026-09-29: function calls, so kind "fn" (one
+# call per round on each arm, the result's numbers saved for the quality pass)
+_add("bootstrap", xlane="resample", ours=("resample.bootstrap",), kind="fn", task="bootstrap",
+     block="reg", sub={"X": SUB["small"]},
+     params=dict(statistic="mean", n_resamples=9999, confidence_level=0.95, method="percentile",
+                 alternative="two-sided", random_state=SEED),
+     other={"scipy-cpu": "scipy"},
+     notes=["the mean of the reg target over 20,000 stride fit rows, 9,999 resamples, a 95% "
+            "percentile interval; scipy.stats.bootstrap((y,), np.mean, vectorized, batch 250)"],
+     mism=["each library draws its resamples from its own generator seeded 7 (ours: the Philox "
+           "position map; scipy: numpy default_rng(7)), so the intervals agree to Monte Carlo "
+           "error, not bit for bit"])
+_add("permutation-test", xlane="resample", ours=("resample.permutation_test",), kind="fn",
+     task="permutation", block="reg", sub={"X": SUB["small"], "Xq": SUB["small"]},
+     params=dict(statistic="diff_means", n_resamples=9999, alternative="two-sided",
+                 random_state=SEED, permutation_type="independent"),
+     other={"scipy-cpu": "scipy"},
+     notes=["x = the reg target on 20,000 stride fit rows, y = on 20,000 stride held-out rows; "
+            "difference of means, 9,999 independent permutations; scipy.stats.permutation_test("
+            "(x, y), vectorized, batch 250)"],
+     mism=["each library draws its permutations from its own generator seeded 7, so the p-values "
+           "agree to Monte Carlo error, not bit for bit"])
+_add("resample", xlane="resample", ours=("resample.resample",), kind="fn", task="resample",
+     block="reg", params=dict(replace=True, n_samples=None, random_state=SEED),
+     other={"sklearn-cpu": "sklearn"},
+     notes=["resample(X, y) of the reg block's 1,000,000 fit rows with replacement "
+            "(sklearn.utils.resample); the gather of both arrays is timed"],
+     mism=["the drawn rows are each library's own (ours the Philox position map, scikit-learn "
+           "numpy RandomState(7)); quality is the resampled column means against the "
+           "population's"])
+_add("cross-val-score", xlane="model_selection", ours=("cross_val_score",
+                                                        "model_selection.cross_val_score"),
+     kind="fn", task="cv", block="reg",
+     params=dict(estimator=_E("LinearRegression"), cv=5, scoring="r2"),
+     other={"sklearn-cpu": "sklearn"},
+     notes=["5 unshuffled k-fold splits (KFold, no seed on either side) of the reg block's "
+            "1,000,000 fit rows, LinearRegression refit per fold, R2 on the held-out fold"])
 
 # ---- lane sequence --------------------------------------------------------
 _TORCH = "torch"      # opponents: torch at every fast setting of the box (bench_board_neural)
@@ -590,6 +685,11 @@ _OPT_HYPER = {
     "Adafactor": dict(beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0, maximize=False),
     "Lion": dict(betas=(0.9, 0.99), weight_decay=0.0),
     "LAMB": dict(betas=(0.9, 0.999), eps=1e-6, weight_decay=0.01),
+    # mojolearn.training's three (the LM and Samba trainers' optimizers; top-level
+    # mojolearn.SGD / Adam / AdamW), raced from 2026-09-29
+    "SGD": dict(momentum=0.9, dampening=0.0, weight_decay=0.0, nesterov=False, maximize=False),
+    "Adam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, maximize=False),
+    "AdamW": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01, maximize=False),
 }
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
@@ -599,6 +699,15 @@ for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adag
          datasets=("synthetic",), torch_opt=_torch, params=dict(lr=1e-3, **_OPT_HYPER[_cls]),
          notes=["one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 "
                 "steps; quality = the parameter after them vs torch eager"])
+for _slug, _cls in (("sgd", "SGD"), ("adam", "Adam"), ("adamw", "AdamW")):
+    _add(_slug, xlane="training", ours=(_cls, "training." + _cls), kind="optim", task="optim",
+         block="optim", datasets=("synthetic",), torch_opt=_cls,
+         params=dict(lr=1e-3, **_OPT_HYPER[_cls]),
+         notes=["one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 "
+                "steps; quality = the parameter after them vs torch eager",
+                "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight "
+                "decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on "
+                "both sides"])
 _add("mlp-clf", xlane="sequence", ours="MLPClassifier", task="clf", block="cls",
      sk="sklearn.neural_network:MLPClassifier",
      params=dict(hidden_layer_sizes=(256, 256), solver="adam", batch_size=4096, max_iter=5,
@@ -614,7 +723,7 @@ _TSNOTE = ("taxi-hourly: hourly pickup counts of the 64 busiest pickup zones ove
            "February 2024 (1,440 hours; the last 48 held out), from the taxi npz; synthetic: 64 "
            "seed-7 series of the same length")
 _add("autoarima", xlane="sequence", ours="AutoARIMA", kind="ts", task="forecast", block="ts",
-     datasets=_TS, params=dict(max_p=3, max_q=3, max_d=1, seasonal=False, ic="aicc",
+     datasets=_TS, sf="AutoARIMA", params=dict(max_p=3, max_q=3, max_d=1, seasonal=False, ic="aicc",
                                stepwise=False, allow_intercept=True),
      other={"statsforecast-cpu": "statsforecast", "cuml-gpu": "cuml"}, notes=[_TSNOTE,
      "ours and cuML: search(s=1, d=0..1, p=0..3, q=0..3, no seasonal part, ic='aicc') then fit, "
@@ -628,19 +737,44 @@ _add("stl", xlane="sequence", ours="STL", kind="ts", task="decompose", block="ts
 _add("var", xlane="sequence", ours="VAR", kind="ts", task="var", block="ts", datasets=_TS,
      params=dict(maxlags=2, method="ols", ic=None, trend="c"), other={"statsmodels-cpu": "statsmodels"},
      notes=[_TSNOTE, "one VAR over 16 series jointly (the first 16), lag order 2"])
-_add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast",
+_add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast", sf="Theta",
      block="ts", datasets=_TS, params=dict(season_length=24, decomposition_type="multiplicative"),
      other={"statsforecast-cpu": "statsforecast", "statsmodels-cpu": "statsmodels"},
      notes=[_TSNOTE, "statsforecast Theta (the standard theta model, STM) on both sides; "
                      "statsmodels-cpu is ThetaModel(period=24), its own theta method"])
 _add("croston", xlane="sequence", ours=("CrostonClassic",), kind="ts", task="forecast",
-     block="tsi", datasets=("taxi-hourly", "synthetic"), params={},
+     sf="CrostonClassic", block="tsi", datasets=("taxi-hourly", "synthetic"), params={},
      mism=["CrostonClassic has no tuning parameter and no seed on either side (smoothing 0.1, "
            "fixed)"],
      other={"statsforecast-cpu": "statsforecast"},
      notes=["intermittent series: taxi-hourly's 64 pickup zones with 30-70% zero hours; "
             "synthetic Bernoulli(0.3) x Poisson(3) demand, seed 7"])
-_add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast",
+#: the rest of statsforecast's theta family and Croston's two variants, one lane
+#: each, ours and statsforecast with the same arguments (2026-09-29)
+for _slug, _cls, _kw, _why in (
+        ("optimized-theta", "OptimizedTheta", {}, "OTM: theta optimized by MSE"),
+        ("dynamic-theta", "DynamicTheta", {}, "DSTM: the dynamic standard theta model"),
+        ("dynamic-optimized-theta", "DynamicOptimizedTheta", {},
+         "DOTM: the dynamic optimized theta model"),
+        ("auto-theta", "AutoTheta", {"model": None},
+         "model=None on both: STM, OTM, DSTM and DOTM fitted, the least in-sample MSE kept")):
+    _add(_slug, xlane="sequence", ours=(_cls,), kind="ts", task="forecast", sf=_cls, block="ts",
+         datasets=_TS, params=dict(season_length=24, decomposition_type="multiplicative", **_kw),
+         other={"statsforecast-cpu": "statsforecast"},
+         notes=[_TSNOTE, "statsforecast %s(season_length=24, decomposition_type="
+                         "'multiplicative'%s) on both sides; %s" % (
+                             _cls, ", model=None" if _kw else "", _why)])
+for _slug, _cls, _why in (("croston-optimized", "CrostonOptimized",
+                           "the smoothing of demand and of the intervals optimized separately"),
+                          ("croston-sba", "CrostonSBA",
+                           "Syntetos-Boylan: CrostonClassic's forecast times 0.95")):
+    _add(_slug, xlane="sequence", ours=(_cls,), kind="ts", task="forecast", sf=_cls, block="tsi",
+         datasets=("taxi-hourly", "synthetic"), params={},
+         mism=["%s has no tuning parameter and no seed on either side" % _cls],
+         other={"statsforecast-cpu": "statsforecast"},
+         notes=["intermittent series: taxi-hourly's 64 pickup zones with 30-70% zero hours; "
+                "synthetic Bernoulli(0.3) x Poisson(3) demand, seed 7", _why])
+_add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast", sf="AutoETS",
      block="ts", datasets=_TS, params=dict(season_length=1, model="AAN", damped=True),
      other={"statsmodels-cpu": "statsmodels", "statsforecast-cpu": "statsforecast"},
      notes=[_TSNOTE, "ETS(A,Ad,N), Holt's damped additive trend, no season: ours refuses seasonal "
@@ -867,6 +1001,16 @@ _add("graphsage", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer", tas
                  bias=True),
      notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)"])
 
+_add("embedding", xlane="embedding", ours=("Embedding",), kind="layer", task="embedding",
+     block="tensor", datasets=("synthetic",), torch=True,
+     params=dict(num_embeddings=32768, embedding_dim=1024, padding_idx=None, max_norm=None,
+                 norm_type=2.0, scale_grad_by_freq=False, sparse=False),
+     notes=["ids (64, 512) uniform over the 32,768 rows, seed 7; the table is torch's "
+            "nn.Embedding seeded N(0,1) init, handed to ours as weight= (ours refuses to draw "
+            "one); training column = forward + the dense (V, d) weight gradient of dy",
+            "fp32 torch arms only: a gather has no matmul for TF32 and autocast leaves "
+            "nn.Embedding in fp32"])
+
 # ---- lane ann -------------------------------------------------------------
 _ANN = ("the classical knn lane's block (tools/knn_datasets.real_block, the classical2 ivf "
         "block): 400,000 index rows, 4,000 queries, raw")
@@ -1041,6 +1185,20 @@ NOT_RACED = {
     "LR schedulers (step, exponential, one-cycle)": "a scalar per step: nothing to time; their "
                                                     "equality with torch.optim.lr_scheduler is "
                                                     "the lane's sanity check",
+    "DampedETS": "ETS(model='AAN', damped=True) by construction (error='A'), the model the "
+                 "damped-ets lane races",
+    "sparse_encode": "the encoder SparseCoder.transform calls, raced as algos/sparse-coder",
+    "resample_indices": "the index draw inside resample(), raced as algos/resample",
+    "johnson_lindenstrauss_min_dim": "a closed-form integer: nothing to time",
+    "monte_carlo_integrate": "no pinned library has the same seeded volume-times-mean "
+                             "integrator (scipy's qmc_quad is quasi-Monte Carlo); no opponent",
+    "kpss_test / select_d": "pmdarima's KPSS test and differencing search, timed inside "
+                            "algos/autoarima (d chosen by KPSS); pmdarima is not pinned and "
+                            "statsmodels' kpss uses another lag rule",
+    "QNRegressor": "cuML's quasi-Newton regressor (l1_strength / l2_strength): its only "
+                   "same-algorithm opponent is cuML's internal QN solver; scikit-learn "
+                   "LinearRegression / QuantileRegressor take other parameter sets, which the "
+                   "board's params == sk_params rule does not admit",
 }
 
 
@@ -1064,6 +1222,8 @@ def opponents(vendor, lane):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
             arms = [a for a in arms if "bf16" not in a]
+        if s["task"] == "embedding":          # a gather: no matmul for TF32, autocast keeps fp32
+            arms = [a for a in arms if a.endswith("fp32")]
         return tuple(arms)
     if s["kind"] == "optim":
         if not s.get("torch_opt"):
@@ -1119,6 +1279,8 @@ def infer_call(lane):
     if s["kind"] in ("svgp", "seqmodel", "cnnclf"):
         return "predict(Xq)"
     t = s["task"]
+    if t == "radius":
+        return "radius_neighbors(Xq)"
     if t in ("clf", "reg", "semi", "outlier", "multiclf", "multireg", "gmm"):
         return "predict(Xq)"
     if t == "cluster":
@@ -1137,6 +1299,8 @@ def not_planned(vendor):
                "torch-*-tf32: no matmul in an optimizer step")
     out.append("openTSNE and hnswlib: not pinned; scikit-learn/cuML t-SNE and FAISS HNSW stand in")
     out.append("pmdarima: statsforecast AutoARIMA (compiled) is the CPU AutoARIMA arm")
+    out.append("torch-*-bf16 and torch-*-tf32 on embedding: a gather has no matmul for TF32 and "
+               "autocast leaves nn.Embedding in fp32, so those arms would repeat the fp32 ones")
     if vendor == "nvidia":
         out.append("cuVS on ivf-filter: cuVS's Python IVF-PQ search takes no sample filter (only "
                    "IVF-Flat, CAGRA and brute force do); ours filters IVF-PQ, so faiss-cpu "
@@ -1190,11 +1354,19 @@ def fit_text(lane):
     if k == "graph":
         return "the graph algorithm on the CSR graph"
     if k == "linalg":
-        return {"lu": "LU factor + solve", "lstsq": "least squares", "rsvd": "randomized SVD"}[t]
+        return {"lu": "LU factor + solve", "lstsq": "least squares", "rsvd": "randomized SVD",
+                "lufac": "lu_factor(A) then lu_solve(., B)", "chol": "Cholesky factor",
+                "qr": "QR (reduced)", "eigh": "symmetric eigendecomposition",
+                "svd": "thin SVD"}[t]
     if k == "ts":
         return "fit + forecast (or decomposition) of every series"
     if k == "shap":
         return "SHAP values of Xq (model fit before the clock)"
+    if k == "fn":
+        return {"bootstrap": "bootstrap(y): every resample and the interval",
+                "permutation": "permutation_test(x, y): every permutation and the p-value",
+                "resample": "resample(X, y): the index draw and both gathers",
+                "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores"}[t]
     if s.get("fit_predict"):
         return "fit_predict(X)"
     if t in ("embed",):
@@ -1216,6 +1388,8 @@ QUALITY_TEXT = {
     "select": "selected-feature Jaccard against scikit-learn's selection",
     "covariance": "relative Frobenius difference of covariance_ vs scikit-learn",
     "labels": "exact agreement with scikit-learn's output",
+    "radius": "neighbours found in total; fraction of queries whose neighbour count equals "
+              "scikit-learn's",
     "multilabel": "exact agreement with scikit-learn's output",
     "vs-sklearn": "max abs and relative Frobenius difference of transform(Xq) vs scikit-learn",
     "subspace": "mean cosine of the principal angles between transform(Xq)'s column space and "
@@ -1244,8 +1418,17 @@ QUALITY_TEXT = {
     "ann": "recall@10 against a float64 NumPy brute force",
     "lu": "relative residual ||A x - B|| / ||B||", "lstsq": "relative residual vs numpy's",
     "rsvd": "relative rank-8 reconstruction error",
+    "chol": "relative residual ||L L^T - A|| / ||A||",
+    "qr": "relative difference of R^T R vs X^T X (float64) and max |diag R| / its float64 value",
+    "eigh": "relative residual ||A V - V diag(w)|| / ||A|| and max eigenvalue error vs float64",
+    "svd": "max relative singular-value error vs float64 and ||X - U S Vh|| / ||X|| on 100,000 "
+           "rows",
     "als": "recall@10 of the held-out interaction per user row",
     "tree-shap": "max additivity error |sum(phi) + base - margin|",
+    "bootstrap": "interval endpoints and standard error; their relative difference vs scipy's",
+    "permutation": "statistic and p-value; |p - scipy's p|",
+    "resample": "max |resampled column mean - population mean| / column std",
+    "cv": "mean fold R2; max |fold score - scikit-learn's|",
     "kernel-shap": "relative error vs the exact linear-model SHAP values",
     "permutation-shap": "relative error vs the exact linear-model SHAP values",
 }
@@ -1290,6 +1473,7 @@ BLOCK_ROWS = {
     "images": "20,000 fit + 5,000 held-out seeded 1 x 28 x 28 images, 10 classes",
     "seqwin": "64 series -> windows of 24 steps, fit = the first 80% of time", "optim": "16,777,216 parameters x 10 steps",
     "dense": "8192 x 8192 system, 64 right-hand sides",
+    "sym": "a seed-7 symmetric positive definite matrix (8192 x 8192; 4096 for eigh)",
 }
 
 
@@ -1307,7 +1491,7 @@ def r2_keys(lane, dataset):
     """The R2 keys a (lane, dataset) reads (bench/results/dataset_store/manifest.tsv)."""
     s = LANES[lane]
     if dataset == "taxi" or dataset in ("taxi-hourly", "taxi-zones"):
-        return ["gbm-bench/taxi/taxi_speed.npz"] if s["block"] not in ("dense", "tensor", "optim") else []
+        return ["gbm-bench/taxi/taxi_speed.npz"] if s["block"] not in ("dense", "sym", "tensor", "optim") else []
     if dataset == "istella":
         return ["gbm-bench/istella/istella_speed.npz"]
     if dataset == "text":
@@ -1343,8 +1527,12 @@ def source_exports():
     import ast
     names = set()
     d = os.path.join(REPO, "python", "mojolearn")
+    # the expansion doors, plus the package's own __all__ and the public
+    # submodules whose functions the lanes name as `module.function`
+    core = ("__init__.py", "linalg.py", "resample.py", "training.py", "model_selection.py",
+            "preprocessing.py", "embedding.py")
     for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
-        if not (f.startswith("_expansion_") and f.endswith(".py")):
+        if not ((f.startswith("_expansion_") and f.endswith(".py")) or f in core):
             continue
         try:
             tree = ast.parse(open(os.path.join(d, f)).read())
@@ -1426,7 +1614,7 @@ MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "ts
 def block_file(lane, dataset):
     """The npz/json basename a (lane, dataset) reads."""
     b = block_of(lane)
-    if b in ("dense", "tensor", "optim", "images"):
+    if b in ("dense", "sym", "tensor", "optim", "images"):
         return None
     if b == "seqwin":
         return "ts-%s" % dataset
@@ -1848,6 +2036,14 @@ def _derived_params(lane, D, params):
         A = X[:1000].astype(np.float64)
         dd = np.sqrt(np.maximum((A * A).sum(1)[:, None] + (A * A).sum(1)[None, :] - 2 * A @ A.T, 0))
         p["bandwidth"] = float(np.quantile(dd[np.triu_indices(A.shape[0], 1)], 0.3))
+    if s.get("radius"):                 # radius-neighbors: ~0.1% of the rows inside the ball
+        A = X[:1000].astype(np.float64)
+        dd = np.sqrt(np.maximum((A * A).sum(1)[:, None] + (A * A).sum(1)[None, :] - 2 * A @ A.T, 0))
+        p["radius"] = float(np.quantile(dd[np.triu_indices(A.shape[0], 1)], 0.001))
+    if s.get("dictionary"):             # sparse-coder: 64 unit-norm stride rows of the fit block
+        A = _stride(X.astype(np.float64), 64)
+        A /= np.maximum(np.linalg.norm(A, axis=1, keepdims=True), 1e-12)
+        p["dictionary"] = np.ascontiguousarray(A, dtype=np.float32)
     if lane == "poly-count-sketch":
         p["gamma"] = 1.0 / d
     if lane == "categorical-nb":
@@ -1976,7 +2172,8 @@ SK_BASE = {"LogisticRegression": "sklearn.linear_model:LogisticRegression",
            "Ridge": "sklearn.linear_model:Ridge", "Lasso": "sklearn.linear_model:Lasso",
            "GaussianNB": "sklearn.naive_bayes:GaussianNB",
            "DecisionTreeClassifier": "sklearn.tree:DecisionTreeClassifier",
-           "DecisionTreeRegressor": "sklearn.tree:DecisionTreeRegressor"}
+           "DecisionTreeRegressor": "sklearn.tree:DecisionTreeRegressor",
+           "LinearRegression": "sklearn.linear_model:LinearRegression"}
 
 
 def _host(a):
@@ -2004,7 +2201,7 @@ def build(lane, arm, D):
     fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel,
           "cnnclf": _build_cnnclf, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
-          "als": _build_als, "shap": _build_shap, "svgp": _build_svgp}[kind]
+          "als": _build_als, "shap": _build_shap, "svgp": _build_svgp, "fn": _build_fn}[kind]
     if arm in OURS_ARMS:
         _ours_class(lane)                     # Skipped when not exported
     return fn(lane, arm, D)
@@ -2024,7 +2221,12 @@ def _est_factory(lane, arm, D):
             import mojolearn as ml
             if not hasattr(ml, s["score_func"]):
                 raise Skipped("SKIPPED: not built yet (mojolearn has no %s)" % s["score_func"])
-            params["score_func"] = getattr(ml, s["score_func"])
+            f = getattr(ml, s["score_func"])
+            if s["score_func"].startswith("mutual"):
+                import functools            # the same noise seed as scikit-learn's arm below
+                f = functools.partial(f, random_state=SEED)
+                f.__name__ = s["score_func"]
+            params["score_func"] = f
         return (lambda: cls(**params)), "mojolearn." + name, params
     if arm == "sklearn-cpu":
         try:
@@ -2040,8 +2242,10 @@ def _est_factory(lane, arm, D):
             import functools
             import sklearn.feature_selection as fs
             f = getattr(fs, s["score_func"])
-            params["score_func"] = (functools.partial(f, random_state=SEED)
-                                    if s["score_func"].startswith("mutual") else f)
+            if s["score_func"].startswith("mutual"):
+                f = functools.partial(f, random_state=SEED)
+                f.__name__ = s["score_func"]
+            params["score_func"] = f
         return (lambda: cls(**params)), s["sk"], params
     if arm == "cuml-gpu":
         cls = _imp(s["cuml"])
@@ -2120,6 +2324,9 @@ def _build_est(lane, arm, D):
             S["pred"] = est.predict(Xq)
         elif t == "cluster":
             S["pred"] = est.predict(Xq) if hasattr(est, "predict") else None
+        elif t == "radius":                 # neighbour count per query (ragged rows)
+            _dist, ind = est.radius_neighbors(Xq)
+            S["pred"] = [int(np.shape(r)[0]) for r in ind]
         elif t in ("labels",):
             S["pred"] = est.transform(labq)
         elif t == "multilabel":
@@ -2609,14 +2816,15 @@ def _build_ts(lane, arm, D):
         from statsforecast import models as sfm
         info = {"library": "statsforecast", "version": statsforecast.__version__, "device": "cpu",
                 "pre_clock_fit": False, "input_home": "host"}
-        kw = {"autoarima": lambda: _sf_autoarima_kw(p),
-              "theta": lambda: dict(season_length=p["season_length"],
-                                    decomposition_type=p["decomposition_type"]),
-              "croston": lambda: {},
-              "damped-ets": lambda: dict(season_length=p["season_length"], model=p["model"],
-                                         damped=p["damped"])}[lane]()
-        ctor = {"autoarima": sfm.AutoARIMA, "theta": sfm.Theta, "croston": sfm.CrostonClassic,
-                "damped-ets": sfm.AutoETS}[lane]
+        # the lane's statsforecast class (LANES[lane]["sf"]) with the lane's own
+        # arguments: the theta family and Croston take ours' params as they are
+        if lane == "autoarima":
+            kw = _sf_autoarima_kw(p)
+        elif lane == "damped-ets":
+            kw = dict(season_length=p["season_length"], model=p["model"], damped=p["damped"])
+        else:
+            kw = dict(p)
+        ctor = getattr(sfm, s["sf"])
         mk = lambda: ctor(**kw)  # noqa: E731
         info["config"] = "%s(%s)" % (ctor.__name__, ", ".join("%s=%r" % i for i in sorted(kw.items())))
         rec = dict(kw, __library__="statsforecast")
@@ -2973,6 +3181,9 @@ def _layer_inputs(lane, D, torch):
         x = emb[raw]
         cls = {"lstm": nn.LSTM, "gru": nn.GRU, "rnn": nn.RNN}[t]
         make = lambda: cls(**p)  # noqa: E731
+    elif t == "embedding":
+        x = torch.randint(0, p["num_embeddings"], (nb, 512), generator=g, dtype=torch.int64)
+        make = lambda: nn.Embedding(**p)  # noqa: E731
     elif t == "layernorm":
         x = torch.randn(256 * nb, p["normalized_shape"], generator=g)
         make = lambda: nn.LayerNorm(**p)  # noqa: E731
@@ -3118,6 +3329,23 @@ def _build_layer(lane, arm, D):
                 S["y"] = cls(x, None, w_, b_, kw["eps"])
             return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
                           record=dict(kw, __library__="mojolearn"))
+        if s["task"] == "embedding":          # ours takes the table (weight=), torch's seeded init
+            ids = x_cpu.numpy()
+            layer = cls(weight=state["weight"], **kw)
+            info["config"] = "mojolearn.%s(%s, weight=torch's init)" % (name, kw)
+            info["weights_loaded"] = info["output_comparable"] = True
+            dyh = {}
+
+            def fit():
+                y = layer.forward(ids)
+                if "dy" not in dyh:
+                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                layer.backward(ids, dyh["dy"])
+
+            def infer():
+                S["y"] = layer.forward(ids)
+            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
+                          record=dict(kw, __library__="mojolearn"))
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
@@ -3198,8 +3426,9 @@ def _build_layer(lane, arm, D):
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
-    if s["task"] not in ("gcn", "sage") and not s.get("forward_only"):
+    if s["task"] not in ("gcn", "sage", "embedding") and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
+                                           # (embedding: integer ids, the gradient is the table's)
     extra = tuple(e.to(dev) for e in extra_cpu)
     run = torch.compile(mod) if mode == "compile" else mod
     dt = torch.bfloat16 if prec == "bf16" else None
@@ -3302,40 +3531,78 @@ def lu_system(n):
     return A, rng.standard_normal((n, 64)).astype(np.float32)
 
 
+def sym_system(n):
+    """A = (M + M^T) / 2 + 2 sqrt(n) I, M N(0,1) (n, n), seed 7: symmetric, and
+    positive definite (the semicircle's edge is sqrt(2n) < 2 sqrt(n))."""
+    np = _np()
+    rng = np.random.default_rng(SEED)
+    M = rng.standard_normal((n, n)).astype(np.float32)
+    A = (M + M.T) * np.float32(0.5)
+    A[np.arange(n), np.arange(n)] += np.float32(2.0 * np.sqrt(n))
+    return A
+
+
+def _sym_n(lane, D):
+    full = 4096 if LANES[lane]["task"] == "eigh" else 8192
+    return full if not D.get("_cap") else min(full, max(256, int(D["_cap"])))
+
+
 def _build_linalg(lane, arm, D):
     np = _np()
     s = LANES[lane]
     t = s["task"]
     S = {}
-    if t == "lu":
+    if t in ("lu", "lufac"):
         n = 8192 if not D.get("_cap") else min(8192, max(256, int(D["_cap"])))
         args = lu_system(n)
+    elif t in ("chol", "eigh"):
+        args = (sym_system(_sym_n(lane, D)),)
     elif t == "lstsq":
         args = (D["X"], D["y"])
     else:
-        args = (D["X"],)
+        args = (np.ascontiguousarray(D["X"], dtype=np.float32),)
     p = s["params"]
     if arm in OURS_ARMS:
         name, fn = _ours_class(lane)
         info = _ours_info(lane)
-        info["config"] = "mojolearn.%s" % name
+        info["config"] = "mojolearn.%s(%s)" % (name, ", ".join("%s=%r" % kv for kv in sorted(p.items())))
+        if t == "lufac":
+            import mojolearn as ml
+            solve2 = getattr(ml, "lu_solve", None) or getattr(ml.linalg, "lu_solve", None)
+            if solve2 is None:
+                raise Skipped("SKIPPED: not built yet (mojolearn has no lu_solve)")
 
         def fit():
-            if t == "rsvd":
+            if t in ("rsvd", "qr", "eigh", "svd"):
                 S["r"] = fn(args[0], **p)
+            elif t == "chol":
+                S["r"] = fn(**p).fit(args[0]).L_
+            elif t == "lufac":
+                S["r"] = solve2(fn(args[0]), args[1])
             else:
                 S["r"] = fn(*args)
     else:
         lib = s["other"][arm]
-        if lib in ("numpy", "sklearn"):
+        if lib in ("numpy", "sklearn", "scipy"):
             info = {"library": lib, "device": "cpu", "pre_clock_fit": False, "input_home": "host"}
             info.update(_tool("classical_two_datasets")._host_info())
 
             def fit():
                 if t == "lu":
                     S["r"] = np.linalg.solve(*args)
+                elif t == "lufac":
+                    import scipy.linalg as sla
+                    S["r"] = sla.lu_solve(sla.lu_factor(args[0]), args[1])
                 elif t == "lstsq":
                     S["r"] = np.linalg.lstsq(args[0], args[1], rcond=None)[0]
+                elif t == "chol":
+                    S["r"] = np.linalg.cholesky(args[0])
+                elif t == "qr":
+                    S["r"] = np.linalg.qr(args[0], **p)
+                elif t == "eigh":
+                    S["r"] = np.linalg.eigh(args[0], **p)
+                elif t == "svd":
+                    S["r"] = np.linalg.svd(args[0], **p)
                 else:
                     from sklearn.utils.extmath import randomized_svd
                     S["r"] = randomized_svd(args[0], **p)
@@ -3349,8 +3616,19 @@ def _build_linalg(lane, arm, D):
             def fit():
                 if t == "lu":
                     S["r"] = torch.linalg.solve(*targs)
+                elif t == "lufac":
+                    LU, piv = torch.linalg.lu_factor(targs[0])
+                    S["r"] = torch.linalg.lu_solve(LU, piv, targs[1])
                 elif t == "lstsq":
                     S["r"] = torch.linalg.lstsq(targs[0], targs[1].reshape(-1, 1)).solution
+                elif t == "chol":
+                    S["r"] = torch.linalg.cholesky(targs[0])
+                elif t == "qr":
+                    S["r"] = torch.linalg.qr(targs[0], mode=p["mode"])
+                elif t == "eigh":
+                    S["r"] = torch.linalg.eigh(targs[0], UPLO=p["UPLO"])
+                elif t == "svd":
+                    S["r"] = torch.linalg.svd(targs[0], full_matrices=p["full_matrices"])
                 else:
                     torch.manual_seed(p["random_state"])      # svd_lowrank has no seed argument
                     q = min(p["n_components"] + p["n_oversamples"], min(targs[0].shape))
@@ -3364,12 +3642,25 @@ def _build_linalg(lane, arm, D):
             cargs = [cp.asarray(a) for a in args]
 
             def fit():
-                S["r"] = (cp.linalg.solve(*cargs) if t == "lu"
-                          else cp.linalg.lstsq(cargs[0], cargs[1], rcond=None)[0])
+                if t == "lu":
+                    S["r"] = cp.linalg.solve(*cargs)
+                elif t == "lufac":
+                    import cupyx.scipy.linalg as csla
+                    S["r"] = csla.lu_solve(csla.lu_factor(cargs[0]), cargs[1])
+                elif t == "chol":
+                    S["r"] = cp.linalg.cholesky(cargs[0])
+                elif t == "qr":
+                    S["r"] = cp.linalg.qr(cargs[0], **p)
+                elif t == "eigh":
+                    S["r"] = cp.linalg.eigh(cargs[0], **p)
+                elif t == "svd":
+                    S["r"] = cp.linalg.svd(cargs[0], **p)
+                else:
+                    S["r"] = cp.linalg.lstsq(cargs[0], cargs[1], rcond=None)[0]
                 cp.cuda.runtime.deviceSynchronize()
 
     if arm in OURS_ARMS:
-        rec = dict(p if t == "rsvd" else {}, __library__="mojolearn")
+        rec = dict(p if t != "lu" else {}, __library__="mojolearn")
     else:
         lib = s["other"][arm]
         rec = {"__library__": lib}
@@ -3378,6 +3669,10 @@ def _build_linalg(lane, arm, D):
         elif t == "rsvd":                               # torch.svd_lowrank(q, niter), seeded globally
             rec.update(n_components=p["n_components"], n_oversamples=p["n_oversamples"],
                        n_iter=p["n_iter"], random_state=p["random_state"])
+        elif t in ("qr", "eigh", "svd"):
+            rec.update(p)
+        elif t == "chol":
+            rec.update(jitter=0.0)                     # numpy/torch/CuPy add no ridge
 
     def outputs():
         r = S["r"]
@@ -3386,8 +3681,120 @@ def _build_linalg(lane, arm, D):
         if t == "rsvd":
             vt = _arr(r[2], np.float64)          # (k, d), scikit-learn's Vt
             return {"components": vt[:p["n_components"]]}
+        if t == "chol":
+            return {"L": _arr(r, np.float64)}
+        if t == "qr":                            # R only: Q is (n, d) and R^T R carries the check
+            return {"R": _arr(r[1], np.float64)}
+        if t == "eigh":
+            return {"w": _arr(r[0], np.float64), "V": _arr(r[1], np.float64)}
+        if t == "svd":                           # U on 100,000 stride rows for the reconstruction
+            U = _arr(r[0], np.float64)
+            return {"S": _arr(r[1], np.float64), "Vh": _arr(r[2], np.float64),
+                    "U_rows": _stride(U, 100_000)}
         return {"x": _arr(r, np.float64).reshape(-1)[:1 << 22]}
     return Runner(info, fit, outputs, record=rec)
+
+
+# ---- function calls (resampling, cross-validation) -------------------------
+
+def _scipy_rng_kw(fn):
+    """scipy's seed argument: `rng` from 1.15, `random_state` before it."""
+    import inspect
+    return "rng" if "rng" in inspect.signature(fn).parameters else "random_state"
+
+
+def _build_fn(lane, arm, D):
+    np = _np()
+    s = LANES[lane]
+    t = s["task"]
+    p = s["params"]
+    S = {}
+    y = np.ascontiguousarray(D["y"], dtype=np.float32)
+    yq = np.ascontiguousarray(D["yq"], dtype=np.float32) if "yq" in D else None
+    X = D["X"]
+    if arm in OURS_ARMS:
+        name, fn = _ours_class(lane)
+        info = _ours_info(lane)
+        kw = {k: _resolve(v, "ours") for k, v in p.items()}
+        info["config"] = "mojolearn.%s(%s)" % (name, ", ".join("%s=%r" % kv for kv in sorted(kw.items())))
+
+        def fit():
+            if t == "bootstrap":
+                r = fn(y, **kw)
+                S["o"] = {"ci": np.array([r.confidence_interval.low, r.confidence_interval.high]),
+                          "se": np.array([r.standard_error])}
+            elif t == "permutation":
+                r = fn(y, yq, **kw)
+                S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            elif t == "resample":
+                Xr, yr = fn(X, y, **kw)
+                S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+            else:                           # cross_val_score clones the estimator per fold
+                est = _resolve(p["estimator"], "ours")
+                S["o"] = {"scores": _arr(fn(est, X, y, cv=p["cv"], scoring=p["scoring"]),
+                                         np.float64)}
+        rec = {k: ("LinearRegression" if k == "estimator" else v) for k, v in p.items()}
+        rec["__library__"] = "mojolearn"
+        return Runner(info, fit, lambda: S["o"], record=rec)
+    lib = s["other"][arm]
+    info = _tool("bench_board_more")._sk_info()
+    info.update(library=lib, device="cpu", pre_clock_fit=False, input_home="host")
+    if lib == "scipy":
+        import scipy
+        from scipy import stats
+        info["version"] = scipy.__version__
+        if t == "bootstrap":
+            seed_kw = _scipy_rng_kw(stats.bootstrap)
+            kw = dict(n_resamples=p["n_resamples"], confidence_level=p["confidence_level"],
+                      method=p["method"], alternative=p["alternative"], vectorized=True, batch=250)
+            kw[seed_kw] = p["random_state"]
+            info["config"] = "scipy.stats.bootstrap((y,), np.mean, %s)" % kw
+
+            def fit():
+                r = stats.bootstrap((y,), np.mean, **kw)
+                S["o"] = {"ci": np.array([r.confidence_interval.low, r.confidence_interval.high]),
+                          "se": np.array([r.standard_error])}
+            rec = dict(statistic="mean", n_resamples=p["n_resamples"],
+                       confidence_level=p["confidence_level"], method=p["method"],
+                       alternative=p["alternative"], random_state=p["random_state"])
+        else:
+            seed_kw = _scipy_rng_kw(stats.permutation_test)
+            kw = dict(permutation_type=p["permutation_type"], n_resamples=p["n_resamples"],
+                      alternative=p["alternative"], vectorized=True, batch=250)
+            kw[seed_kw] = p["random_state"]
+            info["config"] = "scipy.stats.permutation_test((x, y), mean(x) - mean(y), %s)" % kw
+
+            def diff_means(a, b, axis):
+                return np.mean(a, axis=axis) - np.mean(b, axis=axis)
+
+            def fit():
+                r = stats.permutation_test((y, yq), diff_means, **kw)
+                S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            rec = dict(statistic="diff_means", n_resamples=p["n_resamples"],
+                       alternative=p["alternative"], random_state=p["random_state"],
+                       permutation_type=p["permutation_type"])
+    else:
+        if t == "resample":
+            from sklearn.utils import resample as skresample
+            info["config"] = "sklearn.utils.resample(X, y, %s)" % p
+
+            def fit():
+                Xr, yr = skresample(X, y, **p)
+                S["o"] = {"xmean": np.asarray(Xr, dtype=np.float64).mean(0),
+                          "ymean": np.array([np.asarray(yr, dtype=np.float64).mean()])}
+            rec = dict(p)
+        else:
+            from sklearn.model_selection import cross_val_score as skcv
+            info["config"] = ("sklearn.model_selection.cross_val_score(LinearRegression(), X, y, "
+                              "cv=%d, scoring=%r, n_jobs=-1)" % (p["cv"], p["scoring"]))
+
+            def fit():
+                est = _resolve(p["estimator"], "sklearn")
+                S["o"] = {"scores": np.asarray(skcv(est, X, y, cv=p["cv"], scoring=p["scoring"],
+                                                    n_jobs=-1), dtype=np.float64)}
+            rec = dict(p, estimator="LinearRegression")
+    rec["__library__"] = lib
+    return Runner(info, fit, lambda: S["o"], record=rec)
 
 
 # ---- ALS ------------------------------------------------------------------
@@ -3849,6 +4256,8 @@ def quality(lane, D, outs):
     qk = quality_kind(lane)
     s = LANES[lane]
     ref = outs.get("sklearn-cpu")
+    ref_arm = "scipy-cpu"                 # the function-call lanes' reference arm
+    ref_fn = outs.get(ref_arm)
     q = {}
     for arm, o in outs.items():
         e = {}
@@ -3910,6 +4319,11 @@ def quality(lane, D, outs):
                 if ref is not None and arm != "sklearn-cpu" and ref["pred"].shape == P.shape:
                     e["max_abs_diff_vs_sklearn"] = float(np.nanmax(np.abs(P - ref["pred"])))
                     e["rel_diff_vs_sklearn"] = _relfro(np.nan_to_num(P), np.nan_to_num(ref["pred"]))
+            elif qk == "radius":
+                P = o["pred"].reshape(-1)
+                e["neighbors_total"] = int(P.sum())
+                if ref is not None and arm != "sklearn-cpu" and ref["pred"].shape == o["pred"].shape:
+                    e["count_agreement_vs_sklearn"] = float((P == ref["pred"].reshape(-1)).mean())
             elif qk == "subspace":
                 if ref is not None:
                     e["subspace_cos_vs_sklearn"] = _subspace(o["pred"], ref["pred"])
@@ -4023,6 +4437,33 @@ def quality(lane, D, outs):
                 V, _ = np.linalg.qr(o["components"].T)
                 R = X - (X @ V) @ V.T
                 e["relative_reconstruction_error"] = float(np.linalg.norm(R) / np.linalg.norm(X))
+            elif qk == "chol":
+                Lf = np.tril(o["L"])
+                A = sym_system(Lf.shape[0]).astype(np.float64)
+                e["relative_residual"] = float(np.linalg.norm(Lf @ Lf.T - A) / np.linalg.norm(A))
+            elif qk == "eigh":
+                A = sym_system(o["V"].shape[0]).astype(np.float64)
+                w, V = o["w"], o["V"]
+                e["relative_residual"] = float(np.linalg.norm(A @ V - V * w[None, :])
+                                               / np.linalg.norm(A))
+                w64 = np.linalg.eigvalsh(A)
+                e["max_eigenvalue_error"] = float(np.max(np.abs(np.sort(w) - w64))
+                                                  / np.max(np.abs(w64)))
+            elif qk == "qr":
+                X = D["X"].astype(np.float64)
+                G = X.T @ X
+                Rm = o["R"]
+                e["relative_gram_difference"] = float(np.linalg.norm(Rm.T @ Rm - G) / np.linalg.norm(G))
+            elif qk == "svd":
+                X = D["X"].astype(np.float64)
+                s64 = np.sqrt(np.maximum(np.linalg.eigvalsh(X.T @ X)[::-1], 0))
+                k = min(s64.shape[0], o["S"].shape[0])
+                e["max_rel_singular_value_error"] = float(
+                    np.max(np.abs(o["S"][:k] - s64[:k]) / np.maximum(s64[:k], s64[0] * 1e-12)))
+                Xr = _stride(X, o["U_rows"].shape[0])
+                Rr = Xr - (o["U_rows"] * o["S"][None, :]) @ o["Vh"]
+                e["relative_reconstruction_error_100k_rows"] = float(np.linalg.norm(Rr)
+                                                                     / np.linalg.norm(Xr))
             elif qk == "als":
                 _C, held = _als_split(D["X"])
                 rows = np.nonzero(held >= 0)[0]
@@ -4037,6 +4478,25 @@ def quality(lane, D, outs):
                 e["recall_at_10"] = hit / float(max(1, rows.shape[0]))
             elif qk == "tree-shap":
                 e["max_additivity_error"] = float(np.max(np.abs(o["phi"].sum(1) + o["base"] - o["margin"])))
+            elif qk == "bootstrap":
+                e.update(ci_low=float(o["ci"][0]), ci_high=float(o["ci"][1]),
+                         standard_error=float(o["se"][0]))
+                if ref_fn is not None and arm != ref_arm:
+                    w = max(abs(float(ref_fn["ci"][1] - ref_fn["ci"][0])), 1e-30)
+                    e["ci_endpoint_diff_over_width_vs_scipy"] = float(
+                        np.max(np.abs(o["ci"] - ref_fn["ci"])) / w)
+            elif qk == "permutation":
+                e.update(statistic=float(o["stat"][0]), pvalue=float(o["p"][0]))
+                if ref_fn is not None and arm != ref_arm:
+                    e["abs_pvalue_diff_vs_scipy"] = float(abs(o["p"][0] - ref_fn["p"][0]))
+            elif qk == "resample":
+                X = D["X"].astype(np.float64)
+                sd = np.maximum(X.std(0), 1e-12)
+                e["max_mean_shift_over_std"] = float(np.max(np.abs(o["xmean"] - X.mean(0)) / sd))
+            elif qk == "cv":
+                e["mean_r2"] = float(np.mean(o["scores"]))
+                if ref is not None and arm != "sklearn-cpu" and ref["scores"].shape == o["scores"].shape:
+                    e["max_fold_score_diff_vs_sklearn"] = float(np.max(np.abs(o["scores"] - ref["scores"])))
             elif qk in ("kernel-shap", "permutation-shap"):
                 e["rel_error_vs_exact"] = _relfro(o["phi"], o["exact"])
         except Exception as exc:  # noqa: BLE001
