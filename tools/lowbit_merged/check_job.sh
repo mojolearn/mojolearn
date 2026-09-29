@@ -38,6 +38,10 @@ phase install-default pass pixi install -e default
 phase install-test pass pixi install -e test
 export MOJOLEARN_NUMERIC_MODE=identical
 phase build-linalg pass sh bindings/build_linalg.sh
+# The host family build refuses to replace an existing .so (build_host_family.sh);
+# a rerun on this tree met the previous run's output (nvc2-0013). The check
+# rebuilds it from the synced source, so the old one is removed first.
+rm -f python/mojolearn/host/_mojolearn_linalg_host.so
 phase build-linalg-host pass sh bindings/build_linalg_host.sh
 # The base binding (_mojolearn.so) is not in the merge's diff, but the loader
 # and trainer tests below import it; without it they fail on ImportError
