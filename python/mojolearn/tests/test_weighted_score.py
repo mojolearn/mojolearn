@@ -66,9 +66,12 @@ def test_weight_refusals_before_the_binding(weights, match):
         metrics.r2_score(np.float32([0, 1, 2]), np.float32([0, 1, 1]), sample_weight=weights)
 
 
-def test_normalize_false_is_still_refused_with_weights():
-    with pytest.raises(NotImplementedError, match="normalize=False"):
-        metrics.accuracy_score([0, 1], [0, 1], normalize=False, sample_weight=[1.0, 2.0])
+def test_normalize_false_sums_correct_sample_weights():
+    # Exact dyadic weights distinguish weighted count, unweighted count,
+    # and normalized accuracy without a large fixture or tolerance.
+    true, pred, weights = [0, 1, 1], [0, 1, 0], [0.5, 2.0, 4.0]
+    assert metrics.accuracy_score(true, pred, normalize=False, sample_weight=weights) == 2.5
+    assert metrics.accuracy_score(true, true, normalize=False, sample_weight=weights) == 6.5
 
 
 def test_weighted_accuracy_and_r2_match_the_definition():
