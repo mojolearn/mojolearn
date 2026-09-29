@@ -133,12 +133,14 @@ quantized on another carry the same codes.
   the int8 flat plan is one thread per cell with no tiling, and the int8
   MMA plan (L-9) runs on the integer matrix unit of NVIDIA and AMD. They
   were timed against the fp32 plans on 2026-09-29 (lane/lowbit-units,
-  `bench/gemm_lowbit_price_main.mojo`, an H100 and an M2 Pro; the AMD box
-  is checked for identity and not timed):
+  `bench/gemm_lowbit_price_main.mojo`; an H100, an MI325X, an M3 Ultra and
+  an M2 Pro, one run of record each):
   `bench/results/lowbit_units/2026-09-29/TABLE.md`. At the 512-token rows
-  every low-bit plan a dispatcher picks took MORE time than fp32.v1 on both
-  boxes, and the quantization of the activations, one thread per row, took
-  more time than the int8 product on the H100.
+  the complete operation (conversions and product) of every low-bit plan a
+  dispatcher picks took MORE time than fp32.v1 on all four boxes. The int8
+  product alone on the integer unit took more than fp32.v1 on the H100 and
+  less on the MI325X; the quantization of the activations, one thread per
+  row, took more time than that product on both.
 - Any orientation but OP_NT for int8i32.v1.
 
 ## 4. The sabotage arms
@@ -162,13 +164,15 @@ matrix unit, `k` cut into chunks of 1024 steps so that no partial sum leaves
 the integers a float32 holds (`16129 * 1040 < 2^24`), the chunk sums carried
 in Int32, the epilogue `dequant_int8_pinned`. It is NOT in the dispatcher and
 `lib_int8_matrix_unit_for` still answers False on Apple. Its gate,
-`gemm/checks/gemm_int8_apple_chunk_check.mojo`, passed on the M2 Pro
-(bits equal to the flat kernel and to `gemm_int8_oracle` on 21 shapes of
-quantized fixtures and 110 planted worst cases, both tile geometries), and
-the arm that removes the chunk boundary failed 54 of the 110 planted cases
-and none of the quantized fixtures. At the twelve transformer rows its
-digests equal the H100's and the MI325X's integer-unit digests. Owed before
-it can become a plan under L-9: the same gate on a second Apple generation.
+`gemm/checks/gemm_int8_apple_chunk_check.mojo`, passed on an M2 Pro and on
+an M3 Ultra (bits equal to the flat kernel and to `gemm_int8_oracle` on 21
+shapes of quantized fixtures and 110 planted worst cases, both tile
+geometries), and on both the arm that removes the chunk boundary failed 54
+of the 110 planted cases and none of the quantized fixtures. At the twelve
+transformer rows its digests on the two Apple boxes equal the H100's and the
+MI325X's integer-unit digests. It assumes the unit computes in IEEE float32
+at every internal step, which is a measurement per Apple generation: M2 and
+M3 are measured for this kernel, the M4 is not.
 
 ## 5. Owed
 
