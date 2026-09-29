@@ -697,7 +697,8 @@ def previous_release(root=ROOT):
     if best is None:
         return None
     _, d, linux = best
-    rec = dict(version=linux["version"], record_dir=str(d), source_commit=linux.get("light_smoke", {}).get("source_commit"))
+    rec = dict(version=linux["version"], record_dir=str(d), source_commit=(linux.get("light_smoke", {}).get("source_commit")
+                                                  or linux.get("qualification_reuse", {}).get("source_commit")))
     # "nvidia" and "amd": the split Linux plugins (python/mojolearn/gpu_plugins.py),
     # recorded beside the core's alpha-manifest-linux.json by a split release
     for platform in ("linux", "macos", "nvidia", "amd"):
@@ -709,7 +710,8 @@ def previous_release(root=ROOT):
         files = [(n, s) for n, s in doc.get("files", {}).items() if n.endswith(".whl")]
         rec[platform] = dict(wheel=files[0][0], sha256=files[0][1]) if len(files) == 1 else None
         if platform == "macos" and not rec["source_commit"]:
-            rec["source_commit"] = doc.get("light_smoke", {}).get("source_commit")
+            rec["source_commit"] = (doc.get("light_smoke", {}).get("source_commit")
+                                    or doc.get("qualification_reuse", {}).get("source_commit"))
     idents = d / "binding-identities.json"
     rec["identities"] = str(idents) if idents.is_file() else None
     return rec
