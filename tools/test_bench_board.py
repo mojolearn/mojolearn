@@ -1415,3 +1415,19 @@ def test_store_write_skips_failed_opponents(tmp_path, monkeypatch):
     assert rec["stored_now"] == 0
     cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
     assert cat["store"].startswith("not stored")
+
+
+def test_no_mamba_ssm_neither_plans_nor_installs_the_arms(tmp_path, monkeypatch):
+    with_arms = bb.plan_races("nvidia", ["identical"], ["neural"], ["mamba2-forward"], cpu_arm=False)
+    assert any(a in bb.NEURAL.MAMBA_SSM_ARMS for a in with_arms[0]["arms"])
+    without = bb.plan_races("nvidia", ["identical"], ["neural"], ["mamba2-forward"], cpu_arm=False,
+                            mamba_ssm=False)
+    assert not any(a in bb.NEURAL.MAMBA_SSM_ARMS for a in without[0]["arms"])
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    wheel = tmp_path / "mojolearn-0.8.25-py3-none-any.whl"
+    wheel.write_bytes(b"w")
+    args = bb.build_parser().parse_args(["--python-env", "py", "--mojolearn-wheel", str(wheel),
+                                         "--families", "neural", "--no-mamba-ssm"])
+    bb.setup_python(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
+    assert not any("mamba-ssm" in " ".join(c) or "causal-conv1d" in " ".join(c) for c in cmds)

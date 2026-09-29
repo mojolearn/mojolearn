@@ -4,7 +4,9 @@
 # cuGraph, XGBoost/CatBoost/LightGBM GPU arms, torch CUDA), mojolearn 0.8.25
 # from PyPI (the core and its mojolearn-nvidia plugin, the same version the
 # Apple run used), torch==2.13.0+cu129 in a clean venv (the board's NVIDIA
-# default), the parameter check in force, no smoke gate.
+# default), the parameter check in force, no smoke gate. --no-mamba-ssm: this
+# board's venv and resume key predate the mamba-ssm arms (their pins would
+# change the key); run_mamba_ssm.sh races them in its own --out.
 # Submitted through the shared pod queue from the lane tree:
 #
 #   tools/nvidia_central.sh submit bench-board-nvidia --cap 240 bench/results/bench_board/2026-09-29_nvidia/run.sh
@@ -54,7 +56,7 @@ say "board runs until $(date -u -d "@$stop" +%FT%TZ) at most"
 
 "$PY" tools/bench_board.py --vendor nvidia --mojolearn-version 0.8.25 \
     --base-python "$PY" --out "$OUT" --cache "$CACHE" \
-    --no-cpu-arm --no-smoke-gate "${extra[@]}" >> "$LOG" 2>&1 &
+    --no-cpu-arm --no-smoke-gate --no-mamba-ssm "${extra[@]}" >> "$LOG" 2>&1 &
 pid=$!
 killrun() {   # every process of this run but this script and its parent
     for pat in "$PWD/tools/" "$PWD/bench/speed/" "$CACHE/"; do

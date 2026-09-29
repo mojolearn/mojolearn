@@ -586,7 +586,7 @@ def _our_gpu_arms(family, modes, lane=None):
 
 
 def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
-               neural_shape="full", cpu_arm=True):
+               neural_shape="full", cpu_arm=True, mamba_ssm=True):
     check_neural_modes(families, modes)
     races = []
     for fam in families:
@@ -597,6 +597,8 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                 # one race per lane: its own data, not taxi/Istella; IDENTICAL only
                 ours = our_arms(fam, modes, lane, cpu_arm)
                 opp = NEURAL_OPPONENTS[vendor][lane]
+                if not mamba_ssm:
+                    opp = tuple(a for a in opp if a not in NEURAL.MAMBA_SSM_ARMS)
                 ds = NEURAL_DATA[lane]
                 races.append({
                     "id": race_id(fam, lane, ds, None, neural_shape),
@@ -1107,7 +1109,8 @@ def setup_python(args, vendor, out, log):
             print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
                   "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
         # the mamba-ssm arms: two CUDA source builds (MAMBA_SSM_BUILD's comment)
-        for argv, extra in mamba_ssm_install_steps(python, vendor, args.opponent_wheels):
+        for argv, extra in ([] if args.no_mamba_ssm else
+                            mamba_ssm_install_steps(python, vendor, args.opponent_wheels)):
             env = dict(os.environ, **extra) if extra else None
             if env is not None and os.path.isdir("/usr/local/cuda/bin"):
                 env["PATH"] = "/usr/local/cuda/bin" + os.pathsep + env.get("PATH", "")
@@ -3124,6 +3127,9 @@ def build_parser():
     p.add_argument("--no-infer", action="store_true",
                    help="time training only: skip the inference cells (trees, and the classical "
                         "kmeans/pca/ols/svc lanes) that are timed after each race's fit rounds")
+    p.add_argument("--no-mamba-ssm", action="store_true",
+                   help="neither install nor plan the mamba-ssm arms (a board whose venv and resume "
+                        "key predate them races them in a separate --out)")
     p.add_argument("--no-cpu-arm", action="store_true",
                    help="skip our CPU tier: no `ours-cpu` arm (by default it races on every lane "
                         "whose estimator has a CPU path, on every vendor)")
@@ -3406,7 +3412,7 @@ def main(argv=None):
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
-                       cpu_arm=not args.no_cpu_arm)
+                       cpu_arm=not args.no_cpu_arm, mamba_ssm=not args.no_mamba_ssm)
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
