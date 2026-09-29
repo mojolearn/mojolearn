@@ -1,0 +1,8 @@
+deviation=2910
+started=2026-09-29T02:47:13Z
+root=/root/mojolearn-wt/steward-do-amd
+vendor=amd gpu_archs=unset column=unset
+   column: amd  int8 dispatch: mma (lib_int8_matrix_unit_for)
+   column: amd  int8 dispatch: flat (MOJOLEARN_INT8_FORCE_FLAT)
+finished=2026-09-29T02:48:10Z
+verdict=GREEN every expected outcome held (see status.tsv)

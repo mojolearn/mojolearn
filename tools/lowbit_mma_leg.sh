@@ -64,8 +64,11 @@
 #
 # POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.
 set -u
-ROOT=/root/mojolearn
-OUT=/root/gemm_leg_out/lowbit-mma
+# MOJOLEARN_LOWBIT_LEG_ROOT and MOJOLEARN_LOWBIT_LEG_OUT move the tree and the
+# output folder for a box where the lane has its own tree (the shared NVIDIA
+# pods and the stewards' boxes); unset, the two leg runners' paths hold.
+ROOT=${MOJOLEARN_LOWBIT_LEG_ROOT:-/root/mojolearn}
+OUT=${MOJOLEARN_LOWBIT_LEG_OUT:-/root/gemm_leg_out/lowbit-mma}
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH"
@@ -75,9 +78,16 @@ export PATH="$HOME/.pixi/bin:$PATH"
 # working nvidia-smi is NVIDIA, /dev/kfd or an AMD tool is AMD (/dev/dri alone
 # is not AMD evidence). Recorded only; the gate file reads the column from
 # the accelerator the compiler detects.
+# lane/lowbit-units (2026-09-29): a Mac is APPLE. It has no integer matrix
+# unit, so its dispatcher runs the flat plan and check_int8_mma_matches_flat
+# does not run there; the other gates and both sabotage arms do, and the
+# expectations below are the same but for that one gate's name. (The first
+# run of this body on the M2 Pro steward found no vendor and ran nothing.)
 case "${MOJOLEARN_TARGET_COLUMN:-}" in
     amd|nvidia) VENDOR=$MOJOLEARN_TARGET_COLUMN ;;
-    *) if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then
+    *) if [ "$(uname -s)" = Darwin ]; then
+           VENDOR=apple
+       elif command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then
            VENDOR=nvidia
        elif [ -e /dev/kfd ] || command -v rocm-smi > /dev/null 2>&1 || command -v amd-smi > /dev/null 2>&1; then
            VENDOR=amd
@@ -86,13 +96,15 @@ case "${MOJOLEARN_TARGET_COLUMN:-}" in
        fi ;;
 esac
 if [ "$VENDOR" = unknown ]; then
-    echo "vendor=unknown: no working nvidia-smi, no /dev/kfd, no rocm-smi or amd-smi; nothing run" > "$OUT/gate.txt"
+    echo "vendor=unknown: not a Mac, no working nvidia-smi, no /dev/kfd, no rocm-smi or amd-smi; nothing run" > "$OUT/gate.txt"
     exit 9
 fi
 
 gpu_snapshot() {  # <file>
     if [ "$VENDOR" = nvidia ]; then
         nvidia-smi --query-gpu=name,driver_version,uuid,clocks.sm,temperature.gpu --format=csv > "$1" 2>&1
+    elif [ "$VENDOR" = apple ]; then
+        { sysctl -n machdep.cpu.brand_string; sw_vers -productVersion; } > "$1" 2>&1
     else
         { rocm-smi --showproductname --showdriverversion --showuse --showmemuse --showtemp 2>&1 \
             || echo "rocm-smi did not answer"; } > "$1"
@@ -140,7 +152,12 @@ run() {
 }
 must_name() {
     # must_name <log name> <gate>: the sabotage log must list the gate as
-    # FAILED; a sabotage that does not reach a gate is a finding.
+    # FAILED; a sabotage that does not reach a gate is a finding. The
+    # matrix-unit gate does not run on Apple, so it cannot be named there.
+    if [ "$VENDOR" = apple ] && [ "$2" = check_int8_mma_matches_flat ]; then
+        echo "reach: $1 cannot name $2 on apple (the gate does not run there)" >> "$OUT/gate.txt"
+        return 0
+    fi
     if ! grep -q "GATE FAILED: $2" "$OUT/$1.log" 2>/dev/null; then
         echo "reach: $1 did not fail $2" >> "$OUT/gate.txt"
         red=1

@@ -1106,6 +1106,25 @@ check-gemm-int15-sim = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/chec
 check-gemm-int15-sim-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
 check-gemm-int15-sim-convert-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
 check-gemm-int15-sim-device-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_sim_check.mojo"
+# lane/lowbit-units: the Apple exact-chunk PROBE's gate (Metal only) and its
+# two arms that must FAIL; tools/lowbit_units/chunk_job.sh runs the three.
+check-gemm-int8-apple-chunk = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
+check-gemm-int8-apple-chunk-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_APPLE_CHUNK_SABOTAGE=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
+check-gemm-int8-apple-chunk-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
+# lane/lowbit-mma-speed: the parallel quantizer's gate (every column) and
+# the tuned int8 unit plans' gate (NVIDIA and AMD), each with its arms that
+# must FAIL; tools/lowbit_mma_speed/gate_job.sh runs them.
+check-quantize-int8-par = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/quantize_int8_par_check.mojo"
+check-quantize-int8-par-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_QUANT_PAR_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo"
+check-quantize-int8-par-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/quantize_int8_par_check.mojo"
+check-gemm-int8-mma-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
+check-gemm-int8-mma-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_SABOTAGE=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
+check-gemm-int8-mma-tuned-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
+check-gemm-int8-mma-tuned-unstated = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_UNSTATED=1 -I . gemm/checks/gemm_int8_mma_tuned_check.mojo"
+check-gemm-int8-pieces-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
+check-gemm-int8-pieces-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_PIECES_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
+check-gemm-int8-pieces-tuned-staging-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_TUNED_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
+check-gemm-int8-pieces-tuned-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_pieces_tuned_check.mojo"
 
 
 # The three identity check files ALONE, in whatever mode the tree is
