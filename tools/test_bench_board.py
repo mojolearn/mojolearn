@@ -808,7 +808,10 @@ def test_neural_run_schema_quality_and_board(env):
     assert cpu["torch-cpu-eager-bf16"]["device"] == "cpu"
     assert "## Trees" not in board
     # the neural Not covered lines come from the driver's tables
-    assert "not mamba-ssm's fused CUDA/Triton kernels" in board
+    assert "mamba_ssm's own fused CUDA/Triton kernels" in board
+    # the mamba-ssm arms' cells carry their own library (the stub races them)
+    m2 = {c["arm"]: c for c in res["races"]["neural/mamba2-forward/gaussian/shape=small"]["cells"]}
+    assert m2["mamba-ssm-fp32"]["library"] == "mamba-ssm" and m2["mamba-ssm-tf32"]["device"] == "gpu"
     assert not BANNED.search(board)
     # resume: nothing left to run
     env["calls"].write_text("")
