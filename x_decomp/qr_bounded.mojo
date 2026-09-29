@@ -219,11 +219,14 @@ def qr_factor_bounded(
         raise Error("qr_factor_bounded needs at least as many rows as columns, got "
                     + String(n_rows) + " x " + String(n_cols))
     var ns = qr_slice_count(n_rows, n_cols)
+    var pa = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(a.unsafe_ptr()))
+    var ps = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(r_scratch.unsafe_ptr()))
+    var pr = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(r_out.unsafe_ptr()))
     enqueue_fill(ctx, r_out, Float32(0.0) / Float32(0.0))
     if ns == 1:
-        _qrb_pass(ctx, a.unsafe_ptr(), r_out.unsafe_ptr(), n_rows, n_cols, 1, cells)
+        _qrb_pass(ctx, pa, pr, n_rows, n_cols, 1, cells)
         return 1
     enqueue_fill(ctx, r_scratch, Float32(0.0) / Float32(0.0))
-    _qrb_pass(ctx, a.unsafe_ptr(), r_scratch.unsafe_ptr(), n_rows, n_cols, ns, cells)
-    _qrb_pass(ctx, r_scratch.unsafe_ptr(), r_out.unsafe_ptr(), ns * n_cols, n_cols, 1, cells)
+    _qrb_pass(ctx, pa, ps, n_rows, n_cols, ns, cells)
+    _qrb_pass(ctx, ps, pr, ns * n_cols, n_cols, 1, cells)
     return ns
