@@ -83,6 +83,7 @@ which is what every one of them documents as its preferred layout.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -945,6 +946,10 @@ def build_parser():
     p.add_argument("--ours-only", action="store_true",
                    help="skip the opponents; use when two CUDA runtimes in "
                         "one process will not coexist")
+    p.add_argument("--params-only", action="store_true",
+                   help="construct every arm, print its parameters (BOARD-PARAMS) and library "
+                        "(FSPEED-LIBRARY) and stop before the warm-up (the board's opponent "
+                        "store lookup)")
     p.add_argument("--list-arms", action="store_true",
                    help="print the roster for the lane and exit")
     p.add_argument("--infer", action="store_true",
@@ -1127,6 +1132,26 @@ def main(argv=None):
         except Exception as exc:  # noqa: BLE001
             records[arm.name] = {"__record__": True, "library": "?",
                                  "source": "construction failed (%s)" % exc, "params": {}}
+    # each arm's own library version and GPU (the board's opponent store keys
+    # an opponent by them), one FSPEED-LIBRARY JSON line per constructed arm
+    import bench_board_probe
+    for arm in arms:
+        if arm.name in proxy_names or arm.name not in records \
+                or isinstance(records[arm.name], dict):          # not constructed
+            continue
+        lib = getattr(arm, "library", None) or "mojolearn"
+        gpu = any(t in arm.name for t in ("gpu", "cuda", "opencl")) or arm.name in ("ours", "ours-ab")
+        print("FSPEED-LIBRARY %s" % json.dumps({
+            "lane": lane, "arm": arm.name, "library": lib,
+            "version": bench_board_probe.library_version(lib),
+            "device": "gpu" if gpu else "cpu",
+            "device_name": bench_board_probe.gpu_device_name() if gpu else None},
+            sort_keys=True), flush=True)
+    if args.params_only:
+        # the board's opponent-store lookup: constructed, read back, stopped
+        BP.emit(BP.check(lane, records, family="trees"))
+        print("PARAMS-ONLY lane=%s arms=%s" % (lane, ",".join(sorted(records))), flush=True)
+        return 0
     extra = ()
     if args.ours_ab:
         extra = ((args.ours_ab.partition("=")[0].strip(), "ours-ab",
