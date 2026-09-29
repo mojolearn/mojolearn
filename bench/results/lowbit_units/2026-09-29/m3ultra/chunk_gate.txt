@@ -1,0 +1,6 @@
+box=m3ultra
+started=2026-09-29T03:21:30Z
+tree_head=f1e6cb61ca792fec4a71e0b4b13112c8129288f2 dirty_files=1
+machine=Apple M3 Ultra macOS 26.7
+finished=2026-09-29T03:21:43Z
+verdict=GREEN every expected outcome held (see status.tsv)

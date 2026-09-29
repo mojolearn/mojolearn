@@ -1233,7 +1233,7 @@ NON_SIZE_REVISIONS = {
         "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
         "floored on the lane"),
     "tsvd": (
-        "train contract, not input: cb64532b6 added explained_variance_ and "
+        "train contract, not input (2026-09-28): cb64532b6 added explained_variance_ and "
         "explained_variance_ratio_ to the train-parts digest without recording a revision. "
         "This revision repair changes no fixture or arithmetic; old two-part train records "
         "cannot qualify the new three-part contract"),
@@ -2920,6 +2920,36 @@ def _(ml, X, yc, yr, Xh=None):
     c = ml.linalg.matmul_int8((qa, ea), (qb, eb))
     return _fit(dict(codes=_h(np.asarray(qa), np.asarray(qb)), exps=_h(np.asarray(ea), np.asarray(eb)),
                      product=_h(c), dequant=_h(ml.linalg.dequantize_int8(qb, eb))))
+
+
+@lane("gemm-int15")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.identical.gemm.int15i64.v1` on the same slices (lane
+    lane/lowbit-int15, 2026-09-29; contract section 6): the planes and
+    exponents the quantizer produces, the dequantized product from float32
+    operands and from the planes, and the image the planes stand for.
+
+    `planes` hashes both int8 planes of both operands; a code is `hi * 128 +
+    lo`, so the planes ARE the codes. `product` is the product from the
+    planes and `onecall` the product from the float32 operands, which must
+    be the same bytes: the lane holds them to that and records the answer
+    as the number `same`, never as an assertion (a raise would read
+    REFUSED). `refuses` is 1 when a contracted extent above `INT15_MAX_K`
+    is refused by name."""
+    a = np.ascontiguousarray(X[:256]).astype(np.float32)
+    b = np.ascontiguousarray(X[256:256 + 128]).astype(np.float32)
+    ah, al, ea = ml.linalg.quantize_int15(a)
+    bh, bl, eb = ml.linalg.quantize_int15(b)
+    c = ml.linalg.matmul_int15((ah, al, ea), (bh, bl, eb))
+    c1 = ml.linalg.matmul_int15(a, b)
+    same = np.array([int(np.asarray(c).tobytes() == np.asarray(c1).tobytes())], dtype=np.int32)
+    wide = np.zeros((1, ml.linalg.INT15_MAX_K + 1), dtype=np.float32)
+    refuses = np.array([int(_lane_refuses(lambda: ml.linalg.matmul_int15(wide, wide), "65536"))],
+                       dtype=np.int32)
+    return _fit(dict(planes=_h(np.asarray(ah), np.asarray(al), np.asarray(bh), np.asarray(bl)),
+                     exps=_h(np.asarray(ea), np.asarray(eb)),
+                     product=_h(c), onecall=_h(c1), flags=_h(same, refuses),
+                     dequant=_h(ml.linalg.dequantize_int15(bh, bl, eb))))
 
 
 def _lane_refuses(fn, text):
@@ -9418,7 +9448,7 @@ def _batch_gemm_transposed(ml, e, Xh):
 
 
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
-_batch_decl("n/a:profile lane; the products are hashed whole", "gemm-bf16", "gemm-int8")
+_batch_decl("n/a:profile lane; the products are hashed whole", "gemm-bf16", "gemm-int8", "gemm-int15")
 # lane/linalg-public (2026-09-19). A factorization is a GLOBAL REDUCTION over
 # every row of its input: the Householder QR folds each column's norm across
 # all n_rows, and the Jacobi sweeps run to convergence on the whole matrix.

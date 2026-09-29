@@ -32,6 +32,13 @@ what today's block fixes. That is how a Llama 3 config is refused at
 `norm_eps=1e-5` today (the block fixes 1e-6) and honored the day lane B1's
 signature lands, without a line changing here.
 
+NUMERIC PROFILE. `numeric_profile=` names the number format the matrix
+products compute in (`mojolearn._numeric_profile`). It is its own parameter,
+independent of `numeric_mode`, and opt in: None is the process default,
+which is `fp32_v1` unless the caller changed it, and a registered profile
+that no block computes under yet is refused by name before any tensor is
+read. `weight_format` below is storage and does not change the arithmetic.
+
 WEIGHT FORMATS. `weight_format="float32"` keeps every tensor float32.
 `"bfloat16"` hands the blocks their projection matrices as
 `lowbit.BF16Weight`: bits copied straight from a BF16 checkpoint (no
@@ -66,6 +73,7 @@ import inspect
 import os
 
 from .. import _backend
+from .. import _numeric_profile
 from .. import lowbit as _lowbit
 from .._array import Array
 from .._buffer import addr, addr_ro, all_finite, as_i32_c, empty, frombytes
@@ -251,12 +259,14 @@ class CausalLM:
     directly from a `ModelPlan` and a weight dict shaped like
     `_read_weights` returns."""
 
-    def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device="auto"):
+    def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device="auto",
+                 numeric_profile=None):
         if weight_format not in _lowbit.FORMATS:
             raise ValueError(f"mojolearn.models.CausalLM: weight_format must be one of {_lowbit.FORMATS}, got {weight_format!r}")
         self.plan = plan
         self.config = plan.config
         self.weight_format = weight_format
+        self.numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM numeric_profile")
         self.device = _route(device)
         self.d_model = int(plan.d_model)
         self.vocab_size = int(plan.vocab_size)
@@ -328,11 +338,13 @@ class CausalLM:
 
     # ------------------------------------------------------------ loading
     @classmethod
-    def load(cls, path, *, weight_format="float32", max_positions=None, device="auto"):
+    def load(cls, path, *, weight_format="float32", max_positions=None, device="auto", numeric_profile=None):
         """A checkpoint directory (`config.json` plus `model.safetensors` or
         `model.safetensors.index.json` and its shards)."""
         if weight_format not in _lowbit.FORMATS:
             raise ValueError(f"mojolearn.models.CausalLM.load: weight_format must be one of {_lowbit.FORMATS}, got {weight_format!r}")
+        # refuse a profile no model computes under BEFORE reading gigabytes
+        numeric_profile = _numeric_profile.resolve(numeric_profile, "mojolearn.models.CausalLM.load numeric_profile")
         path = os.fspath(path)
         if not os.path.isdir(path):
             raise FileNotFoundError(f"mojolearn.models.CausalLM.load: {path} is not a directory")
@@ -347,7 +359,8 @@ class CausalLM:
             weights = cls._read_weights(ckpt, plan, weight_format)
         finally:
             ckpt.close()
-        return cls(plan, weights, weight_format=weight_format, max_positions=max_positions, device=route)
+        return cls(plan, weights, weight_format=weight_format, max_positions=max_positions, device=route,
+                   numeric_profile=numeric_profile)
 
     @staticmethod
     def _read_weights(ckpt, plan, weight_format):

@@ -1,0 +1,10 @@
+# The fifteen-bit profile's seam check drivers, one sabotage patch per seam (docs/lanes/progress/lowbit-int15.md).
+# Each patch turns ONE arm on as a source edit at its use site, so the driver must build, run and FAIL.
+#   device value flip   every cell the three kernels store          gemm_int15_check: the device oracle gates
+#   piece hi clamp      the split writes -127 for a high piece -128  gemm_int15_check: the conversions gate, the planted worst cases
+#   quant tail dropped  the parallel absmax never reads the tail     gemm_int15_check: the conversions gate
+#   host value flip     every cell of the host oracle                gemm_int15_sim_check: the host oracle against the simulation
+gemm/checks/gemm_int15_check.mojo	gemm/checks/sabotage/int15_device_value_flip.patch
+gemm/checks/gemm_int15_check.mojo	gemm/checks/sabotage/int15_piece_hi_clamp.patch
+gemm/checks/gemm_int15_check.mojo	gemm/checks/sabotage/int15_quant_tail_dropped.patch
+gemm/checks/gemm_int15_sim_check.mojo	gemm/checks/sabotage/int15_host_value_flip.patch

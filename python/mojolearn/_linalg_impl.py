@@ -105,6 +105,14 @@ LOWBIT_PROFILE_VERSION = 1
 PROFILE_BF16 = f"mojolearn.identical.gemm.bf16f32.v{LOWBIT_PROFILE_VERSION}"
 PROFILE_INT8 = f"mojolearn.identical.gemm.int8i32.v{LOWBIT_PROFILE_VERSION}"
 
+#: The fifteen-bit profile (gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6,
+#: lane/lowbit-int15, 2026-09-29). Its own version, read back from the
+#: binary on its own: a change to it makes v2 of it and of nothing else.
+INT15_PROFILE_VERSION = 1
+PROFILE_INT15 = f"mojolearn.identical.gemm.int15i64.v{INT15_PROFILE_VERSION}"
+#: The largest contracted extent the profile accepts (contract clause W-4).
+INT15_MAX_K = 65536
+
 #: The three operations of contract section 0.1, and their `op` codes as
 #: `gemm/host/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
 #: `n == 1` and is NOT a fourth operation.
@@ -720,6 +728,140 @@ def _int8_operand(x, name):
             )
         return q, e
     return quantize_int8(_operand(x, name))
+
+
+# ===========================================================================
+# THE FIFTEEN-BIT PROFILE (lane/lowbit-int15, 2026-09-29)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6. An operand is THREE arrays:
+# its two int8 planes `hi` and `lo` (code = hi * 128 + lo, `lo` in
+# [0, 127], `hi` in [-128, 127]) and one int32 exponent per row. The planes
+# are what the product reads on every vendor, and what a weight is kept as.
+# ===========================================================================
+
+
+def _int15_binding():
+    b = _load()
+    require_identical()
+    got = getattr(b, "int15_profile_version", None)
+    if got is None:
+        raise RuntimeError(
+            "mojolearn.linalg: the loaded linalg extension predates the "
+            "fifteen-bit profile; rebuild it with bindings/build_linalg.sh"
+        )
+    v = int(got())
+    if v != INT15_PROFILE_VERSION:
+        raise RuntimeError(
+            f"mojolearn.linalg: the loaded extension implements fifteen-bit "
+            f"profile version {v}, this wrapper expects {INT15_PROFILE_VERSION}"
+        )
+    return b
+
+
+def quantize_int15(x):
+    """Row-wise fifteen-bit codes of a 2-D float32 matrix, as planes
+    (contract W-1 to W-3). Returns `(hi, lo, exponents)`: two int8 Arrays
+    of x's shape and an int32 Array of `rows`.
+
+    Per row `e = floor(log2 absmax) - 13`, so the row's largest magnitude
+    lands in `[8192, 16384)`; the code is `clamp(rne(x * 2**-e), -16383,
+    16383)`; `hi = code >> 7` and `lo = code & 127`, so `code = hi * 128 +
+    lo`. The same planes and exponents on every vendor."""
+    a = _operand(x, "x")
+    rows, cols = probe(a).shape
+    hi = empty((rows, cols), "<i1")
+    lo = empty((rows, cols), "<i1")
+    exps = empty((rows,), "<i4")
+    # `addrs` is, in this exact order (mirrored word for word in
+    # `bindings/_mojolearn_linalg.mojo::quantize_int15_binding`):
+    #     0 hi, 1 lo, 2 exponents, 3 x
+    addrs = [addr(hi, name="hi"), addr(lo, name="lo"), addr(exps, name="exponents"),
+             addr_ro(a, name="x")]
+    _int15_binding().quantize_int15(addrs, [int(rows), int(cols)])
+    return hi, lo, exps
+
+
+def _int15_planes(x, name, who):
+    hi, _ = as_i8_c(x[0], ndim=2, name=name + " hi")
+    lo, _ = as_i8_c(x[1], ndim=2, name=name + " lo")
+    e, _ = as_i32_c(x[2], ndim=1, name=name + " exponents")
+    shape = probe(hi).shape
+    if probe(lo).shape != shape:
+        raise ValueError(
+            f"mojolearn.linalg.{who}: {name} lo has shape {probe(lo).shape}, "
+            f"hi has {shape}"
+        )
+    if probe(e).shape != (shape[0],):
+        raise ValueError(
+            f"mojolearn.linalg.{who}: {name} exponents has shape "
+            f"{probe(e).shape}, want ({shape[0]},)"
+        )
+    return hi, lo, e
+
+
+def dequantize_int15(hi, lo, exponents):
+    """`(hi * 128 + lo) * 2**exponents[row]`, as float32: the matrix a
+    store of fifteen-bit planes stands for."""
+    h, l, e = _int15_planes((hi, lo, exponents), "operand", "dequantize_int15")
+    rows, cols = probe(h).shape
+    out = empty((rows, cols), "<f4")
+    # `addrs`: 0 y, 1 hi, 2 lo, 3 exponents (mirrored in the binding).
+    addrs = [addr(out, name="out"), addr_ro(h, name="hi"), addr_ro(l, name="lo"),
+             addr_ro(e, name="exponents")]
+    _int15_binding().dequantize_int15(addrs, [int(rows), int(cols)])
+    return out
+
+
+def _int15_operand(x, name):
+    if isinstance(x, tuple) and len(x) == 3:
+        return _int15_planes(x, name, "matmul_int15")
+    if isinstance(x, tuple):
+        raise TypeError(
+            f"mojolearn.linalg.matmul_int15: {name} is a tuple of {len(x)}; a "
+            "fifteen-bit operand is (hi, lo, exponents) from quantize_int15, "
+            "or a float32 matrix"
+        )
+    return quantize_int15(_operand(x, name))
+
+
+def matmul_int15(a, b, *, out=None):
+    """`C = a @ b.T` under `mojolearn.identical.gemm.int15i64.v1` (OP_NT).
+
+    Each of `a` (m x k) and `b` (n x k) is either a float32 matrix, which is
+    quantized by the profile's own rule, or a `(hi, lo, exponents)` triple
+    from `quantize_int15`. The output is float32: the exact integer sum of
+    the products of the codes, converted to float32 with round to nearest
+    even and scaled by one power of two. It is NOT the float32 product; it
+    is the product of the rounded operands, and the profile pins that.
+
+    `k` is at most 65536 (`INT15_MAX_K`); a larger `k` is refused by name.
+    The same bits on every vendor and from every execution plan: the
+    integer matrix unit where the vendor has one, a kernel of integer
+    multiplies elsewhere.
+    """
+    ah, al, ea = _int15_operand(a, "a")
+    bh, bl, eb = _int15_operand(b, "b")
+    m, k = probe(ah).shape
+    n, kb = probe(bh).shape
+    if k != kb:
+        raise ValueError(
+            f"mojolearn.linalg.matmul_int15: contracted extents differ, a "
+            f"gives k={k} and b gives k={kb}"
+        )
+    if k > INT15_MAX_K:
+        raise ValueError(
+            f"mojolearn.linalg.matmul_int15: k={k} is above {INT15_MAX_K}, the "
+            f"largest contracted extent {PROFILE_INT15} accepts (contract W-4)"
+        )
+    out_arr = _out_or_new(out, m, n, "matmul_int15")
+    # `addrs` is, in this exact order (mirrored word for word in
+    # `bindings/_mojolearn_linalg.mojo::gemm_int15_binding`):
+    #     0 c, 1 a hi, 2 a lo, 3 a exponents, 4 b hi, 5 b lo, 6 b exponents
+    # THE OUTPUT ADDRESS COMES FIRST, as in every product of this module.
+    addrs = [addr(out_arr, name="out"),
+             addr_ro(ah, name="a hi"), addr_ro(al, name="a lo"), addr_ro(ea, name="a exponents"),
+             addr_ro(bh, name="b hi"), addr_ro(bl, name="b lo"), addr_ro(eb, name="b exponents")]
+    _int15_binding().gemm_int15(addrs, [int(m), int(n), int(k)])
+    return out_arr
 
 
 def _out_or_new(out, m, n, who):

@@ -1,0 +1,4 @@
+# The fifteen-bit GEMM profile (mojolearn.identical.gemm.int15i64.v1, contract section 6,
+# lane/lowbit-int15, 2026-09-29). Its lane is registered in tools/identity_break.py itself;
+# checking it runs tools/identity_lanes/int15.checks.
+gemm-int15
