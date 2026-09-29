@@ -142,7 +142,7 @@ def test_oracle_imports_no_gpu_module():
         "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
         "gbdt.grid_creator.binarization", "gbdt.host.gbdt_oracle_eval",
         "gbdt.options.data_processing_options",
-        "max.algorithm", "std.math", "std.memory", "std.sys.compile",
+        "std.math", "std.memory", "std.sys.compile",
     ], imports
     for rel in REUSED_HOST_MODULES:
         body = _read(rel)
