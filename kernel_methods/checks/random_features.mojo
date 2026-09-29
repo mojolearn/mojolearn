@@ -204,12 +204,34 @@ comptime KM_KIND_RF_OFFSET: UInt64 = 19
 # import cycle between this file and `km_sabotage.mojo`. Imported above.
 # ===========================================================================
 
-#: The O(N^2) rank pass's bound, the same shape of refusal as
-#: `resample/checks/index_map.mojo::PERM_MAX_POOLED` and for the same
-#: reason: the basis sample ranks every training row against every other by
-#: counting a total order, which is `n_samples^2` comparisons on the host.
-#: DEVIATION 1672.
-comptime KM_MAX_BASIS_POOL = 4096
+#: The basis sample's bound on `n_samples` (DEVIATION 1672, closed
+#: 2026-09-29). The rank pass is no longer the O(N^2) count: it is
+#: `km_rank_order_sort`, a pinned LSD radix sort that is O(N) passes and
+#: `KM_BASIS_SORT_BYTES_PER_ROW` bytes of host memory per row. What bounds
+#: it now is the ROW ID TYPE: `component_indices_` are Int32 and the
+#: position map `position_subsequence` is injective only below 2^32, so the
+#: largest pool is 2^31 - 1 rows, which is 48 GiB of sort scratch; a pool
+#: past it is refused by name with both numbers.
+comptime KM_MAX_BASIS_POOL = 2147483647
+
+#: Host bytes per row the sort holds live: two 64-bit key buffers and two
+#: Int32 position buffers (ping and pong).
+comptime KM_BASIS_SORT_BYTES_PER_ROW = 24
+
+#: The pinned radix: 8 passes of 8 bits over the 64-bit key, least
+#: significant digit first. The pass count, the digit width and the digit
+#: ORDER are part of the order's definition only through stability, so any
+#: change here that keeps every pass stable leaves the answer bit for bit;
+#: the constants are pinned anyway so the scratch size is a fixed number.
+comptime KM_BASIS_RADIX_BITS = 8
+comptime KM_BASIS_RADIX_BUCKETS = 1 << KM_BASIS_RADIX_BITS
+comptime KM_BASIS_RADIX_PASSES = 64 // KM_BASIS_RADIX_BITS
+
+#: The bound of the RETIRED counting rank, kept only as the reference the
+#: sort is gated against (`km_rank_order_counting`): the largest pool the
+#: pre-2026-09-29 code accepted, so "bit-identical to the old answer" is
+#: checked over every size the old answer existed at.
+comptime KM_BASIS_COUNTING_MAX = 4096
 
 
 def km_key(seed: UInt64, kind: UInt64) -> UInt64:
@@ -300,44 +322,109 @@ def km_feature_scale(n_components: Int) -> Float32:
 # ===========================================================================
 
 
-def km_basis_indices(
-    seed: UInt64, n_samples: Int, n_components: Int
-) raises -> List[Int32]:
-    """`inds = rnd.permutation(n_samples); basis_inds = inds[:n_components]`
-    (`kernel_approximation.py:1050-1051`), position-mapped.
+def km_basis_keys(seed: UInt64, n_samples: Int) -> List[UInt64]:
+    """Row `j`'s 64-bit ordering key, `draw_permutation_key` at position
+    `(0, j)` under `km_key(seed, KM_KIND_BASIS)`, for every row. A pure
+    function of `(seed, j)`: no row's key reads another's."""
+    var key = km_key(seed, KM_KIND_BASIS)
+    var keys = List[UInt64](capacity=n_samples)
+    for j in range(n_samples):
+        keys.append(draw_permutation_key(key, 0, j))
+    return keys^
 
-    THEIRS is a Fisher-Yates shuffle over a SEQUENTIAL stream: entry `i` of
-    the permutation depends on every swap before it, and the number of stream
-    words consumed is itself a function of `n_samples`. `index_map.mojo`'s
-    DEVIATION 1690 explains at length why that cannot be made parallel,
-    machine-independent and batch-independent at once.
 
-    OURS gives row `j` a 64-bit ordering key at position `(0, j)` --
-    `draw_permutation_key`, CALLED, not re-spelled -- and takes the rows whose
-    RANK under the total order `(key, index)` is below `n_components`. That
-    is a uniformly random permutation prefix with three properties their
-    shuffle does not have:
+def km_rank_order_sort(keys: List[UInt64], count: Int) -> List[Int32]:
+    """The positions `0..n-1` in the TOTAL ORDER `permutation_key_lt`
+    (key ascending, position breaking every tie), the first `count` kept.
+    DEVIATION 1672's closure.
 
-      (a) **PREFIX STABILITY IN `n_components`.** The basis for `q = 64` is
-          the first 64 entries of the basis for `q = 256`, in the same order,
-          bit for bit. `check_nystroem_basis_prefix_stability` gates it.
-      (b) **The key is a pure function of `(seed, j)`**, so the draw is
-          embarrassingly parallel with no cross-thread RNG state.
-      (c) **Distinctness is free.** The rank is a bijection because the order
-          includes the index, so no two rows can claim one rank and the
-          sample is without replacement by construction rather than by a
-          rejection loop.
+    THE COMPOSITE KEY IS `(key, position)`, the same construction as
+    `neighbors/checks/select_radix_identical.mojo`'s `(distance, index)`:
+    the high part orders, the low part separates what the high part leaves
+    equal, so the order is total and no two positions share a rank. Here the
+    low part costs no radix pass: the positions ENTER in ascending order and
+    every pass is a STABLE counting sort, so after the eight 8-bit passes
+    over the key (least significant digit first) two equal keys still sit in
+    ascending position order. That is exactly `permutation_key_lt`.
 
-    THE RANK PASS IS O(n_samples^2) AND RUNS ON THE HOST. That is the same
-    shape and the same bound as `index_map.mojo::permutation_ranks_host`, and
-    it is a HOST pass for the reason `decomposition/impl/linalg/detail/
-    pca.mojo::eig_and_truncate` gives about its own ordering: sklearn's runs
-    on the host too, and the cost is O(n^2) in the SAMPLE COUNT, never in the
-    feature count. Above `KM_MAX_BASIS_POOL` it RAISES with the closure
-    (DEVIATION 1672).
+    PINNED. Integer histogram, integer exclusive prefix, integer scatter
+    walked in ascending source order; no comparison whose outcome depends on
+    anything but the key bits, no parallel arrival order, no float. The
+    answer is therefore one permutation on every host, and it is THE
+    permutation the retired counting rank produced (a total order has one
+    sorted arrangement), which `nystroem_basis_sort_check.mojo` gates against
+    `km_rank_order_counting` at every size the old code accepted.
 
-    Returns the basis row ids IN RANK ORDER, `n_components` of them.
+    O(n) per pass, `KM_BASIS_SORT_BYTES_PER_ROW` bytes per row.
     """
+    var n = len(keys)
+    var ka = keys.copy()
+    var ia = List[Int32](capacity=n)
+    for j in range(n):
+        ia.append(Int32(j))
+    var kb = List[UInt64](length=n, fill=UInt64(0))
+    var ib = List[Int32](length=n, fill=Int32(0))
+    var hist = List[Int](length=KM_BASIS_RADIX_BUCKETS, fill=0)
+    var mask = UInt64(KM_BASIS_RADIX_BUCKETS - 1)
+    for p in range(KM_BASIS_RADIX_PASSES):
+        var shift = UInt64(p * KM_BASIS_RADIX_BITS)
+        for b in range(KM_BASIS_RADIX_BUCKETS):
+            hist[b] = 0
+        for j in range(n):
+            hist[Int((ka[j] >> shift) & mask)] += 1
+        var run = 0
+        for b in range(KM_BASIS_RADIX_BUCKETS):
+            var c = hist[b]
+            hist[b] = run
+            run += c
+        for j in range(n):
+            var digit = Int((ka[j] >> shift) & mask)
+            var dst = hist[digit]
+            kb[dst] = ka[j]
+            ib[dst] = ia[j]
+            hist[digit] = dst + 1
+        var tk = ka^
+        ka = kb^
+        kb = tk^
+        var ti = ia^
+        ia = ib^
+        ib = ti^
+    var out = List[Int32](capacity=count)
+    for c in range(count):
+        out.append(ia[c])
+    return out^
+
+
+def km_rank_order_counting(keys: List[UInt64], count: Int) raises -> List[Int32]:
+    """THE RETIRED RANK PASS, kept verbatim as the reference
+    `km_rank_order_sort` is gated against: every position's rank is the
+    number of positions below it under `permutation_key_lt`, O(n^2) host
+    comparisons, bounded at `KM_BASIS_COUNTING_MAX` (the old
+    `KM_MAX_BASIS_POOL`). Not on any fit path."""
+    var n = len(keys)
+    if n > KM_BASIS_COUNTING_MAX:
+        raise Error(
+            "km_rank_order_counting: n "
+            + String(n)
+            + " exceeds KM_BASIS_COUNTING_MAX = "
+            + String(KM_BASIS_COUNTING_MAX)
+            + "; the counting reference is n^2 comparisons and exists only"
+            " to gate km_rank_order_sort at the sizes it used to serve"
+        )
+    var out = List[Int32]()
+    for _ in range(count):
+        out.append(Int32(0))
+    for j in range(n):
+        var rank = 0
+        for l in range(n):
+            if permutation_key_lt(keys[l], l, keys[j], j):
+                rank += 1
+        if rank < count:
+            out[rank] = Int32(j)
+    return out^
+
+
+def _km_basis_validate(n_samples: Int, n_components: Int) raises:
     if n_samples <= 0:
         raise Error(
             "km_basis_indices: n_samples must be positive, got "
@@ -369,32 +456,70 @@ def km_basis_indices(
             + String(n_samples)
             + " exceeds KM_MAX_BASIS_POOL = "
             + String(KM_MAX_BASIS_POOL)
-            + ". The rank pass counts a total order over every pair of rows,"
-            " which is n_samples^2 host comparisons. To close this refusal,"
-            " replace the counting rank with a pinned segmented sort over"
-            " the 64-bit composite key -- the construction"
-            " neighbors/checks/select_radix_identical.mojo uses for its"
-            " (distance, index) key -- and re-gate"
-            " check_nystroem_basis_prefix_stability at the larger size."
-            " DEVIATION 1672"
+            + ". Basis row ids are Int32 (component_indices_) and the"
+            " position map is injective only below 2^32; the sort would"
+            " also hold "
+            + String(n_samples * KM_BASIS_SORT_BYTES_PER_ROW)
+            + " bytes of host scratch ("
+            + String(KM_BASIS_SORT_BYTES_PER_ROW)
+            + " per row). DEVIATION 1672"
         )
 
-    var key = km_key(seed, KM_KIND_BASIS)
-    var keys = List[UInt64]()
-    for j in range(n_samples):
-        keys.append(draw_permutation_key(key, 0, j))
 
-    var out = List[Int32]()
-    for _ in range(n_components):
-        out.append(Int32(0))
-    for j in range(n_samples):
-        var rank = 0
-        for l in range(n_samples):
-            if permutation_key_lt(keys[l], l, keys[j], j):
-                rank += 1
-        if rank < n_components:
-            out[rank] = Int32(j)
-    return out^
+def km_basis_indices(
+    seed: UInt64, n_samples: Int, n_components: Int
+) raises -> List[Int32]:
+    """`inds = rnd.permutation(n_samples); basis_inds = inds[:n_components]`
+    (`kernel_approximation.py:1050-1051`), position-mapped.
+
+    THEIRS is a Fisher-Yates shuffle over a SEQUENTIAL stream: entry `i` of
+    the permutation depends on every swap before it, and the number of stream
+    words consumed is itself a function of `n_samples`. `index_map.mojo`'s
+    DEVIATION 1690 explains at length why that cannot be made parallel,
+    machine-independent and batch-independent at once.
+
+    OURS gives row `j` a 64-bit ordering key at position `(0, j)` --
+    `draw_permutation_key`, CALLED, not re-spelled -- and takes the rows whose
+    RANK under the total order `(key, index)` is below `n_components`. That
+    is a uniformly random permutation prefix with three properties their
+    shuffle does not have:
+
+      (a) **PREFIX STABILITY IN `n_components`.** The basis for `q = 64` is
+          the first 64 entries of the basis for `q = 256`, in the same order,
+          bit for bit. `check_nystroem_basis_prefix_stability` gates it, at
+          24 and at 100,000 rows.
+      (b) **The key is a pure function of `(seed, j)`**, so the draw is
+          embarrassingly parallel with no cross-thread RNG state.
+      (c) **Distinctness is free.** The rank is a bijection because the order
+          includes the index, so no two rows can claim one rank and the
+          sample is without replacement by construction rather than by a
+          rejection loop.
+
+    THE RANK PASS RUNS ON THE HOST, for the reason `decomposition/impl/
+    linalg/detail/pca.mojo::eig_and_truncate` gives about its own ordering:
+    sklearn's runs on the host too. It was an O(n_samples^2) count bounded
+    at 4096 rows until 2026-09-29, which refused Nystroem on the bench
+    board's 100,000-row taxi and Istella-S fits. It is now
+    `km_rank_order_sort`, the pinned radix sort over the composite key,
+    O(n_samples) per pass; the counting rank survives as
+    `km_rank_order_counting`, the reference the sort is gated against, and
+    the two return the same rows in the same order at every size the old
+    code accepted (DEVIATION 1672). Integer only, so the answer is one list
+    on every host, whichever GPU the rest of the fit runs on.
+
+    Returns the basis row ids IN RANK ORDER, `n_components` of them.
+    """
+    _km_basis_validate(n_samples, n_components)
+    return km_rank_order_sort(km_basis_keys(seed, n_samples), n_components)
+
+
+def km_basis_indices_counting(
+    seed: UInt64, n_samples: Int, n_components: Int
+) raises -> List[Int32]:
+    """`km_basis_indices` through the RETIRED counting rank: the reference
+    answer, at most `KM_BASIS_COUNTING_MAX` rows. Checks only."""
+    _km_basis_validate(n_samples, n_components)
+    return km_rank_order_counting(km_basis_keys(seed, n_samples), n_components)
 
 
 # ===========================================================================

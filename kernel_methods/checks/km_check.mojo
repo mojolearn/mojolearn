@@ -51,7 +51,9 @@ The checks, in order:
                                        moves no bit; the sabotage flips signs;
                                        and DEVIATION 1668's asymmetry
     check_nystroem_basis_prefix_stability   the basis at q = 4 is the prefix of
-                                       the basis at q = 12
+                                       the basis at q = 12, at n = 24 and at
+                                       n = 100,000, and ascends under
+                                       (key, index)
     check_random_features_prefix_stability  component j is the same at
                                        D = 64, 65 and 256, bit for bit
     check_boxmuller_guard              DEVIATION 1676 at a PLANTED u1 = +0.0
@@ -214,6 +216,7 @@ from kernel_methods.checks.random_features import (
     KM_KIND_RF_WEIGHT,
     KM_MAX_BASIS_POOL,
     km_basis_indices,
+    km_basis_keys,
     km_random_offsets_host,
     km_random_weights_host,
 )
@@ -228,6 +231,7 @@ from resample.checks.index_map import (
     RESAMPLE_KIND_BOOTSTRAP,
     RESAMPLE_KIND_MONTE_CARLO,
     RESAMPLE_KIND_PERMUTATION,
+    permutation_key_lt,
 )
 from svm.impl.svm_parameter import KernelParams
 
@@ -1621,39 +1625,34 @@ def check_eigen_sign_is_pinned() raises:
 # ===========================================================================
 
 
-def check_nystroem_basis_prefix_stability() raises:
-    """The basis at `q` is the PREFIX of the basis at any larger `q`.
-
-    DEVIATION 1671. scikit-learn's `rnd.permutation(n)[:q]` has this property
-    too, at one `n` -- their prefix is stable because the permutation is
-    drawn whole -- but theirs is NOT stable in `n_samples` and is not
-    parallelisable, and this lane's is a rank prefix rather than a shuffle.
-    What is asserted here is the property, at three widths, bit for bit and
-    in both modes: the map is integer arithmetic all the way to the drawn
-    index, so there is nothing for a mode to change.
-    """
-    var n = 24
-    var widths = List[Int]()
-    widths.append(2)
-    widths.append(4)
-    widths.append(12)
-    widths.append(n)
-    var full = km_basis_indices(UInt64(1234), n, n)
+def _basis_prefix_stability_at(
+    seed: UInt64, n: Int, widths: List[Int]
+) raises -> Int:
+    """Prefix stability over `widths` and the q == n bijection at one `n`,
+    plus the ORDER itself: consecutive entries of the q == n sample must
+    ascend strictly under `permutation_key_lt`, recomputed here from
+    `km_basis_keys`. Strictly ascending AND a bijection is the one sorted
+    arrangement of a total order, so this proves the answer without
+    trusting how it was computed. Returns the entries compared."""
+    var full = km_basis_indices(seed, n, n)
     var checked = 0
     for q in widths:
-        var part = km_basis_indices(UInt64(1234), n, q)
+        var part = km_basis_indices(seed, n, q)
         if len(part) != q:
             raise Error(
                 "check_nystroem_basis_prefix_stability FAILED: asked for "
                 + String(q)
-                + " basis rows and got "
+                + " basis rows at n = "
+                + String(n)
+                + " and got "
                 + String(len(part))
             )
         for c in range(q):
             if part[c] != full[c]:
                 raise Error(
-                    "check_nystroem_basis_prefix_stability FAILED: basis"
-                    " entry "
+                    "check_nystroem_basis_prefix_stability FAILED: at n = "
+                    + String(n)
+                    + " basis entry "
                     + String(c)
                     + " is row "
                     + String(Int(part[c]))
@@ -1668,16 +1667,16 @@ def check_nystroem_basis_prefix_stability() raises:
                 )
         checked += q
 
-    # And it is a BIJECTION at q == n: every row exactly once.
-    var seen = List[Int]()
-    for _ in range(n):
-        seen.append(0)
+    # A BIJECTION at q == n: every row exactly once.
+    var seen = List[Int](length=n, fill=0)
     for c in range(n):
         seen[Int(full[c])] += 1
     for r in range(n):
         if seen[r] != 1:
             raise Error(
-                "check_nystroem_basis_prefix_stability FAILED: at q == n row "
+                "check_nystroem_basis_prefix_stability FAILED: at n = "
+                + String(n)
+                + ", q == n, row "
                 + String(r)
                 + " appears "
                 + String(seen[r])
@@ -1686,14 +1685,79 @@ def check_nystroem_basis_prefix_stability() raises:
                 " CONSTRUCTION and a repeat means the order is not total"
             )
 
+    # And IN ORDER: strictly ascending under (key, index).
+    var keys = km_basis_keys(seed, n)
+    for c in range(1, n):
+        var a = Int(full[c - 1])
+        var b = Int(full[c])
+        if not permutation_key_lt(keys[a], a, keys[b], b):
+            raise Error(
+                "check_nystroem_basis_prefix_stability FAILED: at n = "
+                + String(n)
+                + " rank "
+                + String(c - 1)
+                + " holds row "
+                + String(a)
+                + " and rank "
+                + String(c)
+                + " holds row "
+                + String(b)
+                + ", which do not ascend under (key, index). The basis is"
+                " the PREFIX OF THE SORTED ORDER and nothing else."
+                " DEVIATION 1672"
+            )
+    return checked + n
+
+
+def check_nystroem_basis_prefix_stability() raises:
+    """The basis at `q` is the PREFIX of the basis at any larger `q`.
+
+    DEVIATION 1671. scikit-learn's `rnd.permutation(n)[:q]` has this property
+    too, at one `n` -- their prefix is stable because the permutation is
+    drawn whole -- but theirs is NOT stable in `n_samples` and is not
+    parallelisable, and this lane's is a rank prefix rather than a shuffle.
+    What is asserted here is the property, bit for bit and in both modes:
+    the map is integer arithmetic all the way to the drawn index, so there
+    is nothing for a mode to change.
+
+    RE-GATED 2026-09-29 (DEVIATION 1672's closure) at 100,000 rows, the
+    bench board's taxi and Istella-S fit size that the retired counting rank
+    refused, beside the original 24: widths up to n, the q == n bijection,
+    and the full order checked pair by pair against `permutation_key_lt`.
+    """
+    var widths24 = List[Int]()
+    widths24.append(2)
+    widths24.append(4)
+    widths24.append(12)
+    widths24.append(24)
+    var checked = _basis_prefix_stability_at(UInt64(1234), 24, widths24)
+
+    var n_big = 100000
+    var widths_big = List[Int]()
+    widths_big.append(1)
+    widths_big.append(32)
+    widths_big.append(100)
+    widths_big.append(4096)
+    widths_big.append(4097)
+    widths_big.append(65536)
+    widths_big.append(n_big)
+    var checked_big = _basis_prefix_stability_at(
+        UInt64(1234), n_big, widths_big
+    )
+
     print(
         "check_nystroem_basis_prefix_stability OK"
         + _tag()
         + ": "
         + String(checked)
-        + " basis entries agree across q = 2, 4, 12 and "
-        + String(n)
-        + ", and the q == n sample is a bijection (every row exactly once)"
+        + " basis entries agree across q = 2, 4, 12 and 24 at n = 24, and "
+        + String(checked_big)
+        + " across q = 1, 32, 100, 4096, 4097, 65536 and "
+        + String(n_big)
+        + " at n = "
+        + String(n_big)
+        + "; each q == n sample is a bijection that ascends strictly under"
+        " (key, index)"
     )
 
 

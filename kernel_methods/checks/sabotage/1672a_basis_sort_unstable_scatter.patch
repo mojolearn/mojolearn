@@ -1,0 +1,14 @@
+diff --git a/kernel_methods/checks/random_features.mojo b/kernel_methods/checks/random_features.mojo
+index 3e0911314..af3e1f061 100644
+--- a/kernel_methods/checks/random_features.mojo
++++ b/kernel_methods/checks/random_features.mojo
+@@ -377,7 +377,8 @@ def km_rank_order_sort(keys: List[UInt64], count: Int) -> List[Int32]:
+             var c = hist[b]
+             hist[b] = run
+             run += c
+-        for j in range(n):
++        for jj in range(n):
++            var j = n - 1 - jj
+             var digit = Int((ka[j] >> shift) & mask)
+             var dst = hist[digit]
+             kb[dst] = ka[j]
