@@ -148,11 +148,11 @@ def test_reject_before_native(binding, name, true, pred, error):
 
 
 @pytest.mark.parametrize('name', ('confusion_matrix',) + NAMES)
-def test_unsupported_weights_duplicate_labels_and_mode(binding, name):
+def test_invalid_weights_duplicate_labels_and_mode(binding, name):
     method = getattr(metrics, name)
     extra = {} if name == 'confusion_matrix' else {'average': 'macro'}
-    with pytest.raises(NotImplementedError, match='sample_weight'):
-        method([0], [0], sample_weight=[1])
+    with pytest.raises(ValueError, match='sample_weight'):
+        method([0], [0], sample_weight=[])
     for labels in ([], [0, 0]):
         with pytest.raises(ValueError):
             method([0], [0], labels=labels, **extra)
@@ -193,4 +193,21 @@ def test_options_keyword_only_and_exports(binding, name):
     assert name in metrics.__all__
     with pytest.raises(TypeError):
         getattr(metrics, name)([0], [0], 'identical')
+    assert not binding['fast'].calls
+
+
+@pytest.mark.parametrize('name', ('confusion_matrix',) + NAMES)
+def test_supported_weights_reach_expansion(binding, name, monkeypatch):
+    from mojolearn import _expansion_metrics
+    calls = []
+    def run(*args):
+        calls.append(args)
+        return 2.5
+    helper = 'confusion_matrix_weighted' if name == 'confusion_matrix' else '_prf_weighted'
+    monkeypatch.setattr(_expansion_metrics, helper, run)
+    y, weights = [0, 1], [1, 2]
+    assert getattr(metrics, name)(y, y, sample_weight=weights) == 2.5
+    args, = calls
+    assert args[0] is y and args[1] is y
+    assert args[3 if name == 'confusion_matrix' else 5] is weights
     assert not binding['fast'].calls

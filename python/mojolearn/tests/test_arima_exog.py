@@ -93,7 +93,7 @@ def test_the_host_oracle_restates_them():
     assert "ARIMA_ORACLE_EXOG_SABOTAGE" in text, "the exog arithmetic has no negative control"
     # The oracle stays host only: the same import set the CPU training lane pins.
     imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    assert sorted(set(imports)) == ["checks.numerics", "std.math", "std.memory", "std.sys.compile"], imports
+    assert sorted(set(imports)) == ["checks.numerics", "core.host_parallel", "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
 
 
 def test_the_manifest_declares_the_lanes():

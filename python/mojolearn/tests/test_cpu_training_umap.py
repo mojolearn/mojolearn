@@ -126,7 +126,7 @@ def test_sabotage_define_moves_the_negative_draw():
     define = host_surface.sabotage_define("metrics")
     assert define == "MOJOLEARN_HOST_SABOTAGE"
     assert f'is_defined["{define}"]()' in text
-    assert text.count("comptime if UMAP_ORACLE_HOST_SABOTAGE:") == 2
+    assert text.count("comptime if UMAP_ORACLE_HOST_SABOTAGE:") == 3
     assert "draw_epoch = epoch + 1" in text
     assert "UMAP_ORACLE_HOST_SABOTAGE" in _read(host_surface.binding_source("metrics"))
 

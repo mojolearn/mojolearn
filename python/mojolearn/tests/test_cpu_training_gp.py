@@ -100,7 +100,8 @@ def test_oracles_import_no_gpu_and_no_device_module():
         assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{rel} imports DeviceContext"
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", gp, re.M))) == [
         "checks.numerics", "cholesky.host.chol_oracle",
-        "core.host_predict_threads", "gemm.host.identical_gemm",
+        "core.host_gemm_simd", "core.host_parallel", "core.host_predict_threads",
+        "core.host_simd_identical", "gemm.host.identical_gemm",
         "max.algorithm", "std.memory", "std.sys.compile",
     ]
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", chol, re.M))) == [
@@ -122,10 +123,10 @@ def test_oracles_spell_the_bit_carrying_constructs():
     assert "return ftz(ftz(t1 + t2) + t3)" in gp, "the lml adds t1 and t2 first"
     assert "if is_self and i == j:" in gp, "the white kernel is a structural test"
     assert "if not (raw > Float32(0.0)):" in gp, "the variance clamp is a comparison, never a max"
-    assert "gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)" in gp
+    assert "host_gemm_identical(kcross, dual, OP_TN, n_star, 1, n_train)" in gp
     assert "var third = ftz(identical_div(ss, Float32(3.0)))" in gp, "K**2 / 3 is a divide"
-    assert "sync_parallelize(_rbf_rows, tasks)" in gp
-    assert "sync_parallelize(_matern_rows, tasks)" in gp
+    assert "host_parallelize(_rbf_rows, tasks)" in gp
+    assert "host_parallelize(_matern_rows, tasks)" in gp
     assert "slotp.unsafe_store(i * n + j" in gp, "parallel rows must own disjoint cells"
 
 

@@ -61,7 +61,7 @@ def test_the_gram_and_the_oracle_carry_the_polynomial_arm():
 def test_host_update_f_parallelizes_rows_not_kernel_folds():
     oracle = (ROOT / "svm/host/smo_oracle.mojo").read_text()
     fit = oracle.split("def smo_oracle_fit[", 1)[1].split("# Results.", 1)[0]
-    assert "sync_parallelize(_update_f, update_tasks)" in fit
+    assert "host_parallelize(_update_f, update_tasks)" in fit
     assert "host_predict_task_count(n_rows)" in fit
     assert "if n_rows * nnz * k < (1 << 18):\n                update_tasks = 1" in fit
     worker = fit.split("def _update_f(", 1)[1].split("if update_tasks == 1:", 1)[0]

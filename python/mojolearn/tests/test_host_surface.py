@@ -25,6 +25,7 @@ reads SOURCE, never a built binary, so it runs on a box with nothing built:
     carrying literals.
 """
 import json
+import os
 import re
 from pathlib import Path
 
@@ -34,6 +35,9 @@ from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 BINDINGS = ROOT / "bindings"
+# Source archives omit local historical evidence; its original immutable root
+# can be supplied explicitly without replacing source or runtime imports.
+EVIDENCE_ROOT = Path(os.environ.get("MOJOLEARN_TEST_EVIDENCE_ROOT", ROOT))
 
 #: The three vendor classes a cross-vendor claim needs, as the shipped
 #: table's `cols` spells them. `cpu` is deliberately not one of them: it is
@@ -308,7 +312,7 @@ def test_recordings_and_columns_exist():
                 + host_surface.SEARCH_LOOKUP_RECORDED
                 + host_surface.CLASSICAL_GPU_COLUMNS
                 + (host_surface.FOREST_RECORDED_ROOT,)):
-        assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
+        assert (EVIDENCE_ROOT / rel).exists(), f"the manifest names {rel}, which is not in the evidence root"
 
 
 def test_training_gpu_columns_exist():
@@ -781,7 +785,7 @@ def test_saved_model_inference_owed_names_real_lanes_and_remaining_debt():
     declared = set(host_surface.inference_lanes())
     for lane in set(owed) & declared:
         assert "qualification remain owed" in owed[lane], lane
-        record = ROOT / "bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
+        record = EVIDENCE_ROOT / "bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
         assert len(list(record.glob("*/expected.json"))) == 9, lane
         assert len(list(record.glob("*/model.npz"))) == 9, lane
     text = _harness_text()
@@ -905,6 +909,7 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     that describes different bytes, and a user would read DIVERGENT for
     something that is not their machine."""
     import json
+import os
 
     table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
     with_cells = {key.partition("/")[0] for key in table["cells"]}

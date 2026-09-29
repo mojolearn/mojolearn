@@ -99,7 +99,7 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
     imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    assert sorted(set(imports)) == ["checks.numerics", "std.math", "std.memory", "std.sys.compile"], imports
+    assert sorted(set(imports)) == ["checks.numerics", "core.host_parallel", "core.host_predict_threads", "std.math", "std.memory", "std.sys.compile"], imports
 
 
 def test_oracle_spells_the_bit_carrying_constructs():

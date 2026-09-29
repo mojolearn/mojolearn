@@ -124,7 +124,8 @@ def test_feature_freq_oracle_spells_the_bit_carrying_constructs():
     assert "values[row] = (Float32(count) + Float32(0.0)) / (" in text, "the FeatureFreq value"
     assert "folds.append(GBDT_FF_GRID_BORDERS)" in text, "the pinned fold capacity"
     assert "var fixed_scale = Float32(choose_scale(magnitude, n_rows))" in text
-    assert "_refuse_ff(\"a level-one winner on the FeatureFreq tensor column\")" in text
+    assert "tensor_columns.append(column)" in text
+    assert "tensor_borders.append(level_borders[level].copy())" in text
     assert "leaves.append(learning_rate * total / (total_weight + l2))" in text
     assert "if blocks[b].policy == POLICY_BINARY:" in text
 

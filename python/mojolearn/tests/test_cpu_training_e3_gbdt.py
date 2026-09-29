@@ -137,7 +137,7 @@ def test_oracle_imports_no_gpu_module():
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)))
     assert imports == [
-        "checks.numerics", "gbdt.data.permutation", "gbdt.data.quantization",
+        "checks.numerics", "core.host_parallel", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
         "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
         "gbdt.grid_creator.binarization", "gbdt.host.gbdt_oracle_eval",
@@ -160,7 +160,7 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "q = q + Int32(v * fixed_scale)" in text, "the half-byte block partial flush"
     assert "512 * (tid // 32) + (tid & 24) + bin" in text, "the half-byte replica slot"
     assert "comptime EPS_1E20F = Float64(Float32(1e-20))" in text
-    assert "identical_mul_add(estimated[leaf], lr, cursor[row])" in text
+    assert "est_p_leaves[leaf], lr, cursors[p][row]" in text
     assert "if function_value <= next_value:" in text, "AnyImprovement"
     assert "if left_sz < right_sz:" in text, "the sibling tie computes the right child"
     assert "clean.append(ftz(values[i]))" in text, "the phase B border search input flush"
@@ -168,14 +168,14 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)" in text, (
         "the grid must take the phase B border search, not the imported calc_quantization"
     )
-    assert "sync_parallelize(_grid_column, n_features)" in text
+    assert "host_parallelize_pool_env(_grid_column, n_features)" in text
     assert "obp.unsafe_store(f * out_cap + b, q[0][b])" in text, (
         "parallel feature searches must publish into disjoint flat slots"
     )
     assert "_ = sample_idx^" in text, "the sampled-index owner must outlive the worker join"
     refusal = "There are nan factors and nan values for float features are"
     precheck = text.index("if nan_mode == NAN_MODE_FORBIDDEN:", text.index("def gbdt_host_grid"))
-    launch = text.index("sync_parallelize(_grid_column, n_features)", precheck)
+    launch = text.index("host_parallelize_pool_env(_grid_column, n_features)", precheck)
     assert precheck < launch and refusal in text[precheck:launch], (
         "Forbidden NaNs must retain their exact serial public refusal before workers launch"
     )

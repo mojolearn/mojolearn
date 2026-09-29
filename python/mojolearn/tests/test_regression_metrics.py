@@ -97,14 +97,34 @@ def test_invalid_shape_length_or_value(name, bad, side, binding):
 
 @pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize("kwargs", [
-    {"sample_weight": []}, {"sample_weight": np.ones(2)},
-    {"multioutput": "raw_values"}, {"multioutput": None},
-    {"multioutput": np.array([0.5, 0.5])}, {"multioutput": [1.0]},
+    {"sample_weight": []}, {"multioutput": np.array([0.5, 0.5])},
+    {"multioutput": [1.0]},
 ])
-def test_unsupported_weight_or_multioutput(name, kwargs, binding):
+def test_invalid_weight_or_multioutput(name, kwargs, binding):
     x = np.ones(2, dtype=np.float32)
-    with pytest.raises(NotImplementedError, match="sample_weight|multioutput"):
+    with pytest.raises(ValueError):
         getattr(metrics, name)(x, x, **kwargs)
+    assert not binding.calls
+
+
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("kwargs", [
+    {"sample_weight": np.ones(2)}, {"multioutput": "raw_values"},
+    {"multioutput": None},
+])
+def test_supported_options_reach_expansion(name, kwargs, binding, monkeypatch):
+    from mojolearn import _expansion_metrics
+    calls = []
+    def run(*args):
+        calls.append(args)
+        return 7.5
+    monkeypatch.setattr(_expansion_metrics, "regression_error_options", run)
+    x = np.ones(2, dtype=np.float32)
+    assert getattr(metrics, name)(x, x, **kwargs) == 7.5
+    args, = calls
+    assert args[0] == name and args[1] is x and args[2] is x
+    assert args[3] is kwargs.get("sample_weight")
+    assert args[4] is kwargs.get("multioutput", "uniform_average")
     assert not binding.calls
 
 
