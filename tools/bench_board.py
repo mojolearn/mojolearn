@@ -1807,7 +1807,7 @@ def _arm_label(c):
 QUALITY_NOTE = {
     "auc": "higher is better", "accuracy": "higher is better", "logloss": "lower is better",
     "rmse": "lower is better", "r2": "higher is better", "inertia": "lower is better",
-    "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better",
+    "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better", "recall_at_k": "higher is better",
     "mean_log_likelihood": "higher is better",
     "ndcg10": "higher is better", "ndcg5": "higher is better", "map": "higher is better",
     "mlogloss": "lower is better",
