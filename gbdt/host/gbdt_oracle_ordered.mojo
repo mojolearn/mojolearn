@@ -107,6 +107,7 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostModel,
     _binarize_columns,
     _halving_fold_live,
+    _snap_plane,
     _hist2_dither,
     _pinned_partition_stat,
     _hist2_quantize,
@@ -1304,6 +1305,9 @@ def gbdt_ordered_rmse_host_fit(
                 sw[offset + i] = wi
                 sg[offset + i] = ftz(identical_mul(wi, y[row] - cursors[f][i]))
             offset += size
+        # lane/sym-quality: `enqueue_snap_plane` (dynamic_boosting.
+        # fit_ordered_rmse), the gradient plane onto the tree's grid
+        _snap_plane(sg, total, scale)
         var splits = _ordered_tree_structure(
             cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
             fold_count, fold_bits, scale, l2_leaf_reg, feat_offset,
@@ -1799,6 +1803,9 @@ def gbdt_ordered_host_fit(
         var m0 = Float64(mags[0])
         var m1 = Float64(mags[1])
         var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
+        # lane/sym-quality: `enqueue_snap_plane` (ordered_boosting), the
+        # gradient plane onto the tree's grid before the search
+        _snap_plane(sg, total, scale)
         # ---- the structure ----
         var splits = _ordered_tree_structure(
             cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
