@@ -1,0 +1,664 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""What the LOW-BIT GEMM plans cost beside `fp32.v1`: one timing harness.
+
+    pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/gemm_lowbit_price_main.mojo
+
+Lane lane/lowbit-units, 2026-09-29 (`docs/lanes/LOWBIT_UNITS_PLAN.md`, order
+of work 2). Contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` section 3 says of
+every low-bit plan that none has been timed against the fp32 plans. This
+file is that timing. It certifies nothing: the gates are
+`gemm/checks/gemm_lowbit_check.mojo` and
+`gemm/checks/gemm_int8_apple_chunk_check.mojo`, and a time printed here is
+one box's time on one run.
+
+THE SHAPES ARE `bench/gemm_shapes.mojo`'s AND NONE ARE INVENTED HERE. The
+rows read are the OP_NT transformer rows (the int8 profile is OP_NT only,
+contract section 0), and their token count `m` is what sorts them:
+
+    decode     t1 and t8     one token, or a small batch of them, per call
+    training   t512          512 tokens per call, the shape of a training
+                             step's forward product and of a prefill chunk
+
+`k` IS NEVER CAPPED. `m` and `n` are reduced by `bench/gemm_price_main.mojo`'s
+own `_capped` rule only where a row's multiply-accumulate count is above
+`MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET` (default 2^35, which caps exactly one
+row, the head at t512; 0 runs every row whole). A capped row says CAPPED on
+its line and prints the extents it ran at. THE SAME BUDGET MUST RUN ON EVERY
+BOX whose hashes are to be compared: a hash is a hash of the extents run.
+
+THE ARMS. Every arm of one shape lives in this one binary and the timed loop
+ALTERNATES them call by call (`bench/gemm_price_main.mojo`'s discipline: a
+block of one arm and then a block of another measures the drift).
+
+    fp32.v1                  `identical_gemm_into`, the shipped plan
+    bf16f32.v1.fused         `identical_gemm_bf16w_fused_into`
+    bf16f32.v1.widen         `identical_gemm_bf16w_widen_into` (the widening
+                             of the right operand is INSIDE this time)
+    int8i32.v1.flat          `identical_gemm_int8_flat_into`
+    int8i32.v1.mma           `identical_gemm_int8_mma_into`, on a column that
+                             has an integer matrix unit (NVIDIA, AMD)
+    int8i32.v1.applechunk    `identical_gemm_int8_apple_chunk_into`, the
+                             exact-chunk PROBE on Apple's float matrix unit
+
+THE CONVERSIONS ARE THEIR OWN ROWS, because a low-bit product's operands do
+not arrive low-bit for free:
+
+    convert.int8.quantize.a    float32 activations to codes, `m x k`. Paid on
+                               EVERY call: activations are new each call.
+    convert.int8.pack.b        float32 weights to codes, `n x k`. Paid once,
+                               when the weights are packed.
+    convert.bf16.pack.b        float32 weights to bf16, `n x k`. Paid once.
+    convert.bf16.widen.b       bf16 weights back to float32, `n x k`: the
+                               WIDEN plan's first step, and what a block
+                               that materializes its weights pays.
+    convert.int8.dequantize.b  int8 weights back to float32, `n x k`: what a
+                               block that materializes its weights pays.
+
+The dequantization of the PRODUCT (`dequant_int8_pinned`, one per output
+cell) is the epilogue of every int8 kernel and is inside each int8 arm's
+time; it has no launch of its own to time.
+
+THE HASH. After its untimed warm-up every arm's output is read back, a
+surviving poison is refused (`_dev_digest`), and the FNV-1a digest of the
+output bits is printed on the arm's `LOWBIT` line. Identity rides along:
+`tools/lowbit_units/table.py` compares the digests of one arm and shape
+across boxes. Inside one run the plans that must agree are compared here
+(fused against widen; flat against mma and against the Apple probe) and a
+disagreement under IDENTICAL raises AFTER every line is printed.
+
+A HASH THAT CANNOT DIFFER IS NOT A CHECK. A build carrying
+`-D MOJOLEARN_LOWBIT_PRICE_SABOTAGE=1` flips ONE BIT (the lowest) of ONE
+CELL (the last) of what every arm wrote, after the arm ran and before the
+digest is taken: on the device for a float32 output, in the words read back
+for a bf16 or an int8 output. `tools/lowbit_units/table.py --expect-disagree`
+requires every digest of that run to differ from a clean run's at the same
+box, arm and shape. It is an arm of the DIGEST AND THE COMPARISON, which are
+what this file adds; the kernels' own value arms
+(`-D MOJOLEARN_LOWBIT_SABOTAGE=1`) belong to the gates and are run there.
+
+THE LINES.
+    PRICE <mode> lowbit.<shape>.<arm>.device <median ms>
+        the shared median table's format (`_report_device`).
+    LOWBIT <column> <shape> <m> <n> <k> <FULL|CAPPED> <arm> <median ms>
+           <min ms> <rate> <unit> <digest> <note>
+        one line per arm and shape, for `tools/lowbit_units/table.py`.
+        The rate is G MAC/s (multiply-accumulates, `m n k`) for a product and
+        G elem/s for a conversion.
+
+ENVIRONMENT.
+    MOJOLEARN_LOWBIT_PRICE_REPEATS     timed calls per arm (default 5)
+    MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET  see above (default 2^35; 0 = no cap)
+    MOJOLEARN_LOWBIT_PRICE_ONLY        comma separated substrings of shape
+                                       names; unset runs every OP_NT
+                                       transformer row
+
+WHAT MAY NOT BE CONCLUDED. One call and one synchronize per sample, so a
+decode row's time is mostly launch and wait, not arithmetic. No arm here is
+an inference engine or a training step. The flat kernels are one thread per
+cell with no tiling, so `flat` against `fp32.v1` compares two levels of
+kernel engineering as well as two arithmetics.
+"""
+
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_idx, thread_idx
+from std.memory import bitcast
+from std.os import getenv
+from std.sys import has_accelerator, is_defined
+from std.time import perf_counter_ns
+
+from bench.gemm_price_main import (
+    _capped,
+    _dev_digest,
+    _dev_fill,
+    _dev_poison,
+    _fixed,
+    _mode,
+    _report_device,
+)
+from bench.gemm_shapes import (
+    GEMM_SHAPE_COUNT,
+    gemm_shape_k,
+    gemm_shape_m,
+    gemm_shape_n,
+    gemm_shape_name,
+    gemm_shape_op,
+)
+from bench.gemm_shapes import OP_NT as TBL_OP_NT
+from checks.kernel_matrix import (
+    COLUMN_APPLE,
+    TARGET_COLUMN,
+    column_name,
+    lib_int8_matrix_unit_for,
+)
+from gemm.checks.gemm_identical import (
+    choose_gemm_plan,
+    gemm_plan_name,
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
+from gemm.checks.gemm_int8_apple_chunk import (
+    identical_gemm_int8_apple_chunk_into,
+    int8_apple_chunk_geometry,
+    int8_apple_chunk_sabotage_name,
+)
+from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
+from gemm.checks.gemm_lowbit import (
+    BF16W_FUSED_MAX_CELLS,
+    LowbitWorkspace,
+    bf16_narrow,
+    bf16_widen,
+    dequantize_rows_int8_device,
+    identical_gemm_bf16w_fused_into,
+    identical_gemm_bf16w_widen_into,
+    identical_gemm_int8_flat_into,
+    int8_plan_dispatch_name,
+    lowbit_sabotage_name,
+    quantize_rows_int8_device,
+)
+from gemm.host.gemm_oracle import OP_NT
+
+#: Timed calls per arm and shape unless the environment says otherwise.
+comptime DEFAULT_REPEATS = 5
+
+#: The default multiply-accumulate budget per row, 2^35. Of the twelve rows
+#: only `llama8b.lm_head.t512` (2.7e11) is above it.
+comptime DEFAULT_MAC_BUDGET = 34_359_738_368
+
+#: The arms, in the order the timed loop alternates them.
+comptime ARM_FP32 = 0
+comptime ARM_BF16_FUSED = 1
+comptime ARM_BF16_WIDEN = 2
+comptime ARM_INT8_FLAT = 3
+comptime ARM_INT8_MMA = 4
+comptime ARM_INT8_APPLE_CHUNK = 5
+comptime ARM_QUANTIZE_A = 6
+comptime ARM_INT8_PACK_B = 7
+comptime ARM_BF16_PACK_B = 8
+comptime ARM_BF16_WIDEN_B = 9
+comptime ARM_INT8_DEQUANT_B = 10
+comptime ARM_COUNT = 11
+
+#: The arm of the digest and the comparison: one bit of one cell of every
+#: arm's output is flipped before the digest. Off in every build that does
+#: not name it.
+comptime PRICE_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_PRICE_SABOTAGE"]()
+
+#: Whether this build has each column-bound arm.
+comptime HAS_INT8_MMA = lib_int8_matrix_unit_for[TARGET_COLUMN]()
+comptime HAS_APPLE_CHUNK = TARGET_COLUMN == COLUMN_APPLE
+
+
+def _arm_name(arm: Int) -> String:
+    if arm == ARM_FP32:
+        return String("fp32.v1")
+    if arm == ARM_BF16_FUSED:
+        return String("bf16f32.v1.fused")
+    if arm == ARM_BF16_WIDEN:
+        return String("bf16f32.v1.widen")
+    if arm == ARM_INT8_FLAT:
+        return String("int8i32.v1.flat")
+    if arm == ARM_INT8_MMA:
+        return String("int8i32.v1.mma")
+    if arm == ARM_INT8_APPLE_CHUNK:
+        return String("int8i32.v1.applechunk")
+    if arm == ARM_QUANTIZE_A:
+        return String("convert.int8.quantize.a")
+    if arm == ARM_INT8_PACK_B:
+        return String("convert.int8.pack.b")
+    if arm == ARM_BF16_PACK_B:
+        return String("convert.bf16.pack.b")
+    if arm == ARM_BF16_WIDEN_B:
+        return String("convert.bf16.widen.b")
+    return String("convert.int8.dequantize.b")
+
+
+def _arm_is_product(arm: Int) -> Bool:
+    return arm <= ARM_INT8_APPLE_CHUNK
+
+
+def _arm_runs(arm: Int) -> Bool:
+    """Whether this build runs the arm. An arm that does not run prints a
+    NOT RUN line with the reason; a missing line is never an agreeing one."""
+    if arm == ARM_INT8_MMA:
+        return HAS_INT8_MMA
+    if arm == ARM_INT8_APPLE_CHUNK:
+        return HAS_APPLE_CHUNK
+    return True
+
+
+def _median_ms(samples: List[Int]) -> Float64:
+    """The median of the timed calls, in milliseconds. An even count takes
+    the mean of the middle pair."""
+    var s = samples.copy()
+    var n = len(s)
+    for i in range(1, n):
+        var v = s[i]
+        var j = i - 1
+        while j >= 0 and s[j] > v:
+            s[j + 1] = s[j]
+            j -= 1
+        s[j + 1] = v
+    if n == 0:
+        return 0.0
+    if n % 2 == 1:
+        return Float64(s[n // 2]) / 1.0e6
+    return (Float64(s[n // 2 - 1]) + Float64(s[n // 2])) / 2.0e6
+
+
+def _min_ms(samples: List[Int]) -> Float64:
+    if len(samples) == 0:
+        return 0.0
+    var best = samples[0]
+    for i in range(1, len(samples)):
+        if samples[i] < best:
+            best = samples[i]
+    return Float64(best) / 1.0e6
+
+
+def _rate(count: Float64, ms: Float64) -> Float64:
+    """`count` per second, in units of 1e9. Zero when the time is below the
+    clock's resolution, which is a fact about the clock and not a rate."""
+    if ms <= 0.0:
+        return 0.0
+    return count / (ms * 1.0e6)
+
+
+def _fnv(d: UInt64, word: UInt64) -> UInt64:
+    return (d ^ word) * UInt64(0x100000001B3)
+
+
+def price_sabotage_name() -> String:
+    comptime if PRICE_SABOTAGE:
+        return String("ONE_BIT_OF_THE_LAST_CELL")
+    else:
+        return String("none")
+
+
+def _sabotage_flip_kernel(buf: MutPointer[Float32, MutAnyOrigin], at_in: Int32):
+    """The sabotage arm on a float32 output: the lowest bit of cell `at_in`,
+    flipped in place by one thread."""
+    if Int(block_idx.x) != 0 or Int(thread_idx.x) != 0:
+        return
+    var at_ = Int(at_in)
+    var bits = bitcast[DType.uint32](buf.unsafe_load(at_)) ^ UInt32(1)
+    buf.unsafe_store(at_, bitcast[DType.float32](bits))
+
+
+def _sabotage_f32(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int
+) raises:
+    comptime if PRICE_SABOTAGE:
+        ctx.enqueue_function[_sabotage_flip_kernel](
+            buf.unsafe_ptr(), Int32(count - 1), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
+        )
+        ctx.synchronize()
+
+
+def _sabotage_word(word: UInt64, i: Int, count: Int) -> UInt64:
+    """The sabotage arm on a bf16 or an int8 output: the lowest bit of the
+    last word read back."""
+    comptime if PRICE_SABOTAGE:
+        if i == count - 1:
+            return word ^ UInt64(1)
+    return word
+
+
+def _digest_u16(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint16], count: Int
+) raises -> UInt64:
+    """`_dev_digest`'s digest over a bf16 buffer's bits."""
+    var h = ctx.enqueue_create_host_buffer[DType.uint16](count)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
+    ctx.synchronize()
+    var d = UInt64(0xCBF29CE484222325)
+    for i in range(count):
+        d = _fnv(d, _sabotage_word(UInt64(Int(h.unsafe_ptr().unsafe_load(i))), i, count))
+    _ = h
+    return d
+
+
+def _digest_codes(
+    ctx: DeviceContext,
+    mut q: DeviceBuffer[DType.int8],
+    mut e: DeviceBuffer[DType.int32],
+    rows: Int,
+    cols: Int,
+) raises -> UInt64:
+    """The digest of an int8 store: every code, then every row exponent.
+    Contract section 2 promises the codes and the exponents across vendors,
+    so this is the quantizer's identity riding along."""
+    var hq = ctx.enqueue_create_host_buffer[DType.int8](rows * cols)
+    var he = ctx.enqueue_create_host_buffer[DType.int32](rows)
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_ptr=hq.unsafe_ptr(), src_buf=q)
+    ctx.enqueue_copy(dst_ptr=he.unsafe_ptr(), src_buf=e)
+    ctx.synchronize()
+    var d = UInt64(0xCBF29CE484222325)
+    for i in range(rows * cols):
+        d = _fnv(
+            d,
+            _sabotage_word(UInt64(Int(hq.unsafe_ptr().unsafe_load(i)) & 0xFF), i, rows * cols),
+        )
+    for i in range(rows):
+        d = _fnv(d, UInt64(Int(he.unsafe_ptr().unsafe_load(i)) & 0xFFFFFFFF))
+    _ = hq
+    _ = he
+    return d
+
+
+struct ShapeBuffers(Movable):
+    """Every device buffer one shape's arms read or write, allocated once
+    per shape and shared by the arms, so no arm's time holds an allocation."""
+
+    var a: DeviceBuffer[DType.float32]
+    var b: DeviceBuffer[DType.float32]
+    var bh: DeviceBuffer[DType.uint16]
+    var qa: DeviceBuffer[DType.int8]
+    var ea: DeviceBuffer[DType.int32]
+    var qb: DeviceBuffer[DType.int8]
+    var eb: DeviceBuffer[DType.int32]
+    var c: DeviceBuffer[DType.float32]
+    var ws: DeviceBuffer[DType.float32]
+    #: The conversion arms' scratch outputs: a second int8 store for the
+    #: weights and a second bf16 image, so timing a conversion never
+    #: rewrites an operand a product arm reads.
+    var qs: DeviceBuffer[DType.int8]
+    var es: DeviceBuffer[DType.int32]
+    var hs: DeviceBuffer[DType.uint16]
+    var work: LowbitWorkspace
+
+    def __init__(out self, ctx: DeviceContext, m: Int, n: Int, k: Int) raises:
+        var nws = identical_gemm_workspace_max_floats(m, n, k)
+        if nws < 1:
+            nws = 1
+        var rows_s = n
+        if m > rows_s:
+            rows_s = m
+        self.a = ctx.enqueue_create_buffer[DType.float32](m * k)
+        self.b = ctx.enqueue_create_buffer[DType.float32](n * k)
+        self.bh = ctx.enqueue_create_buffer[DType.uint16](n * k)
+        self.qa = ctx.enqueue_create_buffer[DType.int8](m * k)
+        self.ea = ctx.enqueue_create_buffer[DType.int32](m)
+        self.qb = ctx.enqueue_create_buffer[DType.int8](n * k)
+        self.eb = ctx.enqueue_create_buffer[DType.int32](n)
+        self.c = ctx.enqueue_create_buffer[DType.float32](m * n)
+        self.ws = ctx.enqueue_create_buffer[DType.float32](nws)
+        self.qs = ctx.enqueue_create_buffer[DType.int8](rows_s * k)
+        self.es = ctx.enqueue_create_buffer[DType.int32](rows_s)
+        self.hs = ctx.enqueue_create_buffer[DType.uint16](n * k)
+        self.work = LowbitWorkspace(ctx)
+        self.work.ensure(ctx, nws, n * k)
+        ctx.synchronize()
+
+
+def _enqueue_arm(
+    ctx: DeviceContext, mut sb: ShapeBuffers, arm: Int, m: Int, n: Int, k: Int
+) raises:
+    """Enqueue one arm's work and return; the caller waits. The timed region
+    is this call and the wait, nothing else."""
+    if arm == ARM_FP32:
+        identical_gemm_into(ctx, sb.c, sb.a, sb.b, sb.ws, m, n, k, OP_NT)
+    elif arm == ARM_BF16_FUSED:
+        identical_gemm_bf16w_fused_into(ctx, sb.c, sb.a, sb.bh, m, n, k, OP_NT)
+    elif arm == ARM_BF16_WIDEN:
+        identical_gemm_bf16w_widen_into(ctx, sb.c, sb.a, sb.bh, sb.work, m, n, k, OP_NT)
+    elif arm == ARM_INT8_FLAT:
+        identical_gemm_int8_flat_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_INT8_MMA:
+        comptime if HAS_INT8_MMA:
+            identical_gemm_int8_mma_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_INT8_APPLE_CHUNK:
+        comptime if HAS_APPLE_CHUNK:
+            identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
+    elif arm == ARM_QUANTIZE_A:
+        quantize_rows_int8_device(ctx, sb.qs, sb.es, sb.a, m, k)
+    elif arm == ARM_INT8_PACK_B:
+        quantize_rows_int8_device(ctx, sb.qs, sb.es, sb.b, n, k)
+    elif arm == ARM_BF16_PACK_B:
+        bf16_narrow(ctx, sb.hs, sb.b, n * k)
+    elif arm == ARM_BF16_WIDEN_B:
+        bf16_widen(ctx, sb.work.wide, sb.bh, n * k)
+    else:
+        dequantize_rows_int8_device(ctx, sb.work.wide, sb.qb, sb.eb, n, k)
+
+
+def _arm_digest(
+    ctx: DeviceContext,
+    mut sb: ShapeBuffers,
+    arm: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+    tag: String,
+) raises -> UInt64:
+    """The digest of what the arm just wrote (after the sabotage arm's one
+    bit, in a build that names it)."""
+    if _arm_is_product(arm):
+        _sabotage_f32(ctx, sb.c, m * n)
+        return _dev_digest(ctx, sb.c, m * n, tag)
+    if arm == ARM_QUANTIZE_A:
+        return _digest_codes(ctx, sb.qs, sb.es, m, k)
+    if arm == ARM_INT8_PACK_B:
+        return _digest_codes(ctx, sb.qs, sb.es, n, k)
+    if arm == ARM_BF16_PACK_B:
+        return _digest_u16(ctx, sb.hs, n * k)
+    _sabotage_f32(ctx, sb.work.wide, n * k)
+    return _dev_digest(ctx, sb.work.wide, n * k, tag)
+
+
+def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
+    """What a reader needs beside the arm's number: the plan the dispatcher
+    of its profile would have picked at this shape. No spaces."""
+    if arm == ARM_FP32:
+        return String("plan=") + String(choose_gemm_plan(m, n, k))
+    if arm == ARM_BF16_FUSED:
+        if m * n <= BF16W_FUSED_MAX_CELLS:
+            return String("dispatched")
+        return String("not-dispatched(cells>") + String(BF16W_FUSED_MAX_CELLS) + ")"
+    if arm == ARM_BF16_WIDEN:
+        if m * n <= BF16W_FUSED_MAX_CELLS:
+            return String("not-dispatched(cells<=") + String(BF16W_FUSED_MAX_CELLS) + ")"
+        return String("dispatched")
+    if arm == ARM_INT8_FLAT:
+        comptime if HAS_INT8_MMA:
+            return String("not-dispatched(the-column-has-the-unit)")
+        else:
+            return String("dispatched")
+    if arm == ARM_INT8_MMA:
+        return String("dispatched")
+    if arm == ARM_INT8_APPLE_CHUNK:
+        return String("probe,geometry=") + String(int8_apple_chunk_geometry(m))
+    if arm == ARM_QUANTIZE_A:
+        return String("per-call")
+    if arm == ARM_INT8_PACK_B or arm == ARM_BF16_PACK_B:
+        return String("once-per-weight")
+    return String("per-call-when-materialized")
+
+
+def _must_agree(
+    a_arm: Int, b_arm: Int, dig: List[UInt64], ran: List[Bool], name: String
+) -> String:
+    """Empty when the two arms' digests agree or either did not run; the
+    disagreement otherwise."""
+    if not ran[a_arm] or not ran[b_arm]:
+        return String("")
+    if dig[a_arm] == dig[b_arm]:
+        return String("")
+    return (
+        String("PLANS DISAGREE at ") + name + ": " + _arm_name(a_arm) + " "
+        + hex(dig[a_arm]) + " vs " + _arm_name(b_arm) + " " + hex(dig[b_arm]) + "\n"
+    )
+
+
+def _time_shape(
+    ctx: DeviceContext,
+    idx: Int,
+    name: String,
+    m: Int,
+    n: Int,
+    k: Int,
+    capped: Bool,
+    repeats: Int,
+) raises -> String:
+    """Every arm at one shape. Returns the plan disagreements found (empty
+    when there are none); `main` raises on them after every shape has
+    printed."""
+    var cap_word = String("CAPPED") if capped else String("FULL")
+    print()
+    print(
+        "== " + name + "  m=" + String(m) + " n=" + String(n) + " k=" + String(k)
+        + "  " + cap_word + "  fp32 plan: " + gemm_plan_name(choose_gemm_plan(m, n, k))
+    )
+    var sb = ShapeBuffers(ctx, m, n, k)
+    # `bench/gemm_price_main.mojo`'s salts at this shape index, so the fp32
+    # operands are the ones its device arm reads at the same extents.
+    _dev_fill(ctx, sb.a, m * k, 11 + idx)
+    _dev_fill(ctx, sb.b, n * k, 22 + idx)
+    # The low-bit operands, by the contract's own seams on the device, before
+    # anything is timed: bf16 weights (L-2), int8 codes of both (L-3, L-4).
+    bf16_narrow(ctx, sb.bh, sb.b, n * k)
+    quantize_rows_int8_device(ctx, sb.qa, sb.ea, sb.a, m, k)
+    quantize_rows_int8_device(ctx, sb.qb, sb.eb, sb.b, n, k)
+    ctx.synchronize()
+
+    var dig = List[UInt64]()
+    var ran = List[Bool]()
+    var samples = List[List[Int]]()
+    for arm in range(ARM_COUNT):
+        dig.append(UInt64(0))
+        ran.append(_arm_runs(arm))
+        samples.append(List[Int]())
+
+    # Untimed warm-up of every arm, its output poisoned first where the
+    # output is float32 and read back after, so an arm that launches without
+    # writing cannot turn in a time.
+    for arm in range(ARM_COUNT):
+        if not ran[arm]:
+            continue
+        var tag = String("lowbit.") + name + "." + _arm_name(arm)
+        if _arm_is_product(arm):
+            _dev_poison(ctx, sb.c, m * n)
+        elif arm == ARM_BF16_WIDEN_B or arm == ARM_INT8_DEQUANT_B:
+            _dev_poison(ctx, sb.work.wide, n * k)
+        _enqueue_arm(ctx, sb, arm, m, n, k)
+        ctx.synchronize()
+        dig[arm] = _arm_digest(ctx, sb, arm, m, n, k, tag)
+
+    for _ in range(repeats):
+        for arm in range(ARM_COUNT):
+            if not ran[arm]:
+                continue
+            var t0 = perf_counter_ns()
+            _enqueue_arm(ctx, sb, arm, m, n, k)
+            ctx.synchronize()
+            samples[arm].append(Int(perf_counter_ns() - t0))
+
+    var macs = Float64(m) * Float64(n) * Float64(k)
+    for arm in range(ARM_COUNT):
+        var arm_name = _arm_name(arm)
+        if not ran[arm]:
+            print(
+                "LOWBIT-NOT-RUN", column_name(TARGET_COLUMN), name, arm_name,
+                "this column does not have the unit the arm runs on",
+            )
+            continue
+        var med = _median_ms(samples[arm])
+        var best = _min_ms(samples[arm])
+        var count = macs
+        var unit = String("GMAC/s")
+        if not _arm_is_product(arm):
+            unit = String("Gelem/s")
+            count = Float64(n) * Float64(k)
+            if arm == ARM_QUANTIZE_A:
+                count = Float64(m) * Float64(k)
+        _report_device(String("lowbit.") + name + "." + arm_name + ".device", med)
+        print(
+            "LOWBIT", column_name(TARGET_COLUMN), name, m, n, k, cap_word, arm_name,
+            _fixed(med, 4), _fixed(best, 4), _fixed(_rate(count, med), 4), unit,
+            hex(dig[arm]), _arm_note(arm, m, n, k),
+        )
+
+    var bad = String("")
+    bad += _must_agree(ARM_BF16_FUSED, ARM_BF16_WIDEN, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INT8_MMA, dig, ran, name)
+    bad += _must_agree(ARM_INT8_FLAT, ARM_INT8_APPLE_CHUNK, dig, ran, name)
+    if bad.byte_length() > 0:
+        print(bad)
+    _ = sb^
+    return bad
+
+
+def _wanted(only: String, name: String) -> Bool:
+    if only == "":
+        return True
+    for part in only.split(","):
+        if part.byte_length() > 0 and name.find(String(part)) >= 0:
+            return True
+    return False
+
+
+def main() raises:
+    comptime if not has_accelerator():
+        raise Error("bench/gemm_lowbit_price_main: no accelerator; every arm here is a device arm")
+    else:
+        var repeats = DEFAULT_REPEATS
+        var rs = String(getenv("MOJOLEARN_LOWBIT_PRICE_REPEATS"))
+        if rs != "":
+            repeats = Int(atol(rs))
+        var budget = DEFAULT_MAC_BUDGET
+        var bs = String(getenv("MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET"))
+        if bs != "":
+            budget = Int(atol(bs))
+        var only = String(getenv("MOJOLEARN_LOWBIT_PRICE_ONLY"))
+
+        print("== bench/gemm_lowbit_price_main.mojo [" + _mode() + "] ==")
+        print("column", column_name(TARGET_COLUMN))
+        print("profiles fp32.v1, bf16f32.v1, int8i32.v1")
+        print("int8 dispatch:", int8_plan_dispatch_name())
+        print(
+            "sabotage: price", price_sabotage_name(), " lowbit", lowbit_sabotage_name(),
+            " apple chunk", int8_apple_chunk_sabotage_name(),
+        )
+        print("repeats", repeats, " mac budget", budget, " only", only)
+        print(
+            "EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call and one",
+            "synchronize per sample; the median of the timed calls is reported",
+            "and the minimum beside it.",
+        )
+
+        var bad = String("")
+        var shapes = 0
+        with DeviceContext() as ctx:
+            for i in range(GEMM_SHAPE_COUNT):
+                if gemm_shape_op(i) != TBL_OP_NT:
+                    continue
+                var name = gemm_shape_name(i)
+                if name.find("llama8b") < 0:
+                    continue
+                if not _wanted(only, name):
+                    continue
+                var m = gemm_shape_m(i)
+                var n = gemm_shape_n(i)
+                var k = gemm_shape_k(i)
+                var dm = m
+                var dn = n
+                if budget > 0:
+                    var cap = _capped(m, n, k, budget)
+                    dm = cap[0]
+                    dn = cap[1]
+                bad += _time_shape(ctx, i, name, dm, dn, k, dm != m or dn != n, repeats)
+                shapes += 1
+
+        print()
+        print("== done [" + _mode() + "]: " + String(shapes) + " shapes ==")
+        if shapes == 0:
+            raise Error("bench/gemm_lowbit_price_main: no shape matched MOJOLEARN_LOWBIT_PRICE_ONLY=" + only)
+        if bad.byte_length() > 0:
+            if _mode() == "IDENTICAL":
+                raise Error(
+                    "plans of one profile disagree (above). Under IDENTICAL that"
+                    " is a contract violation, not a measurement."
+                )
+            print("NOTE (not IDENTICAL, not a failure): plans disagree, above.")
