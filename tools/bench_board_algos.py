@@ -266,7 +266,8 @@ _add("affinity-prop", xlane="cluster", ours="AffinityPropagation", task="cluster
 _add("bayesian-gmm", xlane="cluster", ours="BayesianGaussianMixture", task="gmm", block="reg",
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.mixture:BayesianGaussianMixture",
      params=dict(n_components=8, covariance_type="full", max_iter=100, tol=1e-3, reg_covar=1e-6,
-                 init_params="kmeans", random_state=SEED))
+                 init_params="kmeans", random_state=SEED),
+     notes=["constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
 
 # ---- lane neighbors + kernel ---------------------------------------------
 _add("lof", xlane="neighbors", ours="LocalOutlierFactor", task="outlier", block="cls",
@@ -1998,6 +1999,8 @@ def lane_arrays(lane, B):
             if yk in D:
                 D[yk] = _stride(D[yk], m)
     t = s["task"]
+    if lane == "bayesian-gmm":             # the gmm lane's rule, the same columns for every arm
+        D = _tool("bench_board_more").drop_constant_columns(D)
     if s["kind"] == "shap" or t in ("impute",):
         pass
     if t == "impute":
