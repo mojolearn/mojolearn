@@ -1,0 +1,47 @@
+box=h100
+started=2026-09-29T05:20:04Z
+tree_head=b42e019110f887d27f9c5c5052f8fa645524a9a0 dirty_files=13
+machine=NVIDIA H100 NVL, 580.159.04
+mojo_cache=/tmp/lowbit-mma-speed-ptx/mojo-cache (private)
+build exit=0
+run exit=0
+PTX_PROBE label=reference regs=64 local=0 shared=0 threads=128 blocks_per_multiprocessor=8
+PTX_PROBE label=direct_reference_loads regs=46 local=0 shared=0 threads=128 blocks_per_multiprocessor=10
+PTX_PROBE label=direct_aligned_loads regs=53 local=0 shared=0 threads=128 blocks_per_multiprocessor=9
+PTX_PROBE label=direct_scalar_acc regs=53 local=0 shared=0 threads=128 blocks_per_multiprocessor=9
+PTX_PROBE label=probe_loads_hoisted regs=37 local=0 shared=0 threads=128 blocks_per_multiprocessor=12
+PTX_PROBE label=staged_w16_b32_k32_l4 regs=39 local=0 shared=3072 threads=128 blocks_per_multiprocessor=12
+PTX_PROBE label=staged_w64_b128_k32_l4 regs=250 local=0 shared=12288 threads=128 blocks_per_multiprocessor=2
+PTX_PROBE label=staged_w64_b128_k64_l16 regs=248 local=512 shared=20480 threads=128 blocks_per_multiprocessor=2
+PTX_PROBE label=staged_w64_b128x256_k64_l16 regs=238 local=0 shared=30720 threads=256 blocks_per_multiprocessor=1
+PTX_PROBE label=staged_w32_b64_k64_l16 regs=114 local=0 shared=10240 threads=128 blocks_per_multiprocessor=4
+PTX_PROBE label=staged_w32_b128_k64_l16 regs=63 local=0 shared=20480 threads=512 blocks_per_multiprocessor=2
+PTX_PROBE label=staged_w16x32_b128_k64_l16 regs=47 local=0 shared=20480 threads=1024 blocks_per_multiprocessor=1
+PTX_PROBE label=refused_w16x32_b64x256_k64_l16 regs=43 local=0 shared=25600 threads=1024 blocks_per_multiprocessor=1
+PTX_PROBE label=refused_w32_b128x256_k64_l16 regs=62 local=0 shared=30720 threads=1024 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16_b32_k64_l16 regs=100 local=0 shared=10240 threads=128 blocks_per_multiprocessor=4
+PTX_PROBE label=pieces_w16x32_b64x128_k64_l16 regs=127 local=192 shared=30720 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w32_b64x128_k64_l16 regs=202 local=384 shared=30720 threads=256 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16_b64_k64_l16 regs=100 local=0 shared=20480 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16x32_b32x128_k64_l16 regs=144 local=192 shared=25600 threads=256 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16x32_b64x64_k64_l16 regs=124 local=192 shared=20480 threads=256 blocks_per_multiprocessor=2
+PTX_PROBE label=staged_w32_b256x64_k64_l16 regs=116 local=0 shared=25600 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=staged_w32_b512x32_k64_l16 regs=117 local=0 shared=43520 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=staged_w32x16_b512x16_k64_l16 regs=100 local=0 shared=42240 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16x32_b128x64_k32_l16 regs=124 local=192 shared=18432 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16x32_b256x32_k32_l16 regs=124 local=192 shared=27648 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16_b256x16_k32_l16 regs=95 local=0 shared=26112 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pieces_w16x32_b64x128_k32_l16 regs=124 local=192 shared=18432 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pipe2_w16x32_b64x128_k32_l16 regs=126 local=192 shared=36864 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=pipe2_w32_b64x128_k32_l16 regs=201 local=384 shared=36864 threads=256 blocks_per_multiprocessor=1
+PTX_PROBE label=pipe2_w16_b32_k64_l16 regs=77 local=96 shared=20480 threads=128 blocks_per_multiprocessor=6
+PTX_PROBE label=fused_w16x32_b64x128_k64_l16 regs=127 local=192 shared=30720 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=fused_w16_b32_k64_l16 regs=100 local=0 shared=10240 threads=128 blocks_per_multiprocessor=4
+PTX_PROBE label=fused_pipe2_w16x32_b64x128_k32_l16 regs=126 local=192 shared=36864 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=decode_w8 regs=90 local=0 shared=8256 threads=256 blocks_per_multiprocessor=2
+PTX_PROBE label=decode_w16 regs=90 local=0 shared=16448 threads=512 blocks_per_multiprocessor=1
+PTX_PROBE label=decode_quant_w8 regs=89 local=0 shared=8256 threads=256 blocks_per_multiprocessor=2
+PTX_PROBE label=quantize_reference regs=23 local=0 shared=0 threads=256 blocks_per_multiprocessor=8
+PTX_PROBE label=quantize_par_256 regs=31 local=0 shared=1024 threads=256 blocks_per_multiprocessor=8
+PTX_PROBE_DONE
+finished=2026-09-29T05:20:24Z

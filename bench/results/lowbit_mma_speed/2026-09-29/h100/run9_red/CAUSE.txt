@@ -1,0 +1,23 @@
+nvc3-0033 (run 9), RED, nothing timed. Three expected outcomes did not hold:
+
+1. unit-sabotage (the staging padding arm) did not fail
+   check_decode_quant_in_launch. Cause: in the quantizer-in-the-launch path
+   only the weights' side broke the padding rule; the left side is quantized
+   from floats and was still zero beyond k, so every garbage weight byte met
+   a zero code. Fixed: the arm breaks the rule on the left side too.
+2. unit-quant-sabotage (the absmax butterfly's first level skipped) did not
+   fail check_decode_quant_in_launch. Cause: the hashed fixture puts values
+   of the row maximum's binade in both halves of the warp, so the half
+   maximum gives the same exponent. Fixed: each row's largest value is
+   planted in a column the upper half of the warp reads.
+3. lane/lowbit-int15's check-gemm-int15-tuned on this tree failed
+   check_int15_tuned_refuses ("only 2 of 3 launches refused"): origin/main's
+   copy of that gate expects the sums kernel to refuse k = 65536, which it
+   admits since 520406a38. lane/lowbit-int15's branch already carries the
+   gate's fix (71db5bb26 "the refusal fix held on both"); not this lane's.
+
+What held: the unit gate clean (the decode kernel on codes at every shape
+with m <= 16, and from floats, equal to the oracle and the host quantizer's
+exponents), its staging and value arms seen failing; the four-product gate
+clean with the FUSED form on lane/lowbit-int15's int15_store_cell (first
+build), all three of its arms seen failing.

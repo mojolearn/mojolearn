@@ -1216,8 +1216,14 @@ def _quant16_codes(
                 v[4 * q + i] = _code(f[i], ex)
     else:
         comptime for i in range(16):
-            if kb + i < k:
-                v[i] = _code(x.unsafe_load(base + kb + i), ex)
+            comptime if INT8_TUNED_SABOTAGE:
+                # SABOTAGE: the padding rule broken on this side too (the
+                # weights' side alone would meet zero codes here and hide).
+                if base + kb + i < rows * k:
+                    v[i] = _code(x.unsafe_load(base + kb + i), ex)
+            else:
+                if kb + i < k:
+                    v[i] = _code(x.unsafe_load(base + kb + i), ex)
     return bitcast[DType.int32, 4](v)
 
 
