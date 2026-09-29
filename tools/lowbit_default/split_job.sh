@@ -11,7 +11,7 @@ M=/root/models/SmolLM2-360M
 BOX=${LB_BOX:-$(hostname -s)}
 OUT=$PWD/bench/results/lowbit_default/$BOX/split
 mkdir -p "$OUT"
-for n in 1 32; do
+for n in ${LB_NEWS:-1 32 128}; do
     pixi run -e default python tools/lowbit_default/default_gate.py --model $M --phases generate --new $n \
         --rounds ${LB_ROUNDS:-7} --box "$BOX-new$n" --out "$OUT" 2>&1 | grep -E "RESULT|GATE|rror|Traceback"
 done

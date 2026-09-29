@@ -4020,6 +4020,14 @@ def attention_eager_core(
     # gate has run on the other columns.
     comptime heads_column = TARGET_COLUMN == COLUMN_NVIDIA
     var heads_at_once = heads_column and stages.int15_on and l <= INT15_HEADS_MAX_L
+    # lane/lowbit-default, lever 3: under the profile the phase fences of
+    # this core are skipped. ONE in-order context runs every launch below in
+    # program order, and no fence here guards a host read: the only host
+    # reads in this core are `_plant_bits` and `trace.record_device`, and
+    # each drains the context itself before it reads. fp32_v1 keeps every
+    # fence, byte for byte the code that was here, and so do AMD and Apple
+    # under the profile until this has run there (NVIDIA only, as above).
+    var fence = not (heads_column and stages.int15_on)
     if heads_at_once:
         if not stages.int15:
             stages.int15 = Optional[LlamaInt15Stage](LlamaInt15Stage(ctx))
@@ -4093,8 +4101,9 @@ def attention_eager_core(
     # Gather -> GEMM -> scatter -> next head uses one in-order context.
     # Stage-owned scratch survives the entire loop, and each scatter finishes
     # before the next head overwrites that scratch. Preserve one phase fence.
-    step_count_sync()
-    ctx.synchronize()
+    if fence:
+        step_count_sync()
+        ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
     step_count_launch()
@@ -4105,8 +4114,9 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    if fence:
+        step_count_sync()
+        ctx.synchronize()
     # DEVIATION 2947 (lane/block-options): the softcap, after the scale and
     # before the mask and the plant, recorded INTO `attn.scores`. Skipped
     # entirely at the default record (softcap 0.0).
@@ -4119,8 +4129,9 @@ def attention_eager_core(
             grid_dim=(_grid(cells), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
-        step_count_sync()
-        ctx.synchronize()
+        if fence:
+            step_count_sync()
+            ctx.synchronize()
     # The score plant, injection point 1. Applied AFTER S12 and BEFORE the
     # stage is recorded, so the planted bits are IN `attn.scores` -- which
     # is the oracle's order and the only order under which clause (a) can
@@ -4153,8 +4164,9 @@ def attention_eager_core(
         grid_dim=(_grid(cells), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    if fence:
+        step_count_sync()
+        ctx.synchronize()
     # The score plant, injection point 2. `PLANT_MASKED_ZERO_ROW` and any
     # other case whose separating value has to survive the mask lands here.
     _plant_bits(
@@ -4328,8 +4340,9 @@ def attention_eager_core(
             grid_dim=(_grid(b * l * nh * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
-        step_count_sync()
-        ctx.synchronize()
+        if fence:
+            step_count_sync()
+            ctx.synchronize()
 
 
 def llama_attention_forward(
