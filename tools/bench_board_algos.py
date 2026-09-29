@@ -300,7 +300,7 @@ _add("bayesian-gmm", xlane="cluster", ours="BayesianGaussianMixture", task="gmm"
      notes=["reg_covar 3e-3 on Istella-S (taxi keeps 1e-6), for every arm on every vendor: at 1e-6 "
             "every arm refused on the constant-dropped Istella rows (ours and ours-fast on 0.8.29 "
             "with the GEMM moments, and scikit-learn: ill-defined empirical covariance, "
-            "m3ultra-b 2026-09-29), and 3e-3 is the smallest value at which the arms fitted "
+            "m3ultra-b 2026-09-29; again ours and scikit-learn on the 0.8.34 L40S and MI300X boards), and 3e-3 is the smallest value at which the arms fitted "
             "(tools/gmm_istella_probe.py), the value classical2/gmm uses on Istella-S (GMM_REG_COVAR)",
             "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"])
 
