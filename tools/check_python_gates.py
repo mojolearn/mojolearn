@@ -12,13 +12,13 @@ import tempfile
 import time
 
 import identity_iterate
+from python_test_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def discover():
-    return sorted(p.stem for p in (ROOT / 'python/mojolearn/tests').glob('test_*.py')
-                  if 'import pytest' not in p.read_text() and 'unittest.TestCase' not in p.read_text())
+    return [p.stem for p in inventory(ROOT / 'python/mojolearn/tests')['gates']]
 
 
 

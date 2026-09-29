@@ -1750,7 +1750,7 @@ release-check = "python3 tools/release_check.py"
 # own verdicts, `cd python && python3 -m mojolearn.tests.<name>`. pytest
 # collects nothing from them, which is correct, not a skip -- running them is
 # a separate step and several require MOJOLEARN_NUMERIC_MODE=identical.
-test-python = "cd python && python3 -m pytest -q mojolearn/tests"
+test-python = "python3 tools/run_python_tests.py"
 
 [environments]
 bench = ["bench"]
