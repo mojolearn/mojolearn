@@ -89,7 +89,46 @@ ARMS = {
     "int8w-fp32a": dict(name="int8w-fp32a", w="int8", a="fp32"),
     "int8m-both": dict(name="int8m-both", w="int8m", a="int8m"),
     "int8w-int12a": dict(name="int8w-int12a", w="int8", a="int12"),
+    "int12": dict(name="int12-both", w="int12", a="int12"),
+    "int10": dict(name="int10-both", w="int10", a="int10"),
 }
+
+#: The order the runs are started in (orchestrator, 2026-09-29): the noise
+#: floor first, then the arms in the order their verdicts are wanted.
+#: (arm, mode, attention products)
+ORDER = (
+    [("e", "fwd", False), ("e", "fwdbwd", False), ("c", "fwdbwd", False), ("c", "fwd", False),
+     ("d", "fwd", False), ("d", "fwdbwd", False),
+     ("int12", "fwd", False), ("int12", "fwdbwd", False), ("int10", "fwd", False), ("int10", "fwdbwd", False),
+     ("f", "fwd", False), ("f", "fwdbwd", False),
+     ("int8w-int15a", "fwd", False), ("int8w-int15a", "fwdbwd", False),
+     ("b", "fwd", False), ("b", "fwdbwd", False),
+     ("e", "fwd", True), ("e", "fwdbwd", True), ("c", "fwdbwd", True), ("c", "fwd", True),
+     ("d", "fwd", True), ("d", "fwdbwd", True)])
+
+#: The widths a gradient operand is coded under for the zero-code record.
+ZERO_CODE_WIDTHS = ("int8", "int10", "int12", "int15")
+
+#: When a dict, `QMatmulNT.backward` records into it, per product, the
+#: fraction of entries of each backward operand whose code is 0 under each
+#: width. Set only around the one diagnostic pass.
+COLLECT = None
+
+
+def zero_code_record(x):
+    """For one backward operand, rows along its last extent as its GEMM
+    sees them: how many entries are exactly zero as float32, and under each
+    width the fraction of ALL entries, and of the NONZERO entries, whose
+    code is 0."""
+    nonzero = x != 0
+    n, nz = x.numel(), int(nonzero.sum().item())
+    out = dict(entries=n, exactly_zero_fraction=1.0 - nz / n)
+    for kind in ZERO_CODE_WIDTHS:
+        codes, _ = arith.quantize_rows(x, kind)
+        zero = codes == 0
+        out[kind] = dict(zero_code_fraction=float(zero.double().mean().item()),
+                         zero_code_fraction_of_nonzero=(float((zero & nonzero).sum().item()) / nz) if nz else 0.0)
+    return out
 
 
 def profile(shape):
@@ -156,16 +195,23 @@ class QMatmulNT(torch.autograd.Function):
     float32 on the saved operands or in the candidate's arithmetic."""
 
     @staticmethod
-    def forward(ctx, A, B, ka, kb, quant_backward, sabotage):
+    def forward(ctx, A, B, ka, kb, quant_backward, sabotage, name):
         ctx.save_for_backward(A, B)
-        ctx.meta = (ka, kb, quant_backward, sabotage)
+        ctx.meta = (ka, kb, quant_backward, sabotage, name)
         return arith.product_nt(A, B, ka, kb)
 
     @staticmethod
     def backward(ctx, G):
         A, B = ctx.saved_tensors
-        ka, kb, quant_backward, sabotage = ctx.meta
+        ka, kb, quant_backward, sabotage, name = ctx.meta
         Gt = G.transpose(-1, -2)
+        if COLLECT is not None:
+            COLLECT[name] = dict(
+                shape_m_n_k=[int(G.shape[-2]), int(G.shape[-1]), int(A.shape[-1])],
+                G_rows_along_n=zero_code_record(G.contiguous()),
+                Gt_rows_along_m=zero_code_record(Gt.contiguous()),
+                At_rows_along_m=zero_code_record(A.transpose(-1, -2).contiguous()),
+                Bt_rows_along_n=zero_code_record(B.transpose(-1, -2).contiguous()))
         if quant_backward:
             kg = ka
             dA = arith.product_nt(G.contiguous(), B.transpose(-1, -2).contiguous(), kg, kb)
@@ -175,7 +221,7 @@ class QMatmulNT(torch.autograd.Function):
             dB = Gt @ A
         if sabotage:
             dB = -dB
-        return dA, dB, None, None, None, None
+        return dA, dB, None, None, None, None, None
 
 
 class ByteLM:
@@ -197,7 +243,7 @@ class ByteLM:
         if mode == "plain":
             return A @ B.transpose(-1, -2)
         ka, kb = spec.kinds(product)
-        return QMatmulNT.apply(A, B, ka, kb, mode == "fwdbwd", mode == "sabotage")
+        return QMatmulNT.apply(A, B, ka, kb, mode == "fwdbwd", mode == "sabotage", product)
 
     def logits(self, ids, spec, mode):
         """`ids [B, L]` -> float32 logits `[B, L, vocab]`. `mode` is
@@ -281,6 +327,18 @@ def gradient_of(model, rows, spec, mode):
     return torch.cat([g.reshape(-1).to(torch.float64) for g in grads]), loss.item()
 
 
+def zero_codes_of(model, rows, spec, mode):
+    """One diagnostic backward pass under the run's own arithmetic, with the
+    collector on: the gradient operands the backward GEMMs would be handed."""
+    global COLLECT
+    COLLECT = {}
+    try:
+        gradient_of(model, rows, spec, mode)
+        return COLLECT
+    finally:
+        COLLECT = None
+
+
 def cosine(a, b):
     return (a @ b / (a.norm() * b.norm()).clamp_min(1e-300)).item()
 
@@ -310,7 +368,7 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
     schedule_sha = hashlib.sha256(starts.numpy().astype("<i8").tobytes()).hexdigest()
     starts = starts.to(device)
     vstarts, vstride = validation_starts(shape, corpus_bytes, device)
-    trace, fp32_eval, grad_cos, nonfinite = [], {}, {}, None
+    trace, fp32_eval, grad_cos, zero_codes, nonfinite = [], {}, {}, {}, None
     t0 = time.time()
 
     def evaluate(step):
@@ -323,10 +381,12 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
     evaluate(0)
     for step in range(args.steps):
         rows = windows(corpus, starts[step], shape["length"])
-        if arm != "a" and step in (0, args.equal_steps // 2, args.equal_steps - 1):
-            ref, _ = gradient_of(model, rows, FP32, "fwd")
-            got, _ = gradient_of(model, rows, spec, mode)
-            grad_cos[str(step)] = dict(cosine=cosine(ref, got), norm_ratio=(got.norm() / ref.norm()).item())
+        if step in (0, args.equal_steps // 2, args.equal_steps - 1):
+            zero_codes[str(step)] = zero_codes_of(model, rows, spec, mode)
+            if arm != "a":
+                ref, _ = gradient_of(model, rows, FP32, "fwd")
+                got, _ = gradient_of(model, rows, spec, mode)
+                grad_cos[str(step)] = dict(cosine=cosine(ref, got), norm_ratio=(got.norm() / ref.norm()).item())
         opt.zero_grad(set_to_none=True)
         loss = model.loss(rows, spec, mode)
         loss.backward()
@@ -350,6 +410,7 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
                   validation_windows=VAL_WINDOWS, validation_stride=int(vstride),
                   validation_targets=VAL_WINDOWS * shape["length"]),
         trace=trace, fp32_forward_val_loss=fp32_eval, gradient_against_fp32=grad_cos,
+        gradient_zero_codes=zero_codes,
         nonfinite_at_step=nonfinite, seconds=time.time() - t0,
         library=dict(torch=torch.__version__, device_name=torch.cuda.get_device_name(0) if device == "cuda" else None),
     )
@@ -364,14 +425,10 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
 
 def plan(args):
     runs = [("a", "fwd", False, s) for s in range(args.baseline_seeds)]
-    arms = [a for a in args.arms.split(",") if a and a != "a"]
-    for attn in (False, True):
-        for arm in arms:
-            if attn and ARMS[arm]["a"] == "fp32":
-                continue  # no activation is rounded, so the attention switch changes nothing
-            for mode in ("fwd", "fwdbwd"):
-                for s in range(args.seeds):
-                    runs.append((arm, mode, attn, s))
+    wanted = set(a for a in args.arms.split(",") if a)
+    for arm, mode, attn in ORDER:
+        if arm in wanted:
+            runs += [(arm, mode, attn, s) for s in range(args.seeds)]
     return runs
 
 
@@ -416,9 +473,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--arms", default="b,c,d,e,f")
+    ap.add_argument("--arms", default="e,c,d,int12,int10,f,int8w-int15a,b")
     ap.add_argument("--baseline-seeds", type=int, default=5)
-    ap.add_argument("--seeds", type=int, default=5)
+    ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--equal-steps", type=int, default=4000)
     ap.add_argument("--steps", type=int, default=6000)
     ap.add_argument("--eval-every", type=int, default=100)

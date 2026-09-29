@@ -5,7 +5,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/env.sh"
 OUT="$WORK/out/${LOWBIT_QUALITY_TRAIN_DIR:-train}"
 mkdir -p "$OUT/logs"
-PER=${LOWBIT_QUALITY_WORKERS_PER_GPU:-4}
+PER=${LOWBIT_QUALITY_WORKERS_PER_GPU:-6}
 GPUS=$(echo "${CUDA_VISIBLE_DEVICES:-0}" | tr ',' ' ')
 N=0; for g in $GPUS; do N=$((N + PER)); done
 CUDA_VISIBLE_DEVICES=$(echo $GPUS | cut -d' ' -f1) "$PY" bench/lowbit_quality/byte_lm_train.py \

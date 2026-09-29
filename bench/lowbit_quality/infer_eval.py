@@ -107,6 +107,30 @@ def _arms():
                               note="int8 both; the ACTIVATION scale saturates: row absmax to [256, 512), clamp at 127"), "-")
     add("int8m-both", Spec("int8m-both", w="int8m", a="int8m",
                            note="int8 both, a finer scale that is NOT a power of two: row absmax maps to exactly 127"), "-")
+    # ---- the WEIGHT side, with the activation held at 15 bits (which alone costs nothing measurable)
+    add("int10w-int15a", Spec("int10w-int15a", w="int10", a="int15",
+                              note="10-bit weight codes, 15-bit activation codes, same scale rule"), "-")
+    add("int12w-int15a", Spec("int12w-int15a", w="int12", a="int15",
+                              note="12-bit weight codes, 15-bit activation codes, same scale rule"), "-")
+    add("int8mw-int15a", Spec("int8mw-int15a", w="int8m", a="int15",
+                              note="int8 weight codes on the finer scale that is NOT a power of two "
+                                   "(row absmax maps to exactly 127), 15-bit activation codes"), "-")
+    add("int8s1w-int15a", Spec("int8s1w-int15a", w="int8s1", a="int15",
+                               note="int8 weight codes on the saturating scale (row absmax to [128, 256), "
+                                    "clamp at 127), 15-bit activation codes"), "-")
+    add("int8w-int15a-fp32head", Spec("int8w-int15a-fp32head", w="int8", a="int15", overrides={"lm_head": FP},
+                                      note="int8 weights, 15-bit activations, the LM head product kept fp32"), "-")
+    add("int8w-int15a-int15head", Spec("int8w-int15a-int15head", w="int8", a="int15",
+                                       overrides={"lm_head": ("int15", "int15")},
+                                       note="int8 weights, 15-bit activations, the LM head (the tied table) on 15-bit codes"), "-")
+    add("int8w-int15a-int15mlp", Spec("int8w-int15a-int15mlp", w="int8", a="int15",
+                                      overrides={k: ("int15", "int15") for k in ("gate_proj", "up_proj", "down_proj")},
+                                      note="int8 weights on the four attention projections and the head, "
+                                           "15-bit weights on the three SwiGLU products, 15-bit activations"), "-")
+    add("int8w-int15a-int15attnproj", Spec("int8w-int15a-int15attnproj", w="int8", a="int15",
+                                           overrides={k: ("int15", "int15") for k in ("q_proj", "k_proj", "v_proj", "o_proj")},
+                                           note="int8 weights on the SwiGLU products and the head, 15-bit weights "
+                                                "on the four attention projections, 15-bit activations"), "-")
     add("d-qk", Spec("int8i32.v1+qk", w="int8", a="int8", overrides={"attn_qk": ("int8", "int8")},
                      note="int8 both operands, QK replaced, PV kept fp32"), "-")
     add("d-pv", Spec("int8i32.v1+pv", w="int8", a="int8", overrides={"attn_pv": ("int8", "int8")},
