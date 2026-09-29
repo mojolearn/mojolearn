@@ -1432,6 +1432,11 @@ check-transformer-backward = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . tra
 # reach, plus its two refusals (the regime bound and the -0.0 corner).
 check-transformer-fused = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_fused_check.mojo"
 check-transformer-options = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_options_check.mojo"
+# lane/lowbit-blocks (2026-09-29): the block under numeric_profile="fixed15_v1"
+# against the host oracle, decode == prefill, batch invariance; the sabotage
+# build MUST report failures in every profile phase.
+check-transformer-int15 = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . transformer/checks/transformer_int15_check.mojo"
+check-transformer-int15-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . transformer/checks/transformer_int15_check.mojo"
 # Independent CPU float64 references for Transformer backward, cross-entropy,
 # SGD/AdamW, and embedding gradients. Run in the skgpu environment because
 # PyTorch is intentionally not a core dependency. The generated NPZ is an
