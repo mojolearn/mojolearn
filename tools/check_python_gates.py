@@ -12,13 +12,13 @@ import tempfile
 import time
 
 import identity_iterate
+from python_test_inventory import inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def discover():
-    return sorted(p.stem for p in (ROOT / 'python/mojolearn/tests').glob('test_*.py')
-                  if 'import pytest' not in p.read_text() and 'unittest.TestCase' not in p.read_text())
+    return [p.stem for p in inventory(ROOT / 'python/mojolearn/tests')['gates']]
 
 
 
@@ -54,6 +54,8 @@ def main(argv=None):
     ap.add_argument('--release', action='store_true', help='explicit release qualification for broad Metal gates')
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--plan', action='store_true')
+    ap.add_argument('--installed', action='store_true',
+                    help='use installed package with source test namespace, not source PYTHONPATH')
     ap.add_argument('--backend', choices=('cpu', 'metal', 'cuda', 'hip'), default='cpu')
     ap.add_argument('--host-dir', type=Path)
     ap.add_argument('--budget', type=float)
@@ -93,7 +95,10 @@ def main(argv=None):
         ap.error('summary already exists; use a fresh output directory')
     print(f'Gate logs and summary: {out}', flush=True)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE='identical', MOJOLEARN_LINALG_GATE_FULL='1')
-    env['PYTHONPATH'] = str(ROOT / 'python') + os.pathsep + env.get('PYTHONPATH', '')
+    if not args.installed:
+        env['PYTHONPATH'] = str(ROOT / 'python') + os.pathsep + env.get('PYTHONPATH', '')
+    elif args.backend == 'cpu':
+        ap.error('--installed currently requires a device backend; CPU package staging is separate')
     if args.backend == 'cpu':
         try:
             package, host = identity_iterate.cpu_package(out, args.host_dir or env.get('MOJOLEARN_HOST_DIR') or ROOT / 'python/mojolearn/host')
@@ -132,8 +137,21 @@ def main(argv=None):
             'if actual != sys.argv[1]: raise SystemExit(f"requested {sys.argv[1]}, loaded {actual}")\n'
             'sys.argv=[sys.argv[2]]\n'
             'runpy.run_module(sys.argv[0], run_name="__main__")')
+    if args.installed:
+        attach = (
+            'import importlib.util,pathlib,sys,mojolearn\n'
+            f'root=pathlib.Path({str(ROOT / "python/mojolearn/tests")!r})\n'
+            'runtime=pathlib.Path(mojolearn.__file__).resolve()\n'
+            'if root.parent.resolve() in runtime.parents: raise SystemExit("refusing source runtime")\n'
+            'print("Installed runtime:", runtime, flush=True)\n'
+            'spec=importlib.util.spec_from_file_location("mojolearn.tests",root/"__init__.py",submodule_search_locations=[str(root)])\n'
+            'tests=importlib.util.module_from_spec(spec)\n'
+            'sys.modules["mojolearn.tests"]=tests\n'
+            'mojolearn.tests=tests\n'
+            'spec.loader.exec_module(tests)\n')
+        body = attach + body
     for i, gate in enumerate(gates):
-        code = run([sys.executable, '-c', body, args.backend, 'mojolearn.tests.' + gate],
+        code = run([sys.executable, *(['-I'] if args.installed else []), '-c', body, args.backend, 'mojolearn.tests.' + gate],
                    'run' if args.backend == 'cpu' else args.backend, gate)
         if code:
             report(gates[i+1:], dict(gate=gate, exit_code=code))
