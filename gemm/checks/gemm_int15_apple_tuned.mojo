@@ -485,8 +485,13 @@ def _tuned_body[
     var step = 0
     for w in range(windows):
         var k0 = w * KB
+        # The left operand's planes: high (or the code whole under TWO) at
+        # `at`, low at `at + ASZ`, the sums last. Job 2 (8fcd8be81) passed
+        # the LAST plane as the low one, which under THREE with staged sums
+        # wrote the low plane over the sums: its gate failed f3.t32.kb16 and
+        # f3.row64.kb16 on every case, as it had to.
         _stage_planes[BM, KB, NT, True, AST, MODE_A, SCALAR](
-            at, at + (NPLA - 1) * ASZ, at + (NPLA - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
+            at, at + ASZ, at + (NPLA - 1) * ASZ, ah, al, m0, m, k0, k, tid, aligned
         )
         _stage_planes[BN, KB, NT, False, BST, MODE_B, SCALAR](
             bt, bt + BSZ, bt + (NPLB - 1) * BSZ, bh, bl, n0, n, k0, k, tid, aligned
