@@ -171,46 +171,51 @@ def gw_cells_kernel(
 #: step is two shared loads, one fma and one compare.
 comptime GT = 16
 comptime GW_GRAM_TPB = GT * GT
-#: Rows a block stages at a time (two buffers of GR x 2GT words).
-comptime GR = 16
+#: Rows a block stages at a time (two buffers of GR x 2GT words): a chunk's
+#: loads are all in flight while the previous chunk is folded.
+comptime GR = 64
 comptime GROW = 2 * GT
-#: Staged words per thread per chunk.
-comptime GPER = (GR * GROW + GW_GRAM_TPB - 1) // GW_GRAM_TPB
+#: Staged rows per thread per chunk: thread tid stages column tid % GROW of
+#: rows tid // GROW + GSTEP * q.
+comptime GSTEP = GW_GRAM_TPB // GROW
+comptime GPER = GR // GSTEP
 
 
 @always_inline
 def _tile_fetch(
-    x: FP, rw: FP, n: Int, d: Int, m: Int, r0: Int, rows: Int, bj: Int, bk: Int, tid: Int, cix: Int,
-) -> InlineArray[Float32, GPER]:
-    """This thread's share of chunk `cix`'s staged words: row r of the chunk
-    at r * GROW, the block's GT t's then its GT u's (zero past the rows or
-    the table); computed from loads, not yet stored."""
-    var stage = InlineArray[Float32, GPER](fill=Float32(0))
+    x: FP, rw: FP, n: Int, d: Int, m: Int, r0: Int, rows: Int, col: Int, is_t: Bool, tid: Int, cix: Int,
+) -> Tuple[InlineArray[Float32, GPER], InlineArray[Float32, GPER]]:
+    """This thread's RAW loads for chunk `cix` (its column `col` of the table,
+    rows tid // GROW + GSTEP * q): h (or g on the gradient row) and x at a
+    clamped, always valid address; no arithmetic, so the loads stay in
+    flight until `_tile_put`."""
+    var ra = InlineArray[Float32, GPER](fill=Float32(0))
+    var rb = InlineArray[Float32, GPER](fill=Float32(0))
+    var colx = min(col, d - 1)
+    var hoff = 0 if (is_t and col == m) else n
     comptime for q in range(GPER):
-        var e = tid + q * GW_GRAM_TPB
-        var v = Float32(0)
-        if e < GR * GROW:
-            var r = e // GROW
-            var c = e % GROW
-            var i = cix * GR + r
-            if i < rows:
-                var gi = r0 + i
-                if c < GT:
-                    var j = bj * GT + c
-                    if j < d:
-                        v = _fm(ld(rw, n + gi), ld(x, gi * d + j))
-                    elif j < m:
-                        v = _fm(ld(rw, n + gi), Float32(1))
-                    elif j == m:
-                        v = _fm(ld(rw, gi), Float32(1))
-                else:
-                    var k = bk * GT + (c - GT)
-                    if k < d:
-                        v = fz(ld(x, gi * d + k))
-                    elif k < m:
-                        v = Float32(1)
-        stage[q] = v
-    return stage^
+        var i = min(cix * GR + tid // GROW + GSTEP * q, rows - 1)
+        var gi = r0 + i
+        ra[q] = ld(rw, hoff + gi)
+        rb[q] = ld(x, gi * d + colx)
+    return (ra^, rb^)
+
+
+@always_inline
+def _tile_word(a: Float32, b: Float32, col: Int, is_t: Bool, d: Int, m: Int) -> Float32:
+    """The staged word: t = fm(h, x_j) | fm(h, 1) | fm(g, 1), or u = fz(x_k) | 1
+    (see THE TILED CELL PASS); zero past the table."""
+    if is_t:
+        if col < d:
+            return _fm(a, b)
+        if col <= m:
+            return _fm(a, Float32(1))
+        return Float32(0)
+    if col < d:
+        return fz(b)
+    if col < m:
+        return Float32(1)
+    return Float32(0)
 
 
 def gw_tile_kernel(
@@ -251,17 +256,21 @@ def gw_tile_kernel(
     var bad = False
     var sm = stack_allocation[2 * GR * GROW, Float32, address_space=AddressSpace.SHARED]()
     var chunks = (rows + GR - 1) // GR
-    var stage = _tile_fetch(x, rw, n, d, m, r0, rows, bj, bk, tid, 0)
+    var c = tid % GROW
+    var is_t = c < GT
+    var col = bj * GT + c if is_t else bk * GT + (c - GT)
+    var srow = tid // GROW
+    var raw = _tile_fetch(x, rw, n, d, m, r0, rows, col, is_t, tid, 0)
     comptime for q in range(GPER):
-        var e = tid + q * GW_GRAM_TPB
-        if e < GR * GROW:
-            sm[e] = stage[q]
+        var r = srow + GSTEP * q
+        var v = _tile_word(raw[0][q], raw[1][q], col, is_t, d, m)
+        sm[r * GROW + c] = v if r < rows else Float32(0)
     barrier()
     var tj = tid // GT
     var tk = GT + tid % GT
     for cix in range(chunks):
         if cix + 1 < chunks:
-            stage = _tile_fetch(x, rw, n, d, m, r0, rows, bj, bk, tid, cix + 1)
+            raw = _tile_fetch(x, rw, n, d, m, r0, rows, col, is_t, tid, cix + 1)
         var base = (cix % 2) * GR * GROW
         if (cix + 1) * GR <= rows:
             comptime for r in range(GR):
@@ -276,9 +285,9 @@ def gw_tile_kernel(
         if cix + 1 < chunks:
             var nb = ((cix + 1) % 2) * GR * GROW
             comptime for q in range(GPER):
-                var e = tid + q * GW_GRAM_TPB
-                if e < GR * GROW:
-                    sm[nb + e] = stage[q]
+                var r = srow + GSTEP * q
+                var v = _tile_word(raw[0][q], raw[1][q], col, is_t, d, m)
+                sm[nb + r * GROW + c] = v if (cix + 1) * GR + r < rows else Float32(0)
         barrier()
     if cell < 0:
         return

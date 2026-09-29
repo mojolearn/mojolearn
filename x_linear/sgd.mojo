@@ -410,14 +410,10 @@ def _warp_row_dot_spec[K: Int](
     var bad = False
     comptime for kk in range(K):
         if (kk + 1) * W <= d:
-            # every x_j and w_j of the chunk fetched first, then the chain
-            var xs = InlineArray[Float32, W](fill=Float32(0))
-            var ws = InlineArray[Float32, W](fill=Float32(0))
             comptime for l in range(W):
-                xs[l] = shuffle_idx(xr[kk], UInt32(l))
-                ws[l] = shuffle_idx(wr[kk], UInt32(l))
-            comptime for l in range(W):
-                acc = xmad(xs[l], ws[l], acc)
+                var xj = shuffle_idx(xr[kk], UInt32(l))
+                var wj = shuffle_idx(wr[kk], UInt32(l))
+                acc = xmad(xj, wj, acc)
                 bad = bad | (abs(acc) < MIN_NORMAL)
         elif kk * W < d:
             # the last chunk: only its d - kk * W live slots (no dead slot
