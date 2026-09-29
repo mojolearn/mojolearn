@@ -12,7 +12,7 @@ full contract. In short:
 | NVIDIA | `identical` | CatBoost, XGBoost and LightGBM GPU arms, cuML, cuVS, torch CUDA (the rosters of `tools/bench_all_ours.sh`); scikit-learn and statsmodels on the CPU where cuML has no such estimator |
 | AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores (scikit-learn, umap-learn, statsmodels, faiss-cpu included); torch ROCm |
 
-- Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
+- Families: trees (`gbdt-symmetric`, `gbdt-symmetric-1000`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`, and the GBDT task lanes `gbdt-rank-yetirank`,
   `gbdt-rank-pairlogit`, `gbdt-multiclass`, `gbdt-categorical`, below) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
   `dbscan`, `hdbscan`) on taxi and Istella-S, classical2 (23 lanes, below) on
@@ -22,7 +22,10 @@ full contract. In short:
   neural surface in that tier only. `--modes fast` with the neural family is
   refused by name; a FAST-only Apple run passes
   `--families trees,classical,classical2`.
-- One seed (7). Five timed rounds after one warm-up (`--rounds`).
+- One seed per race: 7, or 42 where the cuML benchmark sets 42 (`spectral`,
+  `algos/target-encoder`). Five timed rounds after one warm-up (`--rounds`).
+- Settings: NVIDIA's own benchmark values on every lane their harnesses
+  cover, on our arm and every opponent arm (below, "NVIDIA's harnesses").
 - Output: one directory with `board.json` (box fingerprint and every cell) and
   `BOARD.md`. Bulky state (venv, wheel download, classical blocks) goes in
   `--cache`, which defaults to `<out>/cache`. Rerunning the same command
@@ -37,12 +40,95 @@ full contract. In short:
   script refuses and prints the staging command. A neural-only run
   (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). The current plan has 93 races on
-  every vendor (44 of them classical2, 16 neural, 5 GBDT task races). That
-  comes to 423 fit cells on Apple, 367 on NVIDIA and 357 on AMD, 87 of them
-  our CPU tier (below). Inference adds 212 cells on Apple, 164 on NVIDIA and
-  190 on AMD; `--no-infer` times training only. With `--no-cpu-arm` the plan
-  is 336, 280 and 270 fit cells, and inference 170, 122 and 148.
+  --vendor apple` (or `nvidia`, `amd`). On 2026-09-29 the plan has 441
+  races on every vendor (19 trees, 16 classical, 44 classical2, 16 neural,
+  346 algos). That comes to 1,939 fit cells on Apple, 1,695 on NVIDIA and
+  1,525 on AMD, 435 of them our CPU tier (below). Inference adds 1,310 cells
+  on Apple, 1,144 on NVIDIA and 1,038 on AMD; `--no-infer` times training
+  only.
+
+## NVIDIA's harnesses
+
+The board takes its settings from NVIDIA's two public benchmark harnesses.
+For every lane one of them covers, each parameter the harness sets
+explicitly is the board's value, on our arm and on every opponent arm. Where
+the harness leaves a work setting at each library's default, the board
+pins ONE value on every arm (the PINNED table), because the libraries'
+defaults differ and an unset default is how two arms end up solving two
+problems. `tools/bench_board_harness.py` holds the copied values, the
+source file and commit of each, and the lane mapping; every race's settings
+carry `config` (the harness, entry, file URL and commit, or "the board's
+own settings (no NVIDIA harness entry)"), and BOARD.md prints it under the
+race. `tools/bench_board_params.py` refuses a race whose arms differ in the
+seed or in a shared parameter.
+
+| harness | file | commit |
+|---|---|---|
+| cuML benchmark (RAPIDS) | [python/cuml/cuml/benchmark/algorithms.py](https://github.com/rapidsai/cuml/blob/e0f7a4e31578c8eeef376f3ce715d846bfee8d4c/python/cuml/cuml/benchmark/algorithms.py) (`AlgorithmPair` shared_args, cpu_args, cuml_args) | `e0f7a4e31578c8eeef376f3ce715d846bfee8d4c` |
+| NVIDIA gbm-bench | [algorithms.py](https://github.com/NVIDIA/gbm-bench/blob/73a976b036249ff9d8cb30cf9082bb414b911379/algorithms.py) (`shared_params`, each library's `configure`) and `runme.py` (`-ntrees` 500) | `73a976b036249ff9d8cb30cf9082bb414b911379` |
+
+What the board takes from them:
+
+- Trees (gbm-bench): `gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`,
+  `gbdt-multiclass` and `gbdt-categorical` run 500 trees, max_depth 8,
+  learning rate 0.1, L2 1 and 256 leaves (LightGBM's `max_leaves`, which is
+  2^8 on every arm), and on a binary task `scale_pos_weight` =
+  len(y_train) / count_nonzero(y_train) on CatBoost, XGBoost and LightGBM
+  (ours: `class_weights=[1, that]`). `rf` runs gbm-bench's forest values,
+  max_depth 8 and 500 trees. gbm-bench gives CatBoost `MultiClassOneVsAll`
+  beside XGBoost's softmax; the board keeps one loss, softmax, on every arm
+  of `gbdt-multiclass`.
+- `gbdt-symmetric-1000` is `gbdt-symmetric` at 1000 trees, with the same
+  arms, datasets and pinned settings. Oblivious trees are weaker per tree,
+  and 1000 is CatBoost's own default iteration count
+  ([boosting_options.cpp](https://github.com/catboost/catboost/blob/e628c03fb0e6b760592652a995163f26be7ea7d3/catboost/private/libs/options/boosting_options.cpp#L13), `IterationCount("iterations", 1000)`,
+  commit `e628c03fb0e6b760592652a995163f26be7ea7d3`).
+- Classical (cuML): `kmeans` 8 clusters, `init='k-means++'`, 300
+  iterations, `n_init=1`, `oversampling_factor=0` on ours and cuML; `pca`
+  10 components; `knn` 64 neighbors (scikit-learn `algorithm='brute'`);
+  `kde` Gaussian kernel, bandwidth 1.0; `dbscan` eps 3, min_samples 2
+  (scikit-learn `algorithm='brute'`); `svc` RBF kernel.
+- Classical2 (cuML): `umap` 5 neighbors, 500 epochs; `spectral` 8 clusters,
+  nearest-neighbors affinity, 10 neighbors, `n_init=1`, seed 42; `tsvd` 10
+  components; `elasticnet` alpha 0.1, l1_ratio 0.5; `agglomerative` 8
+  clusters, single linkage; `svr` RBF kernel.
+- Algos (cuML): `incremental-pca`, `gaussian-rp` and `sparse-rp` 10
+  components; `target-encoder` smooth 0, 4 folds, seed 42 (cuML folds
+  interleaved); `onehot` dense output, unknown categories ignored;
+  `sgd-clf` and `sgd-reg` 100 epochs at a constant rate 0.005.
+- The pairs that pass nothing (`ols`, `hdbscan`, `logreg`, `linearsvc`,
+  `ridge`, `lasso`, `linearsvr`, `knn-clf`, `knn-reg`, `kernel-ridge`,
+  `tsne`, the naive Bayes classifiers, the scalers and encoders) keep the
+  board's pinned values: the harness leaves every parameter at the
+  library default there.
+
+PINNED (the harness leaves these at library defaults that differ):
+
+| parameter | value on every arm | why |
+|---|---|---|
+| seed | 7 (42 on spectral and target-encoder, where cuML's benchmark sets 42) | gbm-bench sets none and most cuML pairs set none; each library's default differs (XGBoost 0, CatBoost 0, LightGBM its own, scikit-learn and cuML None) |
+| bins | 254 borders = 255 bins on every boosted arm | defaults differ (ours 128, CatBoost CPU 254 borders, CatBoost GPU 128, XGBoost 256, LightGBM 255 bins) |
+| row and column sampling | none (CatBoost and ours bootstrap_type 'No', subsample 1.0 and colsample 1.0 elsewhere) | CatBoost's default bootstrap samples rows; the others do not |
+| boosting_type | Plain | CatBoost's default is data-dependent (Ordered on small pools) |
+| max_leaves | 2 ** max_depth = 256 on every boosted arm | gbm-bench gives LightGBM 256; the others take the same cap at depth 8 |
+| leaf estimation, split floors, borders, nan_mode, boost_from_average | as speed_gbdt_arm.lane_config pins them | the libraries' defaults differ in meaning (lane_config docstring) |
+| rf n_bins | 128 (ours and cuML) | cuML's default; scikit-learn searches exact thresholds and has no bin count |
+| rf max_features, bootstrap, max_samples, min_samples_leaf | 'sqrt' (classification) or 1.0, True, 1.0, 1 | each library's own default for the task, pinned so a default change cannot move one arm |
+| kmeans tol | 1e-7 | scikit-learn and cuML default 1e-4, ours its own; the board keeps one value (ours and cuML refuse 0) |
+| every other parameter a lane sets today | its current value, on every arm | the harness leaves it at the library default |
+
+No harness entry, so the board's own settings stand: `et`, `iforest`,
+`gbdt-rank-yetirank`, `gbdt-rank-pairlogit`; classical2 `gmm`, `gpr`,
+`gpc`, `nystroem`, `rbf-sampler`, `arima`, `ets`, `ivf`,
+`spectral-embedding`; every neural lane (the neural races keep their own
+settings); and every algos lane not listed above.
+
+The seed check. An arm whose constructor has no seed parameter at all draws
+nothing and is recorded as `seed: none (deterministic)`. A third-party arm
+that draws random numbers without a seed argument (cuVS IndexParams, cuGraph
+louvain, faiss HNSW) or through a seeded function argument (SelectKBest's
+mutual information) keeps an EXCEPTIONS row with its reason. An arm that
+has a seed parameter holding anything but the lane's seed refuses the race.
 
 ## Our CPU tier (`ours-cpu`)
 
@@ -183,9 +269,11 @@ define their own clocks in `tools/bench_board_more.py`); svc
 Four trees lanes race the public `GradientBoosting` on tasks beyond binary
 and regression, through the same driver (`bench/speed/forest_speed_arm.py`),
 the same interleaving, FAST and IDENTICAL on Apple and IDENTICAL on NVIDIA
-and AMD, with inference timed after the fit rounds. The shared knobs are the
-gbdt lanes' own: 100 trees, depth 6, learning rate 0.1, L2 1.0, 254 borders
-(255 bins), no bagging, Plain boosting, seed 7. Each lane's objectives and
+and AMD, with inference timed after the fit rounds. `gbdt-multiclass` and
+`gbdt-categorical` take gbm-bench's values (500 trees, depth 8, 256 leaves,
+learning rate 0.1, L2 1.0); the two ranking lanes, which gbm-bench does not
+have, keep 100 trees, depth 6 and 64 leaves. All four pin 254 borders (255
+bins), no bagging, Plain boosting and seed 7. Each lane's objectives and
 every mismatch (one line each, with its reason) are `TASK_LANES` in
 `tools/speed_gbdt_arm.py`; the board copies them into the race's
 `settings.lane_config` and the driver prints them as `FSPEED-NOTE
@@ -201,8 +289,8 @@ metric=mismatch` lines.
 - Growers. Our GradientBoosting fits the ranking and multiclass losses on
   SymmetricTree only (Depthwise and Lossguide refuse by name, as CatBoost's
   GPU learner does). Those lanes race CatBoost on the same oblivious grower,
-  and XGBoost (depthwise) and LightGBM (leaf-wise, 64 leaves) at depth 6,
-  labeled. The categorical lane runs Lossguide, which all four grow.
+  and XGBoost (depthwise) and LightGBM (leaf-wise) at the lane's depth
+  (8 and 256 leaves for multiclass, 6 and 64 for ranking), labeled. The categorical lane runs Lossguide, which all four grow.
 - Objectives. LambdaMART (`rank:ndcg`, `lambdarank`) and YetiRank are
   different losses. Each is that library's closest objective, and the lane
   says so. `rank:pairwise` is PairLogit's pairwise logistic loss with
