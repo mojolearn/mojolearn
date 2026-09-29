@@ -1,0 +1,375 @@
+profile=mojolearn.identical.gemm.int15i64.v1
+box=h100
+started=2026-09-29T04:12:24Z
+tree_head=45464ced2e5ec9c5f858fe17030ec6ba9bdd4698 dirty_files=36
+mac_budget=default repeats=default only=all
+machine=NVIDIA H100 NVL, 580.159.04
+build exit=0 40s
+warm exit=0 30s (untimed, every arm once)
+price exit=0 57s
+warm-and-timed: the two runs printed the same digests (322)
+price-sabotage exit=0 (identity only)
+sabotage-comparison exit=0 (0: every sabotaged fifteen-bit digest differed from the clean one)
+finished=2026-09-29T04:15:15Z
+profiles fp32.v1, int15i64.v1
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 0.0708 0.0687 236.8994 GMAC/s 0x920cdd138650a8bd OP_NT,plan=13
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.flat 0.6431 0.6425 26.0871 GMAC/s 0x6c0a74154145a04f not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.pieces 1.3054 1.3050 12.8517 GMAC/s 0x6c0a74154145a04f not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.mma 0.2086 0.2009 80.4196 GMAC/s 0x6c0a74154145a04f dispatched,four-unit-products
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a 0.5038 0.5033 0.0081 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.a.parallel 0.0264 0.0261 0.1549 Gelem/s 0x4bfbfd4a194dd3c3 per-call
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.a.parallel 0.0265 0.0257 0.1546 Gelem/s 0xdd1cf024338b930d per-call
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.a 0.0104 0.0098 0.3929 Gelem/s 0xdd1cf024338b930d per-call
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b 2.6923 2.6828 6.2315 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.quantize.b.parallel 0.1830 0.1822 91.6888 Gelem/s 0xd7511d5a7d3792ec once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.b.parallel 0.1843 0.1833 91.0449 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL convert.int15.split.b 0.0588 0.0577 285.1716 Gelem/s 0x3a9803f3b6c2415a once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes 0.2506 0.2496 66.9444 GMAC/s 0x6c0a74154145a04f planes.a.parallel+product
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.codes 0.2945 0.2931 56.9673 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL inference.int15i64.v1.planes.rowquant 0.7234 0.7221 23.1908 GMAC/s 0x6c0a74154145a04f quantize.a+split.a+product
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes 0.4232 0.4212 39.6430 GMAC/s 0x6c0a74154145a04f planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.codes 0.4752 0.4724 35.3040 GMAC/s 0x6c0a74154145a04f quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t1 1 4096 4096 FULL training.int15i64.v1.planes.rowquant 3.4603 3.4517 4.8484 GMAC/s 0x6c0a74154145a04f quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.1033 0.1011 1298.8854 GMAC/s 0xd5677d8a13939709 OP_NT,plan=14
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.flat 0.6368 0.6361 210.7604 GMAC/s 0x81664edfe5ebeb5a not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.pieces 1.2992 1.2985 103.3049 GMAC/s 0x81664edfe5ebeb5a not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.mma 0.1961 0.1935 684.4945 GMAC/s 0x81664edfe5ebeb5a dispatched,four-unit-products
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a 0.6119 0.6108 0.0536 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.a.parallel 0.0359 0.0351 0.9132 Gelem/s 0xb78bf34e712fc6ae per-call
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.a.parallel 0.0350 0.0348 0.9352 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.a 0.0113 0.0101 2.8965 Gelem/s 0x3adff9f2d64aa749 per-call
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b 2.6297 2.6204 6.3799 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.quantize.b.parallel 0.1825 0.1810 91.9506 Gelem/s 0x7ada9833a1c6cf07 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.b.parallel 0.1843 0.1830 91.0553 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL convert.int15.split.b 0.0585 0.0580 286.8636 Gelem/s 0x4f6ab0ce3273940 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes 0.2529 0.2514 530.6517 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.codes 0.2984 0.2970 449.8064 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL inference.int15i64.v1.planes.rowquant 0.8233 0.8217 163.0265 GMAC/s 0x81664edfe5ebeb5a quantize.a+split.a+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes 0.4230 0.4220 317.3251 GMAC/s 0x81664edfe5ebeb5a planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.codes 0.4777 0.4753 280.9660 GMAC/s 0x81664edfe5ebeb5a quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t8 8 4096 4096 FULL training.int15i64.v1.planes.rowquant 3.3451 3.3402 40.1239 GMAC/s 0x81664edfe5ebeb5a quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 1.0368 1.0330 8285.4045 GMAC/s 0x67d3d940546b834c OP_NT,plan=10
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.flat 39.1233 39.1008 219.5604 GMAC/s 0xa9844dfadf1fd6da not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.pieces 77.4406 77.4157 110.9229 GMAC/s 0xa9844dfadf1fd6da not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.mma 1.2145 1.1991 7072.7050 GMAC/s 0xa9844dfadf1fd6da dispatched,four-unit-products
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a 2.4677 2.4588 0.8498 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.0661 0.0650 31.7342 Gelem/s 0x96388d91a5c28f60 per-call
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.a.parallel 0.0664 0.0652 31.5732 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.a 0.0158 0.0153 132.7900 Gelem/s 0xb04426ef4d989cc2 per-call
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b 2.4735 2.4687 6.7827 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.quantize.b.parallel 0.1823 0.1816 92.0147 Gelem/s 0x83c4a5fdce0c9ef8 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.b.parallel 0.1847 0.1839 90.8566 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL convert.int15.split.b 0.0587 0.0581 285.6620 Gelem/s 0x547571ca5138fbe8 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes 1.2540 1.2518 6849.7763 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.codes 1.3226 1.3020 6494.7925 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL inference.int15i64.v1.planes.rowquant 3.6810 3.6652 2333.5904 GMAC/s 0xa9844dfadf1fd6da quantize.a+split.a+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes 1.4462 1.4450 5939.5069 GMAC/s 0xa9844dfadf1fd6da planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.codes 1.4983 1.4862 5732.9446 GMAC/s 0xa9844dfadf1fd6da quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 6.1957 6.1754 1386.4443 GMAC/s 0xa9844dfadf1fd6da quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL fp32.v1 1.0185 1.0173 8433.7500 GMAC/s 0xef9cf5a7a4f7f63e OP_NN,plan=10
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.flat 39.1254 39.0985 219.5487 GMAC/s 0x6c4eff5b0480823a not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.pieces 77.5433 77.4262 110.7759 GMAC/s 0x6c4eff5b0480823a not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.mma 1.2125 1.1939 7084.5172 GMAC/s 0x6c4eff5b0480823a dispatched,four-unit-products
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a 2.4643 2.4587 0.8510 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.a.parallel 0.0709 0.0644 29.5991 Gelem/s 0x5412e9d77fa8f1b4 per-call
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.a.parallel 0.0650 0.0641 32.2733 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.a 0.0147 0.0147 142.2763 Gelem/s 0x4d900a1071a39cb2 per-call
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b 2.6254 2.6226 6.3904 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.quantize.b.parallel 0.2021 0.2015 82.9947 Gelem/s 0xc57f9785ab2999c0 per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.b.parallel 0.2043 0.2038 82.1273 Gelem/s 0x22cb22fa7a9b88ff per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.split.b 0.0570 0.0565 294.1978 Gelem/s 0x22cb22fa7a9b88ff once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes 1.4689 1.4551 5847.6897 GMAC/s 0x6c4eff5b0480823a planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.codes 1.5215 1.5047 5645.5492 GMAC/s 0x6c4eff5b0480823a quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.int15i64.v1.planes.rowquant 6.3387 6.3136 1355.1644 GMAC/s 0x6c4eff5b0480823a quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL fp32.v1 0.8825 0.8815 9733.3281 GMAC/s 0xe489aab33323c201 OP_TN,plan=10
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.flat 38.6895 38.6150 222.0225 GMAC/s 0x8ef510e0780e450 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.pieces 76.0081 75.9504 113.0135 GMAC/s 0x8ef510e0780e450 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.mma 1.0556 1.0536 8137.7677 GMAC/s 0x8ef510e0780e450 dispatched,four-unit-products
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a 0.2366 0.2359 8.8646 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.a.parallel 0.0570 0.0536 36.8083 Gelem/s 0xb2ac5568e254c666 per-call,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.a.parallel 0.0488 0.0482 42.9401 Gelem/s 0x660ec1446ce3f2a1 per-call,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.a 0.0155 0.0153 135.6941 Gelem/s 0x660ec1446ce3f2a1 per-call
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b 0.2353 0.2350 8.9124 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.quantize.b.parallel 0.0542 0.0535 38.6643 Gelem/s 0x12961c8aff1fa754 per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.b.parallel 0.0488 0.0485 42.9885 Gelem/s 0x7a7bbd8b4dfdf226 per-step,transposing
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.split.b 0.0150 0.0147 139.3920 Gelem/s 0x7a7bbd8b4dfdf226 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.qkv.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes 1.1556 1.1539 7433.3113 GMAC/s 0x8ef510e0780e450 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.codes 1.1910 1.1901 7212.2929 GMAC/s 0x8ef510e0780e450 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.int15i64.v1.planes.rowquant 1.5244 1.5234 5634.8612 GMAC/s 0x8ef510e0780e450 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 0.1794 0.1791 327.3822 GMAC/s 0x4965ea6af2ff5e61 OP_NT,plan=13
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.flat 0.6396 0.6390 91.8056 GMAC/s 0xae35d8ef540f67ad not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.pieces 1.3023 1.3006 45.0882 GMAC/s 0xae35d8ef540f67ad not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.mma 0.2208 0.2201 265.8962 GMAC/s 0xae35d8ef540f67ad dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a 0.4981 0.4979 0.0082 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.a.parallel 0.0253 0.0252 0.1617 Gelem/s 0xb01c5164b78a8cd9 per-call
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.a.parallel 0.0255 0.0248 0.1609 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.a 0.0089 0.0087 0.4626 Gelem/s 0x6ca381f7a412a406 per-call
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b 2.4835 2.4802 23.6444 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.quantize.b.parallel 0.5836 0.5794 100.6240 Gelem/s 0xf305c69146315ce1 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.b.parallel 0.5912 0.5901 99.3195 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.split.b 0.1787 0.1785 328.5968 Gelem/s 0x4f08c5bb8eef630f once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes 0.2476 0.2473 237.2037 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.codes 0.4199 0.4197 139.8311 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL inference.int15i64.v1.planes.rowquant 0.7161 0.7148 81.9964 GMAC/s 0xae35d8ef540f67ad quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes 0.8331 0.8326 70.4822 GMAC/s 0xae35d8ef540f67ad planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.codes 0.9934 0.9919 59.1128 GMAC/s 0xae35d8ef540f67ad quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t1 1 14336 4096 FULL training.int15i64.v1.planes.rowquant 3.5618 3.5600 16.4863 GMAC/s 0xae35d8ef540f67ad quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.2734 0.2728 1718.0152 GMAC/s 0x7b30465d325906e OP_NT,plan=14
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.flat 2.4896 2.4824 188.6862 GMAC/s 0x5dd8142ffbce1023 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.pieces 4.9617 4.9347 94.6781 GMAC/s 0x5dd8142ffbce1023 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.mma 0.2191 0.2187 2144.1119 GMAC/s 0x5dd8142ffbce1023 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a 0.6094 0.6089 0.0538 Gelem/s 0xc41e630721b559a8 per-call
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.a.parallel 0.0353 0.0345 0.9277 Gelem/s 0xc41e630721b559a8 per-call
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.a.parallel 0.0346 0.0343 0.9471 Gelem/s 0xa65514e80d97e412 per-call
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.a 0.0103 0.0099 3.1730 Gelem/s 0xa65514e80d97e412 per-call
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b 2.5758 2.5652 22.7968 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.quantize.b.parallel 0.5855 0.5834 100.2891 Gelem/s 0x5526319a1fd404eb once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.b.parallel 0.5930 0.5920 99.0204 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.split.b 0.1800 0.1789 326.2708 Gelem/s 0x1a382def955ed027 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes 0.2537 0.2526 1851.5928 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.codes 0.4278 0.4257 1098.0341 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL inference.int15i64.v1.planes.rowquant 0.8242 0.8229 569.9709 GMAC/s 0x5dd8142ffbce1023 quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes 0.8417 0.8376 558.0984 GMAC/s 0x5dd8142ffbce1023 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.codes 1.0027 1.0005 468.5186 GMAC/s 0x5dd8142ffbce1023 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t8 8 14336 4096 FULL training.int15i64.v1.planes.rowquant 3.5666 3.5539 131.7108 GMAC/s 0x5dd8142ffbce1023 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 3.5682 3.3661 8425.8354 GMAC/s 0x27a166783c45f9f0 OP_NT,plan=10
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.flat 137.7987 134.9131 218.1789 GMAC/s 0x31746954b2b719d4 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.pieces 438.1849 413.4945 68.6121 GMAC/s 0x31746954b2b719d4 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.mma 6.0206 4.9344 4993.6686 GMAC/s 0x31746954b2b719d4 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a 3.7372 3.4876 0.5611 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.a.parallel 0.0939 0.0935 22.3427 Gelem/s 0xb4bf94dcc3facd06 per-call
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.a.parallel 0.0910 0.0870 23.0545 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.a 0.0216 0.0197 97.1849 Gelem/s 0xa995a6c363c89d21 per-call
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b 3.6289 3.4631 16.1815 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.quantize.b.parallel 0.8305 0.7853 70.7008 Gelem/s 0x828a1731c89221c0 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.b.parallel 0.8399 0.6870 69.9108 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.split.b 0.2120 0.1895 277.0163 Gelem/s 0x74a888a8034727d3 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes 5.1201 4.2236 5871.8536 GMAC/s 0x31746954b2b719d4 planes.a.parallel+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.codes 4.8621 4.4064 6183.5217 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL inference.int15i64.v1.planes.rowquant 7.1380 7.0487 4211.9380 GMAC/s 0x31746954b2b719d4 quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes 4.8958 4.5642 6140.9362 GMAC/s 0x31746954b2b719d4 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.codes 5.0661 4.7288 5934.4486 GMAC/s 0x31746954b2b719d4 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512 512 14336 4096 FULL training.int15i64.v1.planes.rowquant 9.4625 9.3927 3177.2629 GMAC/s 0x31746954b2b719d4 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL fp32.v1 3.3652 3.3360 8934.1468 GMAC/s 0x88081a26a7d76edd OP_NN,plan=10
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.flat 138.7668 138.2892 216.6568 GMAC/s 0xd25adc12f122f248 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.pieces 307.2496 306.6994 97.8513 GMAC/s 0xd25adc12f122f248 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.mma 4.4927 4.4561 6691.9145 GMAC/s 0xd25adc12f122f248 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a 10.3653 10.2190 0.7081 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.a.parallel 0.1038 0.0997 70.6812 Gelem/s 0x702c87e35b5a7ee8 per-call
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.a.parallel 0.1005 0.0976 73.0308 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.a 0.0322 0.0318 228.0717 Gelem/s 0x99df5fc34d66c8af per-call
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b 9.3647 9.3027 6.2704 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.quantize.b.parallel 0.8881 0.8728 66.1187 Gelem/s 0xda60585d9b0dc19d per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.b.parallel 0.9250 0.9125 63.4829 Gelem/s 0xad29fb7fad789398 per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.split.b 0.1809 0.1806 324.6294 Gelem/s 0xad29fb7fad789398 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes 5.3526 5.2631 5616.8054 GMAC/s 0xd25adc12f122f248 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.codes 5.4689 5.4457 5497.3792 GMAC/s 0xd25adc12f122f248 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.int15i64.v1.planes.rowquant 23.7056 23.6374 1268.2559 GMAC/s 0xd25adc12f122f248 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL fp32.v1 2.9693 2.9666 10125.1845 GMAC/s 0x64a7d4375083cf3f OP_TN,plan=10
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.flat 135.2715 135.2009 222.2550 GMAC/s 0x7f5a1c9a4096e46d not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.pieces 266.1296 266.0804 112.9704 GMAC/s 0x7f5a1c9a4096e46d not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.mma 3.6322 3.6261 8277.3283 GMAC/s 0x7f5a1c9a4096e46d dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a 0.2607 0.2578 28.1584 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.a.parallel 0.1040 0.1037 70.5698 Gelem/s 0xb5be61f74714be0b per-call,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.a.parallel 0.1131 0.1129 64.8946 Gelem/s 0xeb86f345a0f5c39a per-call,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.a 0.0327 0.0322 224.3766 Gelem/s 0xeb86f345a0f5c39a per-call
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b 0.2363 0.2356 8.8733 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.quantize.b.parallel 0.0534 0.0526 39.2725 Gelem/s 0x4020b24addf55360 per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.b.parallel 0.0488 0.0483 43.0017 Gelem/s 0xe2e3bcc68ceb9073 per-step,transposing
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.split.b 0.0152 0.0150 138.1250 Gelem/s 0xe2e3bcc68ceb9073 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_up.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes 3.7813 3.7793 7950.8456 GMAC/s 0x7f5a1c9a4096e46d planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.codes 3.8135 3.8107 7883.6786 GMAC/s 0x7f5a1c9a4096e46d quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.int15i64.v1.planes.rowquant 4.1349 4.1274 7271.0194 GMAC/s 0x7f5a1c9a4096e46d quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 0.1715 0.1707 342.4341 GMAC/s 0x4efb8e54c724fa9 OP_NT,plan=13
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.flat 2.2455 2.2370 26.1504 GMAC/s 0xbad9a98c45aa8707 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.pieces 4.7587 4.7419 12.3396 GMAC/s 0xbad9a98c45aa8707 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.mma 0.7517 0.7497 78.1142 GMAC/s 0xbad9a98c45aa8707 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a 1.7418 1.7321 0.0082 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.a.parallel 0.0308 0.0301 0.4651 Gelem/s 0x1eb5f3ac580f624a per-call
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.a.parallel 0.0306 0.0297 0.4679 Gelem/s 0x582710daad02888 per-call
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.a 0.0094 0.0089 1.5209 Gelem/s 0x582710daad02888 per-call
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b 9.8680 9.8118 5.9505 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.quantize.b.parallel 0.5909 0.5875 99.3810 Gelem/s 0xa7c3c54a8d0b275e once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.b.parallel 0.5961 0.5933 98.5006 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.split.b 0.1791 0.1783 327.7971 Gelem/s 0x43dfc5a2a3228278 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes 0.7856 0.7853 74.7432 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.codes 0.9576 0.9556 61.3223 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL inference.int15i64.v1.planes.rowquant 2.4777 2.4747 23.6996 GMAC/s 0xbad9a98c45aa8707 quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes 1.3774 1.3762 42.6310 GMAC/s 0xbad9a98c45aa8707 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.codes 1.5367 1.5339 38.2122 GMAC/s 0xbad9a98c45aa8707 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t1 1 4096 14336 FULL training.int15i64.v1.planes.rowquant 12.4752 12.4634 4.7070 GMAC/s 0xbad9a98c45aa8707 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 0.2897 0.2892 1621.8041 GMAC/s 0xfb21004541ae3e8e OP_NT,plan=14
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.flat 2.2255 2.2246 211.0785 GMAC/s 0x5d341feda0541b7c not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.pieces 4.7796 4.7618 98.2858 GMAC/s 0x5d341feda0541b7c not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.mma 0.7280 0.7276 645.2501 GMAC/s 0x5d341feda0541b7c dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a 2.4247 2.4133 0.0473 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.a.parallel 0.0543 0.0539 2.1102 Gelem/s 0xf9ccba3820fc369f per-call
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.a.parallel 0.0542 0.0537 2.1165 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.a 0.0093 0.0092 12.2687 Gelem/s 0xaaaac9d17ce8bc07 per-call
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b 9.8611 9.8022 5.9547 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.quantize.b.parallel 0.5897 0.5884 99.5723 Gelem/s 0xf292ee1fa4d75016 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.b.parallel 0.5957 0.5942 98.5800 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.split.b 0.1791 0.1788 327.8501 Gelem/s 0x7c10177c2322eed once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes 0.7782 0.7768 603.6521 GMAC/s 0x5d341feda0541b7c planes.a.parallel+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.codes 0.9528 0.9516 493.0415 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL inference.int15i64.v1.planes.rowquant 3.1332 3.1184 149.9287 GMAC/s 0x5d341feda0541b7c quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes 1.3736 1.3706 342.0035 GMAC/s 0x5d341feda0541b7c planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.codes 1.5374 1.5324 305.5661 GMAC/s 0x5d341feda0541b7c quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t8 8 4096 14336 FULL training.int15i64.v1.planes.rowquant 13.1202 13.0953 35.8046 GMAC/s 0x5d341feda0541b7c quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 3.4189 3.3833 8793.7074 GMAC/s 0x4743c97cb961339e OP_NT,plan=10
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.flat 138.6884 137.7913 216.7792 GMAC/s 0x29a5b58e07315db6 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.pieces 309.7297 300.0507 97.0678 GMAC/s 0x29a5b58e07315db6 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.mma 5.0878 4.5688 5909.1319 GMAC/s 0x29a5b58e07315db6 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a 11.0327 10.4196 0.6653 Gelem/s 0x3f6f13fd8bf5bc70 per-call
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.a.parallel 0.1098 0.1020 66.8686 Gelem/s 0x3f6f13fd8bf5bc70 per-call
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.a.parallel 0.1064 0.1012 68.9879 Gelem/s 0xcf3c04152197ad4f per-call
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.a 0.0319 0.0295 230.3984 Gelem/s 0xcf3c04152197ad4f per-call
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b 10.7865 10.3263 5.4439 Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.quantize.b.parallel 0.6264 0.6195 93.7375 Gelem/s 0xc9ac78579ce12a0f once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.b.parallel 0.6332 0.6241 92.7410 Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.split.b 0.1826 0.1819 321.6649 Gelem/s 0xed9bafdc9a6f7b8d once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes 4.5559 4.3787 6599.0183 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.codes 4.7219 4.5898 6367.0865 GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL inference.int15i64.v1.planes.rowquant 14.5725 14.3466 2063.1175 GMAC/s 0x29a5b58e07315db6 quantize.a+split.a+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes 5.0150 4.9696 5995.0243 GMAC/s 0x29a5b58e07315db6 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.codes 5.1943 5.1167 5788.0235 GMAC/s 0x29a5b58e07315db6 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512 512 4096 14336 FULL training.int15i64.v1.planes.rowquant 24.4787 24.2499 1228.2006 GMAC/s 0x29a5b58e07315db6 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL fp32.v1 3.7635 3.3041 7988.5073 GMAC/s 0x530556760e570c80 OP_NN,plan=10
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.flat 139.3896 134.8861 215.6888 GMAC/s 0xf02913c8e388c6f0 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.pieces 466.1886 414.1908 64.4906 GMAC/s 0xf02913c8e388c6f0 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.mma 5.8397 4.9743 5148.3355 GMAC/s 0xf02913c8e388c6f0 dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a 3.8211 3.4467 0.5488 Gelem/s 0x641e827791a67e8e per-call
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.a.parallel 0.0928 0.0907 22.5998 Gelem/s 0x641e827791a67e8e per-call
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.a.parallel 0.0934 0.0843 22.4631 Gelem/s 0xaa13c116215e42ec per-call
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.a 0.0181 0.0171 116.1214 Gelem/s 0xaa13c116215e42ec per-call
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b 3.4455 3.0839 17.0427 Gelem/s 0xec3851bf8dee716b per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.quantize.b.parallel 0.7017 0.6713 83.6843 Gelem/s 0xec3851bf8dee716b per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.b.parallel 0.7152 0.6774 82.0976 Gelem/s 0xef6837087a440a32 per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.split.b 0.2069 0.2000 283.8386 Gelem/s 0xef6837087a440a32 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dx inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes 5.7283 5.4518 5248.4823 GMAC/s 0xf02913c8e388c6f0 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.codes 5.6415 5.2250 5329.2026 GMAC/s 0xf02913c8e388c6f0 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.int15i64.v1.planes.rowquant 10.8566 10.3353 2769.2527 GMAC/s 0xf02913c8e388c6f0 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL fp32.v1 3.1156 3.1106 9649.8182 GMAC/s 0x57cdff62332dd579 OP_TN,plan=10
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.flat 135.5547 135.5157 221.7907 GMAC/s 0x648fb9758841ed0f not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.pieces 266.4798 266.1865 112.8220 GMAC/s 0x648fb9758841ed0f not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.mma 3.5825 3.5818 8392.0618 GMAC/s 0x648fb9758841ed0f dispatched,four-unit-products
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a 0.2376 0.2369 8.8270 Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.a.parallel 0.0542 0.0541 38.6650 Gelem/s 0x1dbcacc74a82c682 per-call,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.a.parallel 0.0488 0.0484 42.9965 Gelem/s 0x6054e7041e529e7d per-call,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.a 0.0158 0.0154 133.1356 Gelem/s 0x6054e7041e529e7d per-call
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b 0.2515 0.2512 29.1826 Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.quantize.b.parallel 0.1006 0.1004 72.9720 Gelem/s 0xeca44c0da5a995a0 per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.b.parallel 0.1119 0.1110 65.5998 Gelem/s 0xb0e2c0513a836af7 per-step,transposing
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.split.b 0.0299 0.0294 245.5353 Gelem/s 0xb0e2c0513a836af7 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.mlp_down.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes 3.7400 3.7362 8038.7217 GMAC/s 0x648fb9758841ed0f planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.codes 3.7729 3.7709 7968.5621 GMAC/s 0x648fb9758841ed0f quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.int15i64.v1.planes.rowquant 4.0769 4.0748 7374.3581 GMAC/s 0x648fb9758841ed0f quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 1.2107 1.2018 433.9100 GMAC/s 0xcdc134cbce391535 OP_NT,plan=13
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.flat 2.5644 2.4820 204.8581 GMAC/s 0x18d3d46aaa413329 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.pieces 5.1174 4.9585 102.6577 GMAC/s 0x18d3d46aaa413329 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.mma 1.0330 0.9617 508.5494 GMAC/s 0x18d3d46aaa413329 dispatched,four-unit-products
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a 0.5147 0.5004 0.0080 Gelem/s 0x6707375da9d66f3 per-call
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.a.parallel 0.0261 0.0252 0.1571 Gelem/s 0x6707375da9d66f3 per-call
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.a.parallel 0.0256 0.0250 0.1600 Gelem/s 0x421b169685b8e06f per-call
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.a 0.0089 0.0088 0.4603 Gelem/s 0x421b169685b8e06f per-call
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b 12.9021 12.8327 40.7172 Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.quantize.b.parallel 4.9898 4.9088 105.2817 Gelem/s 0x504628acd6e3fdcd once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.b.parallel 5.1162 5.0320 102.6817 Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.split.b 1.5354 1.5271 342.1501 Gelem/s 0x36f96c5bbb978213 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes 0.9946 0.9790 528.1697 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.codes 2.5310 2.5147 207.5617 GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL inference.int15i64.v1.planes.rowquant 1.6540 1.6208 317.6237 GMAC/s 0x18d3d46aaa413329 quantize.a+split.a+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes 6.1781 6.0829 85.0326 GMAC/s 0x18d3d46aaa413329 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.codes 7.5828 7.4407 69.2799 GMAC/s 0x18d3d46aaa413329 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t1 1 128256 4096 FULL training.int15i64.v1.planes.rowquant 16.1698 15.9068 32.4888 GMAC/s 0x18d3d46aaa413329 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 2.2336 2.1284 1881.5948 GMAC/s 0x3ebab59d0da21444 OP_NT,plan=14
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.flat 20.8472 19.9359 201.5953 GMAC/s 0x4a40a5e39d7bbdce not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.pieces 83.4840 82.9958 50.3413 GMAC/s 0x4a40a5e39d7bbdce not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.mma 1.3872 1.3544 3029.5266 GMAC/s 0x4a40a5e39d7bbdce dispatched,four-unit-products
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a 0.7653 0.7479 0.0428 Gelem/s 0x2f87955adcc70c86 per-call
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.a.parallel 0.0419 0.0409 0.7816 Gelem/s 0x2f87955adcc70c86 per-call
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.a.parallel 0.0418 0.0410 0.7840 Gelem/s 0x3d2b9462e8adae61 per-call
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.a 0.0096 0.0094 3.3999 Gelem/s 0x3d2b9462e8adae61 per-call
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b 14.2275 13.9286 36.9241 Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.quantize.b.parallel 5.5626 5.5524 94.4403 Gelem/s 0xbbc8066c3f80c566 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.b.parallel 5.7071 5.6992 92.0498 Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.split.b 1.5952 1.5900 329.3190 Gelem/s 0x2e7c3b24b2073f13 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes 1.0975 1.0452 3829.3990 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.codes 2.6818 2.6017 1567.0988 GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL inference.int15i64.v1.planes.rowquant 1.7807 1.6580 2360.1179 GMAC/s 0x4a40a5e39d7bbdce quantize.a+split.a+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes 6.6071 6.5917 636.0896 GMAC/s 0x4a40a5e39d7bbdce planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.codes 7.9640 7.8589 527.7130 GMAC/s 0x4a40a5e39d7bbdce quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t8 8 128256 4096 FULL training.int15i64.v1.planes.rowquant 16.4212 16.1950 255.9305 GMAC/s 0x4a40a5e39d7bbdce quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 3.9645 3.7510 8480.6959 GMAC/s 0x84fd143bb625cf70 OP_NT,plan=10
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.flat 153.3553 150.4947 219.2396 GMAC/s 0x60f6165f74f17867 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.pieces 608.0748 575.4459 55.2918 GMAC/s 0x60f6165f74f17867 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.mma 7.7217 6.1621 4354.1822 GMAC/s 0x60f6165f74f17867 dispatched,four-unit-products
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a 4.2218 3.7325 0.4967 Gelem/s 0xbae59394889813d4 per-call
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.a.parallel 0.1014 0.0892 20.6832 Gelem/s 0xbae59394889813d4 per-call
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.a.parallel 0.0972 0.0880 21.5821 Gelem/s 0x8e302e8f2144f554 per-call
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.a 0.0196 0.0184 106.8340 Gelem/s 0x8e302e8f2144f554 per-call
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b 4.2255 3.7300 15.5407 Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.quantize.b.parallel 1.0068 0.8947 65.2210 Gelem/s 0xc8dab253643ca495 once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.b.parallel 1.0384 0.9182 63.2382 Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.split.b 0.2501 0.2293 262.5580 Gelem/s 0x856f7302c953e00d once-per-weight-at-inference,per-step-at-training
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes 5.7415 5.2470 5855.9004 GMAC/s 0x60f6165f74f17867 planes.a.parallel+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.codes 5.7893 5.4353 5807.5483 GMAC/s 0x60f6165f74f17867 quantize.a.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED inference.int15i64.v1.planes.rowquant 7.9380 7.5490 4235.5051 GMAC/s 0x60f6165f74f17867 quantize.a+split.a+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes 5.5125 5.4829 6099.1369 GMAC/s 0x60f6165f74f17867 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.codes 5.6830 5.6518 5916.1127 GMAC/s 0x60f6165f74f17867 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t512 512 16032 4096 CAPPED training.int15i64.v1.planes.rowquant 10.3207 10.1064 3257.6834 GMAC/s 0x60f6165f74f17867 quantize.a+quantize.b+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t512.bwd_dx 512 512 128256 CAPPED fp32.v1 3.8224 3.8207 8795.9749 GMAC/s 0xafccdbb3aae1fc36 OP_NN,plan=10
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.flat REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.pieces REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx int15i64.v1.mma REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.planes.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.split.a REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.quantize.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.planes.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx convert.int15.split.b REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx inference.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.codes REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dx training.int15i64.v1.planes.rowquant REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED fp32.v1 3.3540 3.3506 10024.3982 GMAC/s 0xdb68419e4a2093b7 OP_TN,plan=10
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.flat 151.0519 150.9215 222.5827 GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.pieces 298.4332 298.1771 112.6602 GMAC/s 0x97ac9bb1c8a6a3b4 not-dispatched(the-column-has-the-unit)
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.mma 4.0103 4.0074 8383.7405 GMAC/s 0x97ac9bb1c8a6a3b4 dispatched,four-unit-products
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a 0.2805 0.2800 29.2630 Gelem/s 0xbd776d10a4327b97 per-call,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.a.parallel 0.1151 0.1143 71.2960 Gelem/s 0xbd776d10a4327b97 per-call,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.a.parallel 0.1227 0.1219 66.9029 Gelem/s 0xe10b55c37d468a96 per-call,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.a 0.0326 0.0324 251.7909 Gelem/s 0xe10b55c37d468a96 per-call
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b 0.2378 0.2366 8.8180 Gelem/s 0x97f820265d8cb72 per-step,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.quantize.b.parallel 0.0535 0.0532 39.1925 Gelem/s 0x97f820265d8cb72 per-step,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.b.parallel 0.0481 0.0477 43.6044 Gelem/s 0x90f880954a62bcd5 per-step,transposing
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.split.b 0.0150 0.0149 139.5775 Gelem/s 0x90f880954a62bcd5 once-per-weight-at-inference,per-step-at-training
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.codes inference-has-no-backward-product
+INT15-NOT-RUN nvidia llama8b.lm_head.t512.bwd_dw inference.int15i64.v1.planes.rowquant inference-has-no-backward-product
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes 4.1863 4.1854 8031.2475 GMAC/s 0x97ac9bb1c8a6a3b4 planes.a.parallel+planes.b.parallel+product
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.codes 4.2201 4.2176 7966.9538 GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a.parallel+quantize.b.parallel+split.a+split.b+product
+INT15 nvidia llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.int15i64.v1.planes.rowquant 4.5512 4.5484 7387.4597 GMAC/s 0x97ac9bb1c8a6a3b4 quantize.a+quantize.b+split.a+split.b+product
+price_job: box=h100 red=0

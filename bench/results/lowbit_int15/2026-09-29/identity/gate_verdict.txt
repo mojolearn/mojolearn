@@ -1,0 +1,7 @@
+boxes: h100, mi325x, m3ultra, m2pro
+  h100: 171 cases, plans device, dispatch-codes, dispatch-planes, flat, mma, oracle, pieces, 966 digests
+  mi325x: 171 cases, plans device, dispatch-codes, dispatch-planes, flat, mma, oracle, pieces, 966 digests
+  m3ultra: 171 cases, plans device, dispatch-codes, dispatch-planes, flat, oracle, pieces, 810 digests
+  m2pro: 171 cases, plans device, dispatch-codes, dispatch-planes, flat, oracle, pieces, 810 digests
+cases: 171; missing on a box: 0; disagreeing: 0
+verdict=AGREE: every plan of every box and every host oracle printed the same digest for every case
