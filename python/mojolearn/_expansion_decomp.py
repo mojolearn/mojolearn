@@ -18,6 +18,7 @@ correctly rounded on every platform. So the CPU column and every GPU column
 run the same arithmetic in the same order, and the result is the same bits.
 """
 import array
+import heapq as _heapq
 import ctypes
 from . import _portable_math as math
 import sys
@@ -2886,9 +2887,13 @@ def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
     the `_dist` distances themselves."""
     D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
+    take = n_neighbors + (1 if exclude_self else 0)
     for i in range(Q.r):
         row = D.row(i)
-        order = sorted(range(X.r), key=lambda j: (row[j], j))
+        # the `take` smallest, exactly sorted(range(X.r), key=(row[j], j))[:take]
+        # (nsmallest is stable: ties to the lower index), O(n) per row
+        # instead of the full sort (lane/lle-timeout: 51 s of a 10,000-row fit)
+        order = _heapq.nsmallest(take, range(X.r), key=row.__getitem__)
         if exclude_self:
             order = [j for j in order if j != i]
         sel = order[:n_neighbors]
