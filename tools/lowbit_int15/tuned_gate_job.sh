@@ -72,13 +72,16 @@ for arm in sabotage pieces-sabotage epilogue-sabotage host-sabotage; do
     run "tuned-$arm" fail pixi run "check-gemm-int15-tuned-$arm"
     must_name "tuned-$arm" check_int15_tuned_matches_oracle
     must_name "tuned-$arm" check_int15_tuned_planted_worst_cases
+    must_name "tuned-$arm" check_int15_tuned_row_scales
     must_pass "tuned-$arm" check_int15_tuned_refuses
 done
 # The epilogue fold's own arm: the column exponent read at the row index.
-# The planted cases give every row one exponent, so only the shapes gate can
-# see it; the planted gate's outcome is recorded, not required.
+# Only operands whose rows carry different exponents can see it: the other
+# gates' fixtures give each operand one exponent (run 6 and the MI325X read
+# held=no when this arm named check_int15_tuned_matches_oracle), so it names
+# check_int15_tuned_row_scales, whose fixture holds itself to 5 exponents.
 run tuned-exponent-sabotage fail pixi run check-gemm-int15-tuned-exponent-sabotage
-must_name tuned-exponent-sabotage check_int15_tuned_matches_oracle
+must_name tuned-exponent-sabotage check_int15_tuned_row_scales
 must_pass tuned-exponent-sabotage check_int15_tuned_refuses
 grep -h "^   fused path: " "$OUT/tuned.log" 2>/dev/null | head -1 >> "$OUT/gate.txt"
 echo "fused kernel's store: $(grep -E '^from gemm\.checks\.gemm_(int15_epilogue|int8_pieces_epilogue_stub) import int15_store_cell' gemm/checks/gemm_int8_mma_tuned.mojo || echo 'NO int15_store_cell import found')" >> "$OUT/gate.txt"

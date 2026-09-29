@@ -8,7 +8,7 @@ host oracle, the flat kernel and the reference unit plan.
     pixi run check-gemm-int15-tuned-sabotage            MUST FAIL the two product gates (every stored cell flipped)
     pixi run check-gemm-int15-tuned-pieces-sabotage     MUST FAIL them (the sums kernel's middle sum takes HL twice)
     pixi run check-gemm-int15-tuned-epilogue-sabotage   MUST FAIL them (the epilogue reads the wrong sum)
-    pixi run check-gemm-int15-tuned-exponent-sabotage   MUST FAIL them (the column exponent read at the row index)
+    pixi run check-gemm-int15-tuned-exponent-sabotage   MUST FAIL check_int15_tuned_row_scales (the column exponent read at the row index)
     pixi run check-gemm-int15-tuned-host-sabotage       MUST FAIL them (every oracle cell flipped)
 
 Profile `mojolearn.identical.gemm.int15i64.v1`, contract clause W-13. Plan
@@ -50,6 +50,7 @@ from gemm.checks.gemm_int15_check import (
     _first_diff,
     _planted_rows,
     _poisoned,
+    _pow2,
     _shape,
     _tag,
     _upload,
@@ -249,6 +250,54 @@ def check_int15_tuned_planted_worst_cases(ctx: DeviceContext) raises:
     print("   ok " + String(cases) + " planted cases, every tuned plan equal to the oracle")
 
 
+def _distinct(e: List[Int32]) -> Int:
+    """How many distinct values a list of row exponents holds."""
+    var seen = List[Int32]()
+    for i in range(len(e)):
+        var found = False
+        for j in range(len(seen)):
+            if seen[j] == e[i]:
+                found = True
+                break
+        if not found:
+            seen.append(e[i])
+    return len(seen)
+
+
+def check_int15_tuned_row_scales(ctx: DeviceContext) raises:
+    """GATE (clause W-7, the scale `2^(ea[i] + eb[j])`): operands whose rows
+    carry DIFFERENT exponents, so a cell scaled by any exponent but its own
+    row's and its own column's is seen. The other gates' fills give every
+    row of an operand one exponent, and an epilogue that read the column
+    exponent at the row index passed them (run 6, nvc3-0032, and the MI325X,
+    1790658677079: the exponent arm held=no). Row `r` of A is scaled by
+    `2^((r mod 7) - 3)`, row `c` of B by `2^(2 - (c mod 5))`; the gate first
+    holds the fixture to that (at least 5 distinct exponents per operand),
+    so it cannot pass by being blind."""
+    var m = 37
+    var n = 41
+    var k = 300
+    var fa = _fill(m * k, 311)
+    var fb = _fill(n * k, 313)
+    for r in range(m):
+        for p in range(k):
+            fa[r * k + p] = fa[r * k + p] * _pow2((r % 7) - 3)
+    for c in range(n):
+        for p in range(k):
+            fb[c * k + p] = fb[c * k + p] * _pow2(2 - (c % 5))
+    var qa = quantize_rows_int15(fa, m, k)
+    var qb = quantize_rows_int15(fb, n, k)
+    var da = _distinct(qa.e)
+    var db = _distinct(qb.e)
+    if da < 5 or db < 5:
+        raise Error(
+            "the fixture is blind: " + String(da) + " distinct row exponents in A and "
+            + String(db) + " in B, 5 each required"
+        )
+    _every_tuned_plan_equals(ctx, qa, qb, m, n, k, "row-scales-" + _tag(m, n, k))
+    print("   ok every tuned plan, fused and two-launch, equal to the oracle with " + String(da) + " and " + String(db) + " distinct row exponents")
+
+
 def check_int15_tuned_refuses(ctx: DeviceContext) raises:
     """GATE: every path of the tuned plan refuses, by name and before it
     launches, the first extent above the bound it states: a named plan,
@@ -359,6 +408,11 @@ def main() raises:
             _gate(String("check_int15_tuned_planted_worst_cases"), ran, failed, String(""))
         except e:
             _gate(String("check_int15_tuned_planted_worst_cases"), ran, failed, String(e))
+        try:
+            check_int15_tuned_row_scales(ctx)
+            _gate(String("check_int15_tuned_row_scales"), ran, failed, String(""))
+        except e:
+            _gate(String("check_int15_tuned_row_scales"), ran, failed, String(e))
         try:
             check_int15_tuned_refuses(ctx)
             _gate(String("check_int15_tuned_refuses"), ran, failed, String(""))
