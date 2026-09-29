@@ -2230,11 +2230,11 @@ def _driver_has_params_check(ctx, family):
     """Does this family's driver call tools/bench_board_params.py? A finished
     race whose record has no MATCHED check is run again once it does, so every
     race on the board ends up checked (Andrew, 2026-09-29: same seed, same
-    tuning parameters, enforced). The trees family's arms are built in
-    tools/speed_gbdt_arm.py, which is searched too."""
+    tuning parameters, enforced). Only the driver this run uses is read: the
+    trees driver (bench/speed/forest_speed_arm.py) calls the check itself, and
+    reading tools/speed_gbdt_arm.py beside it made a driver without the check
+    (a stub, an older driver) rerun its finished races on every resume."""
     paths = [ctx.get(_DRIVER_KEY.get(family, ""), "")]
-    if family == "trees":
-        paths.append(os.path.join(HERE, "speed_gbdt_arm.py"))
     for p in paths:
         try:
             with open(p, errors="replace") as fh:
