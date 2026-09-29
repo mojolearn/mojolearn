@@ -1,0 +1,1636 @@
+== bench/gemm_int15_apple_tuned_price_main.mojo [IDENTICAL] ==
+column apple
+profiles fp32.v1, int15i64.v1
+sabotage: none
+repeats 5  mac budget 34359738368  slice 4294967296  only   variants   flat True
+EVERY NUMBER BELOW IS ONE BOX'S TIME ON ONE RUN. One call per sample; the median of the timed calls is reported and the minimum beside it. Every timed output was poisoned before the call and read back whole after it.
+
+== llama8b.qkv.t1  m=1 n=4096 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+DIGEST fp32-llama8b.qkv.t1 fp32.v1 0x920cdd138650a8bd
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL fp32.v1 1.0190 0.9680 16.4644 GMAC/s 0x920cdd138650a8bd 1.000
+DIGEST price-llama8b.qkv.t1 int15i64.v1.apple.four 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.apple.four 1.6940 1.6830 9.9039 GMAC/s 0x6c0a74154145a04f 1.662
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.a.parallel 0.2740 0.2680 0.0149 Gelem/s 0x0 0.269
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL convert.int15.planes.b.parallel 1.2690 1.1800 13.2208 Gelem/s 0x0 1.245
+DIGEST price-llama8b.qkv.t1 int15i64.v1.flat 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x6c0a74154145a04f not-timed
+DIGEST price-llama8b.qkv.t1 tuned.f4.w64.kb16.scalar 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.w64.kb16.scalar 2.4760 2.4720 6.7759 GMAC/s 0x6c0a74154145a04f 2.430
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.w64.kb16.scalar 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.w64.kb16.scalar 2.5510 2.5060 6.5767 GMAC/s 0x6c0a74154145a04f 2.503
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.w64.kb16.scalar 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.w64.kb16.scalar 3.5400 3.4950 4.7393 GMAC/s 0x6c0a74154145a04f 3.474
+DIGEST price-llama8b.qkv.t1 tuned.f4.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.w64.kb16 2.2290 2.2000 7.5268 GMAC/s 0x6c0a74154145a04f 2.187
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.w64.kb16 2.2970 2.2610 7.3040 GMAC/s 0x6c0a74154145a04f 2.254
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.w64.kb16 3.2670 3.2380 5.1354 GMAC/s 0x6c0a74154145a04f 3.206
+DIGEST price-llama8b.qkv.t1 tuned.f4.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.t32.kb16 0.8360 0.7400 20.0684 GMAC/s 0x6c0a74154145a04f 0.820
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.t32.kb16 0.8960 0.8040 18.7246 GMAC/s 0x6c0a74154145a04f 0.879
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.t32.kb16 1.8020 1.7830 9.3103 GMAC/s 0x6c0a74154145a04f 1.768
+DIGEST price-llama8b.qkv.t1 tuned.f4.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.t32.kb32 0.8240 0.7620 20.3607 GMAC/s 0x6c0a74154145a04f 0.809
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.t32.kb32 0.8040 0.7990 20.8672 GMAC/s 0x6c0a74154145a04f 0.789
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.t32.kb32 1.8520 1.7650 9.0590 GMAC/s 0x6c0a74154145a04f 1.817
+DIGEST price-llama8b.qkv.t1 tuned.f4.w64x32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.w64x32.kb32 1.2350 1.2170 13.5848 GMAC/s 0x6c0a74154145a04f 1.212
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.w64x32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.w64x32.kb32 1.3260 1.2730 12.6525 GMAC/s 0x6c0a74154145a04f 1.301
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.w64x32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.w64x32.kb32 2.3110 2.2410 7.2597 GMAC/s 0x6c0a74154145a04f 2.268
+DIGEST price-llama8b.qkv.t1 tuned.f4.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.sg16.kb16 1.6990 1.6810 9.8748 GMAC/s 0x6c0a74154145a04f 1.667
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.sg16.kb16 1.7480 1.7410 9.5979 GMAC/s 0x6c0a74154145a04f 1.715
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.sg16.kb16 2.7520 2.7380 6.0964 GMAC/s 0x6c0a74154145a04f 2.701
+DIGEST price-llama8b.qkv.t1 tuned.f3.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.w64.kb16 2.4170 2.4040 6.9413 GMAC/s 0x6c0a74154145a04f 2.372
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.w64.kb16 2.4930 2.4860 6.7297 GMAC/s 0x6c0a74154145a04f 2.447
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.w64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.w64.kb16 3.4520 3.4350 4.8601 GMAC/s 0x6c0a74154145a04f 3.388
+DIGEST price-llama8b.qkv.t1 tuned.f3.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.t32.kb16 0.7920 0.7690 21.1834 GMAC/s 0x6c0a74154145a04f 0.777
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.t32.kb16 0.9160 0.8250 18.3157 GMAC/s 0x6c0a74154145a04f 0.899
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.t32.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.t32.kb16 1.8210 1.8000 9.2132 GMAC/s 0x6c0a74154145a04f 1.787
+DIGEST price-llama8b.qkv.t1 tuned.f3.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.t32.kb32 1.1230 1.0420 14.9396 GMAC/s 0x6c0a74154145a04f 1.102
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.t32.kb32 1.1590 1.1330 14.4756 GMAC/s 0x6c0a74154145a04f 1.137
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.t32.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.t32.kb32 2.1580 2.0990 7.7744 GMAC/s 0x6c0a74154145a04f 2.118
+DIGEST price-llama8b.qkv.t1 tuned.f3.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.sg16.kb16 1.6740 1.6650 10.0222 GMAC/s 0x6c0a74154145a04f 1.643
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.sg16.kb16 1.7620 1.7360 9.5217 GMAC/s 0x6c0a74154145a04f 1.729
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.sg16.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.sg16.kb16 2.7110 2.6810 6.1886 GMAC/s 0x6c0a74154145a04f 2.660
+DIGEST price-llama8b.qkv.t1 tuned.f4.row.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f4.row.kb16 0.9820 0.9400 17.0847 GMAC/s 0x6c0a74154145a04f 0.964
+DIGEST price-llama8b.qkv.t1 inference.tuned.f4.row.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f4.row.kb16 1.0450 0.9730 16.0548 GMAC/s 0x6c0a74154145a04f 1.026
+DIGEST price-llama8b.qkv.t1 training.tuned.f4.row.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f4.row.kb16 1.9680 1.9370 8.5250 GMAC/s 0x6c0a74154145a04f 1.931
+DIGEST price-llama8b.qkv.t1 tuned.f3.row64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.row64.kb16 0.6690 0.6520 25.0781 GMAC/s 0x6c0a74154145a04f 0.657
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.row64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.row64.kb16 0.7110 0.7100 23.5966 GMAC/s 0x6c0a74154145a04f 0.698
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.row64.kb16 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.row64.kb16 1.6840 1.6820 9.9627 GMAC/s 0x6c0a74154145a04f 1.653
+DIGEST price-llama8b.qkv.t1 tuned.f3.row64.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL tuned.f3.row64.kb32 0.6800 0.6280 24.6724 GMAC/s 0x6c0a74154145a04f 0.667
+DIGEST price-llama8b.qkv.t1 inference.tuned.f3.row64.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL inference.tuned.f3.row64.kb32 0.6590 0.6490 25.4586 GMAC/s 0x6c0a74154145a04f 0.647
+DIGEST price-llama8b.qkv.t1 training.tuned.f3.row64.kb32 0x6c0a74154145a04f
+TUNED apple llama8b.qkv.t1 1 4096 4096 FULL training.tuned.f3.row64.kb32 1.6410 1.6350 10.2238 GMAC/s 0x6c0a74154145a04f 1.610
+
+== llama8b.qkv.t8  m=8 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.qkv.t8 fp32.v1 0xd5677d8a13939709
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL fp32.v1 0.5360 0.5290 250.4062 GMAC/s 0xd5677d8a13939709 1.000
+DIGEST price-llama8b.qkv.t8 int15i64.v1.apple.four 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.apple.four 1.7520 1.7330 76.6083 GMAC/s 0x81664edfe5ebeb5a 3.269
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.a.parallel 0.2770 0.2710 0.1183 Gelem/s 0x0 0.517
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL convert.int15.planes.b.parallel 1.2600 1.2180 13.3153 Gelem/s 0x0 2.351
+DIGEST price-llama8b.qkv.t8 int15i64.v1.flat 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x81664edfe5ebeb5a not-timed
+DIGEST price-llama8b.qkv.t8 tuned.f4.w64.kb16.scalar 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.w64.kb16.scalar 2.4980 2.4870 53.7301 GMAC/s 0x81664edfe5ebeb5a 4.660
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.w64.kb16.scalar 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.w64.kb16.scalar 2.5610 2.5520 52.4083 GMAC/s 0x81664edfe5ebeb5a 4.778
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.w64.kb16.scalar 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.w64.kb16.scalar 3.5290 3.5120 38.0328 GMAC/s 0x81664edfe5ebeb5a 6.584
+DIGEST price-llama8b.qkv.t8 tuned.f4.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.w64.kb16 2.2310 2.2090 60.1603 GMAC/s 0x81664edfe5ebeb5a 4.162
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.w64.kb16 2.3020 2.2620 58.3048 GMAC/s 0x81664edfe5ebeb5a 4.295
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.w64.kb16 3.2740 3.2670 40.9950 GMAC/s 0x81664edfe5ebeb5a 6.108
+DIGEST price-llama8b.qkv.t8 tuned.f4.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.t32.kb16 0.8300 0.7790 161.7081 GMAC/s 0x81664edfe5ebeb5a 1.549
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.t32.kb16 0.8970 0.8490 149.6296 GMAC/s 0x81664edfe5ebeb5a 1.674
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.t32.kb16 1.8370 1.7850 73.0635 GMAC/s 0x81664edfe5ebeb5a 3.427
+DIGEST price-llama8b.qkv.t8 tuned.f4.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.t32.kb32 0.8110 0.7360 165.4966 GMAC/s 0x81664edfe5ebeb5a 1.513
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.t32.kb32 0.8060 0.7930 166.5232 GMAC/s 0x81664edfe5ebeb5a 1.504
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.t32.kb32 1.7840 1.7650 75.2342 GMAC/s 0x81664edfe5ebeb5a 3.328
+DIGEST price-llama8b.qkv.t8 tuned.f4.w64x32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.w64x32.kb32 1.2320 1.2020 108.9430 GMAC/s 0x81664edfe5ebeb5a 2.299
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.w64x32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.w64x32.kb32 1.3220 1.2740 101.5263 GMAC/s 0x81664edfe5ebeb5a 2.466
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.w64x32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.w64x32.kb32 2.3230 2.2790 57.7778 GMAC/s 0x81664edfe5ebeb5a 4.334
+DIGEST price-llama8b.qkv.t8 tuned.f4.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.sg16.kb16 1.7090 1.6950 78.5358 GMAC/s 0x81664edfe5ebeb5a 3.188
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.sg16.kb16 1.7800 1.7690 75.4032 GMAC/s 0x81664edfe5ebeb5a 3.321
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.sg16.kb16 2.7560 2.7160 48.7002 GMAC/s 0x81664edfe5ebeb5a 5.142
+DIGEST price-llama8b.qkv.t8 tuned.f3.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.w64.kb16 2.4430 2.4280 54.9397 GMAC/s 0x81664edfe5ebeb5a 4.558
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.w64.kb16 2.4970 2.4800 53.7516 GMAC/s 0x81664edfe5ebeb5a 4.659
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.w64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.w64.kb16 3.5000 3.4970 38.3479 GMAC/s 0x81664edfe5ebeb5a 6.530
+DIGEST price-llama8b.qkv.t8 tuned.f3.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.t32.kb16 0.8550 0.7980 156.9798 GMAC/s 0x81664edfe5ebeb5a 1.595
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.t32.kb16 0.9210 0.9080 145.7304 GMAC/s 0x81664edfe5ebeb5a 1.718
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.t32.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.t32.kb16 1.8170 1.8050 73.8678 GMAC/s 0x81664edfe5ebeb5a 3.390
+DIGEST price-llama8b.qkv.t8 tuned.f3.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.t32.kb32 1.0610 1.0370 126.5012 GMAC/s 0x81664edfe5ebeb5a 1.979
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.t32.kb32 1.1660 1.1030 115.1095 GMAC/s 0x81664edfe5ebeb5a 2.175
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.t32.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.t32.kb32 2.1660 2.0810 61.9657 GMAC/s 0x81664edfe5ebeb5a 4.041
+DIGEST price-llama8b.qkv.t8 tuned.f3.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.sg16.kb16 1.6850 1.6760 79.6544 GMAC/s 0x81664edfe5ebeb5a 3.144
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.sg16.kb16 1.7540 1.7470 76.5209 GMAC/s 0x81664edfe5ebeb5a 3.272
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.sg16.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.sg16.kb16 2.7380 2.7260 49.0204 GMAC/s 0x81664edfe5ebeb5a 5.108
+DIGEST price-llama8b.qkv.t8 tuned.f4.row.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f4.row.kb16 0.9630 0.9340 139.3746 GMAC/s 0x81664edfe5ebeb5a 1.797
+DIGEST price-llama8b.qkv.t8 inference.tuned.f4.row.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f4.row.kb16 1.0740 1.0170 124.9700 GMAC/s 0x81664edfe5ebeb5a 2.004
+DIGEST price-llama8b.qkv.t8 training.tuned.f4.row.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f4.row.kb16 2.0490 1.9690 65.5040 GMAC/s 0x81664edfe5ebeb5a 3.823
+DIGEST price-llama8b.qkv.t8 tuned.f3.row64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.row64.kb16 0.7320 0.7300 183.3576 GMAC/s 0x81664edfe5ebeb5a 1.366
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.row64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.row64.kb16 0.7150 0.7040 187.7171 GMAC/s 0x81664edfe5ebeb5a 1.334
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.row64.kb16 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.row64.kb16 1.6880 1.6850 79.5129 GMAC/s 0x81664edfe5ebeb5a 3.149
+DIGEST price-llama8b.qkv.t8 tuned.f3.row64.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL tuned.f3.row64.kb32 0.6810 0.6090 197.0892 GMAC/s 0x81664edfe5ebeb5a 1.271
+DIGEST price-llama8b.qkv.t8 inference.tuned.f3.row64.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL inference.tuned.f3.row64.kb32 0.6730 0.6710 199.4320 GMAC/s 0x81664edfe5ebeb5a 1.256
+DIGEST price-llama8b.qkv.t8 training.tuned.f3.row64.kb32 0x81664edfe5ebeb5a
+TUNED apple llama8b.qkv.t8 8 4096 4096 FULL training.tuned.f3.row64.kb32 1.6520 1.6410 81.2456 GMAC/s 0x81664edfe5ebeb5a 3.082
+
+== llama8b.qkv.t512  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.qkv.t512 fp32.v1 0x67d3d940546b834c
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL fp32.v1 3.3090 3.2820 2595.9307 GMAC/s 0x67d3d940546b834c 1.000
+DIGEST price-llama8b.qkv.t512 int15i64.v1.apple.four 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.apple.four 11.5110 11.4810 746.2370 GMAC/s 0xa9844dfadf1fd6da 3.479
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.a.parallel 0.9570 0.9020 2.1914 Gelem/s 0x0 0.289
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL convert.int15.planes.b.parallel 1.3280 1.2420 12.6334 Gelem/s 0x0 0.401
+DIGEST price-llama8b.qkv.t512 int15i64.v1.flat 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xa9844dfadf1fd6da not-timed
+DIGEST price-llama8b.qkv.t512 tuned.f4.w64.kb16.scalar 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.w64.kb16.scalar 12.5270 12.5070 685.7136 GMAC/s 0xa9844dfadf1fd6da 3.786
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.w64.kb16.scalar 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.w64.kb16.scalar 12.7210 12.6720 675.2562 GMAC/s 0xa9844dfadf1fd6da 3.844
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.w64.kb16.scalar 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.w64.kb16.scalar 13.7970 13.7140 622.5944 GMAC/s 0xa9844dfadf1fd6da 4.170
+DIGEST price-llama8b.qkv.t512 tuned.f4.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.w64.kb16 11.4710 10.8440 748.8392 GMAC/s 0xa9844dfadf1fd6da 3.467
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.w64.kb16 11.7210 11.6900 732.8670 GMAC/s 0xa9844dfadf1fd6da 3.542
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.w64.kb16 12.7410 12.1020 674.1963 GMAC/s 0xa9844dfadf1fd6da 3.850
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.t32.kb16 6.0860 5.9780 1411.4253 GMAC/s 0xa9844dfadf1fd6da 1.839
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.t32.kb16 6.7600 6.1240 1270.7004 GMAC/s 0xa9844dfadf1fd6da 2.043
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.t32.kb16 7.2390 7.1740 1186.6190 GMAC/s 0xa9844dfadf1fd6da 2.188
+DIGEST price-llama8b.qkv.t512 tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.t32.kb32 6.0070 6.0020 1429.9874 GMAC/s 0xa9844dfadf1fd6da 1.815
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.t32.kb32 6.1810 6.1600 1389.7322 GMAC/s 0xa9844dfadf1fd6da 1.868
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.t32.kb32 7.8610 7.1660 1092.7280 GMAC/s 0xa9844dfadf1fd6da 2.376
+DIGEST price-llama8b.qkv.t512 tuned.f4.w64x32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.w64x32.kb32 7.7600 7.5920 1106.9503 GMAC/s 0xa9844dfadf1fd6da 2.345
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.w64x32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.w64x32.kb32 7.9210 7.8180 1084.4508 GMAC/s 0xa9844dfadf1fd6da 2.394
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.w64x32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.w64x32.kb32 8.9830 8.9210 956.2434 GMAC/s 0xa9844dfadf1fd6da 2.715
+DIGEST price-llama8b.qkv.t512 tuned.f4.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.sg16.kb16 8.2620 8.2010 1039.6919 GMAC/s 0xa9844dfadf1fd6da 2.497
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.sg16.kb16 8.4130 8.3720 1021.0311 GMAC/s 0xa9844dfadf1fd6da 2.542
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.sg16.kb16 9.5870 9.4100 895.9982 GMAC/s 0xa9844dfadf1fd6da 2.897
+DIGEST price-llama8b.qkv.t512 tuned.f3.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.w64.kb16 13.7890 12.9290 622.9556 GMAC/s 0xa9844dfadf1fd6da 4.167
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.w64.kb16 13.5450 13.4150 634.1775 GMAC/s 0xa9844dfadf1fd6da 4.093
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.w64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.w64.kb16 14.5880 14.5110 588.8357 GMAC/s 0xa9844dfadf1fd6da 4.409
+DIGEST price-llama8b.qkv.t512 tuned.f3.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.t32.kb16 6.1160 6.0480 1404.5021 GMAC/s 0xa9844dfadf1fd6da 1.848
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.t32.kb16 6.5150 6.2820 1318.4857 GMAC/s 0xa9844dfadf1fd6da 1.969
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.t32.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.t32.kb16 7.2720 7.2640 1181.2341 GMAC/s 0xa9844dfadf1fd6da 2.198
+DIGEST price-llama8b.qkv.t512 tuned.f3.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.t32.kb32 9.2020 8.7180 933.4856 GMAC/s 0xa9844dfadf1fd6da 2.781
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.t32.kb32 9.4590 9.1080 908.1229 GMAC/s 0xa9844dfadf1fd6da 2.859
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.t32.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.t32.kb32 10.1270 10.1190 848.2211 GMAC/s 0xa9844dfadf1fd6da 3.060
+DIGEST price-llama8b.qkv.t512 tuned.f3.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.sg16.kb16 8.7320 8.1940 983.7305 GMAC/s 0xa9844dfadf1fd6da 2.639
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.sg16.kb16 8.4950 8.3640 1011.1753 GMAC/s 0xa9844dfadf1fd6da 2.567
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.sg16.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.sg16.kb16 9.4330 9.3950 910.6260 GMAC/s 0xa9844dfadf1fd6da 2.851
+DIGEST price-llama8b.qkv.t512 tuned.f4.row.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f4.row.kb16 9.8630 9.7870 870.9251 GMAC/s 0xa9844dfadf1fd6da 2.981
+DIGEST price-llama8b.qkv.t512 inference.tuned.f4.row.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f4.row.kb16 10.0520 9.9640 854.5498 GMAC/s 0xa9844dfadf1fd6da 3.038
+DIGEST price-llama8b.qkv.t512 training.tuned.f4.row.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f4.row.kb16 11.0460 10.9350 777.6511 GMAC/s 0xa9844dfadf1fd6da 3.338
+DIGEST price-llama8b.qkv.t512 tuned.f3.row64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.row64.kb16 9.6380 9.6090 891.2570 GMAC/s 0xa9844dfadf1fd6da 2.913
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.row64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.row64.kb16 10.1150 9.7430 849.2273 GMAC/s 0xa9844dfadf1fd6da 3.057
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.row64.kb16 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.row64.kb16 11.4740 10.8210 748.6434 GMAC/s 0xa9844dfadf1fd6da 3.468
+DIGEST price-llama8b.qkv.t512 tuned.f3.row64.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL tuned.f3.row64.kb32 13.9640 13.7690 615.1486 GMAC/s 0xa9844dfadf1fd6da 4.220
+DIGEST price-llama8b.qkv.t512 inference.tuned.f3.row64.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL inference.tuned.f3.row64.kb32 13.9950 13.9650 613.7860 GMAC/s 0xa9844dfadf1fd6da 4.229
+DIGEST price-llama8b.qkv.t512 training.tuned.f3.row64.kb32 0xa9844dfadf1fd6da
+TUNED apple llama8b.qkv.t512 512 4096 4096 FULL training.tuned.f3.row64.kb32 15.7510 15.0610 545.3580 GMAC/s 0xa9844dfadf1fd6da 4.760
+
+== llama8b.qkv.t512.bwd_dx  m=512 n=4096 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.qkv.t512.bwd_dx fp32.v1 0xef9cf5a7a4f7f63e
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL fp32.v1 3.9110 3.3800 2196.3525 GMAC/s 0xef9cf5a7a4f7f63e 1.000
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.apple.four 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.apple.four 12.1220 11.4450 708.6235 GMAC/s 0x6c4eff5b0480823a 3.099
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.a.parallel 0.9610 0.3760 2.1823 Gelem/s 0x0 0.246
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL convert.int15.planes.b.parallel 1.3560 1.3100 12.3726 Gelem/s 0x0 0.347
+DIGEST price-llama8b.qkv.t512.bwd_dx int15i64.v1.flat 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x6c4eff5b0480823a not-timed
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.w64.kb16.scalar 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.w64.kb16.scalar 12.6590 12.4880 678.5634 GMAC/s 0x6c4eff5b0480823a 3.237
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.w64.kb16.scalar 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.w64.kb16.scalar 14.0890 13.8060 609.6909 GMAC/s 0x6c4eff5b0480823a 3.602
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.w64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.w64.kb16 10.9070 10.8830 787.5616 GMAC/s 0x6c4eff5b0480823a 2.789
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.w64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.w64.kb16 12.8120 12.1330 670.4601 GMAC/s 0x6c4eff5b0480823a 3.276
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.t32.kb16 6.0720 5.9720 1414.6796 GMAC/s 0x6c4eff5b0480823a 1.553
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.t32.kb16 7.2470 7.2230 1185.3090 GMAC/s 0x6c4eff5b0480823a 1.853
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.t32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.t32.kb32 6.0430 6.0010 1421.4686 GMAC/s 0x6c4eff5b0480823a 1.545
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.t32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.t32.kb32 7.2450 7.2070 1185.6362 GMAC/s 0x6c4eff5b0480823a 1.852
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.w64x32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.w64x32.kb32 7.7390 7.6650 1109.9541 GMAC/s 0x6c4eff5b0480823a 1.979
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.w64x32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.w64x32.kb32 8.9940 8.9210 955.0739 GMAC/s 0x6c4eff5b0480823a 2.300
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.sg16.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.sg16.kb16 8.3370 8.2310 1030.3388 GMAC/s 0x6c4eff5b0480823a 2.132
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.sg16.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.sg16.kb16 10.2200 9.4800 840.5024 GMAC/s 0x6c4eff5b0480823a 2.613
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.w64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.w64.kb16 13.3960 13.3880 641.2313 GMAC/s 0x6c4eff5b0480823a 3.425
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.w64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.w64.kb16 14.8810 14.6200 577.2418 GMAC/s 0x6c4eff5b0480823a 3.805
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.t32.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.t32.kb16 6.0820 6.0730 1412.3536 GMAC/s 0x6c4eff5b0480823a 1.555
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.t32.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.t32.kb16 7.4220 7.3360 1157.3612 GMAC/s 0x6c4eff5b0480823a 1.898
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.t32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.t32.kb32 9.4020 8.8630 913.6284 GMAC/s 0x6c4eff5b0480823a 2.404
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.t32.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.t32.kb32 10.1680 10.1040 844.8008 GMAC/s 0x6c4eff5b0480823a 2.600
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.sg16.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.sg16.kb16 8.2360 8.2170 1042.9741 GMAC/s 0x6c4eff5b0480823a 2.106
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.sg16.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.sg16.kb16 9.9050 9.4400 867.2322 GMAC/s 0x6c4eff5b0480823a 2.533
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f4.row.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f4.row.kb16 9.8140 9.8010 875.2735 GMAC/s 0x6c4eff5b0480823a 2.509
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f4.row.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f4.row.kb16 11.1570 11.0330 769.9144 GMAC/s 0x6c4eff5b0480823a 2.853
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.row64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.row64.kb16 9.6800 9.6200 887.3899 GMAC/s 0x6c4eff5b0480823a 2.475
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.row64.kb16 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.row64.kb16 11.5010 10.8020 746.8859 GMAC/s 0x6c4eff5b0480823a 2.941
+DIGEST price-llama8b.qkv.t512.bwd_dx tuned.f3.row64.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL tuned.f3.row64.kb32 13.8180 13.7810 621.6482 GMAC/s 0x6c4eff5b0480823a 3.533
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dx inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dx training.tuned.f3.row64.kb32 0x6c4eff5b0480823a
+TUNED apple llama8b.qkv.t512.bwd_dx 512 4096 4096 FULL training.tuned.f3.row64.kb32 15.0460 14.9440 570.9115 GMAC/s 0x6c4eff5b0480823a 3.847
+
+== llama8b.qkv.t512.bwd_dw  m=4096 n=4096 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.qkv.t512.bwd_dw fp32.v1 0xe489aab33323c201
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL fp32.v1 3.6690 3.2820 2341.2196 GMAC/s 0xe489aab33323c201 1.000
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.apple.four 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.apple.four 17.2000 10.6380 499.4148 GMAC/s 0x8ef510e0780e450 4.688
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.a.parallel 1.0610 0.9940 1.9766 Gelem/s 0x0 0.289
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL convert.int15.planes.b.parallel 0.5390 0.5050 3.8908 Gelem/s 0x0 0.147
+DIGEST price-llama8b.qkv.t512.bwd_dw int15i64.v1.flat 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x8ef510e0780e450 not-timed
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.w64.kb16.scalar 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.w64.kb16.scalar 11.1640 10.7390 769.4316 GMAC/s 0x8ef510e0780e450 3.043
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.w64.kb16.scalar 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.w64.kb16.scalar 11.7560 10.7890 730.6851 GMAC/s 0x8ef510e0780e450 3.204
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.w64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.w64.kb16 10.1440 9.4030 846.7995 GMAC/s 0x8ef510e0780e450 2.765
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.w64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.w64.kb16 10.8590 10.1460 791.0429 GMAC/s 0x8ef510e0780e450 2.960
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.t32.kb16 8.0000 6.5420 1073.7418 GMAC/s 0x8ef510e0780e450 2.180
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.t32.kb16 8.5350 7.3700 1006.4364 GMAC/s 0x8ef510e0780e450 2.326
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.t32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.t32.kb32 8.2560 5.5340 1040.4475 GMAC/s 0x8ef510e0780e450 2.250
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.t32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.t32.kb32 9.9490 7.6030 863.3968 GMAC/s 0x8ef510e0780e450 2.712
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.w64x32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.w64x32.kb32 11.3320 7.7680 758.0246 GMAC/s 0x8ef510e0780e450 3.089
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.w64x32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.w64x32.kb32 10.2070 8.0210 841.5729 GMAC/s 0x8ef510e0780e450 2.782
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.sg16.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.sg16.kb16 9.5170 8.2070 902.5885 GMAC/s 0x8ef510e0780e450 2.594
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.sg16.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.sg16.kb16 9.9510 8.6450 863.2233 GMAC/s 0x8ef510e0780e450 2.712
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.w64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.w64.kb16 15.4800 12.0670 554.9053 GMAC/s 0x8ef510e0780e450 4.219
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.w64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.w64.kb16 17.3920 12.5280 493.9015 GMAC/s 0x8ef510e0780e450 4.740
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.t32.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.t32.kb16 8.7020 6.6710 987.1219 GMAC/s 0x8ef510e0780e450 2.372
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.t32.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.t32.kb16 6.9310 6.3150 1239.3500 GMAC/s 0x8ef510e0780e450 1.889
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.t32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.t32.kb32 11.6690 11.0280 736.1329 GMAC/s 0x8ef510e0780e450 3.180
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.t32.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.t32.kb32 12.9730 10.1410 662.1394 GMAC/s 0x8ef510e0780e450 3.536
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.sg16.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.sg16.kb16 12.6030 8.3650 681.5786 GMAC/s 0x8ef510e0780e450 3.435
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.sg16.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.sg16.kb16 12.6890 8.5540 676.9591 GMAC/s 0x8ef510e0780e450 3.458
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f4.row.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f4.row.kb16 10.6400 9.4230 807.3247 GMAC/s 0x8ef510e0780e450 2.900
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f4.row.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f4.row.kb16 12.7750 10.7500 672.4019 GMAC/s 0x8ef510e0780e450 3.482
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.row64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.row64.kb16 13.1130 10.6900 655.0701 GMAC/s 0x8ef510e0780e450 3.574
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.row64.kb16 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.row64.kb16 12.9280 9.9160 664.4442 GMAC/s 0x8ef510e0780e450 3.524
+DIGEST price-llama8b.qkv.t512.bwd_dw tuned.f3.row64.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL tuned.f3.row64.kb32 19.7980 13.3080 433.8789 GMAC/s 0x8ef510e0780e450 5.396
+TUNED-NOT-RUN apple llama8b.qkv.t512.bwd_dw inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.qkv.t512.bwd_dw training.tuned.f3.row64.kb32 0x8ef510e0780e450
+TUNED apple llama8b.qkv.t512.bwd_dw 4096 4096 512 FULL training.tuned.f3.row64.kb32 13.9220 13.2790 617.0044 GMAC/s 0x8ef510e0780e450 3.794
+
+== llama8b.mlp_up.t1  m=1 n=14336 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+DIGEST fp32-llama8b.mlp_up.t1 fp32.v1 0x4965ea6af2ff5e61
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL fp32.v1 1.0010 0.9760 58.6616 GMAC/s 0x4965ea6af2ff5e61 1.000
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.apple.four 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.apple.four 1.7710 1.7440 33.1566 GMAC/s 0xae35d8ef540f67ad 1.769
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.a.parallel 0.2820 0.2750 0.0145 Gelem/s 0x0 0.282
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL convert.int15.planes.b.parallel 3.8680 3.8520 15.1810 Gelem/s 0x0 3.864
+DIGEST price-llama8b.mlp_up.t1 int15i64.v1.flat 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xae35d8ef540f67ad not-timed
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.w64.kb16.scalar 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.w64.kb16.scalar 5.5910 5.5740 10.5026 GMAC/s 0xae35d8ef540f67ad 5.585
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.w64.kb16.scalar 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.w64.kb16.scalar 5.6530 5.6310 10.3875 GMAC/s 0xae35d8ef540f67ad 5.647
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.w64.kb16.scalar 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.w64.kb16.scalar 9.2690 9.2320 6.3351 GMAC/s 0xae35d8ef540f67ad 9.260
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.w64.kb16 5.0640 5.0320 11.5956 GMAC/s 0xae35d8ef540f67ad 5.059
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.w64.kb16 5.1170 5.0900 11.4755 GMAC/s 0xae35d8ef540f67ad 5.112
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.w64.kb16 8.7270 8.7210 6.7286 GMAC/s 0xae35d8ef540f67ad 8.718
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.t32.kb16 1.4860 1.4640 39.5157 GMAC/s 0xae35d8ef540f67ad 1.485
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.t32.kb16 1.5560 1.5250 37.7380 GMAC/s 0xae35d8ef540f67ad 1.554
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.t32.kb16 5.2050 5.1510 11.2815 GMAC/s 0xae35d8ef540f67ad 5.200
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.t32.kb32 1.4720 1.4460 39.8915 GMAC/s 0xae35d8ef540f67ad 1.471
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.t32.kb32 1.5420 1.5300 38.0806 GMAC/s 0xae35d8ef540f67ad 1.540
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.t32.kb32 5.1380 5.1080 11.4286 GMAC/s 0xae35d8ef540f67ad 5.133
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.w64x32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.w64x32.kb32 2.8460 2.8340 20.6326 GMAC/s 0xae35d8ef540f67ad 2.843
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.w64x32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.w64x32.kb32 2.9030 2.8950 20.2274 GMAC/s 0xae35d8ef540f67ad 2.900
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.w64x32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.w64x32.kb32 6.5160 6.4980 9.0117 GMAC/s 0xae35d8ef540f67ad 6.509
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.sg16.kb16 3.2270 3.2260 18.1965 GMAC/s 0xae35d8ef540f67ad 3.224
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.sg16.kb16 3.2790 3.2460 17.9080 GMAC/s 0xae35d8ef540f67ad 3.276
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.sg16.kb16 6.8840 6.8670 8.5300 GMAC/s 0xae35d8ef540f67ad 6.877
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.w64.kb16 6.2400 6.1870 9.4103 GMAC/s 0xae35d8ef540f67ad 6.234
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.w64.kb16 6.2950 6.2630 9.3281 GMAC/s 0xae35d8ef540f67ad 6.289
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.w64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.w64.kb16 9.9060 9.8440 5.9277 GMAC/s 0xae35d8ef540f67ad 9.896
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.t32.kb16 1.5150 1.4850 38.7592 GMAC/s 0xae35d8ef540f67ad 1.513
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.t32.kb16 1.5780 1.5750 37.2118 GMAC/s 0xae35d8ef540f67ad 1.576
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.t32.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.t32.kb16 5.2280 5.1670 11.2319 GMAC/s 0xae35d8ef540f67ad 5.223
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.t32.kb32 2.3700 2.3590 24.7765 GMAC/s 0xae35d8ef540f67ad 2.368
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.t32.kb32 2.1370 2.0470 27.4779 GMAC/s 0xae35d8ef540f67ad 2.135
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.t32.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.t32.kb32 6.0330 5.8360 9.7332 GMAC/s 0xae35d8ef540f67ad 6.027
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.sg16.kb16 3.1790 3.1770 18.4713 GMAC/s 0xae35d8ef540f67ad 3.176
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.sg16.kb16 3.2360 3.2250 18.1459 GMAC/s 0xae35d8ef540f67ad 3.233
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.sg16.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.sg16.kb16 6.8450 6.8360 8.5786 GMAC/s 0xae35d8ef540f67ad 6.838
+DIGEST price-llama8b.mlp_up.t1 tuned.f4.row.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f4.row.kb16 1.0320 0.9520 56.8995 GMAC/s 0xae35d8ef540f67ad 1.031
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f4.row.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f4.row.kb16 1.0870 1.0360 54.0205 GMAC/s 0xae35d8ef540f67ad 1.086
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f4.row.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f4.row.kb16 4.7030 4.6290 12.4857 GMAC/s 0xae35d8ef540f67ad 4.698
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.row64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.row64.kb16 1.1670 1.1020 50.3173 GMAC/s 0xae35d8ef540f67ad 1.166
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.row64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.row64.kb16 1.2230 1.2180 48.0133 GMAC/s 0xae35d8ef540f67ad 1.222
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.row64.kb16 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.row64.kb16 4.8750 4.8240 12.0452 GMAC/s 0xae35d8ef540f67ad 4.870
+DIGEST price-llama8b.mlp_up.t1 tuned.f3.row64.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL tuned.f3.row64.kb32 1.4320 1.4280 41.0058 GMAC/s 0xae35d8ef540f67ad 1.431
+DIGEST price-llama8b.mlp_up.t1 inference.tuned.f3.row64.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL inference.tuned.f3.row64.kb32 1.4860 1.4630 39.5157 GMAC/s 0xae35d8ef540f67ad 1.485
+DIGEST price-llama8b.mlp_up.t1 training.tuned.f3.row64.kb32 0xae35d8ef540f67ad
+TUNED apple llama8b.mlp_up.t1 1 14336 4096 FULL training.tuned.f3.row64.kb32 5.1010 5.0730 11.5115 GMAC/s 0xae35d8ef540f67ad 5.096
+
+== llama8b.mlp_up.t8  m=8 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_up.t8 fp32.v1 0x7b30465d325906e
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL fp32.v1 0.9770 0.9470 480.8209 GMAC/s 0x7b30465d325906e 1.000
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.apple.four 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.apple.four 1.7540 1.7310 267.8233 GMAC/s 0x5dd8142ffbce1023 1.795
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.a.parallel 0.2860 0.2730 0.1146 Gelem/s 0x0 0.293
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL convert.int15.planes.b.parallel 3.8690 3.8460 15.1771 Gelem/s 0x0 3.960
+DIGEST price-llama8b.mlp_up.t8 int15i64.v1.flat 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x5dd8142ffbce1023 not-timed
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.w64.kb16.scalar 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.w64.kb16.scalar 5.6250 5.6060 83.5133 GMAC/s 0x5dd8142ffbce1023 5.757
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.w64.kb16.scalar 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.w64.kb16.scalar 5.6830 5.6780 82.6609 GMAC/s 0x5dd8142ffbce1023 5.817
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.w64.kb16.scalar 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.w64.kb16.scalar 9.3020 9.2740 50.5012 GMAC/s 0x5dd8142ffbce1023 9.521
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.w64.kb16 5.0750 5.0500 92.5640 GMAC/s 0x5dd8142ffbce1023 5.194
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.w64.kb16 5.1290 5.0830 91.5894 GMAC/s 0x5dd8142ffbce1023 5.250
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.w64.kb16 8.7170 7.3300 53.8903 GMAC/s 0x5dd8142ffbce1023 8.922
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.t32.kb16 1.5080 1.4970 311.5133 GMAC/s 0x5dd8142ffbce1023 1.544
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.t32.kb16 1.5830 1.5590 296.7543 GMAC/s 0x5dd8142ffbce1023 1.620
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.t32.kb16 5.1980 5.1650 90.3736 GMAC/s 0x5dd8142ffbce1023 5.320
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.t32.kb32 1.5350 1.4540 306.0339 GMAC/s 0x5dd8142ffbce1023 1.571
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.t32.kb32 1.5380 1.4980 305.4370 GMAC/s 0x5dd8142ffbce1023 1.574
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.t32.kb32 5.1670 5.1410 90.9158 GMAC/s 0x5dd8142ffbce1023 5.289
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.w64x32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.w64x32.kb32 2.8540 2.8500 164.5978 GMAC/s 0x5dd8142ffbce1023 2.921
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.w64x32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.w64x32.kb32 2.9200 2.9120 160.8774 GMAC/s 0x5dd8142ffbce1023 2.989
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.w64x32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.w64x32.kb32 6.5280 6.5200 71.9611 GMAC/s 0x5dd8142ffbce1023 6.682
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.sg16.kb16 3.2270 3.2160 145.5724 GMAC/s 0x5dd8142ffbce1023 3.303
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.sg16.kb16 3.2870 3.2830 142.9151 GMAC/s 0x5dd8142ffbce1023 3.364
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.sg16.kb16 6.9050 6.8890 68.0322 GMAC/s 0x5dd8142ffbce1023 7.068
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.w64.kb16 6.2590 4.7820 75.0539 GMAC/s 0x5dd8142ffbce1023 6.406
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.w64.kb16 6.3160 6.3010 74.3765 GMAC/s 0x5dd8142ffbce1023 6.465
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.w64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.w64.kb16 9.8980 8.4540 47.4603 GMAC/s 0x5dd8142ffbce1023 10.131
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.t32.kb16 1.5200 1.5050 309.0540 GMAC/s 0x5dd8142ffbce1023 1.556
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.t32.kb16 1.5930 1.5450 294.8914 GMAC/s 0x5dd8142ffbce1023 1.631
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.t32.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.t32.kb16 5.2520 5.1760 89.4444 GMAC/s 0x5dd8142ffbce1023 5.376
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.t32.kb32 2.3490 2.3200 199.9838 GMAC/s 0x5dd8142ffbce1023 2.404
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.t32.kb32 2.4100 2.0480 194.9220 GMAC/s 0x5dd8142ffbce1023 2.467
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.t32.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.t32.kb32 5.6880 5.6720 82.5883 GMAC/s 0x5dd8142ffbce1023 5.822
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.sg16.kb16 3.1840 3.1740 147.5383 GMAC/s 0x5dd8142ffbce1023 3.259
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.sg16.kb16 3.2380 3.2220 145.0778 GMAC/s 0x5dd8142ffbce1023 3.314
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.sg16.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.sg16.kb16 6.8590 6.8500 68.4884 GMAC/s 0x5dd8142ffbce1023 7.020
+DIGEST price-llama8b.mlp_up.t8 tuned.f4.row.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f4.row.kb16 0.9540 0.9400 492.4130 GMAC/s 0x5dd8142ffbce1023 0.976
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f4.row.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f4.row.kb16 1.1070 1.0130 424.3560 GMAC/s 0x5dd8142ffbce1023 1.133
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f4.row.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f4.row.kb16 4.6650 4.6250 100.6993 GMAC/s 0x5dd8142ffbce1023 4.775
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.row64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.row64.kb16 1.1200 1.0920 419.4304 GMAC/s 0x5dd8142ffbce1023 1.146
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.row64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.row64.kb16 1.2160 0.9510 386.3175 GMAC/s 0x5dd8142ffbce1023 1.245
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.row64.kb16 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.row64.kb16 4.7950 4.5550 97.9691 GMAC/s 0x5dd8142ffbce1023 4.908
+DIGEST price-llama8b.mlp_up.t8 tuned.f3.row64.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL tuned.f3.row64.kb32 1.4170 1.0320 331.5187 GMAC/s 0x5dd8142ffbce1023 1.450
+DIGEST price-llama8b.mlp_up.t8 inference.tuned.f3.row64.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL inference.tuned.f3.row64.kb32 1.4940 1.4510 314.4324 GMAC/s 0x5dd8142ffbce1023 1.529
+DIGEST price-llama8b.mlp_up.t8 training.tuned.f3.row64.kb32 0x5dd8142ffbce1023
+TUNED apple llama8b.mlp_up.t8 8 14336 4096 FULL training.tuned.f3.row64.kb32 5.0980 5.0680 92.1463 GMAC/s 0x5dd8142ffbce1023 5.218
+
+== llama8b.mlp_up.t512  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_up.t512 fp32.v1 0x27a166783c45f9f0
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL fp32.v1 10.4200 10.4060 2885.2947 GMAC/s 0x27a166783c45f9f0 1.000
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.apple.four 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.apple.four 35.3890 34.3030 849.5513 GMAC/s 0x31746954b2b719d4 3.396
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.a.parallel 0.9300 0.8830 2.2550 Gelem/s 0x0 0.089
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL convert.int15.planes.b.parallel 3.8870 3.8780 15.1068 Gelem/s 0x0 0.373
+DIGEST price-llama8b.mlp_up.t512 int15i64.v1.flat 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x31746954b2b719d4 not-timed
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.w64.kb16.scalar 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.w64.kb16.scalar 49.8860 49.6860 602.6695 GMAC/s 0x31746954b2b719d4 4.788
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.w64.kb16.scalar 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.w64.kb16.scalar 50.0150 49.8580 601.1151 GMAC/s 0x31746954b2b719d4 4.800
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.w64.kb16.scalar 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.w64.kb16.scalar 53.5630 51.6710 561.2974 GMAC/s 0x31746954b2b719d4 5.140
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.w64.kb16 43.2840 43.2150 694.5932 GMAC/s 0x31746954b2b719d4 4.154
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.w64.kb16 43.5260 43.4330 690.7313 GMAC/s 0x31746954b2b719d4 4.177
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.w64.kb16 47.0370 45.5230 639.1728 GMAC/s 0x31746954b2b719d4 4.514
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.t32.kb16 21.8870 21.8330 1373.6360 GMAC/s 0x31746954b2b719d4 2.100
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.t32.kb16 22.0500 21.9940 1363.4817 GMAC/s 0x31746954b2b719d4 2.116
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.t32.kb16 25.6890 25.5780 1170.3364 GMAC/s 0x31746954b2b719d4 2.465
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.t32.kb32 21.9670 21.9550 1368.6335 GMAC/s 0x31746954b2b719d4 2.108
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.t32.kb32 22.2530 22.1350 1351.0435 GMAC/s 0x31746954b2b719d4 2.136
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.t32.kb32 25.9840 25.7130 1157.0494 GMAC/s 0x31746954b2b719d4 2.494
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.w64x32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.w64x32.kb32 25.2980 25.1330 1188.4248 GMAC/s 0x31746954b2b719d4 2.428
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.w64x32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.w64x32.kb32 25.6340 25.3060 1172.8474 GMAC/s 0x31746954b2b719d4 2.460
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.w64x32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.w64x32.kb32 29.1610 28.9390 1030.9925 GMAC/s 0x31746954b2b719d4 2.799
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.sg16.kb16 27.7480 27.1690 1083.4933 GMAC/s 0x31746954b2b719d4 2.663
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.sg16.kb16 27.9090 27.3850 1077.2429 GMAC/s 0x31746954b2b719d4 2.678
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.sg16.kb16 31.1060 31.0010 966.5264 GMAC/s 0x31746954b2b719d4 2.985
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.w64.kb16 53.5810 53.2100 561.1088 GMAC/s 0x31746954b2b719d4 5.142
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.w64.kb16 53.6440 52.0840 560.4498 GMAC/s 0x31746954b2b719d4 5.148
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.w64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.w64.kb16 57.4780 57.1220 523.0657 GMAC/s 0x31746954b2b719d4 5.516
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.t32.kb16 22.5160 22.4230 1335.2625 GMAC/s 0x31746954b2b719d4 2.161
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.t32.kb16 22.6630 22.5390 1326.6016 GMAC/s 0x31746954b2b719d4 2.175
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.t32.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.t32.kb16 26.2140 26.1220 1146.8975 GMAC/s 0x31746954b2b719d4 2.516
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.t32.kb32 35.7270 35.2290 841.5140 GMAC/s 0x31746954b2b719d4 3.429
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.t32.kb32 35.5930 35.5090 844.6821 GMAC/s 0x31746954b2b719d4 3.416
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.t32.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.t32.kb32 38.9640 37.9820 771.6038 GMAC/s 0x31746954b2b719d4 3.739
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.sg16.kb16 26.9000 26.7890 1117.6495 GMAC/s 0x31746954b2b719d4 2.582
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.sg16.kb16 27.1250 26.9550 1108.3787 GMAC/s 0x31746954b2b719d4 2.603
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.sg16.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.sg16.kb16 30.8490 30.6650 974.5785 GMAC/s 0x31746954b2b719d4 2.961
+DIGEST price-llama8b.mlp_up.t512 tuned.f4.row.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f4.row.kb16 36.6270 36.5350 820.8363 GMAC/s 0x31746954b2b719d4 3.515
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f4.row.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f4.row.kb16 37.0830 36.5220 810.7427 GMAC/s 0x31746954b2b719d4 3.559
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f4.row.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f4.row.kb16 40.3740 40.1410 744.6567 GMAC/s 0x31746954b2b719d4 3.875
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.row64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.row64.kb16 35.5320 35.4490 846.1322 GMAC/s 0x31746954b2b719d4 3.410
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.row64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.row64.kb16 35.7240 35.6170 841.5847 GMAC/s 0x31746954b2b719d4 3.428
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.row64.kb16 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.row64.kb16 39.3080 39.1530 764.8512 GMAC/s 0x31746954b2b719d4 3.772
+DIGEST price-llama8b.mlp_up.t512 tuned.f3.row64.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL tuned.f3.row64.kb32 51.7900 51.5430 580.5131 GMAC/s 0x31746954b2b719d4 4.970
+DIGEST price-llama8b.mlp_up.t512 inference.tuned.f3.row64.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL inference.tuned.f3.row64.kb32 51.2600 50.7970 586.5152 GMAC/s 0x31746954b2b719d4 4.919
+DIGEST price-llama8b.mlp_up.t512 training.tuned.f3.row64.kb32 0x31746954b2b719d4
+TUNED apple llama8b.mlp_up.t512 512 14336 4096 FULL training.tuned.f3.row64.kb32 55.1430 54.5930 545.2146 GMAC/s 0x31746954b2b719d4 5.292
+
+== llama8b.mlp_up.t512.bwd_dx  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dx fp32.v1 0x88081a26a7d76edd
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL fp32.v1 11.4990 11.1940 2614.5553 GMAC/s 0x88081a26a7d76edd 1.000
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.apple.four 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.apple.four 40.6740 40.3300 739.1644 GMAC/s 0xd25adc12f122f248 3.537
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.a.parallel 1.2110 0.6470 6.0611 Gelem/s 0x0 0.105
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL convert.int15.planes.b.parallel 5.0520 4.9370 11.6232 Gelem/s 0x0 0.439
+DIGEST price-llama8b.mlp_up.t512.bwd_dx int15i64.v1.flat 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xd25adc12f122f248 not-timed
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.w64.kb16.scalar 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.w64.kb16.scalar 70.7030 70.4380 425.2262 GMAC/s 0xd25adc12f122f248 6.149
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.w64.kb16.scalar 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.w64.kb16.scalar 75.6890 75.6460 397.2145 GMAC/s 0xd25adc12f122f248 6.582
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.w64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.w64.kb16 60.9970 60.7450 492.8893 GMAC/s 0xd25adc12f122f248 5.305
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.w64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.w64.kb16 66.0930 65.9580 454.8859 GMAC/s 0xd25adc12f122f248 5.748
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.t32.kb16 26.0150 25.9850 1155.6706 GMAC/s 0xd25adc12f122f248 2.262
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.t32.kb16 31.2320 31.0930 962.6271 GMAC/s 0xd25adc12f122f248 2.716
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.t32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.t32.kb32 28.6470 28.5710 1049.4911 GMAC/s 0xd25adc12f122f248 2.491
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.t32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.t32.kb32 33.6840 33.5160 892.5535 GMAC/s 0xd25adc12f122f248 2.929
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.w64x32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.w64x32.kb32 32.1800 32.0750 934.2688 GMAC/s 0xd25adc12f122f248 2.799
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.w64x32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.w64x32.kb32 37.3540 37.3150 804.8608 GMAC/s 0xd25adc12f122f248 3.248
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.sg16.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.sg16.kb16 48.1500 47.8550 624.3982 GMAC/s 0xd25adc12f122f248 4.187
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.sg16.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.sg16.kb16 52.6820 52.5940 570.6839 GMAC/s 0xd25adc12f122f248 4.581
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.w64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.w64.kb16 67.1380 66.9970 447.8056 GMAC/s 0xd25adc12f122f248 5.839
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.w64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.w64.kb16 72.5110 72.4570 414.6236 GMAC/s 0xd25adc12f122f248 6.306
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.t32.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.t32.kb16 26.5420 26.3420 1132.7244 GMAC/s 0xd25adc12f122f248 2.308
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.t32.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.t32.kb16 31.7320 31.5600 947.4591 GMAC/s 0xd25adc12f122f248 2.760
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.t32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.t32.kb32 42.8440 41.5880 701.7265 GMAC/s 0xd25adc12f122f248 3.726
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.t32.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.t32.kb32 47.7380 47.7040 629.7870 GMAC/s 0xd25adc12f122f248 4.151
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.sg16.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.sg16.kb16 47.0230 46.7540 639.3631 GMAC/s 0xd25adc12f122f248 4.089
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.sg16.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.sg16.kb16 52.0750 51.7440 577.3360 GMAC/s 0xd25adc12f122f248 4.529
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f4.row.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f4.row.kb16 44.7890 44.6640 671.2535 GMAC/s 0xd25adc12f122f248 3.895
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f4.row.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f4.row.kb16 50.0150 49.9390 601.1151 GMAC/s 0xd25adc12f122f248 4.350
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.row64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.row64.kb16 43.3430 43.2590 693.6477 GMAC/s 0xd25adc12f122f248 3.769
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.row64.kb16 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.row64.kb16 48.4450 48.3700 620.5960 GMAC/s 0xd25adc12f122f248 4.213
+DIGEST price-llama8b.mlp_up.t512.bwd_dx tuned.f3.row64.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL tuned.f3.row64.kb32 61.8160 61.3790 486.3591 GMAC/s 0xd25adc12f122f248 5.376
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dx inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dx training.tuned.f3.row64.kb32 0xd25adc12f122f248
+TUNED apple llama8b.mlp_up.t512.bwd_dx 512 4096 14336 FULL training.tuned.f3.row64.kb32 66.5820 64.7440 451.5450 GMAC/s 0xd25adc12f122f248 5.790
+
+== llama8b.mlp_up.t512.bwd_dw  m=14336 n=4096 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_up.t512.bwd_dw fp32.v1 0x64a7d4375083cf3f
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL fp32.v1 14.3560 9.7410 2094.2304 GMAC/s 0x64a7d4375083cf3f 1.000
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.apple.four 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.apple.four 40.1500 35.8730 748.8112 GMAC/s 0x7f5a1c9a4096e46d 2.797
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.a.parallel 1.7300 1.6720 4.2428 Gelem/s 0x0 0.121
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL convert.int15.planes.b.parallel 1.2040 0.6730 1.7418 Gelem/s 0x0 0.084
+DIGEST price-llama8b.mlp_up.t512.bwd_dw int15i64.v1.flat 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x7f5a1c9a4096e46d not-timed
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.w64.kb16.scalar 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.w64.kb16.scalar 41.5710 38.9410 723.2150 GMAC/s 0x7f5a1c9a4096e46d 2.896
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.w64.kb16.scalar 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.w64.kb16.scalar 44.2200 41.6930 679.8908 GMAC/s 0x7f5a1c9a4096e46d 3.080
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.w64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.w64.kb16 37.6880 31.4360 797.7280 GMAC/s 0x7f5a1c9a4096e46d 2.625
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.w64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.w64.kb16 38.4650 30.9900 781.6137 GMAC/s 0x7f5a1c9a4096e46d 2.679
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.t32.kb16 26.2070 25.4030 1147.2038 GMAC/s 0x7f5a1c9a4096e46d 1.826
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.t32.kb16 26.9670 25.5690 1114.8727 GMAC/s 0x7f5a1c9a4096e46d 1.878
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.t32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.t32.kb32 24.9670 19.3990 1204.1804 GMAC/s 0x7f5a1c9a4096e46d 1.739
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.t32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.t32.kb32 26.7930 21.5720 1122.1129 GMAC/s 0x7f5a1c9a4096e46d 1.866
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.w64x32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.w64x32.kb32 31.7230 30.4730 947.7279 GMAC/s 0x7f5a1c9a4096e46d 2.210
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.w64x32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.w64x32.kb32 32.1410 31.2220 935.4025 GMAC/s 0x7f5a1c9a4096e46d 2.239
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.sg16.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.sg16.kb16 32.0490 28.2990 938.0876 GMAC/s 0x7f5a1c9a4096e46d 2.232
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.sg16.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.sg16.kb16 30.8610 27.0710 974.1995 GMAC/s 0x7f5a1c9a4096e46d 2.150
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.w64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.w64.kb16 49.9310 48.4390 602.1264 GMAC/s 0x7f5a1c9a4096e46d 3.478
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.w64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.w64.kb16 49.6140 48.2620 605.9735 GMAC/s 0x7f5a1c9a4096e46d 3.456
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.t32.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.t32.kb16 23.0080 21.3980 1306.7095 GMAC/s 0x7f5a1c9a4096e46d 1.603
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.t32.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.t32.kb16 29.9720 25.5430 1003.0953 GMAC/s 0x7f5a1c9a4096e46d 2.088
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.t32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.t32.kb32 38.2850 36.1380 785.2885 GMAC/s 0x7f5a1c9a4096e46d 2.667
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.t32.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.t32.kb32 38.0840 37.3010 789.4331 GMAC/s 0x7f5a1c9a4096e46d 2.653
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.sg16.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.sg16.kb16 31.3020 27.4590 960.4744 GMAC/s 0x7f5a1c9a4096e46d 2.180
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.sg16.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.sg16.kb16 33.5480 29.9260 896.1718 GMAC/s 0x7f5a1c9a4096e46d 2.337
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f4.row.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f4.row.kb16 37.9510 31.1140 792.1997 GMAC/s 0x7f5a1c9a4096e46d 2.644
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f4.row.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f4.row.kb16 39.7500 37.5020 756.3464 GMAC/s 0x7f5a1c9a4096e46d 2.769
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.row64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.row64.kb16 36.4650 30.7840 824.4830 GMAC/s 0x7f5a1c9a4096e46d 2.540
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.row64.kb16 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.row64.kb16 34.3670 30.9010 874.8151 GMAC/s 0x7f5a1c9a4096e46d 2.394
+DIGEST price-llama8b.mlp_up.t512.bwd_dw tuned.f3.row64.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL tuned.f3.row64.kb32 49.1240 40.3820 612.0180 GMAC/s 0x7f5a1c9a4096e46d 3.422
+TUNED-NOT-RUN apple llama8b.mlp_up.t512.bwd_dw inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_up.t512.bwd_dw training.tuned.f3.row64.kb32 0x7f5a1c9a4096e46d
+TUNED apple llama8b.mlp_up.t512.bwd_dw 14336 4096 512 FULL training.tuned.f3.row64.kb32 49.1850 43.6830 611.2589 GMAC/s 0x7f5a1c9a4096e46d 3.426
+
+== llama8b.mlp_down.t1  m=1 n=4096 k=14336  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+DIGEST fp32-llama8b.mlp_down.t1 fp32.v1 0x4efb8e54c724fa9
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL fp32.v1 2.8600 2.8330 20.5316 GMAC/s 0x4efb8e54c724fa9 1.000
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.apple.four 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.apple.four 5.4740 5.4260 10.7271 GMAC/s 0xbad9a98c45aa8707 1.914
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.a.parallel 0.2880 0.2850 0.0498 Gelem/s 0x0 0.101
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL convert.int15.planes.b.parallel 3.7430 3.7280 15.6880 Gelem/s 0x0 1.309
+DIGEST price-llama8b.mlp_down.t1 int15i64.v1.flat 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xbad9a98c45aa8707 not-timed
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.w64.kb16.scalar 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.w64.kb16.scalar 8.0640 8.0290 7.2818 GMAC/s 0xbad9a98c45aa8707 2.820
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.w64.kb16.scalar 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.w64.kb16.scalar 8.1290 8.0890 7.2236 GMAC/s 0xbad9a98c45aa8707 2.842
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.w64.kb16.scalar 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.w64.kb16.scalar 11.6220 11.5990 5.0525 GMAC/s 0xbad9a98c45aa8707 4.064
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.w64.kb16 7.1610 7.1540 8.2000 GMAC/s 0xbad9a98c45aa8707 2.504
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.w64.kb16 7.2620 7.2240 8.0860 GMAC/s 0xbad9a98c45aa8707 2.539
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.w64.kb16 10.7340 10.7100 5.4705 GMAC/s 0xbad9a98c45aa8707 3.753
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.t32.kb16 2.1910 2.1740 26.8007 GMAC/s 0xbad9a98c45aa8707 0.766
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.t32.kb16 2.2410 2.2330 26.2027 GMAC/s 0xbad9a98c45aa8707 0.784
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.t32.kb16 5.7190 5.6980 10.2676 GMAC/s 0xbad9a98c45aa8707 2.000
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.t32.kb32 2.0500 2.0440 28.6440 GMAC/s 0xbad9a98c45aa8707 0.717
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.t32.kb32 2.1350 2.1080 27.5036 GMAC/s 0xbad9a98c45aa8707 0.747
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.t32.kb32 5.6290 5.6080 10.4317 GMAC/s 0xbad9a98c45aa8707 1.968
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.w64x32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.w64x32.kb32 3.6890 3.6860 15.9177 GMAC/s 0xbad9a98c45aa8707 1.290
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.w64x32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.w64x32.kb32 3.7510 3.7430 15.6546 GMAC/s 0xbad9a98c45aa8707 1.312
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.w64x32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.w64x32.kb32 7.2260 7.2200 8.1262 GMAC/s 0xbad9a98c45aa8707 2.527
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.sg16.kb16 5.6270 5.6200 10.4354 GMAC/s 0xbad9a98c45aa8707 1.967
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.sg16.kb16 5.6820 5.6810 10.3344 GMAC/s 0xbad9a98c45aa8707 1.987
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.sg16.kb16 9.1600 9.1540 6.4105 GMAC/s 0xbad9a98c45aa8707 3.203
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.w64.kb16 7.8800 7.8030 7.4518 GMAC/s 0xbad9a98c45aa8707 2.755
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.w64.kb16 7.9490 7.8800 7.3871 GMAC/s 0xbad9a98c45aa8707 2.779
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.w64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.w64.kb16 11.4110 11.3630 5.1459 GMAC/s 0xbad9a98c45aa8707 3.990
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.t32.kb16 2.2710 2.2610 25.8566 GMAC/s 0xbad9a98c45aa8707 0.794
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.t32.kb16 2.3330 2.3070 25.1694 GMAC/s 0xbad9a98c45aa8707 0.816
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.t32.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.t32.kb16 5.8290 5.7850 10.0738 GMAC/s 0xbad9a98c45aa8707 2.038
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.t32.kb32 3.2120 3.2000 18.2815 GMAC/s 0xbad9a98c45aa8707 1.123
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.t32.kb32 3.2650 3.2550 17.9848 GMAC/s 0xbad9a98c45aa8707 1.142
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.t32.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.t32.kb32 6.7450 6.7370 8.7057 GMAC/s 0xbad9a98c45aa8707 2.358
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.sg16.kb16 5.5180 5.5040 10.6416 GMAC/s 0xbad9a98c45aa8707 1.929
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.sg16.kb16 5.5840 5.5760 10.5158 GMAC/s 0xbad9a98c45aa8707 1.952
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.sg16.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.sg16.kb16 9.0600 9.0480 6.4813 GMAC/s 0xbad9a98c45aa8707 3.168
+DIGEST price-llama8b.mlp_down.t1 tuned.f4.row.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f4.row.kb16 2.7530 2.7470 21.3296 GMAC/s 0xbad9a98c45aa8707 0.963
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f4.row.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f4.row.kb16 2.8250 2.8070 20.7859 GMAC/s 0xbad9a98c45aa8707 0.988
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f4.row.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f4.row.kb16 6.3120 6.3070 9.3030 GMAC/s 0xbad9a98c45aa8707 2.207
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.row64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.row64.kb16 1.9140 1.8280 30.6793 GMAC/s 0xbad9a98c45aa8707 0.669
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.row64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.row64.kb16 1.9170 1.8950 30.6313 GMAC/s 0xbad9a98c45aa8707 0.670
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.row64.kb16 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.row64.kb16 5.4030 5.3830 10.8681 GMAC/s 0xbad9a98c45aa8707 1.889
+DIGEST price-llama8b.mlp_down.t1 tuned.f3.row64.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL tuned.f3.row64.kb32 1.6600 1.6440 35.3736 GMAC/s 0xbad9a98c45aa8707 0.580
+DIGEST price-llama8b.mlp_down.t1 inference.tuned.f3.row64.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL inference.tuned.f3.row64.kb32 1.7180 1.7170 34.1794 GMAC/s 0xbad9a98c45aa8707 0.601
+DIGEST price-llama8b.mlp_down.t1 training.tuned.f3.row64.kb32 0xbad9a98c45aa8707
+TUNED apple llama8b.mlp_down.t1 1 4096 14336 FULL training.tuned.f3.row64.kb32 5.1870 5.1580 11.3207 GMAC/s 0xbad9a98c45aa8707 1.814
+
+== llama8b.mlp_down.t8  m=8 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_down.t8 fp32.v1 0xfb21004541ae3e8e
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL fp32.v1 1.3660 1.3400 343.8961 GMAC/s 0xfb21004541ae3e8e 1.000
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.apple.four 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.apple.four 5.4580 5.4530 86.0685 GMAC/s 0x5d341feda0541b7c 3.996
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.a.parallel 0.2870 0.2820 0.3996 Gelem/s 0x0 0.210
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL convert.int15.planes.b.parallel 3.7350 3.7260 15.7216 Gelem/s 0x0 2.734
+DIGEST price-llama8b.mlp_down.t8 int15i64.v1.flat 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x5d341feda0541b7c not-timed
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.w64.kb16.scalar 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.w64.kb16.scalar 8.0930 8.0720 58.0455 GMAC/s 0x5d341feda0541b7c 5.925
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.w64.kb16.scalar 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.w64.kb16.scalar 8.1930 8.1630 57.3370 GMAC/s 0x5d341feda0541b7c 5.998
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.w64.kb16.scalar 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.w64.kb16.scalar 11.6300 11.6020 40.3923 GMAC/s 0x5d341feda0541b7c 8.514
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.w64.kb16 7.1860 7.1740 65.3718 GMAC/s 0x5d341feda0541b7c 5.261
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.w64.kb16 7.2810 7.2200 64.5189 GMAC/s 0x5d341feda0541b7c 5.330
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.w64.kb16 10.7240 10.6770 43.8047 GMAC/s 0x5d341feda0541b7c 7.851
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.t32.kb16 2.1980 2.1920 213.7225 GMAC/s 0x5d341feda0541b7c 1.609
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.t32.kb16 2.2550 2.2370 208.3202 GMAC/s 0x5d341feda0541b7c 1.651
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.t32.kb16 5.7230 5.7100 82.0832 GMAC/s 0x5d341feda0541b7c 4.190
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.t32.kb32 2.0960 2.0830 224.1231 GMAC/s 0x5d341feda0541b7c 1.534
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.t32.kb32 2.1750 2.1380 215.9826 GMAC/s 0x5d341feda0541b7c 1.592
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.t32.kb32 5.6480 5.6300 83.1732 GMAC/s 0x5d341feda0541b7c 4.135
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.w64x32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.w64x32.kb32 3.7080 3.7000 126.6888 GMAC/s 0x5d341feda0541b7c 2.714
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.w64x32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.w64x32.kb32 3.7760 3.7620 124.4073 GMAC/s 0x5d341feda0541b7c 2.764
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.w64x32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.w64x32.kb32 7.2470 7.2380 64.8216 GMAC/s 0x5d341feda0541b7c 5.305
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.sg16.kb16 5.6570 5.6510 83.0408 GMAC/s 0x5d341feda0541b7c 4.141
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.sg16.kb16 5.7270 5.7130 82.0259 GMAC/s 0x5d341feda0541b7c 4.193
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.sg16.kb16 9.2080 9.2040 51.0167 GMAC/s 0x5d341feda0541b7c 6.741
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.w64.kb16 7.8400 7.7970 59.9186 GMAC/s 0x5d341feda0541b7c 5.739
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.w64.kb16 7.9510 7.8780 59.0821 GMAC/s 0x5d341feda0541b7c 5.821
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.w64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.w64.kb16 11.4610 11.4030 40.9879 GMAC/s 0x5d341feda0541b7c 8.390
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.t32.kb16 2.2830 2.2510 205.7652 GMAC/s 0x5d341feda0541b7c 1.671
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.t32.kb16 2.3480 2.3410 200.0690 GMAC/s 0x5d341feda0541b7c 1.719
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.t32.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.t32.kb16 5.8130 5.7760 80.8123 GMAC/s 0x5d341feda0541b7c 4.255
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.t32.kb32 3.2140 3.2110 146.1612 GMAC/s 0x5d341feda0541b7c 2.353
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.t32.kb32 3.2730 3.2690 143.5264 GMAC/s 0x5d341feda0541b7c 2.396
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.t32.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.t32.kb32 6.7540 6.7400 69.5532 GMAC/s 0x5d341feda0541b7c 4.944
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.sg16.kb16 5.5520 5.5450 84.6113 GMAC/s 0x5d341feda0541b7c 4.064
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.sg16.kb16 5.6260 5.6200 83.4984 GMAC/s 0x5d341feda0541b7c 4.119
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.sg16.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.sg16.kb16 9.0960 9.0940 51.6449 GMAC/s 0x5d341feda0541b7c 6.659
+DIGEST price-llama8b.mlp_down.t8 tuned.f4.row.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f4.row.kb16 2.7730 2.7550 169.4057 GMAC/s 0x5d341feda0541b7c 2.030
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f4.row.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f4.row.kb16 2.8520 2.8350 164.7132 GMAC/s 0x5d341feda0541b7c 2.088
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f4.row.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f4.row.kb16 6.3340 6.3250 74.1651 GMAC/s 0x5d341feda0541b7c 4.637
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.row64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.row64.kb16 1.8520 1.8280 253.6512 GMAC/s 0x5d341feda0541b7c 1.356
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.row64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.row64.kb16 1.9080 1.8890 246.2065 GMAC/s 0x5d341feda0541b7c 1.397
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.row64.kb16 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.row64.kb16 5.4350 5.3750 86.4328 GMAC/s 0x5d341feda0541b7c 3.979
+DIGEST price-llama8b.mlp_down.t8 tuned.f3.row64.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL tuned.f3.row64.kb32 1.6850 1.6540 278.7905 GMAC/s 0x5d341feda0541b7c 1.234
+DIGEST price-llama8b.mlp_down.t8 inference.tuned.f3.row64.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL inference.tuned.f3.row64.kb32 1.7590 1.7270 267.0620 GMAC/s 0x5d341feda0541b7c 1.288
+DIGEST price-llama8b.mlp_down.t8 training.tuned.f3.row64.kb32 0x5d341feda0541b7c
+TUNED apple llama8b.mlp_down.t8 8 4096 14336 FULL training.tuned.f3.row64.kb32 5.2520 5.1970 89.4444 GMAC/s 0x5d341feda0541b7c 3.845
+
+== llama8b.mlp_down.t512  m=512 n=4096 k=14336  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_down.t512 fp32.v1 0x4743c97cb961339e
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL fp32.v1 11.1700 11.1640 2691.5641 GMAC/s 0x4743c97cb961339e 1.000
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.apple.four 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.apple.four 40.7330 39.9850 738.0937 GMAC/s 0x29a5b58e07315db6 3.647
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.a.parallel 1.2110 0.6410 6.0611 Gelem/s 0x0 0.108
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL convert.int15.planes.b.parallel 3.7370 3.7040 15.7132 Gelem/s 0x0 0.335
+DIGEST price-llama8b.mlp_down.t512 int15i64.v1.flat 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x29a5b58e07315db6 not-timed
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.w64.kb16.scalar 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.w64.kb16.scalar 70.6450 70.4250 425.5754 GMAC/s 0x29a5b58e07315db6 6.325
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.w64.kb16.scalar 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.w64.kb16.scalar 71.0400 71.0180 423.2091 GMAC/s 0x29a5b58e07315db6 6.360
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.w64.kb16.scalar 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.w64.kb16.scalar 74.6200 74.4870 402.9050 GMAC/s 0x29a5b58e07315db6 6.680
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.w64.kb16 60.9670 60.8910 493.1319 GMAC/s 0x29a5b58e07315db6 5.458
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.w64.kb16 61.3250 61.2360 490.2531 GMAC/s 0x29a5b58e07315db6 5.490
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.w64.kb16 64.7910 64.7790 464.0270 GMAC/s 0x29a5b58e07315db6 5.800
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.t32.kb16 26.2390 26.0120 1145.8048 GMAC/s 0x29a5b58e07315db6 2.349
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.t32.kb16 26.5500 26.4220 1132.3831 GMAC/s 0x29a5b58e07315db6 2.377
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.t32.kb16 29.9330 29.8890 1004.4022 GMAC/s 0x29a5b58e07315db6 2.680
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.t32.kb32 28.7000 28.6660 1047.5530 GMAC/s 0x29a5b58e07315db6 2.569
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.t32.kb32 29.1380 29.1110 1031.8063 GMAC/s 0x29a5b58e07315db6 2.609
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.t32.kb32 32.5380 32.5160 923.9895 GMAC/s 0x29a5b58e07315db6 2.913
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.w64x32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.w64x32.kb32 32.1880 32.1680 934.0366 GMAC/s 0x29a5b58e07315db6 2.882
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.w64x32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.w64x32.kb32 32.6730 32.6150 920.1717 GMAC/s 0x29a5b58e07315db6 2.925
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.w64x32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.w64x32.kb32 36.0950 36.0280 832.9345 GMAC/s 0x29a5b58e07315db6 3.231
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.sg16.kb16 47.8910 47.5720 627.7750 GMAC/s 0x29a5b58e07315db6 4.287
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.sg16.kb16 48.2090 47.9730 623.6340 GMAC/s 0x29a5b58e07315db6 4.316
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.sg16.kb16 51.4850 51.3890 583.9520 GMAC/s 0x29a5b58e07315db6 4.609
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.w64.kb16 67.2020 67.0660 447.3791 GMAC/s 0x29a5b58e07315db6 6.016
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.w64.kb16 67.8180 67.4520 443.3155 GMAC/s 0x29a5b58e07315db6 6.071
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.w64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.w64.kb16 71.1780 70.9660 422.3885 GMAC/s 0x29a5b58e07315db6 6.372
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.t32.kb16 26.4810 26.4620 1135.3337 GMAC/s 0x29a5b58e07315db6 2.371
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.t32.kb16 26.9310 26.9180 1116.3630 GMAC/s 0x29a5b58e07315db6 2.411
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.t32.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.t32.kb16 30.4220 30.3650 988.2575 GMAC/s 0x29a5b58e07315db6 2.724
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.t32.kb32 42.5110 41.7700 707.2233 GMAC/s 0x29a5b58e07315db6 3.806
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.t32.kb32 43.2320 42.6180 695.4286 GMAC/s 0x29a5b58e07315db6 3.870
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.t32.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.t32.kb32 46.6610 45.8450 644.3233 GMAC/s 0x29a5b58e07315db6 4.177
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.sg16.kb16 47.0000 46.8180 639.6760 GMAC/s 0x29a5b58e07315db6 4.208
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.sg16.kb16 47.7150 47.2600 630.0906 GMAC/s 0x29a5b58e07315db6 4.272
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.sg16.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.sg16.kb16 50.7080 50.6970 592.9000 GMAC/s 0x29a5b58e07315db6 4.540
+DIGEST price-llama8b.mlp_down.t512 tuned.f4.row.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f4.row.kb16 44.9030 44.8010 669.5493 GMAC/s 0x29a5b58e07315db6 4.020
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f4.row.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f4.row.kb16 45.2510 45.1560 664.4001 GMAC/s 0x29a5b58e07315db6 4.051
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f4.row.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f4.row.kb16 48.7890 48.6620 616.2203 GMAC/s 0x29a5b58e07315db6 4.368
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.row64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.row64.kb16 43.5450 43.2620 690.4299 GMAC/s 0x29a5b58e07315db6 3.898
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.row64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.row64.kb16 43.7940 43.6650 686.5043 GMAC/s 0x29a5b58e07315db6 3.921
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.row64.kb16 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.row64.kb16 47.2750 47.1050 635.9550 GMAC/s 0x29a5b58e07315db6 4.232
+DIGEST price-llama8b.mlp_down.t512 tuned.f3.row64.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL tuned.f3.row64.kb32 61.6930 61.2310 487.3287 GMAC/s 0x29a5b58e07315db6 5.523
+DIGEST price-llama8b.mlp_down.t512 inference.tuned.f3.row64.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL inference.tuned.f3.row64.kb32 62.2660 61.1800 482.8441 GMAC/s 0x29a5b58e07315db6 5.574
+DIGEST price-llama8b.mlp_down.t512 training.tuned.f3.row64.kb32 0x29a5b58e07315db6
+TUNED apple llama8b.mlp_down.t512 512 4096 14336 FULL training.tuned.f3.row64.kb32 65.3430 65.1330 460.1070 GMAC/s 0x29a5b58e07315db6 5.850
+
+== llama8b.mlp_down.t512.bwd_dx  m=512 n=14336 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_down.t512.bwd_dx fp32.v1 0x530556760e570c80
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL fp32.v1 10.4270 10.4210 2883.3577 GMAC/s 0x530556760e570c80 1.000
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.apple.four 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.apple.four 35.5020 34.9080 846.8473 GMAC/s 0xf02913c8e388c6f0 3.405
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.a.parallel 0.9390 0.3780 2.2334 Gelem/s 0x0 0.090
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL convert.int15.planes.b.parallel 4.0410 4.0100 14.5311 Gelem/s 0x0 0.388
+DIGEST price-llama8b.mlp_down.t512.bwd_dx int15i64.v1.flat 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0xf02913c8e388c6f0 not-timed
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.w64.kb16.scalar 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.w64.kb16.scalar 49.8840 49.7940 602.6937 GMAC/s 0xf02913c8e388c6f0 4.784
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.w64.kb16.scalar 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.w64.kb16.scalar 53.7180 53.6210 559.6778 GMAC/s 0xf02913c8e388c6f0 5.152
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.w64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.w64.kb16 43.1950 42.0030 696.0243 GMAC/s 0xf02913c8e388c6f0 4.143
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.w64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.w64.kb16 47.1950 47.1210 637.0330 GMAC/s 0xf02913c8e388c6f0 4.526
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.t32.kb16 21.9720 21.8300 1368.3220 GMAC/s 0xf02913c8e388c6f0 2.107
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.t32.kb16 26.0090 25.9030 1155.9372 GMAC/s 0xf02913c8e388c6f0 2.494
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.t32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.t32.kb32 22.0430 21.9380 1363.9147 GMAC/s 0xf02913c8e388c6f0 2.114
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.t32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.t32.kb32 25.9910 25.8750 1156.7378 GMAC/s 0xf02913c8e388c6f0 2.493
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.w64x32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.w64x32.kb32 25.2660 25.1910 1189.9300 GMAC/s 0xf02913c8e388c6f0 2.423
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.w64x32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.w64x32.kb32 29.1650 29.0700 1030.8511 GMAC/s 0xf02913c8e388c6f0 2.797
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.sg16.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.sg16.kb16 28.0280 27.5780 1072.6692 GMAC/s 0xf02913c8e388c6f0 2.688
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.sg16.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.sg16.kb16 31.2540 31.1230 961.9495 GMAC/s 0xf02913c8e388c6f0 2.997
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.w64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.w64.kb16 53.4180 53.3000 562.8210 GMAC/s 0xf02913c8e388c6f0 5.123
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.w64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.w64.kb16 57.6080 57.3590 521.8853 GMAC/s 0xf02913c8e388c6f0 5.525
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.t32.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.t32.kb16 22.4600 22.4010 1338.5918 GMAC/s 0xf02913c8e388c6f0 2.154
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.t32.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.t32.kb16 26.5250 26.3400 1133.4504 GMAC/s 0xf02913c8e388c6f0 2.544
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.t32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.t32.kb32 35.9120 35.2710 837.1790 GMAC/s 0xf02913c8e388c6f0 3.444
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.t32.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.t32.kb32 39.5230 39.0970 760.6905 GMAC/s 0xf02913c8e388c6f0 3.790
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.sg16.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.sg16.kb16 27.1700 27.0130 1106.5429 GMAC/s 0xf02913c8e388c6f0 2.606
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.sg16.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.sg16.kb16 30.9410 30.7900 971.6807 GMAC/s 0xf02913c8e388c6f0 2.967
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f4.row.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f4.row.kb16 37.0380 36.4180 811.7277 GMAC/s 0xf02913c8e388c6f0 3.552
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f4.row.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f4.row.kb16 40.6890 40.1540 738.8919 GMAC/s 0xf02913c8e388c6f0 3.902
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.row64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.row64.kb16 35.4980 35.4190 846.9427 GMAC/s 0xf02913c8e388c6f0 3.404
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.row64.kb16 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.row64.kb16 39.6040 39.4190 759.1347 GMAC/s 0xf02913c8e388c6f0 3.798
+DIGEST price-llama8b.mlp_down.t512.bwd_dx tuned.f3.row64.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL tuned.f3.row64.kb32 51.6770 51.5240 581.7824 GMAC/s 0xf02913c8e388c6f0 4.956
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dx inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dx training.tuned.f3.row64.kb32 0xf02913c8e388c6f0
+TUNED apple llama8b.mlp_down.t512.bwd_dx 512 14336 4096 FULL training.tuned.f3.row64.kb32 54.9730 54.5490 546.9007 GMAC/s 0xf02913c8e388c6f0 5.272
+
+== llama8b.mlp_down.t512.bwd_dw  m=4096 n=14336 k=512  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.mlp_down.t512.bwd_dw fp32.v1 0x57cdff62332dd579
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL fp32.v1 15.2560 9.2020 1970.6850 GMAC/s 0x57cdff62332dd579 1.000
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.apple.four 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.apple.four 40.3350 38.2580 745.3767 GMAC/s 0x648fb9758841ed0f 2.644
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.a.parallel 1.1050 0.8320 1.8979 Gelem/s 0x0 0.072
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL convert.int15.planes.b.parallel 1.3010 1.2290 5.6418 Gelem/s 0x0 0.085
+DIGEST price-llama8b.mlp_down.t512.bwd_dw int15i64.v1.flat 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x648fb9758841ed0f not-timed
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.w64.kb16.scalar 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.w64.kb16.scalar 40.9660 40.8840 733.8957 GMAC/s 0x648fb9758841ed0f 2.685
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.w64.kb16.scalar 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.w64.kb16.scalar 40.3230 37.5490 745.5986 GMAC/s 0x648fb9758841ed0f 2.643
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.w64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.w64.kb16 41.1190 37.9470 731.1649 GMAC/s 0x648fb9758841ed0f 2.695
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.w64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.w64.kb16 41.7160 36.5030 720.7012 GMAC/s 0x648fb9758841ed0f 2.734
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.t32.kb16 25.2260 24.6190 1191.8168 GMAC/s 0x648fb9758841ed0f 1.654
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.t32.kb16 26.4290 24.6220 1137.5675 GMAC/s 0x648fb9758841ed0f 1.732
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.t32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.t32.kb32 28.3120 20.8590 1061.9091 GMAC/s 0x648fb9758841ed0f 1.856
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.t32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.t32.kb32 28.3910 26.0730 1058.9543 GMAC/s 0x648fb9758841ed0f 1.861
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.w64x32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.w64x32.kb32 32.8070 30.1460 916.4133 GMAC/s 0x648fb9758841ed0f 2.150
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.w64x32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.w64x32.kb32 32.0540 30.1410 937.9413 GMAC/s 0x648fb9758841ed0f 2.101
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.sg16.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.sg16.kb16 35.1940 27.8840 854.2584 GMAC/s 0x648fb9758841ed0f 2.307
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.sg16.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.sg16.kb16 35.2940 28.1540 851.8380 GMAC/s 0x648fb9758841ed0f 2.313
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.w64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.w64.kb16 47.9890 47.6370 626.4930 GMAC/s 0x648fb9758841ed0f 3.146
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.w64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.w64.kb16 51.5370 48.4790 583.3628 GMAC/s 0x648fb9758841ed0f 3.378
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.t32.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.t32.kb16 24.3450 20.8110 1234.9464 GMAC/s 0x648fb9758841ed0f 1.596
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.t32.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.t32.kb16 27.8620 24.6320 1079.0600 GMAC/s 0x648fb9758841ed0f 1.826
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.t32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.t32.kb32 40.9490 39.7760 734.2004 GMAC/s 0x648fb9758841ed0f 2.684
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.t32.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.t32.kb32 40.5390 38.0480 741.6259 GMAC/s 0x648fb9758841ed0f 2.657
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.sg16.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.sg16.kb16 31.3180 27.7720 959.9837 GMAC/s 0x648fb9758841ed0f 2.053
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.sg16.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.sg16.kb16 28.5380 27.6110 1053.4996 GMAC/s 0x648fb9758841ed0f 1.871
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f4.row.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f4.row.kb16 40.5820 39.6580 740.8401 GMAC/s 0x648fb9758841ed0f 2.660
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f4.row.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f4.row.kb16 41.9920 40.5530 715.9643 GMAC/s 0x648fb9758841ed0f 2.752
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.row64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.row64.kb16 32.0420 30.8550 938.2926 GMAC/s 0x648fb9758841ed0f 2.100
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.row64.kb16 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.row64.kb16 36.8850 31.5370 815.0948 GMAC/s 0x648fb9758841ed0f 2.418
+DIGEST price-llama8b.mlp_down.t512.bwd_dw tuned.f3.row64.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL tuned.f3.row64.kb32 55.2170 53.2920 544.4840 GMAC/s 0x648fb9758841ed0f 3.619
+TUNED-NOT-RUN apple llama8b.mlp_down.t512.bwd_dw inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.mlp_down.t512.bwd_dw training.tuned.f3.row64.kb32 0x648fb9758841ed0f
+TUNED apple llama8b.mlp_down.t512.bwd_dw 4096 14336 512 FULL training.tuned.f3.row64.kb32 56.8110 55.6950 529.2069 GMAC/s 0x648fb9758841ed0f 3.724
+
+== llama8b.lm_head.t1  m=1 n=128256 k=4096  FULL  fp32 plan: FLAT(1 thread/cell, tpb=256, 1-D grid)
+DIGEST fp32-llama8b.lm_head.t1 fp32.v1 0xcdc134cbce391535
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL fp32.v1 4.0600 4.0450 129.3932 GMAC/s 0xcdc134cbce391535 1.000
+DIGEST price-llama8b.lm_head.t1 int15i64.v1.apple.four 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.apple.four 9.6810 9.6040 54.2647 GMAC/s 0x18d3d46aaa413329 2.384
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.a.parallel 0.2840 0.2810 0.0144 Gelem/s 0x0 0.070
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL convert.int15.planes.b.parallel 36.3990 36.3600 14.4327 Gelem/s 0x0 8.965
+DIGEST price-llama8b.lm_head.t1 int15i64.v1.flat 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x18d3d46aaa413329 not-timed
+DIGEST price-llama8b.lm_head.t1 tuned.f4.w64.kb16.scalar 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.w64.kb16.scalar 32.1850 31.7740 16.3224 GMAC/s 0x18d3d46aaa413329 7.927
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.w64.kb16.scalar 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.w64.kb16.scalar 32.4500 31.6340 16.1891 GMAC/s 0x18d3d46aaa413329 7.993
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.w64.kb16.scalar 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.w64.kb16.scalar 68.2220 67.9390 7.7004 GMAC/s 0x18d3d46aaa413329 16.803
+DIGEST price-llama8b.lm_head.t1 tuned.f4.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.w64.kb16 29.1300 28.9340 18.0342 GMAC/s 0x18d3d46aaa413329 7.175
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.w64.kb16 29.3840 29.0240 17.8783 GMAC/s 0x18d3d46aaa413329 7.237
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.w64.kb16 65.2980 65.1250 8.0452 GMAC/s 0x18d3d46aaa413329 16.083
+DIGEST price-llama8b.lm_head.t1 tuned.f4.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.t32.kb16 9.7860 9.7740 53.6825 GMAC/s 0x18d3d46aaa413329 2.410
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.t32.kb16 9.8510 9.8490 53.3282 GMAC/s 0x18d3d46aaa413329 2.426
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.t32.kb16 45.9550 45.9510 11.4315 GMAC/s 0x18d3d46aaa413329 11.319
+DIGEST price-llama8b.lm_head.t1 tuned.f4.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.t32.kb32 9.7270 9.6880 54.0081 GMAC/s 0x18d3d46aaa413329 2.396
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.t32.kb32 9.7930 9.7540 53.6441 GMAC/s 0x18d3d46aaa413329 2.412
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.t32.kb32 45.8910 45.8710 11.4475 GMAC/s 0x18d3d46aaa413329 11.303
+DIGEST price-llama8b.lm_head.t1 tuned.f4.w64x32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.w64x32.kb32 20.8050 20.7360 25.2505 GMAC/s 0x18d3d46aaa413329 5.124
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.w64x32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.w64x32.kb32 20.8070 20.7920 25.2481 GMAC/s 0x18d3d46aaa413329 5.125
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.w64x32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.w64x32.kb32 56.9380 56.9220 9.2265 GMAC/s 0x18d3d46aaa413329 14.024
+DIGEST price-llama8b.lm_head.t1 tuned.f4.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.sg16.kb16 26.1530 25.3700 20.0870 GMAC/s 0x18d3d46aaa413329 6.442
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.sg16.kb16 25.5500 25.4650 20.5611 GMAC/s 0x18d3d46aaa413329 6.293
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.sg16.kb16 62.3290 61.4690 8.4284 GMAC/s 0x18d3d46aaa413329 15.352
+DIGEST price-llama8b.lm_head.t1 tuned.f3.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.w64.kb16 38.3450 37.8560 13.7003 GMAC/s 0x18d3d46aaa413329 9.445
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.w64.kb16 38.1380 37.8770 13.7746 GMAC/s 0x18d3d46aaa413329 9.394
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.w64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.w64.kb16 74.6840 74.1170 7.0341 GMAC/s 0x18d3d46aaa413329 18.395
+DIGEST price-llama8b.lm_head.t1 tuned.f3.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.t32.kb16 9.7570 9.7510 53.8420 GMAC/s 0x18d3d46aaa413329 2.403
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.t32.kb16 9.8280 9.8160 53.4531 GMAC/s 0x18d3d46aaa413329 2.421
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.t32.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.t32.kb16 45.9470 45.9370 11.4335 GMAC/s 0x18d3d46aaa413329 11.317
+DIGEST price-llama8b.lm_head.t1 tuned.f3.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.t32.kb32 14.8640 14.8560 35.3429 GMAC/s 0x18d3d46aaa413329 3.661
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.t32.kb32 14.8590 14.7530 35.3548 GMAC/s 0x18d3d46aaa413329 3.660
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.t32.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.t32.kb32 51.0390 50.9640 10.2928 GMAC/s 0x18d3d46aaa413329 12.571
+DIGEST price-llama8b.lm_head.t1 tuned.f3.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.sg16.kb16 24.9520 24.9090 21.0539 GMAC/s 0x18d3d46aaa413329 6.146
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.sg16.kb16 24.9950 24.8940 21.0177 GMAC/s 0x18d3d46aaa413329 6.156
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.sg16.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.sg16.kb16 61.2230 61.1420 8.5807 GMAC/s 0x18d3d46aaa413329 15.080
+DIGEST price-llama8b.lm_head.t1 tuned.f4.row.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f4.row.kb16 5.0220 4.9990 104.6070 GMAC/s 0x18d3d46aaa413329 1.237
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f4.row.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f4.row.kb16 5.0670 5.0610 103.6780 GMAC/s 0x18d3d46aaa413329 1.248
+DIGEST price-llama8b.lm_head.t1 training.tuned.f4.row.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f4.row.kb16 41.1720 41.1610 12.7596 GMAC/s 0x18d3d46aaa413329 10.141
+DIGEST price-llama8b.lm_head.t1 tuned.f3.row64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.row64.kb16 4.6960 4.6770 111.8689 GMAC/s 0x18d3d46aaa413329 1.157
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.row64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.row64.kb16 4.8770 4.8280 107.7172 GMAC/s 0x18d3d46aaa413329 1.201
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.row64.kb16 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.row64.kb16 41.0220 40.9160 12.8062 GMAC/s 0x18d3d46aaa413329 10.104
+DIGEST price-llama8b.lm_head.t1 tuned.f3.row64.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL tuned.f3.row64.kb32 6.9090 6.8820 76.0366 GMAC/s 0x18d3d46aaa413329 1.702
+DIGEST price-llama8b.lm_head.t1 inference.tuned.f3.row64.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL inference.tuned.f3.row64.kb32 7.0100 6.9670 74.9410 GMAC/s 0x18d3d46aaa413329 1.727
+DIGEST price-llama8b.lm_head.t1 training.tuned.f3.row64.kb32 0x18d3d46aaa413329
+TUNED apple llama8b.lm_head.t1 1 128256 4096 FULL training.tuned.f3.row64.kb32 43.1490 43.1190 12.1749 GMAC/s 0x18d3d46aaa413329 10.628
+
+== llama8b.lm_head.t8  m=8 n=128256 k=4096  FULL  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.lm_head.t8 fp32.v1 0x3ebab59d0da21444
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL fp32.v1 5.6470 5.6260 744.2346 GMAC/s 0x3ebab59d0da21444 1.000
+DIGEST price-llama8b.lm_head.t8 int15i64.v1.apple.four 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.apple.four 9.8500 9.8060 426.6693 GMAC/s 0x4a40a5e39d7bbdce 1.744
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.a.parallel 0.8780 0.2820 0.0373 Gelem/s 0x0 0.155
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL convert.int15.planes.b.parallel 36.4060 36.3740 14.4299 Gelem/s 0x0 6.447
+DIGEST price-llama8b.lm_head.t8 int15i64.v1.flat 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x4a40a5e39d7bbdce not-timed
+DIGEST price-llama8b.lm_head.t8 tuned.f4.w64.kb16.scalar 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.w64.kb16.scalar 32.1160 32.0150 130.8598 GMAC/s 0x4a40a5e39d7bbdce 5.687
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.w64.kb16.scalar 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.w64.kb16.scalar 32.4340 32.2790 129.5768 GMAC/s 0x4a40a5e39d7bbdce 5.744
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.w64.kb16.scalar 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.w64.kb16.scalar 68.6640 68.4300 61.2066 GMAC/s 0x4a40a5e39d7bbdce 12.159
+DIGEST price-llama8b.lm_head.t8 tuned.f4.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.w64.kb16 29.1990 29.1000 143.9328 GMAC/s 0x4a40a5e39d7bbdce 5.171
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.w64.kb16 29.2870 29.0610 143.5003 GMAC/s 0x4a40a5e39d7bbdce 5.186
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.w64.kb16 65.6180 65.4170 64.0479 GMAC/s 0x4a40a5e39d7bbdce 11.620
+DIGEST price-llama8b.lm_head.t8 tuned.f4.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.t32.kb16 9.8180 9.7970 428.0600 GMAC/s 0x4a40a5e39d7bbdce 1.739
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.t32.kb16 9.8990 9.8930 424.5573 GMAC/s 0x4a40a5e39d7bbdce 1.753
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.t32.kb16 46.0110 45.9910 91.3410 GMAC/s 0x4a40a5e39d7bbdce 8.148
+DIGEST price-llama8b.lm_head.t8 tuned.f4.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.t32.kb32 9.8120 9.8020 428.3217 GMAC/s 0x4a40a5e39d7bbdce 1.738
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.t32.kb32 9.8790 9.8470 425.4168 GMAC/s 0x4a40a5e39d7bbdce 1.749
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.t32.kb32 46.0060 45.9550 91.3510 GMAC/s 0x4a40a5e39d7bbdce 8.147
+DIGEST price-llama8b.lm_head.t8 tuned.f4.w64x32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.w64x32.kb32 20.9250 20.8810 200.8455 GMAC/s 0x4a40a5e39d7bbdce 3.706
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.w64x32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.w64x32.kb32 20.9950 20.9720 200.1759 GMAC/s 0x4a40a5e39d7bbdce 3.718
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.w64x32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.w64x32.kb32 57.1240 57.1030 73.5714 GMAC/s 0x4a40a5e39d7bbdce 10.116
+DIGEST price-llama8b.lm_head.t8 tuned.f4.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.sg16.kb16 25.8090 25.6230 162.8383 GMAC/s 0x4a40a5e39d7bbdce 4.570
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.sg16.kb16 26.4990 25.6120 158.5982 GMAC/s 0x4a40a5e39d7bbdce 4.693
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.sg16.kb16 61.7940 61.7760 68.0113 GMAC/s 0x4a40a5e39d7bbdce 10.943
+DIGEST price-llama8b.lm_head.t8 tuned.f3.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.w64.kb16 38.3930 38.2360 109.4651 GMAC/s 0x4a40a5e39d7bbdce 6.799
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.w64.kb16 38.2830 37.7590 109.7796 GMAC/s 0x4a40a5e39d7bbdce 6.779
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.w64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.w64.kb16 74.4260 74.3690 56.4681 GMAC/s 0x4a40a5e39d7bbdce 13.180
+DIGEST price-llama8b.lm_head.t8 tuned.f3.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.t32.kb16 9.7980 9.7910 428.9337 GMAC/s 0x4a40a5e39d7bbdce 1.735
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.t32.kb16 9.9070 9.8560 424.2145 GMAC/s 0x4a40a5e39d7bbdce 1.754
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.t32.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.t32.kb16 46.0060 45.9720 91.3510 GMAC/s 0x4a40a5e39d7bbdce 8.147
+DIGEST price-llama8b.lm_head.t8 tuned.f3.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.t32.kb32 14.8380 14.7520 283.2385 GMAC/s 0x4a40a5e39d7bbdce 2.628
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.t32.kb32 14.9590 14.7800 280.9474 GMAC/s 0x4a40a5e39d7bbdce 2.649
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.t32.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.t32.kb32 51.1070 51.0150 82.2332 GMAC/s 0x4a40a5e39d7bbdce 9.050
+DIGEST price-llama8b.lm_head.t8 tuned.f3.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.sg16.kb16 25.4250 24.9970 165.2976 GMAC/s 0x4a40a5e39d7bbdce 4.502
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.sg16.kb16 25.5110 25.0920 164.7404 GMAC/s 0x4a40a5e39d7bbdce 4.518
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.sg16.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.sg16.kb16 61.2960 61.2460 68.5639 GMAC/s 0x4a40a5e39d7bbdce 10.855
+DIGEST price-llama8b.lm_head.t8 tuned.f4.row.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f4.row.kb16 5.0970 5.0510 824.5424 GMAC/s 0x4a40a5e39d7bbdce 0.903
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f4.row.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f4.row.kb16 5.1880 5.1350 810.0795 GMAC/s 0x4a40a5e39d7bbdce 0.919
+DIGEST price-llama8b.lm_head.t8 training.tuned.f4.row.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f4.row.kb16 41.2930 41.2870 101.7774 GMAC/s 0x4a40a5e39d7bbdce 7.312
+DIGEST price-llama8b.lm_head.t8 tuned.f3.row64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.row64.kb16 4.8810 4.7480 861.0311 GMAC/s 0x4a40a5e39d7bbdce 0.864
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.row64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.row64.kb16 4.9590 4.7790 847.4879 GMAC/s 0x4a40a5e39d7bbdce 0.878
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.row64.kb16 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.row64.kb16 40.9530 40.9280 102.6223 GMAC/s 0x4a40a5e39d7bbdce 7.252
+DIGEST price-llama8b.lm_head.t8 tuned.f3.row64.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL tuned.f3.row64.kb32 7.0450 6.9790 596.5497 GMAC/s 0x4a40a5e39d7bbdce 1.248
+DIGEST price-llama8b.lm_head.t8 inference.tuned.f3.row64.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL inference.tuned.f3.row64.kb32 7.0810 7.0440 593.5168 GMAC/s 0x4a40a5e39d7bbdce 1.254
+DIGEST price-llama8b.lm_head.t8 training.tuned.f3.row64.kb32 0x4a40a5e39d7bbdce
+TUNED apple llama8b.lm_head.t8 8 128256 4096 FULL training.tuned.f3.row64.kb32 43.2190 43.2070 97.2418 GMAC/s 0x4a40a5e39d7bbdce 7.653
+
+== llama8b.lm_head.t512  m=512 n=16032 k=4096  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.lm_head.t512 fp32.v1 0x84fd143bb625cf70
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED fp32.v1 11.5470 11.5340 2911.7122 GMAC/s 0x84fd143bb625cf70 1.000
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.apple.four 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.apple.four 39.2720 38.6660 856.1199 GMAC/s 0x60f6165f74f17867 3.401
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.a.parallel 0.9350 0.9030 2.2429 Gelem/s 0x0 0.081
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED convert.int15.planes.b.parallel 4.3480 4.2960 15.1028 Gelem/s 0x0 0.377
+DIGEST price-llama8b.lm_head.t512 int15i64.v1.flat 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x60f6165f74f17867 not-timed
+DIGEST price-llama8b.lm_head.t512 tuned.f4.w64.kb16.scalar 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.w64.kb16.scalar 50.5270 50.3770 665.4173 GMAC/s 0x60f6165f74f17867 4.376
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.w64.kb16.scalar 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.w64.kb16.scalar 50.7900 50.5520 661.9717 GMAC/s 0x60f6165f74f17867 4.399
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.w64.kb16.scalar 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.w64.kb16.scalar 54.6470 54.5410 615.2495 GMAC/s 0x60f6165f74f17867 4.733
+DIGEST price-llama8b.lm_head.t512 tuned.f4.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.w64.kb16 44.0040 43.8160 764.0565 GMAC/s 0x60f6165f74f17867 3.811
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.w64.kb16 44.1150 44.0900 762.1340 GMAC/s 0x60f6165f74f17867 3.820
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.w64.kb16 48.1990 48.0490 697.5568 GMAC/s 0x60f6165f74f17867 4.174
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.t32.kb16 24.3670 24.2840 1379.7981 GMAC/s 0x60f6165f74f17867 2.110
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.t32.kb16 24.4380 24.3020 1375.7894 GMAC/s 0x60f6165f74f17867 2.116
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.t32.kb16 28.4920 28.2990 1180.0344 GMAC/s 0x60f6165f74f17867 2.467
+DIGEST price-llama8b.lm_head.t512 tuned.f4.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.t32.kb32 24.3690 24.3480 1379.6849 GMAC/s 0x60f6165f74f17867 2.110
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.t32.kb32 24.6140 24.4870 1365.9519 GMAC/s 0x60f6165f74f17867 2.132
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.t32.kb32 28.6850 28.6200 1172.0949 GMAC/s 0x60f6165f74f17867 2.484
+DIGEST price-llama8b.lm_head.t512 tuned.f4.w64x32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.w64x32.kb32 31.2440 31.0030 1076.0959 GMAC/s 0x60f6165f74f17867 2.706
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.w64x32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.w64x32.kb32 31.2310 30.2880 1076.5438 GMAC/s 0x60f6165f74f17867 2.705
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.w64x32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.w64x32.kb32 35.3810 35.2470 950.2711 GMAC/s 0x60f6165f74f17867 3.064
+DIGEST price-llama8b.lm_head.t512 tuned.f4.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.sg16.kb16 33.5600 33.2830 1001.8338 GMAC/s 0x60f6165f74f17867 2.906
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.sg16.kb16 33.6700 33.4910 998.5608 GMAC/s 0x60f6165f74f17867 2.916
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.sg16.kb16 37.8950 37.6850 887.2289 GMAC/s 0x60f6165f74f17867 3.282
+DIGEST price-llama8b.lm_head.t512 tuned.f3.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.w64.kb16 54.1850 53.9080 620.4954 GMAC/s 0x60f6165f74f17867 4.693
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.w64.kb16 54.3440 53.3740 618.6799 GMAC/s 0x60f6165f74f17867 4.706
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.w64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.w64.kb16 58.3860 57.8930 575.8494 GMAC/s 0x60f6165f74f17867 5.056
+DIGEST price-llama8b.lm_head.t512 tuned.f3.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.t32.kb16 24.7920 24.6350 1356.1448 GMAC/s 0x60f6165f74f17867 2.147
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.t32.kb16 24.7370 24.6450 1359.1600 GMAC/s 0x60f6165f74f17867 2.142
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.t32.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.t32.kb16 28.8530 28.7120 1165.2702 GMAC/s 0x60f6165f74f17867 2.499
+DIGEST price-llama8b.lm_head.t512 tuned.f3.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.t32.kb32 36.1140 35.9270 930.9836 GMAC/s 0x60f6165f74f17867 3.128
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.t32.kb32 36.9140 35.7490 910.8073 GMAC/s 0x60f6165f74f17867 3.197
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.t32.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.t32.kb32 40.3180 39.7980 833.9089 GMAC/s 0x60f6165f74f17867 3.492
+DIGEST price-llama8b.lm_head.t512 tuned.f3.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.sg16.kb16 33.2810 33.0500 1010.2323 GMAC/s 0x60f6165f74f17867 2.882
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.sg16.kb16 33.2970 33.1920 1009.7468 GMAC/s 0x60f6165f74f17867 2.884
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.sg16.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.sg16.kb16 37.3920 37.2330 899.1640 GMAC/s 0x60f6165f74f17867 3.238
+DIGEST price-llama8b.lm_head.t512 tuned.f4.row.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f4.row.kb16 40.2920 40.1600 834.4471 GMAC/s 0x60f6165f74f17867 3.489
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f4.row.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f4.row.kb16 40.5900 40.3090 828.3208 GMAC/s 0x60f6165f74f17867 3.515
+DIGEST price-llama8b.lm_head.t512 training.tuned.f4.row.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f4.row.kb16 44.6080 44.2600 753.7110 GMAC/s 0x60f6165f74f17867 3.863
+DIGEST price-llama8b.lm_head.t512 tuned.f3.row64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.row64.kb16 38.8690 38.7460 864.9963 GMAC/s 0x60f6165f74f17867 3.366
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.row64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.row64.kb16 39.0710 38.9240 860.5242 GMAC/s 0x60f6165f74f17867 3.384
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.row64.kb16 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.row64.kb16 43.0850 42.9090 780.3537 GMAC/s 0x60f6165f74f17867 3.731
+DIGEST price-llama8b.lm_head.t512 tuned.f3.row64.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED tuned.f3.row64.kb32 56.5700 56.1830 594.3352 GMAC/s 0x60f6165f74f17867 4.899
+DIGEST price-llama8b.lm_head.t512 inference.tuned.f3.row64.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED inference.tuned.f3.row64.kb32 57.1250 56.6970 588.5609 GMAC/s 0x60f6165f74f17867 4.947
+DIGEST price-llama8b.lm_head.t512 training.tuned.f3.row64.kb32 0x60f6165f74f17867
+TUNED apple llama8b.lm_head.t512 512 16032 4096 CAPPED training.tuned.f3.row64.kb32 60.6080 60.2420 554.7377 GMAC/s 0x60f6165f74f17867 5.249
+
+== llama8b.lm_head.t512.bwd_dx  m=512 n=512 k=128256  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.lm_head.t512.bwd_dx fp32.v1 0xafccdbb3aae1fc36
+TUNED apple llama8b.lm_head.t512.bwd_dx 512 512 128256 CAPPED fp32.v1 17.5040 17.5020 1920.7919 GMAC/s 0xafccdbb3aae1fc36 1.000
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.apple.four REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.planes.a.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx convert.int15.planes.b.parallel REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx int15i64.v1.flat REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.w64.kb16.scalar REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.w64.kb16.scalar REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.w64.kb16.scalar REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.w64x32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.w64x32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.w64x32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.w64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.t32.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.t32.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.sg16.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f4.row.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f4.row.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f4.row.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.row64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.row64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.row64.kb16 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx tuned.f3.row64.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx inference.tuned.f3.row64.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dx training.tuned.f3.row64.kb32 REFUSED-BY-THE-PROFILE:k=128256>INT15_MAX_K=65536
+
+== llama8b.lm_head.t512.bwd_dw  m=16032 n=4096 k=512  CAPPED  fp32 plan: APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+DIGEST fp32-llama8b.lm_head.t512.bwd_dw fp32.v1 0xdb68419e4a2093b7
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED fp32.v1 16.7200 10.9540 2010.8577 GMAC/s 0xdb68419e4a2093b7 1.000
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.apple.four 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.apple.four 46.3010 43.6370 726.1515 GMAC/s 0x97ac9bb1c8a6a3b4 2.769
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.a.parallel 1.8480 1.8190 4.4418 Gelem/s 0x0 0.111
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED convert.int15.planes.b.parallel 0.6880 0.6760 3.0482 Gelem/s 0x0 0.041
+DIGEST price-llama8b.lm_head.t512.bwd_dw int15i64.v1.flat 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED int15i64.v1.flat not-timed not-timed not-timed GMAC/s 0x97ac9bb1c8a6a3b4 not-timed
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.w64.kb16.scalar 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.w64.kb16.scalar 44.3530 39.3370 758.0443 GMAC/s 0x97ac9bb1c8a6a3b4 2.653
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.w64.kb16.scalar inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.w64.kb16.scalar 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.w64.kb16.scalar 47.4460 43.5160 708.6275 GMAC/s 0x97ac9bb1c8a6a3b4 2.838
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.w64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.w64.kb16 40.9810 35.7140 820.4178 GMAC/s 0x97ac9bb1c8a6a3b4 2.451
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.w64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.w64.kb16 40.4440 40.0090 831.3110 GMAC/s 0x97ac9bb1c8a6a3b4 2.419
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.t32.kb16 30.2140 21.4090 1112.7802 GMAC/s 0x97ac9bb1c8a6a3b4 1.807
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.t32.kb16 29.7530 22.5790 1130.0219 GMAC/s 0x97ac9bb1c8a6a3b4 1.779
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.t32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.t32.kb32 28.4860 24.6230 1180.2830 GMAC/s 0x97ac9bb1c8a6a3b4 1.704
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.t32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.t32.kb32 28.7620 26.8080 1168.9570 GMAC/s 0x97ac9bb1c8a6a3b4 1.720
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.w64x32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.w64x32.kb32 35.3990 30.5590 949.7879 GMAC/s 0x97ac9bb1c8a6a3b4 2.117
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.w64x32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.w64x32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.w64x32.kb32 34.9630 32.2960 961.6320 GMAC/s 0x97ac9bb1c8a6a3b4 2.091
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.sg16.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.sg16.kb16 36.6810 32.1820 916.5928 GMAC/s 0x97ac9bb1c8a6a3b4 2.194
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.sg16.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.sg16.kb16 36.3780 35.0660 924.2273 GMAC/s 0x97ac9bb1c8a6a3b4 2.176
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.w64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.w64.kb16 51.3430 49.8340 654.8418 GMAC/s 0x97ac9bb1c8a6a3b4 3.071
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.w64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.w64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.w64.kb16 53.4680 50.7580 628.8161 GMAC/s 0x97ac9bb1c8a6a3b4 3.198
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.t32.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.t32.kb16 27.7140 23.0970 1213.1609 GMAC/s 0x97ac9bb1c8a6a3b4 1.658
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.t32.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.t32.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.t32.kb16 30.2770 26.2380 1110.4647 GMAC/s 0x97ac9bb1c8a6a3b4 1.811
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.t32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.t32.kb32 42.1910 40.1070 796.8889 GMAC/s 0x97ac9bb1c8a6a3b4 2.523
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.t32.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.t32.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.t32.kb32 41.3510 37.8320 813.0769 GMAC/s 0x97ac9bb1c8a6a3b4 2.473
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.sg16.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.sg16.kb16 36.0660 34.0830 932.2226 GMAC/s 0x97ac9bb1c8a6a3b4 2.157
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.sg16.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.sg16.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.sg16.kb16 39.0560 32.2860 860.8547 GMAC/s 0x97ac9bb1c8a6a3b4 2.336
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f4.row.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f4.row.kb16 41.2110 36.9900 815.8390 GMAC/s 0x97ac9bb1c8a6a3b4 2.465
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f4.row.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f4.row.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f4.row.kb16 42.6820 39.9480 787.7218 GMAC/s 0x97ac9bb1c8a6a3b4 2.553
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.row64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.row64.kb16 39.1580 36.3030 858.6123 GMAC/s 0x97ac9bb1c8a6a3b4 2.342
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.row64.kb16 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.row64.kb16 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.row64.kb16 42.2850 35.8810 795.1174 GMAC/s 0x97ac9bb1c8a6a3b4 2.529
+DIGEST price-llama8b.lm_head.t512.bwd_dw tuned.f3.row64.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED tuned.f3.row64.kb32 50.8370 45.1710 661.3597 GMAC/s 0x97ac9bb1c8a6a3b4 3.040
+TUNED-NOT-RUN apple llama8b.lm_head.t512.bwd_dw inference.tuned.f3.row64.kb32 inference-has-no-backward-product
+DIGEST price-llama8b.lm_head.t512.bwd_dw training.tuned.f3.row64.kb32 0x97ac9bb1c8a6a3b4
+TUNED apple llama8b.lm_head.t512.bwd_dw 16032 4096 512 CAPPED training.tuned.f3.row64.kb32 55.7860 49.3940 602.6878 GMAC/s 0x97ac9bb1c8a6a3b4 3.336
+
+== done [IDENTICAL]: 20 rows ==

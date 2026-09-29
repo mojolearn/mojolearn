@@ -21,7 +21,7 @@ def main():
     fp = {}
     for line in open(path):
         f = line.split()
-        if len(f) < 9 or f[0] != "TUNED" or f[2] not in ROWS:
+        if len(f) < 9 or f[0] != "TUNED" or f[2] not in ROWS or f[8] == "not-timed":
             continue
         row, arm, ms = f[2], f[7], float(f[8])
         if arm == "fp32.v1":
