@@ -85,8 +85,10 @@ not construct runs normally): its stored cell joins the race and
 BOARD.md marks it `stored (measured <UTC> on <box>, <device>)`; an opponent
 measured in this run is marked `measured this run`. When every opponent is
 stored, only our arms run. Any key field that differs means a new
-measurement. A refused or failed opponent is stored as what it was; a
-PARTIAL one is never reused. `--retime-opponents` measures every opponent
+measurement. Only a successful measurement (status ok with a time) is
+stored and reused: every error, timeout, crash and refusal is attempted
+again on the next run (a planned refusal comes from the plan, not the
+store). `--retime-opponents` measures every opponent
 again, and `--backfill-store <board.json>` imports an existing board's
 opponent cells, a corpus by its manifest pin when the staged file has the
 pinned size and a missing version from the board's venv when its dist-info

@@ -2092,8 +2092,8 @@ def store_opponents(ctx, race, rec):
     for c in rec.get("cells") or []:
         if c.get("library") == "mojolearn" or c.get("stored"):
             continue
-        if any(("(%s" % r) in str(c.get("status") or "") for r in STORE.RACE_LEVEL):
-            c["store"] = "not stored (refused by the race, not measured: %s)" % str(c["status"])[:60]
+        if not STORE.reusable({"cell": c}):
+            c["store"] = "not stored (only a successful measurement is: %s)" % str(c.get("status"))[:60]
             continue
         key = opponent_key(ctx["box"], race, c["arm"], settings, dsha, ctx["rounds"],
                            params=(params.get(c["arm"]) or {}).get("params"),

@@ -1383,10 +1383,29 @@ def test_neural_full_shape_gives_a_compile_its_warmup():
     assert cmd[cmd.index("--warmup-seconds") + 1] == cmd[cmd.index("--round-seconds") + 1]
 
 
-def test_store_never_reuses_an_opponent_the_race_refused():
-    ok = {"cell": {"status": "ok"}}
-    own = {"cell": {"status": "REFUSED(timeout: null)"}}
-    race = {"cell": {"status": 'REFUSED(params_refused: "parameters do not match (2): cuml-gpu: ...")'}}
-    assert bb.STORE.reusable(ok) and bb.STORE.reusable(own)
-    assert not bb.STORE.reusable(race)
-    assert not bb.STORE.reusable({"cell": {"status": "PARTIAL(1 of 3 rounds)"}})
+def test_store_reuses_only_a_successful_measurement():
+    assert bb.STORE.reusable({"cell": {"status": "ok", "median_ms": 12.5}})
+    assert not bb.STORE.reusable({"cell": {"status": "ok", "median_ms": None}})
+    for st in ("REFUSED(timeout: null)", "REFUSED(error: TypeError(...))",
+               'REFUSED(params_refused: "parameters do not match (2): cuml-gpu: ...")',
+               "REFUSED(not installed)", "PARTIAL(1 of 3 rounds)", "UNKNOWN(no race json, rc 1)",
+               "HOST MEMORY(killed at 91%)"):
+        assert not bb.STORE.reusable({"cell": {"status": st, "median_ms": None}}), st
+
+
+def test_store_write_skips_failed_opponents(tmp_path, monkeypatch):
+    ctx, race = _store_ctx(tmp_path)
+    _probe_returns(monkeypatch, {"params": READBACK, "version": "1.2.8"})
+
+    def fake(ctx_, race_):
+        cells = [dict(bb.base_cell(ctx_, race_, a, race_["our_arms"].get(a)),
+                      status="ok" if a == "ours" else "REFUSED(error: boom)",
+                      median_ms=700.0 if a == "ours" else None, times_ms=[], rounds=1,
+                      library_version=None if a == "ours" else "1.2.8") for a in race_["arms"]]
+        return {"cells": cells, "status": "done", "rc": 0, "finished": "2026-09-29T13:00:00Z",
+                "params": {"arms": {"catboost-cpu": {"params": READBACK}}}}
+    monkeypatch.setattr(bb, "_run_race", fake)
+    rec = bb.run_race(ctx, race)
+    assert rec["stored_now"] == 0
+    cat = [c for c in rec["cells"] if c["arm"] == "catboost-cpu"][0]
+    assert cat["store"].startswith("not stored")
