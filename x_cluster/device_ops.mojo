@@ -45,6 +45,9 @@ from x_cluster.bodies import (
 )
 from cluster.estimator import kmeans_fit
 from cluster.impl.kmeans_params import METRIC_L2_EXPANDED
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.checks.gemm_oracle import OP_TN
+from mixture.checks.mstep import center_scale_kernel, cov_finish_kernel, means_divide_kernel
 from x_cluster.ops import ClusterOps
 
 comptime TPB = 128
@@ -1280,6 +1283,13 @@ struct DeviceOps(ClusterOps):
         if kc <= 0:
             self._ph1("moments")
             return
+        # DEVIATION 5110 (revised 2026-09-29): under IDENTICAL the means and
+        # covariances fold the sample axis through the identical GEMM, as
+        # `mixture/` does (x_cluster/host/moments_gemm.mojo says why)
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            self._moments_gemm(resp, x, n, d, kc, reg, nk, means, cov)
+            self._ph1("moments")
+            return
         comptime if MOMS:
             if d <= MOMS_MAX_D and n > 0:
                 var G = (n + MOMS_ROWS - 1) // MOMS_ROWS
@@ -1344,6 +1354,55 @@ struct DeviceOps(ClusterOps):
             self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
         )
         self._ph1("moments")
+
+    def _moments_gemm(
+        mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
+    ) raises:
+        """nk by its row-ascending chain; means = (resp^T . X) / nk and, per
+        component, cov = ((resp * diff)^T . diff) / nk + reg on the diagonal,
+        both products through `identical_gemm_into` at OP_TN
+        (`mixture/checks/mstep.mojo`'s kernels around them)."""
+        self.ctx.enqueue_function[_nk_kernel](
+            self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
+        )
+        var wsn = identical_gemm_workspace_max_floats(kc, d, n)
+        var w2 = identical_gemm_workspace_max_floats(d, d, n)
+        if w2 > wsn:
+            wsn = w2
+        if wsn < 1:
+            wsn = 1
+        var rawn = kc * d if kc * d > d * d else d * d
+        var nd = n * d if n * d > 0 else 1
+        var raw = self.ctx.enqueue_create_buffer[DType.float32](rawn)
+        var ws = self.ctx.enqueue_create_buffer[DType.float32](wsn)
+        var diff = self.ctx.enqueue_create_buffer[DType.float32](nd)
+        var scaled = self.ctx.enqueue_create_buffer[DType.float32](nd)
+        # handle copies: the same device memory as the slots
+        var rb = self.f[resp].copy()
+        var xb = self.f[x].copy()
+        identical_gemm_into(self.ctx, raw, rb, xb, ws, kc, d, n, OP_TN)
+        self.ctx.enqueue_function[means_divide_kernel](
+            raw.unsafe_ptr(), self._fp(nk), self._fp(means), Int32(kc), Int32(d),
+            grid_dim=_grid(kc * d), block_dim=TPB,
+        )
+        for k in range(kc):
+            self.ctx.enqueue_function[center_scale_kernel](
+                self._fp(x), self._fp(means), self._fp(resp), diff.unsafe_ptr(), scaled.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(k), Int32(kc), grid_dim=_grid(n * d), block_dim=TPB,
+            )
+            identical_gemm_into(self.ctx, raw, scaled, diff, ws, d, d, n, OP_TN)
+            self.ctx.enqueue_function[cov_finish_kernel](
+                raw.unsafe_ptr(), self._fp(nk), self._fp(cov), Int32(d), Int32(k), reg, Int32(1),
+                grid_dim=_grid(d * d), block_dim=TPB,
+            )
+        # the scratch buffers die with this call: drain first
+        self.ctx.synchronize()
+        _ = raw^
+        _ = ws^
+        _ = diff^
+        _ = scaled^
+        _ = rb^
+        _ = xb^
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int

@@ -503,6 +503,81 @@ def test_resume_refuses_a_different_box(env):
         _run(env)
 
 
+def _git(repo, *a):
+    import subprocess
+    return subprocess.run(["git", "-C", str(repo)] + list(a), check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def test_repo_commit_names_the_patch_synced_commit_not_the_pods_base(tmp_path):
+    repo = tmp_path / "tree"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "a.txt").write_text("a")
+    _git(repo, "add", "a.txt")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "a.txt").write_text("patched")        # the applied patch
+    # no sync record: the tree's own HEAD, dirty
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+    assert bb.repo_sync(str(repo)) is None
+    synced = "c" * 40
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=0\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced
+    assert bb.repo_sync(str(repo))["patch_sha256"] == "d" * 64
+    (repo / ".git" / "devpod_synced").write_text(
+        "commit=%s\nworktree_dirty=1\nbase=%s\npatch_sha256=%s\n" % (synced, base, "d" * 64))
+    assert bb.repo_commit(str(repo)) == synced + "-dirty"
+    # a record whose base is not HEAD (the tree moved since) is ignored
+    (repo / ".git" / "devpod_synced").write_text("commit=%s\nbase=%s\n" % (synced, "e" * 40))
+    assert bb.repo_commit(str(repo)) == base + "-dirty"
+
+
+def test_gpu_set_refusal_names_the_wheels_reason(tmp_path):
+    fake = tmp_path / "py"
+    fake.write_text("#!/bin/sh\necho 'ImportError: this device is sm_86 ... Carried: sm_89'; exit 3\n")
+    fake.chmod(0o755)
+    assert "sm_86" in bb.gpu_set_refusal(str(fake), "nvidia")
+    assert bb.gpu_set_refusal(str(fake), "apple") is None
+    ok = tmp_path / "ok"
+    ok.write_text("#!/bin/sh\necho OK\n")
+    ok.chmod(0o755)
+    assert bb.gpu_set_refusal(str(ok), "amd") is None
+
+
+def _nv_box(host="pod-a", gpu="NVIDIA A40", driver="580.159.04", cuml="26.8.0"):
+    return {"host": {"hostname": host}, "gpu": {"vendor": "nvidia", "name": gpu, "driver": driver},
+            "mojolearn": {"version": "0.8.25", "wheel": {"sha256": "ab"}},
+            "packages": {"cuml-cu12": cuml, "xgboost": "3.2.0", "torch": "2.4.1+cu124",
+                         "unrelated": "1"}}
+
+
+def test_nvidia_resume_key_ignores_the_pod_but_not_the_gpu_driver_or_pins():
+    k = bb.box_key(_nv_box())
+    assert "hostname" not in k
+    assert k["driver_major"] == "580"
+    assert k["pinned"] == {"cuml-cu12": "26.8.0", "xgboost": "3.2.0", "torch": "2.4.1+cu124"}
+    # a new pod with the same GPU model, driver major and pins resumes
+    assert bb.box_key(_nv_box(host="pod-b", driver="580.95.05")) == k
+    # a different GPU model, driver major or pinned version does not
+    assert bb.box_key(_nv_box(gpu="NVIDIA GeForce RTX 4090")) != k
+    assert bb.box_key(_nv_box(driver="570.1")) != k
+    assert bb.box_key(_nv_box(cuml="26.6.0")) != k
+    # every other vendor keeps the hostname
+    apple = {"host": {"hostname": "m3ultra-b"}, "gpu": {"vendor": "apple", "name": "M3 Ultra"}}
+    assert bb.box_key(apple)["hostname"] == "m3ultra-b"
+
+
+def test_races_record_the_host_they_ran_on(env, monkeypatch):
+    monkeypatch.setenv("RUNPOD_POD_ID", "podxyz")
+    assert _run(env) == 0
+    res = json.loads((env["out"] / "board.json").read_text())
+    for rec in res["races"].values():
+        assert rec["host"]["pod_id"] == "podxyz" and rec["host"]["hostname"]
+    assert "(pod podxyz)" in (env["out"] / "BOARD.md").read_text()
+
+
 def test_refusal_and_driver_text_never_put_direction_words_on_board(env, monkeypatch):
     monkeypatch.setenv("STUB_REFUSE", "lightgbm-cpu")
     assert _run(env) == 0
@@ -668,6 +743,32 @@ def _run_neural(env, *extra):
     base[base.index("--data-root") + 1] = str(env["tmp"] / "no-data-here")
     return bb.main(["--vendor", "nvidia", "--families", "neural", "--neural-shape", "small"]
                    + base + list(extra))
+
+
+def test_nvidia_board_from_the_old_key_resumes_on_the_same_and_a_new_pod(env, monkeypatch):
+    """A board.json written before the NVIDIA key change (its box carries the
+    hostname, its races no `host`) resumes under the new key: on the same pod,
+    and on a new pod with the same GPU model, driver major and pins; a
+    different GPU model refuses."""
+    gpu = {"vendor": "nvidia", "api": "cuda", "name": "NVIDIA A40", "driver": "580.159.04"}
+    monkeypatch.setattr(bb, "gpu_info", lambda vendor: dict(gpu))
+    assert _run_neural(env) == 0
+    p = env["out"] / "board.json"
+    res = json.loads(p.read_text())
+    host = res["box"]["host"]["hostname"]
+    for rec in res["races"].values():
+        rec.pop("host", None)                 # what the old code wrote
+    p.write_text(json.dumps(res))
+    env["calls"].write_text("")
+    assert _run_neural(env) == 0              # same pod: resumes, runs nothing
+    assert _calls(env) == []
+    assert host in (env["out"] / "BOARD.md").read_text()
+    monkeypatch.setattr(bb.platform, "node", lambda: "a-new-pod")
+    assert _run_neural(env) == 0              # a new pod, same GPU/driver/pins: resumes
+    assert _calls(env) == []
+    gpu["name"] = "NVIDIA GeForce RTX 4090"
+    with pytest.raises(SystemExit, match="different box"):
+        _run_neural(env)
 
 
 def test_neural_run_schema_quality_and_board(env):
@@ -932,6 +1033,50 @@ def test_classical2_pins_installed_per_vendor(tmp_path, monkeypatch):
             assert not any("statsmodels" in c for c in flat)
     assert "umap-learn==0.5.12" in bb.MORE_PINS["apple"] and "faiss-cpu==1.15.1" in bb.MORE_PINS["amd"]
     assert all("==" in p for v in bb.MORE_PINS.values() for p in v)
+
+
+def test_nvidia_installs_the_cu129_torch_first_from_its_extra_index(tmp_path, monkeypatch):
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    wheel = tmp_path / "mojolearn-0.8.25-py3-none-any.whl"
+    wheel.write_bytes(b"w")
+    args = bb.build_parser().parse_args(["--python-env", "py", "--mojolearn-wheel", str(wheel),
+                                         "--families", "trees,algos,neural"])
+    bb.setup_python(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
+    flat = [" ".join(c) for c in cmds]
+    t = next(i for i, c in enumerate(flat) if "torch==2.13.0+cu129" in c)
+    assert "--extra-index-url https://download.pytorch.org/whl/cu129" in flat[t]
+    assert "--index-url" not in flat[t].replace("--extra-index-url", "")
+    # right after our wheel, before every opponent set (gpytorch, torch-geometric, ...)
+    assert str(wheel) in flat[t - 1]
+    assert all("torch==2.13.0+cu129" not in c for c in flat[t + 1:])
+    assert any("gpytorch" in c for c in flat[t + 1:])
+
+
+def test_implicit_gpu_gets_its_own_venv_and_the_algos_race_passes_it(tmp_path, monkeypatch):
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    args = bb.build_parser().parse_args(["--families", "algos", "--cache", str(tmp_path / "c")])
+    got = bb.setup_arm_venvs(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
+    assert set(got) == {"implicit-gpu"} and got["implicit-gpu"].endswith("venv-implicit-gpu/bin/python")
+    flat = [" ".join(c) for c in cmds]
+    assert any("-m venv" in c and "venv-implicit-gpu" in c for c in flat)
+    assert any("implicit==0.7.3" in c and "rmm-cu13==26.4.0" in c and "cuda-toolkit" in c for c in flat)
+    assert bb.setup_arm_venvs(args, "apple", str(tmp_path), str(tmp_path / "log")) == {}
+    ctx = {"round_seconds": 60, "python": "py", "algos_driver": "d", "rounds": 1, "out": str(tmp_path),
+           "algos_data": str(tmp_path), "arm_python": got}
+    race = {"lane": "als", "dataset": "taxi-zones", "rows": None,
+            "arms": ["ours", "implicit-cpu", "implicit-gpu"]}
+    cmd, _, _ = bb.algos_cmd(ctx, race)
+    i = cmd.index("--arm-python")
+    assert cmd[i + 1] == "implicit-gpu=" + got["implicit-gpu"]
+    race["arms"] = ["ours", "implicit-cpu"]
+    assert "--arm-python" not in bb.algos_cmd(ctx, race)[0]
+
+
+def test_nvidia_refuses_system_site_packages():
+    with pytest.raises(SystemExit, match="system-site-packages"):
+        bb.main(["--vendor", "nvidia", "--system-site-packages", "--dry-run"])
 
 
 # --- the opponent store (tools/bench_board_store.py) -------------------------

@@ -88,6 +88,21 @@ def _plus1(v):
     return None if v is None else v + 1
 
 
+def _cuml_pca_solver(v):
+    """cuML PCA's svd_solver 'full' is the eigendecomposition of the
+    covariance matrix (cuml/decomposition/pca.pyx: 'auto' and 'full' both set
+    solver.COV_EIG_DQ), scikit-learn's and ours' 'covariance_eigh'; its own
+    scikit-learn interop maps any scikit-learn solver but 'auto' to 'full'.
+    'jacobi' (COV_EIG_JACOBI) is another algorithm and keeps its name."""
+    return "covariance_eigh" if v == "full" else v
+
+
+def _hw_component(v):
+    """Holt-Winters component names: cuML and statsmodels also spell
+    'additive'/'multiplicative' as 'add'/'mul' (the same model)."""
+    return {"add": "additive", "mul": "multiplicative"}.get(v, v)
+
+
 def _unit_if_none(v):
     """scale_pos_weight: None is every library's documented unit weight 1."""
     return 1.0 if v is None else v
@@ -189,7 +204,10 @@ ALIASES = {
                   "n_bins": "max_bin",
                   # GradientBoosting's class weights as the positive-class weight
                   "class_weights": ("scale_pos_weight", _pos_over_neg)},
-    "cuml": {"n_bins": "max_bin", "n_folds": "cv"},
+    "cuml": {"n_bins": "max_bin", "n_folds": "cv",
+             "svd_solver": ("svd_solver", _cuml_pca_solver),
+             "seasonal": ("seasonal", _hw_component)},
+    "statsmodels": {"seasonal": ("seasonal", _hw_component), "trend": ("trend", _hw_component)},
     # torch: lr / betas / eps / weight_decay come from the optimizer's defaults
     "torch": {"lr": "learning_rate"},
 }
@@ -208,6 +226,11 @@ IGNORE = frozenset({
 #: arm glob, reason). A difference not listed here refuses the race.
 EXCEPTIONS = [
     # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+    # ---- classical
+    ("pca", "tol", "cuml-gpu", "cuML PCA's tol is read only by its 'jacobi' solver "
+     "(cuml/decomposition/pca.pyx: 'Used if algorithm = \"jacobi\"'); the raced 'full' solver, "
+     "COV_EIG_DQ, the covariance eigendecomposition of ours' covariance_eigh, has no tolerance. "
+     "cuML's own scikit-learn interop maps scikit-learn's tol 0.0 to its 1e-7"),
     # ---- trees (tools/speed_gbdt_arm.py lane_config; each also a FSPEED-NOTE mismatch line)
     ("gbdt-*", "subsample", "*", "no row sampling on any arm: ours and CatBoost bootstrap_type "
      "'No' (neither accepts subsample beside it, so it stays unset), XGBoost and LightGBM "
@@ -286,6 +309,13 @@ EXCEPTIONS = [
     ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
      "runs 'arpack' at tol=0"),
     ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
+    ("tsvd", "n_iter", "cuml-gpu", "cuML TruncatedSVD's n_iter is read only by its 'jacobi' solver "
+     "(cuml/decomposition/tsvd.pyx: 'Used in Jacobi solver'); the raced 'full' solver, COV_EIG_DQ, "
+     "a covariance eigendecomposition, iterates nothing. cuML's own scikit-learn interop maps n_iter "
+     "5 to its 15"),
+    ("tsvd", "tol", "cuml-gpu", "cuML TruncatedSVD's tol is read only by its 'jacobi' solver "
+     "(cuml/decomposition/tsvd.pyx: 'Used if algorithm = \"jacobi\"'); the raced 'full' solver "
+     "has no tolerance. cuML's own scikit-learn interop maps tol 0.0 to its 1e-7"),
     ("spectral*", "gamma", "*", "affinity='nearest_neighbors' reads no gamma: ours refuses any "
      "value (None), scikit-learn holds its default (1.0 clustering, None embedding)"),
     ("spectral", "degree", "*", "affinity='nearest_neighbors' reads no degree: ours refuses any "

@@ -241,3 +241,12 @@ def test_mode_readback_uses_the_constant_else_the_tier_directory(tmp_path, monke
     assert mode == "fast" and "constant" in how
     est = types.SimpleNamespace(numeric_mode_used=lambda: "identical")
     assert bbm._mode_readback(fake, est, "_mojolearn_solver") == ("identical", "numeric_mode_used()")
+
+
+def test_gmm_lane_arrays_with_a_constant_column_describe_their_shape():
+    import numpy as np
+    X = np.random.default_rng(7).normal(size=(50, 4)).astype(np.float32)
+    X[:, 2] = 1.0
+    D = bbm.drop_constant_columns({"X": X, "Xq": X[:10]})
+    assert D["_dropped_constant_columns"] == 1
+    assert bbm.shape_desc(D) == "X 50x3; Xq 10x3; _dropped_constant_columns 1"
