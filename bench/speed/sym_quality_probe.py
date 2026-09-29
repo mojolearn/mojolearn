@@ -58,8 +58,9 @@ def main():
     which, ds, n_trees = sys.argv[1], sys.argv[2], int(sys.argv[3])
     extra = dict(a.split("=", 1) for a in sys.argv[4:])
     extra = {k: _val(v) for k, v in extra.items()}
+    lane = extra.pop("lane", "gbdt-symmetric")
     data = spec.load_dataset(ds, "shipped")
-    cfg = spec.lane_config("gbdt-symmetric", "shipped")
+    cfg = spec.lane_config(lane, "shipped")
     spw = spec.scale_pos_weight_for(cfg, data)
     print("PROBE data=%s train=%s test=%s pos_train=%.4f spw=%s extra=%s" % (
         ds, data.X_train.shape, data.X_test.shape, float(np.mean(data.y_train)), spw, extra),
@@ -81,13 +82,19 @@ def main():
             feature_border_type=cfg["feature_border_type"], nan_mode=cfg["nan_mode"],
             boosting_type=cfg["boosting_type"], boost_from_average=False,
         )
+        if cfg.get("min_split_gain") is not None:
+            params["min_split_gain"] = cfg["min_split_gain"]
+        if cfg.get("min_child_hessian") is not None:
+            params["min_child_hessian"] = cfg["min_child_hessian"]
         if spw is not None:
             params["class_weights"] = [1.0, spw]
         params.update(extra)
         m = mojolearn.GradientBoosting(**params)
         t0 = time.time()
         m.fit(xtr, ytr)
-        print("PROBE ours fit_s=%.1f version=%s" % (time.time() - t0, mojolearn.__version__), flush=True)
+        print("PROBE ours lane=%s fit_s=%.1f version=%s from=%s mode=%s" % (
+            lane, time.time() - t0, mojolearn.__version__, mojolearn.__file__,
+            getattr(mojolearn, "numeric_mode", lambda: "?")()), flush=True)
         for attr in ("learning_rate_", "n_trees_", "best_iteration_", "tree_count_"):
             if hasattr(m, attr):
                 print("PROBE ours %s=%r" % (attr, getattr(m, attr)), flush=True)
@@ -125,6 +132,7 @@ def main():
         if spw is not None:
             p["scale_pos_weight"] = spw
         p.update(extra)
+        print("PROBE cat lane=%s" % lane, flush=True)
         m = catboost.CatBoostClassifier(loss_function="Logloss", **p)
         t0 = time.time()
         m.fit(xtr, ytr)
