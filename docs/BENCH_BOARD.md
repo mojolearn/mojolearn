@@ -14,7 +14,7 @@ full contract. In short:
 
 - Families: trees (`gbdt-symmetric`, `gbdt-symmetric-1000`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`, and the GBDT task lanes `gbdt-rank-yetirank`,
-  `gbdt-rank-pairlogit`, `gbdt-multiclass`, `gbdt-categorical`, below) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
+  `gbdt-rank-pairlogit`, `gbdt-multiclass`, `gbdt-categorical`, `gbdt-ordered`, below) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
   `dbscan`, `hdbscan`) on taxi and Istella-S, classical2 (23 lanes, below) on
   taxi and Istella-S or seeded synthetic series, and neural (16 lanes,
   below) on inputs the driver builds from seed 7.
@@ -40,12 +40,13 @@ full contract. In short:
   script refuses and prints the staging command. A neural-only run
   (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). On 2026-09-29 the plan has 441
-  races on every vendor (19 trees, 16 classical, 44 classical2, 16 neural,
-  346 algos). That comes to 1,939 fit cells on Apple, 1,695 on NVIDIA and
-  1,525 on AMD, 435 of them our CPU tier (below). Inference adds 1,310 cells
-  on Apple, 1,144 on NVIDIA and 1,038 on AMD; `--no-infer` times training
-  only.
+  --vendor apple` (or `nvidia`, `amd`). On 2026-09-29 the plan has 464
+  races on every vendor (21 trees, 16 classical, 44 classical2, 20 neural,
+  363 algos). That comes to 2,033 fit cells on Apple, 1,774 on NVIDIA and
+  1,600 on AMD, 456 of them our CPU tier (below). Inference adds 1,326 cells
+  on Apple, 1,156 on NVIDIA and 1,050 on AMD; `--no-infer` times training
+  only. `bench/results/bench_board/COVERAGE.md` maps every public algorithm
+  to its races.
 
 ## NVIDIA's harnesses
 
@@ -78,6 +79,9 @@ What the board takes from them:
   max_depth 8 and 500 trees. gbm-bench gives CatBoost `MultiClassOneVsAll`
   beside XGBoost's softmax; the board keeps one loss, softmax, on every arm
   of `gbdt-multiclass`.
+- `gbdt-ordered` races GradientBoosting `boosting_type='Ordered'` against
+  CatBoost `boosting_type='Ordered'` (CatBoost only, the symmetric grower
+  Ordered requires) on taxi and Istella-S with gbm-bench's values.
 - `gbdt-symmetric-1000` is `gbdt-symmetric` at 1000 trees, with the same
   arms, datasets and pinned settings. Oblivious trees are weaker per tree,
   and 1000 is CatBoost's own default iteration count
