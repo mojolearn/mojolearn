@@ -27,6 +27,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     TTreeWorkspace,
     acc_i32_is_live,
     compute_target_std_dev,
+    enqueue_snap_gradients,
     enqueue_snap_weights_host_sum,
     launch_histograms_for_blocks,
     resolve_split,
@@ -1592,6 +1593,8 @@ def fit_non_symmetric_tree[
     # grid (`snap_weights_to_grid_kernel`), before the root histogram, as
     # the symmetric driver does; only where a histogram quantizes at all.
     comptime if _ACC_LIVE:
+        if options.snap_gradients:
+            enqueue_snap_gradients(ctx, stats, n_rows, stat_count, fixed_scale)
         if options.snap_stats:
             enqueue_snap_weights_host_sum(ctx, stats, n_rows, weight_magnitude)
 
