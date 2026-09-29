@@ -115,7 +115,7 @@ def main(argv=None):
     print("WIDTH TABLE: rows weight width, columns activation width; each cell: int8 pieces of the weight x "
           "pieces of the activation = products, then per text the change (upper end), then the verdict")
     print()
-    print("| weight \\\\ activation | " + " | ".join("%d bits (%d piece%s)" % (a, pieces(a), "" if pieces(a) == 1 else "s")
+    print("| weight \\ activation | " + " | ".join("%d bits (%d piece%s)" % (a, pieces(a), "" if pieces(a) == 1 else "s")
                                                    for a in WIDTHS) + " |")
     print("|---|" + "---|" * len(WIDTHS))
     sweep = {}
