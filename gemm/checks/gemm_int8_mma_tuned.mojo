@@ -140,18 +140,19 @@ comptime INT8_TUNED_PLAN_WARPS32 = 12  #: 16x32 per warp, 8x4 warps: block 128x1
 #: 16x32 per warp, 4x8 warps: block 64x256. NOT LAUNCHED ANYWHERE: the H100
 #: refused every launch of it (job nvc3-0019) and of the plan it replaced,
 #: 32x32 per warp in 4x8 warps (job nvc3-0018), with
-#: CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES, while the 8x4 plan of the same 1024
-#: threads launches. The cause is NOT ESTABLISHED; the PTX counter prints
-#: the kernel's register count so that it can be. The plan keeps its number
-#: and `int8_tuned_plan_available` answers False for it.
+#: CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES. The PTX counter (job nvc3-0020)
+#: reads 85 and 108 registers a thread for the two; 1024 threads of either
+#: are above the 65536 registers of one multiprocessor, and the 8x4 plan
+#: that launches reads 47. The plan keeps its number and
+#: `int8_tuned_plan_available` answers False for it.
 comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13
 comptime INT8_TUNED_PLAN_COUNT = 14
 
 #: The most threads a block may hold on the columns that have the unit.
 comptime INT8_TUNED_MAX_TPB = 1024
 
-#: Outputs of at most this many rows take the ROW plan: a 128-row block
-#: would multiply 112 rows of zero codes for them.
+#: Outputs of at most this many rows take the launcher's small plan: a
+#: 128-row block would multiply 112 rows of zero codes for them.
 comptime INT8_TUNED_ROW_MAX_M = 16
 
 #: The direct kernel's instantiations (NVIDIA only).
@@ -240,11 +241,16 @@ def int8_direct_is_probe(which: Int) -> Bool:
 
 def int8_tuned_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_mma_tuned_into` takes. Reads the shape
-    and may: every plan is the profile. The threshold and the choice are
-    the measurements of `docs/lanes/progress/lowbit-mma-speed.md`."""
+    and may: every plan is the profile. The choice is the H100's
+    measurement of 2026-09-29 (job nvc3-0020,
+    `docs/lanes/progress/lowbit-mma-speed.md`): at the four 512-token rows
+    the 128 x 128 block of sixteen 32 x 32 warps took the least time of the
+    thirteen plans, and at the eight decode rows the 32 x 32 block of four
+    16 x 16 warps did (the ROW plan, written for them, took two to four
+    times as long). Between 17 and 511 rows nothing is measured."""
     if m <= INT8_TUNED_ROW_MAX_M:
-        return INT8_TUNED_PLAN_ROW
-    return INT8_TUNED_PLAN_K64
+        return INT8_TUNED_PLAN_SMALL_K64
+    return INT8_TUNED_PLAN_WARPS16
 
 
 # ===========================================================================

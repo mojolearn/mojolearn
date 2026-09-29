@@ -399,7 +399,7 @@ def check_tuned_dispatch_is_batch_invariant(ctx: DeviceContext) raises:
     call equals the one-row call on row `i` alone. The two calls take
     DIFFERENT plans (the block plan and the ROW plan), so this is also the
     launcher's choice shown to be scheduling; and the batch equals the
-    oracle."""
+    oracle. The gate refuses to pass when the two calls take one plan."""
     var m = 40
     var n = 150
     var k = 1000
