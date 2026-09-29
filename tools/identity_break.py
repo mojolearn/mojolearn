@@ -1567,6 +1567,27 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+@lane("gbdt-class-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """Logloss with a class weight OFF the fixed-point grid (1.3101..., the
+    bench board's gbm-bench scale_pos_weight on taxi), l2 1: one
+    SymmetricTree fit (random strength 1, no bootstrap, the board's
+    settings), one Depthwise and one Lossguide. The weighted fits are the
+    ones whose search stats `snap_stats_to_grid_kernel` puts on the grid
+    (lane/sym-quality, 2026-09-29); every unit-weight lane above is
+    untouched by it. The CPU column refuses binary class_weights by name."""
+    cw = [1.0, 1.3101271632087197]
+    parts, first = {}, None
+    for policy, kw in (("SymmetricTree", dict(max_depth=6, random_strength=1.0, bootstrap_type="No")),
+                       ("Depthwise", dict(max_depth=6)),
+                       ("Lossguide", dict(max_leaves=32))):
+        m = _gbdt(ml.GradientBoosting, n_estimators=20, grow_policy=policy, loss="Logloss",
+                  l2_leaf_reg=1.0, class_weights=cw, **kw).fit(X, yc)
+        parts[policy] = _h(m.predict(X))
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 @lane("gbdt-rmse")
 def _(ml, X, yc, yr, Xh=None):
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE").fit(X, yr)
