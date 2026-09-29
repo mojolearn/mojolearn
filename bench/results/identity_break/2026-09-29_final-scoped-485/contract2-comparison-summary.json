@@ -1,0 +1,21 @@
+{
+  "verdict": "AGREE",
+  "counts": {
+    "numeric_matches": 90,
+    "na_parts": 72,
+    "unrecorded_parts": 18,
+    "different_parts": 0,
+    "incomplete_parts": 0,
+    "expected_cells": 18,
+    "compared_cells": 18,
+    "missing_records": 0,
+    "invalid_records": 0,
+    "uncompleted_cells": 0,
+    "agree_lanes": 2,
+    "incomplete_lanes": 0,
+    "different_lanes": 0
+  },
+  "scope": "saved GPU columns only; no native execution; numeric hashes exclude timings",
+  "exit": 0,
+  "full_comparison_evidence": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/scoped485-crossvendor/contract2-comparison.json"
+}
