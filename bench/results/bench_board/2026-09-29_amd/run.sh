@@ -26,8 +26,11 @@
 # istella_rank.npz under /root/datasets/gbm-bench; the corpora under
 # /root/r2-stage/corpus (tools/bench_board_algos.py corpus_path).
 set -u
-OUT="$HOME/mojolearn-evidence/bench-board/2026-09-29_amd"
-CACHE="$HOME/bench-board-cache"
+# BOARD_OUT / BOARD_CACHE: another result directory and venv for the same
+# board (2026-09-29: the neural and torch-arm algos races again with torch
+# 2.13 ROCm in their own venv; a different torch is a different box key)
+OUT="${BOARD_OUT:-$HOME/mojolearn-evidence/bench-board/2026-09-29_amd}"
+CACHE="${BOARD_CACHE:-$HOME/bench-board-cache}"
 DATA="$HOME/datasets/gbm-bench"
 LOG="$OUT/run.log"
 PY=/usr/bin/python3
