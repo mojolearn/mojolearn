@@ -321,6 +321,7 @@ LANE_CONFIG = {
         "quality": "held-out mean log-likelihood, BIC on the fit rows (from each arm's parameters)",
         "mismatches": ["init_params='kmeans': each library seeds its own k-means (ours the "
                        "identity-certified k-means, scikit-learn KMeans(n_init=1, k-means++))"],
+        "data": "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)",
     },
     "logreg": {
         "rows": "%d fit and %d held-out stride rows (%s)" % (LIN_ROWS, EVAL_ROWS, _STD),
@@ -674,6 +675,23 @@ def prep(args):
 # Each lane's arrays: the SAME rows for every arm and for the quality pass
 # ---------------------------------------------------------------------------
 
+def drop_constant_columns(D):
+    """X and Xq without the columns constant on X (the fit rows): the same
+    columns for every arm, removed before the clock. A full-covariance mixture
+    over a constant column is singular (LANE_CONFIG['gmm']['data'])."""
+    import numpy as np
+    X = D["X"]
+    keep = np.flatnonzero(X.max(axis=0) != X.min(axis=0))
+    if keep.shape[0] == X.shape[1]:
+        return D
+    out = dict(D)
+    for k in ("X", "Xq"):
+        if k in out:
+            out[k] = np.ascontiguousarray(out[k][:, keep])
+    out["_dropped_constant_columns"] = int(X.shape[1] - keep.shape[0])
+    return out
+
+
 def lane_arrays(lane, B):
     """The arrays one lane reads from its block, subsets taken by stride (the
     same rows for every arm and for the conductor's quality pass)."""
@@ -700,7 +718,7 @@ def lane_arrays(lane, B):
     if lane in ("spectral", "agglomerative"):
         return {"X": sub(X, CLUSTER_ROWS)}
     if lane == "gmm":
-        return {"X": sub(X, GMM_FIT), "Xq": sub(Xq, GMM_EVAL)}
+        return drop_constant_columns({"X": sub(X, GMM_FIT), "Xq": sub(Xq, GMM_EVAL)})
     if lane in ("gpr", "gpc"):
         return {"X": sub(X, GP_FIT), "y": sub(y, GP_FIT), "Xq": sub(Xq, GP_EVAL), "yq": sub(yq, GP_EVAL)}
     if lane in ("svr", "kernel-ridge"):
