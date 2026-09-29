@@ -38,7 +38,7 @@ def _f32(X, name="X"):
     if _buffer.hotpath_enabled():
         finite = _buffer.all_finite(x)
     else:
-        finite = all(map(math.isfinite, memoryview(x).cast("B").cast("f")))
+        finite = all(map(math.isfinite, _buffer.flat_bytes(x).cast("f")))
     if not finite:
         raise ValueError(f"mojolearn: {name} contains NaN or infinity")
     return x
@@ -205,7 +205,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
               1 if (init_arr is None and self.init == "random") else 0, 1 if weights is not None else 0]
         aux = []
         if init_arr is not None:
-            aux += [float(v) for v in memoryview(init_arr).cast("B").cast("f")]
+            aux += [float(v) for v in _buffer.flat_bytes(init_arr).cast("f")]
         if weights is not None:
             aux += weights
         a = _f32([aux], "init") if aux else None
@@ -257,7 +257,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
                 if ia.shape != (k, d):
                     raise ValueError(f"The shape of the initial centers {ia.shape} does not match "
                                      f"the number of clusters {k} and features {d}.")
-                aux += [float(v) for v in memoryview(ia).cast("B").cast("f")]
+                aux += [float(v) for v in _buffer.flat_bytes(ia).cast("f")]
                 mode = 2
             seed = _seed(self.random_state)
             state = (seed >> 32, seed & 0xFFFFFFFF)
@@ -269,8 +269,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             mode, init_size = self._partial_init
             batch_eff = self._partial_batch
             state, since = self._partial_state
-            aux += [float(v) for v in memoryview(self.cluster_centers_).cast("B").cast("f")]
-            aux += [float(v) for v in memoryview(self.counts_).cast("B").cast("f")]
+            aux += [float(v) for v in _buffer.flat_bytes(self.cluster_centers_).cast("f")]
+            aux += [float(v) for v in _buffer.flat_bytes(self.counts_).cast("f")]
         if sample_weight is not None:
             w = [float(v) for v in sample_weight]
             if len(w) != n:
@@ -352,7 +352,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         self._check_fitted("cluster_centers_")
         x = self._input_like_fit(X)
         n, d = x.shape
-        nodes = [int(v) for v in memoryview(self._tree_nodes).cast("B").cast("i")]
+        nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]
         _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
         return Array._from_flat(i[0], (n,), "<i4")
 
@@ -663,7 +663,7 @@ class BayesianGaussianMixture(_XCluster):
                 if cp.shape != (d, d):
                     raise ValueError(f"The parameter '{self.covariance_type} covariance prior' should have the "
                                      f"shape of ({d}, {d})")
-                full = [float(v) for v in memoryview(cp).cast("B").cast("f")]
+                full = [float(v) for v in _buffer.flat_bytes(cp).cast("f")]
             elif ct == 2:
                 v = [float(t) for t in self.covariance_prior]
                 if len(v) != d:
@@ -740,7 +740,7 @@ class BayesianGaussianMixture(_XCluster):
         k = self.means_.shape[0]
         vals = []
         for arr in (self.means_, self._full_pchol, self._log_consts):
-            vals += [float(v) for v in memoryview(arr).cast("B").cast("f")]
+            vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
         f, _, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
         return f[0], f[1], n, k
 
@@ -816,7 +816,7 @@ def _gmm_ext_fit(est, X):
         m = _f32(est.means_init, "means_init")
         if m.shape != (k, d):
             raise ValueError(f"The parameter 'means' should have the shape of ({k}, {d})")
-        aux += [float(v) for v in memoryview(m).cast("B").cast("f")]
+        aux += [float(v) for v in _buffer.flat_bytes(m).cast("f")]
         flags[1] = 1
     if est.precisions_init is not None and not warm:
         from . import _portable_math as _m
@@ -871,7 +871,7 @@ def _gmm_ext_score(est, X):
     k = est.means_.shape[0]
     vals = []
     for arr in (est.means_, ext["pchol"], ext["consts"]):
-        vals += [float(v) for v in memoryview(arr).cast("B").cast("f")]
+        vals += [float(v) for v in _buffer.flat_bytes(arr).cast("f")]
     f, _, _ = ext["call"]._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
     lr, lpn = f[0], f[1]
     labels = [max(range(k), key=lambda j: (lr[r * k + j], -j)) for r in range(n)]
