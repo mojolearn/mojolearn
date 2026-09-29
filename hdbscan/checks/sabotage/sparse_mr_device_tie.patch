@@ -1,0 +1,13 @@
+diff --git a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+index d9d1689de..d2f8903ad 100644
+--- a/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
++++ b/hdbscan/impl/cluster/detail/sparse_mr_mst.mojo
+@@ -134,7 +134,7 @@ def sparse_mr_search_kernel(
+             bad = True
+             continue
+         var key = weight_order_key(v)
+-        if key < bk:
++        if key <= bk:
+             bk = key
+             bj = Int32(j)
+     var cell = s * n_todo + t

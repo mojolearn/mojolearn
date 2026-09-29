@@ -28,3 +28,6 @@ x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5121_moments_tile.patch
 x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5105_ap_rmax_tie.patch
 x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_round.patch
+# lane hdbscan-sparse (2026-09-29): DEVIATION 1620, the sparse mutual reachability MST == the dense one (device, CPU, fit); the tie rule broken on each column
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_device_tie.patch
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_host_tie.patch
