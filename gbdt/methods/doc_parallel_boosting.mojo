@@ -62,6 +62,7 @@ from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
 )
 from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
     run_sequential_two_level_feature_freq_tree,
+    enqueue_snap_plane,
     run_tree_layout,
     run_tree_layout_traced,
     TSynchronizedTensorTreeResult,
@@ -2782,6 +2783,13 @@ def fit_with_test(
                 )
 
             var planes = split_stat_planes(ctx, stats, n_rows)
+            # lane/sym-quality: the gradient plane onto the tree's grid, as
+            # the greedy arm's `run_tree_layout` does (`enqueue_snap_plane`);
+            # only where the scale above is a real one
+            @parameter
+            if _needs_magnitudes:
+                var g_plane = planes[1].copy()
+                enqueue_snap_plane(ctx, g_plane, n_rows, scale)
             splits = fit_oblivious_tree_structure_traced(
                 ctx,
                 tree_layout.value().copy() if feature_fraction < 1 else layout_for_test.copy(),
