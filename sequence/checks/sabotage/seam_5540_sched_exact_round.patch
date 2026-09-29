@@ -1,13 +1,13 @@
 diff --git a/python/mojolearn/_x_sequence_sched.py b/python/mojolearn/_x_sequence_sched.py
-index 922b56606..6b6f736e1 100644
+index 2bb7f3f9b..d457b6f5b 100644
 --- a/python/mojolearn/_x_sequence_sched.py
 +++ b/python/mojolearn/_x_sequence_sched.py
-@@ -63,7 +63,7 @@ class ExponentialLR(_Sched):
-         self.base_lr, self.gamma = float(base_lr), float(gamma)
+@@ -250,7 +250,7 @@ class ExponentialLR(_PowSched):
+         self._init_pow()
  
      def lr_at(self, t):
--        return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
+-        return self._pow_value(self._t(t))
 +        return _f32_round(Fraction(self.base_lr * self.gamma ** self._t(t)))
  
- 
- class OneCycleLR(_Sched):
+     def _exact_lr_at(self, t):
+         return _f32_round(_q(self.base_lr, "base_lr") * _q(self.gamma, "gamma") ** self._t(t))
