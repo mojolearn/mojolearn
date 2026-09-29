@@ -121,11 +121,12 @@ THE LINES.
         The rate is G MAC/s (multiply-accumulates, `m n k`) for a product and
         G elem/s for a conversion.
 
-IDENTITY ONLY (Andrew, 2026-09-29: the AMD box is judged on bitwise
-identity and is not timed). `MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1` runs
+IDENTITY ONLY. `MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1` runs
 every arm ONCE, for its digest, and times nothing: no timed loop, no `PRICE`
 line, and the three number fields of every `LOWBIT` line read `not-timed`.
-The in-run plan comparisons still run.
+The in-run plan comparisons still run. It is also how a box is WARMED before
+it is timed: the same binary (the mode is read from the environment, not
+compiled in), every kernel launched once.
 
 ENVIRONMENT.
     MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY  1: digests only, nothing timed

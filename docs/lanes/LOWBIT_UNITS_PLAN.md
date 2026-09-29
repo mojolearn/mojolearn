@@ -44,7 +44,7 @@ forbids one).
 |---|---|
 | Identity | same output bits on Apple, NVIDIA and AMD; full logits, not only tokens; sabotage arm fails |
 | Quality | relative change in held-out perplexity under 1% against `fp32.v1` |
-| Speed | end-to-end time improves, with quantize, pack and convert costs counted; judged on NVIDIA and on Apple only (Andrew, 2026-09-29: the AMD box is checked for bitwise identity and is not timed) |
+| Speed | end-to-end time improves, with quantize, pack and convert costs counted; judged on NVIDIA, Apple and AMD (Andrew, 2026-09-29: first "just the bitwise idenity" on the AMD box, then "ok can we start timing on the amd") |
 
 ## Candidates
 
@@ -78,9 +78,9 @@ information, and that loss is what the quality gate measures.
 |---|---|---|
 | NVIDIA | shared pod `nvc3`, H100 | `tools/nvidia_central.sh` |
 | NVIDIA, quality runs | shared pod `nvc1`, 2x RTX 4090 | `tools/nvidia_central.sh` |
-| AMD | `do-amd`, MI325X, IDENTITY ONLY: every arm once for its output hash and the gate verdicts, no timing and no vendor arm (Andrew, 2026-09-29) | `tools/apple_steward.py submit --target do-amd` |
+| AMD | `do-amd`, MI325X; identity only for part of 2026-09-29, TIMED since Andrew's "ok can we start timing on the amd": a steward speed job, warm cache, run once untimed and then time | `tools/apple_steward.py submit --target do-amd` |
 | Apple M2 | `m2pro` | `tools/apple_steward.py submit --target m2pro` |
-| Apple M3 Ultra | host held, no instance | waits on Andrew lifting the two locks |
+| Apple M3 Ultra | `m3ultra-b`, ready since 2026-09-29 ~03:15Z (the brief) | `tools/apple_steward.py submit --target m3ultra-b` |
 
 ## Rules that bind every lane here
 
