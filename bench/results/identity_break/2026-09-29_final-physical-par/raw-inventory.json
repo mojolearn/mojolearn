@@ -1,0 +1,332 @@
+[
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/par-gmm-inputs/amd.par-gmm.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/amd/amd.par-gmm.json",
+    "sha256": "5abd39df5941bd63cc0990b4357c787caa8102064e3f279414a35ee3c17160e7"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.base.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.base.one.json",
+    "sha256": "0a28bd52ec3a34d64b0d40b5c8eba8e75c0bce4a11191d08a9ad67f4ce88afef"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.base.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.base.two.json",
+    "sha256": "e32de177dadfa08c0b6b85d22881086f94755046a006926d591b02e46498e350"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.base.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.base.two.witness.json",
+    "sha256": "e62571d646ff08d75808fab2b6531d2c3e61e64509435661e01d95702d514fb5"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.ties.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.ties.one.json",
+    "sha256": "fe899fa77b9eaa8253201191d1618d44c4068ee4583a83d13121b1fb31451731"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.ties.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.ties.two.json",
+    "sha256": "1f653933033986701224ee13e492cf6b94289dfe1abe3f28d6c68ec68de6b711"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.ties.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.ties.two.witness.json",
+    "sha256": "60a5751a5396f1debc6577e2cee70a0fb6d301db2faf926764c436edb52a9b46"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.hashed.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.hashed.one.json",
+    "sha256": "fc4928f1fa457e26e82582c85a2710a903cb15c632b54cbfdb0ea88adb52625c"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.hashed.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.hashed.two.json",
+    "sha256": "dc21332067e05178aedfbb247f3062776bc0b95f38280f21581dfa9aa85124ed"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.hashed.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.hashed.two.witness.json",
+    "sha256": "8359fd325743b600c6f00f4950e6db447da273601dd35fd37aa75e59b233413b"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.wide.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.wide.one.json",
+    "sha256": "fb9ae64bb1d8dc64bf2c19581deac0d2b8452cb613f80035be22afc59250cbd2"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.wide.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.wide.two.json",
+    "sha256": "09b9abacba5aa7ea560ec50acffbc809f11afb3ed8ca33024ecc3311a946b974"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.wide.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.wide.two.witness.json",
+    "sha256": "f1bf20e4b2e14606b606385c47dd91c2f051270c9d834907da190b22a021f205"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal.one.json",
+    "sha256": "50b055054022b231ac42a4e13748d3259dc5da895459bdf156c737941956a932"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal.two.json",
+    "sha256": "3094d7ee914ad2648d6c689ba2227796596ff84b1f564f3badb4cd0699725556"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal.two.witness.json",
+    "sha256": "7231652518c01df651b63c465b757c1bbcf5cbb391a5a0fef4c0ceba4d58c381"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal_ftz.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal_ftz.one.json",
+    "sha256": "4e1b60c9f155624597ec843c5bbe789e94e4cee3c50b333cdf44af2177443aeb"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal_ftz.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal_ftz.two.json",
+    "sha256": "3b6eff53b1c46e44b0d29e49c0f69a2e0edd1a2bbe8951527c954ee5e485367a"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.denormal_ftz.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.denormal_ftz.two.witness.json",
+    "sha256": "e8392ce74f391058f46f3b072d3b7a99a098fed7ff5c8512d2f8f8e89bb81d6c"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.dupes.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.dupes.one.json",
+    "sha256": "4e6a59dbdcc2f892cea63a6d510b4576916b9c5b5cb60b56b9b1073db4d6512a"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.dupes.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.dupes.two.json",
+    "sha256": "344036c8e1ff07f2f4751e67edc02a47dae973d08b3cf6b3e6fc81a8bc3e6578"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.dupes.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.dupes.two.witness.json",
+    "sha256": "727d03ed328aff838cf5ee09b9073637828ac87f483f5e565bd67b0515c1e353"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.odd.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.odd.one.json",
+    "sha256": "43e31463fe4b03f3bc401d339dd3b9a44e6816762f56e57bca3b6f45e881336b"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.odd.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.odd.two.json",
+    "sha256": "8255fc3f28a9b7646e846f7797dcb77410fef5b4ecc5e3b010cc47166c799a2c"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.odd.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.odd.two.witness.json",
+    "sha256": "0231f4dd66bab1e4af74779758a92a7e3684a3adc1484498f5564b91a52519ec"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.negative.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.negative.one.json",
+    "sha256": "e6e302e5373ba37e1f27aeb41f5bf6b1ba9ab47a08446f173a00998e5068106f"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.negative.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.negative.two.json",
+    "sha256": "1cda9baa5ec945c4ae1c4471cd8acdda18bbbe11a7f22b58dd214c9062f8ee7f"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/par-gmm.negative.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.negative.two.witness.json",
+    "sha256": "c0d359fa90ef1e67bba0646d3f2a078f9d2617abc2af0bfcc28d9165ed2012a0"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-physical-gmm9/physical/provenance.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-gmm.provenance.json",
+    "sha256": "9c08312681e9b652bfedb3864b69f75361dd163e7c4c55c80357244b8f10f40e"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.base.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.base.one.json",
+    "sha256": "cbd9615e2649d7573f874a7ae2bfb3fbcb5f473f3bd3dcccff5e8d818c0379d5"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.base.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.base.two.json",
+    "sha256": "461c29cf046423dca268e11c129e0c9722473e591492ef808e33fe16bf696b88"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.base.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.base.two.witness.json",
+    "sha256": "48f3d92d222979e6871fc7cb7a21f1e9f716cfa76080382c01aa23101a96b871"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/base.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.base.repeat2.json",
+    "sha256": "df5d32d6e51b4ba43bd9bc89d81ebabbbb87134e3da8ceaad5cb2da382b1f1ec"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.ties.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.ties.one.json",
+    "sha256": "f91d66991521b86a64fc2bfb09f7e811e75ab4a21bae9e76de1b0da373a491ff"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.ties.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.ties.two.json",
+    "sha256": "deea7c2b460a48cbae53f3e97909b3af8d45b814ee96054a99dd8bdbad3c0047"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.ties.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.ties.two.witness.json",
+    "sha256": "8b5be4233120d7014fadebc785a8d56ea9bef241bfae86fe6c8a5057b3ff7d34"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/ties.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.ties.repeat2.json",
+    "sha256": "7243414191bdbe9e3d288364dd587a6aa67204effc939a380313897c7e780254"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.hashed.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.hashed.one.json",
+    "sha256": "2a00265032965cd56b4cd5090147d9db02484b593ef637622632c1bfff6e8500"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.hashed.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.hashed.two.json",
+    "sha256": "11100e02c43024a29b6f26119b44ab453702a58b794dc09d4978b38205af7116"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.hashed.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.hashed.two.witness.json",
+    "sha256": "1292098891076f5cfd61d4f2c22adcc2ff3bc052f7adfb52569dc0279a8de352"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/hashed.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.hashed.repeat2.json",
+    "sha256": "b38be2a9cada77736256c9211feb91e946b1de7a432443a8f56cddcbbe756e22"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.wide.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.wide.one.json",
+    "sha256": "72f52fb205d8af1b32cb6443ccd5a609a0ae4a42bc14bbe41e5d3745a9c7de81"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.wide.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.wide.two.json",
+    "sha256": "6f6be19de70942fd4148f10a06dab24e8ef724cd681de0ed885f5246323f3f5e"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.wide.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.wide.two.witness.json",
+    "sha256": "e05a225ce5902407f7b3ea4de6d7d7ffe756794ecd2d91079e828c272fc6842e"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/wide.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.wide.repeat2.json",
+    "sha256": "c64b439c51e7145edca5f7c2ccae3ba0b3a64d286d10badac9e8af719b3a3456"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal.one.json",
+    "sha256": "cd143656e3d8f331bfe1983f2b5b4414af1b0bb7f03368e0e70cd315b8db84bb"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal.two.json",
+    "sha256": "ba94a2235c9dd48a3bd1b281de31760ebd2387d85a843c877a83ed0ece7f3c7a"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal.two.witness.json",
+    "sha256": "9665b118ccc1661e23d817daf4642b1bf50a06b03d6c4c0952c1efc87d880c67"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/denormal.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal.repeat2.json",
+    "sha256": "c9af8b8b412d4ec0fcb77bb393025c894b5033880188a88cb15cf607aa180a82"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal_ftz.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal_ftz.one.json",
+    "sha256": "c4c4c16d3b68cd0de7adaff58c73cd6381023643441f2ac7464a4df86eadc959"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal_ftz.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal_ftz.two.json",
+    "sha256": "c9a8d8cc00dd5379a4a6f4e545571174c2b3ed80a898ffcef999f68ce027780c"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.denormal_ftz.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal_ftz.two.witness.json",
+    "sha256": "99a2aeac1eb14f25a70d01504b07b21ef0310c44c72f5c186e3e9660b87054d4"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/denormal_ftz.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.denormal_ftz.repeat2.json",
+    "sha256": "d85be78de075cc4af77bea477a2652c22fa7fc376b0029c69a219bb0973f1fed"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.dupes.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.dupes.one.json",
+    "sha256": "653b8f9c2cea146d5626b86828a9c556384d02edc312f35c52ecaead0b6307ec"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.dupes.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.dupes.two.json",
+    "sha256": "e6b9b9a174b9afbb6609cb256dbdca47556c739a1b9ddaa8fd3eb457a563b43b"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.dupes.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.dupes.two.witness.json",
+    "sha256": "33364e523c5875ce090101ddaa67df556a9b6733af1a8ea6f28f2e684486c513"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/dupes.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.dupes.repeat2.json",
+    "sha256": "2e4d4193a5dd7d0c324454586d78b47949bca2d62fbe5ba1930ecac1877979d7"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.odd.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.odd.one.json",
+    "sha256": "7471d4cdb74220eb26494de8bfe62ff097e57fdf81563b873c9ffc216ce9d5db"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.odd.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.odd.two.json",
+    "sha256": "f10f7f319b16cb8e78cd41dfcab59ba9a66d5455a69dd8cf0cd92165da9f57f2"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.odd.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.odd.two.witness.json",
+    "sha256": "08ae7ed5d38a06c552f9b1b9bb28cb4c07434390c806dcf7a0d709a139a1b73f"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/odd.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.odd.repeat2.json",
+    "sha256": "f7624d644469834620086e8a44e9144e5b4b1eedc9a23e20bc7b8246f78a516f"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.negative.one.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.negative.one.json",
+    "sha256": "505069659b38f8d667cd7071891d57abda8e9c6abfd006f65de4c75b0f0c3fe7"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.negative.two.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.negative.two.json",
+    "sha256": "3caf5843afaf9a9fba29dfba7400cd911fbd083f15a65a8a49e3e342e85451ee"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/par-graph-umap.negative.two.witness.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.negative.two.witness.json",
+    "sha256": "73d71060d5beb2a65c5a480de4ca4c3a8ded8e56db77deee6d9586e5e6fd85bf"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-umap-reference-repeat2/umap-reference-repeat2/negative.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.negative.repeat2.json",
+    "sha256": "d5b6b9072826158798d389a372e44d06ea4c32865950fa1fe032523b6ead4162"
+  },
+  {
+    "source": "/Users/andrewhendel/mojolearn-evidence/consolidated-2026-09-28/packaging-preparation/final-installed-physical18/physical/provenance.json",
+    "relative": "bench/results/identity_break/2026-09-29_final-physical-par/nvidia/par-graph-umap.provenance.json",
+    "sha256": "9c08312681e9b652bfedb3864b69f75361dd163e7c4c55c80357244b8f10f40e"
+  }
+]
