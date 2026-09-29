@@ -98,6 +98,7 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     _add_leaf_cosine,
     _bootstrap_pass,
+    _snap_gradients,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     _binarize_columns,
@@ -141,25 +142,6 @@ struct GbdtHostMultiModel(Movable):
 
     def n_trees(self) -> Int:
         return len(self.tree_split_offsets) - 1
-
-
-def _weight_grid_for(weight_sum: Float32, n_rows: Int) -> Float32:
-    """`weight_grid_for` (`kernel/histogram_utils.mojo`), line for line."""
-    var limit = Float32(16777215 - n_rows)
-    if n_rows >= 16777215 or not (weight_sum > Float32(0.0)):
-        return Float32(0.0)
-    var g = Float32(1.0)
-    var k = 0
-    while weight_sum * g > limit and k < 40:
-        g = g * Float32(0.5)
-        k += 1
-    if weight_sum * g > limit:
-        return Float32(0.0)
-    k = 0
-    while weight_sum * (g * Float32(2.0)) <= limit and k < 40:
-        g = g * Float32(2.0)
-        k += 1
-    return g
 
 
 def _partition_stat_n(
@@ -849,20 +831,7 @@ def gbdt_multi_host_fit(
             mags[0] = bm[0]
             mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
-        # lane/sym-quality: `snap_weights_to_grid_kernel`
-        # (`kernel/histogram_utils.mojo`), which `run_tree_layout_traced`
-        # launches for a weighted fit right after the scale and before the
-        # score std dev: the WEIGHT plane onto the dyadic grid of
-        # `weight_grid_for(mags[0], n_rows)`, keyed on the row.
-        if has_weights:
-            var g = _weight_grid_for(mags[0], n_rows)
-            if g != Float32(0.0):
-                for pos in range(n_rows):
-                    var q = _hist2_quantize(stats[pos], g, _hist2_dither(pos))
-                    var v = Float32(0.0)
-                    if q != Int32(0):
-                        v = ftz(Float32(Int(q)) / g)
-                    stats[pos] = v
+        _snap_gradients(stats, n_rows, stat_count, fixed_scale)  # lane/sym-quality
         var score_std_dev = Float32(0.0)
         if random_strength != Float32(0.0):
             score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))
