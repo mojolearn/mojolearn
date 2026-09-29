@@ -1035,6 +1035,29 @@ def test_classical2_pins_installed_per_vendor(tmp_path, monkeypatch):
     assert all("==" in p for v in bb.MORE_PINS.values() for p in v)
 
 
+def test_nvidia_installs_the_cu129_torch_first_from_its_extra_index(tmp_path, monkeypatch):
+    cmds = []
+    monkeypatch.setattr(bb, "run_logged", lambda cmd, *a, **k: cmds.append(list(cmd)) or 0)
+    wheel = tmp_path / "mojolearn-0.8.25-py3-none-any.whl"
+    wheel.write_bytes(b"w")
+    args = bb.build_parser().parse_args(["--python-env", "py", "--mojolearn-wheel", str(wheel),
+                                         "--families", "trees,algos,neural"])
+    bb.setup_python(args, "nvidia", str(tmp_path), str(tmp_path / "log"))
+    flat = [" ".join(c) for c in cmds]
+    t = next(i for i, c in enumerate(flat) if "torch==2.13.0+cu129" in c)
+    assert "--extra-index-url https://download.pytorch.org/whl/cu129" in flat[t]
+    assert "--index-url" not in flat[t].replace("--extra-index-url", "")
+    # right after our wheel, before every opponent set (gpytorch, torch-geometric, ...)
+    assert str(wheel) in flat[t - 1]
+    assert all("torch==2.13.0+cu129" not in c for c in flat[t + 1:])
+    assert any("gpytorch" in c for c in flat[t + 1:])
+
+
+def test_nvidia_refuses_system_site_packages():
+    with pytest.raises(SystemExit, match="system-site-packages"):
+        bb.main(["--vendor", "nvidia", "--system-site-packages", "--dry-run"])
+
+
 # --- the opponent store (tools/bench_board_store.py) -------------------------
 
 READBACK = {"max_depth": 8, "n_estimators": 500, "seed": 7}

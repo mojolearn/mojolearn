@@ -3,7 +3,8 @@
 # board plans it), our GPU arm against the NVIDIA opponents (cuML, cuVS,
 # cuGraph, XGBoost/CatBoost/LightGBM GPU arms, torch CUDA), mojolearn 0.8.25
 # from PyPI (the core and its mojolearn-nvidia plugin, the same version the
-# Apple run used), the parameter check in force, no smoke gate.
+# Apple run used), torch==2.13.0+cu129 in a clean venv (the board's NVIDIA
+# default), the parameter check in force, no smoke gate.
 # Submitted through the shared pod queue from the lane tree:
 #
 #   tools/nvidia_central.sh submit bench-board-nvidia --cap 240 bench/results/bench_board/2026-09-29_nvidia/run.sh
@@ -20,7 +21,7 @@
 set -u
 OUT_ROOT="/root/bench-board"
 OUT="$OUT_ROOT/2026-09-29_nvidia"
-CACHE="/root/bench-board-cache"
+CACHE="/root/bench-board-cache-clean"   # a clean venv (no system site packages)
 ARGS_FILE="$OUT_ROOT/next-args"
 LOG="$OUT/run.log"
 PY=/usr/bin/python3
@@ -51,7 +52,7 @@ stop=$((start + STOP_S))
 say "board runs until $(date -u -d "@$stop" +%FT%TZ) at most"
 
 "$PY" tools/bench_board.py --vendor nvidia --mojolearn-version 0.8.25 \
-    --base-python "$PY" --system-site-packages --out "$OUT" --cache "$CACHE" \
+    --base-python "$PY" --out "$OUT" --cache "$CACHE" \
     --no-cpu-arm --no-smoke-gate "${extra[@]}" >> "$LOG" 2>&1 &
 pid=$!
 killrun() {   # every process of this run but this script and its parent
