@@ -1099,8 +1099,9 @@ LANE_REVISIONS = {
     "transformer": "norms-near-one-1",
     "transformer-window": "norms-near-one-1",
     # arithmetic, not input: UMAP.transform is row separable now
-    "umap": "transform-row-separable-1",
-    "par-graph-umap": "transform-row-separable-1",
+    "tsvd": "explained-variance-train-contract-1",
+    "umap": "save-option-extras-contract-2",
+    "par-graph-umap": "save-option-extras-contract-2",
     # arithmetic, not input (2026-09-26, lane/gmm-degenerate-data): the
     # init_params='kmeans' start is the classic greedy k-means++ now, not
     # k-means|| (mixture/estimator.mojo, DEVIATION 3133), so every committed
@@ -1231,7 +1232,15 @@ NON_SIZE_REVISIONS = {
         "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
         "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
         "floored on the lane"),
+    "tsvd": (
+        "train contract, not input: cb64532b6 added explained_variance_ and "
+        "explained_variance_ratio_ to the train-parts digest without recording a revision. "
+        "This revision repair changes no fixture or arithmetic; old two-part train records "
+        "cannot qualify the new three-part contract"),
     "umap": (
+        "saved-model contract: b27e071d7 added the extras option array to the saved NPZ, "
+        "changing its whole-file model digest. This revision repair changes no fixture or "
+        "arithmetic and preserves the prior transform-row-separable contract. Previously: "
         "arithmetic, not input: UMAP.transform became row separable (2026-09-16, "
         "lane/umap-batch-determinism), so the cell moved without any fixture size moving. The lane "
         "still fits 1024 rows, exactly as it did before"),
@@ -1252,6 +1261,9 @@ NON_SIZE_REVISIONS = {
         "is why the lane/dead-arms census was run over every sequence "
         "block rather than the two it listed. Not a size"),
     "par-graph-umap": (
+        "saved-model contract: the fitted UMAP uses the same b27e071d7 extras array as "
+        "umap, so old model records cannot qualify it. Physical-parallel evidence remains "
+        "owed separately; single-device UMAP evidence does not qualify this lane. Previously: "
         "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
         "lane/umap-batch-determinism); this driver's fixture size did not move either"),
     "gmm": (
