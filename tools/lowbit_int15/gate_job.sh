@@ -150,6 +150,14 @@ run int15-quant-sabotage fail pixi run check-gemm-int15-quant-sabotage
 must_name int15-quant-sabotage check_int15_device_conversions_match_host
 must_pass int15-quant-sabotage check_int15_plans_agree
 must_pass int15-quant-sabotage check_int15_planted_worst_cases
+if [ "$VENDOR" = apple ]; then
+    # THE DEFECT ARM of the Apple float-unit plan (clause W-12): the
+    # accumulators live across two steps of the unit. Apple only.
+    run int15-apple-chunk-sabotage fail pixi run check-gemm-int15-apple-chunk-sabotage
+    must_name int15-apple-chunk-sabotage check_int15_planted_worst_cases
+    must_pass int15-apple-chunk-sabotage check_int15_device_conversions_match_host
+    grep -v -E '^   (DIGEST|ok) ' "$OUT/int15-apple-chunk-sabotage.log" > "$OUT/int15-apple-chunk-sabotage.gates.txt" 2>/dev/null
+fi
 
 grep -h "int15 dispatch:" "$OUT/int15.log" "$OUT/int15-force-flat.log" 2>/dev/null >> "$OUT/gate.txt"
 grep -h "^   DIGEST " "$OUT/int15.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
@@ -165,7 +173,8 @@ grep -h "^   DIGEST " "$OUT/int15-force-flat.log" 2>/dev/null | sed 's/^   //' >
 } >> "$OUT/gate.txt"
 
 cat "$OUT/status.tsv" "$OUT/gate.txt"
-for f in int15 int15-force-flat int15-unstated-loads int15-sabotage int15-host-sabotage int15-piece-sabotage int15-quant-sabotage; do
+for f in int15 int15-force-flat int15-unstated-loads int15-sabotage int15-host-sabotage int15-piece-sabotage int15-quant-sabotage int15-apple-chunk-sabotage; do
+    [ -f "$OUT/$f.log" ] || continue
     echo "== $f (every line that is not a digest or a per-shape ok; last 60)"
     grep -v -E '^   (DIGEST|ok) ' "$OUT/$f.log" 2>/dev/null | cut -c1-600 | tail -60
 done

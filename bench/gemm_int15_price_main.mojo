@@ -49,6 +49,12 @@ ALTERNATES them call by call.
     int15i64.v1.pieces         the product alone, on planes, no unit
     int15i64.v1.mma            the product alone, on planes, on the integer
                                matrix unit (NVIDIA, AMD): FOUR unit products
+    int15i64.v1.apple.two      the product alone, on planes, on Apple's
+                               FLOAT matrix unit: TWO unit products, the
+                               left operand whole, carried into integers
+                               after every step of the unit
+    int15i64.v1.apple.four     the same unit, FOUR unit products, carried
+                               into integers every 512 steps
     convert.int15.quantize.a            float32 to codes, the left
                                         operand, the REFERENCE schedule:
                                         one thread per row
@@ -93,6 +99,11 @@ not a sum of medians.
                                        the planes arm with the reference
                                        quantizer and the splits
 
+    ON APPLE each complete operation is measured on the float unit too:
+        inference.int15i64.v1.apple.two, .apple.four
+        training.int15i64.v1.apple.two, .apple.four
+    (operands straight to planes by the parallel quantizer, then the unit).
+
 A training STEP of one layer is its forward row and its two backward rows;
 `tools/lowbit_int15/table.py` adds the three measured operations and says
 that it added them.
@@ -100,8 +111,10 @@ that it added them.
 ON APPLE EVERY TIME IS THE WHOLE KERNEL'S. `fp32.v1` there is
 `PLAN_APPLE_MMA` where its dispatcher picks it: the staging, the admission
 test of every window and any window that fell back to the exact step are
-inside its time. The fifteen-bit plans on Apple are one thread per cell
-and admit every shape, so they have no admission test and no fallback.
+inside its time. The fifteen-bit plans on Apple admit every shape, so they
+have no admission test and no fallback; the float-unit plans' staging, the
+conversion of every code to a float and every carry into integers are
+inside their times.
 
 THE DIGESTS. After its untimed warm-up every arm's output is read back, a
 surviving poison is refused, and the FNV-1a digest of the output bits is
@@ -158,6 +171,7 @@ from bench.gemm_shapes import (
 )
 from bench.gemm_shapes import OP_NT as TBL_OP_NT
 from checks.kernel_matrix import (
+    COLUMN_APPLE,
     TARGET_COLUMN,
     column_name,
     lib_int8_matrix_unit_for,
@@ -184,6 +198,11 @@ from gemm.checks.gemm_int15 import (
     quantize_planes_int15_parallel_device,
     quantize_rows_int15_device,
     split_int15_device,
+)
+from gemm.checks.gemm_int15_apple import (
+    INT15_APPLE_FORM_FOUR,
+    INT15_APPLE_FORM_TWO,
+    identical_gemm_int15_apple_into,
 )
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN
@@ -213,7 +232,13 @@ comptime ARM_INF_ROWQUANT = 14
 comptime ARM_TRAIN_PLANES = 15
 comptime ARM_TRAIN_CODES = 16
 comptime ARM_TRAIN_ROWQUANT = 17
-comptime ARM_COUNT = 18
+comptime ARM_APPLE2 = 18
+comptime ARM_APPLE4 = 19
+comptime ARM_INF_APPLE2 = 20
+comptime ARM_INF_APPLE4 = 21
+comptime ARM_TRAIN_APPLE2 = 22
+comptime ARM_TRAIN_APPLE4 = 23
+comptime ARM_COUNT = 24
 
 #: The kinds of row.
 comptime ROW_FORWARD = 0
@@ -221,6 +246,7 @@ comptime ROW_BWD_DX = 1
 comptime ROW_BWD_DW = 2
 
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
+comptime IS_APPLE = TARGET_COLUMN == COLUMN_APPLE
 
 
 def _arm_name(arm: Int) -> String:
@@ -258,7 +284,19 @@ def _arm_name(arm: Int) -> String:
         return String("training.int15i64.v1.planes")
     if arm == ARM_TRAIN_CODES:
         return String("training.int15i64.v1.codes")
-    return String("training.int15i64.v1.planes.rowquant")
+    if arm == ARM_TRAIN_ROWQUANT:
+        return String("training.int15i64.v1.planes.rowquant")
+    if arm == ARM_APPLE2:
+        return String("int15i64.v1.apple.two")
+    if arm == ARM_APPLE4:
+        return String("int15i64.v1.apple.four")
+    if arm == ARM_INF_APPLE2:
+        return String("inference.int15i64.v1.apple.two")
+    if arm == ARM_INF_APPLE4:
+        return String("inference.int15i64.v1.apple.four")
+    if arm == ARM_TRAIN_APPLE2:
+        return String("training.int15i64.v1.apple.two")
+    return String("training.int15i64.v1.apple.four")
 
 
 def _arm_is_left(arm: Int) -> Bool:
@@ -267,7 +305,14 @@ def _arm_is_left(arm: Int) -> Bool:
 
 
 def _arm_is_inference(arm: Int) -> Bool:
-    return arm == ARM_INF_PLANES or arm == ARM_INF_CODES or arm == ARM_INF_ROWQUANT
+    return (
+        arm == ARM_INF_PLANES or arm == ARM_INF_CODES or arm == ARM_INF_ROWQUANT
+        or arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4
+    )
+
+
+def _arm_is_apple_unit(arm: Int) -> Bool:
+    return arm >= ARM_APPLE2
 
 
 def _arm_is_product(arm: Int) -> Bool:
@@ -292,6 +337,8 @@ def _why_not(arm: Int, kind: Int, k: Int) -> String:
         )
     if arm == ARM_MMA and not HAS_UNIT:
         return String("this-column-has-no-integer-matrix-unit")
+    if _arm_is_apple_unit(arm) and not IS_APPLE:
+        return String("this-column-is-not-apple")
     if _arm_is_inference(arm) and kind != ROW_FORWARD:
         return String("inference-has-no-backward-product")
     return String("")
@@ -593,12 +640,24 @@ def _enqueue_arm(
         _quantize_par(ctx, rb.qa, rb.ea, rb.a, rb.quant, _a_transposed(kind), m, k)
         _quantize_par(ctx, rb.qb, rb.eb, rb.b, rb.quant, _b_transposed(kind), n, k)
         identical_gemm_int15_into(ctx, rb.c, rb.qa, rb.ea, rb.qb, rb.eb, rb.work, m, n, k)
-    else:
+    elif arm == ARM_TRAIN_ROWQUANT:
         _quantize_a(ctx, rb.qa, rb.ea, rb.a, kind, m, k)
         _quantize_b(ctx, rb.qb, rb.eb, rb.b, kind, n, k)
         split_int15_device(ctx, rb.ah, rb.al, rb.qa, m * k)
         split_int15_device(ctx, rb.bh, rb.bl, rb.qb, n * k)
         identical_gemm_int15_planes_into(ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k)
+    else:
+        comptime if IS_APPLE:
+            var form = INT15_APPLE_FORM_TWO
+            if arm == ARM_APPLE4 or arm == ARM_INF_APPLE4 or arm == ARM_TRAIN_APPLE4:
+                form = INT15_APPLE_FORM_FOUR
+            if arm != ARM_APPLE2 and arm != ARM_APPLE4:
+                _planes_par(ctx, rb.ah, rb.al, rb.ea, rb.a, rb.quant, _a_transposed(kind), m, k)
+            if arm == ARM_TRAIN_APPLE2 or arm == ARM_TRAIN_APPLE4:
+                _planes_par(ctx, rb.bh, rb.bl, rb.eb, rb.b, rb.quant, _b_transposed(kind), n, k)
+            identical_gemm_int15_apple_into(
+                ctx, rb.c, rb.ah, rb.al, rb.ea, rb.bh, rb.bl, rb.eb, m, n, k, form
+            )
 
 
 def _arm_digest(
@@ -666,7 +725,15 @@ def _arm_note(arm: Int, kind: Int, m: Int, n: Int, k: Int) -> String:
             return String("quantize.a.parallel+quantize.b.parallel+split.a+split.b+product")
         else:
             return String("quantize.a.parallel+quantize.b.parallel+flat")
-    return String("quantize.a+quantize.b+split.a+split.b+product")
+    if arm == ARM_TRAIN_ROWQUANT:
+        return String("quantize.a+quantize.b+split.a+split.b+product")
+    if arm == ARM_APPLE2:
+        return String("not-dispatched,float-unit,two-products,carry-every-8-steps")
+    if arm == ARM_APPLE4:
+        return String("not-dispatched,float-unit,four-products,carry-every-512-steps")
+    if arm == ARM_INF_APPLE2 or arm == ARM_INF_APPLE4:
+        return String("planes.a.parallel+float-unit-product")
+    return String("planes.a.parallel+planes.b.parallel+float-unit-product")
 
 
 def _time_row(

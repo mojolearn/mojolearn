@@ -36,7 +36,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import has_accelerator
 
-from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -51,6 +51,14 @@ from checks.numerics_int15 import (
     int15_recombine,
 )
 from gemm.checks.gemm_int8_mma import INT8_MMA_UNSTATED_LOADS, mma_operands_aligned
+from gemm.checks.gemm_int15_apple import (
+    INT15_APPLE_FORM_FOUR,
+    INT15_APPLE_FORM_TWO,
+    INT15_APPLE_GEOMETRY_ROW,
+    INT15_APPLE_GEOMETRY_WIDE,
+    identical_gemm_int15_apple_with_geometry,
+    int15_apple_sabotage_name,
+)
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     Int15Workspace,
@@ -91,12 +99,18 @@ from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
 comptime IDENTICAL_BUILD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime POISON = Float32(-987654.0)
 comptime HAS_UNIT = lib_int8_matrix_unit_for[TARGET_COLUMN]()
+comptime IS_APPLE = TARGET_COLUMN == COLUMN_APPLE
 
 comptime PLAN_FLAT = 0
 comptime PLAN_PIECES = 1
 comptime PLAN_MMA = 2
 comptime PLAN_DISPATCH_CODES = 3
 comptime PLAN_DISPATCH_PLANES = 4
+comptime PLAN_APPLE_WIDE = 5
+comptime PLAN_APPLE_ROW = 6
+comptime PLAN_APPLE4_WIDE = 7
+comptime PLAN_APPLE4_ROW = 8
+comptime PLAN_COUNT = 9
 
 
 def _plan_name(plan: Int) -> String:
@@ -108,6 +122,14 @@ def _plan_name(plan: Int) -> String:
         return String("mma")
     if plan == PLAN_DISPATCH_CODES:
         return String("dispatch-codes")
+    if plan == PLAN_APPLE_WIDE:
+        return String("apple-two-wide")
+    if plan == PLAN_APPLE_ROW:
+        return String("apple-two-row")
+    if plan == PLAN_APPLE4_WIDE:
+        return String("apple-four-wide")
+    if plan == PLAN_APPLE4_ROW:
+        return String("apple-four-row")
     return String("dispatch-planes")
 
 
@@ -705,6 +727,22 @@ def _run_plan(
             identical_gemm_int15_pieces_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
         elif plan == PLAN_MMA:
             identical_gemm_int15_mma_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        elif plan == PLAN_APPLE_WIDE:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_WIDE, INT15_APPLE_FORM_TWO
+            )
+        elif plan == PLAN_APPLE_ROW:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_ROW, INT15_APPLE_FORM_TWO
+            )
+        elif plan == PLAN_APPLE4_WIDE:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_WIDE, INT15_APPLE_FORM_FOUR
+            )
+        elif plan == PLAN_APPLE4_ROW:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_ROW, INT15_APPLE_FORM_FOUR
+            )
         else:
             identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
         ctx.synchronize()
@@ -730,10 +768,12 @@ def _every_plan_equals(
     var want = gemm_int15_oracle(qa.q, qa.e, qb.q, qb.e, m, n, k)
     print("   DIGEST " + name + " oracle " + _digest(want))
     var failures = String("")
-    comptime plan_count = 5
-    for plan in range(plan_count):
+    for plan in range(PLAN_COUNT):
         if plan == PLAN_MMA:
             comptime if not HAS_UNIT:
+                continue
+        if plan >= PLAN_APPLE_WIDE:
+            comptime if not IS_APPLE:
                 continue
         var got = _run_plan(ctx, qa, qb, m, n, k, plan, name)
         print("   DIGEST " + name + " " + _plan_name(plan) + " " + _digest(got))
@@ -1104,7 +1144,11 @@ def _planted_rows(rows: Int, k: Int, kind: Int, e: Int) -> Int15Rows:
       5  codes walking the whole range, a different phase per row
       6  every code +16257            (hi, lo) = (127, 1)
       7  a row of zeros first, then the code 1 at p = 0 and zeros after
-      8  the code -1 at p = 0 and zeros after"""
+      8  the code -1 at p = 0 and zeros after
+      9  +16383, but +16382 where p is a multiple of 16: against kind 0
+         every product by the high piece is ODD but one in sixteen, so the
+         sum of any sixteen consecutive steps is an odd integer above 2^24,
+         which no float32 holds, while the sum of any eight is below it"""
     var q = List[Int16]()
     for r in range(rows):
         for p in range(k):
@@ -1125,6 +1169,8 @@ def _planted_rows(rows: Int, k: Int, kind: Int, e: Int) -> Int15Rows:
                 c = 16257
             elif kind == 7:
                 c = 1 if (p == 0 and r > 0) else 0
+            elif kind == 9:
+                c = 16382 if p % 16 == 0 else 16383
             else:
                 c = -1 if p == 0 else 0
             q.append(Int16(c))
@@ -1198,6 +1244,17 @@ def check_int15_planted_worst_cases(ctx: DeviceContext) raises:
                         failures += "; "
                     failures += String(e)
                 cases += 1
+        # The float unit's own worst case (clause W-12): an odd sum above
+        # 2^24 across two steps of the unit, none inside one.
+        var qa9 = _planted_rows(m, k, 9, 0)
+        var qb9 = _planted_rows(n, k, 0, 0)
+        try:
+            _every_plan_equals(ctx, qa9, qb9, m, n, k, "planted-9.0-" + _tag(m, n, k))
+        except e:
+            if failures.byte_length() > 0:
+                failures += "; "
+            failures += String(e)
+        cases += 1
     # the scale exponent at both ends (clause W-7), on every plan
     comptime scale_count = 6
     for s in range(scale_count):
@@ -1410,6 +1467,7 @@ def main() raises:
     print(
         "== gemm/checks/gemm_int15_check.mojo [" + numeric_mode_name()
         + "]  sabotage: " + int15_sabotage_name()
+        + "  apple unit sabotage: " + int15_apple_sabotage_name()
         + "  host sabotage: " + String(GEMM_ORACLE_HOST_SABOTAGE) + " =="
     )
     print("   profile: mojolearn.identical.gemm.int15i64.v1")

@@ -31,6 +31,16 @@ import sys
 INF = ("inference.int15i64.v1.planes", "inference.int15i64.v1.codes", "inference.int15i64.v1.planes.rowquant")
 TRAIN = ("training.int15i64.v1.planes", "training.int15i64.v1.codes", "training.int15i64.v1.planes.rowquant")
 PRODUCTS = ("int15i64.v1.mma", "int15i64.v1.flat", "int15i64.v1.pieces")
+#: Apple's float-unit plans (clause W-12), present only in a run on Apple
+#: that has them.
+APPLE_PRODUCTS = ("int15i64.v1.apple.two", "int15i64.v1.apple.four")
+APPLE_INF = ("inference.int15i64.v1.apple.two", "inference.int15i64.v1.apple.four")
+APPLE_TRAIN = ("training.int15i64.v1.apple.two", "training.int15i64.v1.apple.four")
+
+
+def short(arm):
+    """The plan's name in a cell: what follows `int15i64.v1.`."""
+    return arm.split("int15i64.v1.", 1)[1]
 
 
 def read(path):
@@ -89,10 +99,28 @@ def table(label, path):
         return out
     col = next(iter(rows.values()))["col"]
     unit = "int15i64.v1.mma" in next(iter(rows.values()))["arms"]
+    apple_unit = any(a in row["arms"] for row in rows.values() for a in APPLE_PRODUCTS)
     out += [f"Column `{col}`. The product's plan on this box: "
             + ("the integer matrix unit, four products per k-tile." if unit
                else "no integer matrix unit; the flat kernel on codes and the pieces kernel on planes, "
-                    "one thread per cell."), ""]
+                    "one thread per cell"
+                    + (", and the FLOAT matrix unit in exact chunks (two products carried every 8 steps, "
+                       "four products carried every 512). Each cell names the plan that took the least "
+                       "time at that row; the float-unit plans are not dispatched yet." if apple_unit else ".")),
+            ""]
+    if apple_unit:
+        out += ["### The Apple float unit: the two forms beside the flat kernel, the product alone", "",
+                "| row | fp32.v1 ms | flat ms | over | two products ms | over | four products ms | over |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|"]
+        for r in order:
+            row = rows[r]
+            base = row["arms"]["fp32.v1"][0]
+            cells = []
+            for arm in ("int15i64.v1.flat",) + APPLE_PRODUCTS:
+                got = row["arms"].get(arm)
+                cells.append(f"{ms(got[0])} | {over(got[0], base)}" if got else "refused | refused")
+            out.append(f"| {r.replace('llama8b.', '')} | {ms(base)} | " + " | ".join(cells) + " |")
+        out.append("")
     fwd = [r for r in order if ".bwd_" not in r]
     out += ["### Inference: one call, weights packed once", "",
             "| row | m x n x k | fp32.v1 ms | product alone ms | over | activations to planes ms | "
@@ -101,16 +129,16 @@ def table(label, path):
     for r in fwd:
         row = rows[r]
         base = row["arms"]["fp32.v1"][0]
-        prod = best_of(row, PRODUCTS[:1] if unit else PRODUCTS[1:], not_run.get(r, {}))
-        full = best_of(row, INF[:2], not_run.get(r, {}))
+        prod = best_of(row, PRODUCTS[:1] if unit else PRODUCTS[1:] + APPLE_PRODUCTS, not_run.get(r, {}))
+        full = best_of(row, INF[:2] + APPLE_INF, not_run.get(r, {}))
         rq = row["arms"].get(INF[2])
         conv = row["arms"].get("convert.int15.planes.a.parallel")
         shape = f"{row['m']} x {row['n']} x {row['k']}" + (" (capped)" if row["cap"] == "CAPPED" else "")
         out.append(
             f"| {r.replace('llama8b.', '')} | {shape} | {ms(base)} | "
-            + (f"{ms(prod[1])} | {over(prod[1], base)}" if prod else "refused | refused") + " | "
+            + (f"{ms(prod[1])} ({short(prod[0])}) | {over(prod[1], base)}" if prod else "refused | refused") + " | "
             + (ms(conv[0]) if conv else "refused") + " | "
-            + (f"{ms(full[1])} | {over(full[1], base)}" if full else "refused | refused") + " | "
+            + (f"{ms(full[1])} ({short(full[0])}) | {over(full[1], base)}" if full else "refused | refused") + " | "
             + (f"{ms(rq[0])} | {over(rq[0], base)}" if rq else "refused | refused") + " |")
     out += ["", "### Training: one product of a step, both operands converted per call", "",
             "| row | m x n x k | fp32.v1 ms | product alone ms | over | A to planes ms | B to planes ms | "
@@ -123,17 +151,17 @@ def table(label, path):
         row = rows[r]
         base = row["arms"]["fp32.v1"][0]
         nr = not_run.get(r, {})
-        prod = best_of(row, PRODUCTS[:1] if unit else PRODUCTS[1:], nr)
-        full = best_of(row, TRAIN[:2], nr)
+        prod = best_of(row, PRODUCTS[:1] if unit else PRODUCTS[1:] + APPLE_PRODUCTS, nr)
+        full = best_of(row, TRAIN[:2] + APPLE_TRAIN, nr)
         rq = row["arms"].get(TRAIN[2])
         ca = row["arms"].get("convert.int15.planes.a.parallel")
         cb = row["arms"].get("convert.int15.planes.b.parallel")
         shape = f"{row['m']} x {row['n']} x {row['k']}" + (" (capped)" if row["cap"] == "CAPPED" else "")
         out.append(
             f"| {r.replace('llama8b.', '')} | {shape} | {ms(base)} | "
-            + (f"{ms(prod[1])} | {over(prod[1], base)}" if prod else "refused | refused") + " | "
+            + (f"{ms(prod[1])} ({short(prod[0])}) | {over(prod[1], base)}" if prod else "refused | refused") + " | "
             + (ms(ca[0]) if ca else "refused") + " | " + (ms(cb[0]) if cb else "refused") + " | "
-            + (f"{ms(full[1])} | {over(full[1], base)}" if full else "refused | refused") + " | "
+            + (f"{ms(full[1])} ({short(full[0])}) | {over(full[1], base)}" if full else "refused | refused") + " | "
             + (f"{ms(rq[0])} | {over(rq[0], base)}" if rq else "refused | refused") + " |")
         layer = r.split(".bwd_")[0]
         steps.setdefault(layer, []).append((r, base, full[1] if full else None))
