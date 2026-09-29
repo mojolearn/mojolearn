@@ -3490,6 +3490,19 @@ def _lle_upper(s, n, unit=False):
     return _M(out, n, n)
 
 
+def _lle_orth(k, Z):
+    """Z's columns orthonormalized by the Householder QR (geqrf, orgqr):
+    unconditionally orthonormal, never a zeroed column (the kit's orth zeroes
+    a column it judges dependent, DEVIATION 5318, and subspace iteration's
+    columns lean together). Each column is first scaled by its 1-norm (the
+    shift-invert operator reaches 1 / sigma^2, 1e18 on a null space at
+    float32 resolution, whose squares overflow)."""
+    nr = [float(v) for v in k.colsum(k.ew("abs", Z)).s]
+    sc = _M.of([1.0 / v if v > 0.0 and math.isfinite(v) else 1.0 for v in nr], 1, Z.c)
+    h, tau = k.geqrf(k.ew("mul", Z, sc))
+    return k.orgqr(h, tau, Z.c)
+
+
 def _lle_smallest(k, F, nc, max_iter, seed=0):
     """The nc smallest right singular pairs of the square LLE factor F
     (n x n, M = F^T F) past its null vector, the constant: (V n x nc, unit
@@ -3510,7 +3523,8 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
     minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
     Subspace iteration on that operator (sklearn's shift-invert at
     sigma = 0) with p = max(2 nc + 1, 20) columns (ARPACK's ncv), each step
-    column-scaled by its 1-norm, orthonormalized and rotated to the Ritz vectors of F^
+    in two halves (F^+T, then F^+), each half orthonormalized (`_lle_orth`),
+    then rotated to the Ritz vectors of F^
     (the one-sided Jacobi SVD of F^ X, n x p), until the wanted Ritz
     subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
     Every product is a kit cell and the stopping test reads their outputs:
@@ -3581,20 +3595,17 @@ def _lle_smallest(k, F, nc, max_iter, seed=0):
         return None
     z = k.ew("scale", z, s=1.0 / zn)
 
-    def op(X):                  # (F^T F^)^-1 X, X n1 x p
-        Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
-        Y = k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True)))
-        return solve(Y).rows(0, n1)
-
-    X = k.orth(k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
+    X = _lle_orth(k, k.ew("adds", k.rand(n1, p, seed, 0x11E, 0), s=-0.5))
     want = list(range(p - 1, p - 1 - nc, -1))
     prev, e_prev = None, float("inf")
     for it in range(max(1, int(max_iter))):
-        Z = op(X)
-        # each column scaled by its 1-norm, not its 2-norm: the operator
-        # reaches 1 / sigma^2 (1e18 on a null space at float32 resolution)
-        # and the squares would overflow to inf (every column then 0)
-        X = k.orth(k.ew("mul", Z, k.ew("recip", k.colsum(k.ew("abs", Z)))))
+        # (F^T F^)^-1 X in two orthonormalized halves: F^+T X = P_z F0^-T
+        # [X; 0] (range(F^), n x p), then F^+ of that = the first n - 1 rows
+        # of F0^-1; each half stretches the block by 1 / sigma, not
+        # 1 / sigma^2, so the columns stay far from float32 dependence
+        Y = solve_t(_M(array.array("f", X.s) + array.array("f", [0.0]) * X.c, n, X.c))
+        Y = _lle_orth(k, k.ew("sub", Y, k.mm(z, k.mm(z, Y, ta=True))))
+        X = _lle_orth(k, solve(Y).rows(0, n1))
         S, Vt = k.svd(k.mm(Fhat, X))
         X = k.mm(X, Vt, tb=True)
         Y = X.take_cols(want)
