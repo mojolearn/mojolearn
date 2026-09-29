@@ -170,6 +170,15 @@ def split_int15(q: List[Int16]) -> Int15Planes:
     return Int15Planes(hi^, lo^)
 
 
+def join_int15(hi: List[Int8], lo: List[Int8]) -> List[Int16]:
+    """Clause W-3 read backwards: the codes two planes stand for,
+    `hi * 128 + lo`. Exact: a shift and an addition of small integers."""
+    var q = List[Int16]()
+    for i in range(len(hi)):
+        q.append(Int16(Int(hi[i]) * 128 + Int(lo[i])))
+    return q^
+
+
 def int15_dot_cell(
     qa: List[Int16], qb: List[Int16], i: Int, j: Int, k: Int
 ) -> Int64:

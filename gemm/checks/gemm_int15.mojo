@@ -263,6 +263,27 @@ def dequantize_rows_int15_kernel(
     y.unsafe_store(i, dequant_int15_code(q.unsafe_load(i), Int(e.unsafe_load(r))))
 
 
+def dequantize_planes_int15_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    hi: MutPointer[Int8, MutAnyOrigin],
+    lo: MutPointer[Int8, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+):
+    """`(hi * 128 + lo) * 2^e`, one element per thread: the float32 matrix
+    a store of planes stands for. The code is rebuilt by clause W-5's own
+    recombination with no high-high and no low-low term."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= rows * cols:
+        return
+    var r = i // cols
+    var code = int15_recombine(Int32(0), Int32(hi.unsafe_load(i)), Int32(lo.unsafe_load(i)))
+    y.unsafe_store(i, dequant_int15_pinned(code, Int(e.unsafe_load(r))))
+
+
 def split_int15_kernel(
     hi: MutPointer[Int8, MutAnyOrigin],
     lo: MutPointer[Int8, MutAnyOrigin],
@@ -587,6 +608,30 @@ def dequantize_rows_int15_device(
     ctx.enqueue_function[dequantize_rows_int15_kernel](
         y.unsafe_ptr(),
         q.unsafe_ptr(),
+        e.unsafe_ptr(),
+        Int32(rows),
+        Int32(cols),
+        grid_dim=((count + INT15_TPB - 1) // INT15_TPB, 1, 1),
+        block_dim=(INT15_TPB, 1, 1),
+    )
+
+
+def dequantize_planes_int15_device(
+    ctx: DeviceContext,
+    mut y: DeviceBuffer[DType.float32],
+    mut hi: DeviceBuffer[DType.int8],
+    mut lo: DeviceBuffer[DType.int8],
+    mut e: DeviceBuffer[DType.int32],
+    rows: Int,
+    cols: Int,
+) raises:
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_planes_int15: rows and cols must be positive")
+    var count = rows * cols
+    ctx.enqueue_function[dequantize_planes_int15_kernel](
+        y.unsafe_ptr(),
+        hi.unsafe_ptr(),
+        lo.unsafe_ptr(),
         e.unsafe_ptr(),
         Int32(rows),
         Int32(cols),

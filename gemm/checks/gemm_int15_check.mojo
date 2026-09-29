@@ -53,6 +53,7 @@ from checks.numerics_int15 import (
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     Int15Workspace,
+    dequantize_planes_int15_device,
     dequantize_rows_int15_device,
     identical_gemm_int15_from_f32,
     int15_quant_chunks,
@@ -75,6 +76,7 @@ from gemm.host.gemm_int15_oracle import (
     INT15_PIECE_BOUND_K,
     Int15Rows,
     dequantize_rows_int15,
+    join_int15,
     quantize_cols_int15,
     gemm_int15_oracle,
     gemm_int15_pieces_oracle,
@@ -970,6 +972,20 @@ def check_int15_device_conversions_match_host(ctx: DeviceContext) raises:
                 raise Error(what + ": code at " + String(i) + " is " + String(Int(got_pq[i])) + ", want " + String(Int(wq)))
             if got_ph[i] != wh or got_pl[i] != wl:
                 raise Error(what + ": planes at " + String(i) + " are (" + String(Int(got_ph[i])) + ", " + String(Int(got_pl[i])) + "), want (" + String(Int(wh)) + ", " + String(Int(wl)) + ")")
+        if not transposed:
+            # The planes read back as the codes they were split from, and
+            # the image dequantized FROM THE PLANES is the image
+            # dequantized from the codes.
+            var joined = join_int15(got_ph, got_pl)
+            for i in range(rows * cols):
+                if joined[i] != want.q[i]:
+                    raise Error("planes joined at " + String(i) + " give " + String(Int(joined[i])) + ", the code is " + String(Int(want.q[i])))
+            var dyp = _poisoned(ctx, rows * cols)
+            dequantize_planes_int15_device(ctx, dyp, dph, dpl, dpe2, rows, cols)
+            ctx.synchronize()
+            var got_yp = _download_cells(ctx, dyp, rows * cols, "dequantize from planes")
+            _first_diff(got_yp, dequantize_rows_int15(want), "image dequantized from planes")
+            _ = dyp
         _ = dpq
         _ = dpe
         _ = dph

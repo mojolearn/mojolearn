@@ -1195,6 +1195,9 @@ TRAINING_LANE_NAMES = {
     # weights materialized exactly and run through the fp32 path.
     "gemm-bf16": "the bf16-storage GEMM profile",
     "gemm-int8": "the int8 GEMM profile with power-of-two scales",
+    # lane/lowbit-int15 (2026-09-29): the fifteen-bit GEMM profile,
+    # mojolearn.identical.gemm.int15i64.v1 (contract section 6).
+    "gemm-int15": "the fifteen-bit GEMM profile with power-of-two scales",
     "transformer-bf16w": "the Transformer block with bf16-stored weights",
     "transformer-int8w": "the Transformer block with int8-stored weights",
     "mamba1-bf16w": "the Mamba-1 block with bf16-stored weights",
@@ -1757,6 +1760,8 @@ FAMILIES = (
         # estimator that owns a DeviceContext -- so this family IS their
         # route, not their fallback.
         training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8",
+                        # lane/lowbit-int15 (2026-09-29)
+                        "gemm-int15",
                         "linalg-qr", "linalg-eigh", "linalg-svdvals",
                         # lane/laneless-public-classes (2026-09-19): the
                         # conversion seams themselves, under their own arm
@@ -1776,6 +1781,8 @@ FAMILIES = (
                  "linalg.qr", "linalg.eigh", "linalg.svdvals"),
         display="pinned GEMM, the Cholesky factorization and solve, and the QR, symmetric eigen and singular-value decompositions",
         host_modules=("gemm/host/gemm_oracle.mojo", "gemm/host/gemm_lowbit_oracle.mojo",
+                      # lane/lowbit-int15 (2026-09-29)
+                      "gemm/host/gemm_int15_oracle.mojo", "checks/numerics_int15.mojo",
                       "cholesky/host/chol_oracle.mojo",
                       "decomposition/host/linalg_public.mojo"),
         exports=(
@@ -1787,6 +1794,9 @@ FAMILIES = (
             # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
             "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
             "dequantize_int8", "to_bf16", "from_bf16",
+            # lane/lowbit-int15 (2026-09-29): the int15i64.v1 profile,
+            # gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6.
+            "int15_profile_version", "gemm_int15", "quantize_int15", "dequantize_int15",
             # lane/linalg-public (2026-09-19)
             "qr_r", "eigh", "svdvals",
         ),
@@ -3581,6 +3591,10 @@ PUBLIC_PENDING_LANES = {
     # lane/prep (merged by lane/merged, 2026-09-28): covered resample option
     # lanes; CPU and NVIDIA agree (lane/apple-merged), no release record yet.
     }
+# lane/lowbit-int15 (2026-09-29): the lane is new, so no committed column and
+# no shipped table cell describes it yet. It leaves this table the day a
+# release record carries it.
+PUBLIC_PENDING_LANES["gemm-int15"] = "no reference"
 # The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
 
