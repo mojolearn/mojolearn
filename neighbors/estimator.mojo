@@ -1693,6 +1693,16 @@ def _rbc_index_and_count(
     _ = nearest^
     _ = nearest_dist^
     _ = counts^
+    # The count is EXACT (summed in 64-bit, `scan.mojo::rbc_exact_edge_total`)
+    # but this surface hands back int32 `indptr`, which cannot address it.
+    # Refused by name with the true count, never returned wrapped.
+    if nnz > 2147483647:
+        raise Error(
+            "radius_neighbors: the query has " + String(nnz)
+            + " neighbour pairs, past the 2147483647 an int32 indptr"
+            " addresses (" + String(nnz * 4) + " bytes of indices); query"
+            " fewer rows per call or use a smaller radius"
+        )
     return nnz
 
 
