@@ -11,6 +11,10 @@ stdout). A label is what the run is called in the table, e.g. "H100, run 2".
 A label followed by `=-` is a box with no run: every cell of its tables
 reads "not run yet".
 
+    python3 tools/lowbit_int15/table.py --compare "<label A>=<file>" "<label B>=<file>"
+
+puts two runs of ONE box side by side (a before and an after).
+
 TWO TABLES PER RUN, the complete operation in each, every time beside
 `fp32.v1`'s at the same row in the same run:
 
@@ -20,8 +24,9 @@ TWO TABLES PER RUN, the complete operation in each, every time beside
              the dequantization (inside the product's kernel).
   TRAINING   the weights and the gradients are converted every step. Per
              product: both operands to planes, the product. The forward
-             row and the two backward rows of a layer are three measured
-             operations; the step line ADDS them and says so.
+             row and the two backward rows of a layer are three products,
+             each timed alone; the last table ADDS them and says so. It is
+             not an integrated training step and is not called one.
 
 `over` is the operation's median time over fp32.v1's median time: above 1
 it took longer than fp32.v1. Nothing here is a claim about another library.
@@ -140,7 +145,7 @@ def table(label, path):
             + (ms(conv[0]) if conv else "refused") + " | "
             + (f"{ms(full[1])} ({short(full[0])}) | {over(full[1], base)}" if full else "refused | refused") + " | "
             + (f"{ms(rq[0])} | {over(rq[0], base)}" if rq else "refused | refused") + " |")
-    out += ["", "### Training: one product of a step, both operands converted per call", "",
+    out += ["", "### Training shapes: one product, both operands converted per call", "",
             "| row | m x n x k | fp32.v1 ms | product alone ms | over | A to planes ms | B to planes ms | "
             "complete product ms | over | complete, row quantizer ms | over |",
             "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
@@ -165,8 +170,10 @@ def table(label, path):
             + (f"{ms(rq[0])} | {over(rq[0], base)}" if rq else "refused | refused") + " |")
         layer = r.split(".bwd_")[0]
         steps.setdefault(layer, []).append((r, base, full[1] if full else None))
-    out += ["", "### Training: a layer's step, the forward product and the two backward products ADDED", "",
-            "Each line is the sum of three operations measured one at a time, not one measured operation.", "",
+    out += ["", "### Three products of one layer, each timed alone and added", "",
+            "The forward product, the input gradient and the weight gradient of one layer. Each line is the "
+            "sum of three operations measured one at a time. It is not an integrated training step: no "
+            "optimizer, no activation, no norm and no memory traffic between the products is in it.", "",
             "| layer | fp32.v1, three products ms | fifteen-bit, three complete products ms | over |",
             "|---|---:|---:|---:|"]
     for layer, parts in steps.items():
@@ -183,7 +190,82 @@ def table(label, path):
     return out
 
 
+def compare(label_a, path_a, label_b, path_b):
+    """Two runs of ONE box side by side: the product alone and the complete
+    operation, each over fp32.v1 of its own run."""
+    ra, na, order = read(path_a)
+    rb, nb, _ = read(path_b)
+    unit = any("int15i64.v1.mma" in r["arms"] for r in ra.values())
+    prods = PRODUCTS[:1] if unit else PRODUCTS[1:] + APPLE_PRODUCTS
+    out = [f"## {label_a} beside {label_b}", "",
+           "`over` is the fifteen-bit time over fp32.v1's at the same row IN THE SAME RUN.", ""]
+
+    def line(r, arms_full):
+        cells = []
+        for rows, nr in ((ra, na), (rb, nb)):
+            row = rows.get(r)
+            if row is None:
+                cells += ["not run", "not run", "", "not run", ""]
+                continue
+            base = row["arms"]["fp32.v1"][0]
+            prod = best_of(row, prods, nr.get(r, {}))
+            full = best_of(row, arms_full, nr.get(r, {}))
+            cells += [ms(base)]
+            cells += [ms(prod[1]), over(prod[1], base)] if prod else ["refused", "refused"]
+            cells += [ms(full[1]), over(full[1], base)] if full else ["refused", "refused"]
+        return f"| {r.replace('llama8b.', '')} | " + " | ".join(cells) + " |"
+
+    head = ("| row | A fp32.v1 ms | A product alone ms | over | A complete ms | over | "
+            "B fp32.v1 ms | B product alone ms | over | B complete ms | over |")
+    rule = "|---|" + "---:|" * 10
+    out += [f"A = {label_a}. B = {label_b}.", "",
+            "### Inference: one call, weights packed once (complete = activations to planes, the product)", "",
+            head, rule]
+    for r in order:
+        if ".bwd_" not in r:
+            out.append(line(r, INF[:2] + APPLE_INF))
+    out += ["", "### Training shapes: one product, both operands converted per call", "", head, rule]
+    for r in order:
+        if ".t512" in r:
+            out.append(line(r, TRAIN[:2] + APPLE_TRAIN))
+    out += ["", "### Three products of one layer, each timed alone and added", "",
+            "The forward product, the input gradient and the weight gradient of one layer, each a complete "
+            "product (both operands converted), measured one at a time and ADDED. Not an integrated "
+            "training step.", "",
+            "| layer | A fp32.v1 ms | A fifteen-bit ms | over | B fp32.v1 ms | B fifteen-bit ms | over |",
+            "|---|---:|---:|---:|---:|---:|---:|"]
+    layers = []
+    for r in order:
+        if ".t512" in r and ".bwd_" not in r:
+            layers.append(r)
+    for layer in layers:
+        cells = []
+        for rows, nr in ((ra, na), (rb, nb)):
+            parts = [layer, layer + ".bwd_dx", layer + ".bwd_dw"]
+            if any(p not in rows for p in parts):
+                cells += ["not run", "not run", ""]
+                continue
+            b = sum(rows[p]["arms"]["fp32.v1"][0] for p in parts)
+            fulls = [best_of(rows[p], TRAIN[:2] + APPLE_TRAIN, nr.get(p, {})) for p in parts]
+            if any(f is None for f in fulls):
+                cells += [ms(b), "refused (k above 65536)", "refused"]
+                continue
+            t = sum(f[1] for f in fulls)
+            cells += [ms(b), ms(t), over(t, b)]
+        out.append(f"| {layer.replace('llama8b.', '')} | " + " | ".join(cells) + " |")
+    out.append("")
+    return out
+
+
 def main(argv):
+    if argv and argv[0] == "--compare":
+        if len(argv) != 3 or any("=" not in a for a in argv[1:]):
+            print(__doc__)
+            return 2
+        la, pa = argv[1].rsplit("=", 1)
+        lb, pb = argv[2].rsplit("=", 1)
+        print("\n".join(compare(la, pa, lb, pb)))
+        return 0
     if not argv or any("=" not in a for a in argv):
         print(__doc__)
         return 2
