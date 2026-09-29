@@ -183,8 +183,8 @@ keep activations in float32 and store only weights low-bit.
 
 ## 6. THE FIFTEEN-BIT PROFILE: `mojolearn.identical.gemm.int15i64.v1`
 
-Lane lane/lowbit-int15, 2026-09-29. DEVIATIONS 2965 to 2976. Clauses W-1 to
-W-11. Answers: `gemm/host/gemm_int15_oracle.mojo`. Device:
+Lane lane/lowbit-int15, 2026-09-29. DEVIATIONS 2965 to 2979. Clauses W-1 to
+W-14. Answers: `gemm/host/gemm_int15_oracle.mojo`. Device:
 `gemm/checks/gemm_int15.mojo`. Gates: `gemm/checks/gemm_int15_check.mojo` and
 `gemm/checks/gemm_int15_sim_check.mojo`. Seams: `checks/numerics_int15.mojo`,
 a file of its own so that no binding which imports `checks/numerics.mojo` is
@@ -223,6 +223,10 @@ arithmetic and claims no quality.
 | W-9 | which values a product quantizes | EVERY PRODUCT QUANTIZES ITS OWN OPERANDS FROM THEIR FLOAT32 VALUES, along that product's own contracted extent. Codes are never carried from one product to another and never transposed; section 6.8 | 2976 |
 | W-10 | conversion schedules | ROWS (`quantize_rows_int15_kernel`, and `quantize_cols_int15_kernel` for an operand stored the other way: one thread per row of the matrix being quantized) and PARALLEL (the row's absmax in chunks of 256 values, the chunk maxima reduced to one exponent per row, then one thread per value, to codes or straight to planes). Both are the quantizer: the absmax is a maximum of magnitudes that a NaN never enters, the same float under every grouping, and a code is a function of its own value and its row's exponent. `check_int15_device_conversions_match_host` requires both schedules' codes, exponents and planes to be the host's | 2974 |
 | W-11 | fragment loads of the matrix units | a load of four or eight codes states its alignment only where it is a fact: the offset inside the buffer is a multiple of the word (tested in `_pack4` and `_pack8`) and the base of the buffer is a multiple of 8 (read by the launch off the pointers it passes). Elsewhere the load is unstated, and beyond the row the byte path with its zero codes. The same bytes reach the unit whichever load fetched them; `-D MOJOLEARN_INT8_MMA_UNSTATED_LOADS=1` keeps the unstated loads and must print the same digests. It applies to `int8i32.v1`'s unit plan as well, whose kernel shares the step | 2975 |
+
+| W-12 | Apple's float matrix unit | `gemm/checks/gemm_int15_apple.mojo`, two forms, both the profile; section 6.9. NOT a plan of clause W-8 by another name: it has bounds of its own, because a float unit is exact only while every value it holds is an integer below `2^24` | 2977 |
+| W-13 | the tuned unit plan | `gemm/checks/gemm_int15_tuned.mojo`: lane/lowbit-mma-speed's four products with one staging (three exact Int32 sums per cell, `HH`, `HL + LH`, `LL`, no float), then the epilogue of every plan as a launch of its own. It admits `k <= 65535` (the sums kernel allows a low piece of -128, which this profile never makes) and takes the reference unit plan at `k = 65536` | 2978 |
+| W-14 | a launch on Apple is bounded in work | the two one-thread-per-cell plans launch their cells in slices of at most `2^30` multiply-accumulates on the Apple column and wait between slices; the Apple dispatchers take the float-unit plan above `2^28`; section 6.10 | 2979 |
 
 ### 6.2 THE BOUNDS
 
@@ -406,4 +410,70 @@ values, spelled in the check and not taken from the function under test.
 from the quality lane's training simulation, with the host oracle and the
 devices held to them bit for bit, as section 6.6 does for the forward
 product.
+
+### 6.9 Clause W-12: the product on Apple's float matrix unit
+
+Metal has no integer matrix unit. Its float unit multiplies 8 by 8 by 8 in
+float32, and it is exact on integers while every value it holds stays below
+`2^24` in magnitude. lane/lowbit-units showed that for int8 codes (its
+exact-chunk probe); this clause is the fifteen-bit product on the same
+unit, in two forms.
+
+**Form TWO: the left operand whole.** `sum(a * b) = sum(a * bh) * 2^7 +
+sum(a * bl)`, two unit products per step.
+
+| what | bound | why |
+|---|---|---|
+| an operand | `abs(a) <= 16383`, `abs(bh) <= 128`, `0 <= bl <= 127` | integers below `2^24`, so each is a float32; the left operand is staged as `ah * 128 + al`, exact |
+| one product | `abs(a * bh) <= 16383 * 128 = 2097024` | below `2^24`, exact |
+| one step of the unit | `8 * 2097024 = 16776192 < 2^24 = 16777216` | the accumulator enters every step at zero, so every value the unit can hold is a sum of at most 8 products, under any order and with or without fusing; NINE products would reach 18873216 |
+| the carry | `abs(sum(a * bh)) <= 2097024 * 65536 < 2^38` | each accumulator converts to Int32 after every step (exact) and is added to an Int64 running sum |
+| the result | `HI * 2^7 + LO` in Int64 | a shift and an addition |
+
+**Form FOUR: both operands in pieces.** The construction of clauses W-3 to
+W-5 with float accumulators: the largest magnitude one step of `k` adds to
+an accumulator is the cross term's, 32512, so a chunk of 512 steps holds at
+most `32512 * 512 = 16646144 < 2^24` (517 steps would pass it). At a chunk
+end each accumulator converts to Int32 and is added to an Int32 running sum,
+which W-4 bounds.
+
+**What the argument assumes.** That the unit computes in IEEE float32 with
+a 24-bit significand at every internal step. That is a measurement per
+Apple generation, not a documented property, so the gate plants the cases
+that separate it: every product odd and at its largest (`a = 16383`,
+`bh = 127`); an operand whose sums over sixteen consecutive steps are ODD
+and above `2^24` while its sums over eight are below; the largest magnitude
+(`bh = -128`); halves that cancel; `k = 65536`. The arm
+`-D MOJOLEARN_INT15_APPLE_CHUNK_SABOTAGE=1` removes the chunk boundary (form
+TWO carries across two steps, form FOUR across the whole of `k`) and must
+fail the planted cases.
+
+### 6.10 Clause W-14: a launch on Apple is bounded in work
+
+macOS aborts a Metal command buffer that holds the GPU for seconds
+(`kIOGPUCommandBufferCallbackErrorImpactingInteractivity`). The cells
+written before the abort stay, the rest keep what the buffer held, and the
+wait returns as if the launch had finished. Measured on an M2 Pro,
+2026-09-29: the pieces kernel at 512 x 4096 x 14336, one launch of `3e10`
+multiply-accumulates, left cells unwritten in two runs of three, at a
+different cell each time. On an M3 Ultra the same launch takes a quarter
+of a second and was never cut.
+
+So a cell that was never written is a failure this profile can have on
+Apple whatever its arithmetic, and the clause is about the LAUNCH:
+
+- the FLAT and PIECES plans launch their cells in slices of at most `2^30`
+  multiply-accumulates and wait between slices (a PIECES step is four
+  products, so its slice is a quarter of FLAT's in cells);
+- the dispatchers send a product above `2^28` multiply-accumulates to the
+  float-unit plan, whose launches take milliseconds;
+- which cells a launch covers cannot move a bit: a cell is computed by one
+  thread from its own two rows whatever the slice.
+
+`check_int15_large_product_is_written_whole` runs the row that failed on
+every plan of every column: the output poisoned first and read back whole,
+one digest for every plan, and the host oracle on cells sampled across the
+whole output. What this clause cannot do is make the runtime report an
+aborted command buffer; until it does, a launch that is never long is what
+keeps a launch from being cut.
 
