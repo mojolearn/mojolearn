@@ -13,12 +13,25 @@ AN ARM'S CHANGE is the mean over its seeds of (arm loss minus the baseline
 loss OF THE SAME SEED) at the equal-step point, as a relative change of
 perplexity `exp(mean) - 1`.
 
+THE INTERVAL of an arm's change is the mean of its per-seed paired
+differences plus and minus t(0.975, seeds - 1) standard errors of that mean
+(Student's t, because the seeds are few), mapped through exp(x) - 1. The
+seeds are the unit that is resampled. It bounds the run-to-run error AT THIS
+SHAPE, ON THIS CORPUS, and says nothing about another shape or another text.
+
 THE VERDICT against 1 percent:
   MISS          a run went non-finite, or the change is 1 percent or more
-                and outside the noise floor
-  PASS          the change is under 1 percent and the noise floor is under
-                1 percent; "inside the noise" is said when it is
-  UNDERPOWERED  otherwise: the seeds cannot separate this arm from 1 percent
+                and the lower end of its interval is above zero
+  PASS          the change AND the upper end of its interval are both
+                under 1 percent
+  UNDERPOWERED  otherwise: the seeds cannot separate this arm from 1
+                percent, and no conclusion is drawn
+
+THE ZERO-CODE RECORD. At three steps of every run one diagnostic backward
+pass records, for every product, the fraction of entries of each backward
+operand whose code is 0 under each width (8, 10, 12 and 15 bits), in the
+orientation its GEMM has. `training_zero_codes.md` prints the baseline's,
+at the last step before the equal-step point, averaged over its seeds.
 """
 import argparse
 import glob
@@ -47,6 +60,55 @@ def first_reach(run, target):
         if t["step"] > 0 and t["val_loss"] <= target:
             return t["step"]
     return None
+
+
+T975 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262}
+FINALIST = {"int15-both+attn": "F1", "F2-int15proj-int8attn": "F2"}
+WIDTHS = ("int8", "int10", "int12", "int15")
+OPERANDS = (("Gt_rows_along_m", "G^T, the weight-gradient GEMM's left operand (rows over the tokens)"),
+            ("At_rows_along_m", "A^T, the weight-gradient GEMM's right operand (rows over the tokens)"),
+            ("G_rows_along_n", "G, the input-gradient GEMM's left operand (one row per token)"),
+            ("Bt_rows_along_n", "B^T, the input-gradient GEMM's right operand"))
+
+
+def zero_code_tables(runs, step):
+    """Mean over the given runs of the zero-code fractions at `step`."""
+    acc = {}
+    for r in runs:
+        rec = r.get("gradient_zero_codes", {}).get(str(step))
+        if not rec:
+            continue
+        for product, ops in rec.items():
+            for op, _ in OPERANDS:
+                cell = acc.setdefault((product, op), dict(n=0, exact=0.0, **{w: 0.0 for w in WIDTHS},
+                                                          **{w + "_nz": 0.0 for w in WIDTHS}))
+                cell["n"] += 1
+                cell["exact"] += ops[op]["exactly_zero_fraction"]
+                for w in WIDTHS:
+                    cell[w] += ops[op][w]["zero_code_fraction"]
+                    cell[w + "_nz"] += ops[op][w]["zero_code_fraction_of_nonzero"]
+    out = {}
+    for (product, op), c in acc.items():
+        n = c.pop("n")
+        out.setdefault(product, {})[op] = {k: v / n for k, v in c.items()}
+    return out
+
+
+def zero_code_markdown(table, title):
+    lines = [title, ""]
+    for op, what in OPERANDS:
+        lines += ["### " + what, "",
+                  "Fraction of the operand's NONZERO entries whose code is 0 (in brackets: of all entries).", "",
+                  "| product | exactly zero as float32 | " + " | ".join(w for w in WIDTHS) + " |",
+                  "|---|---|" + "---|" * len(WIDTHS)]
+        for product in table:
+            c = table[product].get(op)
+            if c is None:
+                continue
+            lines.append("| %s | %.4f | %s |" % (product, c["exact"], " | ".join(
+                "%.4f (%.4f)" % (c[w + "_nz"], c[w]) for w in WIDTHS)))
+        lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def main(argv=None):
@@ -100,6 +162,10 @@ def main(argv=None):
             ds = [smoothed(r, n_eq) - b_sm[r["seed"]] for r in good]
             mean = statistics.mean(d)
             se = statistics.stdev(d) / math.sqrt(len(d)) if len(d) > 1 else float("nan")
+            half = T975.get(len(d) - 1, 1.96) * se if len(d) > 1 else float("nan")
+            row.update(rel_ppl_change_lo=math.expm1(mean - half), rel_ppl_change_hi=math.expm1(mean + half),
+                       interval="mean of the per-seed paired differences +- t(0.975, %d) standard errors, "
+                                "through exp(x) - 1; the seeds are resampled" % (len(d) - 1))
             reach = [first_reach(r, b_eq[r["seed"]]) for r in good]
             reached = sorted(x for x in reach if x is not None)
             cos = [v["cosine"] for r in good for v in r["gradient_against_fp32"].values()]
@@ -118,39 +184,54 @@ def main(argv=None):
                     f - at(r, n_eq) for r, f in zip(good, fp) if f is not None) if all(f is not None for f in fp) else None,
                 gradient_cosine_against_fp32_mean=statistics.mean(cos) if cos else None,
                 gradient_cosine_against_fp32_min=min(cos) if cos else None)
+        row["finalist"] = FINALIST.get(row["profile"])
         if bad:
             row["verdict"] = "MISS"
             row["reason"] = "non-finite loss in seed(s) %s" % bad
         elif len(good) < 3:
             row["verdict"] = "UNDERPOWERED"
             row["reason"] = "fewer than three seeds"
-        elif row["rel_ppl_change"] >= 0.01 and not row["inside_noise"]:
-            row["verdict"] = "MISS"
-        elif row["rel_ppl_change"] < 0.01 and math.expm1(floor) < 0.01:
+        elif row["rel_ppl_change"] < 0.01 and row["rel_ppl_change_hi"] < 0.01:
             row["verdict"] = "PASS"
+        elif row["rel_ppl_change"] >= 0.01 and row["rel_ppl_change_lo"] > 0:
+            row["verdict"] = "MISS"
         else:
             row["verdict"] = "UNDERPOWERED"
-            row["reason"] = "the seed noise does not separate this arm from 1 percent"
+            row["reason"] = "the seeds do not separate this arm from 1 percent"
         table["arms"].append(row)
     with open(os.path.join(args.out, "training.json"), "w") as fh:
         json.dump(table, fh, indent=1)
     b = table["baseline"]
     lines = ["baseline fp32.v1: seeds %s, val loss at step %d mean %.5f, noise floor %.5f nats (%.3f%% of perplexity), range %.5f"
              % (b["seeds"], n_eq, b["mean"], floor, 100 * math.expm1(floor), b["range_nats"]), "",
-             "| profile | products | mode | seeds | change at step %d | noise floor | inside noise | steps to baseline final | verdict |" % n_eq,
-             "|---|---|---|---|---|---|---|---|---|"]
+             "The change is the mean over the seeds of (arm minus the baseline of the same seed) at step %d, as a "
+             "relative change of validation perplexity. The interval is that mean plus and minus t(0.975, seeds - 1) "
+             "standard errors; the seeds are resampled; it bounds the run-to-run error at this shape on this corpus "
+             "and says nothing about another shape or text." % n_eq, "",
+             "| profile | products | mode | seeds | change at step %d | interval | noise floor | inside noise | steps to baseline final | gradient cosine against fp32 (min) | verdict |" % n_eq,
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in table["arms"]:
         if "rel_ppl_change" in r:
-            change = "%+.3f%% (%+.5f nats, se %.5f)" % (100 * r["rel_ppl_change"], r["delta_nats_mean"], r["delta_nats_se"])
+            change = "%+.3f%% (%+.5f nats)" % (100 * r["rel_ppl_change"], r["delta_nats_mean"])
+            interval = "%+.3f%% to %+.3f%%" % (100 * r["rel_ppl_change_lo"], 100 * r["rel_ppl_change_hi"])
             reach = ("median %s" % r["steps_to_baseline_final_median"]) if r["seeds_not_reaching"] == 0 else \
                 "%d of %d seeds not within %d" % (r["seeds_not_reaching"], len(r["delta_nats_per_seed"]), n_end)
             inside = "yes" if r["inside_noise"] else "no"
+            cos = "%.6f" % r["gradient_cosine_against_fp32_min"] if r["gradient_cosine_against_fp32_min"] is not None else "-"
         else:
-            change, reach, inside = "non-finite", "-", "-"
-        lines.append("| %s | %s | %s | %d | %s | %.3f%% | %s | %s | %s |" % (
-            r["profile"], "projections + attention" if r["attention_products"] else "projections",
-            "forward" if r["mode"] == "fwd" else "forward + backward", len(r["seeds"]), change,
-            100 * r["noise_floor_rel_ppl"], inside, reach, r["verdict"]))
+            change, interval, reach, inside, cos = "non-finite", "-", "-", "-", "-"
+        name = r["profile"] + (" (%s)" % r["finalist"] if r.get("finalist") else "")
+        lines.append("| %s | %s | %s | %d | %s | %s | %.3f%% | %s | %s | %s | %s |" % (
+            name, "projections + attention" if r["attention_products"] else "projections",
+            "forward" if r["mode"] == "fwd" else "forward + backward", len(r["seeds"]), change, interval,
+            100 * r["noise_floor_rel_ppl"], inside, reach, cos, r["verdict"]))
+    zc = zero_code_tables(list(complete.values()), n_eq - 1)
+    table["baseline_gradient_zero_codes"] = dict(step=n_eq - 1, seeds=sorted(complete), products=zc)
+    with open(os.path.join(args.out, "training.json"), "w") as fh:
+        json.dump(table, fh, indent=1)
+    with open(os.path.join(args.out, "training_zero_codes.md"), "w") as fh:
+        fh.write(zero_code_markdown(zc, "## Zero codes of the backward operands: fp32.v1 baseline, step %d, mean over seeds %s"
+                                    % (n_eq - 1, sorted(complete))))
     text = "\n".join(lines) + "\n"
     with open(os.path.join(args.out, "training.md"), "w") as fh:
         fh.write(text)

@@ -70,6 +70,16 @@ def main(argv=None):
                  e.get("invalid_bytes_in_used", 0), e["ids_used"], e["windows"], e["length"], e["ids_sha256"],
                  e["scored_positions"], arms["fp32.v1"]["perplexity"],
                  ("%+.2e" % arms["fp32-acc64"]["rel_ppl_change"]) if "fp32-acc64" in arms else "not measured"))
+    windows = sorted(set(first["evaluation_set"]["windows"] for first, _ in texts.values()))
+    print()
+    print("THE INTERVAL: within each of the %s windows of a text the per-position difference of nll (arm minus "
+          "baseline) is averaged; the interval is the mean of those window means plus and minus 1.96 of their "
+          "standard error, 95 percent under a normal approximation, mapped through exp(x) - 1; the table prints "
+          "its upper end. It bounds the sampling error on THESE texts and says nothing about other text or tasks."
+          % "/".join(str(w) for w in windows))
+    print("TOP-1 AGREEMENT: the share of scored positions, each with the true context supplied, where the arm's "
+          "top token equals the baseline's. It is not a rate of changed tokens in generated text: free-running "
+          "generation diverges from the first changed token on.")
     print()
     names = []
     for _, (_, arms) in texts.items():

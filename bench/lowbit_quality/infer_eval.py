@@ -73,6 +73,15 @@ def _arms():
         add(key, Spec(name, w=w, a=a, note=note), key)
         add(key + "+attn", Spec(name + "+attn", w=w, a=a, attn=True,
                                 note=note + "; attention QK and PV products replaced too"), key)
+    # ---- THE TWO FINALISTS (orchestrator, 2026-09-29 03:35Z), each ONE COMPLETE CONFIGURATION:
+    # every projection and every attention product replaced at once. Errors interact, so a
+    # pass of the projections alone and of the attention alone does not establish these.
+    add("F1", Spec("F1-int15-all", w="int15", a="int15", attn=True,
+                   note="FINALIST F1: 15-bit codes on every projection and on every attention product (QK, PV)"), "F1")
+    add("F2", Spec("F2-int15proj-int8attn", w="int15", a="int15", attn=True,
+                   overrides={"attn_qk": ("int8", "int8"), "attn_pv": ("int8", "int8")},
+                   note="FINALIST F2: 15-bit codes on every projection, int8 codes (int8i32.v1's rule) on "
+                        "every attention product (QK, PV)"), "F2")
     # ---- follow-up arms: their own names, their own rows
     add("int8w-fp32a", Spec("int8w-fp32a", w="int8",
                             note="int8 weight codes materialized (what weight_format='int8' ships), fp32 activations"), "-")
@@ -165,6 +174,15 @@ def sha256(b):
     return hashlib.sha256(b).hexdigest()
 
 
+def source_sha256():
+    """The sha256 of the source files this record was computed by, read at
+    run time, so a record names its code even when the tree on the box was
+    synced after the job that wrote it had started."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return {name: hashlib.sha256(open(os.path.join(here, name), "rb").read()).hexdigest()
+            for name in ('arith.py', 'llama_sim.py', 'infer_eval.py')}
+
+
 def evaluation_ids(corpus, tokenizer_path, tail_from, windows, length, corpus_key="corpus/enwik8/input.txt"):
     from tokenizers import Tokenizer
     with open(corpus, "rb") as fh:
@@ -251,6 +269,14 @@ def run_arm(weights, cfg, spec, ids, device, batch, diag_batches=1, rope_theta=N
     return torch.cat(nll), torch.cat(top), finite, rel, seconds
 
 
+INTERVAL = ("the per-position difference of nll (arm minus baseline) is averaged within each window; the "
+            "interval is the mean over the windows plus and minus 1.96 standard errors of those window means "
+            "(sample standard deviation over the windows divided by the root of their number), a normal "
+            "approximation at the 95 percent level, mapped through exp(x) - 1. The windows are the unit that "
+            "is resampled. It bounds the SAMPLING ERROR ON THIS TEXT and says nothing about other text or "
+            "about tasks.")
+
+
 def compare(nll, top, base_nll, base_top, length):
     per = length - 1
     d = (nll - base_nll).reshape(-1, per).mean(1)
@@ -262,7 +288,10 @@ def compare(nll, top, base_nll, base_top, length):
         rel_ppl_change=math.expm1(mean),
         rel_ppl_change_lo=math.expm1(mean - 1.96 * se), rel_ppl_change_hi=math.expm1(mean + 1.96 * se),
         top1_agreement=(top == base_top).double().mean().item(),
-        top1_accuracy_note="agreement with the baseline's top-1, not with the text",
+        top1_agreement_is="the share of scored positions, each with the TRUE context supplied, where the "
+                          "arm's top token equals the baseline's; not a rate of changed tokens in generated "
+                          "text, which diverges from the first changed token on",
+        interval=INTERVAL,
     )
 
 
@@ -355,6 +384,7 @@ def main(argv=None):
         model=dict(key="models/SmolLM2-360M", path=args.model,
                    weights_sha256=sha256(open(os.path.join(args.model, "model.safetensors"), "rb").read()),
                    stored_dtypes=dtypes, config=cfg),
+        source_sha256=source_sha256(),
         evaluation_set=evalset, limit_windows=args.limit_windows, batch=args.batch,
         library=dict(torch=torch.__version__, cuda=torch.version.cuda,
                      device_name=torch.cuda.get_device_name(0) if args.device == "cuda" else None,

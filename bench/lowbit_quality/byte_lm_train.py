@@ -89,6 +89,10 @@ ARMS = {
     "int8w-fp32a": dict(name="int8w-fp32a", w="int8", a="fp32"),
     "int8m-both": dict(name="int8m-both", w="int8m", a="int8m"),
     "int8w-int12a": dict(name="int8w-int12a", w="int8", a="int12"),
+    # FINALIST F2 (orchestrator, 2026-09-29 03:35Z): 15-bit codes on every projection, int8 codes on
+    # every attention product, as ONE configuration. FINALIST F1 is arm e with the attention switch on.
+    "F2": dict(name="F2-int15proj-int8attn", w="int15", a="int15",
+               overrides={"attn_qk": ("int8", "int8"), "attn_pv": ("int8", "int8")}),
     "int12": dict(name="int12-both", w="int12", a="int12"),
     "int10": dict(name="int10-both", w="int10", a="int10"),
 }
@@ -129,6 +133,15 @@ def zero_code_record(x):
         out[kind] = dict(zero_code_fraction=float(zero.double().mean().item()),
                          zero_code_fraction_of_nonzero=(float((zero & nonzero).sum().item()) / nz) if nz else 0.0)
     return out
+
+
+def source_sha256():
+    """The sha256 of the source files this record was computed by, read at
+    run time, so a record names its code even when the tree on the box was
+    synced after the job that wrote it had started."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return {name: hashlib.sha256(open(os.path.join(here, name), "rb").read()).hexdigest()
+            for name in ('arith.py', 'byte_lm_train.py')}
 
 
 def profile(shape):
@@ -345,6 +358,10 @@ def cosine(a, b):
 
 def make_spec(arm, attn):
     a = ARMS[arm]
+    if "overrides" in a:
+        if not attn:
+            raise ValueError(f"arm {arm} is a complete configuration; it has no projections-only form")
+        return Spec(a["name"], w=a["w"], a=a["a"], attn=True, overrides=a["overrides"])
     return Spec(a["name"] + ("+attn" if attn else ""), w=a["w"], a=a["a"], attn=attn)
 
 
@@ -400,6 +417,7 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
                 print(tag, "step", step + 1, "train", round(loss.item(), 4), "val", round(v, 4), flush=True)
     record = dict(
         schema="mojolearn.lowbit_quality.training_run.v1", commit=args.commit, tag=tag,
+        source_sha256=source_sha256(),
         arm=arm, profile_name=spec.name, mode=mode, attention_products=attn, seed=seed,
         seed_xor=seed_xor_of(seed), spec=spec.describe(), shape=shape, model_profile=profile(shape),
         parameters=total, initialization=INIT_ID, initial_parameters_sha256=init_sha,
@@ -425,6 +443,11 @@ def run_one(args, arm, mode, attn, seed, corpus, corpus_bytes, corpus_sha, devic
 
 def plan(args):
     runs = [("a", "fwd", False, s) for s in range(args.baseline_seeds)]
+    if args.only:
+        for item in args.only.split(","):
+            arm, mode, where = item.split(":")
+            runs += [(arm, mode, where == "attn", s) for s in range(args.seeds)]
+        return runs
     wanted = set(a for a in args.arms.split(",") if a)
     for arm, mode, attn in ORDER:
         if arm in wanted:
@@ -474,6 +497,8 @@ def main(argv=None):
     ap.add_argument("--corpus", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--arms", default="e,c,d,int12,int10,f,int8w-int15a,b")
+    ap.add_argument("--only", default=None,
+                    help="an explicit list in place of the plan: arm:mode:proj|attn, comma separated")
     ap.add_argument("--baseline-seeds", type=int, default=5)
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--equal-steps", type=int, default=4000)
