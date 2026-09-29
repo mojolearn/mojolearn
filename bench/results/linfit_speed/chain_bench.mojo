@@ -14,9 +14,12 @@ from x_linear.ops import FP, fz, xmad, ld, st, fmad
 from x_linear.tops import chain_fmad, chain_fmad_scaled, fold_fa
 
 
-def k_plain(x: FP, v: FP, res: FP, n: Int, d: Int, mode: Int):
+def k_plain(x: FP, v: FP, res: FP, n_in: Int32, d_in: Int32, mode_in: Int32):
     if Int(thread_idx.x) != 0:
         return
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var mode = Int(mode_in)
     var acc = Float32(0)
     if mode == 0:
         # fma chain, operands from memory (row stride d), no flush
@@ -62,7 +65,7 @@ def main() raises:
         for rep in range(2):
             var t0 = perf_counter_ns()
             ctx.enqueue_function[k_plain](
-                dx.unsafe_ptr(), dv.unsafe_ptr(), do.unsafe_ptr(), n, d, mode, grid_dim=1, block_dim=32,
+                dx.unsafe_ptr(), dv.unsafe_ptr(), do.unsafe_ptr(), Int32(n), Int32(d), Int32(mode), grid_dim=1, block_dim=32,
             )
             ctx.synchronize()
             var t1 = perf_counter_ns()
