@@ -127,7 +127,29 @@ plan --full` prints it on its own.
 The numbered steps below are the same work by hand: the fallback when a step
 refuses and needs a person, and the reference for what each step runs.
 
-**Alpha Python/reference patch:** use the [bounded patch path](lanes/RELEASE_PROCESS_ALPHA.md#pythonreference-patches-with-unchanged-native-inputs). Reuse unchanged native binaries, check only affected numerical references, and smoke each exact final wheel. The broader native-build and certification steps below do not apply to every such patch.
+### Bounded followup after a completed qualification run
+
+For an alpha Python/reference patch with unchanged native inputs, retain the
+original reports and compare the actual old and new wheel payloads. Admit
+unchanged results only when the relevant shipped Python and native bytes are
+unchanged and their values still match the final references. Recheck every
+lane in the affected family; do not mark the original failed run as passing.
+`tools/admit_cluster_identity_repair.py` implements this admission for the
+clustering buffer repair, including the complete original lane inventory.
+
+Pack all final wheels with the new source witness, including plugins whose
+payload metadata names that source. Run the expanded installed smoke on each
+exact final platform/vendor artifact and compare the selected public identity
+reports with `tools/compare_installed_identity.py`. These bounded receipts do
+not claim full numerical certification: retain the broader original campaign,
+reference-admission evidence, native-source proofs and physical multi-GPU
+witnesses alongside them. Any unresolved applicable failure holds publication.
+
+Use the by-hand publication steps below when the orchestrator cannot represent
+these reports. Do not synthesize legacy `column.json` files or mark unexecuted
+orchestrator steps complete. Preserve the original receipts and their SHA256s,
+run the existing exact-artifact admission checks, publish both Linux plugins
+before the Linux core, and complete the post-index installation checks.
 
 ## 0. Rehearse (by hand, before anything is rented)
 
