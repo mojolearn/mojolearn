@@ -156,11 +156,11 @@ class ParallelCausalLM(CausalLM):
 
     @classmethod
     def load(cls, path, *, layer_devices, weight_format='float32', max_positions=None,
-             gemm_profile=None):
-        from .. import _gemm_profile
+             numeric_profile=None):
+        from .. import _numeric_profile
         from .config import HFConfig, plan_for
         from .safetensors import Checkpoint
-        gemm_profile = _gemm_profile.resolve(gemm_profile, 'mojolearn.models.ParallelCausalLM.load gemm_profile')
+        numeric_profile = _numeric_profile.resolve(numeric_profile, 'mojolearn.models.ParallelCausalLM.load numeric_profile')
         if weight_format not in ('float32', 'bfloat16', 'int8'):
             raise ValueError('unsupported weight_format')
         layer_devices = tuple(layer_devices)
@@ -177,7 +177,7 @@ class ParallelCausalLM(CausalLM):
             ckpt.close()
         return cls(plan, weights, layer_devices=layer_devices,
                    weight_format=weight_format, max_positions=max_positions,
-                   gemm_profile=gemm_profile)
+                   numeric_profile=numeric_profile)
 
     def _make_blocks(self, cls, layers, kwargs):
         return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]

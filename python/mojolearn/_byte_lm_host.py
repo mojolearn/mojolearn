@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 from . import _backend
+from . import _numeric_profile
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, frombytes, zeros
 from ._bufcheck import flat_view, le_bytes
 from ._byte_lm_config import ByteLanguageModelConfig
@@ -365,6 +366,8 @@ class LanguageModelHostTrainer:
     def __init__(self, parameters, *, m=None, v=None, shape=None,
                  completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
                  weight_decay=.01):
+        # A trainer runs only under a numeric profile whose TRAINING gates have passed.
+        _numeric_profile.require_training("mojolearn.LanguageModelHostTrainer")
         shape = ByteLanguageModelConfig() if shape is None else shape
         self._shape = shape
         self._native = _native_shape(shape)
