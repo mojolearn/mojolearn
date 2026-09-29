@@ -1,0 +1,2 @@
+compared 264, differ 0
+VERDICT: the two runs agree at every arm and shape compared
