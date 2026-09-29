@@ -116,7 +116,9 @@ CORPUS_KEYS = {"enwik8": "corpus/enwik8/input.txt",
 #: NVIDIA pod on 2026-09-27 (Python 3.11).
 PINS_COMMON = ["statsmodels==0.15.0", "statsforecast==2.1.1", "arch==8.0.0", "prophet==1.4.0",
                "networkx==3.6.1", "shap==0.51.0", "implicit==0.7.3",
-               "torch-geometric==2.8.0.post1", "gpytorch==1.15.2", "faiss-cpu==1.15.1"]
+               "torch-geometric==2.8.0.post1", "gpytorch==1.15.2", "faiss-cpu==1.15.1",
+               # the bpe-encode and bpe-train opponent (Hugging Face tokenizers)
+               "tokenizers==0.23.2"]
 PINS = {"apple": list(PINS_COMMON), "amd": list(PINS_COMMON),
         "nvidia": list(PINS_COMMON)}
 #: installed from the rapids index with the pinned cuml/cuvs set
@@ -1157,6 +1159,21 @@ _SHARED = {
 }
 
 
+# ---- the extra lanes (tools/bench_board_extra.py, 2026-09-29): QNRegressor,
+# kpss_test / select_d, clip_grad_norm_, cross_entropy, the BPE tokenizer, the
+# six learning-rate schedules and johnson_lindenstrauss_min_dim
+def _load_extra():
+    spec = importlib.util.spec_from_file_location(
+        "bba_extra", os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_board_extra.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_EXTRA = _load_extra()
+_EXTRA.register(_add)
+
+
 def _merge_shared():
     for lane, extra in _SHARED.items():
         spec = LANES[lane]
@@ -1188,23 +1205,13 @@ NOT_RACED = {
     "LinearSVC / LinearSVR": "already public and raced as classical2/linearsvc and "
                              "classical2/linearsvr",
     "SpectralEmbedding": "already public and raced as classical2/spectral-embedding",
-    "LR schedulers (step, exponential, one-cycle)": "a scalar per step: nothing to time; their "
-                                                    "equality with torch.optim.lr_scheduler is "
-                                                    "the lane's sanity check",
     "DampedETS": "ETS(model='AAN', damped=True) by construction (error='A'), the model the "
                  "damped-ets lane races",
     "sparse_encode": "the encoder SparseCoder.transform calls, raced as algos/sparse-coder",
     "resample_indices": "the index draw inside resample(), raced as algos/resample",
-    "johnson_lindenstrauss_min_dim": "a closed-form integer: nothing to time",
-    "monte_carlo_integrate": "no pinned library has the same seeded volume-times-mean "
-                             "integrator (scipy's qmc_quad is quasi-Monte Carlo); no opponent",
-    "kpss_test / select_d": "pmdarima's KPSS test and differencing search, timed inside "
-                            "algos/autoarima (d chosen by KPSS); pmdarima is not pinned and "
-                            "statsmodels' kpss uses another lag rule",
-    "QNRegressor": "cuML's quasi-Newton regressor (l1_strength / l2_strength): its only "
-                   "same-algorithm opponent is cuML's internal QN solver; scikit-learn "
-                   "LinearRegression / QuantileRegressor take other parameter sets, which the "
-                   "board's params == sk_params rule does not admit",
+    "monte_carlo_integrate": "no pinned library has a plain seeded Monte Carlo integrator "
+                             "(numpy and torch have none; scipy.integrate.qmc_quad is "
+                             "quasi-Monte Carlo over a QMCEngine); no opponent",
 }
 
 
@@ -1224,6 +1231,8 @@ _NVIDIA_ONLY = ("cuml-gpu", "cuvs-gpu", "cugraph-gpu", "cupy-gpu", "implicit-gpu
 def opponents(vendor, lane):
     s = LANES[lane]
     arms = []
+    if s["kind"] == "extra":
+        return _EXTRA.opponents(vendor, lane, s, TORCH_GPU[vendor])
     if s["kind"] in ("layer", "seqmodel", "cnnclf"):
         arms = ["torch-" + t for t in TORCH_GPU[vendor]]
         if s["task"] == "dropout2d":
@@ -1347,6 +1356,8 @@ def _jsonable(v):
 def fit_text(lane):
     s = LANES[lane]
     k, t = s["kind"], s["task"]
+    if k == "extra":
+        return s["fit_text"]
     if k == "layer":
         return "forward + backward(dy)"
     if k == "seqmodel":
@@ -1476,6 +1487,7 @@ BLOCK_ROWS = {
     "countclf": "count features with a class label, every 10th row held out",
     "bytes": "64 x 256 bytes of enwik8",
     "tensor": "a seeded tensor (see notes)",
+    "corpus": "the first 4 MiB of enwik8 as 2,048-character documents",
     "images": "20,000 fit + 5,000 held-out seeded 1 x 28 x 28 images, 10 classes",
     "seqwin": "64 series -> windows of 24 steps, fit = the first 80% of time", "optim": "16,777,216 parameters x 10 steps",
     "dense": "8192 x 8192 system, 64 right-hand sides",
@@ -1536,7 +1548,7 @@ def source_exports():
     # the expansion doors, plus the package's own __all__ and the public
     # submodules whose functions the lanes name as `module.function`
     core = ("__init__.py", "linalg.py", "resample.py", "training.py", "model_selection.py",
-            "preprocessing.py", "embedding.py")
+            "preprocessing.py", "embedding.py", "tokenizer.py")
     for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
         if not ((f.startswith("_expansion_") and f.endswith(".py")) or f in core):
             continue
@@ -1620,7 +1632,7 @@ MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "ts
 def block_file(lane, dataset):
     """The npz/json basename a (lane, dataset) reads."""
     b = block_of(lane)
-    if b in ("dense", "sym", "tensor", "optim", "images"):
+    if b in ("dense", "sym", "tensor", "optim", "images", "corpus"):
         return None
     if b == "seqwin":
         return "ts-%s" % dataset
@@ -2207,7 +2219,8 @@ def build(lane, arm, D):
     fn = {"est": _build_est, "dart": _build_dart, "seqmodel": _build_seqmodel,
           "cnnclf": _build_cnnclf, "ts": _build_ts, "graph": _build_graph, "ann": _build_ann,
           "layer": _build_layer, "optim": _build_optim, "linalg": _build_linalg,
-          "als": _build_als, "shap": _build_shap, "svgp": _build_svgp, "fn": _build_fn}[kind]
+          "als": _build_als, "shap": _build_shap, "svgp": _build_svgp, "fn": _build_fn,
+          "extra": lambda l, a, d: _EXTRA.build(l, a, d, globals())}[kind]
     if arm in OURS_ARMS:
         _ours_class(lane)                     # Skipped when not exported
     return fn(lane, arm, D)
@@ -4257,6 +4270,8 @@ def _modularity(ip, ix, lab):
 
 
 def quality(lane, D, outs):
+    if LANES[lane]["kind"] == "extra":
+        return _EXTRA.quality(lane, D, outs, globals())
     np = _np()
     more = _tool("bench_board_more")
     qk = quality_kind(lane)
