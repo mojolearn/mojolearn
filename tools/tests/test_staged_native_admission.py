@@ -123,6 +123,19 @@ class Admission(unittest.TestCase):
             self.proof=canonicalize(fixture());value=a.decoded(self.proof['composition_witness']);mutation(value);self.proof['composition_witness']=w(value);self.refused()
         self.proof=canonicalize(fixture());del self.proof['canonical_host_manifest_witness'];self.refused()
 
+    def test_fresh_source_admission_preserves_original_stage(self):
+        self.proof=canonicalize(self.proof)
+        original=self.proof['stage_witness'].copy()
+        self.proof['source_commit']='9'*40
+        self.refused()
+        self.proof['native_source_admission']=dict(schema='mojolearn.native-source-equivalence.v1',
+            original_staged_source_commit='c'*40,admitted_source_commit='9'*40,
+            stage_witness_sha256=original['sha256'],source_sha256=self.proof['source_sha256'],closure_output_count=110)
+        self.assertTrue(a.validate_staged(self.proof))
+        self.assertEqual(self.proof['stage_witness'],original)
+        self.proof['native_source_admission']['original_staged_source_commit']='8'*40
+        self.refused()
+
     def test_current_source_inventory_must_match(self):
         with patch('check_linux_release_qualification.tracked_native_inventory',return_value=[['changed.py','f'*64]]):
             self.assertFalse(a.complete_native_proof(self.proof,Path('/irrelevant')))

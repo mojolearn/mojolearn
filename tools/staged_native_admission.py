@@ -63,7 +63,17 @@ def validate_staged(proof, source_root=None):
     admission = decoded(proof.get('stage_witness'))
     require(admission.get('schema') == 'mojolearn.native-staging-admission.v1'
             and admission.get('status') == 'STAGED', 'Missing successful staging receipt')
-    require(admission.get('admitted_package_source_commit') == source, 'Wrong admitted source')
+    staged_source = admission.get('admitted_package_source_commit')
+    require(valid_sha(staged_source,40), 'Invalid original staged source')
+    if staged_source != source:
+        transition = proof.get('native_source_admission',{})
+        require(transition == dict(schema='mojolearn.native-source-equivalence.v1',
+                original_staged_source_commit=staged_source, admitted_source_commit=source,
+                stage_witness_sha256=proof['stage_witness']['sha256'],
+                source_sha256=proof.get('source_sha256'), closure_output_count=len(expected_outputs())),
+                'Missing explicit fresh native source admission')
+    else:
+        require('native_source_admission' not in proof, 'Unnecessary native source transition')
     require(valid_sha(admission.get('qualified_source_commit'), 40), 'Invalid qualified source')
     compiler = compiler_identity(admission.get('compiler'))
     vendor, arch = admission.get('vendor'), admission.get('arch')
@@ -91,7 +101,7 @@ def validate_staged(proof, source_root=None):
     if 'canonical_host_stage_witness' in proof:
         canonical = decoded(proof['canonical_host_stage_witness'])
         require(canonical.get('schema')==admission['schema'] and canonical.get('status')=='STAGED'
-                and canonical.get('admitted_package_source_commit')==source
+                and canonical.get('admitted_package_source_commit')==staged_source
                 and canonical.get('source_inventory')==inventory and canonical.get('source_sha256')==proof['source_sha256']
                 and compiler_identity(canonical.get('compiler'))==compiler and canonical.get('vendor')=='cuda'
                 and isinstance(canonical.get('arch'),str) and re.fullmatch('sm_[0-9]+[a-z]*',canonical['arch']), 'Canonical host source/compiler differs')
@@ -103,7 +113,7 @@ def validate_staged(proof, source_root=None):
                 == {r['relative']:r['staged_sha256'] for r in crows.values()}, 'Canonical stage manifest SHA mismatch')
         composition = decoded(proof.get('composition_witness'))
         require(composition.get('schema')=='mojolearn.canonical-host-assembly.v1'
-                and composition.get('package_source')==source, 'Missing explicit canonical composition')
+                and composition.get('package_source')==staged_source, 'Missing explicit canonical composition')
         source_links = composition.get('sources',{})
         require(source_links.get('device_manifest_sha256')==proof['stage_manifest_witness']['sha256']
                 and source_links.get('canonical_manifest_sha256')==proof['canonical_host_manifest_witness']['sha256'], 'Composition manifest linkage differs')
@@ -201,7 +211,7 @@ def complete_native_proof(proof, source_root=None):
 
 def adapt(admission_path, stamps, set_root, source_root, native_builds, raw_root,
           stage_manifest, canonical_admission=None, canonical_stamps=None,
-          canonical_raw_root=None, canonical_manifest=None, composition=None):
+          canonical_raw_root=None, canonical_manifest=None, composition=None, admitted_source_commit=None):
     stage = witness(admission_path); admission = decoded(stage)
     builds = [{'manifest':witness(m),'results':witness(r)} for m,r in native_builds]
     require(admission['status']=='STAGED', 'Staging incomplete')
@@ -247,6 +257,17 @@ def adapt(admission_path, stamps, set_root, source_root, native_builds, raw_root
                stage_witness=stage,stage_manifest_witness=primary_manifest,
                native_builds=builds,output_witnesses=links,runtime_libraries=libraries,
                extensions=ext,host_extension=hosts,**extra)
+    if admitted_source_commit is not None:
+        import subprocess
+        actual = subprocess.run(['git','-C',str(source_root),'rev-parse','HEAD'],
+                                check=True,capture_output=True,text=True,timeout=30).stdout.strip()
+        require(actual==admitted_source_commit, 'Fresh admission checkout is not requested source')
+        if admitted_source_commit != proof['source_commit']:
+            proof['native_source_admission']=dict(schema='mojolearn.native-source-equivalence.v1',
+                original_staged_source_commit=proof['source_commit'], admitted_source_commit=admitted_source_commit,
+                stage_witness_sha256=stage['sha256'],source_sha256=proof['source_sha256'],
+                closure_output_count=len(expected_outputs()))
+            proof['source_commit']=admitted_source_commit
     validate_staged(proof,source_root)
     return proof
 
@@ -261,10 +282,11 @@ if __name__=='__main__':
     p.add_argument('--canonical-admission');p.add_argument('--canonical-stamps')
     p.add_argument('--canonical-raw-root');p.add_argument('--canonical-manifest')
     p.add_argument('--composition');p.add_argument('--out',required=True)
+    p.add_argument('--admitted-source-commit',help='Explicit newer packaging commit; native inventory and all closures must still match original stage')
     args=p.parse_args()
     result=adapt(args.admission,args.stamps,args.set_root,args.source,args.native_build,
                  args.raw_root,args.stage_manifest,args.canonical_admission,args.canonical_stamps,
-                 args.canonical_raw_root,args.canonical_manifest,args.composition)
+                 args.canonical_raw_root,args.canonical_manifest,args.composition,args.admitted_source_commit)
     output=Path(args.out);require(not output.exists(),'Refuse overwriting a provenance proof')
     output.write_text(json.dumps(result,indent=2)+'\n')
     print(f"Staged admission: {len(result['extensions'])} device-tier outputs, {len(result['host_extension'])} host outputs")
