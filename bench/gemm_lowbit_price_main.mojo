@@ -311,10 +311,39 @@ def _sabotage_word(word: UInt64, i: Int, count: Int) -> UInt64:
     return word
 
 
+def _whole(have: Int, count: Int, what: String) raises:
+    """A read-back copies the WHOLE device buffer into a host buffer of
+    `count` elements, and a poison copies `len(buffer)` elements out of one.
+    A device buffer of any other length is refused by name."""
+    if have != count:
+        raise Error(
+            "bench/gemm_lowbit_price_main: " + what + " holds " + String(have)
+            + " elements and " + String(count) + " were asked for; the copy is"
+            " of the whole buffer, so the two must be equal"
+        )
+
+
+def _digest_f32(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int, tag: String
+) raises -> UInt64:
+    """`_dev_digest`, refused on a buffer that is not exactly `count` long."""
+    _whole(len(buf), count, tag)
+    return _dev_digest(ctx, buf, count, tag)
+
+
+def _poison_f32(
+    ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], count: Int, tag: String
+) raises:
+    """`_dev_poison`, refused on a buffer that is not exactly `count` long."""
+    _whole(len(buf), count, tag)
+    _dev_poison(ctx, buf, count)
+
+
 def _digest_u16(
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.uint16], count: Int
 ) raises -> UInt64:
     """`_dev_digest`'s digest over a bf16 buffer's bits."""
+    _whole(len(buf), count, String("a bf16 buffer"))
     var h = ctx.enqueue_create_host_buffer[DType.uint16](count)
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=buf)
@@ -336,6 +365,8 @@ def _digest_codes(
     """The digest of an int8 store: every code, then every row exponent.
     Contract section 2 promises the codes and the exponents across vendors,
     so this is the quantizer's identity riding along."""
+    _whole(len(q), rows * cols, String("an int8 code buffer"))
+    _whole(len(e), rows, String("an int8 exponent buffer"))
     var hq = ctx.enqueue_create_host_buffer[DType.int8](rows * cols)
     var he = ctx.enqueue_create_host_buffer[DType.int32](rows)
     ctx.synchronize()
@@ -368,11 +399,18 @@ struct ShapeBuffers(Movable):
     var eb: DeviceBuffer[DType.int32]
     var c: DeviceBuffer[DType.float32]
     var ws: DeviceBuffer[DType.float32]
-    #: The conversion arms' scratch outputs: a second int8 store for the
-    #: weights and a second bf16 image, so timing a conversion never
-    #: rewrites an operand a product arm reads.
-    var qs: DeviceBuffer[DType.int8]
-    var es: DeviceBuffer[DType.int32]
+    #: The conversion arms' scratch outputs: a second int8 store for each
+    #: operand and a second bf16 image, so timing a conversion never
+    #: rewrites an operand a product arm reads. EACH IS EXACTLY THE SIZE OF
+    #: WHAT IS WRITTEN TO IT: a read-back copies the whole device buffer, so
+    #: a scratch larger than the host buffer it is read into writes past
+    #: the host buffer's end (m2pro, 2026-09-29: one `max(m, n) * k` scratch
+    #: for both operands gave conversion digests that differed from the
+    #: other boxes' at the decode rows, where `m` is far below `n`).
+    var qsa: DeviceBuffer[DType.int8]
+    var esa: DeviceBuffer[DType.int32]
+    var qsb: DeviceBuffer[DType.int8]
+    var esb: DeviceBuffer[DType.int32]
     var hs: DeviceBuffer[DType.uint16]
     var work: LowbitWorkspace
 
@@ -380,9 +418,6 @@ struct ShapeBuffers(Movable):
         var nws = identical_gemm_workspace_max_floats(m, n, k)
         if nws < 1:
             nws = 1
-        var rows_s = n
-        if m > rows_s:
-            rows_s = m
         self.a = ctx.enqueue_create_buffer[DType.float32](m * k)
         self.b = ctx.enqueue_create_buffer[DType.float32](n * k)
         self.bh = ctx.enqueue_create_buffer[DType.uint16](n * k)
@@ -392,8 +427,10 @@ struct ShapeBuffers(Movable):
         self.eb = ctx.enqueue_create_buffer[DType.int32](n)
         self.c = ctx.enqueue_create_buffer[DType.float32](m * n)
         self.ws = ctx.enqueue_create_buffer[DType.float32](nws)
-        self.qs = ctx.enqueue_create_buffer[DType.int8](rows_s * k)
-        self.es = ctx.enqueue_create_buffer[DType.int32](rows_s)
+        self.qsa = ctx.enqueue_create_buffer[DType.int8](m * k)
+        self.esa = ctx.enqueue_create_buffer[DType.int32](m)
+        self.qsb = ctx.enqueue_create_buffer[DType.int8](n * k)
+        self.esb = ctx.enqueue_create_buffer[DType.int32](n)
         self.hs = ctx.enqueue_create_buffer[DType.uint16](n * k)
         self.work = LowbitWorkspace(ctx)
         self.work.ensure(ctx, nws, n * k)
@@ -420,9 +457,9 @@ def _enqueue_arm(
         comptime if HAS_APPLE_CHUNK:
             identical_gemm_int8_apple_chunk_into(ctx, sb.c, sb.qa, sb.ea, sb.qb, sb.eb, m, n, k)
     elif arm == ARM_QUANTIZE_A:
-        quantize_rows_int8_device(ctx, sb.qs, sb.es, sb.a, m, k)
+        quantize_rows_int8_device(ctx, sb.qsa, sb.esa, sb.a, m, k)
     elif arm == ARM_INT8_PACK_B:
-        quantize_rows_int8_device(ctx, sb.qs, sb.es, sb.b, n, k)
+        quantize_rows_int8_device(ctx, sb.qsb, sb.esb, sb.b, n, k)
     elif arm == ARM_BF16_PACK_B:
         bf16_narrow(ctx, sb.hs, sb.b, n * k)
     elif arm == ARM_BF16_WIDEN_B:
@@ -444,15 +481,15 @@ def _arm_digest(
     bit, in a build that names it)."""
     if _arm_is_product(arm):
         _sabotage_f32(ctx, sb.c, m * n)
-        return _dev_digest(ctx, sb.c, m * n, tag)
+        return _digest_f32(ctx, sb.c, m * n, tag)
     if arm == ARM_QUANTIZE_A:
-        return _digest_codes(ctx, sb.qs, sb.es, m, k)
+        return _digest_codes(ctx, sb.qsa, sb.esa, m, k)
     if arm == ARM_INT8_PACK_B:
-        return _digest_codes(ctx, sb.qs, sb.es, n, k)
+        return _digest_codes(ctx, sb.qsb, sb.esb, n, k)
     if arm == ARM_BF16_PACK_B:
         return _digest_u16(ctx, sb.hs, n * k)
     _sabotage_f32(ctx, sb.work.wide, n * k)
-    return _dev_digest(ctx, sb.work.wide, n * k, tag)
+    return _digest_f32(ctx, sb.work.wide, n * k, tag)
 
 
 def _arm_note(arm: Int, m: Int, n: Int, k: Int) -> String:
@@ -522,6 +559,8 @@ def _time_shape(
     var sb = ShapeBuffers(ctx, m, n, k)
     # `bench/gemm_price_main.mojo`'s salts at this shape index, so the fp32
     # operands are the ones its device arm reads at the same extents.
+    _whole(len(sb.a), m * k, String("the left operand"))
+    _whole(len(sb.b), n * k, String("the right operand"))
     _dev_fill(ctx, sb.a, m * k, 11 + idx)
     _dev_fill(ctx, sb.b, n * k, 22 + idx)
     # The low-bit operands, by the contract's own seams on the device, before
@@ -547,9 +586,9 @@ def _time_shape(
             continue
         var tag = String("lowbit.") + name + "." + _arm_name(arm)
         if _arm_is_product(arm):
-            _dev_poison(ctx, sb.c, m * n)
+            _poison_f32(ctx, sb.c, m * n, tag)
         elif arm == ARM_BF16_WIDEN_B or arm == ARM_INT8_DEQUANT_B:
-            _dev_poison(ctx, sb.work.wide, n * k)
+            _poison_f32(ctx, sb.work.wide, n * k, tag)
         _enqueue_arm(ctx, sb, arm, m, n, k)
         ctx.synchronize()
         dig[arm] = _arm_digest(ctx, sb, arm, m, n, k, tag)

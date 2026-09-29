@@ -37,10 +37,19 @@ plants the codes that reach the bound:
                      with j, so neighbouring cells of one fragment hold
                      +max and -max together
 
-at k on both sides of the chunk boundary (1024, 1025, 1040, 1041, 2081), at
+at k on both sides of the chunk boundary (1024, 1025, 1040, 1041, 1042, 2081), at
 the transformer widths (4096, 4097, 14336) and at the profile's largest k
 (131072, where the Int32 sum is 2114060288), with m and n off the 8-wide
 fragment, the 64-wide WIDE tile and the 128-wide ROW tile.
+
+WHERE A MISSING BOUNDARY FIRST SHOWS (m2pro, 2026-09-29, the boundary
+removed). Not at k = 1041: there the float chain rounds ONCE, at its last
+step, and one rounding of the exact sum is what the epilogue's own
+`i32_to_f32_pinned` does to the Int32, so the stored cell is the same. It
+shows from k = 1042, where the chain has rounded twice (16129 * 1042 =
+16806418 is a float32 and the chain holds 16806416). The k = 1042 shape is
+planted for that reason; cancel-halves at k = 2081 does not show it either,
+its partial sum peaking at 16129 * 1040.
 
 MAIN RUNS EVERY GATE AND REPORTS EVERY VERDICT before it raises, and the
 planted gate reports EVERY case before it raises, as
@@ -153,7 +162,7 @@ def _plant_exponents(rows: Int, base: Int, period: Int) -> List[Int32]:
 
 #: The planted shapes: k on both sides of the chunk boundary, the
 #: transformer widths, the profile's largest k; m and n off every tile edge.
-comptime PLANT_SHAPE_COUNT = 10
+comptime PLANT_SHAPE_COUNT = 11
 
 
 def _plant_shape(i: Int) -> Tuple[Int, Int, Int]:
@@ -175,6 +184,8 @@ def _plant_shape(i: Int) -> Tuple[Int, Int, Int]:
         return (8, 129, 14336)
     if i == 8:
         return (2, 3, INT8_MAX_K)
+    if i == 9:
+        return (3, 5, 1042)
     return (1, 1, 1041)
 
 

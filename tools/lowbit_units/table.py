@@ -274,6 +274,38 @@ def main():
             w(f"| {arm} | {len(v)} | {v.count('AGREE')} | {v.count('DISAGREE')} | {v.count('ONE BOX')} | "
               f"{sum(1 for x in v if x.startswith('NOT'))} |")
     w("")
+    # One profile, several plans: every plan of a profile must print the
+    # profile's digest on every box, so the Apple probe (one box) is held to
+    # the integer units' digests and the fused plan to the widen plan's.
+    w("### One profile, every plan, every box")
+    w("")
+    w("AGREE: every digest any plan of the profile printed on any box at the shape is the same, and at")
+    w("least two boxes ran a plan of it.")
+    w("")
+    w("| profile | plans | shapes | AGREE | DISAGREE | ONE BOX |")
+    w("|---|---|---:|---:|---:|---:|")
+    for profile, plans in (("fp32.v1", ("fp32.v1",)),
+                           ("bf16f32.v1", ("bf16f32.v1.fused", "bf16f32.v1.widen")),
+                           ("int8i32.v1", ("int8i32.v1.flat", "int8i32.v1.mma", "int8i32.v1.applechunk"))):
+        tally = {"AGREE": 0, "DISAGREE": 0, "ONE BOX": 0}
+        seen = set()
+        for shape in all_shapes:
+            ran = [(b, p_, boxes[b][0][(shape, p_)]) for b in order for p_ in plans if (shape, p_) in boxes[b][0]]
+            if not ran:
+                continue
+            seen.update(p_ for _, p_, _ in ran)
+            if len({(r["m"], r["n"], r["k"]) for _, _, r in ran}) > 1:
+                continue  # counted as not comparable in the table above
+            if len({b for b, _, _ in ran}) < 2:
+                tally["ONE BOX"] += 1
+            elif len({r["digest"] for _, _, r in ran}) == 1:
+                tally["AGREE"] += 1
+            else:
+                tally["DISAGREE"] += 1
+                disagree += 1
+        w(f"| {profile} | {', '.join(p_ for p_ in plans if p_ in seen)} | {sum(tally.values())} | "
+          f"{tally['AGREE']} | {tally['DISAGREE']} | {tally['ONE BOX']} |")
+    w("")
     text = "\n".join(out) + "\n"
     if a.out:
         open(a.out, "w").write(text)
