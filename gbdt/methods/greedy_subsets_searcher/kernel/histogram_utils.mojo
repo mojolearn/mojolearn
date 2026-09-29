@@ -202,6 +202,33 @@ def snap_gradients_to_scale_kernel(
         pos += stride
 
 
+def snap_plane_to_scale_kernel(
+    plane: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    fixed_scale: Float32,
+):
+    """lane/sym-quality: `snap_gradients_to_scale_kernel` for the POINTWISE
+    searcher's gradient plane (`fit_oblivious_tree_structure`, the Plain
+    `use_pointwise_searcher` arm and the Ordered drivers), which carries its
+    scale as a host scalar and its planes as separate buffers. Same rule,
+    keyed on the plane index: a value already on the grid quantizes to the
+    same integer under any dither key, so the histogram (keyed on the
+    document) reads exactly what the partition sums read."""
+    var n = Int(n_in)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    while i < n:
+        var u = hist2_dither(i)
+        comptime if is_defined["MOJOLEARN_SNAP_SABOTAGE"]():
+            u = hist2_dither(i + 1)
+        var q = hist2_quantize(plane.unsafe_load(i), fixed_scale, u)
+        var v = Float32(0.0)
+        if q != Int32(0):
+            v = ftz(Float32(Int(q)) / fixed_scale)
+        plane.unsafe_store(i, v)
+        i += stride
+
+
 def hist2_smem_add[
     dt: DType
 ](
