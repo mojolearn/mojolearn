@@ -135,6 +135,12 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
     side of a split weighs exactly zero. The boosting loop sets it for
     weighted fits; False (the default) keeps every bit."""
 
+    var snap_gradients: Bool
+    """lane/sym-quality, NO CATBOOST COUNTERPART: put the gradient planes on
+    the tree's fixed-point grid before the first histogram
+    (`kernel/histogram_utils.snap_gradients_to_scale_kernel`). False (the
+    default) keeps every bit."""
+
     def __init__(out self):
         """Their aggregate defaults, field for field."""
         self.score_function = SCORE_FUNCTION_COSINE
@@ -149,6 +155,7 @@ struct TTreeStructureSearcherOptions(Copyable, Movable):
         self.random_strength = Float32(0.0)
         self.feature_weights = List[Float32]()
         self.snap_stats = False
+        self.snap_gradients = False
 
     def check(self) raises:
         """What this LANE can honor, refused by name rather than ignored.
