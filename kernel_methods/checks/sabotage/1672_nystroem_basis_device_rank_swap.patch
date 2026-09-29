@@ -1,0 +1,15 @@
+diff --git a/kernel_methods/estimator.mojo b/kernel_methods/estimator.mojo
+index 04db3fea7..b4c73aabd 100644
+--- a/kernel_methods/estimator.mojo
++++ b/kernel_methods/estimator.mojo
+@@ -850,6 +850,10 @@ def nystroem_fit_host(
+ 
+     var q = n_components
+     var basis = km_basis_indices(seed, n_samples, q)
++    if q >= 2:
++        var t0 = basis[0]
++        basis[0] = basis[1]
++        basis[1] = t0
+     if sabotage == KMSAB_BASIS_FROM_LAUNCH:
+         # ARM: a LAUNCH-STRIDED slice instead of the position-mapped rank
+         # prefix. Plausible, wrong, and dependent on a scheduling number.
