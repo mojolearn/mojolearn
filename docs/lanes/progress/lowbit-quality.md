@@ -258,7 +258,7 @@ EXPORTED, 2026-09-29T04:00Z, on nvc2 (CPU, torch 2.4.1):
 `~/mojolearn-evidence/lowbit-quality/backward_vectors/int15_backward_vectors.q15`,
 884,750 words, sha256
 8e8c6824315b7f9aad894c08c42bf269dadbc6973caaeab3ce5183ca8f04df79; manifest
-`bench/results/lowbit_quality/2026-09-29_nvc1-rtx4090/int15_backward_vectors.json`.
+`bench/results/lowbit_quality/2026-09-29_nvc2-rtx4090/int15_backward_vectors.json`.
 18 cases: forward, weight gradient and input gradient of `block0.w_q`,
 `block1.w_gate`, `block3.w_down`, `lm_head`, `block1.attn_qk` and
 `block2.attn_pv`, at training step 50 of seed 0. Operands are cut to 12 rows
@@ -273,6 +273,73 @@ gradient). `C` is cut from the tensor the training step used.
   weights still has the same exponent (-16), so the two rules coincide
   there. Vectors from a later step would separate them everywhere; these
   separate them in three of six.
+
+A SECOND FILE, FROM A LATER STEP (job nvc2-0009, 2026-09-29T04:20Z, GPU):
+`~/mojolearn-evidence/lowbit-quality/backward_vectors/int15_backward_vectors_step4000.q15`,
+884,750 words, sha256
+8ce755e62b33f278c1f6d13022415aced503774b6446f49897dab09b978971eb; manifest
+`bench/results/lowbit_quality/2026-09-29_nvc2-rtx4090/int15_backward_vectors_step4000.json`.
+Same format, same 18 cases, same cuts, at training step 4000 of seed 0.
+- IT IS THE MEASURED RUN'S STEP. The exporter's validation loss at step
+  4000 under the profile is 1.484375673162105, the value run
+  `e.fwdbwd.attn.s0` recorded at step 4000, to every digit.
+- The weight rows' exponents have spread (-16 to -14 in the projections).
+- THE OTHER RULE here quantizes each tensor once, in the orientation of the
+  first product that reads it (X by token, W by output feature, dY by
+  token), and carries the codes transposed. It gives different bits in ALL
+  12 backward cases, 1595 of 1728 cells: every cell of the six weight
+  gradients (144 of 144 each), and 132, 144, 107, 130, 75 and 143 of 144
+  in the six input gradients. The six forward cases are where a carried
+  code comes from, so the two rules are the same product there; the
+  manifest says "not applicable" for them.
+- Recomputed from its cut operands, every case gives the same bits as the
+  training step computed; with the rounding sabotaged every case differs.
+The step-50 file's manifest was written by the first exporter, which
+carried W only; under the fuller comparison above, a three-step dry run
+already separated 12 of 12.
+
+## Training under the 15-bit profile, complete configuration (jobs nvc2-0007, nvc2-0008)
+
+15-bit codes on every projection and every attention product; five seeds
+against five baseline seeds; records in
+`bench/results/lowbit_quality/2026-09-29_nvc2-rtx4090/`. The baseline seeds
+on nvc2 equal those on nvc1 to every printed digit.
+
+| Mode | Change at step 4000 | Interval | Change at step 6000 | Interval | Steps to the baseline's final loss | Min gradient cosine against fp32 | Verdict |
+|---|---|---|---|---|---|---|---|
+| Forward only | +0.298% | -0.287% to +0.887% | -0.354% | -1.389% to +0.691% | median 4100 | 1.000000 | PASS |
+| Forward and backward | +0.146% | -0.275% to +0.569% | -0.024% | -0.619% to +0.575% | median 4100 | 0.999997 | PASS |
+
+The interval is the mean of the five paired differences (arm minus the
+baseline of the same seed) plus and minus t(0.975, 4) standard errors,
+through exp(x) - 1; the seeds are what is resampled. It bounds the
+run-to-run error at this shape on this corpus and says nothing about
+another shape or text. Noise floor 0.0085 nats (0.853%) at step 4000 and
+0.0053 nats at step 6000. Both arms are inside it. The baseline reaches its
+own final loss at step 4000 (3800 on one seed); evaluations are 100 steps
+apart.
+
+Zero codes of the gradient, in the forward and backward arm itself, step
+3999, mean of five seeds (share of the operand's nonzero entries whose
+15-bit code is 0; `training_int15_zero_codes.md` has every product):
+
+| Product | dY by output feature (weight gradient) | dY by token (input gradient) |
+|---|---|---|
+| `lm_head` | 56.7% | 76.9% |
+| attention QK, four blocks | 8.5% to 48.2% | 5.4% to 43.9% |
+| `w_gate` | 1.4% to 9.8% | 0.4% to 1.0% |
+| every other projection, and PV | 0.1% to 6.3% | under 0.2% |
+
+DO THE ZERO CODES COST ANYTHING? The arm that codes the gradients against
+the arm that does not (forward and backward minus forward only, paired by
+seed): -0.152% at step 4000 (interval -0.886% to +0.588%) and +0.331% at
+step 6000 (interval -0.522% to +1.192%). Both straddle zero: no cost is
+measured. The limit: the second interval reaches +1.19%, so five seeds do
+not bound the cost under 1 percent BY THIS CONTRAST; against the baseline
+the same arm is bounded (upper end +0.575%).
+
+Validation of the trained weights under the float32 forward differs from
+validation under the profile by 5e-7 nats (forward and backward arm).
 
 ## Failures, with cause
 
