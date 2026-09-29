@@ -45,6 +45,7 @@ print('Installed runtime:', runtime, flush=True)
 spec = importlib.util.spec_from_file_location('mojolearn.tests', root/'__init__.py', submodule_search_locations=[str(root)])
 tests = importlib.util.module_from_spec(spec)
 sys.modules['mojolearn.tests'] = tests
+mojolearn.tests = tests
 spec.loader.exec_module(tests)
 raise SystemExit(pytest.main(sys.argv[1:]))
 '''
