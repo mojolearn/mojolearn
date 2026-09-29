@@ -22,6 +22,7 @@ from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
+from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 from x_cluster.bodies import (
     FPtr,
@@ -478,82 +479,18 @@ struct HostOps(ClusterOps):
 
         host_cells(nk_body, kc, 2 * n)
 
-        # The host's moments walk the rows once per output ROW of cells and
-        # carry MOMENTS_W neighbouring cells in the lanes of one vector: each
-        # lane is its cell's own chain (`bodies.xk_cell` / `bodies.cov_cell`,
-        # rows ascending, the same flushes and pinned products), read from
-        # contiguous memory instead of one strided walk per cell.
-        def xk_task(k: Int) {imm pr, imm px, imm pn, imm pm, imm n, imm d, imm kc}:
-            var a0 = 0
-            while a0 + MOMENTS_W <= d:
-                var acc = SIMD[DType.float32, MOMENTS_W](0)
-                for i in range(n):
-                    var r = SIMD[DType.float32, MOMENTS_W](pr[i * kc + k])
-                    var xv = ftz_v[MOMENTS_W]((px + i * d + a0).load[width=MOMENTS_W]())
-                    acc = ftz_v[MOMENTS_W](acc + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](r, xv)))
-                comptime for l in range(MOMENTS_W):
-                    pm[k * d + a0 + l] = ftz(identical_div(acc[l], pn[k]))
-                a0 += MOMENTS_W
-            for a in range(a0, d):
-                xk_cell(pr, px, n, d, kc, pn, pm, k * d + a)
-
-        host_cells(xk_task, kc, 4 * n * d)
-
-        # A task is one component and COV_AB rows a of the covariance: every
-        # row i is read once for COV_AB x d cells (each its own chain,
-        # `bodies.cov_cell`), the column differences formed once per row.
-        var a_blocks = (d + COV_AB - 1) // COV_AB
-        var n_vec = d // MOMENTS_W
-
-        def cov_task(t: Int) {imm pr, imm px, imm pm, imm pn, imm pc, imm n, imm d, imm kc, imm reg, imm a_blocks, imm n_vec}:
-            var k = t // a_blocks
-            var a0 = (t - k * a_blocks) * COV_AB
-            var a1 = min(a0 + COV_AB, d)
-            var na = a1 - a0
-            # ONE scratch block per task, padded by SCRATCH_PAD floats on
-            # both sides, so no two tasks' accumulators share a cache line.
-            var tail = d - n_vec * MOMENTS_W
-            var nv_acc = na * n_vec * MOMENTS_W
-            var n_s = na * tail
-            var scratch = List[Float32](length=2 * SCRATCH_PAD + nv_acc + n_s + d, fill=Float32(0))
-            var accv = scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]() + SCRATCH_PAD
-            var accs = accv + nv_acc
-            var db = accs + n_s
-            for i in range(n):
-                var r = pr[i * kc + k]
-                var rv = SIMD[DType.float32, MOMENTS_W](r)
-                var xrow = px + i * d
-                for q in range(n_vec):
-                    var b0 = q * MOMENTS_W
-                    (db + b0).store(ftz_v[MOMENTS_W](ftz_v[MOMENTS_W]((xrow + b0).load[width=MOMENTS_W]()) - (pm + k * d + b0).load[width=MOMENTS_W]()))
-                for b in range(n_vec * MOMENTS_W, d):
-                    db[b] = ftz(ftz(xrow[b]) - pm[k * d + b])
-                for aa in range(na):
-                    var a = a0 + aa
-                    var da = ftz(ftz(xrow[a]) - pm[k * d + a])
-                    var dav = SIMD[DType.float32, MOMENTS_W](da)
-                    for q in range(n_vec):
-                        var slot = accv + (aa * n_vec + q) * MOMENTS_W
-                        var prod = ftz_v[MOMENTS_W](mul_v[MOMENTS_W](dav, (db + q * MOMENTS_W).load[width=MOMENTS_W]()))
-                        slot.store(ftz_v[MOMENTS_W](slot.load[width=MOMENTS_W]() + ftz_v[MOMENTS_W](mul_v[MOMENTS_W](rv, prod))))
-                    for q in range(tail):
-                        var b = n_vec * MOMENTS_W + q
-                        accs[aa * tail + q] = ftz(accs[aa * tail + q] + ftz(identical_mul(r, ftz(identical_mul(da, db[b])))))
-            for aa in range(na):
-                var a = a0 + aa
-                for b in range(d):
-                    var acc: Float32
-                    if b < n_vec * MOMENTS_W:
-                        acc = accv[aa * n_vec * MOMENTS_W + b]
-                    else:
-                        acc = accs[aa * tail + b - n_vec * MOMENTS_W]
-                    var v = ftz(identical_div(acc, pn[k]))
-                    if a == b:
-                        v = ftz(v + reg)
-                    pc[k * d * d + a * d + b] = v
-            _ = scratch^
-
-        host_cells(cov_task, kc * a_blocks, 7 * n * d * COV_AB)
+        # DEVIATION 5110 (revised 2026-09-29): means and covariances fold the
+        # sample axis through the identical GEMM (`x_cluster/host/
+        # moments_gemm.mojo`), the device's `identical_gemm_into` bit for bit.
+        var nkl = List[Float32](length=kc, fill=Float32(0))
+        for k in range(kc):
+            nkl[k] = pn[k]
+        var ml = gemm_fold_means(self.f[resp], self.f[x], nkl, n, d, kc)
+        for t in range(kc * d):
+            pm[t] = ml[t]
+        var cl = gemm_fold_cov(self.f[resp], self.f[x], ml, nkl, n, d, kc, reg)
+        for t in range(kc * d * d):
+            pc[t] = cl[t]
 
     def pdist(
         mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
