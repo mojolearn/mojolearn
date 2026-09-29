@@ -219,3 +219,42 @@ def test_holt_winters_add_is_additive():
     with pytest.raises(BP.ParamsRefused, match="seasonal"):
         BP.enforce("ets", {"ours": ours, "cuml-gpu": cuml}, family="classical2",
                    stream=io.StringIO())
+
+
+def _hdbscan_arms(sk_min_samples, cuml_min_samples=10):
+    common = dict(min_cluster_size=100, metric="euclidean", cluster_selection_method="eom",
+                  cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False)
+    ours = _est("mojolearn.hdbscan", "HDBSCAN", min_samples=10, max_cluster_size=0, **common)
+    cuml = _est("cuml.cluster.hdbscan", "HDBSCAN", min_samples=cuml_min_samples, max_cluster_size=0,
+                **common)
+    sk = _est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN", min_samples=sk_min_samples,
+              max_cluster_size=None, n_jobs=-1, **common)
+    return {"ours": ours, "cuml-gpu": cuml, "sklearn-cpu": sk}
+
+
+def test_hdbscan_min_samples_counts_the_point_in_sklearn_only():
+    """scikit-learn's HDBSCAN counts the point itself in min_samples; ours and
+    cuML's do not. scikit-learn 11 selects ours' 10th neighbour: MATCHED."""
+    rep = BP.enforce("hdbscan", _hdbscan_arms(11), family="classical", stream=io.StringIO())
+    assert rep["verdict"] == "MATCHED"
+    assert rep["arms"]["sklearn-cpu"]["params"]["min_samples"] == 10
+    assert rep["arms"]["cuml-gpu"]["params"]["min_samples"] == 10
+
+
+def test_hdbscan_same_number_is_a_different_k_and_refuses():
+    """The same NUMBER on scikit-learn is a different neighbour: refused."""
+    with pytest.raises(BP.ParamsRefused):
+        BP.enforce("hdbscan", _hdbscan_arms(10), family="classical", stream=io.StringIO())
+
+
+def test_hdbscan_cuml_takes_no_transform():
+    """cuML passes min_samples straight to runner.h, which adds 1 as ours does."""
+    with pytest.raises(BP.ParamsRefused):
+        BP.enforce("hdbscan", _hdbscan_arms(11, cuml_min_samples=11), family="classical",
+                   stream=io.StringIO())
+
+
+def test_sklearn_dbscan_min_samples_is_not_transformed():
+    """Only scikit-learn's HDBSCAN is keyed: its DBSCAN counts the point, as ours does."""
+    assert BP.library_of(_est("sklearn.cluster._dbscan", "DBSCAN", min_samples=2)) == "sklearn"
+    assert BP.library_of(_est("sklearn.cluster._hdbscan.hdbscan", "HDBSCAN")) == "sklearn/HDBSCAN"

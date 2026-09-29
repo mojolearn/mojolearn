@@ -37,3 +37,6 @@ x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_rou
 # lane dbscan-int64 (2026-09-29): the ball-cover edge count is exact past the int32 wrap, and a batch past the int32 CSR is split with no label moved
 dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_split_drops_last_batch.patch
 dbscan/checks/dbscan_edge_split_check.mojo	dbscan/checks/sabotage/dbscan_exact_total_reads_wrapped_tail.patch
+# lane hdbscan-sparse (2026-09-29): DEVIATION 1620, the sparse mutual reachability MST == the dense one (device, CPU, fit); the tie rule broken on each column
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_device_tie.patch
+hdbscan/checks/sparse_mr_check.mojo	hdbscan/checks/sabotage/sparse_mr_host_tie.patch

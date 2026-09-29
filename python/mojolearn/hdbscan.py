@@ -14,7 +14,8 @@ WHAT IS REFUSED, AND WHERE (the estimator's header):
     min_samples < 1 or > n_rows          Mojo host
     min_cluster_size < 2 or > n_rows     Mojo host
     alpha <= 0 or non-finite             Mojo host
-    n_rows < 2, n_rows > 46340           Mojo host
+    n_rows < 2                           Mojo host (past 46340 rows the MST is
+                                         built without the dense graph, DEVIATION 1620)
     a NaN or infinite anywhere           Mojo host (DEVIATION 1607)
 
 HELD-OUT POINTS (2026-09-15). `HDBSCAN(prediction_data=True)` keeps the

@@ -37,7 +37,8 @@ WHAT OURS DOES. `hierarchy/impl/sparse/op/sort.mojo::
 merge_sort_u64_with_index` -- the SAME host merge sort DEVIATION 621
 already put under the MST, imported rather than rewritten -- on the key
 `(UInt64(parent) << 32) | UInt64(child)`. Both fields are non-negative
-and below `2 * n_leaves <= 2 * 46340`, so neither can reach the other's
+and below `2 * n_leaves < 2^31` (DEVIATION 1620 lifted the 46340
+bound), so neither can reach the other's
 half of the word and the unsigned order of the packed key IS their
 lexicographic order. The payload moves through the index permutation.
 

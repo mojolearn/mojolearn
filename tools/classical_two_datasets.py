@@ -350,13 +350,18 @@ CONFIG = {
     },
     "hdbscan": {
         "rows": "the dbscan block's first 100,000 rows",
-        "params": "min_samples=10, min_cluster_size=100, metric='euclidean', "
+        "params": "min_samples=10 (scikit-learn 11: the same core distance, the 10th neighbour "
+                  "besides the point), min_cluster_size=100, metric='euclidean', "
                   "cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, "
                   "allow_single_cluster=False",
         "timed": "fit",
         "mismatches": [
             "seed: no arm has a seed argument (deterministic)",
             "max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)",
+            "min_samples: ours and cuML 10, scikit-learn 11. The SAME k-th neighbour: cuML's "
+            "runner.h:68-80 (ours transcribes it) runs the k-NN at min_samples + 1 including the "
+            "point itself; scikit-learn's kneighbors(X, min_samples) counts the point itself "
+            "(its HDBSCAN Notes say so). tools/bench_board_params.py maps both to one canonical value",
             "scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo "
             "at its default",
         ],
@@ -1855,6 +1860,16 @@ HDBSCAN_KW = dict(min_samples=10, min_cluster_size=100, metric="euclidean",
                   cluster_selection_method="eom", cluster_selection_epsilon=0.0, alpha=1.0,
                   allow_single_cluster=False)
 
+#: scikit-learn's HDBSCAN min_samples COUNTS THE POINT ITSELF
+#: (sklearn/cluster/_hdbscan/hdbscan.py: kneighbors(X, min_samples)[:, -1],
+#: and its Notes: "must be 1 greater than the value used in
+#: scikit-learn-contrib/hdbscan"); cuML's does not (cpp/src/hdbscan/runner.h
+#: :68-80 runs the k-NN at min_samples + 1, "consistent with
+#: scikit-learn-contrib"), and ours transcribes cuML. So the SAME core distance
+#: is scikit-learn's min_samples = ours + 1.
+SKLEARN_HDBSCAN_MIN_SAMPLES = HDBSCAN_KW["min_samples"] + 1
+SKLEARN_HDBSCAN_KW = dict(HDBSCAN_KW, min_samples=SKLEARN_HDBSCAN_MIN_SAMPLES)
+
 
 class CumlHDBSCAN:
     MIN_SAMPLES = HDBSCAN_KW["min_samples"]
@@ -1931,11 +1946,11 @@ class SkHDBSCAN:
         self.info = _sklearn_info()
         self.info["config"] = ("sklearn.cluster.HDBSCAN(%s, max_cluster_size=None, n_jobs=-1) on the "
                                "block's first %d rows; fit timed"
-                               % (", ".join("%s=%r" % kv for kv in sorted(HDBSCAN_KW.items())), n))
+                               % (", ".join("%s=%r" % kv for kv in sorted(SKLEARN_HDBSCAN_KW.items())), n))
         self.params_obj = self.make()
 
     def make(self):
-        return self.HDBSCAN(max_cluster_size=None, n_jobs=-1, **HDBSCAN_KW)
+        return self.HDBSCAN(max_cluster_size=None, n_jobs=-1, **SKLEARN_HDBSCAN_KW)
 
     def call(self):
         est = self.make()
