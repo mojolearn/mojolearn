@@ -106,10 +106,12 @@ from gemm.checks.gemm_int8_mma import (
     INT8_MMA_K_TILE,
     INT8_MMA_TILE,
     INT8_MMA_TPB,
+    INT8_MMA_UNSTATED_LOADS,
     INT8_MMA_WARPS_N,
     _imma_m16n8k32,
     _pack4,
     _pack8,
+    mma_operands_aligned,
 )
 from gemm.host.gemm_int15_oracle import INT15_MAX_K
 from gemm.host.gemm_oracle import gemm_oracle_sabotage_value_flip
@@ -797,6 +799,7 @@ def _nvidia_warp_tile15(
     m: Int,
     n: Int,
     k: Int,
+    aligned: Bool,
 ):
     """`gemm_int8_mma.mojo::_nvidia_warp_tile` with two planes on each side:
     the same fragment layout, the same two n8 halves, eight IMMA steps per
@@ -815,26 +818,26 @@ def _nvidia_warp_tile15(
     var ll1 = SIMD[DType.int32, 4](0)
     for kt in range(0, k, INT8_MMA_K_TILE):
         var ka = kt + t * 4
-        var ah0 = _pack4(ah, ra0, ka, m, k)
-        var ah1 = _pack4(ah, ra1, ka, m, k)
-        var ah2 = _pack4(ah, ra0, ka + 16, m, k)
-        var ah3 = _pack4(ah, ra1, ka + 16, m, k)
-        var al0 = _pack4(al, ra0, ka, m, k)
-        var al1 = _pack4(al, ra1, ka, m, k)
-        var al2 = _pack4(al, ra0, ka + 16, m, k)
-        var al3 = _pack4(al, ra1, ka + 16, m, k)
-        var bh0 = _pack4(bh, cb0, ka, n, k)
-        var bh1 = _pack4(bh, cb0, ka + 16, n, k)
-        var bl0 = _pack4(bl, cb0, ka, n, k)
-        var bl1 = _pack4(bl, cb0, ka + 16, n, k)
+        var ah0 = _pack4(ah, ra0, ka, m, k, aligned)
+        var ah1 = _pack4(ah, ra1, ka, m, k, aligned)
+        var ah2 = _pack4(ah, ra0, ka + 16, m, k, aligned)
+        var ah3 = _pack4(ah, ra1, ka + 16, m, k, aligned)
+        var al0 = _pack4(al, ra0, ka, m, k, aligned)
+        var al1 = _pack4(al, ra1, ka, m, k, aligned)
+        var al2 = _pack4(al, ra0, ka + 16, m, k, aligned)
+        var al3 = _pack4(al, ra1, ka + 16, m, k, aligned)
+        var bh0 = _pack4(bh, cb0, ka, n, k, aligned)
+        var bh1 = _pack4(bh, cb0, ka + 16, n, k, aligned)
+        var bl0 = _pack4(bl, cb0, ka, n, k, aligned)
+        var bl1 = _pack4(bl, cb0, ka + 16, n, k, aligned)
         hh0 = _imma_m16n8k32(ah0, ah1, ah2, ah3, bh0, bh1, hh0)
         mid0 = _imma_m16n8k32(ah0, ah1, ah2, ah3, bl0, bl1, mid0)
         mid0 = _imma_m16n8k32(al0, al1, al2, al3, bh0, bh1, mid0)
         ll0 = _imma_m16n8k32(al0, al1, al2, al3, bl0, bl1, ll0)
-        var bh2 = _pack4(bh, cb1, ka, n, k)
-        var bh3 = _pack4(bh, cb1, ka + 16, n, k)
-        var bl2 = _pack4(bl, cb1, ka, n, k)
-        var bl3 = _pack4(bl, cb1, ka + 16, n, k)
+        var bh2 = _pack4(bh, cb1, ka, n, k, aligned)
+        var bh3 = _pack4(bh, cb1, ka + 16, n, k, aligned)
+        var bl2 = _pack4(bl, cb1, ka, n, k, aligned)
+        var bl3 = _pack4(bl, cb1, ka + 16, n, k, aligned)
         hh1 = _imma_m16n8k32(ah0, ah1, ah2, ah3, bh2, bh3, hh1)
         mid1 = _imma_m16n8k32(ah0, ah1, ah2, ah3, bl2, bl3, mid1)
         mid1 = _imma_m16n8k32(al0, al1, al2, al3, bh2, bh3, mid1)
@@ -865,6 +868,7 @@ def _amd_warp_tile15(
     m: Int,
     n: Int,
     k: Int,
+    aligned: Bool,
 ):
     """`gemm_int8_mma.mojo::_amd_warp_tile` with two planes on each side:
     the same operand layout, four MFMA steps per k-tile in place of one."""
@@ -874,10 +878,10 @@ def _amd_warp_tile15(
     var mid = SIMD[DType.int32, 4](0)
     var ll = SIMD[DType.int32, 4](0)
     for kt in range(0, k, INT8_MMA_K_TILE):
-        var a_hi = _pack8(ah, row0 + i16, kt + kq, m, k)
-        var a_lo = _pack8(al, row0 + i16, kt + kq, m, k)
-        var b_hi = _pack8(bh, col0 + i16, kt + kq, n, k)
-        var b_lo = _pack8(bl, col0 + i16, kt + kq, n, k)
+        var a_hi = _pack8(ah, row0 + i16, kt + kq, m, k, aligned)
+        var a_lo = _pack8(al, row0 + i16, kt + kq, m, k, aligned)
+        var b_hi = _pack8(bh, col0 + i16, kt + kq, n, k, aligned)
+        var b_lo = _pack8(bl, col0 + i16, kt + kq, n, k, aligned)
         hh = _mfma_i32_16x16x32_i8(a_hi, b_hi, hh)
         mid = _mfma_i32_16x16x32_i8(a_hi, b_lo, mid)
         mid = _mfma_i32_16x16x32_i8(a_lo, b_hi, mid)
@@ -901,15 +905,19 @@ def identical_gemm_int15_mma_kernel(
     m_in: Int32,
     n_in: Int32,
     k_in: Int32,
+    aligned_in: Int32,
 ):
     """OP_NT, one 16 x 16 output tile per warp, four int8 products per
     k-tile on the vendor's integer matrix unit, then clause W-5 and the
-    seam. `identical_gemm_int8_mma_kernel`'s grid and block. On a target
-    with no integer matrix unit both branches are dead and the kernel
-    stores nothing; the dispatchers never launch it there."""
+    seam. `identical_gemm_int8_mma_kernel`'s grid and block, and its
+    `aligned_in` (DEVIATION 2975): 1 when the launch found the bases of
+    all four planes aligned. On a target with no integer matrix unit both
+    branches are dead and the kernel stores nothing; the dispatchers never
+    launch it there."""
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
     var warp = Int(thread_idx.x) // WARP_SIZE
     var lane = Int(lane_id())
     var wm = warp // INT8_MMA_WARPS_N
@@ -920,9 +928,9 @@ def identical_gemm_int15_mma_kernel(
     if row0 >= m or col0 >= n:
         return
     comptime if is_nvidia_gpu():
-        _nvidia_warp_tile15(c, ah, al, ea, bh, bl, eb, lane, row0, col0, m, n, k)
+        _nvidia_warp_tile15(c, ah, al, ea, bh, bl, eb, lane, row0, col0, m, n, k, aligned)
     elif is_amd_gpu():
-        _amd_warp_tile15(c, ah, al, ea, bh, bl, eb, lane, row0, col0, m, n, k)
+        _amd_warp_tile15(c, ah, al, ea, bh, bl, eb, lane, row0, col0, m, n, k, aligned)
     else:
         return
 
@@ -1015,6 +1023,14 @@ def identical_gemm_int15_mma_into(
         _refuse(m, n, k, String("identical_gemm_int15_mma"))
         var grid_x = (n + INT8_MMA_BLOCK_TILE_N - 1) // INT8_MMA_BLOCK_TILE_N
         var grid_y = (m + INT8_MMA_BLOCK_TILE_M - 1) // INT8_MMA_BLOCK_TILE_M
+        # DEVIATION 2975: the fragment loads state their alignment only
+        # when the bases of ALL FOUR planes are aligned, read here.
+        var aligned = Int32(0)
+        comptime if not INT8_MMA_UNSTATED_LOADS:
+            if mma_operands_aligned(ah.unsafe_ptr(), al.unsafe_ptr()) and mma_operands_aligned(
+                bh.unsafe_ptr(), bl.unsafe_ptr()
+            ):
+                aligned = Int32(1)
         ctx.enqueue_function[identical_gemm_int15_mma_kernel](
             c.unsafe_ptr(),
             ah.unsafe_ptr(),
@@ -1026,6 +1042,7 @@ def identical_gemm_int15_mma_into(
             Int32(m),
             Int32(n),
             Int32(k),
+            aligned,
             grid_dim=(grid_x, grid_y, 1),
             block_dim=(INT8_MMA_TPB, 1, 1),
         )

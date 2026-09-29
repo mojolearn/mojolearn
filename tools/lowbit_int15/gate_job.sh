@@ -12,6 +12,10 @@
 #                         pieces and mma; on Apple flat and pieces.
 #   int15-force-flat      pixi run check-gemm-int15-force-flat
 #                         The dispatchers pinned off the unit. EXPECTED exit 0.
+#   int15-unstated-loads  pixi run check-gemm-int15-unstated-loads
+#                         The matrix-unit fragment loads with no alignment
+#                         stated (DEVIATION 2975). EXPECTED exit 0 and the
+#                         clean run's digests, line for line.
 #   int15-sabotage        pixi run check-gemm-int15-sabotage
 #                         THE DEVICE ARM: every stored cell flipped. EXPECTED
 #                         non-zero, naming the three device oracle gates.
@@ -114,6 +118,18 @@ must_pass() {
 
 run int15 pass pixi run check-gemm-int15
 run int15-force-flat pass pixi run check-gemm-int15-force-flat
+# DEVIATION 2975: the unit plan with the fragment loads as they were before
+# their alignment was stated. Same gates, and the SAME DIGESTS as the clean
+# run, which is what says the stated alignment moved no bit.
+run int15-unstated-loads pass pixi run check-gemm-int15-unstated-loads
+grep -h "^   DIGEST " "$OUT/int15-unstated-loads.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests_unstated_loads.tsv"
+grep -h "^   DIGEST " "$OUT/int15.log" 2>/dev/null | sed 's/^   //' > "$OUT/digests.tsv"
+if [ -s "$OUT/digests.tsv" ] && cmp -s "$OUT/digests.tsv" "$OUT/digests_unstated_loads.tsv"; then
+    echo "loads: stated and unstated alignment printed the same $(grep -c . "$OUT/digests.tsv") digests" >> "$OUT/gate.txt"
+else
+    echo "loads: stated and unstated alignment printed DIFFERENT digests, or a run printed none" >> "$OUT/gate.txt"
+    red=1
+fi
 run int15-sabotage fail pixi run check-gemm-int15-sabotage
 must_name int15-sabotage check_int15_device_matches_oracle
 must_name int15-sabotage check_int15_plans_agree
@@ -149,7 +165,7 @@ grep -h "^   DIGEST " "$OUT/int15-force-flat.log" 2>/dev/null | sed 's/^   //' >
 } >> "$OUT/gate.txt"
 
 cat "$OUT/status.tsv" "$OUT/gate.txt"
-for f in int15 int15-force-flat int15-sabotage int15-host-sabotage int15-piece-sabotage int15-quant-sabotage; do
+for f in int15 int15-force-flat int15-unstated-loads int15-sabotage int15-host-sabotage int15-piece-sabotage int15-quant-sabotage; do
     echo "== $f (every line that is not a digest or a per-shape ok; last 60)"
     grep -v -E '^   (DIGEST|ok) ' "$OUT/$f.log" 2>/dev/null | cut -c1-600 | tail -60
 done

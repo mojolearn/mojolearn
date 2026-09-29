@@ -50,6 +50,7 @@ from checks.numerics_int15 import (
     int15_piece_lo,
     int15_recombine,
 )
+from gemm.checks.gemm_int8_mma import INT8_MMA_UNSTATED_LOADS, mma_operands_aligned
 from gemm.checks.gemm_int15 import (
     Int15QuantWorkspace,
     Int15Workspace,
@@ -1308,6 +1309,45 @@ def check_int15_is_batch_invariant(ctx: DeviceContext) raises:
     print("   ok " + String(m) + " int15 rows agree with their single-row calls")
 
 
+def check_int15_unit_loads_state_their_alignment(ctx: DeviceContext) raises:
+    """GATE (DEVIATION 2975), unit columns only: the fragment loads of the
+    matrix-unit plan state an alignment only when the launch finds the
+    bases of the planes aligned, so a box whose allocator returned
+    unaligned bases would run every gate through the OLD loads and the
+    stated ones would be reached by nothing. This gate allocates planes the
+    way every caller does, at sizes from one code to the training rows',
+    and requires every base to be a multiple of 8. Its pass is what makes
+    the other gates' passes a statement about the stated loads."""
+    var sizes: List[Int] = [1, 17, 4096, 65536, 2097152]
+    var seen = 0
+    for i in range(len(sizes)):
+        var a = ctx.enqueue_create_buffer[DType.int8](sizes[i])
+        var b = ctx.enqueue_create_buffer[DType.int8](sizes[i])
+        ctx.synchronize()
+        if not mma_operands_aligned(a.unsafe_ptr(), b.unsafe_ptr()):
+            raise Error(
+                "two int8 buffers of " + String(sizes[i]) + " codes have the bases "
+                + String(Int(a.unsafe_ptr())) + " and " + String(Int(b.unsafe_ptr()))
+                + ", not both multiples of 8: the stated-alignment loads are not reached on this box"
+            )
+        seen += 2
+        _ = a
+        _ = b
+    var work = Int15Workspace(ctx)
+    work.ensure(ctx, 12345, 54321)
+    ctx.synchronize()
+    if not mma_operands_aligned(work.ah.unsafe_ptr(), work.al.unsafe_ptr()) or not mma_operands_aligned(
+        work.bh.unsafe_ptr(), work.bl.unsafe_ptr()
+    ):
+        raise Error("a workspace plane has a base that is not a multiple of 8")
+    seen += 4
+    _ = work^
+    comptime if INT8_MMA_UNSTATED_LOADS:
+        print("   ok " + String(seen) + " bases are multiples of 8; THIS BUILD STATES NO ALIGNMENT (MOJOLEARN_INT8_MMA_UNSTATED_LOADS)")
+    else:
+        print("   ok " + String(seen) + " bases are multiples of 8; the unit plan's fragment loads state their alignment")
+
+
 def check_int15_device_refuses_above_max_k(ctx: DeviceContext) raises:
     """GATE: every launch refuses `k = INT15_MAX_K + 1` by name, before it
     reads a buffer."""
@@ -1438,6 +1478,12 @@ def main() raises:
             _gate(String("check_int15_is_batch_invariant"), ran, failed, String(""))
         except e:
             _gate(String("check_int15_is_batch_invariant"), ran, failed, String(e))
+        comptime if HAS_UNIT:
+            try:
+                check_int15_unit_loads_state_their_alignment(ctx)
+                _gate(String("check_int15_unit_loads_state_their_alignment"), ran, failed, String(""))
+            except e:
+                _gate(String("check_int15_unit_loads_state_their_alignment"), ran, failed, String(e))
         try:
             check_int15_device_refuses_above_max_k(ctx)
             _gate(String("check_int15_device_refuses_above_max_k"), ran, failed, String(""))
