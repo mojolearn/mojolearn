@@ -137,7 +137,12 @@ comptime INT8_TUNED_PLAN_SMALL_K64 = 9  #: STAGED with 16-byte loads and KB 64
 comptime INT8_TUNED_PLAN_FRAG2_K64 = 10  #: FRAG2 with 16-byte loads and KB 64
 comptime INT8_TUNED_PLAN_WARPS16 = 11  #: 32x32 per warp, 4x4 warps: block 128x128
 comptime INT8_TUNED_PLAN_WARPS32 = 12  #: 16x32 per warp, 8x4 warps: block 128x128
-comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13  #: 32x32 per warp, 4x8 warps: block 128x256
+#: 16x32 per warp, 4x8 warps: block 64x256. (32x32 per warp in 4x8 warps,
+#: block 128x256, was this plan in job nvc3-0018 and the H100 REFUSED every
+#: launch of it, CUDA_ERROR_LAUNCH_OUT_OF_RESOURCES: 1024 threads of 63
+#: registers and more are above one multiprocessor's register file. A plan
+#: of 1024 threads has 64 registers a thread to spend and no more.)
+comptime INT8_TUNED_PLAN_WARPS32_WIDE = 13
 comptime INT8_TUNED_PLAN_COUNT = 14
 
 #: The most threads a block may hold on the columns that have the unit.
@@ -194,7 +199,7 @@ def int8_tuned_plan_name(plan: Int) -> String:
         return String("staged.w32x32.b128x128.k64.l16")
     if plan == INT8_TUNED_PLAN_WARPS32:
         return String("staged.w16x32.b128x128.k64.l16")
-    return String("staged.w32x32.b128x256.k64.l16")
+    return String("staged.w16x32.b64x256.k64.l16")
 
 
 def int8_tuned_plan_available(plan: Int) -> Bool:
@@ -856,7 +861,7 @@ def identical_gemm_int8_mma_tuned_with_plan(
                 if plan == INT8_TUNED_PLAN_WARPS32:
                     _launch_tuned[1, 2, 8, 4, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
                 else:
-                    _launch_tuned[2, 2, 4, 8, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
+                    _launch_tuned[1, 2, 4, 8, 64, 16](ctx, c, qa, ea, qb, eb, m, n, k)
             else:
                 raise Error(
                     "identical_gemm_int8_mma_tuned: plan " + int8_tuned_plan_name(plan)

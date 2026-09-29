@@ -185,10 +185,13 @@ def _run_every_plan(
             continue
         var ptag = tag + " " + int8_tuned_plan_name(plan)
         var dc = _poisoned(ctx, m * n)
-        identical_gemm_int8_mma_tuned_with_plan(ctx, dc, dqa, dea, dqb, deb, m, n, k, plan)
-        ctx.synchronize()
-        var got = String("")
+        var got: String
+        # A launch the device refuses is a failed case of THAT plan, named,
+        # and the plans after it still run (nvc3-0018: a refused launch
+        # outside this `try` ended the gate without saying whose it was).
         try:
+            identical_gemm_int8_mma_tuned_with_plan(ctx, dc, dqa, dea, dqb, deb, m, n, k, plan)
+            ctx.synchronize()
             var out = _download_f32(ctx, dc, m * n, ptag)
             got = _diff(out, want, ptag + " (tuned vs oracle)")
             if got.byte_length() == 0:
@@ -196,23 +199,23 @@ def _run_every_plan(
             if got.byte_length() == 0:
                 got = _diff(out, flat, ptag + " (tuned vs flat)")
         except e:
-            got = String(e)
+            got = ptag + ": " + String(e)
         tally.note(got)
         _ = dc
     comptime if HAS_DIRECT:
         for which in range(DIRECT_PLAN_COUNT):
             var ptag = tag + " " + int8_direct_name(which)
             var dc = _poisoned(ctx, m * n)
-            identical_gemm_int8_mma_direct_into(ctx, dc, dqa, dea, dqb, deb, m, n, k, which)
-            ctx.synchronize()
-            var got = String("")
+            var got: String
             try:
+                identical_gemm_int8_mma_direct_into(ctx, dc, dqa, dea, dqb, deb, m, n, k, which)
+                ctx.synchronize()
                 var out = _download_f32(ctx, dc, m * n, ptag)
                 got = _diff(out, want, ptag + " (direct vs oracle)")
                 if got.byte_length() == 0:
                     got = _diff(out, ref_, ptag + " (direct vs reference unit plan)")
             except e:
-                got = String(e)
+                got = ptag + ": " + String(e)
             tally.note(got)
             _ = dc
     _ = dqa
