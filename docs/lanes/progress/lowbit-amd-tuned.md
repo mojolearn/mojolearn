@@ -154,7 +154,7 @@ one launch, the stand-in recombination; one wait), best plan per row, this run:
 inference 0.173, 0.176, 0.196, 0.181 at the 512-token rows; 0.820, 0.796,
 0.427, 0.447, 0.901, 0.832, 0.255, 0.315 at the decode rows (qkv, mlp_up,
 mlp_down, lm_head; t1 then t8): UNDER fp32.v1 AT ALL TWELVE ROWS. Training
-(both operands quantized per call) 0.200, 0.218, 0.273, 0.222; decode 1.25 to
+(both operands quantized per call) 0.200, 0.218, 0.273, 0.222; decode 1.09 to
 1.74 but the head (0.87, 0.94): the right operand's quantizer alone is 0.58 to
 0.79 of fp32.v1 there.
 
