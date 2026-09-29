@@ -261,3 +261,24 @@ def test_cudf_object_is_copied_to_host_explicitly():
             raise TypeError("Implicit conversion to a host NumPy array via __array__ is not allowed")
     ctd = _load("classical_two_datasets")
     assert ctd._to_host(Frame()).tolist() == [[0.0, 1.0], [2.0, 3.0]]
+
+
+def test_bayesian_gmm_reg_covar_per_dataset(tmp_path, monkeypatch):
+    # Istella-S takes reg_covar 3e-3 on every arm (every arm refused at 1e-6);
+    # taxi keeps 1e-6. The dataset is the one _load_block read.
+    D = {"X": np.zeros((4, 3), np.float32)}
+    s = A.LANES["bayesian-gmm"]
+    for ds, want in (("istella", 3e-3), ("taxi", 1e-6)):
+        monkeypatch.setattr(A, "_DATASET", ds)
+        for params in (s["params"], s.get("sk_params", s["params"])):
+            assert A._derived_params("bayesian-gmm", D, params)["reg_covar"] == want
+    assert s["params"]["reg_covar"] == 1e-6          # the table itself is not changed
+    assert A.lane_config("bayesian-gmm")["dataset_params"] == {"istella": {"reg_covar": 3e-3}}
+    # _load_block records the dataset (the synthetic path needs no file)
+    monkeypatch.setattr(A, "block_file", lambda lane, ds: None)
+    A._load_block("bayesian-gmm", "istella", str(tmp_path))
+    assert A._DATASET == "istella"
+
+
+def test_no_other_lane_has_dataset_params():
+    assert sorted(k for k, s in A.LANES.items() if s.get("dataset_params")) == ["bayesian-gmm"]
