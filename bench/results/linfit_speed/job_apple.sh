@@ -4,9 +4,16 @@
 # the one-block fit and against tiny bounded launches on synthetic data.
 set -uo pipefail
 export MOJOLEARN_NUMERIC_MODE=identical
-L=x-glm-poisson,x-glm-gamma,x-glm-tweedie,x-glm-poisson-sw,x-sgd-clf,x-sgd-reg,x-sgd-clf-w,x-sgd-reg-sw,x-sgd-ocsvm,x-perceptron,x-pa-clf,x-pa-reg
+# the lanes the e2e sabotage reaches (the wide GLM, the speculative SGD row
+# dot); SGDOneClassSVM and PassiveAggressive fold norms or |x|^2 with the dot
+# (the exact path, which the sabotage does not touch) and Perceptron's
+# fixture did not move under it (m2pro, ee967e460f): they run clean, --pass 2
+L=x-glm-poisson,x-glm-gamma,x-glm-tweedie,x-glm-poisson-sw,x-sgd-clf,x-sgd-reg,x-sgd-clf-w,x-sgd-reg-sw
 sh tools/algos_lane_check.sh "$L" --pass 2 --sabotage x_linear/checks/sabotage/e2e_linfit_wide.patch; rc=$?
-echo "LANE-CHECK rc=$rc"
+echo "LANE-CHECK sabotaged set rc=$rc"
+sh tools/algos_lane_check.sh x-sgd-ocsvm,x-perceptron,x-pa-clf,x-pa-reg --pass 2; rc2=$?
+echo "LANE-CHECK clean set rc=$rc2"
+[ $rc2 -eq 0 ] || rc=$rc2
 sh bindings/build_x_linear.sh >/dev/null 2>&1 || true
 PY="pixi run -e default python"
 O=${TMPDIR:-/tmp}/linfit
