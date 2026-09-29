@@ -26,6 +26,7 @@ from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.team import Team
+from std.memory import bitcast
 from checks.numerics import identical_pow
 
 comptime L_HINGE = 0
@@ -290,6 +291,9 @@ def sgd_one(
 # and the fallback for d > SGD_WARP_MAX_CHUNKS * W.
 
 comptime SGD_WARP_MAX_CHUNKS = 8
+#: `-D MOJOLEARN_SGD_SPEC_OFF=1`: the row dot's flushed chain instead of the
+#: speculative one (`_warp_row_dot_spec`, the same word): the A/B arm.
+comptime SGD_SPEC_OFF = is_defined["MOJOLEARN_SGD_SPEC_OFF"]()
 
 
 @always_inline
@@ -384,12 +388,61 @@ def _warp_row_folds_tree[K: Int, NORMS: Bool, SQ: Bool](
 
 
 @always_inline
+def _is_subnormal(v: Float32) -> Bool:
+    """A nonzero word with a zero exponent field: the words `fz` changes."""
+    var b = bitcast[DType.uint32](v)
+    return (b & UInt32(0x7F800000)) == UInt32(0) and (b & UInt32(0x007FFFFF)) != UInt32(0)
+
+
+@always_inline
+def _warp_row_dot_spec[K: Int](
+    xr: InlineArray[Float32, K], wr: InlineArray[Float32, K], d: Int,
+) -> Float32:
+    """`_warp_row_folds[K, False, False]`'s row dot, SAME WORD, on a shorter
+    critical path (lane/linfit-speed, 2026-09-29). The chain's step is
+    fz(fma(x_j, w_j, acc)) over j ascending; x_j and w_j are flushed words,
+    so while no partial sum is subnormal every fz is the identity and the
+    chain is the plain fma chain. This runs that chain (one fma per term on
+    the critical path instead of the fma, the flush's four integer steps and
+    the slot select) and watches every partial sum OFF the path; if any was
+    subnormal it returns the exact flushed chain instead. Either way the word
+    is the flushed chain's. The whole warp takes the same branch (every lane
+    folds the same words)."""
+    comptime W = WARP_SIZE
+    var acc = Float32(0)
+    var bad = False
+    comptime for kk in range(K):
+        if (kk + 1) * W <= d:
+            comptime for l in range(W):
+                var xj = shuffle_idx(xr[kk], UInt32(l))
+                var wj = shuffle_idx(wr[kk], UInt32(l))
+                acc = xmad(xj, wj, acc)
+                bad = bad or _is_subnormal(acc)
+        elif kk * W < d:
+            comptime for l in range(W):
+                comptime j = kk * W + l
+                var live = j < d
+                var xj = shuffle_idx(xr[kk], UInt32(l))
+                var wj = shuffle_idx(wr[kk], UInt32(l))
+                var a2 = xmad(xj, wj, acc)
+                acc = a2 if live else acc
+                bad = bad or _is_subnormal(acc)
+    if bad:
+        return _warp_row_folds[K, False, False](xr, wr, d)[0]
+    return acc
+
+
+@always_inline
 def _row_folds[K: Int, NORMS: Bool, SQ: Bool](
     xr: InlineArray[Float32, K], wr: InlineArray[Float32, K], d: Int,
 ) -> Tuple[Float32, Float32, Float32, Float32]:
-    """`_warp_row_folds`, or FAST on Apple with the define its tree form."""
+    """`_warp_row_folds`, or FAST on Apple with the define its tree form.
+    IDENTICAL with no norms: the speculative chain (`_warp_row_dot_spec`,
+    the same word)."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and is_apple_gpu() and is_defined["MOJOLEARN_SGD_FAST_TREE"]():
         return _warp_row_folds_tree[K, NORMS, SQ](xr, wr)
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not NORMS and not SQ and not SGD_SPEC_OFF:
+        return (_warp_row_dot_spec[K](xr, wr, d), Float32(0), Float32(0), Float32(0))
     return _warp_row_folds[K, NORMS, SQ](xr, wr, d)
 
 
