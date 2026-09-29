@@ -592,6 +592,14 @@ class LlamaEager:
         qp = self.t.arange(c["ctx"], c["ctx"] + L, device=self.dev).view(L, 1)
         kp = self.t.arange(S, device=self.dev).view(1, S)
         mask = (kp <= qp).view(1, 1, L, S)
+        # One dtype for q, k and v, the one autocast gives SDPA's inputs (v is
+        # a linear's output, so bf16 under a bf16 autocast; RoPE by the float32
+        # cos/sin table promoted q and k to float32). Eager autocast casts all
+        # three itself; torch.compile's SDPA decomposition does not, and the
+        # compiled bf16 arms refused with "self and mat2 must have the same
+        # dtype, but got Float and BFloat16" (do-amd, torch 2.6, 2026-09-29).
+        # With no autocast all three already share the dtype: a no-op.
+        q, krep = q.to(vrep.dtype), krep.to(vrep.dtype)
         o = self.t.nn.functional.scaled_dot_product_attention(
             q, krep, vrep, attn_mask=mask, scale=self.scale)
         return o.transpose(1, 2).reshape(B * L, H * hd)
