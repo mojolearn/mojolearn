@@ -320,8 +320,10 @@ class Leg:
             proof = json.loads((self.release_build / "build" / "build-provenance.json").read_text())
         except (OSError, ValueError):
             return False
-        return (proof.get("complete") is True and proof.get("build_exit") == 0
-                and proof.get("source_commit") == commit
+        from staged_native_admission import SCHEMA as STAGED_SCHEMA, complete_native_proof
+        admitted = (complete_native_proof(proof) if proof.get("schema") == STAGED_SCHEMA else
+                    proof.get("complete") is True and proof.get("build_exit") == 0)
+        return (admitted and proof.get("source_commit") == commit
                 and (self.release_build / "build" / "sets" / self.vendor / self.arch).is_dir())
 
     def done(self, commit):
@@ -359,8 +361,11 @@ def verify_leg_tree(release_build, vendor, arch, commit, exit_file=None):
     proof = read_json(proof_path)
     if not proof:
         return False, f"no build proof at {proof_path}", None
-    if proof.get("complete") is not True or proof.get("build_exit") != 0 or proof.get("source_commit") != commit:
-        return False, "its build proof is not complete, not exit 0 or not of " + commit[:12], None
+    from staged_native_admission import SCHEMA as STAGED_SCHEMA, complete_native_proof
+    admitted = (complete_native_proof(proof) if proof.get("schema") == STAGED_SCHEMA else
+                proof.get("complete") is True and proof.get("build_exit") == 0)
+    if not admitted or proof.get("source_commit") != commit:
+        return False, "its native proof is incomplete, invalid or not of " + commit[:12], None
     if not (rb / "build" / "sets" / vendor / arch).is_dir():
         return False, "no set directory", None
     ext = proof.get("extensions") or {}

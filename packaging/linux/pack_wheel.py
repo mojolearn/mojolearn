@@ -399,13 +399,13 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
         raise SystemExit(profile + ' requires every host binding the manifest ships; missing: '
                          + ', '.join(sorted(set(HOST_NAMES) - set(host_record))))
     proofs, inventories, commits = {}, [], set()
+    staged_keys = set()
     for path in proof_paths:
         raw = pathlib.Path(path).read_bytes()
         proof = json.loads(raw)
-        if (proof.get('schema') != 'mojolearn.linux.build-provenance.v1'
-                or proof.get('complete') is not True or proof.get('build_exit') != 0
-                or proof.get('action') != 'build'):
-            raise SystemExit('Incomplete architecture build proof')
+        from staged_native_admission import complete_native_proof
+        if not complete_native_proof(proof, source_root):
+            raise SystemExit('Incomplete architecture build or staged-admission proof')
         covered = {key for key in keys if any(
             name.startswith(f'mojolearn/{key[0]}/{key[1]}/')
             for name in proof.get('extensions', {}))}
@@ -452,6 +452,24 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
         inventories.append(inventory)
         proofs[key] = dict(sha256=hashlib.sha256(raw).hexdigest(),
                            source_sha256=proof['source_sha256'])
+        from staged_native_admission import SCHEMA as STAGED_SCHEMA, decoded
+        if proof['schema'] == STAGED_SCHEMA:
+            staged_keys.add(key)
+            stage = decoded(proof['stage_witness'])
+            rows = {r['relative']: r for r in stage['outputs']}
+            if 'canonical_host_stage_witness' in proof:
+                rows.update({r['relative']:r for r in decoded(proof['canonical_host_stage_witness'])['outputs']
+                             if r['relative'].startswith('host/')})
+            for rel, row in rows.items():
+                member = ('mojolearn/'+rel if rel.startswith('host/') else prefix+rel)
+                origin[member].update(origin='staged-admission',
+                    compiled_from_commit=row['original_stamp']['commit'],
+                    unstaged_sha256=row['original_sha256'], source_closure=row['admitted_closure']['digest'])
+                if rel.startswith('host/'):
+                    rec = host_record[pathlib.Path(rel).stem]
+                    rec['origin'] = 'staged-admission'
+                    rec['admitted_by'] = rec.pop('built_by', rec.get('admitted_by', []))
+
     if len(commits) > 1 or any(i != inventories[0] for i in inventories[1:]):
         raise SystemExit('Architecture sets were built from different sources')
     if commits:
@@ -470,20 +488,22 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     for s in sets:
         key = (s.vendor, s.arch)
         if key in proofs:
-            set_records['/'.join(key)] = dict(proofs[key], origin='built' if not reused_of[key] else 'mixed',
+            set_records['/'.join(key)] = dict(proofs[key], origin=('staged-admission' if key in staged_keys else 'built') if not reused_of[key] else 'mixed',
                                               reused=sorted(reused_of[key]))
         else:
             set_records['/'.join(key)] = dict(origin='reused', from_release=s.reuse['origin'],
                                               reused=sorted(reused_of[key]),
                                               **({'from_legs': s.reuse['legs']} if s.reuse.get('legs') else {}))
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
+    n_admitted = sum(1 for o in origin.values() if o['origin'] == 'staged-admission')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
                 release_profile='alpha-api', assembly_profile=profile,
                 source_commit=commit, source_inventory=inventory,
                 sets=set_records,
                 extensions=payload,
                 binding_origin=origin,
-                reuse=dict(built=len(origin) - n_reused, reused=n_reused,
+                reuse=dict(built=len(origin) - n_reused - n_admitted, reused=n_reused,
+                           **({'staged_admitted': n_admitted} if n_admitted else {}),
                            from_release=next((s.reuse['origin'] for s in sets if s.reuse and s.reuse['origin']), None),
                            from_legs={k: v for s in sets if s.reuse for k, v in (s.reuse.get('legs') or {}).items()}),
                 optional_native={**{n: {

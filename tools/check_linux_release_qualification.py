@@ -19,6 +19,8 @@ from pathlib import Path, PurePosixPath
 import re
 import zipfile
 
+from staged_native_admission import complete_native_proof
+
 import compare_ordered_python
 import verify_linux_surface_qualification as surface
 
@@ -236,9 +238,7 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
     require(digest_file(proof_path) == audit.get('build_provenance_sha256'),
             'Build proof differs from qualification audit')
     proof = json.loads(proof_path.read_text())
-    require(proof.get('schema') == 'mojolearn.linux.build-provenance.v1'
-            and proof.get('complete') is True and type(proof.get('build_exit')) is int
-            and proof['build_exit'] == 0 and proof.get('action') == 'build',
+    require(complete_native_proof(proof),
             'Incomplete or failed vendor build proof')
     require(re.fullmatch(r'[0-9a-f]{40}', proof.get('source_commit', '')) is not None,
             'Invalid native source commit')
@@ -370,17 +370,18 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
     for key in sorted(carried):
         proof_path = proof_root / (key.replace('/', '-') + '.json')
         proof = json.loads(proof_path.read_text())
-        require(proof.get('schema') == 'mojolearn.linux.build-provenance.v1'
-                and proof.get('complete') is True and type(proof.get('build_exit')) is int
-                and proof['build_exit'] == 0 and proof.get('action') == 'build', 'Failed architecture build')
+        require(complete_native_proof(proof, source_root), 'Failed architecture build')
         require(proof.get('source_inventory') == inventory and proof.get('source_sha256') == source_sha
                 and re.fullmatch('[0-9a-f]{40}', proof.get('source_commit', ''))
                 and proof['source_commit'] == payload.get('source_commit'), 'Different architecture source')
         expected = {'mojolearn/' + n: h for n, h in extensions.items() if n.startswith(key + '/')}
         require(len(expected) == sum(len(surface.expected_bindings(mode, True)) for mode in surface.MODES) and proof.get('extensions') == expected, 'Architecture build bytes differ')
         proof_hashes[key] = digest_file(proof_path)
-        require(payload['sets'][key] == {'sha256': proof_hashes[key], 'source_sha256': source_sha},
-                'Assembly proof linkage differs')
+        expected_link = {'sha256': proof_hashes[key], 'source_sha256': source_sha}
+        from staged_native_admission import SCHEMA as STAGED_SCHEMA
+        if proof.get('schema') == STAGED_SCHEMA:
+            expected_link.update(origin='staged-admission', reused=[])
+        require(payload['sets'][key] == expected_link, 'Assembly proof linkage differs')
     vendor, arch = runtime_key.split('/')
     return dict(sha256=wheel_sha or digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=sorted(vendors),
                 assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
