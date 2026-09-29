@@ -7,9 +7,9 @@
 #   gate     tools/lowbit_units/gate_job.sh    the existing low-bit gate and its sabotage arms
 #   price    tools/lowbit_units/price_job.sh   the timing harness and its sabotage arm
 #   identity tools/lowbit_units/price_job.sh with MOJOLEARN_LOWBIT_PRICE_IDENTITY_ONLY=1:
-#            every arm once for its digest, NOTHING TIMED. THE AMD BOX RUNS
-#            `gate identity` AND NOTHING ELSE (Andrew, 2026-09-29: AMD is
-#            judged on bitwise identity only; no timing, no vendor arm).
+#            every arm once for its digest, NOTHING TIMED. Also the way to
+#            BUILD FIRST: it compiles the binary the timed phase runs and
+#            launches every kernel once, so a later `price` starts warm.
 #   chunk    tools/lowbit_units/chunk_job.sh   the Apple exact-chunk gate and its sabotage arms (Apple only)
 #   vendor   tools/lowbit_units/vendor_job.sh  the vendor library, COMPARISON ONLY
 #

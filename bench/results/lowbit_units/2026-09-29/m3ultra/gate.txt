@@ -1,0 +1,10 @@
+deviation=2910
+started=2026-09-29T03:20:17Z
+root=/Users/ec2-user/mojolearn-wt/steward-m3ultra-b
+vendor=apple gpu_archs=unset column=unset
+reach: lowbit-sabotage cannot name check_int8_mma_matches_flat on apple (the gate does not run there)
+reach: lowbit-host-sabotage cannot name check_int8_mma_matches_flat on apple (the gate does not run there)
+   column: apple  int8 dispatch: flat (no int8 matrix unit on this column)
+   column: apple  int8 dispatch: flat (MOJOLEARN_INT8_FORCE_FLAT)
+finished=2026-09-29T03:21:30Z
+verdict=GREEN every expected outcome held (see status.tsv)

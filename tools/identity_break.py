@@ -1233,7 +1233,7 @@ NON_SIZE_REVISIONS = {
         "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
         "floored on the lane"),
     "tsvd": (
-        "train contract, not input: cb64532b6 added explained_variance_ and "
+        "train contract, not input (2026-09-28): cb64532b6 added explained_variance_ and "
         "explained_variance_ratio_ to the train-parts digest without recording a revision. "
         "This revision repair changes no fixture or arithmetic; old two-part train records "
         "cannot qualify the new three-part contract"),
