@@ -16,10 +16,12 @@
 # and the verdicts, so a steward's stdout carries them home. The mac budget
 # and the repeats come from the environment (bench/gemm_lowbit_price_main.mojo);
 # THE SAME BUDGET MUST RUN ON EVERY BOX whose hashes are compared.
+# MOJOLEARN_LOWBIT_PRICE_DIR names the folder under the box's (default
+# price), so a second run with another budget does not overwrite the first.
 set -u
 cd "$(dirname "$0")/../.." || exit 9
 BOX=${MOJOLEARN_LOWBIT_BOX:-$(hostname -s)}
-OUT="$PWD/bench/results/lowbit_units/$BOX/price"
+OUT="$PWD/bench/results/lowbit_units/$BOX/${MOJOLEARN_LOWBIT_PRICE_DIR:-price}"
 mkdir -p "$OUT"
 export PATH="$HOME/.pixi/bin:$PATH"
 if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L > /dev/null 2>&1; then
@@ -36,7 +38,10 @@ red=0
 {
     echo "box=$BOX"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "commit=$(git rev-parse HEAD 2>/dev/null)"
+    # On a patch-synced tree (the shared NVIDIA pods) HEAD is the merge base
+    # and the lane's commit lies over it as a patch; on a steward's worktree
+    # HEAD is the submitted commit.
+    echo "tree_head=$(git rev-parse HEAD 2>/dev/null) dirty_files=$(git status --porcelain 2>/dev/null | grep -c .)"
     echo "mac_budget=${MOJOLEARN_LOWBIT_PRICE_MAC_BUDGET:-default} repeats=${MOJOLEARN_LOWBIT_PRICE_REPEATS:-default} only=${MOJOLEARN_LOWBIT_PRICE_ONLY:-all}"
 } > "$OUT/run.txt"
 

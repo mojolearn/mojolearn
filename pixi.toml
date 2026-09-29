@@ -1090,6 +1090,11 @@ check-gemm-lowbit = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/
 check-gemm-lowbit-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 check-gemm-lowbit-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+# lane/lowbit-units: the Apple exact-chunk PROBE's gate (Metal only) and its
+# two arms that must FAIL; tools/lowbit_units/chunk_job.sh runs the three.
+check-gemm-int8-apple-chunk = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
+check-gemm-int8-apple-chunk-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_APPLE_CHUNK_SABOTAGE=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
+check-gemm-int8-apple-chunk-value-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int8_apple_chunk_check.mojo"
 
 
 # The three identity check files ALONE, in whatever mode the tree is
