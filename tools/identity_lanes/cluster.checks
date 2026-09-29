@@ -29,5 +29,8 @@ x_cluster/checks/agglo_check.mojo	x_cluster/checks/sabotage/5118_merge_tie.patch
 x_cluster/checks/spectral_assign_check.mojo	x_cluster/checks/sabotage/5119_svd_fold.patch
 x_cluster/checks/kth_check.mojo	x_cluster/checks/sabotage/5120_kth_radix.patch
 x_cluster/checks/moments_check.mojo	x_cluster/checks/sabotage/5110_device_gemm_divide.patch
-x_cluster/checks/ap_check.mojo	x_cluster/checks/sabotage/5105_ap_rmax_tie.patch
+# 5105_ap_rmax_tie.patch is retired: it hands a tied row maximum to the HIGHEST index instead of the
+# lowest, but a tie at the maximum makes the max and the second max the same value, and the
+# responsibility update reads only those two values (ap_r_update), so no output can change; the
+# arm passed unseen on the m2pro (2026-09-29). 5105's live arm is 5105_ap_damping.patch
 x_cluster/checks/ap_noise_check.mojo	x_cluster/checks/sabotage/5122_ap_noise_round.patch
