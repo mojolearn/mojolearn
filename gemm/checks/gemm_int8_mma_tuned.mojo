@@ -256,11 +256,16 @@ comptime INT8_PIECES_PLAN_WARPS16_K32 = 7
 comptime INT8_PIECES_PLAN_PIPE_WARPS16 = 8  #: 16x32 per warp, 4x4 warps, KB 32
 comptime INT8_PIECES_PLAN_PIPE_FRAG2 = 9  #: 32x32 per warp, 2x4 warps, KB 32
 comptime INT8_PIECES_PLAN_PIPE_SMALL = 10  #: 16x16 per warp, 2x2 warps, KB 64
+#: The plans that take EVERY shape on every column with the unit: a caller
+#: may loop over `range(INT8_PIECES_PLAN_COUNT)` at any shape.
+comptime INT8_PIECES_PLAN_COUNT = 11
 #: FOUR PRODUCTS AT THE DECODE ROWS (`identical_gemm_int8_pieces_decode_kernel`):
-#: `m <= 16` and NVIDIA only (`int8_pieces_plan_admits`).
+#: `m <= 16` and NVIDIA only (`int8_pieces_plan_admits`), so they lie beyond
+#: `INT8_PIECES_PLAN_COUNT`; a caller that runs them loops over
+#: `range(INT8_PIECES_PLAN_ALL_COUNT)` and asks `int8_pieces_plan_admits`.
 comptime INT8_PIECES_PLAN_DECODE_W4 = 11  #: 4 warps a block
 comptime INT8_PIECES_PLAN_DECODE_W8 = 12  #: 8 warps a block
-comptime INT8_PIECES_PLAN_COUNT = 13
+comptime INT8_PIECES_PLAN_ALL_COUNT = 13
 
 #: Outputs of at most this many rows take the launcher's small plan: a
 #: 128-row block would multiply 112 rows of zero codes for them.
@@ -380,14 +385,12 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     least time of the eleven plans at all twelve rows, the 32 x 32 warps of
     the 64 x 128 block at the four 512-token rows and the 32 x 32 block at
     the eight decode rows. At the decode rows on NVIDIA the four-product
-    decode plans (not yet measured when this was written: run 11 reads them
-    beside the two-page plan; the one-product decode kernel took 0.12 to 0.34
-    of fp32.v1 there in run 10)."""
+    decode kernel of eight warps (run 11, job nvc3-0039: 0.20 to 0.40 of
+    fp32.v1 where the two-page plan read 0.27 to 1.22; four warps took more
+    time at every row, 1% more at the head's)."""
     if m <= INT8_TUNED_ROW_MAX_M:
         comptime if INT8_DECODE_AVAILABLE:
             if m <= INT8_DECODE_MAX_M:
-                if n >= 65536:
-                    return INT8_PIECES_PLAN_DECODE_W4
                 return INT8_PIECES_PLAN_DECODE_W8
         return INT8_PIECES_PLAN_PIPE_SMALL
     return INT8_PIECES_PLAN_PIPE_FRAG2

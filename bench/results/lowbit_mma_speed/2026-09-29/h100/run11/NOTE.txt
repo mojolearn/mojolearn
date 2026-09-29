@@ -1,0 +1,12 @@
+nvc3-0039 (run 11). This lane's two gates GREEN with every arm seen failing;
+the timing run, its cold run and its sabotage comparison GREEN. The job exits
+1 because lane/lowbit-int15's gate (check-gemm-int15-tuned) on this tree
+failed three checks: check_int15_tuned_refuses as in runs 9 and 10 (origin/main's
+copy of the gate is stale), and check_int15_tuned_matches_oracle and
+check_int15_tuned_planted_worst_cases, because that gate loops over every
+index below INT8_PIECES_PLAN_COUNT at every shape and the two decode plans,
+placed below it, refuse m > 16 ("the decode plans take at most 16 rows, got
+m=129"). Wherever the decode plans ran in that gate their digests equal the
+oracle's. FIXED in this lane: INT8_PIECES_PLAN_COUNT again counts only the
+plans that take every shape; the decode plans lie beyond it
+(INT8_PIECES_PLAN_ALL_COUNT, int8_pieces_plan_admits).

@@ -1,0 +1,42 @@
+label	mma.sync	bar.sync	cp.async	loads and stores by kind
+decode_quant_w8	4	2	0	ld.global.b32=36 ld.global.b8=32 ld.global.s32=1 ld.global.v4.b32=11 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=1 ld.shared.s32=3 st.global.b32=2 st.shared.b32=9 
+decode_w16	4	2	0	ld.global.b32=1 ld.global.b8=64 ld.global.s32=1 ld.global.v4.b32=4 ld.param.b32=3 ld.param.b64=5 ld.param.s32=1 ld.shared.b32=1 ld.shared.s32=1 st.global.b32=1 st.shared.b32=9 
+decode_w8	4	2	0	ld.global.b32=1 ld.global.b8=64 ld.global.s32=1 ld.global.v4.b32=4 ld.param.b32=3 ld.param.b64=5 ld.param.s32=1 ld.shared.b32=1 ld.shared.s32=1 st.global.b32=1 st.shared.b32=9 
+direct_aligned_loads	2	0	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+direct_reference_loads	2	0	0	ld.global.b8=16 ld.global.s32=16 ld.param.b32=1 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+direct_scalar_acc	2	0	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+fused_pipe2_w16x32_b64x128_k32_l16	16	2	8	ld.global.b8=128 ld.global.s32=8 ld.local.b32=8 ld.local.s32=4 ld.param.b32=2 ld.param.b64=7 ld.param.s32=2 ld.shared.b32=24 st.global.b32=4 st.local.b32=48 st.shared.v4.b32=8 
+fused_w16_b32_k64_l16	16	2	0	ld.global.b8=64 ld.global.s32=8 ld.global.v4.b32=4 ld.local.b32=8 ld.local.s32=4 ld.param.b32=2 ld.param.b64=7 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=24 st.shared.v4.b32=4 
+fused_w16x32_b64x128_k64_l16	32	2	0	ld.global.b8=64 ld.global.s32=8 ld.global.v4.b32=4 ld.local.b32=8 ld.local.s32=4 ld.param.b32=2 ld.param.b64=7 ld.param.s32=2 ld.shared.b32=48 st.global.b32=4 st.local.b32=48 st.shared.v4.b32=4 
+pieces_decode_fused_w4	16	1	0	ld.global.b8=128 ld.global.s32=2 ld.global.v4.b32=8 ld.param.b32=2 ld.param.b64=7 ld.param.s32=2 ld.shared.b32=3 st.global.b32=1 st.shared.b32=24 
+pieces_decode_fused_w8	16	1	0	ld.global.b8=128 ld.global.s32=2 ld.global.v4.b32=8 ld.param.b32=2 ld.param.b64=7 ld.param.s32=2 ld.shared.b32=3 st.global.b32=1 st.shared.b32=24 
+pieces_decode_w8	16	1	0	ld.global.b8=128 ld.global.v4.b32=8 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=3 st.global.b32=3 st.shared.b32=24 
+pieces_w16_b256x16_k32_l16	8	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=16 st.global.b32=12 st.local.b32=24 st.shared.v4.b32=4 
+pieces_w16_b32_k64_l16	16	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=12 st.local.b32=24 st.shared.v4.b32=4 
+pieces_w16_b64_k64_l16	16	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=12 st.local.b32=24 st.shared.v4.b32=4 
+pieces_w16x32_b128x64_k32_l16	16	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=4 
+pieces_w16x32_b256x32_k32_l16	16	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=4 
+pieces_w16x32_b32x128_k64_l16	32	2	0	ld.global.b8=96 ld.global.v4.b32=6 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=48 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=6 
+pieces_w16x32_b64x128_k32_l16	16	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=4 
+pieces_w16x32_b64x128_k64_l16	32	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=48 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=4 
+pieces_w16x32_b64x64_k64_l16	32	2	0	ld.global.b8=64 ld.global.v4.b32=4 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=48 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=4 
+pieces_w32_b64x128_k64_l16	64	2	0	ld.global.b8=96 ld.global.v4.b32=6 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=64 st.global.b32=12 st.local.b32=96 st.shared.v4.b32=6 
+pipe2_w16_b32_k64_l16	16	2	8	ld.global.b8=128 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=12 st.local.b32=24 st.shared.v4.b32=8 
+pipe2_w16x32_b64x128_k32_l16	16	2	8	ld.global.b8=128 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=12 st.local.b32=48 st.shared.v4.b32=8 
+pipe2_w32_b64x128_k32_l16	32	2	8	ld.global.b8=128 ld.local.b32=12 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=12 st.local.b32=96 st.shared.v4.b32=8 
+probe_loads_hoisted	2	0	0	ld.global.b32=8 ld.global.b8=32 ld.global.s32=16 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+quantize_par_256	0	2	0	ld.global.b32=16 ld.param.b32=3 ld.param.b64=3 ld.shared.b32=3 st.global.b32=2 st.global.b8=4 st.shared.b32=2 
+quantize_reference	0	0	0	ld.global.b32=2 ld.param.b32=1 ld.param.b64=3 ld.param.s32=1 st.global.b32=1 st.global.b8=1 
+reference	2	0	0	ld.global.b32=8 ld.global.b8=16 ld.global.s32=16 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 st.global.b32=8 
+refused_w16x32_b64x256_k64_l16	8	2	0	ld.global.b8=32 ld.global.s32=8 ld.global.v4.b32=2 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=4 st.local.b32=16 st.shared.v4.b32=2 
+refused_w32_b128x256_k64_l16	16	2	0	ld.global.b8=32 ld.global.s32=8 ld.global.v4.b32=2 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=32 st.shared.v4.b32=2 
+staged_w16_b32_k32_l4	2	2	0	ld.global.b32=4 ld.global.b8=16 ld.global.s32=8 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=8 st.global.b32=4 st.local.b32=8 st.shared.b32=4 
+staged_w16x32_b128_k64_l16	8	2	0	ld.global.b8=32 ld.global.s32=8 ld.global.v4.b32=2 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=4 st.local.b32=16 st.shared.v4.b32=2 
+staged_w32_b128_k64_l16	16	2	0	ld.global.b8=32 ld.global.s32=8 ld.global.v4.b32=2 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=32 st.shared.v4.b32=2 
+staged_w32_b256x64_k64_l16	16	2	0	ld.global.b8=48 ld.global.s32=8 ld.global.v4.b32=3 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=32 st.shared.v4.b32=3 
+staged_w32_b512x32_k64_l16	16	2	0	ld.global.b8=80 ld.global.s32=8 ld.global.v4.b32=5 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=32 st.shared.v4.b32=5 
+staged_w32_b64_k64_l16	16	2	0	ld.global.b8=64 ld.global.s32=8 ld.global.v4.b32=4 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=32 st.shared.v4.b32=4 
+staged_w32x16_b512x16_k64_l16	8	2	0	ld.global.b8=80 ld.global.s32=8 ld.global.v4.b32=5 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=24 st.global.b32=4 st.local.b32=16 st.shared.v4.b32=5 
+staged_w64_b128_k32_l4	32	2	0	ld.global.b32=16 ld.global.b8=64 ld.global.s32=8 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=32 st.global.b32=4 st.local.b32=128 st.shared.b32=16 
+staged_w64_b128_k64_l16	64	2	0	ld.global.b8=128 ld.global.s32=8 ld.global.v4.b32=8 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=64 st.global.b32=4 st.local.b32=128 st.shared.v4.b32=8 
+staged_w64_b128x256_k64_l16	64	2	0	ld.global.b8=96 ld.global.s32=8 ld.global.v4.b32=6 ld.local.b32=4 ld.param.b32=2 ld.param.b64=5 ld.param.s32=2 ld.shared.b32=64 st.global.b32=4 st.local.b32=128 st.shared.v4.b32=6 
