@@ -2413,8 +2413,10 @@ def main(argv=None):
     if corpus_missing:
         raise SystemExit(
             "bench_board: REFUSING: corpus key(s) %s missing (looked in $MOJOLEARN_CORPUS_ROOT, "
-            "~/r2-stage, <repo>/training). This script never downloads. Stage from R2:\n  sh "
-            "tools/dataset_store.sh stage \"<ssh flags+target>\" %s"
+            "<repo>/training, ~/r2-stage, ~/CascadeProjects/mojolearn/training and "
+            "~/mojolearn-wt/*/training). This script never downloads. Stage from R2 on the Mac "
+            "that holds the credential:\n  sh tools/dataset_store.sh stage \"<ssh flags+target>\" %s\n"
+            "(a remote Mac: prefix MOJOLEARN_STAGE_BOX_HOME=<its home>)"
             % (",".join(corpus_missing), " ".join(corpus_missing)))
     if args.verify_data:
         data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed, verify=True)
