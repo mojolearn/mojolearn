@@ -80,11 +80,13 @@ STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
 # Comma-separated; RunPod places the pod on whichever of these has stock.
 # Identity needs any NVIDIA; speed is judged before/after on the SAME pod.
 # Andrew 2026-09-28: 13 H100s at $3.49/h emptied the account in four hours. Identity work
-# needs no H100: the default list stops at the cheap cards, and an H100/H200/A100/B200 in
+# needs no H100: the default list stops at the cheap cards, and an H200/A100/B200 in
 # MOJOLEARN_DEVPOD_GPUS is refused unless MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1 (Andrew's OK only).
+# Andrew 2026-09-29: an H100 is no longer refused ("i don't want to refuse h100"). It is
+# still not in the default list, and the pod cap and the lease cap below still bound the spend.
 NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA RTX A6000,NVIDIA A40}"
-case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
-    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
+case "$NV_GPUS" in *H200*|*A100*|*B200*)
+    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
 esac
 # At most this many live RunPod pods on the account, counted from the API at every up.
 MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
