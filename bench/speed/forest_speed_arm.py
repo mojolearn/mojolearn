@@ -184,12 +184,11 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         border_count (BORDERS, not bins) grow_policy
         bootstrap_type='No'              random_state <- random_seed
 
-    `boost_from_average` is passed by NEITHER arm, deliberately. Both
-    libraries resolve the same data-dependent default -- auto-true for RMSE,
-    false for Logloss, since Logloss is not on CatBoost's
-    `AdjustBoostFromAverageDefaultValue` list -- and `check-bfa-oracle`
-    proves our bias bit-equal to their `get_scale_and_bias`. Passing it would
-    be overriding a default that already agrees.
+    `boost_from_average` is passed explicitly since 2026-09-29 (same seed,
+    same tuning parameters): True for RMSE and False for Logloss, the
+    data-dependent default both libraries resolve (`check-bfa-oracle` proves
+    our bias bit-equal to their `get_scale_and_bias`), and the value XGBoost
+    and LightGBM are now pinned to as well.
 
     MULTICLASS IS REFUSED BY NAME (DEVIATION 1838). The Mojo layer implements
     `MultiClass`; this Python wrapper is one-dimensional, so a 7-class
@@ -218,9 +217,25 @@ def our_gbdt_arm(lane, cfg, data, extra=None):
         bootstrap_type="No",                 # DEVIATION 1833
         grow_policy=cfg["grow_policy"],
         loss=task_loss or ("RMSE" if data.task == "regression" else "Logloss"),
+        # SAME SEED, SAME TUNING PARAMETERS (speed_gbdt_arm.lane_config): every
+        # knob the opponents also have, set to the value they are given
+        max_leaves=cfg["max_leaves"],        # 2 ** depth, accepted off Lossguide
+        min_data_in_leaf=cfg["min_data_in_leaf"],
+        random_strength=cfg["random_strength"],
+        score_function=cfg["score_function"],
+        leaf_estimation_method=cfg["leaf_estimation_method"],
+        leaf_estimation_iterations=cfg["leaf_estimation_iterations"],
+        feature_border_type=cfg["feature_border_type"],
+        nan_mode=cfg["nan_mode"],
+        boosting_type=cfg["boosting_type"],
     )
-    if cfg["grow_policy"] == "Lossguide":
-        params["max_leaves"] = cfg["max_leaves"]
+    if cfg.get("min_split_gain") is not None:
+        params["min_split_gain"] = cfg["min_split_gain"]
+    if cfg.get("min_child_hessian") is not None:
+        params["min_child_hessian"] = cfg["min_child_hessian"]
+    bfa = spec.boost_from_average_for(data)
+    if bfa is not None:
+        params["boost_from_average"] = bfa
     if data.cat_idx:
         # DEVIATION 2634's OTHER SIDE. `cat_features` is the only way to reach
         # the CTR target prep at all: with no categorical column 2634 skips it,
@@ -285,6 +300,7 @@ def our_rf_arm(lane, cfg, data, extra=None):
         min_samples_split=cfg["min_samples_split"],
         min_impurity_decrease=cfg["min_impurity_decrease"],
         bootstrap=cfg["bootstrap"],
+        max_samples=cfg["max_samples"],   # 1.0: n draws with replacement, as sklearn's
         random_state=cfg["seed"],
         device="gpu",
     )

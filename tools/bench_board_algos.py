@@ -195,15 +195,17 @@ _add("bayesian-ridge", xlane="linear", ours="BayesianRidge", task="reg", block="
 _add("ard", xlane="linear", ours="ARDRegression", task="reg", block="reg", sub={"X": SUB["mid"]},
      sk="sklearn.linear_model:ARDRegression", params=dict(max_iter=300, tol=1e-3))
 _add("lars", xlane="linear", ours="Lars", task="reg", block="reg",
-     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True),
+     sk="sklearn.linear_model:Lars", params=dict(n_nonzero_coefs=500, fit_intercept=True,
+                                                 random_state=SEED),
      cuml="cuml.experimental.linear_model:Lars",
      cuml_params=dict(n_nonzero_coefs=500, fit_intercept=True))
 _add("lasso-lars", xlane="linear", ours="LassoLars", task="reg", block="reg",
-     sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500))
+     sk="sklearn.linear_model:LassoLars", params=dict(alpha=0.01, max_iter=500, random_state=SEED))
 _add("quantile", xlane="linear", ours="QuantileRegressor", task="reg", block="reg",
      sub={"X": SUB["mid"]}, sk="sklearn.linear_model:QuantileRegressor",
-     params=dict(quantile=0.5, alpha=1e-4), sk_params=dict(quantile=0.5, alpha=1e-4, solver="highs"),
-     mism=["solver: ours IRLS/ADMM (the lane names it), scikit-learn the HiGHS LP"])
+     params=dict(quantile=0.5, alpha=1e-4, solver="highs"),
+     mism=["solver: 'highs' passed to both; ours accepts the name and always runs ADMM "
+           "(max_iter=5000, tol=1e-4, ours only), scikit-learn solves the HiGHS LP"])
 _add("perceptron", xlane="linear", ours="Perceptron", task="clf", block="cls",
      sk="sklearn.linear_model:Perceptron", params=dict(max_iter=20, tol=None, random_state=SEED))
 _add("pa-clf", xlane="linear", ours="PassiveAggressiveClassifier", task="clf", block="cls",
@@ -213,7 +215,7 @@ _add("pa-reg", xlane="linear", ours="PassiveAggressiveRegressor", task="reg", bl
      sk="sklearn.linear_model:PassiveAggressiveRegressor",
      params=dict(C=1.0, max_iter=20, tol=None, random_state=SEED))
 _add("ridge-clf", xlane="linear", ours="RidgeClassifier", task="clf", block="cls",
-     sk="sklearn.linear_model:RidgeClassifier", params=dict(alpha=1.0))
+     sk="sklearn.linear_model:RidgeClassifier", params=dict(alpha=1.0, random_state=SEED))
 _add("sgd-ocsvm", xlane="linear", ours="SGDOneClassSVM", task="outlier", block="cls",
      sk="sklearn.linear_model:SGDOneClassSVM", params=dict(nu=0.1, max_iter=20, tol=None,
                                                           random_state=SEED))
@@ -222,15 +224,18 @@ _add("ridge-cv", xlane="linear", ours="RidgeCV", task="reg", block="reg",
      sk="sklearn.linear_model:RidgeCV", params=dict(alphas=_ALPHAS, cv=5),
      notes=["cv=5: k-fold (cross_val_score's fold order), not the leave-one-out GCV of cv=None"])
 _add("lasso-cv", xlane="linear", ours="LassoCV", task="reg", block="reg",
-     sk="sklearn.linear_model:LassoCV", params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4),
-     sk_params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, n_jobs=-1))
+     sk="sklearn.linear_model:LassoCV",
+     params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED),
+     sk_params=dict(alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED, n_jobs=-1))
 _add("enet-cv", xlane="linear", ours="ElasticNetCV", task="reg", block="reg",
      sk="sklearn.linear_model:ElasticNetCV",
-     params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4),
-     sk_params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, n_jobs=-1))
+     params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4, random_state=SEED),
+     sk_params=dict(l1_ratio=0.5, alphas=_ALPHAS[:4], cv=5, max_iter=1000, tol=1e-4,
+                    random_state=SEED, n_jobs=-1))
 _add("logreg-cv", xlane="linear", ours="LogisticRegressionCV", task="clf", block="cls",
-     sk="sklearn.linear_model:LogisticRegressionCV", params=dict(Cs=[0.1, 1.0, 10.0], cv=5, max_iter=1000),
-     sk_params=dict(Cs=[0.1, 1.0, 10.0], cv=5, max_iter=1000, n_jobs=-1))
+     sk="sklearn.linear_model:LogisticRegressionCV",
+     params=dict(Cs=[0.1, 1.0, 10.0], cv=5, max_iter=1000, random_state=SEED),
+     sk_params=dict(Cs=[0.1, 1.0, 10.0], cv=5, max_iter=1000, random_state=SEED, n_jobs=-1))
 _add("isotonic", xlane="linear", ours="IsotonicRegression", task="reg", block="reg", iso=True,
      sk="sklearn.isotonic:IsotonicRegression", params=dict(out_of_bounds="clip"),
      notes=["X = the one fit-row column most correlated with y (1-D, as isotonic regression takes)"])
@@ -270,8 +275,10 @@ _add("ocsvm", xlane="neighbors", ours="OneClassSVM", task="outlier", block="cls"
                                                                  cache_size=2000))
 _add("kernel-pca", xlane="neighbors", ours="KernelPCA", task="transform", block="cls",
      sub={"X": SUB["quad"], "Xq": SUB["quad"]}, gamma=True, quality="subspace",
-     sk="sklearn.decomposition:KernelPCA", params=dict(n_components=8, kernel="rbf"),
-     sk_params=dict(n_components=8, kernel="rbf", n_jobs=-1))
+     sk="sklearn.decomposition:KernelPCA", params=dict(n_components=8, kernel="rbf", random_state=SEED),
+     sk_params=dict(n_components=8, kernel="rbf", random_state=SEED, n_jobs=-1),
+     notes=["eigen_solver='auto' picks a randomized/ARPACK solver at this size: random_state=7 "
+            "on every arm"])
 _add("poly-count-sketch", xlane="neighbors", ours="PolynomialCountSketch", task="transform",
      block="reg", sub={"X": SUB["mid"], "Xq": 1000}, gamma=True, quality="kernel-poly",
      sk="sklearn.kernel_approximation:PolynomialCountSketch",
@@ -315,10 +322,18 @@ _add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvai
            "order-dependent; ours pins the vertex sweep (lowest id first)", _GRAPH_MISM])
 _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp", task="reg",
      block="reg", sub={"X": SUB["mid"], "Xq": SUB["small"]},
-     params=dict(n_inducing=512, n_iter=200, batch_size=4096, learning_rate=0.01),
+     params=dict(n_inducing=512, kernel_variance=1.0, lengthscale=1.0, noise_variance=1.0,
+                 jitter=1e-6),
      other={"gpytorch-gpu": "gpytorch", "gpytorch-cpu": "gpytorch"},
-     notes=["RBF kernel with ARD off, Gaussian likelihood, inducing points = the first 512 stride "
-            "rows, Adam 200 steps of 4,096-row minibatches in a seed-7 order"])
+     notes=["zero mean, RBF kernel (one lengthscale), Gaussian likelihood, inducing points = 512 "
+            "stride rows (fixed), kernel variance, lengthscale and noise variance all 1.0 and "
+            "NOT trained on any arm: ours sets q(u) to its optimum for the given "
+            "hyperparameters (Titsias's collapsed bound, DEVIATION 5205); gpytorch is the same "
+            "model through InducingPointKernel (SGPR, the collapsed bound) in an ExactGP with "
+            "ZeroMean, the same fixed hyperparameters, its prediction cache built in the fit clock"],
+     mism=["no seed on any arm: nothing is drawn (fixed inducing points, closed form)",
+           "jitter: ours 1e-6 on K_uu; gpytorch adds its own Cholesky jitter (1e-6 in float32) "
+           "only when a factorization fails"])
 
 # ---- lane decomp + linalg -------------------------------------------------
 _add("incremental-pca", xlane="decomp", ours="IncrementalPCA", task="transform", block="tsvd",
@@ -410,7 +425,11 @@ _add("isomap", xlane="decomp", ours="Isomap", task="embed", block="manifold",
 _add("mds", xlane="decomp", ours="MDS", task="embed", block="manifold", sub={"X": SUB["tiny"]},
      sk="sklearn.manifold:MDS", params=dict(n_components=2, n_init=1, max_iter=300, eps=1e-3,
                                              random_state=SEED),
-     sk_params=dict(n_components=2, n_init=1, max_iter=300, eps=1e-3, random_state=SEED, n_jobs=-1))
+     sk_params=dict(n_components=2, n_init=1, max_iter=300, eps=1e-3, random_state=SEED, n_jobs=-1),
+     mism=["metric MDS on Euclidean distances on both, spelled differently: ours "
+           "metric='euclidean', metric_mds=True, init='random' (scikit-learn 1.9's names); the "
+           "pinned scikit-learn 1.7.2 metric=True, dissimilarity='euclidean' and a random start "
+           "from random_state; each draws its own start"])
 _add("lle", xlane="decomp", ours="LocallyLinearEmbedding", task="embed", block="manifold",
      sub={"X": SUB["quad"]}, sk="sklearn.manifold:LocallyLinearEmbedding",
      params=dict(n_neighbors=10, n_components=2, random_state=SEED),
@@ -422,8 +441,12 @@ _add("min-cov-det", xlane="decomp", ours="MinCovDet", task="covariance", block="
      sub={"X": SUB["mid"]}, sk="sklearn.covariance:MinCovDet", params=dict(random_state=SEED))
 _add("als", xlane="decomp", ours=("ImplicitALS", "AlternatingLeastSquares", "ALS"), kind="als",
      task="als", block="counts", datasets=("taxi-zones", "text"),
-     params=dict(factors=64, regularization=0.01, alpha=1.0, iterations=15, random_state=SEED),
+     params=dict(factors=64, regularization=0.01, alpha=1.0, iterations=15, use_cg=False, cg_steps=3,
+                 calculate_training_loss=False, random_state=SEED),
      other={"implicit-cpu": "implicit", "implicit-gpu": "implicit"},
+     mism=["implicit-gpu has only the conjugate-gradient solver (use_cg ignored there); ours and "
+           "implicit-cpu solve each least-squares step exactly (use_cg=False)",
+           "each library draws its own initial factors from random_state=7"],
      notes=["users x items = taxi (day, hour, pickup zone) x dropoff zone trip counts, and text "
             "documents x byte-bigram bins; one held-out interaction per user row for recall@10"])
 
@@ -442,14 +465,16 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("poly-features", "PolynomialFeatures", dict(degree=2, include_bias=False), "raw16", True),
         ("spline", "SplineTransformer", dict(n_knots=5, degree=3), "raw16", False),
         ("kbins", "KBinsDiscretizer", dict(n_bins=16, encode="ordinal", strategy="quantile",
-                                           quantile_method="linear", subsample=None), "raw", True),
+                                           quantile_method="linear", subsample=None,
+                                           random_state=SEED), "raw", True),
         ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False), "cat", True),
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
         ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False)):
     # cuML takes no subsample and no quantile_method (its quantile edges are np.percentile's
     # linear ones, the method ours and scikit-learn are set to above)
-    _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")}
+    _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")
+             and not (_cls == "KBinsDiscretizer" and k == "random_state")}
     if _cls == "QuantileTransformer":
         _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
@@ -496,7 +521,8 @@ for _slug, _fn, _blk, _k in (("select-f-classif", "f_classif", "cls", 0.5),
 _add("rfe", xlane="prep", ours="RFE", task="select", block="cls", sub={"X": SUB["knn"]},
      sk="sklearn.feature_selection:RFE",
      params=dict(estimator=_E("LogisticRegression", max_iter=200), n_features_to_select="half",
-                 step=0.1))
+                 step=0.1),
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 for _slug, _cls, _blk, _cu in (("gaussian-nb", "GaussianNB", "cls", True),
                                ("bernoulli-nb", "BernoulliNB", "cls", True),
                                ("categorical-nb", "CategoricalNB", "cat", True)):
@@ -526,19 +552,22 @@ for _cell in ("LSTM", "GRU", "RNN"):
              kind="seqmodel", task=_task, block="seqwin", datasets=("taxi-hourly", "synthetic"),
              cell=_cell, torch=True,
              params=dict(hidden_size=64, num_layers=1, optimizer="adam", learning_rate=1e-3,
-                         batch_size=256, max_epochs=2, shuffle=True, random_state=SEED),
+                         optimizer_options=dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
+                         batch_size=256, max_epochs=2, shuffle=True, random_state=SEED,
+                         **({"nonlinearity": "tanh"} if _cell == "RNN" else {})),
              notes=["windows of %d steps of the time-series block (each series z-scored by its fit "
                     "part), X (n, %d, 1); target: the next value (reg) or next value above the "
                     "window mean (clf); windows ending in the first 80%% of time fit, the rest "
                     "held out" % (SEQ_T, SEQ_T),
                     "torch arm: nn.%s(1, 64, batch_first) + Linear head on the last hidden state, "
-                    "Adam lr 1e-3, batch 256, 2 epochs, a seed-7 shuffle per epoch" % _cell],
-             mism=["each library initializes its own weights (ours from random_state=7, torch "
-                   "from torch.manual_seed(7))"])
+                    "Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 "
+                    "epochs; its weights and per-epoch row orders are ours' (numpy "
+                    "default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, "
+                    "then one permutation per epoch), loaded into the torch module" % _cell])
 _add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), kind="layer",
      task="layernorm",
      block="tensor", datasets=("synthetic",), torch=True,
-     params=dict(normalized_shape=1024, eps=1e-5),
+     params=dict(normalized_shape=1024, eps=1e-5, elementwise_affine=True, bias=True),
      notes=["x (16384, 1024) N(0,1) seed 7"])
 _add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
      task="moe", block="tensor", datasets=("synthetic",), torch=True, forward_only=True,
@@ -550,12 +579,24 @@ _add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
             "sequence/NOT_IMPLEMENTED.tsv): the fit column times one forward, torch under "
             "no_grad; ours loads torch's weights in HF's fused layout (router (E, D), "
             "gate_up_proj (E, 2F, D) = [w1; w3], down_proj (E, D, F) = w2)"])
+#: every optimizer hyperparameter passed explicitly to ours and torch.optim (ours'
+#: defaults, which are torch's)
+_OPT_HYPER = {
+    "RMSprop": dict(alpha=0.99, eps=1e-8, weight_decay=0.0, momentum=0.0, centered=False),
+    "Adagrad": dict(lr_decay=0.0, weight_decay=0.0, initial_accumulator_value=0.0, eps=1e-10),
+    "Adamax": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0),
+    "NAdam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
+                  decoupled_weight_decay=False),
+    "Adafactor": dict(beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0, maximize=False),
+    "Lion": dict(betas=(0.9, 0.99), weight_decay=0.0),
+    "LAMB": dict(betas=(0.9, 0.999), eps=1e-6, weight_decay=0.01),
+}
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
                             ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
                             ("lamb", "LAMB", None)):
     _add(_slug, xlane="sequence", ours=_cls, kind="optim", task="optim", block="optim",
-         datasets=("synthetic",), torch_opt=_torch, params=dict(lr=1e-3),
+         datasets=("synthetic",), torch_opt=_torch, params=dict(lr=1e-3, **_OPT_HYPER[_cls]),
          notes=["one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 "
                 "steps; quality = the parameter after them vs torch eager"])
 _add("mlp-clf", xlane="sequence", ours="MLPClassifier", task="clf", block="cls",
@@ -573,15 +614,19 @@ _TSNOTE = ("taxi-hourly: hourly pickup counts of the 64 busiest pickup zones ove
            "February 2024 (1,440 hours; the last 48 held out), from the taxi npz; synthetic: 64 "
            "seed-7 series of the same length")
 _add("autoarima", xlane="sequence", ours="AutoARIMA", kind="ts", task="forecast", block="ts",
-     datasets=_TS, params=dict(season_length=24, max_p=3, max_q=3, max_d=1, seasonal=False,
-                               information_criterion="aicc"),
-     other={"statsforecast-cpu": "statsforecast", "cuml-gpu": "cuml"}, notes=[_TSNOTE],
-     mism=["cuML AutoARIMA searches its own grid (p,q <= 3, d <= 1, no seasonal) by AICc; "
-           "statsforecast AutoARIMA stepwise (its default)"])
+     datasets=_TS, params=dict(max_p=3, max_q=3, max_d=1, seasonal=False, ic="aicc",
+                               stepwise=False, allow_intercept=True),
+     other={"statsforecast-cpu": "statsforecast", "cuml-gpu": "cuml"}, notes=[_TSNOTE,
+     "ours and cuML: search(s=1, d=0..1, p=0..3, q=0..3, no seasonal part, ic='aicc') then fit, "
+     "d chosen by the KPSS test; statsforecast AutoARIMA(season_length=1, seasonal=False, "
+     "max_p=3, max_q=3, max_d=1, max_order=6, stepwise=False, ic='aicc', allowmean=True, "
+     "allowdrift=True): the same exhaustive grid with an intercept or drift allowed, d by KPSS"],
+     mism=["the likelihood optimizer and its stopping rule are each library's own"])
 _add("stl", xlane="sequence", ours="STL", kind="ts", task="decompose", block="ts", datasets=_TS,
-     params=dict(period=24, robust=False), other={"statsmodels-cpu": "statsmodels"}, notes=[_TSNOTE])
+     params=dict(period=24, robust=False, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
+                 trend_deg=1, low_pass_deg=1, seasonal_jump=1, trend_jump=1, low_pass_jump=1), other={"statsmodels-cpu": "statsmodels"}, notes=[_TSNOTE])
 _add("var", xlane="sequence", ours="VAR", kind="ts", task="var", block="ts", datasets=_TS,
-     params=dict(maxlags=2), other={"statsmodels-cpu": "statsmodels"},
+     params=dict(maxlags=2, method="ols", ic=None, trend="c"), other={"statsmodels-cpu": "statsmodels"},
      notes=[_TSNOTE, "one VAR over 16 series jointly (the first 16), lag order 2"])
 _add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast",
      block="ts", datasets=_TS, params=dict(season_length=24, decomposition_type="multiplicative"),
@@ -590,6 +635,8 @@ _add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast",
                      "statsmodels-cpu is ThetaModel(period=24), its own theta method"])
 _add("croston", xlane="sequence", ours=("CrostonClassic",), kind="ts", task="forecast",
      block="tsi", datasets=("taxi-hourly", "synthetic"), params={},
+     mism=["CrostonClassic has no tuning parameter and no seed on either side (smoothing 0.1, "
+           "fixed)"],
      other={"statsforecast-cpu": "statsforecast"},
      notes=["intermittent series: taxi-hourly's 64 pickup zones with 30-70% zero hours; "
             "synthetic Bernoulli(0.3) x Poisson(3) demand, seed 7"])
@@ -601,7 +648,8 @@ _add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast",
                      "AutoETS(model='AAN', damped=True), statsmodels ExponentialSmoothing("
                      "trend='add', damped_trend=True, seasonal=None)"])
 _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="tsr", datasets=_TS,
-     params=dict(p=1, q=1, mean="Constant", dist="normal"), other={"arch-cpu": "arch"},
+     params=dict(p=1, o=0, q=1, power=2.0, mean="Constant", dist="normal"),
+     other={"arch-cpu": "arch"},
      notes=["taxi-hourly: first differences of log(1 + count); synthetic: GARCH(1,1) returns "
             "omega 0.1 alpha 0.1 beta 0.8, seed 7",
             "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
@@ -609,8 +657,10 @@ _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="ts
             "conditional variance, h steps"])
 _add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
      task="forecast", block="ts", datasets=_TS,
-     params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
-                 yearly_seasonality=False, max_iter=10000),
+     params=dict(growth="linear", n_changepoints=25, changepoint_range=0.8,
+                 daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=False,
+                 seasonality_mode="additive", seasonality_prior_scale=10.0,
+                 holidays_prior_scale=10.0, changepoint_prior_scale=0.05, max_iter=10000),
      other={"prophet-cpu": "prophet"},
      notes=[_TSNOTE, "prophet's shape on both sides: fit(ds, y), predict(future ds), ds hourly "
                      "from 2024-01-01; ours fits the batch of series at once, prophet one "
@@ -618,7 +668,9 @@ _add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
                      "the first 80%, daily (order 4) and weekly (order 3) seasonality, no "
                      "yearly; the iteration cap is prophet's (Stan iter=1e4) on both"],
      mism=["prophet fits by Stan's L-BFGS (MAP); ours by its own L-BFGS; parity is at a "
-           "tolerance, the forecast RMSE is the comparable number"])
+           "tolerance, the forecast RMSE is the comparable number",
+           "prophet uncertainty_samples=0: ours computes no intervals, so prophet's 1,000 "
+           "sampled intervals (prophet only, numpy's unseeded RNG) are switched off"])
 
 # ---- lane trees -----------------------------------------------------------
 _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="clf", block="cls",
@@ -627,43 +679,58 @@ _add("decision-tree-clf", xlane="trees", ours="DecisionTreeClassifier", task="cl
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
      mism=["cuml-gpu is cuML's forest with one tree, no bootstrap, every feature (no GPU "
-           "single-tree class exists); it bins features (n_bins=128), scikit-learn and ours "
-           "split on exact thresholds"])
+           "single-tree class exists), n_bins=128 as ours",
+           "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("decision-tree-reg", xlane="trees", ours="DecisionTreeRegressor", task="reg", block="reg",
      sk="sklearn.tree:DecisionTreeRegressor", params=dict(max_depth=16, random_state=SEED),
      cuml="cuml.ensemble:RandomForestRegressor",
      cuml_params=dict(n_estimators=1, bootstrap=False, max_features=1.0, max_depth=16, n_bins=128,
                       random_state=SEED),
-     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)"])
+     mism=["cuml-gpu is cuML's forest with one tree (see decision-tree-clf)", "ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-clf", xlane="trees", ours="BaggingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:BaggingClassifier",
-     params=dict(estimator=_E("DecisionTreeClassifier", max_depth=12), n_estimators=10,
-                 random_state=SEED), sk_extra=dict(n_jobs=-1))
+     params=dict(estimator=_E("DecisionTreeClassifier", max_depth=12, random_state=SEED),
+                 n_estimators=10, random_state=SEED), sk_extra=dict(n_jobs=-1),
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("bagging-reg", xlane="trees", ours="BaggingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:BaggingRegressor",
-     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=12), n_estimators=10,
-                 random_state=SEED), sk_extra=dict(n_jobs=-1))
+     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=12, random_state=SEED),
+                 n_estimators=10, random_state=SEED), sk_extra=dict(n_jobs=-1),
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("adaboost-clf", xlane="trees", ours="AdaBoostClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:AdaBoostClassifier",
-     params=dict(estimator=_E("DecisionTreeClassifier", max_depth=3), n_estimators=50,
-                 learning_rate=1.0, random_state=SEED))
+     params=dict(estimator=_E("DecisionTreeClassifier", max_depth=3, random_state=SEED),
+                 n_estimators=50, learning_rate=1.0, algorithm="SAMME", random_state=SEED),
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
 _add("adaboost-reg", xlane="trees", ours="AdaBoostRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:AdaBoostRegressor",
-     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=3), n_estimators=50,
-                 learning_rate=1.0, loss="linear", random_state=SEED))
+     params=dict(estimator=_E("DecisionTreeRegressor", max_depth=3, random_state=SEED),
+                 n_estimators=50, learning_rate=1.0, loss="linear", random_state=SEED),
+     mism=["ours' DecisionTree* is its forest builder with one tree: it splits on n_bins=128 quantile bins per feature (ours only; not a scikit-learn parameter), scikit-learn on exact thresholds"])
+#: DART: ours takes LightGBM's DART parameter set; every one is passed explicitly
+#: to ours and LightGBM, and the ones XGBoost has to XGBoost (_build_dart).
+_DART = dict(n_estimators=200, learning_rate=0.1, max_depth=8, num_leaves=255, drop_rate=0.1,
+             skip_drop=0.5, max_drop=50, xgboost_dart_mode=False, uniform_drop=False,
+             min_child_samples=20, reg_lambda=0.0, reg_alpha=0.0, max_bin=255, max_delta_step=0.0,
+             subsample=1.0, subsample_freq=0, colsample_bytree=1.0,
+             drop_seed=SEED, feature_fraction_seed=SEED, bagging_seed=SEED, random_state=SEED)
+_DART_MISM = (
+    "LightGBM boosting='dart' grows leaf-wise (num_leaves=255, max_depth=8) as ours; XGBoost "
+    "booster='dart' tree_method='hist' grows depth-wise (max_depth=8, no leaf cap)",
+    "XGBoost has no max_drop (ours and LightGBM 50), no min_child_samples (ours and LightGBM "
+    "20 rows; XGBoost min_child_weight=1, a hessian sum), no uniform_drop / xgboost_dart_mode "
+    "(XGBoost sample_type='uniform', normalize_type='tree') and no drop_seed: its drops come "
+    "from random_state=7; each library's drop RNG is its own",
+    "max_bin 255 on every arm (XGBoost's default is 256, set to 255 here)")
 _add("dart", xlane="trees", ours=("DARTClassifier", "DartClassifier"), kind="dart", task="clf",
      block="cls",
-     params=dict(n_estimators=200, learning_rate=0.1, max_depth=8, num_leaves=255, drop_rate=0.1,
-                 skip_drop=0.5, random_state=SEED),
+     params=dict(_DART),
      other={"lightgbm-cpu": "lightgbm", "xgboost-cpu": "xgboost", "xgboost-gpu": "xgboost"},
-     mism=["LightGBM boosting='dart' num_leaves=255 max_depth=8; XGBoost booster='dart' "
-           "rate_drop=0.1 skip_drop=0.5 tree_method='hist' (depth-wise, no leaf cap); each "
-           "library's own drop RNG"])
+     mism=list(_DART_MISM))
 _add("dart-reg", xlane="trees", ours=("DARTRegressor",), kind="dart", task="reg", block="reg",
-     params=dict(n_estimators=200, learning_rate=0.1, max_depth=8, num_leaves=255, drop_rate=0.1,
-                 skip_drop=0.5, random_state=SEED),
+     params=dict(_DART),
      other={"lightgbm-cpu": "lightgbm", "xgboost-cpu": "xgboost", "xgboost-gpu": "xgboost"},
-     mism=["as dart: LightGBM boosting='dart', XGBoost booster='dart', each library's drop RNG"])
+     mism=list(_DART_MISM))
 _add("random-trees-embedding", xlane="trees", ours="RandomTreesEmbedding", task="transform",
      block="cls", quality="shape", sk="sklearn.ensemble:RandomTreesEmbedding",
      params=dict(n_estimators=10, max_depth=5, random_state=SEED, sparse_output=False),
@@ -672,35 +739,39 @@ _add("voting-clf", xlane="trees", ours="VotingClassifier", task="clf", block="cl
      sk="sklearn.ensemble:VotingClassifier",
      params=dict(estimators=[("lr", _E("LogisticRegression", max_iter=200)), ("nb", _E("GaussianNB")),
                              ("dt", _E("DecisionTreeClassifier", max_depth=8, random_state=SEED))],
-                 voting="soft"))
+                 voting="soft"),
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("voting-reg", xlane="trees", ours="VotingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:VotingRegressor",
-     params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01)),
+     params=dict(estimators=[("ridge", _E("Ridge", alpha=1.0)), ("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))]))
 _add("stacking-clf", xlane="trees", ours="StackingClassifier", task="clf", block="cls",
      sk="sklearn.ensemble:StackingClassifier",
      params=dict(estimators=[("nb", _E("GaussianNB")),
                              ("dt", _E("DecisionTreeClassifier", max_depth=8, random_state=SEED))],
-                 final_estimator=_E("LogisticRegression", max_iter=200), cv=5))
+                 final_estimator=_E("LogisticRegression", max_iter=200), cv=5),
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("stacking-reg", xlane="trees", ours="StackingRegressor", task="reg", block="reg",
      sk="sklearn.ensemble:StackingRegressor",
-     params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01)),
+     params=dict(estimators=[("lasso", _E("Lasso", alpha=0.01, tol=1e-3, max_iter=1000, random_state=SEED)),
                              ("dt", _E("DecisionTreeRegressor", max_depth=8, random_state=SEED))],
                  final_estimator=_E("Ridge", alpha=1.0), cv=5))
 _add("multioutput-clf", xlane="trees", ours="MultiOutputClassifier", task="multiclf", block="cls",
      sk="sklearn.multioutput:MultiOutputClassifier",
      params=dict(estimator=_E("LogisticRegression", max_iter=200)),
-     notes=["targets: y and (last column > 0); that column is removed from X"])
+     notes=["targets: y and (last column > 0); that column is removed from X"],
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("multioutput-reg", xlane="trees", ours="MultiOutputRegressor", task="multireg", block="reg",
      sk="sklearn.multioutput:MultiOutputRegressor", params=dict(estimator=_E("Ridge", alpha=1.0)),
      notes=["targets: y and the last column; that column is removed from X"])
 _add("ovr", xlane="trees", ours="OneVsRestClassifier", task="clf", block="mc",
      sk="sklearn.multiclass:OneVsRestClassifier",
      params=dict(estimator=_E("LogisticRegression", max_iter=200)),
-     notes=["taxi: the tip-share band (4 classes); Istella-S: the relevance grade (5 classes)"])
+     notes=["taxi: the tip-share band (4 classes); Istella-S: the relevance grade (5 classes)"],
+     mism=["nested LogisticRegression(max_iter=200): ours is L-BFGS (cuML's quasi-Newton, memory 5, solver='qn'), scikit-learn solver='lbfgs' (scipy, memory 10); C=1.0 and tol=1e-4 are both libraries' defaults; each stops by its own criterion"])
 _add("calibrated", xlane="trees", ours="CalibratedClassifierCV", task="clf", block="cls",
      sk="sklearn.calibration:CalibratedClassifierCV",
-     params=dict(estimator=_E("GaussianNB"), method="sigmoid", cv=5))
+     params=dict(estimator=_E("GaussianNB"), method="sigmoid", cv=5, ensemble=True))
 _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-shap", block="reg",
      sub={"X": SUB["mid"], "Xq": SUB["quad"]},
      params=dict(n_estimators=100, max_depth=6, learning_rate=0.1),
@@ -713,7 +784,7 @@ _add("tree-shap", xlane="trees", ours="TreeExplainer", kind="shap", task="tree-s
            "DecisionTree and DART models), the opponents their GBDT of the same size"])
 _add("kernel-shap", xlane="trees", ours="KernelExplainer", kind="shap", task="kernel-shap",
      block="reg", sub={"X": SUB["mid"], "Xq": 100},
-     params=dict(n_background=100, nsamples=2048),
+     params=dict(n_background=100, nsamples=2048, link="identity", l1_reg=False),
      other={"shap-cpu": "shap", "cuml-gpu": "cuml"},
      notes=["the model is a ridge fit before the clock (its exact SHAP values are known: "
             "w_j (x_j - E x_j)); background = 100 stride rows"])
@@ -725,42 +796,52 @@ _add("permutation-shap", xlane="trees", ours="PermutationExplainer", kind="shap"
 
 # ---- lane cnn -------------------------------------------------------------
 _CNN = "seeded N(0,1) tensors (no image set is in the R2 store)"
+_CONV = dict(stride=1, dilation=1, groups=1, bias=True, padding_mode="zeros")
 _add("conv1d", xlane="cnn", ours="Conv1d", kind="layer", task="conv1d", block="tensor",
      datasets=("synthetic",), torch=True,
-     params=dict(in_channels=128, out_channels=128, kernel_size=3, padding=1),
+     params=dict(in_channels=128, out_channels=128, kernel_size=3, padding=1, **_CONV),
      notes=["x (64, 128, 4096), " + _CNN])
 _add("conv2d", xlane="cnn", ours="Conv2d", kind="layer", task="conv2d", block="tensor",
      datasets=("synthetic",), torch=True,
-     params=dict(in_channels=64, out_channels=64, kernel_size=3, padding=1),
+     params=dict(in_channels=64, out_channels=64, kernel_size=3, padding=1, **_CONV),
      notes=["x (64, 64, 56, 56), " + _CNN])
 _add("maxpool2d", xlane="cnn", ours="MaxPool2d", kind="layer", task="maxpool2d", block="tensor",
-     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     datasets=("synthetic",), torch=True,
+     params=dict(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
      notes=["x (64, 64, 112, 112), " + _CNN])
 _add("avgpool2d", xlane="cnn", ours="AvgPool2d", kind="layer", task="avgpool2d", block="tensor",
-     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     datasets=("synthetic",), torch=True,
+     params=dict(kernel_size=2, stride=2, padding=0, ceil_mode=False, count_include_pad=True,
+                 divisor_override=None),
      notes=["x (64, 64, 112, 112), " + _CNN])
 _add("maxpool1d", xlane="cnn", ours="MaxPool1d", kind="layer", task="maxpool1d", block="tensor",
-     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     datasets=("synthetic",), torch=True,
+     params=dict(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
      notes=["x (64, 64, 4096), " + _CNN])
 _add("avgpool1d", xlane="cnn", ours="AvgPool1d", kind="layer", task="avgpool1d", block="tensor",
-     datasets=("synthetic",), torch=True, params=dict(kernel_size=2, stride=2),
+     datasets=("synthetic",), torch=True,
+     params=dict(kernel_size=2, stride=2, padding=0, ceil_mode=False, count_include_pad=True),
      notes=["x (64, 64, 4096), " + _CNN])
 _add("batchnorm1d", xlane="cnn", ours="BatchNorm1d", kind="layer", task="batchnorm1d",
-     block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=256),
+     block="tensor", datasets=("synthetic",), torch=True,
+     params=dict(num_features=256, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True),
      notes=["x (64, 256, 1024), training-mode statistics, " + _CNN])
 _add("cnn-clf", xlane="cnn", ours="CNNClassifier", kind="cnnclf", task="clf", block="images",
      datasets=("synthetic",), torch=True,
      params=dict(input_shape=(1, 28, 28), conv_channels=(8, 16), kernel_size=3, pool_size=2,
-                 learning_rate=0.01, momentum=0.9, weight_decay=0.0, batch_size=128, max_iter=2,
-                 shuffle=True, random_state=SEED),
+                 learning_rate=0.01, momentum=0.9, weight_decay=0.0, dampening=0.0, nesterov=False,
+                 optimizer="sgd", batch_size=128, max_iter=2, shuffle=True, random_state=SEED),
      notes=["seed-7 synthetic 1 x 28 x 28 images of 10 classes (a class template plus N(0, 1) "
             "noise), 20,000 fit and 5,000 held out: the R2 store holds no image set, so this is "
             "the one kind",
             "torch arm: the same net (Conv2d-ReLU-MaxPool2d per entry of conv_channels, then "
-            "Linear), SGD momentum 0.9, cross entropy, the same epochs and batch size"],
-     mism=["each library initializes its own weights"])
+            "Linear), SGD lr 0.01 momentum 0.9 dampening 0 no nesterov no weight decay, cross "
+            "entropy, the same epochs and batch size; its weights and per-epoch row orders are "
+            "ours' (numpy default_rng: conv i from seed 7 + 101 i, the head from seed 7 + 997, "
+            "the orders from seed 7), loaded into the torch module"])
 _add("batchnorm2d", xlane="cnn", ours="BatchNorm2d", kind="layer", task="batchnorm2d",
-     block="tensor", datasets=("synthetic",), torch=True, params=dict(num_features=64),
+     block="tensor", datasets=("synthetic",), torch=True,
+     params=dict(num_features=64, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True),
      notes=["x (64, 64, 56, 56), training-mode statistics, " + _CNN])
 _add("dropout2d", xlane="cnn", ours="Dropout2d", kind="layer", task="dropout2d", block="tensor",
      datasets=("synthetic",), torch=True, params=dict(p=0.1),
@@ -777,10 +858,13 @@ _add("resnet-block", xlane="cnn", ours=("BasicBlock", "ResNetBasicBlock"), kind=
      notes=["torchvision BasicBlock semantics (conv3x3-BN-ReLU-conv3x3-BN + identity, ReLU), "
             "x (64, 64, 56, 56)"])
 _add("gcn", xlane="cnn", ours=("GCNConv", "GCN"), kind="layer", task="gcn", block="graph",
-     torch=True, params=dict(out_channels=128),
+     torch=True, params=dict(out_channels=128, improved=False, add_self_loops=True, normalize=True,
+                             bias=True),
      notes=["the kNN graph and its node features; PyG GCNConv (normalize=True, self loops)"])
 _add("graphsage", xlane="cnn", ours=("SAGEConv", "GraphSAGE"), kind="layer", task="sage",
-     block="graph", torch=True, params=dict(out_channels=128, aggr="mean"),
+     block="graph", torch=True,
+     params=dict(out_channels=128, aggr="mean", normalize=False, root_weight=True, project=False,
+                 bias=True),
      notes=["the kNN graph and its node features; PyG SAGEConv (mean aggregation)"])
 
 # ---- lane ann -------------------------------------------------------------
@@ -799,17 +883,22 @@ _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="
                          "efSearch=64), the CPU graph index; cuvs-gpu is CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
-     params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
-                 init="random", random_state=SEED),
-     sk_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
-                    init="random", random_state=SEED, n_jobs=-1, method="barnes_hut"),
+     params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
+                 learning_rate="auto", init="seeded", random_state=SEED),
+     sk_params=dict(n_components=2, perplexity=30.0, early_exaggeration=12.0, max_iter=1000,
+                    learning_rate="auto", init="seeded", random_state=SEED, n_jobs=-1,
+                    method="barnes_hut", metric="euclidean", n_iter_without_progress=1000,
+                    min_grad_norm=0.0),
      cuml="cuml.manifold:TSNE",
      cuml_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate_method="adaptive",
                       init="random", random_state=SEED, method="fft"),
      mism=["gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under "
-           "IDENTICAL); scikit-learn Barnes-Hut; cuML FFT",
-           "init='random' on every arm: cuML's only init, and ours refuses 'pca' "
-           "(x_ann/NOT_IMPLEMENTED.tsv); each library draws its own start"])
+           "IDENTICAL); scikit-learn Barnes-Hut (angle=0.5, scikit-learn only); cuML FFT",
+           "init: ours and scikit-learn start from the SAME array, ours' 'random' rule "
+           "(default_rng(7).uniform(-5e-5, 5e-5, (n, 2)) float32); cuML takes only 'random' "
+           "and draws its own start",
+           "scikit-learn's early stop is switched off (n_iter_without_progress=1000, "
+           "min_grad_norm=0.0): ours runs exactly max_iter steps"])
 _add("ivf-sq", xlane="ann", ours=("IVFSQIndex",), kind="ann", task="ivf-sq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"}, notes=[_ANN, "8-bit scalar quantizer"])
@@ -1177,6 +1266,11 @@ def _load(name):
 
 
 _MODS = {}
+
+
+def _BP():
+    """tools/bench_board_params.py, the board's one parameter check."""
+    return _tool("bench_board_params")
 
 
 def _tool(name):
@@ -1648,6 +1742,8 @@ def _derived_params(lane, D, params):
     if lane == "categorical-nb":
         p["min_categories"] = (np.maximum(X.max(axis=0), D["Xq"].max(axis=0)).astype(np.int64)
                                + 1).tolist()
+    if p.get("init") == "seeded":       # t-SNE: ours' 'random' start, handed to every arm that takes one
+        p["init"] = np.random.default_rng(SEED).uniform(-5e-5, 5e-5, (X.shape[0], 2)).astype(np.float32)
     return p
 
 
@@ -1660,8 +1756,12 @@ class Skipped(Exception):
 
 
 class Runner:
-    def __init__(self, info, fit, outputs, infer=None, sync=None):
+    def __init__(self, info, fit, outputs, infer=None, sync=None, record=None):
         self.info, self._fit, self._out, self._infer, self._sync = info, fit, outputs, infer, sync
+        #: what this arm was constructed with, for tools/bench_board_params.py:
+        #: BP.arm_record(constructed object), or a declared {"__library__": ...}
+        #: dict of the values really passed (a function-call arm)
+        self.record = record
 
     def fit(self):
         self._fit()
@@ -1969,7 +2069,8 @@ def _build_est(lane, arm, D):
             o["pred"] = o.pop("out")
         return o
 
-    return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync)
+    return Runner(info, fit, outputs, infer if has_infer(lane) else None, sync,
+                  record=_BP().arm_record(make()))
 
 
 # ---- LSTM / GRU / RNN estimators -------------------------------------------
@@ -2001,9 +2102,30 @@ def _build_cnnclf(lane, arm, D):
     dt = torch.bfloat16 if prec == "bf16" else None
     Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
     yt = torch.from_numpy(y.astype(np.int64)).to(dev)
-    rng = np.random.default_rng(SEED)
-    orders = [torch.from_numpy(rng.permutation(X.shape[0])).to(dev) for _ in range(p["max_iter"])]
+    # ours' row orders: one permutation per epoch from default_rng(random_state)
+    rng = np.random.default_rng(p["random_state"])
+    orders = [torch.from_numpy(rng.permutation(X.shape[0]) if p["shuffle"] else np.arange(X.shape[0]))
+              .to(dev) for _ in range(p["max_iter"])]
+    n_classes = int(np.unique(y).shape[0])
     S = {}
+
+    def ours_init(m):
+        """ours' weights (mojolearn _expansion_cnn: conv i from default_rng(seed + 101 i), the
+        head from default_rng(seed + 997); U(+-1/sqrt(fan_in)) for weight then bias)."""
+        seed = int(p["random_state"])
+        convs = [mm for mm in m if isinstance(mm, nn.Conv2d)]
+        lin = [mm for mm in m if isinstance(mm, nn.Linear)][0]
+        with torch.no_grad():
+            for i, cv in enumerate(convs):
+                r = np.random.default_rng(seed + 101 * i)
+                fan = cv.weight.shape[1] * cv.weight.shape[2] * cv.weight.shape[3]
+                b = 1.0 / np.sqrt(fan)
+                cv.weight.copy_(torch.from_numpy(r.uniform(-b, b, tuple(cv.weight.shape)).astype(np.float32)))
+                cv.bias.copy_(torch.from_numpy(r.uniform(-b, b, tuple(cv.bias.shape)).astype(np.float32)))
+            r = np.random.default_rng(seed + 997)
+            b = 1.0 / np.sqrt(lin.weight.shape[1])
+            lin.weight.copy_(torch.from_numpy(r.uniform(-b, b, tuple(lin.weight.shape)).astype(np.float32)))
+            lin.bias.copy_(torch.from_numpy(r.uniform(-b, b, tuple(lin.bias.shape)).astype(np.float32)))
 
     def net():
         c, h, w = p["input_shape"]
@@ -2014,7 +2136,7 @@ def _build_cnnclf(lane, arm, D):
                 layers.append(nn.MaxPool2d(p["pool_size"]))
                 h, w = h // p["pool_size"], w // p["pool_size"]
             c = co
-        return nn.Sequential(*layers, nn.Flatten(), nn.Linear(c * h * w, 10))
+        return nn.Sequential(*layers, nn.Flatten(), nn.Linear(c * h * w, n_classes))
 
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "pre_clock_fit": False, "input_home": "device", "setting": setting,
@@ -2031,9 +2153,12 @@ def _build_cnnclf(lane, arm, D):
 
     def fit():
         torch.manual_seed(SEED)
-        m = net().to(dev)
+        m = net()
+        ours_init(m)
+        m = m.to(dev)
         fwd = torch.compile(m) if mode == "compile" else m
         opt = torch.optim.SGD(m.parameters(), lr=p["learning_rate"], momentum=p["momentum"],
+                              dampening=p["dampening"], nesterov=p["nesterov"],
                               weight_decay=p["weight_decay"])
         bs = p["batch_size"]
         for order in orders:
@@ -2050,7 +2175,12 @@ def _build_cnnclf(lane, arm, D):
             out = torch.cat([run(S["fwd"], Xqt[i:i + 4096]).float() for i in range(0, Xqt.shape[0], 4096)])
         S["pred"] = out.argmax(1).double()
         _torch_sync(torch, dev)
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer)
+    rec = dict(__library__="torch", seed=p["random_state"], learning_rate=p["learning_rate"],
+               momentum=p["momentum"], dampening=p["dampening"], nesterov=p["nesterov"],
+               weight_decay=p["weight_decay"], batch_size=p["batch_size"], max_iter=p["max_iter"],
+               shuffle=p["shuffle"], kernel_size=p["kernel_size"], pool_size=p["pool_size"],
+               conv_channels=list(p["conv_channels"]), optimizer="sgd")
+    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
 
 
 def _build_seqmodel(lane, arm, D):
@@ -2072,15 +2202,32 @@ def _build_seqmodel(lane, arm, D):
     dt = torch.bfloat16 if prec == "bf16" else None
     Xt, Xqt = torch.from_numpy(X).to(dev), torch.from_numpy(Xq).to(dev)
     yt = torch.from_numpy(y.astype(np.int64) if clf else y.astype(np.float32)).to(dev)
-    rng = np.random.default_rng(SEED)
-    orders = [torch.from_numpy(rng.permutation(X.shape[0])).to(dev) for _ in range(p["max_epochs"])]
     cell = {"LSTM": nn.LSTM, "GRU": nn.GRU, "RNN": nn.RNN}[s["cell"]]
+    ckw = {"nonlinearity": p["nonlinearity"]} if s["cell"] == "RNN" else {}
+    oo = p["optimizer_options"]
+    n_out = 2 if clf else 1
+    # ours' draw (mojolearn _x_sequence_rnn: default_rng(random_state), uniform(+-1/sqrt(H))
+    # per tensor in the torch layout, then one permutation per epoch from the same stream)
+    rng = np.random.default_rng(p["random_state"])
+    H, G = p["hidden_size"], {"LSTM": 4, "GRU": 3, "RNN": 1}[s["cell"]]
+    layout = []
+    for l in range(p["num_layers"]):
+        din = X.shape[2] if l == 0 else H
+        layout += [("rnn.weight_ih_l%d" % l, (G * H, din)), ("rnn.weight_hh_l%d" % l, (G * H, H)),
+                   ("rnn.bias_ih_l%d" % l, (G * H,)), ("rnn.bias_hh_l%d" % l, (G * H,))]
+    layout += [("head.weight", (n_out, H)), ("head.bias", (n_out,))]
+    kb = 1.0 / np.sqrt(float(H))
+    init = {name: torch.from_numpy(rng.uniform(-kb, kb, size=int(np.prod(shp))).astype(np.float32)
+                                   .reshape(shp)) for name, shp in layout}
+    orders = [torch.from_numpy(rng.permutation(X.shape[0]) if p["shuffle"] else np.arange(X.shape[0]))
+              .to(dev) for _ in range(p["max_epochs"])]
 
     class Net(nn.Module):
         def __init__(self):
             super().__init__()
-            self.rnn = cell(1, p["hidden_size"], num_layers=p["num_layers"], batch_first=True)
-            self.head = nn.Linear(p["hidden_size"], 2 if clf else 1)
+            self.rnn = cell(X.shape[2], p["hidden_size"], num_layers=p["num_layers"], batch_first=True,
+                            **ckw)
+            self.head = nn.Linear(p["hidden_size"], n_out)
 
         def forward(self, x):
             out = self.rnn(x)[0]
@@ -2088,10 +2235,16 @@ def _build_seqmodel(lane, arm, D):
 
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "pre_clock_fit": False, "input_home": "device", "setting": setting,
-            "config": "nn.%s(1, %d, batch_first) + Linear, Adam lr %g, batch %d, %d epochs, %s %s on %s"
-                      % (s["cell"], p["hidden_size"], p["learning_rate"], p["batch_size"],
-                         p["max_epochs"], mode, prec, dev)}
+            "config": "nn.%s(1, %d, batch_first) + Linear, Adam lr %g betas %s eps %g wd %g, batch %d, "
+                      "%d epochs, ours' seed-%d init and row orders, %s %s on %s"
+                      % (s["cell"], p["hidden_size"], p["learning_rate"], oo["betas"], oo["eps"],
+                         oo["weight_decay"], p["batch_size"], p["max_epochs"], p["random_state"], mode,
+                         prec, dev)}
     lossf = nn.CrossEntropyLoss() if clf else nn.MSELoss()
+    rec = dict(__library__="torch", seed=p["random_state"], hidden_size=p["hidden_size"],
+               num_layers=p["num_layers"], learning_rate=p["learning_rate"], batch_size=p["batch_size"],
+               max_epochs=p["max_epochs"], shuffle=p["shuffle"], optimizer="adam",
+               betas=list(oo["betas"]), eps=oo["eps"], weight_decay=oo["weight_decay"], **ckw)
 
     def run(net, x):
         if dt is not None:
@@ -2101,9 +2254,12 @@ def _build_seqmodel(lane, arm, D):
 
     def fit():
         torch.manual_seed(SEED)
-        net = Net().to(dev)
+        net = Net()
+        net.load_state_dict(init)
+        net = net.to(dev)
         fwd = torch.compile(net) if mode == "compile" else net
-        opt = torch.optim.Adam(net.parameters(), lr=p["learning_rate"])
+        opt = torch.optim.Adam(net.parameters(), lr=p["learning_rate"], betas=tuple(oo["betas"]),
+                               eps=oo["eps"], weight_decay=oo["weight_decay"])
         bs = p["batch_size"]
         for order in orders:
             for st in range(0, X.shape[0], bs):
@@ -2122,7 +2278,7 @@ def _build_seqmodel(lane, arm, D):
                              for i in range(0, Xqt.shape[0], 4096)])
         S["pred"] = out.argmax(1).double() if clf else out[:, 0].double()
         _torch_sync(torch, dev)
-    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer)
+    return Runner(info, fit, lambda: {"pred": S["pred"].cpu().numpy()}, infer, record=rec)
 
 
 # ---- DART -----------------------------------------------------------------
@@ -2138,8 +2294,15 @@ def _build_dart(lane, arm, D):
     if arm == "lightgbm-cpu":
         import lightgbm as lgb
         kw = dict(boosting_type="dart", n_estimators=p["n_estimators"], learning_rate=p["learning_rate"],
-                  max_depth=p["max_depth"], num_leaves=255, drop_rate=p["drop_rate"],
-                  skip_drop=p["skip_drop"], random_state=SEED, n_jobs=-1, verbose=-1)
+                  max_depth=p["max_depth"], num_leaves=p["num_leaves"], drop_rate=p["drop_rate"],
+                  skip_drop=p["skip_drop"], max_drop=p["max_drop"],
+                  xgboost_dart_mode=p["xgboost_dart_mode"], uniform_drop=p["uniform_drop"],
+                  min_child_samples=p["min_child_samples"], reg_lambda=p["reg_lambda"],
+                  reg_alpha=p["reg_alpha"], max_bin=p["max_bin"], max_delta_step=p["max_delta_step"],
+                  subsample=p["subsample"], subsample_freq=p["subsample_freq"],
+                  colsample_bytree=p["colsample_bytree"], drop_seed=p["drop_seed"],
+                  feature_fraction_seed=p["feature_fraction_seed"], bagging_seed=p["bagging_seed"],
+                  random_state=p["random_state"], n_jobs=-1, verbose=-1)
         make = lambda: (lgb.LGBMClassifier if s["task"] == "clf" else lgb.LGBMRegressor)(**kw)  # noqa: E731
         info = {"library": "lightgbm", "version": lgb.__version__, "device": "cpu"}
     else:
@@ -2147,7 +2310,12 @@ def _build_dart(lane, arm, D):
         gpu = arm == "xgboost-gpu"
         kw = dict(booster="dart", n_estimators=p["n_estimators"], learning_rate=p["learning_rate"],
                   max_depth=p["max_depth"], rate_drop=p["drop_rate"], skip_drop=p["skip_drop"],
-                  tree_method="hist", device="cuda" if gpu else "cpu", random_state=SEED, n_jobs=-1)
+                  sample_type="uniform", normalize_type="tree", one_drop=False,
+                  reg_lambda=p["reg_lambda"], reg_alpha=p["reg_alpha"], max_bin=p["max_bin"],
+                  max_delta_step=p["max_delta_step"], subsample=p["subsample"],
+                  colsample_bytree=p["colsample_bytree"], min_child_weight=1.0,
+                  tree_method="hist", device="cuda" if gpu else "cpu",
+                  random_state=p["random_state"], n_jobs=-1)
         make = lambda: (xgb.XGBClassifier if s["task"] == "clf" else xgb.XGBRegressor)(**kw)  # noqa: E731
         info = {"library": "xgboost", "version": xgb.__version__, "device": "gpu" if gpu else "cpu"}
     info.update(pre_clock_fit=False, input_home="host",
@@ -2165,7 +2333,7 @@ def _build_dart(lane, arm, D):
         if s["task"] != "clf":
             return {"pred": P.reshape(-1)}
         return {"pred": (P[:, 1] >= 0.5).astype(np.float64), "proba1": P[:, 1]}
-    return Runner(info, fit, outputs, infer)
+    return Runner(info, fit, outputs, infer, record=_BP().arm_record(make()))
 
 
 # ---- time series ----------------------------------------------------------
@@ -2173,6 +2341,33 @@ def _build_dart(lane, arm, D):
 def _joblib_map(fn, rows):
     from joblib import Parallel, delayed
     return Parallel(n_jobs=-1, backend="loky")(delayed(fn)(r) for r in rows)
+
+
+_STL_NAMES = ("period", "seasonal", "trend", "low_pass", "seasonal_deg", "trend_deg",
+              "low_pass_deg", "robust", "seasonal_jump", "trend_jump", "low_pass_jump")
+_PROPHET_NAMES = ("growth", "n_changepoints", "changepoint_range", "yearly_seasonality",
+                  "weekly_seasonality", "daily_seasonality", "seasonality_mode",
+                  "seasonality_prior_scale", "holidays_prior_scale", "changepoint_prior_scale")
+
+
+def _STL_KW(params):
+    """STL's arguments, the same on ours and statsmodels (every one explicit)."""
+    return {k: params[k] for k in _STL_NAMES}
+
+
+def _PROPHET_KW(params):
+    """prophet.Prophet's arguments: the lane's, plus uncertainty_samples=0 (ours
+    computes no intervals) and mcmc_samples=0 (MAP, as ours)."""
+    kw = {k: params[k] for k in _PROPHET_NAMES}
+    kw.update(uncertainty_samples=0, mcmc_samples=0)
+    return kw
+
+
+def _sf_autoarima_kw(p):
+    """statsforecast AutoARIMA over ours' / cuML's exhaustive grid."""
+    return dict(season_length=1, seasonal=False, max_p=p["max_p"], max_q=p["max_q"], max_d=p["max_d"],
+                max_order=p["max_p"] + p["max_q"], stepwise=p["stepwise"], ic=p["ic"],
+                allowmean=p["allow_intercept"], allowdrift=p["allow_intercept"], approximation=False)
 
 
 def _ts_one(lib, task, params, y, h):
@@ -2183,7 +2378,7 @@ def _ts_one(lib, task, params, y, h):
     if lib == "statsmodels":
         if task == "decompose":
             from statsmodels.tsa.seasonal import STL
-            r = STL(y, period=params["period"], robust=params["robust"]).fit()
+            r = STL(y, **_STL_KW(params)).fit()
             return np.asarray(r.trend + r.seasonal)
         if task == "forecast" and "damped" in params:
             from statsmodels.tsa.holtwinters import ExponentialSmoothing
@@ -2195,7 +2390,8 @@ def _ts_one(lib, task, params, y, h):
         return np.asarray(m.forecast(h))
     if lib == "arch":
         from arch import arch_model
-        r = arch_model(y, vol="GARCH", p=1, q=1, mean="Constant", dist="normal",
+        r = arch_model(y, vol="GARCH", p=params["p"], o=params["o"], q=params["q"],
+                       power=params["power"], mean=params["mean"], dist=params["dist"],
                        rescale=False).fit(disp="off")
         f = r.forecast(horizon=h, reindex=False).variance.values[-1]
         return np.concatenate([[r.loglikelihood], f])
@@ -2205,9 +2401,8 @@ def _ts_one(lib, task, params, y, h):
         from prophet import Prophet
         logging.getLogger("cmdstanpy").setLevel(logging.ERROR)
         ds = pd.date_range("2024-01-01", periods=len(y) + h, freq="h")
-        m = Prophet(n_changepoints=params["n_changepoints"], daily_seasonality=True,
-                    weekly_seasonality=True, yearly_seasonality=False)
-        m.fit(pd.DataFrame({"ds": ds[:len(y)], "y": y}))
+        m = Prophet(**_PROPHET_KW(params))
+        m.fit(pd.DataFrame({"ds": ds[:len(y)], "y": y}), iter=int(params["max_iter"]))
         return m.predict(pd.DataFrame({"ds": ds[len(y):]}))["yhat"].to_numpy()
     raise ValueError(lib)
 
@@ -2232,14 +2427,16 @@ def _build_ts(lane, arm, D):
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
                 m = cls(Y32)
-                m.search(s=1, d=range(0, 2), p=range(0, 4), q=range(0, 4), P=range(1), D=range(1),
-                         Q=range(1), ic="aicc")
+                m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
+                         q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
+                         fit_intercept="auto")
                 m.fit()
                 S["est"] = m
             elif lane == "stl":               # statsmodels' shape: STL(endog, period).fit() -> result
-                S["est"] = cls(Y32, period=p["period"], robust=p["robust"]).fit()
+                S["est"] = cls(Y32, **_STL_KW(p)).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
-                S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
+                S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(
+                    maxlags=p["maxlags"], method=p["method"], ic=p["ic"], trend=p["trend"])
             elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
                 S["est"] = cls(**p).fit(Y32, horizon=h)
             elif lane == "prophet":           # prophet's shape: fit(ds, y), then predict(future ds)
@@ -2278,30 +2475,47 @@ def _build_ts(lane, arm, D):
             if t == "garch":
                 o["llf"] = _arr(S["est"].loglikelihood_, np.float64).reshape(-1)
             return o
+        rec = {"__library__": "mojolearn"}
+        if lane == "autoarima":
+            rec.update(p, search="s=1, d 0..%d, p 0..%d, q 0..%d, fit_intercept='auto', KPSS"
+                       % (p["max_d"], p["max_p"], p["max_q"]))
+        elif lane not in ("stl", "var"):
+            try:
+                rec = _BP().arm_record(cls(**p))
+            except Exception:  # noqa: BLE001  (a constructor that needs data: declare)
+                rec.update(p)
+        else:
+            rec.update(p)
         fit0 = fit
 
         def fit():                        # the forecast is inside the clock, as for every arm
             fit0()
             infer()
-        return Runner(info, fit, outputs, None)
+        return Runner(info, fit, outputs, None, record=rec)
     lib = s["other"][arm]
     if lib == "statsforecast":
         import statsforecast
         from statsforecast import models as sfm
         info = {"library": "statsforecast", "version": statsforecast.__version__, "device": "cpu",
                 "pre_clock_fit": False, "input_home": "host"}
-        mk = {"autoarima": lambda: sfm.AutoARIMA(season_length=1, max_p=3, max_q=3, max_d=1),
-              "theta": lambda: sfm.Theta(season_length=24),
-              "croston": lambda: sfm.CrostonClassic(),
-              "damped-ets": lambda: sfm.AutoETS(season_length=1, model="AAN", damped=True)}[lane]
-        info["config"] = repr(mk())
+        kw = {"autoarima": lambda: _sf_autoarima_kw(p),
+              "theta": lambda: dict(season_length=p["season_length"],
+                                    decomposition_type=p["decomposition_type"]),
+              "croston": lambda: {},
+              "damped-ets": lambda: dict(season_length=p["season_length"], model=p["model"],
+                                         damped=p["damped"])}[lane]()
+        ctor = {"autoarima": sfm.AutoARIMA, "theta": sfm.Theta, "croston": sfm.CrostonClassic,
+                "damped-ets": sfm.AutoETS}[lane]
+        mk = lambda: ctor(**kw)  # noqa: E731
+        info["config"] = "%s(%s)" % (ctor.__name__, ", ".join("%s=%r" % i for i in sorted(kw.items())))
+        rec = dict(kw, __library__="statsforecast")
 
         def one(y):
             return mk().forecast(y=y, h=h)["mean"]
 
         def fit():
             S["fc"] = np.stack(_joblib_map(one, list(Y)))
-        return Runner(info, fit, lambda: {"forecast": S["fc"]}, None)
+        return Runner(info, fit, lambda: {"forecast": S["fc"]}, None, record=rec)
     if lib == "cuml":
         from cuml.tsa.auto_arima import AutoARIMA
         dev, info, sync = _cuml_up({"Yt": np.ascontiguousarray(Y.T)})
@@ -2309,11 +2523,14 @@ def _build_ts(lane, arm, D):
 
         def fit():
             m = AutoARIMA(dev["Yt"], output_type="numpy")
-            m.search(s=1, d=range(0, 2), p=range(0, 4), q=range(0, 4), P=range(1), D=range(1),
-                     Q=range(1), ic="aicc")
+            m.search(s=1, d=range(0, p["max_d"] + 1), p=range(0, p["max_p"] + 1),
+                     q=range(0, p["max_q"] + 1), P=range(1), D=range(1), Q=range(1), ic=p["ic"],
+                     fit_intercept="auto")
             m.fit()
             S["fc"] = m.forecast(h)
-        return Runner(info, fit, lambda: {"forecast": _arr(S["fc"], np.float64).T}, None, sync)
+        rec = dict(p, __library__="cuml")
+        return Runner(info, fit, lambda: {"forecast": _arr(S["fc"], np.float64).T}, None, sync,
+                      record=rec)
     import importlib as il
     modname = {"statsmodels": "statsmodels", "arch": "arch", "prophet": "prophet"}[lib]
     mod = il.import_module(modname)
@@ -2322,12 +2539,14 @@ def _build_ts(lane, arm, D):
             "config": "%s per series, joblib loky n_jobs=-1, params %s" % (lib, p)}
     if t == "var":
         from statsmodels.tsa.api import VAR
-        info["config"] = "statsmodels VAR(Y[:16].T).fit(maxlags=%d)" % p["maxlags"]
+        info["config"] = "statsmodels VAR(Y[:16].T).fit(maxlags=%d, method=%r, ic=%r, trend=%r)" % (
+            p["maxlags"], p["method"], p["ic"], p["trend"])
 
         def fit():
-            r = VAR(Y[:16].T).fit(maxlags=p["maxlags"])
+            r = VAR(Y[:16].T).fit(maxlags=p["maxlags"], method=p["method"], ic=p["ic"], trend=p["trend"])
             S["fc"] = r.forecast(Y[:16].T[-r.k_ar:], h).T
-        return Runner(info, fit, lambda: {"forecast": S["fc"]}, None)
+        return Runner(info, fit, lambda: {"forecast": S["fc"]}, None,
+                      record=dict(p, __library__="statsmodels"))
     task = "decompose" if t == "decompose" else "forecast"
 
     def fit():
@@ -2340,7 +2559,18 @@ def _build_ts(lane, arm, D):
         if t == "garch":
             return {"llf": r[:, 0], "forecast": r[:, 1:]}
         return {"forecast": r}
-    return Runner(info, fit, outputs, None)
+    rec = {"__library__": lib}
+    if lib == "prophet":
+        rec.update(_PROPHET_KW(p), max_iter=p["max_iter"])
+    elif lib == "statsmodels" and t == "decompose":
+        rec.update(_STL_KW(p))
+    elif lib == "statsmodels" and "damped" in p:
+        rec.update(trend="add", damped_trend=True, seasonal=None, initialization_method="estimated")
+    elif lib == "statsmodels":
+        rec.update(period=p.get("season_length", 24), method="theta (statsmodels ThetaModel defaults)")
+    else:
+        rec.update(p)
+    return Runner(info, fit, outputs, None, record=rec)
 
 
 # ---- graph ----------------------------------------------------------------
@@ -2608,7 +2838,7 @@ def _layer_inputs(lane, D, torch):
         make = lambda: cls(**p)  # noqa: E731
     elif t == "layernorm":
         x = torch.randn(256 * nb, p["normalized_shape"], generator=g)
-        make = lambda: nn.LayerNorm(p["normalized_shape"], eps=p["eps"])  # noqa: E731
+        make = lambda: nn.LayerNorm(**p)  # noqa: E731
     elif t == "moe":
         x = torch.randn(128 * nb, p["hidden_size"], generator=g)
         make = lambda: _MoE(torch, **p)  # noqa: E731
@@ -2647,10 +2877,10 @@ def _layer_inputs(lane, D, torch):
         d = x.shape[1]
         if t == "gcn":
             from torch_geometric.nn import GCNConv
-            make = lambda: GCNConv(d, p["out_channels"])  # noqa: E731
+            make = lambda: GCNConv(d, **p)  # noqa: E731
         else:
             from torch_geometric.nn import SAGEConv
-            make = lambda: SAGEConv(d, p["out_channels"], aggr=p["aggr"])  # noqa: E731
+            make = lambda: SAGEConv(d, **p)  # noqa: E731
     else:
         raise ValueError(t)
     torch.manual_seed(SEED)
@@ -2749,7 +2979,8 @@ def _build_layer(lane, arm, D):
 
             def infer():
                 S["y"] = cls(x, None, w_, b_, kw["eps"])
-            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer)
+            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer,
+                          record=dict(kw, __library__="mojolearn"))
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect
@@ -2813,7 +3044,8 @@ def _build_layer(lane, arm, D):
                 "batchnorm1d", "batchnorm2d", "layernorm") for k in state)
         info["output_comparable"] = bool(comparable)
         out = (lambda: {"y": _arr(S["y"], np.float32)}) if comparable else (lambda: {})
-        return Runner(info, fit, out, infer)
+        rec = dict(kw, __library__="mojolearn")
+        return Runner(info, fit, out, infer, record=rec)
     setting = arm[len("torch-"):]
     mode, prec = setting.split("-")
     dev = _torch_device(torch)
@@ -2869,7 +3101,10 @@ def _build_layer(lane, arm, D):
         if s["task"] == "dropout2d":
             return {}
         return {"y": S["y"].float().cpu().numpy()}
-    return Runner(info, fit, outputs, infer)
+    rec = dict(s["params"], __library__="torch", seed=SEED)   # torch.manual_seed(7) before make()
+    if s["task"] in ("gcn", "sage"):
+        rec["in_channels"] = x_cpu.shape[1]
+    return Runner(info, fit, outputs, infer, record=rec)
 
 
 def _build_optim(lane, arm, D):
@@ -2892,7 +3127,8 @@ def _build_optim(lane, arm, D):
             for gr in grads:
                 opt.step([gr])
             S["p"] = p
-        return Runner(info, fit, lambda: {"param": np.asarray(S["p"], dtype=np.float32)})
+        rec = dict(hyper, __library__="mojolearn")
+        return Runner(info, fit, lambda: {"param": np.asarray(S["p"], dtype=np.float32)}, record=rec)
     import torch
     dev = _torch_device(torch)
     mode = arm.split("-")[1]
@@ -2902,7 +3138,9 @@ def _build_optim(lane, arm, D):
     if ocls is None:
         raise RuntimeError("REFUSED: torch %s has no torch.optim.%s" % (torch.__version__, s["torch_opt"]))
     g_dev = [torch.from_numpy(gr).to(dev) for gr in grads]
-    info["config"] = "torch.optim.%s([p], lr=1e-3) on %s, %s" % (s["torch_opt"], dev, mode)
+    info["config"] = "torch.optim.%s([p], %s) on %s, %s" % (s["torch_opt"], hyper, dev, mode)
+    # read back from a constructed optimizer (its defaults are what every step uses)
+    rec = _BP().arm_record(ocls([torch.nn.Parameter(torch.zeros(1))], **hyper))
 
     def fit():
         p = torch.nn.Parameter(torch.from_numpy(p0).to(dev))
@@ -2913,7 +3151,7 @@ def _build_optim(lane, arm, D):
             step()
         _torch_sync(torch, dev)
         S["p"] = p
-    return Runner(info, fit, lambda: {"param": S["p"].detach().cpu().numpy()})
+    return Runner(info, fit, lambda: {"param": S["p"].detach().cpu().numpy()}, record=rec)
 
 
 # ---- linalg ---------------------------------------------------------------
@@ -2977,6 +3215,7 @@ def _build_linalg(lane, arm, D):
                 elif t == "lstsq":
                     S["r"] = torch.linalg.lstsq(targs[0], targs[1].reshape(-1, 1)).solution
                 else:
+                    torch.manual_seed(p["random_state"])      # svd_lowrank has no seed argument
                     q = min(p["n_components"] + p["n_oversamples"], min(targs[0].shape))
                     u, sv, v = torch.svd_lowrank(targs[0], q=q, niter=p["n_iter"])
                     S["r"] = (u, sv, v.T)
@@ -2992,6 +3231,17 @@ def _build_linalg(lane, arm, D):
                           else cp.linalg.lstsq(cargs[0], cargs[1], rcond=None)[0])
                 cp.cuda.runtime.deviceSynchronize()
 
+    if arm in OURS_ARMS:
+        rec = dict(p if t == "rsvd" else {}, __library__="mojolearn")
+    else:
+        lib = s["other"][arm]
+        rec = {"__library__": lib}
+        if t == "rsvd" and lib == "sklearn":
+            rec.update(p)
+        elif t == "rsvd":                               # torch.svd_lowrank(q, niter), seeded globally
+            rec.update(n_components=p["n_components"], n_oversamples=p["n_oversamples"],
+                       n_iter=p["n_iter"], random_state=p["random_state"])
+
     def outputs():
         r = S["r"]
         if t == "lstsq" and isinstance(r, tuple):     # numpy's (x, residuals, rank, s)
@@ -3000,7 +3250,7 @@ def _build_linalg(lane, arm, D):
             vt = _arr(r[2], np.float64)          # (k, d), scikit-learn's Vt
             return {"components": vt[:p["n_components"]]}
         return {"x": _arr(r, np.float64).reshape(-1)[:1 << 22]}
-    return Runner(info, fit, outputs)
+    return Runner(info, fit, outputs, record=rec)
 
 
 # ---- ALS ------------------------------------------------------------------
@@ -3035,7 +3285,7 @@ def _build_als(lane, arm, D):
 
         def outputs():
             return {"U": _arr(S["e"].user_factors_, np.float32), "V": _arr(S["e"].item_factors_, np.float32)}
-        return Runner(info, fit, outputs)
+        return Runner(info, fit, outputs, record=_BP().arm_record(cls(**p)))
     import implicit
     gpu = arm == "implicit-gpu"
     if gpu:
@@ -3048,13 +3298,16 @@ def _build_als(lane, arm, D):
     threadpool_limits(1, "blas")          # implicit's documented setting: its own threads, BLAS at 1
     info = {"library": "implicit", "env": dict(ARM_ENV[arm]), "version": implicit.__version__, "device": "gpu" if gpu else "cpu",
             "pre_clock_fit": False, "input_home": "host",
-            "config": "implicit AlternatingLeastSquares(factors=64, regularization=0.01, alpha=1.0, "
-                      "iterations=15, random_state=7, use_gpu=%s)" % gpu}
+            "config": "implicit AlternatingLeastSquares(%s, use_gpu=%s)" % (p, gpu)}
+    akw = dict(factors=p["factors"], regularization=p["regularization"], alpha=p["alpha"],
+               iterations=p["iterations"], random_state=p["random_state"], use_gpu=gpu,
+               calculate_training_loss=p["calculate_training_loss"])
+    if not gpu:                        # implicit's GPU model has only its CG solver
+        akw.update(use_cg=p["use_cg"], cg_steps=p["cg_steps"])
+    rec = dict(akw, __library__="implicit")
 
     def fit():
-        m = AlternatingLeastSquares(factors=p["factors"], regularization=p["regularization"],
-                                    alpha=p["alpha"], iterations=p["iterations"],
-                                    random_state=SEED, use_gpu=gpu, calculate_training_loss=False)
+        m = AlternatingLeastSquares(**akw)
         m.fit(C, show_progress=False)
         S["m"] = m
 
@@ -3064,7 +3317,7 @@ def _build_als(lane, arm, D):
             m = m.to_cpu()
         return {"U": np.asarray(m.user_factors, dtype=np.float32),
                 "V": np.asarray(m.item_factors, dtype=np.float32)}
-    return Runner(info, fit, outputs, None, sync)
+    return Runner(info, fit, outputs, None, sync, record=rec)
 
 
 # ---- SHAP -----------------------------------------------------------------

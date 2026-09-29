@@ -111,6 +111,17 @@ ALIASES = {
         "normalize": "normalize", "positive": "positive", "class_weight": "class_weight",
         "leaf_size": "leaf_size", "boosting_type": "boosting_type",
         "border_count": ("max_bin", _plus1),
+        # classical and classical2 (tools/classical_two_datasets.py, tools/bench_board_more.py)
+        "gamma": "gamma", "atol": "atol", "rtol": "rtol", "breadth_first": "breadth_first",
+        "cluster_selection_method": "cluster_selection_method",
+        "cluster_selection_epsilon": "cluster_selection_epsilon",
+        "max_cluster_size": "max_cluster_size", "allow_single_cluster": "allow_single_cluster",
+        "selection": "selection", "precompute": "precompute", "init_params": "init_params",
+        "n_restarts_optimizer": "n_restarts_optimizer", "max_iter_predict": "max_iter_predict",
+        "maxiter": "max_iter", "penalized_intercept": "penalized_intercept",
+        "set_op_mix_ratio": "set_op_mix_ratio", "local_connectivity": "local_connectivity",
+        "negative_sample_rate": "negative_sample_rate", "repulsion_strength": "repulsion_strength",
+        "assign_labels": "assign_labels", "start_periods": "start_periods",
     },
     # XGBoost's `gamma` is the minimum split loss reduction
     "xgboost": {"gamma": "min_split_gain", "max_bin": "max_bin", "booster": "boosting_type"},
@@ -137,6 +148,80 @@ IGNORE = frozenset({
 #: arm glob, reason). A difference not listed here refuses the race.
 EXCEPTIONS = [
     # e.g. ("umap", "seed", "umap-learn-unseeded", "raced unseeded on purpose: seeded umap-learn runs one thread"),
+    # --- classical (tools/classical_two_datasets.py) and classical2 (tools/bench_board_more.py).
+    # A seed exception names each library that has NO seed argument (or refuses
+    # one); every arm that has one gets 7.
+    ("ols", "seed", "ours*", "mojolearn LinearRegression has no seed argument (closed-form fit)"),
+    ("ols", "seed", "sklearn-cpu*", "scikit-learn LinearRegression has no seed argument (closed-form fit)"),
+    ("ols", "seed", "cuml-gpu", "cuML LinearRegression has no seed argument (closed-form fit)"),
+    ("knn", "seed", "ours*", "mojolearn NearestNeighbors has no seed argument (exact search)"),
+    ("knn", "seed", "sklearn-cpu*", "scikit-learn NearestNeighbors has no seed argument (exact search)"),
+    ("knn", "seed", "cuml-gpu", "cuML NearestNeighbors has no seed argument (exact search)"),
+    ("kde", "seed", "ours*", "mojolearn KernelDensity has no seed argument (exact density)"),
+    ("kde", "seed", "sklearn-cpu*", "scikit-learn KernelDensity has no seed argument (exact density)"),
+    ("kde", "seed", "cuml-gpu", "cuML KernelDensity has no seed argument (exact density)"),
+    ("svc", "seed", "ours*", "mojolearn SVC refuses random_state without probability=True (the fit "
+     "draws nothing); scikit-learn and cuML get 7"),
+    ("svc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("dbscan", "seed", "ours*", "mojolearn DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "seed", "sklearn-cpu*", "scikit-learn DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "seed", "cuml-gpu*", "cuML DBSCAN has no seed argument (deterministic)"),
+    ("dbscan", "algorithm", "sklearn-cpu*", "an exact eps search on every arm: ours 'rbc' (its "
+     "default), scikit-learn has no 'rbc' and runs 'auto' (a tree on taxi, brute on Istella-S)"),
+    ("dbscan", "algorithm", "cuml-gpu", "an exact eps search on every arm: ours 'rbc', cuml-gpu "
+     "'brute' (cuml-gpu-rbc races 'rbc')"),
+    ("hdbscan", "seed", "ours*", "mojolearn HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "seed", "sklearn-cpu*", "scikit-learn HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "seed", "cuml-gpu", "cuML HDBSCAN has no seed argument (deterministic)"),
+    ("hdbscan", "max_cluster_size", "sklearn-cpu*", "no limit on every arm: ours and cuML spell "
+     "it 0, scikit-learn None"),
+    ("umap", "seed", "umap-learn-cpu-unseeded", "raced unseeded on purpose: seeded umap-learn runs "
+     "one thread (its rule); this arm is random_state=None, n_jobs=-1 (umap-learn-cpu has 7)"),
+    ("logreg", "seed", "ours*", "mojolearn LogisticRegression has no seed argument (L-BFGS, deterministic)"),
+    ("logreg", "seed", "cuml-gpu", "cuML LogisticRegression has no seed argument (L-BFGS, deterministic)"),
+    ("logreg", "solver", "sklearn-cpu*", "L-BFGS on every arm: ours and cuML 'qn', scikit-learn 'lbfgs'"),
+    ("logreg", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("logreg", "l1_ratio", "*", "penalty='l2' on every arm: ours None, scikit-learn None or 0.0 "
+     "(its l2 spelling from 1.8)"),
+    ("linearsvc", "seed", "ours*", "mojolearn LinearSVC has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvc", "seed", "cuml-gpu", "cuML LinearSVC has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvc", "class_weight", "*", "None (unweighted) set explicitly on every arm"),
+    ("ridge", "seed", "ours*", "mojolearn Ridge has no seed argument (closed-form fit)"),
+    ("ridge", "seed", "cuml-gpu", "cuML Ridge has no seed argument (closed-form fit)"),
+    ("ridge", "solver", "sklearn-cpu*", "ours and cuML 'eig' (eigendecomposition of the normal "
+     "equations); scikit-learn has no 'eig' and runs 'cholesky' on the same normal equations"),
+    ("lasso", "seed", "ours*", "mojolearn Lasso refuses random_state: it selects nothing with "
+     "selection='cyclic'"),
+    ("lasso", "seed", "cuml-gpu", "cuML Lasso has no seed argument"),
+    ("elasticnet", "seed", "ours*", "mojolearn ElasticNet refuses random_state: it selects nothing "
+     "with selection='cyclic'"),
+    ("elasticnet", "seed", "cuml-gpu", "cuML ElasticNet has no seed argument"),
+    ("linearsvr", "seed", "ours*", "mojolearn LinearSVR has no seed argument (L-BFGS, deterministic)"),
+    ("linearsvr", "seed", "cuml-gpu", "cuML LinearSVR has no seed argument (L-BFGS, deterministic)"),
+    ("tsvd", "algorithm", "sklearn-cpu*", "scikit-learn TruncatedSVD has no 'covariance_eigh'; it "
+     "runs 'arpack' at tol=0"),
+    ("tsvd", "algorithm", "cuml-gpu", "cuML TruncatedSVD has no 'covariance_eigh'; it runs 'full'"),
+    ("knn-*", "seed", "ours*", "mojolearn KNeighbors* has no seed argument (exact search)"),
+    ("knn-*", "seed", "sklearn-cpu*", "scikit-learn KNeighbors* has no seed argument (exact search)"),
+    ("knn-*", "seed", "cuml-gpu", "cuML KNeighbors* has no seed argument (exact search)"),
+    ("spectral", "degree", "*", "affinity='nearest_neighbors' reads no degree: ours refuses any "
+     "value (None), scikit-learn holds 3"),
+    ("spectral", "coef0", "*", "affinity='nearest_neighbors' reads no coef0: ours refuses any "
+     "value (None), scikit-learn holds 1"),
+    ("agglomerative", "seed", "ours*", "mojolearn AgglomerativeClustering has no seed argument"),
+    ("agglomerative", "seed", "sklearn-cpu*", "scikit-learn AgglomerativeClustering has no seed argument"),
+    ("agglomerative", "seed", "cuml-gpu", "cuML AgglomerativeClustering has no seed argument"),
+    ("gp[rc]", "kernel", "sklearn-cpu*", "the same ConstantKernel(1.0) * RBF(sqrt(d)) (gpr: + "
+     "WhiteKernel(1e-2)) built from each library's own kernel classes; their reprs differ"),
+    ("gpc", "seed", "ours*", "mojolearn GaussianProcessClassifier refuses random_state "
+     "(optimizer=None draws nothing); scikit-learn gets 7"),
+    ("svr", "seed", "*", "no SVR takes a seed argument (ours, scikit-learn, cuML)"),
+    ("kernel-ridge", "seed", "*", "no KernelRidge takes a seed argument (ours, scikit-learn, cuML)"),
+    ("arima", "seed", "*", "no ARIMA takes a seed argument (maximum likelihood, deterministic): "
+     "ours, statsmodels, cuML"),
+    ("ets", "seed", "*", "no Holt-Winters takes a seed argument (deterministic): ours, "
+     "statsmodels, cuML"),
+    ("ivf", "seed", "cuvs-gpu", "cuVS ivf_flat IndexParams takes no seed; ours and faiss get 7"),
 ]
 
 

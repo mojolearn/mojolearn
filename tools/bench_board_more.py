@@ -162,6 +162,13 @@ TSVD_COMPONENTS = 8
 GMM_COMPONENTS = 8
 IVF_NLIST, IVF_NPROBE, IVF_K = 1024, 32, 10
 ARIMA_ORDER = (1, 0, 1)
+ARIMA_SEASONAL = (0, 0, 0, 0)
+#: Holt-Winters convergence tolerance: ours' and cuML's parameter (their
+#: default, set explicitly); statsmodels has none.
+ETS_EPS = 2.24e-3
+#: The SVR kernel cache on every arm that takes one (scikit-learn's value
+#: here since the lane began; ours honors it at predict only, DEVIATION 871).
+SVR_CACHE_MB = 2000.0
 
 #: lane -> (block, the binding its estimator answers from, datasets)
 LANES = {
@@ -668,8 +675,11 @@ def length_scale_of(D):
 class Runner:
     """`call` is timed; `outputs` is run after the clock, once per round."""
 
-    def __init__(self, info, call, outputs, sync=None):
+    def __init__(self, info, call, outputs, sync=None, params=None):
         self.info, self._call, self._outputs, self._sync = info, call, outputs, sync
+        # the constructed estimator (or a declared dict for a function arm);
+        # the worker sends its tools/bench_board_params.py record
+        self.params = params
 
     def call(self):
         self._call()
@@ -776,7 +786,8 @@ def build(lane, arm, D, rec):
 
         def call():
             S["e"] = umap.UMAP(**kw).fit(D["X"]).embedding_
-        return Runner(info, call, lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)})
+        return Runner(info, call, lambda: {"embedding": np.asarray(S["e"], dtype=np.float32)},
+                      params=umap.UMAP(**kw))
     if arm == "statsmodels-cpu":
         return _build_statsmodels(lane, D, rec, S)
     if arm == "faiss-cpu":
@@ -789,6 +800,9 @@ def build(lane, arm, D, rec):
         info.update(_load("classical_two_datasets")._host_info())
         X, Q = D["index"], D["queries"]
         nlist = min(IVF_NLIST, X.shape[0] // 4)
+        declared = {"__library__": "faiss", "seed": SEED, "nlist": nlist,
+                    "nprobe": min(IVF_NPROBE, nlist), "n_neighbors": IVF_K,
+                    "metric": "sqeuclidean", "kmeans_n_iters": 20}
 
         def call():
             d = X.shape[1]
@@ -801,7 +815,8 @@ def build(lane, arm, D, rec):
             index.nprobe = min(IVF_NPROBE, nlist)
             _dist, ind = index.search(Q, IVF_K)
             S["ind"], S["keep"] = ind, (quant, index)
-        return Runner(info, call, lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)})
+        return Runner(info, call, lambda: {"ind": np.asarray(S["ind"], dtype=np.int64)},
+                      params=declared)
     if arm == "cuvs-gpu":
         from cuvs.neighbors import ivf_flat
         import cuvs
@@ -811,6 +826,9 @@ def build(lane, arm, D, rec):
                            "kmeans_n_iters=20)) + search(SearchParams(n_probes=%d), k=%d)"
                            % (IVF_NLIST, IVF_NPROBE, IVF_K))
         nlist = min(IVF_NLIST, D["index"].shape[0] // 4)
+        # cuVS ivf_flat IndexParams takes no seed
+        declared = {"__library__": "cuvs", "nlist": nlist, "nprobe": min(IVF_NPROBE, nlist),
+                    "n_neighbors": IVF_K, "metric": "sqeuclidean", "kmeans_n_iters": 20}
 
         def call():
             idx = ivf_flat.build(ivf_flat.IndexParams(n_lists=nlist, metric="sqeuclidean",
@@ -818,7 +836,8 @@ def build(lane, arm, D, rec):
             _d, ind = ivf_flat.search(ivf_flat.SearchParams(n_probes=min(IVF_NPROBE, nlist)), idx,
                                       dev["queries"], IVF_K)
             S["ind"] = ind
-        return Runner(info, call, lambda: {"ind": np.asarray(_host(S["ind"]), dtype=np.int64)}, sync)
+        return Runner(info, call, lambda: {"ind": np.asarray(_host(S["ind"]), dtype=np.int64)}, sync,
+                      params=declared)
     if arm == "cuml-gpu":
         return _build_cuml(lane, D, rec, S)
     raise SystemExit("no arm %r for lane %r" % (arm, lane))
@@ -862,29 +881,32 @@ def _build_ours(lane, D, rec, S):
     elif lane == "gmm":
         make = lambda: ml.GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full",  # noqa: E731
                                           tol=1e-3, reg_covar=1e-6, max_iter=100,
-                                          init_params="kmeans", random_state=SEED)
+                                          init_params="kmeans", n_init=1, warm_start=False,
+                                          random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
 
         def out():
             e = S["est"]
             return _gmm_out(np, e.weights_, e.means_, e.covariances_, e.n_iter_)
     elif lane in ("tsvd",):
-        make = lambda: ml.TruncatedSVD(n_components=TSVD_COMPONENTS, algorithm="covariance_eigh")  # noqa: E731
+        make = lambda: ml.TruncatedSVD(n_components=TSVD_COMPONENTS, algorithm="covariance_eigh",  # noqa: E731
+                                       n_iter=5, n_oversamples=10, tol=0.0, random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"components": np.asarray(S["est"].components_, dtype=np.float64)}  # noqa: E731
     elif lane in ("spectral", "agglomerative"):
         if lane == "spectral":
             make = lambda: ml.SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
                                                  n_neighbors=10, assign_labels="kmeans", n_init=10,
-                                                 random_state=SEED)
+                                                 n_components=N_CLUSTERS, random_state=SEED)
         else:
             make = lambda: ml.AgglomerativeClustering(n_clusters=N_CLUSTERS, metric="euclidean",  # noqa: E731
-                                                      connectivity="pairwise", linkage="single")
+                                                      connectivity="pairwise", linkage="single",
+                                                      compute_full_tree="auto", distance_threshold=None)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"labels": np.asarray(S["est"].labels_, dtype=np.int64).reshape(-1)}  # noqa: E731
     elif lane in ("knn-clf", "knn-reg"):
         cls = ml.KNeighborsClassifier if lane == "knn-clf" else ml.KNeighborsRegressor
-        make = lambda: cls(n_neighbors=KNN_K, weights="uniform", metric="euclidean", algorithm="brute")  # noqa: E731
+        make = lambda: cls(n_neighbors=KNN_K, weights="uniform", metric="euclidean", algorithm="brute", p=2)  # noqa: E731
         # the classifier takes integer labels only (cuML's check_dtype=np.int32);
         # the cast is outside the clock, the same 0/1 values every arm reads
         yfit = D["y"].astype(np.int32) if lane == "knn-clf" else D["y"]
@@ -908,7 +930,8 @@ def _build_ours(lane, D, rec, S):
             S["est"] = est
         out = lambda: {"zcheck": np.asarray(S["est"].transform(D["Xcheck"]), dtype=np.float64)}  # noqa: E731
     elif lane == "arima":
-        make = lambda: ml.ARIMA(order=ARIMA_ORDER, trend="c", method="ml", maxiter=1000)  # noqa: E731
+        make = lambda: ml.ARIMA(order=ARIMA_ORDER, seasonal_order=ARIMA_SEASONAL, trend="c",  # noqa: E731
+                                method="ml", maxiter=1000)
         call = lambda: S.update(est=make().fit(D["Yfit"]))  # noqa: E731
 
         def out():
@@ -919,7 +942,7 @@ def _build_ours(lane, D, rec, S):
     elif lane == "ets":
         Y = D["Yfit"]
         make = lambda: ml.ExponentialSmoothing(Y, seasonal="additive", seasonal_periods=SEASON_PERIOD,  # noqa: E731
-                                               start_periods=2, ts_num=Y.shape[0],
+                                               start_periods=2, ts_num=Y.shape[0], eps=ETS_EPS,
                                                initialization_method="estimated")
         call = lambda: S.update(est=make().fit())  # noqa: E731
 
@@ -929,7 +952,7 @@ def _build_ours(lane, D, rec, S):
                     "insample": np.asarray(e.predict(0, Y.shape[1]), dtype=np.float64).T}
     elif lane == "ivf":
         make = lambda: ml.IVFIndex(n_lists=min(IVF_NLIST, D["index"].shape[0] // 4),  # noqa: E731
-                                   n_probes=min(IVF_NPROBE, D["index"].shape[0] // 4),
+                                   n_probes=min(IVF_NPROBE, IVF_NLIST, D["index"].shape[0] // 4),
                                    n_neighbors=IVF_K, kmeans_n_iters=20, metric="sqeuclidean",
                                    random_state=SEED)
 
@@ -943,24 +966,36 @@ def _build_ours(lane, D, rec, S):
         g, ls = (gamma_of(D), length_scale_of(D))
         ctors = {
             "logreg": lambda: ml.LogisticRegression(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
-                                                    fit_intercept=True, solver="qn"),
+                                                    fit_intercept=True, solver="qn",
+                                                    class_weight=None),
             "linearsvc": lambda: ml.LinearSVC(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
-                                              max_iter=1000, fit_intercept=True),
-            "ridge": lambda: ml.Ridge(alpha=1.0, fit_intercept=True, solver="auto"),
+                                              max_iter=1000, fit_intercept=True,
+                                              penalized_intercept=False, class_weight=None),
+            # 'auto' resolves to 'eig' here (solver_); named, not left to resolve
+            "ridge": lambda: ml.Ridge(alpha=1.0, fit_intercept=True, solver="eig"),
+            # random_state stays None: ours refuses any other value (it selects
+            # nothing once selection='random' is refused)
             "lasso": lambda: ml.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
-                                      selection="cyclic"),
+                                      selection="cyclic", solver="cd", precompute=False,
+                                      positive=False, warm_start=False),
             "elasticnet": lambda: ml.ElasticNet(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
-                                                max_iter=1000, tol=1e-4, selection="cyclic"),
+                                                max_iter=1000, tol=1e-4, selection="cyclic",
+                                                solver="cd", precompute=False, positive=False,
+                                                warm_start=False),
             "linearsvr": lambda: ml.LinearSVR(epsilon=0.0, penalty="l2", loss="epsilon_insensitive",
-                                              C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True),
+                                              C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True,
+                                              penalized_intercept=False),
             "gpr": lambda: ml.GaussianProcessRegressor(
                 kernel=ml.ConstantKernel(1.0) * ml.RBF(length_scale=ls) + ml.WhiteKernel(noise_level=GP_NOISE), alpha=GP_ALPHA, optimizer=None,
-                normalize_y=False),
+                normalize_y=False, n_restarts_optimizer=0, random_state=SEED),
+            # random_state stays None: ours refuses any other value
             "gpc": lambda: ml.GaussianProcessClassifier(
                 kernel=ml.ConstantKernel(1.0) * ml.RBF(length_scale=ls), optimizer=None,
-                max_iter_predict=100),
-            "svr": lambda: ml.SVR(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3),
-            "kernel-ridge": lambda: ml.KernelRidge(alpha=1.0, kernel="rbf", gamma=g),
+                max_iter_predict=100, n_restarts_optimizer=0),
+            "svr": lambda: ml.SVR(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3, degree=3,
+                                  coef0=0.0, max_iter=-1, cache_size=SVR_CACHE_MB),
+            "kernel-ridge": lambda: ml.KernelRidge(alpha=1.0, kernel="rbf", gamma=g, degree=3,
+                                                   coef0=1.0),
         }
         make = ctors[lane]
         call = lambda: S.update(est=make().fit(X, D["y"]))  # noqa: E731
@@ -975,7 +1010,7 @@ def _build_ours(lane, D, rec, S):
     info = _ours(lane, probe)
     if d is not None:
         info["n_features"] = d
-    return Runner(info, call, out)
+    return Runner(info, call, out, params=probe)
 
 
 def _build_sklearn(lane, D, rec, S):
@@ -992,7 +1027,7 @@ def _build_sklearn(lane, D, rec, S):
         from sklearn.mixture import GaussianMixture
         make = lambda: GaussianMixture(n_components=GMM_COMPONENTS, covariance_type="full", tol=1e-3,  # noqa: E731
                                        reg_covar=1e-6, max_iter=100, init_params="kmeans", n_init=1,
-                                       random_state=SEED)
+                                       warm_start=False, random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
 
         def out():
@@ -1001,7 +1036,7 @@ def _build_sklearn(lane, D, rec, S):
     elif lane == "tsvd":
         from sklearn.decomposition import TruncatedSVD
         make = lambda: TruncatedSVD(n_components=TSVD_COMPONENTS, algorithm="arpack", tol=0.0,  # noqa: E731
-                                    random_state=SEED)
+                                    n_iter=5, n_oversamples=10, random_state=SEED)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"components": np.asarray(S["est"].components_, dtype=np.float64)}  # noqa: E731
     elif lane in ("spectral", "agglomerative"):
@@ -1009,18 +1044,19 @@ def _build_sklearn(lane, D, rec, S):
             from sklearn.cluster import SpectralClustering
             make = lambda: SpectralClustering(n_clusters=N_CLUSTERS, affinity="nearest_neighbors",  # noqa: E731
                                               n_neighbors=10, assign_labels="kmeans", n_init=10,
-                                              random_state=SEED, n_jobs=-1)
+                                              n_components=N_CLUSTERS, random_state=SEED, n_jobs=-1)
         else:
             from sklearn.cluster import AgglomerativeClustering
             make = lambda: AgglomerativeClustering(n_clusters=N_CLUSTERS, linkage="single",  # noqa: E731
-                                                   metric="euclidean")
+                                                   metric="euclidean", compute_full_tree="auto",
+                                                   distance_threshold=None)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"labels": np.asarray(S["est"].labels_, dtype=np.int64).reshape(-1)}  # noqa: E731
     elif lane in ("knn-clf", "knn-reg"):
         from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
         cls = KNeighborsClassifier if lane == "knn-clf" else KNeighborsRegressor
         make = lambda: cls(n_neighbors=KNN_K, weights="uniform", metric="euclidean",  # noqa: E731
-                           algorithm="brute", n_jobs=-1)
+                           algorithm="brute", p=2, n_jobs=-1)
 
         def call():
             est = make()
@@ -1031,8 +1067,9 @@ def _build_sklearn(lane, D, rec, S):
         from sklearn.kernel_approximation import Nystroem, RBFSampler
         g = gamma_of(D)
         if lane == "nystroem":
-            make = lambda: Nystroem(kernel="rbf", gamma=g, n_components=KAPPROX_COMPONENTS,  # noqa: E731
-                                    random_state=SEED, n_jobs=-1)
+            # degree and coef0 are not read by the rbf kernel; set to ours' values
+            make = lambda: Nystroem(kernel="rbf", gamma=g, degree=3, coef0=1.0,  # noqa: E731
+                                    n_components=KAPPROX_COMPONENTS, random_state=SEED, n_jobs=-1)
         else:
             make = lambda: RBFSampler(gamma=g, n_components=KAPPROX_COMPONENTS, random_state=SEED)  # noqa: E731
 
@@ -1047,27 +1084,35 @@ def _build_sklearn(lane, D, rec, S):
         K = gp.kernels
         ctors = {
             "logreg": lambda: lm.LogisticRegression(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
-                                                    fit_intercept=True, solver="lbfgs"),
+                                                    fit_intercept=True, solver="lbfgs",
+                                                    class_weight=None, random_state=SEED),
             "linearsvc": lambda: svm.LinearSVC(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
                                                max_iter=1000, fit_intercept=True, dual="auto",
+                                               intercept_scaling=1.0, class_weight=None,
                                                random_state=SEED),
-            "ridge": lambda: lm.Ridge(alpha=1.0, fit_intercept=True, solver="auto"),
+            # 'auto' is 'cholesky' for this dense input; named, not left to resolve
+            "ridge": lambda: lm.Ridge(alpha=1.0, fit_intercept=True, solver="cholesky",
+                                      positive=False, random_state=SEED),
             "lasso": lambda: lm.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
-                                      selection="cyclic"),
+                                      selection="cyclic", precompute=False, positive=False,
+                                      warm_start=False, random_state=SEED),
             "elasticnet": lambda: lm.ElasticNet(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
-                                                max_iter=1000, tol=1e-4, selection="cyclic"),
+                                                max_iter=1000, tol=1e-4, selection="cyclic",
+                                                precompute=False, positive=False,
+                                                warm_start=False, random_state=SEED),
             "linearsvr": lambda: svm.LinearSVR(epsilon=0.0, loss="epsilon_insensitive", C=1.0,
                                                tol=1e-4, max_iter=1000, fit_intercept=True,
-                                               dual=True, random_state=SEED),
+                                               intercept_scaling=1.0, dual=True, random_state=SEED),
             "gpr": lambda: gp.GaussianProcessRegressor(
                 kernel=K.ConstantKernel(1.0) * K.RBF(length_scale=ls) + K.WhiteKernel(noise_level=GP_NOISE), alpha=GP_ALPHA, optimizer=None,
-                normalize_y=False),
+                normalize_y=False, n_restarts_optimizer=0, random_state=SEED),
             "gpc": lambda: gp.GaussianProcessClassifier(
                 kernel=K.ConstantKernel(1.0) * K.RBF(length_scale=ls), optimizer=None,
-                max_iter_predict=100),
-            "svr": lambda: svm.SVR(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3,
-                                   cache_size=2000.0),
-            "kernel-ridge": lambda: kernel_ridge.KernelRidge(alpha=1.0, kernel="rbf", gamma=g),
+                max_iter_predict=100, n_restarts_optimizer=0, random_state=SEED),
+            "svr": lambda: svm.SVR(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3, degree=3,
+                                   coef0=0.0, max_iter=-1, shrinking=True, cache_size=SVR_CACHE_MB),
+            "kernel-ridge": lambda: kernel_ridge.KernelRidge(alpha=1.0, kernel="rbf", gamma=g,
+                                                             degree=3, coef0=1.0),
         }
         if lane not in ctors:
             raise SystemExit("no sklearn-cpu arm for lane %r" % lane)
@@ -1080,8 +1125,9 @@ def _build_sklearn(lane, D, rec, S):
                         "std": np.asarray(sd, dtype=np.float64).reshape(-1)}
         else:
             out = lambda: _supervised_out(lane, np, S["est"], D["Xq"])  # noqa: E731
-    info["config"] = repr(make())
-    return Runner(info, call, out)
+    probe = make()
+    info["config"] = repr(probe)
+    return Runner(info, call, out, params=probe)
 
 
 def _sm_arima_one(y):
@@ -1089,8 +1135,8 @@ def _sm_arima_one(y):
     from statsmodels.tsa.arima.model import ARIMA
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = ARIMA(y.astype("float64"), order=ARIMA_ORDER, trend="c").fit(
-            method_kwargs={"maxiter": 1000})
+        res = ARIMA(y.astype("float64"), order=ARIMA_ORDER, seasonal_order=ARIMA_SEASONAL,
+                    trend="c").fit(method_kwargs={"maxiter": 1000})
     return float(res.llf), res.forecast(ARMA_H), res.fittedvalues
 
 
@@ -1099,9 +1145,9 @@ def _sm_ets_one(y):
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = ExponentialSmoothing(y.astype("float64"), trend="add", seasonal="add",
-                                   seasonal_periods=SEASON_PERIOD,
-                                   initialization_method="estimated").fit()
+        res = ExponentialSmoothing(y.astype("float64"), trend="additive", seasonal="additive",
+                                   seasonal_periods=SEASON_PERIOD, damped_trend=False,
+                                   use_boxcox=False, initialization_method="estimated").fit()
     return res.forecast(SEASON_H), res.fittedvalues
 
 
@@ -1114,11 +1160,20 @@ def _build_statsmodels(lane, D, rec, S):
     Y = D["Yfit"]
     fn = _sm_arima_one if lane == "arima" else _sm_ets_one
     pool = Parallel(n_jobs=-1)
-    info["config"] = ("statsmodels.tsa.arima.model.ARIMA(order=(1,0,1), trend='c').fit("
-                      "method_kwargs={'maxiter': 1000})" if lane == "arima" else
-                      "statsmodels.tsa.holtwinters.ExponentialSmoothing(trend='add', seasonal='add', "
-                      "seasonal_periods=24, initialization_method='estimated').fit()")
+    info["config"] = ("statsmodels.tsa.arima.model.ARIMA(order=(1,0,1), seasonal_order=(0,0,0,0), "
+                      "trend='c').fit(method_kwargs={'maxiter': 1000})" if lane == "arima" else
+                      "statsmodels.tsa.holtwinters.ExponentialSmoothing(trend='additive', "
+                      "seasonal='additive', seasonal_periods=24, damped_trend=False, use_boxcox=False, "
+                      "initialization_method='estimated').fit()")
     info["config"] += "; one series per fit, joblib Parallel(n_jobs=-1) over the %d series" % Y.shape[0]
+    # Declared (a function per series, not an estimator): the values _sm_*_one pass.
+    if lane == "arima":
+        declared = {"__library__": "statsmodels", "order": list(ARIMA_ORDER),
+                    "seasonal_order": list(ARIMA_SEASONAL), "trend": "c", "maxiter": 1000}
+    else:
+        declared = {"__library__": "statsmodels", "trend": "additive", "seasonal": "additive",
+                    "seasonal_periods": SEASON_PERIOD, "damped_trend": False,
+                    "initialization_method": "estimated"}
 
     def call():
         S["res"] = pool(delayed(fn)(Y[i]) for i in range(Y.shape[0]))
@@ -1131,7 +1186,7 @@ def _build_statsmodels(lane, D, rec, S):
                     "insample": np.array([np.asarray(x[2]) for x in r], dtype=np.float64)}
         return {"forecast": np.array([np.asarray(x[0]) for x in r], dtype=np.float64),
                 "insample": np.array([np.asarray(x[1]) for x in r], dtype=np.float64)}
-    return Runner(info, call, out)
+    return Runner(info, call, out, params=declared)
 
 
 def _series_major(a, n_series):
@@ -1147,6 +1202,7 @@ def _series_major(a, n_series):
 def _build_cuml(lane, D, rec, S):
     np = _np()
     import cuml
+    ctd = _load("classical_two_datasets")
     arrays = {k: v for k, v in D.items() if k in ("X", "y", "Xq")}
     if lane == "arima":
         arrays = {"Yt": np.ascontiguousarray(D["Yfit"].T)}          # cuML: (n_obs, batch)
@@ -1155,41 +1211,49 @@ def _build_cuml(lane, D, rec, S):
     dev, info, sync = _cuml(arrays)
     X = dev.get("X")
     out_type = {"output_type": "cupy"}
+
+    def tolerant(cls, **kw):
+        """cls with the keywords this cuML build takes; a dropped one is named
+        in info['params_not_in_this_build'] (never silently)."""
+        _obj, kept = ctd.construct_tolerant(cls, kw, info)
+        return lambda: cls(**kept)  # noqa: E731
+
     if lane == "umap":
         from cuml.manifold import UMAP
         kw = _umap_kw()
         kw.update(random_state=SEED, build_algo="brute_force_knn", **out_type)
-        make = lambda: UMAP(**kw)  # noqa: E731
+        make = tolerant(UMAP, **kw)
         call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
         out = lambda: {"embedding": np.asarray(_host(S["e"]), dtype=np.float32)}  # noqa: E731
     elif lane == "spectral-embedding":
         from cuml.manifold import SpectralEmbedding
-        make = lambda: SpectralEmbedding(n_components=2, affinity="nearest_neighbors",  # noqa: E731
-                                         n_neighbors=10, random_state=SEED)
+        make = tolerant(SpectralEmbedding, n_components=2, affinity="nearest_neighbors",
+                        n_neighbors=10, random_state=SEED)
         call = lambda: S.update(e=make().fit_transform(X))  # noqa: E731
         out = lambda: {"embedding": np.asarray(_host(S["e"]), dtype=np.float32)}  # noqa: E731
     elif lane == "tsvd":
         from cuml.decomposition import TruncatedSVD
-        make = lambda: TruncatedSVD(n_components=TSVD_COMPONENTS, algorithm="full", **out_type)  # noqa: E731
+        make = tolerant(TruncatedSVD, n_components=TSVD_COMPONENTS, algorithm="full",
+                        random_state=SEED, **out_type)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"components": np.asarray(_host(S["est"].components_), dtype=np.float64)}  # noqa: E731
     elif lane in ("spectral", "agglomerative"):
         if lane == "spectral":
             from cuml.cluster import SpectralClustering
-            make = lambda: SpectralClustering(n_clusters=N_CLUSTERS, n_neighbors=10, n_init=10,  # noqa: E731
-                                              random_state=SEED)
+            make = tolerant(SpectralClustering, n_clusters=N_CLUSTERS, affinity="nearest_neighbors",
+                            n_neighbors=10, n_init=10, n_components=N_CLUSTERS,
+                            random_state=SEED)
         else:
             from cuml.cluster import AgglomerativeClustering
-            make = lambda: AgglomerativeClustering(n_clusters=N_CLUSTERS, metric="euclidean",  # noqa: E731
-                                                   linkage="single", connectivity="pairwise",
-                                                   **out_type)
+            make = tolerant(AgglomerativeClustering, n_clusters=N_CLUSTERS, metric="euclidean",
+                            linkage="single", connectivity="pairwise", **out_type)
         call = lambda: S.update(est=make().fit(X))  # noqa: E731
         out = lambda: {"labels": np.asarray(_host(S["est"].labels_), dtype=np.int64).reshape(-1)}  # noqa: E731
     elif lane in ("knn-clf", "knn-reg"):
         from cuml.neighbors import KNeighborsClassifier, KNeighborsRegressor
         cls = KNeighborsClassifier if lane == "knn-clf" else KNeighborsRegressor
-        make = lambda: cls(n_neighbors=KNN_K, weights="uniform", metric="euclidean",  # noqa: E731
-                           algorithm="brute", **out_type)
+        make = tolerant(cls, n_neighbors=KNN_K, weights="uniform", metric="euclidean",
+                        algorithm="brute", p=2, **out_type)
 
         def call():
             est = make()
@@ -1199,7 +1263,8 @@ def _build_cuml(lane, D, rec, S):
     elif lane == "arima":
         from cuml.tsa.arima import ARIMA
         nb = D["Yfit"].shape[0]
-        make = lambda: ARIMA(dev["Yt"], order=ARIMA_ORDER, fit_intercept=True, output_type="numpy")  # noqa: E731
+        make = tolerant(ARIMA, endog=dev["Yt"], order=ARIMA_ORDER, seasonal_order=ARIMA_SEASONAL,
+                        fit_intercept=True, output_type="numpy")
 
         def call():
             est = make()
@@ -1214,9 +1279,8 @@ def _build_cuml(lane, D, rec, S):
     elif lane == "ets":
         from cuml import ExponentialSmoothing
         nb = D["Yfit"].shape[0]
-        make = lambda: ExponentialSmoothing(dev["Y"], seasonal="additive",  # noqa: E731
-                                            seasonal_periods=SEASON_PERIOD, start_periods=2,
-                                            ts_num=nb)
+        make = tolerant(ExponentialSmoothing, endog=dev["Y"], seasonal="additive",
+                        seasonal_periods=SEASON_PERIOD, start_periods=2, ts_num=nb, eps=ETS_EPS)
         call = lambda: S.update(est=make().fit())  # noqa: E731
 
         def out():
@@ -1225,29 +1289,35 @@ def _build_cuml(lane, D, rec, S):
         from cuml import linear_model as lm, svm
         g = gamma_of(D)
         ctors = {
-            "logreg": lambda: lm.LogisticRegression(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
-                                                    fit_intercept=True, solver="qn", **out_type),
-            "linearsvc": lambda: svm.LinearSVC(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
-                                               max_iter=1000, fit_intercept=True, **out_type),
-            "ridge": lambda: lm.Ridge(alpha=1.0, fit_intercept=True, **out_type),
-            "lasso": lambda: lm.Lasso(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
-                                      selection="cyclic", **out_type),
-            "elasticnet": lambda: lm.ElasticNet(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
-                                                max_iter=1000, tol=1e-4, selection="cyclic",
-                                                **out_type),
-            "linearsvr": lambda: svm.LinearSVR(epsilon=0.0, penalty="l2", loss="epsilon_insensitive",
-                                               C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True,
-                                               **out_type),
-            "svr": lambda: svm.SVR(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3, **out_type),
-            "kernel-ridge": lambda: cuml.KernelRidge(alpha=1.0, kernel="rbf", gamma=g, **out_type),
+            "logreg": (lm.LogisticRegression, dict(penalty="l2", C=1.0, tol=1e-4, max_iter=1000,
+                                                   fit_intercept=True, solver="qn",
+                                                   class_weight=None)),
+            "linearsvc": (svm.LinearSVC, dict(penalty="l2", loss="squared_hinge", C=1.0, tol=1e-4,
+                                              max_iter=1000, fit_intercept=True,
+                                              penalized_intercept=False, class_weight=None)),
+            "ridge": (lm.Ridge, dict(alpha=1.0, fit_intercept=True, solver="eig")),
+            "lasso": (lm.Lasso, dict(alpha=0.01, fit_intercept=True, max_iter=1000, tol=1e-4,
+                                     selection="cyclic", solver="cd")),
+            "elasticnet": (lm.ElasticNet, dict(alpha=0.01, l1_ratio=0.5, fit_intercept=True,
+                                               max_iter=1000, tol=1e-4, selection="cyclic",
+                                               solver="cd")),
+            "linearsvr": (svm.LinearSVR, dict(epsilon=0.0, penalty="l2", loss="epsilon_insensitive",
+                                              C=1.0, tol=1e-4, max_iter=1000, fit_intercept=True,
+                                              penalized_intercept=False)),
+            "svr": (svm.SVR, dict(kernel="rbf", gamma=g, C=1.0, epsilon=0.1, tol=1e-3, degree=3,
+                                  coef0=0.0, max_iter=-1, cache_size=SVR_CACHE_MB)),
+            "kernel-ridge": (cuml.KernelRidge, dict(alpha=1.0, kernel="rbf", gamma=g, degree=3,
+                                                    coef0=1.0)),
         }
         if lane not in ctors:
             raise SystemExit("no cuml-gpu arm for lane %r" % lane)
-        make = ctors[lane]
+        cls, kw = ctors[lane]
+        make = tolerant(cls, **kw, **out_type)
         call = lambda: S.update(est=make().fit(X, dev["y"]))  # noqa: E731
         out = lambda: _supervised_out(lane, np, S["est"], dev["Xq"])  # noqa: E731
-    info["config"] = repr(make())
-    return Runner(info, call, out, sync)
+    probe = make()
+    info["config"] = repr(probe)
+    return Runner(info, call, out, sync, params=probe)
 
 
 def worker(args):
@@ -1267,12 +1337,14 @@ def worker(args):
         with open(block + ".json") as fh:
             rec = json.load(fh)
         runner = build(args.lane, args.arm, lane_arrays(args.lane, B), rec)
+        # the parameters this arm really got, read back from what it constructed
+        params = _load("classical_two_datasets").params_record(runner.params)
     except BaseException as exc:  # noqa: BLE001 (SystemExit from a missing arm too)
         import traceback
         traceback.print_exc()
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
-    say({"event": "ready", "info": runner.info, "pid": os.getpid()})
+    say({"event": "ready", "info": runner.info, "pid": os.getpid(), "params": params})
     # peak memory per round, reset and read OUTSIDE the clock
     mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
     last = None
@@ -1601,6 +1673,25 @@ def race(args):
             continue
         w.info = msg["info"]
         result["arms"][arm]["info"] = msg["info"]
+        result["arms"][arm]["params_record"] = msg.get("params")
+    # SAME SEED, SAME TUNING PARAMETERS, checked before the first timed round
+    # (tools/bench_board_params.py). A refusal fails the race by name.
+    records = {a: result["arms"][a].get("params_record") for a in arms
+               if workers[a].alive and result["arms"][a].get("params_record") is not None}
+    refused = ctd.enforce_params(lane, FAMILY, records, result, "MORE")
+    if refused is not None:
+        for arm in arms:
+            w = workers[arm]
+            if w.alive:
+                w.kill("params_refused", refused[:500])
+                result["arms"][arm].update(status="params_refused", error=refused[:2000])
+            w.log.close()
+        result["finished"] = now_utc()
+        out_json = os.path.join(args.out, "%s.json" % tag)
+        with open(out_json + ".tmp", "w") as fh:
+            json.dump(result, fh, indent=2, sort_keys=True, default=str)
+        os.replace(out_json + ".tmp", out_json)
+        return 3
     for r in range(args.rounds + 1):
         live = [a for a in arms if workers[a].alive]
         if not live:
