@@ -117,6 +117,7 @@ must_pass() {
 }
 
 run int15 pass pixi run check-gemm-int15
+must_pass int15 check_int15_large_product_is_written_whole
 run int15-force-flat pass pixi run check-gemm-int15-force-flat
 # DEVIATION 2975: the unit plan with the fragment loads as they were before
 # their alignment was stated. Same gates, and the SAME DIGESTS as the clean
@@ -157,6 +158,12 @@ if [ "$VENDOR" = apple ]; then
     must_name int15-apple-chunk-sabotage check_int15_planted_worst_cases
     must_pass int15-apple-chunk-sabotage check_int15_device_conversions_match_host
     grep -v -E '^   (DIGEST|ok) ' "$OUT/int15-apple-chunk-sabotage.log" > "$OUT/int15-apple-chunk-sabotage.gates.txt" 2>/dev/null
+    # DEVIATION 2979, RECORDED AND NOT REQUIRED: every cell in one launch,
+    # as the kernels launched until 2026-09-29. Whether the system cuts the
+    # large product short depends on how long this box holds its GPU, so
+    # either outcome is written down and neither is the job's verdict.
+    pixi run check-gemm-int15-one-launch > "$OUT/int15-one-launch.log" 2>&1
+    echo "one-launch: exit=$? (recorded); $(grep -c 'POISON SURVIVED' "$OUT/int15-one-launch.log") poison lines; $(grep -E '^(ok|!! GATE FAILED:) check_int15_large_product_is_written_whole' "$OUT/int15-one-launch.log" | head -1)" >> "$OUT/gate.txt"
 fi
 
 grep -h "int15 dispatch:" "$OUT/int15.log" "$OUT/int15-force-flat.log" 2>/dev/null >> "$OUT/gate.txt"

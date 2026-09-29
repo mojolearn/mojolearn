@@ -1,0 +1,18 @@
+m2pro, steward request 1790656250587, commit 464d5002a, 2026-09-29T04:31Z.
+quant-gate GREEN (both sabotage arms seen failing). quant-price RED: the COLD
+run (the first run after the build, whose times are never read) exited 1:
+
+  POISON SURVIVED at cell 4352 of lowbit.llama8b.mlp_down.t512.inference.int8i32.v1.parq
+
+Cell 4352 is 17 * 256: the first cell of block 17 of the FLAT int8 kernel
+(gemm/checks/gemm_lowbit.mojo, one thread per cell, 256 threads a block),
+which is the product the profile's dispatcher runs on Apple. The arm is the
+parallel quantizer, then that product, one wait. The run of record, the same
+binary a minute later, wrote every cell and exited 0, and its digests agree
+with the other boxes'. The cold log was read on the box
+(bench/results/lowbit_mma_speed/m2pro/price_quant/cold.log); it is not in
+the steward's stdout.
+This is the failure the brief names as known and open on the M2 Pro ("a
+plain kernel left cells unwritten at a large shape"); lane/lowbit-int15 is
+reproducing it. The parallel quantizer's own outputs are poisoned and read
+back in its own arms, which passed in both runs.

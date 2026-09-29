@@ -1,0 +1,28 @@
+gpuq: job 0015 lane=lowbit-merged gpus=0 cap=240min started 2026-09-29T05:03:26Z
+gpuq: script /root/mojolearn-lowbit-merged/tools/lowbit_merged/check_job.sh sha256 at submit 4cea5c53d8cc06a60f096c38546b7cee2e5b99d19540dbd87f2b2cc4fba61187, now 4cea5c53d8cc06a60f096c38546b7cee2e5b99d19540dbd87f2b2cc4fba61187
+tree_head=624a1d09200eeb09af96a320d20001ad280b6fd4 dirty_files=62
+machine=NVIDIA GeForce RTX 4090, 580.126.20
+started=2026-09-29T05:03:26Z
+PHASE install-default                              exit=0   expected=pass held
+PHASE install-test                                 exit=0   expected=pass held
+PHASE build-linalg                                 exit=0   expected=pass held
+PHASE build-linalg-host                            exit=0   expected=pass held
+PHASE build-base                                   exit=0   expected=pass held
+PHASE build-training                               exit=0   expected=pass held
+PHASE build-transformer                            exit=0   expected=pass held
+PHASE build-mamba                                  exit=0   expected=pass held
+PHASE gate-gemm-identity                           exit=0   expected=pass held
+PHASE gate-lowbit                                  exit=0   expected=pass held
+PHASE gate-lowbit-sabotage                         exit=1   expected=fail held
+PHASE gate-int15                                   exit=0   expected=pass held
+PHASE gate-int15-sabotage                          exit=1   expected=fail held
+PHASE gate-int8-mma-tuned                          exit=0   expected=pass held
+PHASE gate-int8-mma-tuned-sabotage                 exit=1   expected=fail held
+PHASE gate-int8-pieces-tuned                       exit=0   expected=pass held
+PHASE gate-int8-pieces-tuned-sabotage              exit=1   expected=fail held
+PHASE python-tests                                 exit=0   expected=pass held
+    | 297 passed, 1 skipped, 6 warnings in 43.03s
+    | SKIPPED [1] mojolearn/tests/test_models_loader.py:640: tokenizer host binding not built: mojolearn: /root/mojolearn-lowbit-merged/python/mojolearn/host/_mojolearn_tokenizer_host.so is not built. Build
+finished=2026-09-29T05:08:53Z
+MERGE CHECK GREEN
+gpuq: job 0015 done exit=0 at 2026-09-29T05:08:56Z after 331s

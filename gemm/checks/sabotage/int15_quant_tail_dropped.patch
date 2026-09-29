@@ -1,8 +1,8 @@
 diff --git a/gemm/checks/gemm_int15.mojo b/gemm/checks/gemm_int15.mojo
-index 97acae272..bf8c773c1 100644
+index 0925ba0f0..344f9066a 100644
 --- a/gemm/checks/gemm_int15.mojo
 +++ b/gemm/checks/gemm_int15.mojo
-@@ -342,7 +342,7 @@ def int15_absmax_chunk_kernel(
+@@ -420,7 +420,7 @@ def int15_absmax_chunk_kernel(
      var c1 = c0 + INT15_ABSMAX_CHUNK
      if c1 > cols:
          c1 = cols

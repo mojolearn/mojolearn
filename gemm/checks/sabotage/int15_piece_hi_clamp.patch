@@ -1,8 +1,8 @@
 diff --git a/gemm/checks/gemm_int15.mojo b/gemm/checks/gemm_int15.mojo
-index 97acae272..5c8aafd75 100644
+index 0925ba0f0..b44df7781 100644
 --- a/gemm/checks/gemm_int15.mojo
 +++ b/gemm/checks/gemm_int15.mojo
-@@ -298,7 +298,7 @@ def split_int15_kernel(
+@@ -376,7 +376,7 @@ def split_int15_kernel(
          return
      var c = q.unsafe_load(i)
      var h = int15_piece_hi(c)
@@ -11,7 +11,7 @@ index 97acae272..5c8aafd75 100644
          # THE DEFECT ARM: a split that believes an int8 piece is symmetric.
          if h == Int8(-128):
              h = Int8(-127)
-@@ -421,7 +421,7 @@ def int15_planes_kernel(
+@@ -499,7 +499,7 @@ def int15_planes_kernel(
      var v = x.unsafe_load(r * Int(s_row_in) + c * Int(s_col_in))
      var code = quantize_int15_value(v, Int(e.unsafe_load(r)))
      var h = int15_piece_hi(code)

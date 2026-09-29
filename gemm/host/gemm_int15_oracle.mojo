@@ -232,6 +232,24 @@ def _refuse_k(k: Int, who: String) raises:
         )
 
 
+def gemm_int15_oracle_cell(
+    qa: List[Int16],
+    ea: List[Int32],
+    qb: List[Int16],
+    eb: List[Int32],
+    i: Int,
+    j: Int,
+    k: Int,
+) -> Float32:
+    """ONE CELL of the normative answer, for a check that cannot afford
+    the whole product on the host (a 512 x 4096 x 14336 product is 3e10
+    steps). The arithmetic and the sabotage arm of `gemm_int15_oracle`."""
+    var v = dequant_int15_pinned(int15_dot_cell(qa, qb, i, j, k), Int(ea[i]) + Int(eb[j]))
+    comptime if GEMM_ORACLE_HOST_SABOTAGE:
+        v = gemm_oracle_sabotage_value_flip(v)
+    return v
+
+
 def gemm_int15_oracle(
     qa: List[Int16],
     ea: List[Int32],
@@ -249,13 +267,9 @@ def gemm_int15_oracle(
     var c = List[Float32]()
     for i in range(m):
         for j in range(n):
-            var acc = int15_dot_cell(qa, qb, i, j, k)
-            var v = dequant_int15_pinned(acc, Int(ea[i]) + Int(eb[j]))
-            comptime if GEMM_ORACLE_HOST_SABOTAGE:
-                # THE SABOTAGE ARM: a value whose bits differ from the
-                # dequantized cell on every fixture, exact ones included.
-                v = gemm_oracle_sabotage_value_flip(v)
-            c.append(v)
+            # THE SABOTAGE ARM lives in the cell: a value whose bits differ
+            # from the dequantized cell on every fixture, exact ones included.
+            c.append(gemm_int15_oracle_cell(qa, ea, qb, eb, i, j, k))
     return c^
 
 

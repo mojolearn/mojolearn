@@ -1098,6 +1098,8 @@ check-gemm-int15-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D M
 check-gemm-int15-piece-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_PIECE_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-quant-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_QUANT_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
 check-gemm-int15-apple-chunk-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_APPLE_CHUNK_SABOTAGE=1 -I . gemm/checks/gemm_int15_check.mojo"
+# DEVIATION 2979: every cell of a product in ONE launch on Apple, as before 2026-09-29. On a box slow enough the large product is cut short and the gate FAILS; on a quick box it passes. Recorded, never required.
+check-gemm-int15-one-launch = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT15_ONE_LAUNCH=1 -D MOJOLEARN_INT15_NO_APPLE_UNIT=1 -I . gemm/checks/gemm_int15_check.mojo"
 # The TUNED plan of int15i64.v1 (contract W-13): lane/lowbit-mma-speed's four products with one staging, this profile's seams.
 check-gemm-int15-tuned = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"
 check-gemm-int15-tuned-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_int15_tuned_check.mojo"

@@ -88,6 +88,7 @@ from gemm.host.gemm_int15_oracle import (
     join_int15,
     quantize_cols_int15,
     gemm_int15_oracle,
+    gemm_int15_oracle_cell,
     gemm_int15_pieces_oracle,
     int15_dot_cell,
     int15_dot_cell_pieces,
@@ -1317,6 +1318,113 @@ def check_int15_planted_worst_cases(ctx: DeviceContext) raises:
     print("   ok " + String(cases) + " planted cases, every plan equal to the oracle")
 
 
+def check_int15_large_product_is_written_whole(ctx: DeviceContext) raises:
+    """GATE (DEVIATION 2979, clause W-14): THE ROW THAT FAILED on the M2
+    Pro, 512 x 4096 x 14336, on every plan this column has.
+
+    A launch that holds an Apple GPU for seconds is aborted by the system
+    and leaves its output partly written, and the wait returns as if it had
+    finished. No shape of the other gates is large enough to reach that.
+    Here every plan's output is poisoned first and read back whole, so a
+    cell no launch wrote is seen; every plan's digest must be one digest;
+    and the host oracle is held to it on cells sampled across the whole
+    output, the first and the last included (the whole product is 3e10
+    steps on the host, the sample is a million).
+
+    The operands are the walk over the whole range of codes, written
+    directly. The planes are split on the device."""
+    var m = 512
+    var n = 4096
+    var k = 14336
+    var qa = _planted_rows(m, k, 5, -3)
+    var qb = _planted_rows(n, k, 5, 2)
+    var dea = _upload[DType.int32](ctx, qa.e)
+    var deb = _upload[DType.int32](ctx, qb.e)
+    var dqa = _upload[DType.int16](ctx, qa.q)
+    var dqb = _upload[DType.int16](ctx, qb.q)
+    var dah = ctx.enqueue_create_buffer[DType.int8](m * k)
+    var dal = ctx.enqueue_create_buffer[DType.int8](m * k)
+    var dbh = ctx.enqueue_create_buffer[DType.int8](n * k)
+    var dbl = ctx.enqueue_create_buffer[DType.int8](n * k)
+    var work = Int15Workspace(ctx)
+    split_int15_device(ctx, dah, dal, dqa, m * k)
+    split_int15_device(ctx, dbh, dbl, dqb, n * k)
+    ctx.synchronize()
+    var reference = String("")
+    var failures = String("")
+    var ran = 0
+    for plan in range(PLAN_COUNT):
+        if plan == PLAN_MMA:
+            comptime if not HAS_UNIT:
+                continue
+        if plan >= PLAN_APPLE_WIDE:
+            comptime if not IS_APPLE:
+                continue
+        # The ROW geometry owns 8 rows of output a block; at 512 rows it is
+        # the WIDE plan's work in eight times the blocks. Once is enough.
+        if plan == PLAN_APPLE_ROW or plan == PLAN_APPLE4_ROW:
+            continue
+        var dc = _poisoned(ctx, m * n)
+        if plan == PLAN_FLAT:
+            identical_gemm_int15_flat_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
+        elif plan == PLAN_DISPATCH_CODES:
+            identical_gemm_int15_into(ctx, dc, dqa, dea, dqb, deb, work, m, n, k)
+        elif plan == PLAN_PIECES:
+            identical_gemm_int15_pieces_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        elif plan == PLAN_MMA:
+            identical_gemm_int15_mma_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        elif plan == PLAN_APPLE_WIDE:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_WIDE, INT15_APPLE_FORM_TWO
+            )
+        elif plan == PLAN_APPLE4_WIDE:
+            identical_gemm_int15_apple_with_geometry(
+                ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k, INT15_APPLE_GEOMETRY_WIDE, INT15_APPLE_FORM_FOUR
+            )
+        else:
+            identical_gemm_int15_planes_into(ctx, dc, dah, dal, dea, dbh, dbl, deb, m, n, k)
+        ctx.synchronize()
+        var name = "large-" + _tag(m, n, k)
+        try:
+            var got = _download_cells(ctx, dc, m * n, name + " " + _plan_name(plan))
+            var d = _digest(got)
+            print("   DIGEST " + name + " " + _plan_name(plan) + " " + d)
+            if reference.byte_length() == 0:
+                reference = d
+                # the host oracle on sampled cells, against the first plan
+                var samples = 64
+                for t in range(samples):
+                    var cell = (t * (m * n - 1)) // (samples - 1)
+                    var i = cell // n
+                    var j = cell - i * n
+                    var want = gemm_int15_oracle_cell(qa.q, qa.e, qb.q, qb.e, i, j, k)
+                    if not _same(got[cell], want):
+                        raise Error(
+                            name + " (" + _plan_name(plan) + "): cell " + String(cell) + " is "
+                            + _show(got[cell]) + ", the host oracle has " + _show(want)
+                        )
+            elif d != reference:
+                raise Error(name + ": " + _plan_name(plan) + " printed " + d + ", the first plan " + reference)
+        except e:
+            if failures.byte_length() > 0:
+                failures += "; "
+            failures += String(e)
+        ran += 1
+        _ = dc
+    _ = dea
+    _ = deb
+    _ = dqa
+    _ = dqb
+    _ = dah
+    _ = dal
+    _ = dbh
+    _ = dbl
+    _ = work^
+    if failures.byte_length() > 0:
+        raise Error(failures)
+    print("   ok " + String(ran) + " plans wrote every cell of " + _tag(m, n, k) + " and printed one digest; 64 sampled cells equal the host oracle")
+
+
 def check_int15_is_batch_invariant(ctx: DeviceContext) raises:
     """GATE: a row's codes, exponent and products do not depend on the other
     rows in the call."""
@@ -1529,6 +1637,11 @@ def main() raises:
             _gate(String("check_int15_planted_worst_cases"), ran, failed, String(""))
         except e:
             _gate(String("check_int15_planted_worst_cases"), ran, failed, String(e))
+        try:
+            check_int15_large_product_is_written_whole(ctx)
+            _gate(String("check_int15_large_product_is_written_whole"), ran, failed, String(""))
+        except e:
+            _gate(String("check_int15_large_product_is_written_whole"), ran, failed, String(e))
         try:
             check_int15_is_batch_invariant(ctx)
             _gate(String("check_int15_is_batch_invariant"), ran, failed, String(""))

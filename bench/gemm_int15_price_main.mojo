@@ -41,13 +41,23 @@ extent is above `INT15_MAX_K` is REFUSED by the profile; its fifteen-bit
 arms print a refusal line and `fp32.v1` is still timed.
 
 THE ARMS. Every arm of one row lives in this one binary and the timed loop
-ALTERNATES them call by call, in `_arm_at`'s order: `fp32.v1` first, the
-unit products next, the conversions, the complete operations, and the two
-one-thread-per-cell reference kernels LAST. They were fourth and third
-until run 2 on the H100, where the unit product, timed directly after the
-pieces kernel (a launch of 300 ms at the training rows), read ABOVE the
-complete call that contains it in two runs. A neighbor that long disturbs
-the arm after it; now no unit arm follows one.
+ALTERNATES them call by call, in `_arm_at`'s order, IN TWO BLOCKS:
+
+    the first block    `fp32.v1`, the unit products, the parallel
+                       conversions and the splits, the complete operations
+    the slow block     the reference kernels that are one thread per cell
+                       or one thread per row (flat, pieces, the row
+                       quantizer and the two complete operations built on
+                       it), timed after the first block has finished
+
+A LAUNCH OF HUNDREDS OF MILLISECONDS DISTURBS THE ARM TIMED AFTER IT, and
+this harness found that twice. Runs 1 to 3 (H100): the unit product was
+timed directly after the pieces kernel (300 ms at the training rows) and
+read ABOVE the complete call that contains it. Run 4 moved the slow kernels
+to the end of one alternation, which put them directly before `fp32.v1` of
+the next pass: `fp32.v1` read 5.6 to 6.1 ms at four rows where three runs
+had read 3.5 to 3.9. In both cases the ratio moved without any kernel
+changing. With two blocks no arm of the first block follows a slow one.
 
     fp32.v1                    `identical_gemm_into`, the shipped plan, at
                                the row's own orientation
@@ -349,16 +359,23 @@ def _arm_is_tuned(arm: Int) -> Bool:
     return arm >= ARM_TUNED
 
 
+#: Arms of the first block of the alternation; the rest are the slow block.
+comptime ARM_FIRST_BLOCK = 21
+
+
 def _arm_at(i: Int) -> Int:
-    """The `i`-th arm of the alternation (see THE ARMS)."""
+    """The `i`-th arm of the alternation (see THE ARMS): the first
+    `ARM_FIRST_BLOCK` are the first block, the rest the slow block."""
     var order: List[Int] = [
         ARM_FP32, ARM_MMA, ARM_TUNED, ARM_APPLE2, ARM_APPLE4,
-        ARM_QUANTIZE_A, ARM_QUANTIZE_A_PAR, ARM_PLANES_A_PAR, ARM_SPLIT_A,
-        ARM_QUANTIZE_B, ARM_QUANTIZE_B_PAR, ARM_PLANES_B_PAR, ARM_SPLIT_B,
+        ARM_QUANTIZE_A_PAR, ARM_PLANES_A_PAR, ARM_SPLIT_A,
+        ARM_QUANTIZE_B_PAR, ARM_PLANES_B_PAR, ARM_SPLIT_B,
         ARM_INF_TUNED, ARM_TRAIN_TUNED,
         ARM_INF_APPLE2, ARM_INF_APPLE4, ARM_TRAIN_APPLE2, ARM_TRAIN_APPLE4,
-        ARM_INF_PLANES, ARM_INF_CODES, ARM_INF_ROWQUANT,
-        ARM_TRAIN_PLANES, ARM_TRAIN_CODES, ARM_TRAIN_ROWQUANT,
+        ARM_INF_PLANES, ARM_INF_CODES,
+        ARM_TRAIN_PLANES, ARM_TRAIN_CODES,
+        ARM_QUANTIZE_A, ARM_QUANTIZE_B,
+        ARM_INF_ROWQUANT, ARM_TRAIN_ROWQUANT,
         ARM_FLAT, ARM_PIECES,
     ]
     return order[i]
@@ -865,15 +882,29 @@ def _time_row(
         ctx.synchronize()
         dig[arm] = _arm_digest(ctx, rb, arm, m, n, k, tag)
 
-    for _ in range(0 if identity_only else repeats):
-        for at_ in range(ARM_COUNT):
+    comptime block_count = 2
+    for block in range(block_count):
+        var first = 0 if block == 0 else ARM_FIRST_BLOCK
+        var last = ARM_FIRST_BLOCK if block == 0 else ARM_COUNT
+        # One untimed call of the block's first arm that runs, so the first
+        # timed call of the block does not follow whatever ran before it
+        # (the read-back of the warm-up, or the first block).
+        for at_ in range(first, last):
             var arm = _arm_at(at_)
-            if why[arm].byte_length() > 0:
+            if why[arm].byte_length() > 0 or identity_only:
                 continue
-            var t0 = perf_counter_ns()
             _enqueue_arm(ctx, rb, arm, kind, m, n, k)
             ctx.synchronize()
-            samples[arm].append(Int(perf_counter_ns() - t0))
+            break
+        for _ in range(0 if identity_only else repeats):
+            for at_ in range(first, last):
+                var arm = _arm_at(at_)
+                if why[arm].byte_length() > 0:
+                    continue
+                var t0 = perf_counter_ns()
+                _enqueue_arm(ctx, rb, arm, kind, m, n, k)
+                ctx.synchronize()
+                samples[arm].append(Int(perf_counter_ns() - t0))
 
     var macs = Float64(m) * Float64(n) * Float64(k)
     for arm in range(ARM_COUNT):
