@@ -1373,6 +1373,37 @@ def invalidate_arm(out, arm, reason, store_path=None, vendor=None, races=None):
     return n_board, n_store
 
 
+def forget_stored(store_path, specs, reason):
+    """--forget-stored <race prefix>:<arm>: the opponent store's latest record of
+    that arm in those races is superseded by a copy marked UNKNOWN(forgotten:
+    reason), which lookup never reuses, so the next run measures the arm. For
+    a cell the store holds as REFUSED because of a harness bug since fixed (a
+    stored refusal is otherwise reused as what it was). Idempotent. Returns
+    the number of records forgotten."""
+    if not store_path or not os.path.exists(store_path):
+        return 0
+    want = []
+    for spec in specs or ():
+        prefix, _, arm = spec.rpartition(":")
+        if not prefix or not arm:
+            raise SystemExit("--forget-stored %r: want <race id prefix>:<arm>" % spec)
+        want.append((prefix, arm))
+    n = 0
+    for r in STORE.load(store_path).values():
+        k = r.get("key") or {}
+        rid = "%s/%s/%s" % (k.get("family"), k.get("lane"), k.get("dataset"))
+        if not any(rid.startswith(pf) and k.get("arm") == arm for pf, arm in want):
+            continue
+        if not STORE.reusable(r):
+            continue
+        gone = json.loads(json.dumps(r))
+        gone["cell"]["status"] = "UNKNOWN(forgotten: %s; was %s)" % (reason, str(r["cell"].get("status"))[:200])
+        gone["forgotten_at"] = now_utc()
+        STORE.append(store_path, gone)
+        n += 1
+    return n
+
+
 def load_result(path):
     if not os.path.exists(path):
         return None
@@ -3156,6 +3187,11 @@ def build_parser():
                         "of this arm REFUSED(--invalidate-arm-reason), times withdrawn and ratios "
                         "recomputed, for an arm that did not run what its name says (repeatable)")
     p.add_argument("--invalidate-arm-reason", default=None)
+    p.add_argument("--forget-stored", action="append", default=[], metavar="PREFIX:ARM",
+                   help="before the run: the opponent store no longer reuses this arm's record in "
+                        "the races whose id starts with PREFIX (a refusal from a harness bug since "
+                        "fixed); needs --forget-reason (repeatable)")
+    p.add_argument("--forget-reason", default=None)
     p.add_argument("--invalidate-arm-races", default=None, metavar="PREFIXES",
                    help="with --invalidate-arm: only the races whose id starts with one of these "
                         "(comma list); a cell the library already refused there gets this reason "
@@ -3372,6 +3408,15 @@ def main(argv=None):
                                    args.invalidate_fixed_at, store)
         print("bench_board: --invalidate-memory %s: withdrew %d GPU memory figures on the board, "
               "corrected %d opponent-store records" % (args.invalidate_memory, nb, ns), flush=True)
+
+    if args.forget_stored:
+        if not (args.out and args.forget_reason):
+            raise SystemExit("--forget-stored needs --out and --forget-reason")
+        fout = os.path.abspath(os.path.expanduser(args.out))
+        fstore = os.path.abspath(os.path.expanduser(
+            args.opponent_store or os.path.join(os.path.dirname(fout), "opponent-store.jsonl")))
+        print("bench_board: --forget-stored: %d opponent-store records forgotten"
+              % forget_stored(fstore, args.forget_stored, args.forget_reason), flush=True)
 
     if args.invalidate_arm:
         if not (args.out and args.invalidate_arm_reason):
