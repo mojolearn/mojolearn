@@ -1,0 +1,19 @@
+######## phase amd-scratch-first on mi325x, started 2026-09-29T05:45:51Z
+box=mi325x started=2026-09-29T05:45:51Z runs=150 tree_head=a9c13231dc01611101ca186de19d491cf09a7dd1
+build scratch exit=0
+build noscratch exit=0
+scratch scratch_0.o:  .private_segment_fixed_size: 1028  .vgpr_count: 8  .vgpr_spill_count: 0 
+noscratch noscratch_0.o:  .private_segment_fixed_size: 1028  .vgpr_count: 122  .vgpr_spill_count: 0 
+faults: scratch 0 of 150, noscratch 0 of 150; other failures 0
+== kernel log fault lines (last 12)
+[130191.945226] amdgpu 0000:83:00.0: amdgpu: [gfxhub0] retry page fault (src_id:0 ring:0 vmid:3 pasid:32769)
+[130191.946130] amdgpu 0000:83:00.0: amdgpu:  for process mojo pid 4102208 thread mojo pid 4102208)
+[130191.946950] amdgpu 0000:83:00.0: amdgpu:   in page starting at address 0x000076349b340000 from IH client 0x1b (UTCL2)
+[131864.881163] amdgpu 0000:83:00.0: amdgpu: [gfxhub0] retry page fault (src_id:0 ring:0 vmid:3 pasid:32769)
+[131864.882091] amdgpu 0000:83:00.0: amdgpu:  for process stated_3 pid 4155960 thread stated_3 pid 4155960)
+[131864.882979] amdgpu 0000:83:00.0: amdgpu:   in page starting at address 0x0000793868540000 from IH client 0x1b (UTCL2)
+[132226.038826] amdgpu 0000:83:00.0: amdgpu: [gfxhub0] retry page fault (src_id:0 ring:0 vmid:3 pasid:32769)
+[132226.039749] amdgpu 0000:83:00.0: amdgpu:  for process gate pid 4169603 thread gate pid 4169603)
+[132226.040567] amdgpu 0000:83:00.0: amdgpu:   in page starting at address 0x00007e1556140000 from IH client 0x1b (UTCL2)
+finished=2026-09-29T05:47:36Z
+scratch_first: box=mi325x scratch_faults=0 noscratch_faults=0

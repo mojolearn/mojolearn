@@ -391,8 +391,10 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     time at every row, 1% more at the head's)."""
     if m <= INT8_TUNED_ROW_MAX_M:
         comptime if TARGET_COLUMN == COLUMN_AMD:
-            # THE AMD COLUMN: the MI325X has not timed the two-page plans
-            # yet; the one-page plan it measured is kept until it has.
+            # THE AMD COLUMN: on the MI325X the two-page plans took more
+            # time than the one-page ones at every 512-token row and the
+            # same at the decode rows (job 1790660726998), where staging
+            # is synchronous; the one-page plan is kept.
             return INT8_PIECES_PLAN_SMALL
         comptime if INT8_DECODE_AVAILABLE:
             if m <= INT8_DECODE_MAX_M:
@@ -404,7 +406,9 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
         # block took the least time where `n` is above 8192 (mlp_up.t512
         # 0.184 of fp32.v1 against 0.225, the head 0.195 against 0.261);
         # 16 x 32 in 64 x 128 where it is not (qkv 0.171, mlp_down 0.212).
-        # The two-page plans are not yet timed there.
+        # The two-page plans took more time there at every 512-token row
+        # (qkv 0.210 against 0.170, the head 0.420 against 0.196; job
+        # 1790660726998).
         if n > 8192:
             return INT8_PIECES_PLAN_FRAG2
         return INT8_PIECES_PLAN_WARPS16

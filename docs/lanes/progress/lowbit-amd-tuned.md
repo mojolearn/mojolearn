@@ -38,6 +38,8 @@ code path moves.
 | `gemm/checks/gemm_int8_mma_tuned.mojo` (Lane D) | import `COLUMN_AMD` from `checks.kernel_matrix` |
 | same | `int8_pieces_dispatch`: on AMD, m > 16 and n > 8192 takes `INT8_PIECES_PLAN_FRAG2` |
 | same | `int8_tuned_dispatch`: on AMD, m > 16 takes `INT8_TUNED_PLAN_FRAG2_K64`, and `INT8_TUNED_PLAN_K64` where n > 14336 |
+| same | `int8_pieces_dispatch` after Lane D's two-page change: on AMD, m <= 16 keeps `INT8_PIECES_PLAN_SMALL` and m > 16 keeps the one-page plans; the two-page plans took more time on the MI325X at every 512-token row (job 1790660726998) |
+| (patch only, not on this branch) `gemm/checks/gemm_int8_mma_tuned.mojo` | the two staged kernels state their launch bound: `~/mojolearn-evidence/lowbit-amd-tuned/lane_d_launch_bound.patch`, gated and timed on the MI325X at `lane/lowbit-amd-tuned-lb` (job 1790661410124); its effect on NVIDIA is not measured |
 | (withdrawn) `gemm/checks/gemm_int15_tuned_check.mojo`, `gemm/checks/gemm_int15_tuned.mojo` | This lane's fix of the refusal gate and its AMD branch in the fifteen-bit launcher were DROPPED at the orchestrator's word: Lane C fixed the gate at its root in its own branch (MI325X job 1790658677079) and rebuilt the launcher on the fused form; both files are now lane/lowbit-int15's as merged. |
 
 The AMD pieces launcher now has Lane D's two forms: the SUMS form
@@ -53,6 +55,8 @@ sums.
 | Box | Request | Commit | What | Verdict |
 |---|---|---|---|---|
 | MI325X | 1790657510941 | 0a29ffdf3 | amd-gate, full-price (run of record 2), amd-price | gate: clean GREEN, four arms seen failing, byte-path arm RED (fault); full-price GREEN; amd-price did not build |
+| MI325X | 1790661410124 | 93323a158 (lane/lowbit-amd-tuned-lb = cacf699b9 + the launch-bound patch for Lane D's two staged kernels) | Lane D's unit and pieces gates, the AMD gate, 30 stress runs with the code objects read, cross-build, amd-price | every gate GREEN, every arm as expected; Lane D's staged kernels spill NOTHING with the bound (196 to 388 bytes of private stack remain, not spills); 0 faults in 30; NVIDIA and CPU cross-builds pass; amd-price GREEN (1836 of 1836). Times: the plans that spilled 0.23 against 0.30 (four products 32x64 staged, qkv.t512), the rest within the runs' spread; no row's best plan changes |
+| MI325X | 1790660726998 | a9c13231d (lane/lowbit-amd-tuned-int15col = 448915dd2 + Lane C's patch) | first-scratch probe, AMD gate with the seam's two arms, cross-build of four importers, amd-price, int15 tuned gate and price through this lane's fused launcher | probe: 0 faults in 300 fresh processes; gate GREEN, all EIGHT arms as expected; cross-build: NVIDIA and CPU build all four, Apple builds the two checks and NOT the two harnesses ("Metal Compiler failed to compile metallib", on Linux); amd-price GREEN (1836 of 1836); int15 tuned gate GREEN, its five arms seen failing; int15 price GREEN (422 digests warm == timed, sabotage seen) |
 | MI325X | 1790660119759 | de62bbfbc | first-scratch probe (did not build: `out` as an argument name, again), AMD gate, 40 stress runs, amd-price with the launch bound | gate GREEN, every arm as expected, the fused forms equal to the host's seam on every plan; 0 faults in 40 runs; amd-price GREEN (cold == record at 1836 of 1836; sabotage seen at every arm) |
 | MI325X | 1790659453776 | 51307868e | AMD gate (fused forms added), 25 stress runs, amd-price, int15 tuned gate and price (Lane C's fused launcher) | gate GREEN every arm; 1 fault in 25 runs (first launch of the first kernel with scratch); amd-price GREEN (1836 of 1836); int15 tuned gate GREEN with its five arms seen failing; int15 price GREEN (422 digests warm == timed) |
 | MI325X | 1790659053624 | 72b659823 | lane/lowbit-int15's tuned gate (before its fix was merged here), the fault's reproduction (4 builds x 3 runs, byte path and stated loads) | tuned gate GREEN with this lane's refusal-gate fix (since withdrawn for Lane C's); the fault CAME BACK once in 24 runs (Failures 1) |
@@ -236,6 +240,25 @@ to planes alone takes 0.043 to 0.080 ms there (0.70 of fp32.v1 at qkv.t1), and
 the call is three launches (quantize, sums, epilogue) where fp32.v1 is one. The
 int8 stand-in's quantizer at the same row is under half of that.
 
+## THE FIFTEEN-BIT CALL ON AMD'S FUSED LAUNCHER (Lane C's patch), job 1790660726998
+
+`inference.int15i64.v1.tuned` over fp32.v1 in the same run (lane/lowbit-int15's
+harness: the real quantizer to planes, the four products and the seam in one
+launch). Before: job 1790659453776, Lane C's launcher on the tuned file's plans.
+
+| | qkv.t512 | mlp_up.t512 | mlp_down.t512 | lm_head.t512 | qkv.t1 | qkv.t8 | mlp_up.t1 | mlp_up.t8 | mlp_down.t1 | mlp_down.t8 | lm_head.t1 | lm_head.t8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| complete call, the tuned file's plan | 0.268 | 0.219 | 0.290 | 0.225 | 2.427 | 2.273 | 1.018 | 1.054 | 2.460 | 2.243 | 0.394 | 0.443 |
+| complete call, AMD's fused launcher | 0.251 | 0.192 | 0.257 | 0.197 | 1.326 | 1.318 | 0.597 | 0.724 | 0.982 | 1.039 | 0.271 | 0.338 |
+| the product alone (planes given), AMD's fused launcher | 0.152 | 0.154 | 0.174 | 0.161 | 0.740 | 0.569 | 0.347 | 0.320 | 0.681 | 0.577 | 0.232 | 0.289 |
+| the fifteen-bit quantizer to planes alone | 0.098 | 0.038 | 0.047 | 0.034 | 0.736 | 0.881 | 0.255 | 0.351 | 0.341 | 0.427 | 0.031 | 0.050 |
+
+fp32.v1 ms: 0.953, 2.397, 2.465, 2.688; 0.058, 0.074, 0.172, 0.179, 0.163,
+0.195, 1.407, 1.370. Over fp32.v1 still at qkv.t1, qkv.t8 and mlp_down.t8:
+the quantizer to planes alone is 0.74 to 0.88 of fp32.v1 at the qkv decode
+rows. The lever there is the quantizer in the product's launch (Lane D's
+NVIDIA decode kernel does it; no AMD form exists).
+
 ## Failures, each with its cause
 
 1. Job 1790657510941, `amd-unstated` (byte path forced): exit 139, "Memory
@@ -260,9 +283,27 @@ int8 stand-in's quantizer at the same row is under half of that.
 
 ## Owed
 
-1. Second run of record on the MI325X.
-2. The plan choice for a 64-wide wavefront, as an AMD column of the launcher.
-3. The AMD form of the many-warps-per-block lever.
-4. The complete operation with AMD's best plan per row, over fp32.v1, twelve rows.
-5. The 15-bit profile's tuned plan on the MI325X (merge `origin/lane/lowbit-int15`).
-6. The decode rows.
+Tasks 1 to 6 of the takeover are done (above). What is still owed:
+
+1. THE DECODE ROWS OF THE FIFTEEN-BIT CALL: over fp32.v1 at qkv.t1, qkv.t8
+   and mlp_down.t8 (1.33, 1.32, 1.04) with AMD's fused launcher. The
+   fifteen-bit quantizer to planes alone is 0.74 to 0.88 of fp32.v1 at the
+   qkv decode rows. The lever is the quantizer inside the product's launch
+   (an AMD form of Lane D's NVIDIA decode kernel, with Lane C's quantizer):
+   not written.
+2. Lane C to merge the fused-column patch
+   (`int15_tuned_amd_fused_column.patch`, verified at a9c13231d, job
+   1790660726998). The Apple build of `bench/gemm_int15_price_main.mojo` with
+   it is NOT SHOWN (the Linux cross-build is refused by the Metal compiler);
+   the M2 Pro must build it before the merge.
+3. Lane D to decide the launch-bound patch (`lane_d_launch_bound.patch`,
+   verified on AMD, job 1790661410124); its effect on the H100 is not
+   measured.
+4. THE FAULT'S MECHANISM is not established: three faults, the traced two at
+   the first launch of the spilling direct kernel; none since no kernel of
+   this lane spills (70 stress runs and every gate since); a probe with no
+   mojolearn code did not reproduce it in 300 processes.
+5. Rows between 17 and 511 tokens: no AMD plan is measured there.
+6. Every AMD number is one box, one run per job; the plan choice rests on
+   jobs 1790660119759 and 1790660726998 (two runs of the same arms, which
+   agree within 0.01 to 0.02 of fp32.v1 at the chosen plans).
