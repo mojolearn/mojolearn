@@ -1,0 +1,1049 @@
+{
+  "box": {
+    "env": {
+      "MKL_NUM_THREADS": null,
+      "MODULAR_NVPTX_COMPILER_PATH": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "gpu": {
+      "api": "metal",
+      "cores": "60",
+      "driver": "macOS 26.6",
+      "metal": "spdisplays_metal4",
+      "name": "Apple M3 Ultra",
+      "vendor": "apple"
+    },
+    "host": {
+      "cpu_count": 28,
+      "cpu_model": "Apple M3 Ultra",
+      "hostname": "ip-172-31-43-215.ec2.internal",
+      "machine": "arm64",
+      "memory_bytes": 274877906944
+    },
+    "mojolearn": {
+      "requested": "0.8.31",
+      "version": "0.8.31",
+      "wheel": {
+        "bytes": 68915638,
+        "file": "mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+        "sha256": "7f69892187dd96abb816d4b1835565b434a88f9f0fff403078811256d3c2879b"
+      }
+    },
+    "os": {
+      "name": "macOS 26.6",
+      "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+      "release": "25.6.0",
+      "system": "Darwin"
+    },
+    "packages": {
+      "adagio": "0.2.6",
+      "aiohappyeyeballs": "2.7.1",
+      "aiohttp": "3.14.3",
+      "aiosignal": "1.4.0",
+      "anyio": "4.15.1",
+      "arch": "8.0.0",
+      "attrs": "26.1.0",
+      "catboost": "1.2.10",
+      "certifi": "2026.7.22",
+      "charset-normalizer": "3.5.2",
+      "click": "8.5.0",
+      "cloudpickle": "3.1.2",
+      "cmdstanpy": "1.3.0",
+      "contourpy": "1.4.0",
+      "coreforecast": "0.0.18",
+      "cycler": "0.12.1",
+      "einops": "0.8.1",
+      "faiss-cpu": "1.15.1",
+      "filelock": "4.0.7",
+      "fonttools": "4.66.1",
+      "formulaic": "1.2.2",
+      "frozenlist": "1.8.0",
+      "fsspec": "2026.9.0",
+      "fugue": "0.9.7",
+      "gpytorch": "1.15.2",
+      "graphviz": "0.21",
+      "h11": "0.16.0",
+      "hf-xet": "1.6.0",
+      "holidays": "0.105",
+      "httpcore": "1.0.9",
+      "httpx": "0.28.1",
+      "huggingface_hub": "1.33.0",
+      "idna": "3.20",
+      "implicit": "0.7.3",
+      "interface_meta": "2.0.1",
+      "jinja2": "3.1.6",
+      "joblib": "1.6.0",
+      "kiwisolver": "1.5.1",
+      "lightgbm": "4.7.0",
+      "linear_operator": "0.6.1",
+      "llvmlite": "0.49.0",
+      "markupsafe": "3.0.3",
+      "matplotlib": "3.11.2",
+      "mojolearn": "0.8.31",
+      "mpmath": "1.3.0",
+      "multidict": "6.9.1",
+      "narwhals": "2.26.0",
+      "networkx": "3.6.1",
+      "numba": "0.67.0",
+      "numpy": "2.5.3",
+      "packaging": "26.3",
+      "pandas": "2.3.3",
+      "patsy": "1.0.3",
+      "pillow": "12.3.0",
+      "pip": "26.2.1",
+      "plotly": "7.1.0",
+      "propcache": "0.5.4",
+      "prophet": "1.4.0",
+      "psutil": "7.2.2",
+      "pyarrow": "25.0.1",
+      "pynndescent": "0.6.0",
+      "pyparsing": "3.3.3",
+      "python-dateutil": "2.9.0.post0",
+      "pytz": "2026.4",
+      "pyyaml": "6.0.3",
+      "requests": "2.34.2",
+      "scikit-learn": "1.7.2",
+      "scipy": "1.18.1",
+      "setuptools": "84.0.0",
+      "shap": "0.51.0",
+      "six": "1.17.0",
+      "slicer": "0.0.8",
+      "stanio": "0.5.1",
+      "statsforecast": "2.1.1",
+      "statsmodels": "0.15.0",
+      "sympy": "1.14.0",
+      "threadpoolctl": "3.7.0",
+      "tokenizers": "0.23.2",
+      "torch": "2.13.0",
+      "torch-geometric": "2.8.0.post1",
+      "tqdm": "4.70.1",
+      "triad": "1.0.2",
+      "typing_extensions": "4.16.0",
+      "tzdata": "2026.4",
+      "umap-learn": "0.5.12",
+      "urllib3": "2.8.0",
+      "utilsforecast": "0.2.16",
+      "wrapt": "2.5.0",
+      "xgboost": "3.2.0",
+      "xxhash": "4.0.1",
+      "yarl": "1.25.1"
+    },
+    "python": {
+      "executable": "/Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python",
+      "orchestrator": "3.13.15",
+      "version": "3.13.15 CPython"
+    },
+    "repo": {
+      "commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+      "script": "tools/bench_board.py",
+      "script_sha256": "e9142f8aaddf01a550867e05ce2ac616e3dd1f901055c8ec383289bb2d2e7f26",
+      "sync": null
+    }
+  },
+  "box_history": [
+    {
+      "packages": {
+        "adagio": "0.2.6",
+        "aiohappyeyeballs": "2.7.1",
+        "aiohttp": "3.14.3",
+        "aiosignal": "1.4.0",
+        "anyio": "4.15.1",
+        "arch": "8.0.0",
+        "attrs": "26.1.0",
+        "catboost": "1.2.10",
+        "certifi": "2026.7.22",
+        "charset-normalizer": "3.5.2",
+        "click": "8.5.0",
+        "cloudpickle": "3.1.2",
+        "cmdstanpy": "1.3.0",
+        "contourpy": "1.4.0",
+        "coreforecast": "0.0.18",
+        "cycler": "0.12.1",
+        "einops": "0.8.1",
+        "faiss-cpu": "1.15.1",
+        "filelock": "4.0.7",
+        "fonttools": "4.66.1",
+        "formulaic": "1.2.2",
+        "frozenlist": "1.8.0",
+        "fsspec": "2026.9.0",
+        "fugue": "0.9.7",
+        "gpytorch": "1.15.2",
+        "graphviz": "0.21",
+        "h11": "0.16.0",
+        "hf-xet": "1.6.0",
+        "holidays": "0.105",
+        "httpcore": "1.0.9",
+        "httpx": "0.28.1",
+        "huggingface_hub": "1.33.0",
+        "idna": "3.20",
+        "implicit": "0.7.3",
+        "interface_meta": "2.0.1",
+        "jinja2": "3.1.6",
+        "joblib": "1.6.0",
+        "kiwisolver": "1.5.1",
+        "lightgbm": "4.7.0",
+        "linear_operator": "0.6.1",
+        "llvmlite": "0.49.0",
+        "markupsafe": "3.0.3",
+        "matplotlib": "3.11.2",
+        "mojolearn": "0.8.31",
+        "mpmath": "1.3.0",
+        "multidict": "6.9.1",
+        "narwhals": "2.26.0",
+        "networkx": "3.6.1",
+        "numba": "0.67.0",
+        "numpy": "2.5.3",
+        "packaging": "26.3",
+        "pandas": "2.3.3",
+        "patsy": "1.0.3",
+        "pillow": "12.3.0",
+        "pip": "26.2.1",
+        "plotly": "7.1.0",
+        "propcache": "0.5.4",
+        "prophet": "1.4.0",
+        "psutil": "7.2.2",
+        "pyarrow": "25.0.1",
+        "pynndescent": "0.6.0",
+        "pyparsing": "3.3.3",
+        "python-dateutil": "2.9.0.post0",
+        "pytz": "2026.4",
+        "pyyaml": "6.0.3",
+        "requests": "2.34.2",
+        "scikit-learn": "1.7.2",
+        "scipy": "1.18.1",
+        "setuptools": "84.0.0",
+        "shap": "0.51.0",
+        "six": "1.17.0",
+        "slicer": "0.0.8",
+        "stanio": "0.5.1",
+        "statsforecast": "2.1.1",
+        "statsmodels": "0.15.0",
+        "sympy": "1.14.0",
+        "threadpoolctl": "3.7.0",
+        "tokenizers": "0.23.2",
+        "torch": "2.13.0",
+        "torch-geometric": "2.8.0.post1",
+        "tqdm": "4.70.1",
+        "triad": "1.0.2",
+        "typing_extensions": "4.16.0",
+        "tzdata": "2026.4",
+        "umap-learn": "0.5.12",
+        "urllib3": "2.8.0",
+        "utilsforecast": "0.2.16",
+        "wrapt": "2.5.0",
+        "xgboost": "3.2.0",
+        "xxhash": "4.0.1",
+        "yarl": "1.25.1"
+      },
+      "resumed": "2026-09-30T17:59:54Z"
+    }
+  ],
+  "config": {
+    "cpu_arm": false,
+    "data": {
+      "istella": {
+        "bytes": 2248281826,
+        "path": "/Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz",
+        "pinned_bytes": 2248281826,
+        "pinned_sha256": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+        "present": true,
+        "r2_key": "gbm-bench/istella/istella_speed.npz",
+        "size_ok": true
+      }
+    },
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "data_sha256": {},
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "families": [
+      "trees",
+      "classical",
+      "classical2",
+      "neural",
+      "algos"
+    ],
+    "infer": true,
+    "lanes": null,
+    "modes": [
+      "fast",
+      "identical"
+    ],
+    "neural_shape": "full",
+    "opponent_store": "/Users/ec2-user/board-resume-main-3d0da1acf/opponent-store.jsonl",
+    "retime_opponents": false,
+    "rounds": 1,
+    "rows": null,
+    "seed": 7,
+    "shard": null,
+    "smoke": false,
+    "smoke_check": false,
+    "smoke_gate": "overridden (--no-smoke-gate)",
+    "vendor": "apple"
+  },
+  "created": "2026-09-30T17:59:21Z",
+  "plan": [
+    "algos/label-propagation/istella/rows=full"
+  ],
+  "races": {
+    "algos/label-propagation/taxi/rows=full": {
+      "arms": [
+        "ours",
+        "ours-fast",
+        "sklearn-cpu"
+      ],
+      "cells": [
+        {
+          "arm": "ours",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "Apple M3 Ultra",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "installed_wheel": "wheel",
+          "lane": "label-propagation",
+          "library": "mojolearn",
+          "library_version": "0.8.31",
+          "max_ms": 8294.691625000269,
+          "median_ms": 8294.691625000269,
+          "memory": {
+            "children_mb": 1.7,
+            "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+            "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 534.0,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 530.5
+          },
+          "min_ms": 8294.691625000269,
+          "mode": "identical",
+          "mode_witness": "identical",
+          "neural_shape": null,
+          "params": {
+            "library": "mojolearn",
+            "params": {
+              "gamma": 20,
+              "kernel": "knn",
+              "max_iter": 1000,
+              "n_neighbors": 7,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 534.0,
+          "quality": {
+            "accuracy": 0.7016
+          },
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 200000x11; Xq 20000x11; y 200000; y_semi 200000; yq 20000",
+          "status": "ok",
+          "times_ms": [
+            8294.691625000269
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 8321.172625001054
+        },
+        {
+          "arm": "ours-fast",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "device_name": "Apple M3 Ultra",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "installed_wheel": "wheel",
+          "lane": "label-propagation",
+          "library": "mojolearn",
+          "library_version": "0.8.31",
+          "max_ms": 5156.603458002792,
+          "median_ms": 5156.603458002792,
+          "memory": {
+            "children_mb": 1.7,
+            "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+            "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 501.3,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 529.9
+          },
+          "min_ms": 5156.603458002792,
+          "mode": "fast",
+          "mode_witness": "fast",
+          "neural_shape": null,
+          "params": {
+            "library": "mojolearn",
+            "params": {
+              "gamma": 20,
+              "kernel": "knn",
+              "max_iter": 1000,
+              "n_neighbors": 7,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 501.3,
+          "quality": {
+            "accuracy": 0.7016
+          },
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 200000x11; Xq 20000x11; y 200000; y_semi 200000; yq 20000",
+          "status": "ok",
+          "times_ms": [
+            5156.603458002792
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 5314.1055410014815
+        },
+        {
+          "arm": "sklearn-cpu",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": []
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "device_name": "arm",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "lane": "label-propagation",
+          "library": "scikit-learn",
+          "library_version": "1.7.2",
+          "max_ms": 10366.015666997555,
+          "median_ms": 10366.015666997555,
+          "memory": {
+            "children_mb": 16.0,
+            "gpu_method": "cpu arm: no device memory",
+            "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)",
+            "peak_gpu_mb": null,
+            "peak_host_mb": 328.6,
+            "rounds_sampled": 1,
+            "warmup_gpu_mb": null,
+            "warmup_host_mb": 296.1
+          },
+          "min_ms": 10366.015666997555,
+          "mode": "opponent",
+          "neural_shape": null,
+          "params": {
+            "library": "sklearn",
+            "params": {
+              "gamma": 20,
+              "kernel": "knn",
+              "max_iter": 1000,
+              "n_neighbors": 7,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "peak_gpu_mb": null,
+          "peak_host_mb": 328.6,
+          "quality": {
+            "accuracy": 0.7016
+          },
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": 0.49745279417432775,
+          "ratio_ours_identical_over": 0.8001812742197764,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "shape": "X 200000x11; Xq 20000x11; y 200000; y_semi 200000; yq 20000",
+          "source": "stored (measured 2026-09-30T16:25:59Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+          "status": "ok",
+          "stored": {
+            "box": "ip-172-31-43-215.ec2.internal",
+            "commit": "a19d159d7d3a7322d0159e6c3482de29c4464109",
+            "device": "cpu (Apple M3 Ultra)",
+            "key_id": "edce29b7064c5d22462b0972bb7a1121c4bde0e9ecb9af9261b8f38dfc0bd4da",
+            "measured_at": "2026-09-30T16:25:59Z"
+          },
+          "times_ms": [
+            10366.015666997555
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 10207.96729200083
+        }
+      ],
+      "command": [
+        "/Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python",
+        "-u",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "race",
+        "--lane",
+        "label-propagation",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/board-resume-main-3d0da1acf/cache/algos-data/rows-full",
+        "--arms",
+        "ours,ours-fast",
+        "--rounds",
+        "1",
+        "--out",
+        "/Users/ec2-user/board-resume-main-3d0da1acf/board/raw/algos/rows-full",
+        "--work",
+        "/Users/ec2-user/board-resume-main-3d0da1acf/board/work",
+        "--ours-python",
+        "/Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python",
+        "--theirs-python",
+        "/Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python",
+        "--ready-seconds",
+        "300",
+        "--warmup-seconds",
+        "300",
+        "--round-seconds",
+        "300"
+      ],
+      "dataset": "taxi",
+      "env": {},
+      "family": "algos",
+      "finished": "2026-09-30T17:59:52Z",
+      "host": {
+        "hostname": "ip-172-31-43-215.ec2.internal",
+        "pod_id": null
+      },
+      "id": "algos/label-propagation/taxi/rows=full",
+      "infer_cells": [
+        {
+          "arm": "ours",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "lane": "label-propagation",
+          "library": "mojolearn",
+          "max_ms": 358.74929100100417,
+          "median_ms": 358.74929100100417,
+          "memory": {},
+          "min_ms": 358.74929100100417,
+          "mode": "identical",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            358.74929100100417
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 358.1416659944807
+        },
+        {
+          "arm": "ours-fast",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi",
+          "device": "gpu",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "lane": "label-propagation",
+          "library": "mojolearn",
+          "max_ms": 333.06645799893886,
+          "median_ms": 333.06645799893886,
+          "memory": {},
+          "min_ms": 333.06645799893886,
+          "mode": "fast",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "status": "ok",
+          "times_ms": [
+            333.06645799893886
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 332.53137500287266
+        },
+        {
+          "arm": "sklearn-cpu",
+          "batch": "Xq",
+          "batch_rows": null,
+          "call": "predict(Xq)(Xq)",
+          "comparability": {
+            "span": {
+              "input_home": "host",
+              "inside_clock": "fit(X, y)",
+              "pre_clock_fit": false,
+              "upload_ms_untimed": null
+            },
+            "span_asymmetry": [],
+            "upload_ms_untimed": null
+          },
+          "dataset": "taxi",
+          "device": "cpu",
+          "family": "algos",
+          "hash": "edacd5a14bb91f43",
+          "hash_stable": null,
+          "lane": "label-propagation",
+          "library": "scikit-learn",
+          "max_ms": 1004.564124999888,
+          "median_ms": 1004.564124999888,
+          "memory": {},
+          "min_ms": 1004.564124999888,
+          "mode": "opponent",
+          "neural_shape": null,
+          "peak_gpu_mb": null,
+          "peak_host_mb": null,
+          "phase": "infer",
+          "quality": {},
+          "ratio_ours_cpu_over": null,
+          "ratio_ours_fast_over": null,
+          "ratio_ours_identical_over": null,
+          "rounds": 1,
+          "rows": null,
+          "rows_tag": "full",
+          "settings": {
+            "config": "the board's own settings (no NVIDIA harness entry)",
+            "driver": "tools/bench_board_algos.py",
+            "interleaved": true,
+            "lane_config": {
+              "block": "cls",
+              "datasets": [
+                "taxi",
+                "istella"
+              ],
+              "expansion_lane": "neighbors",
+              "kind": "est",
+              "mismatches": [],
+              "notes": [
+                "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+              ],
+              "ours_class": "mojolearn.LabelPropagation",
+              "params": {
+                "gamma": 20,
+                "kernel": "knn",
+                "max_iter": 1000,
+                "n_neighbors": 7,
+                "tol": 0.001
+              },
+              "quality": "accuracy on the held-out rows",
+              "sklearn": "sklearn.semi_supervised:LabelPropagation",
+              "stride_subsets": {
+                "X": 200000,
+                "Xq": 20000
+              },
+              "task": "semi",
+              "timed_fit": "fit(X, y)",
+              "timed_infer": "predict(Xq)"
+            },
+            "rounds": 1,
+            "rows_cap": null,
+            "seed": 7,
+            "warmup_rounds": 1
+          },
+          "source": "stored (measured 2026-09-30T16:25:59Z on ip-172-31-43-215.ec2.internal, cpu (Apple M3 Ultra))",
+          "status": "ok",
+          "times_ms": [
+            1004.564124999888
+          ],
+          "verdict": "LIKE-FOR-LIKE-SPAN",
+          "warmup_ms": 954.6618749991467
+        }
+      ],
+      "lane": "label-propagation",
+      "lane_config": {
+        "block": "cls",
+        "datasets": [
+          "taxi",
+          "istella"
+        ],
+        "expansion_lane": "neighbors",
+        "kind": "est",
+        "mismatches": [],
+        "notes": [
+          "90% of the fit labels hidden (-1) by a fixed stride: every 10th row keeps its label"
+        ],
+        "ours_class": "mojolearn.LabelPropagation",
+        "params": {
+          "gamma": 20,
+          "kernel": "knn",
+          "max_iter": 1000,
+          "n_neighbors": 7,
+          "tol": 0.001
+        },
+        "quality": "accuracy on the held-out rows",
+        "sklearn": "sklearn.semi_supervised:LabelPropagation",
+        "stride_subsets": {
+          "X": 200000,
+          "Xq": 20000
+        },
+        "task": "semi",
+        "timed_fit": "fit(X, y)",
+        "timed_infer": "predict(Xq)"
+      },
+      "log": "logs/algos.label-propagation.taxi.rows-full.log",
+      "our_arms": {
+        "ours": "identical",
+        "ours-fast": "fast"
+      },
+      "params": {
+        "arms": {
+          "ours": {
+            "library": "mojolearn",
+            "params": {
+              "gamma": 20,
+              "kernel": "knn",
+              "max_iter": 1000,
+              "n_neighbors": 7,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          },
+          "ours-fast": {
+            "library": "mojolearn",
+            "params": {
+              "gamma": 20,
+              "kernel": "knn",
+              "max_iter": 1000,
+              "n_neighbors": 7,
+              "seed": "none (deterministic)",
+              "tol": 0.001
+            },
+            "source": "get_params"
+          }
+        },
+        "compared": [
+          {
+            "arm": "ours-fast",
+            "ours": 20,
+            "param": "gamma",
+            "same": true,
+            "theirs": 20
+          },
+          {
+            "arm": "ours-fast",
+            "ours": "knn",
+            "param": "kernel",
+            "same": true,
+            "theirs": "knn"
+          },
+          {
+            "arm": "ours-fast",
+            "ours": 1000,
+            "param": "max_iter",
+            "same": true,
+            "theirs": 1000
+          },
+          {
+            "arm": "ours-fast",
+            "ours": 7,
+            "param": "n_neighbors",
+            "same": true,
+            "theirs": 7
+          },
+          {
+            "arm": "ours-fast",
+            "ours": 0.001,
+            "param": "tol",
+            "same": true,
+            "theirs": 0.001
+          }
+        ],
+        "exceptions": [],
+        "family": "algos",
+        "lane": "algos/label-propagation",
+        "problems": [],
+        "reference": "ours",
+        "seed": 7,
+        "seed_none_deterministic": [
+          "ours",
+          "ours-fast"
+        ],
+        "verdict": "MATCHED"
+      },
+      "params_check": "MATCHED",
+      "race_json": "raw/algos/rows-full/label-propagation-taxi.json",
+      "rc": 0,
+      "rows": null,
+      "started": "2026-09-30T17:59:23Z",
+      "status": "done",
+      "stored_arms": [
+        "sklearn-cpu"
+      ],
+      "stored_now": 0,
+      "wall_s": 30.8
+    }
+  },
+  "schema": "mojolearn-bench-board/1",
+  "updated": "2026-09-30T17:59:54Z"
+}
