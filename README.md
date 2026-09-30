@@ -12,15 +12,24 @@ produces bitwise-identical results across verified Apple, NVIDIA and AMD GPUs
 and x86-64 and Arm CPUs. Results agree bit for bit, not merely within a
 numerical tolerance.
 
+- **Training and inference for transformers and hybrids.** Decoder language
+  models, Mamba-1/2/3 state-space models and Samba attention/state-space
+  hybrids train and serve under the same contract, alongside CNNs, recurrent
+  and graph networks.
 - **100+ machine-learning algorithms and model components across 13 families**,
-  from tree ensembles and classical models to CNNs, recurrent networks and
-  state-space models.
+  from neural networks to tree ensembles and classical models.
 - **Serve models trained elsewhere.** Neural models trained in other
   frameworks can be served with identical outputs across vendors.
 - **Move training between vendors.** A training run can be handed off from
   one GPU vendor to another mid-run, or shared by Apple, NVIDIA and AMD GPUs
   working on one model at once, and the training state after every step is
   bitwise identical to a single GPU's.
+- **GPT-3 Small, trained twice, the same bits.** Two 5,000-step runs of a
+  162-million-parameter GPT-3 Small-shaped decoder, each on 2.62 billion
+  tokens, took different hardware routes across Apple, NVIDIA and AMD GPUs,
+  with checkpoints handed between vendors and one segment trained jointly on
+  an NVIDIA H100 and an AMD MI325X. The runs agree at every step and write the
+  same final checkpoint.
 - **Full FP32.** Neural training and inference run in full FP32
   floating-point arithmetic, without reducing the computation to integers.
 - **Every algorithm runs on the Mac's own GPU**, where XGBoost, LightGBM,
@@ -67,6 +76,9 @@ The table shows representative methods, with related estimator variants grouped 
 
 | family | algorithms and components |
 |---|---|
+| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
+| language models and tokenization | decoder language models, byte-level BPE tokenization |
+| convolutional and graph networks | 1-D and 2-D convolutions, pooling, batch normalization, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
 | boosting | symmetric-tree, depth-wise, loss-guided and ordered boosting; AdaBoost, DART |
 | trees and ensembles | decision trees, random forests, Extra Trees, isolation forests, bagging, voting, stacking |
 | clustering | k-means, mini-batch and bisecting k-means, DBSCAN, HDBSCAN, agglomerative, spectral, mean shift, OPTICS, affinity propagation, Gaussian and Bayesian Gaussian mixtures |
@@ -76,9 +88,6 @@ The table shows representative methods, with related estimator variants grouped 
 | decomposition and manifold | PCA, incremental and kernel PCA, truncated SVD, NMF, ICA, factor analysis, PLS, CCA, dictionary learning, sparse PCA, LDA, UMAP, t-SNE, Isomap, MDS, LLE |
 | time series | ARIMA, AutoARIMA, Holt-Winters, ETS, STL, VAR, Theta, Croston, GARCH, Prophet-style forecasting, KPSS |
 | preprocessing, probabilistic models and resampling | scalers, encoders, imputers, discretization, feature selection, naive Bayes, discriminant analysis, bootstrap, permutation tests, Monte Carlo integration |
-| neural blocks and optimizers | transformers, Mamba-1/2/3, Samba, MLPs, RNNs, LSTMs, GRUs, mixture of experts, Adam, AdamW, SGD, RMSprop, Adagrad, Lion, Adafactor, LAMB |
-| convolutional and graph networks | 1-D and 2-D convolutions, pooling, batch normalization, residual blocks, CNN classifiers, GCN and GraphSAGE convolutions |
-| language models and tokenization | decoder language models, byte-level BPE tokenization |
 | linear algebra | matrix products, Cholesky, QR, LU, eigendecomposition, SVD, least squares |
 
 Also provided are evaluation metrics, cross-validation, CPU training and
