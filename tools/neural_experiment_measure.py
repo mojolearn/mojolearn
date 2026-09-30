@@ -4,6 +4,7 @@ import argparse, datetime, hashlib, json, os, pathlib, shutil, subprocess, sys, 
 P=pathlib.Path
 ap=argparse.ArgumentParser();ap.add_argument('--vendor',choices=['nvidia','amd'],required=True);a=ap.parse_args()
 root=P.cwd();out=P('/root/neural-experiment-results');out.mkdir(exist_ok=True)
+patch=subprocess.check_output(['git','diff','--binary','HEAD'],cwd=root);(out/'candidate-source.patch').write_bytes(patch)
 parent='f89f43b85';candidate='97b6e3b76';backend='cuda' if a.vendor=='nvidia' else 'hip';arch='sm_89' if a.vendor=='nvidia' else 'gfx942'
 env=dict(os.environ,PATH='/root/.pixi/bin:/opt/rocm/bin:'+os.environ['PATH'],MOJOLEARN_TARGET_COLUMN=a.vendor,MOJOLEARN_GPU_ARCHS=arch,MOJOLEARN_NUMERIC_MODE='identical',MOJOLEARN_COMPILE_JOBS='2',MOJOLEARN_BENCH_INSTALLED='1')
 env.pop('PYTHONPATH',None)
@@ -28,16 +29,18 @@ try:
  archive=out/'parent.tar'
  with archive.open('wb') as f:subprocess.run(['git','archive',parent],cwd=root,stdout=f,check=True)
  with tarfile.open(archive) as t:t.extractall(par,filter='data')
- archive.unlink();(par/'.pixi').symlink_to(root/'.pixi',target_is_directory=True)
+ archive.unlink()
+ if not (par/'.pixi').exists():(par/'.pixi').symlink_to(root/'.pixi',target_is_directory=True)
  sources={'candidate':root,'parent':par}
  # Compile the untested candidate first; fail visibly if it does not build.
  for label,src in sources.items():
   for module in ['transformer','byte_lm']:
    phase=label+'-build-'+module
+   (src/'python/mojolearn/identical'/('_mojolearn_'+module+'.so')).unlink(missing_ok=True)
    run(['bash','bindings/build_'+module+'.sh'],phase+'.log',cwd=src,timeout=3600)
  site=P(subprocess.check_output([str(py),'-c','import sysconfig; print(sysconfig.get_paths()["purelib"])'],text=True).strip())/'mojolearn'
  lanes=['transformer-forward','lm-forward','samba-forward','lm-train-step','samba-train-step']
- manifest={'parent':parent,'candidate':candidate,'base_distribution':'mojolearn 0.8.31; Python sources and two IDENTICAL bindings replaced from the named revision','vendor':a.vendor,'backend':backend,'arch':arch,'lanes':lanes,'rounds':5,'artifacts':{}}
+ manifest={'parent':parent,'candidate':candidate,'source_patch_sha256':hashlib.sha256(patch).hexdigest(),'base_distribution':'mojolearn 0.8.31; Python sources and two IDENTICAL bindings replaced from the named revision','vendor':a.vendor,'backend':backend,'arch':arch,'lanes':lanes,'rounds':5,'artifacts':{}}
  for label in ['parent','candidate']:
   src=sources[label]
   for p in (src/'python/mojolearn').rglob('*.py'):
