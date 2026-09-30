@@ -1,0 +1,292 @@
+[
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {},
+  "first": {
+   "lm-forward": 637.563,
+   "lm-train-step": 583.202,
+   "mamba3-forward": 510.227,
+   "samba-forward": 30.794,
+   "samba-train-step": 1010.153,
+   "transformer-forward": 1052.933
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 52.533,
+   "lm-train-step": 45.241,
+   "mamba3-forward": 2.676,
+   "samba-forward": 9.92,
+   "samba-train-step": 147.996,
+   "transformer-forward": 2.905
+  },
+  "name": "baseline",
+  "returncode": 0,
+  "stderr_tail": "7303 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72b300000000, nodemask=1)\n7303 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ad740000000, nodemask=2)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0",
+   "MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": "0"
+  },
+  "first": {
+   "lm-forward": 592.972,
+   "lm-train-step": 584.623,
+   "mamba3-forward": 8.885,
+   "samba-forward": 10.391,
+   "samba-train-step": 157.541,
+   "transformer-forward": 760.097
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 54.482,
+   "lm-train-step": 44.967,
+   "mamba3-forward": 3.167,
+   "samba-forward": 9.843,
+   "samba-train-step": 141.591,
+   "transformer-forward": 2.952
+  },
+  "name": "no_retain_weights",
+  "returncode": 0,
+  "stderr_tail": "7435 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x720840000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"
+  },
+  "first": {
+   "lm-forward": 624.775,
+   "lm-train-step": 573.812,
+   "mamba3-forward": 11.824,
+   "samba-forward": 14.065,
+   "samba-train-step": 165.479,
+   "transformer-forward": 946.869
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 54.973,
+   "lm-train-step": 45.141,
+   "mamba3-forward": 2.676,
+   "samba-forward": 8.808,
+   "samba-train-step": 144.024,
+   "transformer-forward": 2.971
+  },
+  "name": "legacy_fresh_entry",
+  "returncode": 0,
+  "stderr_tail": "7567 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x126840000000, nodemask=1)\n7567 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a3640000000, nodemask=2)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"
+  },
+  "first": {
+   "lm-forward": 675.159,
+   "lm-train-step": 604.716,
+   "mamba3-forward": 9.291,
+   "samba-forward": 20.409,
+   "samba-train-step": 166.283,
+   "transformer-forward": 897.627
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.94,
+   "lm-train-step": 45.096,
+   "mamba3-forward": 2.651,
+   "samba-forward": 8.077,
+   "samba-train-step": 142.954,
+   "transformer-forward": 2.317
+  },
+  "name": "no_stage_reset",
+  "returncode": 0,
+  "stderr_tail": "7703 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b5b40000000, nodemask=2)\n7703 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x306380000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_ATTN_SPECULATIVE": "1"
+  },
+  "first": {
+   "lm-forward": 701.067,
+   "lm-train-step": 724.657,
+   "mamba3-forward": 7.893,
+   "samba-forward": 18.677,
+   "samba-train-step": 160.436,
+   "transformer-forward": 783.019
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 52.945,
+   "lm-train-step": 44.738,
+   "mamba3-forward": 2.672,
+   "samba-forward": 7.935,
+   "samba-train-step": 144.486,
+   "transformer-forward": 2.541
+  },
+  "name": "speculative_attn",
+  "returncode": 0,
+  "stderr_tail": "7989 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x312480000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_SWIGLU_FUSED": "1"
+  },
+  "first": {
+   "lm-forward": 649.306,
+   "lm-train-step": 664.838,
+   "mamba3-forward": 12.196,
+   "samba-forward": 20.903,
+   "samba-train-step": 160.013,
+   "transformer-forward": 1030.449
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 52.565,
+   "lm-train-step": 45.335,
+   "mamba3-forward": 2.689,
+   "samba-forward": 8.3,
+   "samba-train-step": 141.533,
+   "transformer-forward": 2.622
+  },
+  "name": "swiglu_fused",
+  "returncode": 0,
+  "stderr_tail": "8121 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x729900000000, nodemask=1)\n8121 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7908c0000000, nodemask=2)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"
+  },
+  "first": {
+   "lm-forward": 605.552,
+   "lm-train-step": 681.937,
+   "mamba3-forward": 12.947,
+   "samba-forward": 18.813,
+   "samba-train-step": 157.196,
+   "transformer-forward": 891.849
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 49.791,
+   "lm-train-step": 45.114,
+   "mamba3-forward": 2.608,
+   "samba-forward": 7.994,
+   "samba-train-step": 140.788,
+   "transformer-forward": 2.539
+  },
+  "name": "no_layer_sync",
+  "returncode": 0,
+  "stderr_tail": "8253 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x599bc0000000, nodemask=2)\n8253 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x725e40000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_ATTN_SPECULATIVE": "1",
+   "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0",
+   "MOJOLEARN_SWIGLU_FUSED": "1",
+   "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"
+  },
+  "first": {
+   "lm-forward": 624.955,
+   "lm-train-step": 619.094,
+   "mamba3-forward": 9.858,
+   "samba-forward": 19.784,
+   "samba-train-step": 157.471,
+   "transformer-forward": 867.445
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 58.348,
+   "lm-train-step": 44.697,
+   "mamba3-forward": 2.755,
+   "samba-forward": 8.205,
+   "samba-train-step": 145.431,
+   "transformer-forward": 2.336
+  },
+  "name": "all_on",
+  "returncode": 0,
+  "stderr_tail": "8385 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38c400000000, nodemask=2)\n8385 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x517a00000000, nodemask=1)\n"
+ }
+]
