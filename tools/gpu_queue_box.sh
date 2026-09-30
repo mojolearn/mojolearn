@@ -236,6 +236,7 @@ backstop)
     lease_conf; t0=$(date +%s)
     echo "$(now) backstop up: deletes pod $POD_ID ${GRACE_MIN} min past the idle deadline if the dispatcher has not"
     while :; do
+        lease_conf
         dl=$(cat $Q/lease.deadline 2>/dev/null || echo $(( t0 + IDLE_SEC )))
         if [ "$(date +%s)" -ge $(( dl + GRACE_SEC )) ]; then
             echo "$(now) backstop: $GRACE_MIN min past the deadline $(date -u -d @"$dl" +%FT%TZ) and the pod is still here"
@@ -378,6 +379,7 @@ daemon)
             fi
         fi
         if leased; then
+            lease_conf   # re-read each pass: an IDLE_MIN edited in lease.conf applies to a live pod
             t=$(date +%s)
             held=0; for g in $(seq 0 $((SLOTS - 1))); do slot_free $g || held=1; done
             lock_free $Q/activity.lock || held=1
