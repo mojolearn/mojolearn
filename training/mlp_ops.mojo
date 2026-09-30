@@ -468,7 +468,8 @@ def mlp_train_step_host(
     var dhidden = ctx.enqueue_create_buffer[DType.float32](rows * MLP_HID)
     _gemm(ctx, dw2_v, dlogits, act, ws, MLP_OUT, MLP_HID, rows, OP_TN)
     _launch_mlp(
-        ctx, dlogits.unsafe_ptr(), dlogits.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
+        # operation 3 never reads `other`; `incoming` is a distinct placeholder
+        ctx, dlogits.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B2,
         rows, MLP_OUT, 3,
     )
     _gemm(ctx, incoming, dlogits, w2_v, ws, rows, MLP_HID, MLP_OUT, OP_NN)
@@ -478,7 +479,8 @@ def mlp_train_step_host(
     )
     _gemm(ctx, dw1_v, dhidden, x_d, ws, MLP_HID, MLP_IN, rows, OP_TN)
     _launch_mlp(
-        ctx, dhidden.unsafe_ptr(), dhidden.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
+        # operation 3 never reads `other`; `incoming` is a distinct placeholder
+        ctx, dhidden.unsafe_ptr(), incoming.unsafe_ptr(), g_d.unsafe_ptr() + MLP_OFF_B1,
         rows, MLP_HID, 3,
     )
     var dx_n = 1
