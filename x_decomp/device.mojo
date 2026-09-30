@@ -35,6 +35,8 @@ from x_decomp.cells import (
     bidx,
     cd_row,
     chol_serial,
+    chol_diag,
+    chol_col_elem,
     colsum_cell,
     ew_cell,
     gemm_cell,
@@ -444,6 +446,30 @@ def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, t
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         chol_serial(a, Int(n), info)
+
+
+def chol_diag_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        chol_diag(a, info, Int(j), Int(n))
+
+
+def chol_col_kernel(a: F32Ptr, j: Int32, n: Int32):
+    var jj = Int(j)
+    var i = jj + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        chol_col_elem(a, jj, i, Int(n))
+
+
+def chol_serial_max() -> Int:
+    """Largest n whose Cholesky runs as ONE `chol_kernel` launch on one
+    thread (MOJOLEARN_XD_CHOL_SERIAL, default 16; timing only: the column
+    driver below stores the same cells in the same order). A value at or
+    above every n restores the one-thread kernel for the A/B."""
+    var v = String(getenv("MOJOLEARN_XD_CHOL_SERIAL", "16"))
+    try:
+        return Int(v)
+    except:
+        return 16
 
 
 def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
@@ -1345,7 +1371,26 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        # lane/neural-net-experiment (2026-09-30, the classical pass): the
+        # unblocked left-looking Cholesky ran as ONE thread for every n
+        # (n^3 / 6 fmas in a row). `chol_serial`'s cells, step by step:
+        # column j's diagonal on one thread (its j-long chain), then every
+        # row below it one thread per row (each its own j-long chain, the
+        # same chain `chol_serial` walks for that cell, reading only cells
+        # final before the step), and the mirror cell zeroed there. Same
+        # cells, same order per cell, same bits; 2n launches.
+        if n <= chol_serial_max():
+            ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        else:
+            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+            for j in range(n):
+                ctx.enqueue_function[chol_diag_kernel](
+                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=1, block_dim=1
+                )
+                if n - j - 1 > 0:
+                    ctx.enqueue_function[chol_col_kernel](
+                        da.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j - 1), block_dim=TPB
+                    )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
