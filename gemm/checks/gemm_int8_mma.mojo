@@ -126,6 +126,27 @@ comptime INT8_MMA_BLOCK_TILE_N = INT8_MMA_WARPS_N * INT8_MMA_TILE
 #: on CDNA), the same on the host launch and inside the kernel.
 comptime INT8_MMA_TPB = INT8_MMA_WARPS_M * INT8_MMA_WARPS_N * WARP_SIZE
 
+#: lane/neural-net-experiment (2026-09-30): the REUSE plan. In the reference
+#: plan one warp owns one 16 x 16 tile and reads every fragment of both
+#: operands from device memory at every k step (eight 4-byte or two 8-byte
+#: loads per unit step, one unit step per load pair). Here a warp owns a
+#: 32 x 32 tile: at each k step it loads the fragments of TWO A row-tiles
+#: and TWO B row-tiles and runs the four unit tiles they combine into, so
+#: every fragment feeds two unit tiles instead of one, and the next step's
+#: fragments are loaded before this step's units run (the loads and the
+#: units are independent). The bench board's gemm-int8 lane (4096^3) took
+#: 1,799 ms on an MI325X and 2,917 ms on an L40S against torch's int8 at
+#: 48 ms on the L40S: the reference plan is bound by its loads, not the
+#: unit. Contract L-9: an Int32 sum of exact int8 products is the same
+#: integer under every order, grouping and tile, so no plan here can move
+#: a bit; the epilogue stays `_store_cell` with the reference's arguments.
+#: MOJOLEARN_INT8_MMA_REFERENCE=1 (a build define) keeps the reference
+#: plan for the A/B and the equality gate.
+comptime INT8_MMA_REUSE = not is_defined["MOJOLEARN_INT8_MMA_REFERENCE"]()
+comptime INT8_MMA_REUSE_WARP_TILE = 2 * INT8_MMA_TILE
+comptime INT8_MMA_REUSE_BLOCK_TILE_M = INT8_MMA_WARPS_M * INT8_MMA_REUSE_WARP_TILE
+comptime INT8_MMA_REUSE_BLOCK_TILE_N = INT8_MMA_WARPS_N * INT8_MMA_REUSE_WARP_TILE
+
 
 def int8_mma_admits(m: Int, n: Int, k: Int) -> Bool:
     """Whether the matrix-unit plan serves the shape. Every shape the
@@ -353,6 +374,209 @@ def _amd_warp_tile(
     _store_cell(c, ea, eb, acc[3], ir + 3, j, m, n)
 
 
+@always_inline
+def _nvidia_warp_tile_reuse(
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    lane: Int,
+    row0: Int,
+    col0: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+    aligned: Bool,
+):
+    """`_nvidia_warp_tile` over a 32 x 32 warp tile: two A row-tiles (rows
+    row0.. and row0+16..) and four B n8 column groups, the same fragment
+    layout, each A fragment feeding four `mma.sync` and each B fragment
+    two. The next k step's fragments are loaded before this step's units
+    run. Same Int32 sums, same epilogue."""
+    var g = lane >> 2
+    var t = lane & 3
+    var acc = InlineArray[SIMD[DType.int32, 4], 8](fill=SIMD[DType.int32, 4](0))
+    # fragments of step kt: a[i][0..3] for A row-tile i, b[j][0..1] for B group j
+    var ka = t * 4
+    var a00 = _pack4(qa, row0 + g, ka, m, k, aligned)
+    var a01 = _pack4(qa, row0 + g + 8, ka, m, k, aligned)
+    var a02 = _pack4(qa, row0 + g, ka + 16, m, k, aligned)
+    var a03 = _pack4(qa, row0 + g + 8, ka + 16, m, k, aligned)
+    var a10 = _pack4(qa, row0 + 16 + g, ka, m, k, aligned)
+    var a11 = _pack4(qa, row0 + 24 + g, ka, m, k, aligned)
+    var a12 = _pack4(qa, row0 + 16 + g, ka + 16, m, k, aligned)
+    var a13 = _pack4(qa, row0 + 24 + g, ka + 16, m, k, aligned)
+    var b00 = _pack4(qb, col0 + g, ka, n, k, aligned)
+    var b01 = _pack4(qb, col0 + g, ka + 16, n, k, aligned)
+    var b10 = _pack4(qb, col0 + 8 + g, ka, n, k, aligned)
+    var b11 = _pack4(qb, col0 + 8 + g, ka + 16, n, k, aligned)
+    var b20 = _pack4(qb, col0 + 16 + g, ka, n, k, aligned)
+    var b21 = _pack4(qb, col0 + 16 + g, ka + 16, n, k, aligned)
+    var b30 = _pack4(qb, col0 + 24 + g, ka, n, k, aligned)
+    var b31 = _pack4(qb, col0 + 24 + g, ka + 16, n, k, aligned)
+    for kt in range(0, k, INT8_MMA_K_TILE):
+        var kn = kt + INT8_MMA_K_TILE + t * 4
+        var more = kt + INT8_MMA_K_TILE < k
+        # the next step's fragments, loaded now (zero codes past k)
+        var na00 = _pack4(qa, row0 + g, kn, m, k, aligned) if more else Int32(0)
+        var na01 = _pack4(qa, row0 + g + 8, kn, m, k, aligned) if more else Int32(0)
+        var na02 = _pack4(qa, row0 + g, kn + 16, m, k, aligned) if more else Int32(0)
+        var na03 = _pack4(qa, row0 + g + 8, kn + 16, m, k, aligned) if more else Int32(0)
+        var na10 = _pack4(qa, row0 + 16 + g, kn, m, k, aligned) if more else Int32(0)
+        var na11 = _pack4(qa, row0 + 24 + g, kn, m, k, aligned) if more else Int32(0)
+        var na12 = _pack4(qa, row0 + 16 + g, kn + 16, m, k, aligned) if more else Int32(0)
+        var na13 = _pack4(qa, row0 + 24 + g, kn + 16, m, k, aligned) if more else Int32(0)
+        var nb00 = _pack4(qb, col0 + g, kn, n, k, aligned) if more else Int32(0)
+        var nb01 = _pack4(qb, col0 + g, kn + 16, n, k, aligned) if more else Int32(0)
+        var nb10 = _pack4(qb, col0 + 8 + g, kn, n, k, aligned) if more else Int32(0)
+        var nb11 = _pack4(qb, col0 + 8 + g, kn + 16, n, k, aligned) if more else Int32(0)
+        var nb20 = _pack4(qb, col0 + 16 + g, kn, n, k, aligned) if more else Int32(0)
+        var nb21 = _pack4(qb, col0 + 16 + g, kn + 16, n, k, aligned) if more else Int32(0)
+        var nb30 = _pack4(qb, col0 + 24 + g, kn, n, k, aligned) if more else Int32(0)
+        var nb31 = _pack4(qb, col0 + 24 + g, kn + 16, n, k, aligned) if more else Int32(0)
+        # this step's eight unit steps: A row-tile i (0, 1) x B group j (0..3)
+        acc[0] = _imma_m16n8k32(a00, a01, a02, a03, b00, b01, acc[0])
+        acc[1] = _imma_m16n8k32(a00, a01, a02, a03, b10, b11, acc[1])
+        acc[2] = _imma_m16n8k32(a00, a01, a02, a03, b20, b21, acc[2])
+        acc[3] = _imma_m16n8k32(a00, a01, a02, a03, b30, b31, acc[3])
+        acc[4] = _imma_m16n8k32(a10, a11, a12, a13, b00, b01, acc[4])
+        acc[5] = _imma_m16n8k32(a10, a11, a12, a13, b10, b11, acc[5])
+        acc[6] = _imma_m16n8k32(a10, a11, a12, a13, b20, b21, acc[6])
+        acc[7] = _imma_m16n8k32(a10, a11, a12, a13, b30, b31, acc[7])
+        a00 = na00
+        a01 = na01
+        a02 = na02
+        a03 = na03
+        a10 = na10
+        a11 = na11
+        a12 = na12
+        a13 = na13
+        b00 = nb00
+        b01 = nb01
+        b10 = nb10
+        b11 = nb11
+        b20 = nb20
+        b21 = nb21
+        b30 = nb30
+        b31 = nb31
+    # C/D (16 x 8, s32): c0, c1 row g cols t*2 + 0, 1; c2, c3 row g + 8
+    comptime for i in range(2):
+        comptime for j in range(4):
+            var r0 = row0 + 16 * i + g
+            var jc = col0 + 8 * j + t * 2
+            var v = acc[i * 4 + j]
+            _store_cell(c, ea, eb, v[0], r0, jc, m, n)
+            _store_cell(c, ea, eb, v[1], r0, jc + 1, m, n)
+            _store_cell(c, ea, eb, v[2], r0 + 8, jc, m, n)
+            _store_cell(c, ea, eb, v[3], r0 + 8, jc + 1, m, n)
+
+
+@always_inline
+def _amd_warp_tile_reuse(
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    lane: Int,
+    row0: Int,
+    col0: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+    aligned: Bool,
+):
+    """`_amd_warp_tile` over a 32 x 32 warp tile: two A operands (rows
+    row0.. and row0+16..) and two B operands (columns col0.. and
+    col0+16..) per k step, the same lane layout, four MFMAs, each operand
+    feeding two. The next k step's operands are loaded before this step's
+    MFMAs run. Same Int32 sums, same epilogue."""
+    var i16 = lane & 15
+    var kq = (lane >> 4) * 8
+    var acc00 = SIMD[DType.int32, 4](0)
+    var acc01 = SIMD[DType.int32, 4](0)
+    var acc10 = SIMD[DType.int32, 4](0)
+    var acc11 = SIMD[DType.int32, 4](0)
+    var a0 = _pack8(qa, row0 + i16, kq, m, k, aligned)
+    var a1 = _pack8(qa, row0 + 16 + i16, kq, m, k, aligned)
+    var b0 = _pack8(qb, col0 + i16, kq, n, k, aligned)
+    var b1 = _pack8(qb, col0 + 16 + i16, kq, n, k, aligned)
+    for kt in range(0, k, INT8_MMA_K_TILE):
+        var kn = kt + INT8_MMA_K_TILE + kq
+        var more = kt + INT8_MMA_K_TILE < k
+        var na0 = _pack8(qa, row0 + i16, kn, m, k, aligned) if more else Int64(0)
+        var na1 = _pack8(qa, row0 + 16 + i16, kn, m, k, aligned) if more else Int64(0)
+        var nb0 = _pack8(qb, col0 + i16, kn, n, k, aligned) if more else Int64(0)
+        var nb1 = _pack8(qb, col0 + 16 + i16, kn, n, k, aligned) if more else Int64(0)
+        acc00 = llvm_intrinsic[
+            "llvm.amdgcn.mfma.i32.16x16x32.i8",
+            SIMD[DType.int32, 4],
+            has_side_effect=False,
+        ](a0, b0, acc00, Int32(0), Int32(0), Int32(0))
+        acc01 = llvm_intrinsic[
+            "llvm.amdgcn.mfma.i32.16x16x32.i8",
+            SIMD[DType.int32, 4],
+            has_side_effect=False,
+        ](a0, b1, acc01, Int32(0), Int32(0), Int32(0))
+        acc10 = llvm_intrinsic[
+            "llvm.amdgcn.mfma.i32.16x16x32.i8",
+            SIMD[DType.int32, 4],
+            has_side_effect=False,
+        ](a1, b0, acc10, Int32(0), Int32(0), Int32(0))
+        acc11 = llvm_intrinsic[
+            "llvm.amdgcn.mfma.i32.16x16x32.i8",
+            SIMD[DType.int32, 4],
+            has_side_effect=False,
+        ](a1, b1, acc11, Int32(0), Int32(0), Int32(0))
+        a0 = na0
+        a1 = na1
+        b0 = nb0
+        b1 = nb1
+    # D[i][j]: lane j + 16 (i // 4), register i % 4 -- per 16 x 16 tile
+    var ir = (lane >> 4) * 4
+    comptime for r in range(4):
+        _store_cell(c, ea, eb, acc00[r], row0 + ir + r, col0 + i16, m, n)
+        _store_cell(c, ea, eb, acc01[r], row0 + ir + r, col0 + 16 + i16, m, n)
+        _store_cell(c, ea, eb, acc10[r], row0 + 16 + ir + r, col0 + i16, m, n)
+        _store_cell(c, ea, eb, acc11[r], row0 + 16 + ir + r, col0 + 16 + i16, m, n)
+
+
+def identical_gemm_int8_mma_reuse_kernel(
+    c: MutPointer[Float32, MutAnyOrigin],
+    qa: MutPointer[Int8, MutAnyOrigin],
+    ea: MutPointer[Int32, MutAnyOrigin],
+    qb: MutPointer[Int8, MutAnyOrigin],
+    eb: MutPointer[Int32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    aligned_in: Int32,
+):
+    """`identical_gemm_int8_mma_kernel` with a 32 x 32 tile per warp (the
+    reuse plan, `INT8_MMA_REUSE`): grid `(ceil(n / 64), ceil(m / 64), 1)`,
+    block `INT8_MMA_TPB`, the same 2 x 2 warps. A warp whose tile starts
+    beyond m or n returns whole (uniform across the warp)."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var aligned = aligned_in != Int32(0)
+    var warp = Int(thread_idx.x) // WARP_SIZE
+    var lane = Int(lane_id())
+    var wm = warp // INT8_MMA_WARPS_N
+    var wn = warp - wm * INT8_MMA_WARPS_N
+    var row0 = Int(block_idx.y) * INT8_MMA_REUSE_BLOCK_TILE_M + wm * INT8_MMA_REUSE_WARP_TILE
+    var col0 = Int(block_idx.x) * INT8_MMA_REUSE_BLOCK_TILE_N + wn * INT8_MMA_REUSE_WARP_TILE
+    if row0 >= m or col0 >= n:
+        return
+    comptime if is_nvidia_gpu():
+        _nvidia_warp_tile_reuse(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
+    elif is_amd_gpu():
+        _amd_warp_tile_reuse(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
+    else:
+        return
+
+
 def identical_gemm_int8_mma_kernel(
     c: MutPointer[Float32, MutAnyOrigin],
     qa: MutPointer[Int8, MutAnyOrigin],
@@ -429,6 +653,24 @@ def identical_gemm_int8_mma_into(
         comptime if not INT8_MMA_UNSTATED_LOADS:
             if mma_operands_aligned(Int(qa.unsafe_ptr()), Int(qb.unsafe_ptr())):
                 aligned = Int32(1)
+        comptime if INT8_MMA_REUSE:
+            # the reuse plan: a 64 x 64 block tile (2 x 2 warps of 32 x 32)
+            var rgrid_x = (n + INT8_MMA_REUSE_BLOCK_TILE_N - 1) // INT8_MMA_REUSE_BLOCK_TILE_N
+            var rgrid_y = (m + INT8_MMA_REUSE_BLOCK_TILE_M - 1) // INT8_MMA_REUSE_BLOCK_TILE_M
+            ctx.enqueue_function[identical_gemm_int8_mma_reuse_kernel](
+                c.unsafe_ptr(),
+                qa.unsafe_ptr(),
+                ea.unsafe_ptr(),
+                qb.unsafe_ptr(),
+                eb.unsafe_ptr(),
+                Int32(m),
+                Int32(n),
+                Int32(k),
+                aligned,
+                grid_dim=(rgrid_x, rgrid_y, 1),
+                block_dim=(INT8_MMA_TPB, 1, 1),
+            )
+            return
         ctx.enqueue_function[identical_gemm_int8_mma_kernel](
             c.unsafe_ptr(),
             qa.unsafe_ptr(),
