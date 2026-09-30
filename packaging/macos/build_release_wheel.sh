@@ -510,10 +510,20 @@ print(json.dumps(dict(extension='_mojolearn_byte_lm', native_vendor='metal', num
     profile=module.byte_lm_profile(), supported_modes=['identical'], unsupported_modes=['fast', 'deterministic'])))
 PYBYTE
 fi
-for so in $ALL_SOS; do
-    [ -f "$so" ] || { echo "ERROR: $so was not produced" >&2; exit 1; }
-    [ "$so" -nt "$STAMP" ] || { echo "ERROR: $so predates this build (stale)" >&2; exit 1; }
-done
+# macOS /bin/sh's -nt compares whole seconds. A reused binding can be
+# placed after STAMP within that same second; preserve the strict freshness
+# check using the filesystem's nanosecond timestamps instead.
+# shellcheck disable=SC2086
+python3 - "$STAMP" $ALL_SOS <<'PYFRESH'
+import pathlib, sys
+started = pathlib.Path(sys.argv[1]).stat().st_mtime_ns
+for name in sys.argv[2:]:
+    path = pathlib.Path(name)
+    if not path.is_file():
+        raise SystemExit(f"ERROR: {path} was not produced")
+    if path.stat().st_mtime_ns <= started:
+        raise SystemExit(f"ERROR: {path} predates this build (stale)")
+PYFRESH
 
 # AND NOTHING ELSE. The loop above walks ALL_SOS, so it can only ever check a
 # file it already expects; a .so that is on NO list is neither required nor
