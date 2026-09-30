@@ -1,0 +1,192 @@
+[
+  {
+    "ms": 3013.6822974309325,
+    "digest": "b53aeffc5bf56d980f02582434de9e06c89bea0fe0da49a93c265ab2c2708548",
+    "quality": {
+      "rel_residual": 2.4372712669882974e-06
+    },
+    "case": "lu",
+    "size": 1024,
+    "env": {
+      "MOJOLEARN_XD_LU_PIVOT_SERIAL": "1",
+      "MOJOLEARN_XD_LU_SOLVE_SERIAL": "1"
+    },
+    "tag": "lu-old-1024"
+  },
+  {
+    "ms": 398.01622554659843,
+    "digest": "b53aeffc5bf56d980f02582434de9e06c89bea0fe0da49a93c265ab2c2708548",
+    "quality": {
+      "rel_residual": 2.4372712669882974e-06
+    },
+    "case": "lu",
+    "size": 1024,
+    "env": {},
+    "tag": "lu-new-1024"
+  },
+  {
+    "ms": 8449.296955950558,
+    "digest": "2a296d1d25da0a2c77bb94fb743e0f5e7300e509f15b576c2e8107357d6584e3",
+    "quality": {
+      "rel_residual": 8.22865153834661e-06
+    },
+    "case": "lu",
+    "size": 8192,
+    "env": {},
+    "tag": "lu-new-8192"
+  },
+  {
+    "tag": "lu-verdict",
+    "same_digest": true,
+    "speedup_at_digest_size": 7.571757390775267
+  },
+  {
+    "ms": 87896.80903218687,
+    "digest": "431ad9f1214c29a2f886ebaabd7d6aa37cdd880efe02da2a0c00a93e9736211f",
+    "quality": {
+      "score": 0.9998983262209755
+    },
+    "case": "sgd-reg",
+    "size": 20000,
+    "env": {
+      "MOJOLEARN_X_LINEAR_SGD_HOST": "0"
+    },
+    "tag": "sgd-reg-old-20000"
+  },
+  {
+    "ms": 3473.3398016542196,
+    "digest": "431ad9f1214c29a2f886ebaabd7d6aa37cdd880efe02da2a0c00a93e9736211f",
+    "quality": {
+      "score": 0.9998983262209755
+    },
+    "case": "sgd-reg",
+    "size": 20000,
+    "env": {},
+    "tag": "sgd-reg-new-20000"
+  },
+  {
+    "ms": 175838.69745768607,
+    "digest": "f07701df3903e41239341707b276d6bde37e8e9cb1e6b1718515f6e635335a18",
+    "quality": {
+      "score": 0.9998626712365437
+    },
+    "case": "sgd-reg",
+    "size": 1000000,
+    "env": {},
+    "tag": "sgd-reg-new-1000000"
+  },
+  {
+    "tag": "sgd-reg-verdict",
+    "same_digest": true,
+    "speedup_at_digest_size": 25.306135895579512
+  },
+  {
+    "ms": 12488.21357730776,
+    "digest": "a6cb75bf0e2f93da8e1bed8f10ddcd2f5343e106136f0400f2a0e38ef09b3512",
+    "quality": {
+      "score": 0.99025
+    },
+    "case": "sgd-clf",
+    "size": 20000,
+    "env": {
+      "MOJOLEARN_X_LINEAR_SGD_HOST": "0"
+    },
+    "tag": "sgd-clf-old-20000"
+  },
+  {
+    "ms": 3293.0066594853997,
+    "digest": "a6cb75bf0e2f93da8e1bed8f10ddcd2f5343e106136f0400f2a0e38ef09b3512",
+    "quality": {
+      "score": 0.99025
+    },
+    "case": "sgd-clf",
+    "size": 20000,
+    "env": {},
+    "tag": "sgd-clf-new-20000"
+  },
+  {
+    "ms": 175152.4278363213,
+    "digest": "bcac4b45fd82f48b9b4dfbcaf540fdd683a0c3ba9936aab6cac29a529c491f32",
+    "quality": {
+      "score": 0.98655
+    },
+    "case": "sgd-clf",
+    "size": 1000000,
+    "env": {},
+    "tag": "sgd-clf-new-1000000"
+  },
+  {
+    "tag": "sgd-clf-verdict",
+    "same_digest": true,
+    "speedup_at_digest_size": 3.7923438573486825
+  },
+  {
+    "ms": 9162.008454091847,
+    "digest": "356afc301a0d55c121bfb817effa6f9f818459b6e628f88b73efd5558868a476",
+    "quality": {
+      "score": 0.9999581365430179
+    },
+    "case": "lars",
+    "size": 200000,
+    "env": {
+      "MOJOLEARN_X_LINEAR_LARS_GRID_GRAM": "0"
+    },
+    "tag": "lars-old-200000"
+  },
+  {
+    "ms": 6487.9442770034075,
+    "digest": "356afc301a0d55c121bfb817effa6f9f818459b6e628f88b73efd5558868a476",
+    "quality": {
+      "score": 0.9999581365430179
+    },
+    "case": "lars",
+    "size": 200000,
+    "env": {},
+    "tag": "lars-new-200000"
+  },
+  {
+    "ms": 6688.559978269041,
+    "digest": "88fba1aba928096eb3fcd66ec60acf614419fda2d6ef388c6fe088c4732241ab",
+    "quality": {
+      "score": 0.9999373597288915
+    },
+    "case": "lars",
+    "size": 1000000,
+    "env": {},
+    "tag": "lars-new-1000000"
+  },
+  {
+    "tag": "lars-verdict",
+    "same_digest": true,
+    "speedup_at_digest_size": 1.4121589309215694
+  },
+  {
+    "ms": 3994.262006133795,
+    "digest": "5bf7822421de6cd5efcde8f02dd066822016f4e0a946af82fe28f805c2b8b761",
+    "case": "ivf",
+    "size": 40000,
+    "env": {},
+    "tag": "ivf-old-40000"
+  },
+  {
+    "ms": 1517.0034393668175,
+    "digest": "5bf7822421de6cd5efcde8f02dd066822016f4e0a946af82fe28f805c2b8b761",
+    "case": "ivf",
+    "size": 40000,
+    "env": {},
+    "tag": "ivf-new-40000"
+  },
+  {
+    "ms": 4650.300742127001,
+    "digest": "26a769d35c913838182682f8609813564afeb1457475acda2baba53ba239f156",
+    "case": "ivf",
+    "size": 400000,
+    "env": {},
+    "tag": "ivf-new-400000"
+  },
+  {
+    "tag": "ivf-verdict",
+    "same_digest": true,
+    "speedup_at_digest_size": 2.6329946936712028
+  }
+]

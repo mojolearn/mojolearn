@@ -1,0 +1,24 @@
+COMMAND ["/root/neural-requested-profile/venv/bin/python", "-m", "pip", "install", "mojolearn==0.8.31", "numpy==2.5.2", "scipy==1.18.0"]
+Collecting mojolearn==0.8.31
+  Downloading mojolearn-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (13 kB)
+Collecting numpy==2.5.2
+  Downloading numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting scipy==1.18.0
+  Downloading scipy-1.18.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting mojolearn-nvidia==0.8.31 (from mojolearn==0.8.31)
+  Downloading mojolearn_nvidia-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Collecting mojolearn-amd==0.8.31 (from mojolearn==0.8.31)
+  Downloading mojolearn_amd-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Downloading mojolearn-0.8.31-py3-none-manylinux_2_35_x86_64.whl (12.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.1/12.1 MB 15.0 MB/s  0:00:00
+Downloading numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 70.2 MB/s  0:00:00
+Downloading scipy-1.18.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 94.6 MB/s  0:00:00
+Downloading mojolearn_amd-0.8.31-py3-none-manylinux_2_35_x86_64.whl (33.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 33.8/33.8 MB 87.8 MB/s  0:00:00
+Downloading mojolearn_nvidia-0.8.31-py3-none-manylinux_2_35_x86_64.whl (88.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 88.7/88.7 MB 21.9 MB/s  0:00:04
+Installing collected packages: numpy, scipy, mojolearn-nvidia, mojolearn-amd, mojolearn
+
+Successfully installed mojolearn-0.8.31 mojolearn-amd-0.8.31 mojolearn-nvidia-0.8.31 numpy-2.5.2 scipy-1.18.0

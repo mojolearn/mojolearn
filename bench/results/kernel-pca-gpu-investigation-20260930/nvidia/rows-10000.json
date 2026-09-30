@@ -1,0 +1,32 @@
+{
+  "rows": 10000,
+  "features": 11,
+  "components": 8,
+  "vendor": "cuda",
+  "numeric_operations": "identical; NEW iterative algorithm, not certified equivalent to old output bits",
+  "input_sha256": "4210ebf43668e3e7bfcc8ee65d6779a78f01dcdadc94dec632c05d1aad8e548d",
+  "kernel_and_center_ms": 1690.3688767924905,
+  "solver_ms": 134.4762183725834,
+  "eigenvalues": [
+    787.9529418945312,
+    718.23388671875,
+    655.1227416992188,
+    618.2881469726562,
+    354.95343017578125,
+    285.80120849609375,
+    244.2597198486328,
+    113.62533569335938
+  ],
+  "relative_residuals": [
+    4.802613148058299e-06,
+    3.6005822039442137e-06,
+    3.171036269122851e-06,
+    4.015075774077559e-06,
+    2.45261617237702e-06,
+    2.026208449024125e-06,
+    1.9494571006362094e-06,
+    1.1114601647932432e-06
+  ],
+  "orthogonality_max_abs": 7.152557373046875e-06,
+  "passed": true
+}

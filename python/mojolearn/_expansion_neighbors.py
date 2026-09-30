@@ -696,6 +696,40 @@ class KernelPCA(_XNeighbors):
         all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
         Kc = _empty_out((n, n), "<f4")
         self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
+        # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
+        # auto asks for a few components (on by default since 2026-09-30:
+        # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
+        # float64 reference match; MOJOLEARN_XN_KPCA_LANCZOS=0 turns it off).
+        # Anything outside that scope, or a basis that does not converge,
+        # takes the exact dense path below.
+        c = 0 if self.n_components is None else int(self.n_components)
+        kit = None
+        if (os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS", "1") != "0"
+                and self.eigen_solver == "auto" and n > 200 and 0 < c < 10):
+            from ._expansion_decomp import _Kit
+            # Every column (CUDA, HIP, Metal and the CPU host binding) takes
+            # this route, so a CPU-only install gives the GPUs' bits.
+            kit = _Kit(self.numeric_mode_used())
+        result = None
+        if kit is not None:
+            import array
+            from ._expansion_decomp import _M, _lanczos_top
+            # Array's buffer is float32 in row order; no Python float list of
+            # n*n cells. The kit uploads it once and retains the device store.
+            store = array.array("f")
+            store.frombytes(Kc.tobytes())
+            result = _lanczos_top(kit, _M(store, n, n), c)
+        if result is not None:
+            values, vectors = result
+            vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
+            vals = [max(float(v), 0.0) for v in values.s]
+            keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
+            vectors = vectors.take_cols(keep)
+            self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
+            self.eigenvectors_ = Array._from_flat(vectors.s, (n, len(keep)), "<f4")
+            self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
+            self.n_features_in_ = d
+            return self
         w = _empty_out((n,), "<f4")
         V = _empty_out((n, n), "<f4")
         self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
@@ -1005,13 +1039,32 @@ class SkewedChi2Sampler(_XNeighbors):
 # ====================================================================== LabelPropagation
 class _LabelPropagationBase(_XNeighbors):
     """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
-    graph (rbf, or the knn connectivity graph with each row's own point as
-    its first neighbor), the product / clamp iteration with their stopping
+    RBF graph or compact kNN connectivity graph (including each row's own
+    point as its first neighbor), the product / clamp iteration with their stopping
     rule (sum |L - L_prev| < tol, checked before each step), the final row
     normalization and `transduction_`. Callable kernels are refused. Float32
     where theirs is float64; the neighbor ties go to the lower index."""
 
     _variant = None
+
+    def _compact_graph(self, idx, n_reference, variant):
+        n, k = idx.shape
+        cols = empty((n, k), "<i4")
+        vals = empty((n, k), "<f4")
+        self._op("lp_knn_graph", [(idx, 0), (cols, 1), (vals, 1)],
+                 (n, n_reference, k, variant))
+        return cols, vals, n_reference
+
+    def _graph_product(self, G, labels):
+        if not isinstance(G, tuple):
+            return self._matmul(G, labels)
+        cols, vals, m = G
+        n, k = cols.shape
+        c = labels.shape[1]
+        out = _empty_out((n, c), "<f4")
+        self._op("lp_knn_product", [(cols, 0), (vals, 0), (labels, 0), (out, 1)],
+                 (n, m, k, c))
+        return out
 
     def _graph_affinity(self, X):
         n = X.shape[0]
@@ -1041,11 +1094,16 @@ class _LabelPropagationBase(_XNeighbors):
         else:
             a = _f32_scalar(1.0 - float(self.alpha))
             ys = [[a * v for v in row] for row in ld0]
-        G = self._build_graph(X)
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_sq(X, X, k, False)
+            G = self._compact_graph(idx, n, 0 if self._variant == "propagation" else 1)
+        else:
+            G = self._build_graph(X)
         ld = Array.from_list(ld0, "<f4")
         ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
-        if not _HOST_LOOP_LP:
+        if not _HOST_LOOP_LP and not isinstance(G, tuple):
             # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
             # the same items in the same order, the graph uploaded once, tol
             # passed as its float64 bits so the stopping test is Python's.
@@ -1068,7 +1126,7 @@ class _LabelPropagationBase(_XNeighbors):
                 converged = True
                 break
             prev = ld
-            nxt = self._matmul(G, ld)
+            nxt = self._graph_product(G, ld)
             out = _empty_out((n, C), "<f4")
             if self._variant == "propagation":
                 self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
@@ -1097,11 +1155,10 @@ class _LabelPropagationBase(_XNeighbors):
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
             _, idx = self._knn_sq(Q, self.X_, k, False)
-            W = _empty_out((nq, n), "<f4")
-            self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
+            W = self._compact_graph(idx, n, 2)
         else:
             W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
-        P = self._matmul(W, self.label_distributions_)
+        P = self._graph_product(W, self.label_distributions_)
         out = empty(P.shape, "<f4")
         self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
         return out

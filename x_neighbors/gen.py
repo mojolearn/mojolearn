@@ -156,6 +156,10 @@ OPS = [
 #: x_neighbors/iter_host.mojo on the CPU): loops of the items above that keep
 #: their buffers on the device between steps. Exported like any op.
 CUSTOM_OPS = [
+    ("lp_knn_graph", [("idx", "iin", "n * k"), ("cols", "iout", "n * k"), ("vals", "fout", "n * k"),
+     ("n", "int"), ("m", "int"), ("k", "int"), ("variant", "int")]),
+    ("lp_knn_product", [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("x", "fin", "m * c"), ("res", "fout", "n * c"),
+     ("n", "int"), ("m", "int"), ("k", "int"), ("c", "int")]),
     ("lp_iterate",
      [("g", "fin", "n * n"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"),
       ("info", "iout", "2"), ("n", "int"), ("c", "int"), ("max_iter", "int"), ("variant", "int"),

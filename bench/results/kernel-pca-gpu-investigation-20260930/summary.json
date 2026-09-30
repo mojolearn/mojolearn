@@ -1,0 +1,20 @@
+{
+  "candidate": "Opt-in MOJOLEARN_XN_KPCA_LANCZOS=1 in public KernelPCA; default unchanged; auto solver, >200rows,1..9components only; raises on nonconvergence without full dense host fallback.",
+  "evidence": "public-candidate/ uses exact board stride taxi subset.256/1000/10000row public fit_transform and transform checks passed; two independent fits per size with byte-identical output.256/1000 also checked against SciPy float64 eigenpairs. Large reference uses actual residual and orthogonality, not a 10000row CPU eigensolve.",
+  "timing_note": "First and second fits only, not a multi-round median or a vendor-certified benchmark. All times are L40S CUDA. No cross-device speedup inferred from the M3 timeout.",
+  "initial_trial_note": "The first exploratory low-level trial used a linspace taxi sample, not the exact board stride. Its subspace_cosines field is raw overlap singular values; the public-candidate check correctly orthonormalizes before comparing subspaces.",
+  "required_before_default": [
+    "Apple/NVIDIA/AMD identity gate for changed numerical plan",
+    "broader matrix/seed/degeneracy/convergence fixtures",
+    "GPU-only measurement classification and CPU-opponent filtering still pending"
+  ],
+  "priority_evidence": "gpu-opponent-slowdowns.json contains historical 0.8.25 records only. Check latest code before assuming historical failure persists. Worst GPU ratios include AMD LU, NVIDIA IVF/LARS/SGD; not all are eigensolver bottlenecks.",
+  "cpu_work_audit": {
+    "KernelPCA": "confirmed expensive full host dense eigensolve; live M3 stack corroborates",
+    "OPTICS": "host sequential ordering/extraction over GPU distances; cost not profiled here",
+    "AgglomerativeClustering": "host linkage loop and distance readback; cost not profiled here",
+    "MeanShift": "host bandwidth aggregation/center selection; main shift work on GPU; cost not profiled here",
+    "Spectral": "small projected host eigensolve is not the same problem as full n-by-n host solve",
+    "LogisticRegressionCV": "GPU fit in one thread block, not CPU fallback"
+  }
+}
