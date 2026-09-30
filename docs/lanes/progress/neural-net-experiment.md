@@ -275,3 +275,14 @@ next run answer "where does the time go" for gemm-int8 and for the Samba
 backward; the other two are fixed15 (a run-time plan override for the
 wide-N sweep; the planes quantizer as one block per row). The measuring
 lane's compile fixes are cherry-picked onto the branch.
+
+## The strides pass (2026-09-30 night)
+
+The diagnostics answered three questions and the answers became code
+(table in EXPERIMENTS.md, "The strides pass"): the int8 cell was Python
+(fixed, measured here on the host: 4,000x on the conversion); the Samba
+backward is two kernels (both rewritten as a block per row over staged
+operands, the same chains); the fixed15 wide-N loss is the plan (a table
+for low-bandwidth boxes) and the backward conversion loss is uncoalesced
+reads (the transposing quantizer through a tile). Unmeasured on a GPU;
+every one has its restore.

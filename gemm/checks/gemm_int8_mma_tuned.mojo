@@ -435,6 +435,49 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     return INT8_PIECES_PLAN_PIPE_FRAG2
 
 
+#: lane/neural-net-experiment (2026-09-30): the plan table of a
+#: LOW-BANDWIDTH box. `int8_pieces_dispatch` was measured on an H100
+#: (3.35 TB/s), where the two-page 64 x 128 block took the least time at
+#: every row. The L40S (864 GB/s) sweep of 2026-09-30
+#: (bench/results/direction-diag-20260930, every plan the same digests):
+#:   mlp_up.t512  512 x 14336 x 4096   plan 3 (SQUARE, 64 x 64)   34.3 TFLOPS against the H100 plan's 18.2
+#:   bwd_dw       4096 x 14336 x 512   plan 0 (SMALL, 32 x 32)    52.0 against 47.2
+#:   bwd_dx       512 x 4096 x 14336   plan 0                     45.2 against 40.6
+#: qkv (512 x 4096 x 4096) was not swept and keeps the H100 plan (67
+#: TFLOPS there). SCHEDULING: every plan returns the same three integers.
+#: `int15_box_low_bandwidth(name)` decides from the device's name;
+#: MOJOLEARN_INT15_BOX=low / high overrides it, MOJOLEARN_INT15_PLAN=<n>
+#: overrides both.
+def int15_box_low_bandwidth(name: String) -> Bool:
+    var forced = String(getenv("MOJOLEARN_INT15_BOX"))
+    if forced == "low":
+        return True
+    if forced == "high":
+        return False
+    return (
+        name.find("L40") >= 0 or name.find("L4") >= 0 or name.find("A10") >= 0
+        or name.find("4090") >= 0 or name.find("A40") >= 0 or name.find("T4") >= 0
+    )
+
+
+def int8_pieces_dispatch_for(low_bandwidth: Bool, m: Int, n: Int, k: Int) -> Int:
+    """`int8_pieces_dispatch` on a box whose class is known: the L40S table
+    above on a low-bandwidth box, the H100's choice otherwise. The env
+    overrides apply as in `int8_pieces_dispatch`."""
+    var forced = String(getenv("MOJOLEARN_INT15_PLAN"))
+    if forced != "":
+        return int8_pieces_dispatch(m, n, k)
+    comptime if TARGET_COLUMN == COLUMN_NVIDIA:
+        if low_bandwidth and m > INT8_TUNED_ROW_MAX_M:
+            if n > 8192 and k <= 8192:
+                return INT8_PIECES_PLAN_SQUARE
+            if k > 8192:
+                return INT8_PIECES_PLAN_SMALL
+            if m >= 4096 and k <= 1024:
+                return INT8_PIECES_PLAN_SMALL
+    return int8_pieces_dispatch(m, n, k)
+
+
 def int8_pieces_sabotage_name() -> String:
     comptime if INT8_PIECES_SABOTAGE:
         return String("MIDDLE_TAKES_HL_TWICE")

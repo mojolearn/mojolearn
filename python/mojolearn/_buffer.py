@@ -298,7 +298,15 @@ def typestr_of(buf):
     if fmt in ("f", "d", "e"):
         return {"f": "<f4", "d": "<f8", "e": "<f2"}[fmt]
     if len(fmt) == 1 and fmt in _SIGNED:
-        return ("|i1" if size == 1 else f"<i{size}")
+        # lane/neural-net-experiment (2026-09-30): a signed one-byte buffer
+        # is the Array's own int8 dtype ("<i1", `array.array('b')`), so a
+        # contiguous int8 exporter (NumPy int8 codes) is a zero-copy view.
+        # It was spelled "|i1", which no Array dtype matched, so
+        # `_materialize` widened it to int32 one Python object per element
+        # and `_convert` cast it back: 1.25 s per 4096 x 4096 code array on
+        # the L40S, the whole of the board's gemm-int8 cell (2.46 s against a
+        # 6 ms device side).
+        return ("<i1" if size == 1 else f"<i{size}")
     if len(fmt) == 1 and fmt in _UNSIGNED:
         return ("<u1" if size == 1 else f"<u{size}")
     if fmt == "?":

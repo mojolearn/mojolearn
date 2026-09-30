@@ -212,3 +212,21 @@ parts, which is orchestration (waits and allocations between the
 conversions and the product), not arithmetic. At mlp_up.t512 the product
 alone is 3.31 ms for 3.5x the MACs of qkv (0.255): the plan, not the
 conversions (1.5 ms), is the loss there.
+
+## The strides pass (same branch, 2026-09-30 night, unmeasured)
+
+From the direction diagnostics (`bench/results/direction-diag-20260930`).
+Four commits, each with its restore-env or build define:
+
+| finding | change | restore with |
+|---|---|---|
+| gemm-int8: 2.4 s of the 2.46 s cell was Python widening the int8 codes one object at a time | a signed one-byte buffer is the Array's int8 dtype: pre-made codes are a zero-copy view (16M codes: 1,227 ms -> 0.3 ms here) | none needed (a widening request still casts) |
+| Samba: s16_s15 63% and s17_operands 24% of the Mamba-3 backward | `mamba3_s16_qk_shared_kernel` (a block per row, operands staged, the two per-j / per-i products formed once); `mamba3_s17_operands_shared_kernel` (a block per row instead of one thread per row) | build defines `MOJOLEARN_MAMBA3_S16_QK_NAIVE=1`, `MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE=1` |
+| fixed15 mlp_up: plan 3 at 34 TFLOPS against the dispatched 18; backward rows prefer plan 0 | a plan table for low-bandwidth NVIDIA boxes, chosen from the device name | `MOJOLEARN_INT15_BOX=high` (the H100 choice), `MOJOLEARN_INT15_PLAN=<n>` |
+| fixed15 bwd_dx conversions at 14 TFLOPS with a 45-TFLOPS multiply | the transposing quantizer reads coalesced (absmax thread map; planes through a 32 x 32 tile) | `MOJOLEARN_INT15_TRANSPOSED_TILE=0` |
+
+Run, in this order: `python tools/mamba3_backward_timing.py --batch 2 --length 512
+--d-model 384` (the two stages should fall from 23.7 / 9.0 ms to a few
+ms; the digest gate says the bits), the Samba board cell, the gemm-int8
+board cell (expect ~50 ms), the price harness at bwd_dx and mlp_up (the
+transposed A/B and the table), then `mamba/checks` and `gemm/checks` gates.
