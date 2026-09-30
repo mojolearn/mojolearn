@@ -1719,7 +1719,7 @@ def mamba3_s17_tail_pipe_kernel(
                                 nxt[2*i]=pr[0];nxt[2*i+1]=pr[1]
                         comptime for i in range(G):
                             add=ftz(identical_mul_add(cur[2*i],cur[2*i+1],add))
-                        cur=nxt
+                        cur=nxt^
                 barrier()
                 p0+=M3_S17_TP
     var el=ftz(identical_exp(last))
@@ -1747,7 +1747,7 @@ def mamba3_s17_tail_pipe_kernel(
                         nxt[2*i]=pr[0];nxt[2*i+1]=pr[1]
                 comptime for i in range(G):
                     add=ftz(identical_mul_add(cur[2*i],cur[2*i+1],add))
-                cur=nxt
+                cur=nxt^
         barrier()
         p1+=M3_S17_TP
     if n==0:
