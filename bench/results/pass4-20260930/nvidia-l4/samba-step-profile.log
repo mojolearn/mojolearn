@@ -1,0 +1,17 @@
+47915 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190f80000000, nodemask=2)
+SambaStack.train_step B=2 L=512 d_model=384: median 102.96 ms over 5 calls after warm-up
+phase (inclusive walls, summed over the step)                           ms   share
+stack.loss_and_grads (forward + loss + backward)                     89.05   86.5%
+Mamba3Block.backward                                                 53.71   52.2%
+stack._forward (embedding + all blocks + norm/head fwd)              17.12   16.6%
+TransformerBlock.backward                                            13.68   13.3%
+optimizer.step (AdamW)                                               13.50   13.1%
+Mamba3Block.forward                                                   7.88    7.7%
+TransformerBlock.forward                                              7.75    7.5%
+T.samba_head_loss                                                     1.57    1.5%
+T.rms_norm_backward                                                   1.26    1.2%
+T.embedding_backward                                                  0.77    0.7%
+T.accumulate_grads                                                    0.55    0.5%
+T.embedding_forward                                                   0.49    0.5%
+leaf phases (blocks + T.* + optimizer) summed                       101.16   98.3%
+everything else (Python between the leaves)                           1.80    1.7%

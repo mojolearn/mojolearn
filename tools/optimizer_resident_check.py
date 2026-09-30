@@ -69,7 +69,7 @@ def _run(ml, kind, shapes, grads, resident, clip_at, roundtrip_at):
             opt.load_state_dict(st)
         max_norm = 1.0 if k == clip_at else None
         t0 = time.perf_counter()
-        opt.step([np.ascontiguousarray(x) for x in g], max_norm=max_norm)
+        opt.step([np.array(x, dtype=np.float32, copy=True) for x in g], max_norm=max_norm)  # a copy: the clip scales its gradients in place
         walls.append(time.perf_counter() - t0)
         st = opt.state_dict()
         records.append({
