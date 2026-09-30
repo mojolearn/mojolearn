@@ -82,6 +82,8 @@ FAMILIES = (
             "xn_louvain",
             "xn_svgp",
             "xn_svgp_var",
+            "xn_lp_knn_graph",
+            "xn_lp_knn_product",
             "xn_lp_iterate",
             "xn_pr_iterate",
             "xn_pcs_resident",
