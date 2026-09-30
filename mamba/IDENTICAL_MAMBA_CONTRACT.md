@@ -66,7 +66,7 @@ True, the MambaConfig defaults).
 | dt_rank | ceil(d_model / 16) | MambaConfig `time_step_rank` |
 | rms eps | 1e-5 (`0x3727C5AC`) | MambaConfig `layer_norm_epsilon` |
 | softplus threshold | 20.0, compared `<=` | `selective_scan_fwd_kernel.cuh:160`, torch `F.softplus` threshold |
-| dtype | Float32 everywhere (weights, activations, state) | Andrew's order |
+| dtype | Float32 everywhere (weights, activations, state) | project policy |
 
 Changing any of these is a v2. Shapes covered by the gates are B in
 {1, 2, 3}, L in {1, 4, 16, 64, 257}, d_model in {8, 16}; the arithmetic

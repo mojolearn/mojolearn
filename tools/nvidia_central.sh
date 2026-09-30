@@ -1,6 +1,6 @@
 #!/bin/bash
-# tools/nvidia_central.sh -- THE SHARED NVIDIA PODS (Andrew, 2026-09-28: "share
-# a runpod or 2 runpods and not create 12 of them").
+# tools/nvidia_central.sh -- THE SHARED NVIDIA PODS (2026-09-28): one or two
+# shared RunPod pods, never one per lane.
 #
 # THE ONLY WAY A LANE USES NVIDIA. At most NVC_MAX_PODS (3, the account cap in
 # tools/dev_pod.sh) shared RunPod pods, each with several cheap GPUs (4x or 2x
@@ -9,7 +9,7 @@
 # pod's FIFO queue (tools/gpu_queue_box.sh, the same queue as the central AMD
 # box), one job per GPU slot, in the lane's own tree /root/mojolearn-<lane>.
 # A lane never runs `tools/dev_pod.sh up` for NVIDIA (dev_pod refuses it).
-# ONLY THE ORCHESTRATOR PROVISIONS MACHINES (Andrew, 2026-09-28): `up`,
+# ONLY THE ORCHESTRATOR PROVISIONS MACHINES (2026-09-28): `up`,
 # `install` and `down` refuse without MOJOLEARN_ORCHESTRATOR=1; a lane that
 # finds no pod up says so to the orchestrator and waits.
 #
@@ -266,7 +266,7 @@ pick_pod() {  # the live pod with the fewest assigned lanes per GPU
 
 cmd="${1:-}"; shift || true
 case "$cmd" in up|install|down)
-    [ "${MOJOLEARN_ORCHESTRATOR:-0}" = 1 ] || die "only the orchestrator provisions machines (Andrew, 2026-09-28): '$cmd' needs MOJOLEARN_ORCHESTRATOR=1. A lane reports that it needs NVIDIA and waits." ;;
+    [ "${MOJOLEARN_ORCHESTRATOR:-0}" = 1 ] || die "only the orchestrator provisions machines: '$cmd' needs MOJOLEARN_ORCHESTRATOR=1. A lane reports that it needs NVIDIA and waits." ;;
 esac
 case "$cmd" in
 up)

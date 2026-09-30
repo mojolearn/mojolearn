@@ -1,6 +1,6 @@
 # T3: the GPT-3 Small six-segment run, 2026-09-23
 
-The run of `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`: a GPT-3 Small shape decoder
+The GPT-3 Small run: a GPT-3 Small shape decoder
 (162,147,840 parameters, batch 4, length 2048, vocabulary 50,257, K=64 logical
 shards of 8,192 tokens an optimizer step) trained for 5,000 steps over the
 pinned FineWeb-Edu id stream in six segments handed between NVIDIA and AMD
@@ -70,7 +70,7 @@ step on the H100 side and 104 s on the MI325X side; that pace is the
 exchange between the boxes, not either box's arithmetic (T1 measured 40 s
 for 64 shards on one H100 and 139 s on one MI325X). Wall clock 10:03 to
 22:01 UTC; the pod and the droplet were confirmed gone by 22:04 UTC.
-Cost about $88. After A/3 the run paused on Andrew's instruction: no AMD
+Cost about $88. After A/3 the run paused by decision: no AMD
 segment runs before the next PyPI release carries the AMD step-time work
 (`bench/results/amd_step_time_2026-09-24/`), so A/4 and every route B
 segment that needs AMD are held in `spec.json`.

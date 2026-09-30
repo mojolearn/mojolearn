@@ -3,9 +3,8 @@
 The code kind of CONTRIBUTING.md (Performance claims) for every neural timing and
 quality claim, from 2026-09-11 night (the English kind is
 `training/corpus/enwik8`). It replaces `training/corpus/cpython312_lib`
-(4.5 MB of one project's Python, no published numbers), because Andrew
-asked for two corpora that are the norm, generalize and carry published
-benchmarks.
+(4.5 MB of one project's Python, no published numbers), because the two
+corpora should be the norm, generalize and carry published benchmarks.
 
 The Pile's GitHub component is ordinary public GitHub code in many
 languages, with the READMEs and config files that come with it. It has

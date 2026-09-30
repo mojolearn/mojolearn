@@ -15,8 +15,8 @@ them is fixed here; each needs a decision that is not this lane's to make.
      holds one element, the set always holds one element, and MOVED is
      unreachable. Every consumer of MOVED goes with it:
      `_verify_reference.judge`'s `value == "MOVED"` arm, and `ONE-COLUMN`'s
-     sibling in `_verify_par.GATING`. BLOCKED on Andrew's standing
-     `--repeats 1` instruction; `tools/identity_break.py` defaults to 2.
+     sibling in `_verify_par.GATING`. BLOCKED on the standing
+     `--repeats 1` policy; `tools/identity_break.py` defaults to 2.
 
   B  `_verify_all.commitment_state` and `challenge_state` guard their
      self-consistency catch with `isinstance(stored, str)`. A tampered

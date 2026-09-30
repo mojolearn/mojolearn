@@ -1,4 +1,4 @@
-"""A release is LIGHT and PARALLEL (Andrew, 2026-09-25), proved without a
+"""A release is LIGHT and PARALLEL (2026-09-25), proved without a
 rental: the NVIDIA and AMD wheel columns are launched together and both
 awaited, one failing does not stop the other, they are diffed against the
 Apple column (the CPU column only with --cpu-column), a DIVERGENT cell

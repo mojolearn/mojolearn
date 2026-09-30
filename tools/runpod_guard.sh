@@ -18,7 +18,7 @@
 # ---------------------------------------------------
 # An MI300X is $2.39/hr. The failure being guarded is an ORPHAN: a session
 # ends, crashes, or is closed, and the pod keeps billing with nobody watching
-# it. Andrew's rule (2026-08-23): the expiry must be BAKED IN, not remembered.
+# it. The rule (2026-08-23): the expiry must be BAKED IN, not remembered.
 #
 # **THE ORPHAN CASE IS THE LAPTOP GOING AWAY**, so a reaper that runs on the
 # laptop is the wrong primary defence -- it is exactly the thing that is gone

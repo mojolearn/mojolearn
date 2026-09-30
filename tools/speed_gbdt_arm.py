@@ -40,7 +40,7 @@ chosen for flattering us.
 
 WHICH OPPONENT GOES IN WHICH LANE, AND THE STANDING ORDER BEHIND IT
 --------------------------------------------------------------------
-Andrew's standing order (2026-08-22): **the symmetric-tree comparison is
+Standing rule since 2026-08-22: **the symmetric-tree comparison is
 CatBoost ONLY.** LightGBM has no symmetric mode -- leaf-wise is its only
 growth algorithm -- so a LightGBM arm beside the symmetric learner compares
 two different algorithms and is excluded from it.
@@ -107,7 +107,7 @@ not be installed or could not run:
     FSPEED-ACC lane=<l> arm=<a> metric=<rmse|logloss|accuracy|auc> value=<f>
     FSPEED-REFUSED lane=<l> arm=<a> reason=<one line>
 
-One line type is NOT in the contract the orchestrator handed down, and it is
+One line type is NOT in the contract the maintainer handed down, and it is
 additive rather than a change to the four above (DEVIATION 1839):
 
     FSPEED-NOTE lane=<l> arms=<a,b> metric=<m> delta=<f> reason=<one line>
@@ -534,7 +534,7 @@ def load_year(size, rows_cap=None):
 
     THE DOWNLOAD IS 211 MB and it is a SEPARATE, EXPLICITLY NAMED STEP
     (`--download year`), never something a timed run does on its own, because
-    the orchestrator has to budget a one-hour GPU lease around it. The
+    the maintainer has to budget a one-hour GPU lease around it. The
     train/test split is gbm-bench's own: the first 463,715 rows train, the
     remaining 51,630 test, no shuffle, which that dataset's own
     documentation requires (an artist's tracks must not straddle the split).
@@ -720,7 +720,7 @@ def load_higgs(size, rows_cap=None):
 
     THE DOWNLOAD IS 2.6 GB and it is a SEPARATE, EXPLICITLY NAMED STEP
     (`--download higgs`), never something a timed run does on its own, for
-    the reason `load_year` gives: the orchestrator budgets a lease around
+    the reason `load_year` gives: the maintainer budgets a lease around
     it. The decoded cache is another 1.3 GB of float32.
     """
     folder = os.path.join(data_root(), "higgs")
@@ -1560,7 +1560,7 @@ def staged_cache(name):
 
 def download(name):
     """The explicitly named, untimed fetch step. Prints the size it pulled so
-    the orchestrator can budget the lease around it.
+    the maintainer can budget the lease around it.
 
     THE STAGED CACHE SHORT-CIRCUITS EVERYTHING BELOW (DEVIATION 2704).
     Every branch used to test for the RAW artifact -- `HIGGS.csv.gz`,
@@ -1592,7 +1592,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 2.6 GB)" % (url, dest))
-            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh: always use R2)")
             urllib.request.urlretrieve(url, dest)
             print("higgs: %.1f MB" % (os.path.getsize(dest) / 1e6))
         # Decode once, here. The gzip csv parse is several MINUTES and it
@@ -1649,7 +1649,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 472 MB)" % (ISTELLA_URL, dest))
-            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh: always use R2)")
             urllib.request.urlretrieve(ISTELLA_URL, dest)
             print("istella: %.1f MB" % (os.path.getsize(dest) / 1e6))
         if _find_file(folder, "train.txt") is None:
@@ -1678,7 +1678,7 @@ def download(name):
             # counts as present is how a leg once measured synthetic data
             # while believing it had Istella-S.
             tmp = dest + ".part"
-            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh: always use R2)")
             urllib.request.urlretrieve(url, tmp)
             os.replace(tmp, dest)
             print("criteo part: %.1f MB" % (os.path.getsize(dest) / 1e6))
@@ -1701,7 +1701,7 @@ def download(name):
                   % (dest, os.path.getsize(dest) / 1e6))
         else:
             print("downloading %s -> %s (about 211 MB)" % (url, dest))
-            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh, Andrew 2026-09-13: always use R2)")
+            print("R2_STAGING_MISSED: downloading from the origin on this box; the runner should have staged it (tools/stage_from_r2.sh: always use R2)")
             urllib.request.urlretrieve(url, dest)
             print("year: %.1f MB" % (os.path.getsize(dest) / 1e6))
         # Decode once, here, so the first timed run does not pay a
@@ -1864,8 +1864,8 @@ def task_of(lane):
 def lane_config(lane, size):
     """The knobs every arm of `lane` is given, spelled once.
 
-    NVIDIA'S VALUES (2026-09-29, Andrew: "use their tuning params for us and
-    the opponent"). Every lane NVIDIA gbm-bench covers takes each parameter
+    NVIDIA'S VALUES (2026-09-29: their tuning parameters for our arm and the
+    opponent). Every lane NVIDIA gbm-bench covers takes each parameter
     gbm-bench sets explicitly, on our arm and every opponent arm
     (tools/bench_board_harness.py GBM, source URL and commit there and in
     `cfg["harness"]`): 500 trees (runme.py -ntrees), max_depth 8,
@@ -1927,8 +1927,7 @@ def lane_config(lane, size):
                          Plain. Both CatBoost arms are pinned to `Plain`.
       seed 7             Every arm.
 
-    SAME SEED, SAME TUNING PARAMETERS (2026-09-29, Andrew: "they need to be
-    comparable same seed same tuning params"). The M3 Ultra board read
+    SAME SEED, SAME TUNING PARAMETERS (2026-09-29: races must be comparable). The M3 Ultra board read
     NOT-COMPARABLE on the taxi depthwise/lossguide races and the LightGBM
     forests; the knobs below were left to library defaults that differ in
     meaning, and are now pinned on every arm that has them:
@@ -2313,7 +2312,7 @@ def _catboost_score_note(lane, cfg, devices):
 
 def catboost_arms(lane, cfg, data, devices):
     """CatBoost CPU and CatBoost's CUDA learner. The symmetric-tree opponent,
-    and per Andrew's standing order the ONLY opponent in `gbdt-symmetric`."""
+    and by standing rule the ONLY opponent in `gbdt-symmetric`."""
     import catboost
 
     def _params(task_type):
@@ -2583,7 +2582,7 @@ def lightgbm_arms(lane, cfg, data, devices):
     as a refusal rather than as a missing row.
 
     LightGBM never appears in `gbdt-symmetric`: leaf-wise is its only growth
-    algorithm (Andrew's standing order, 2026-08-22). In the forest lanes it
+    algorithm (standing rule since 2026-08-22). In the forest lanes it
     runs `boosting_type='rf'`, which is what
     `PARITY_NOTES['lgbm-rf-bagging']` and `tools/nvidia_forest_bench.sh`
     already compare against."""

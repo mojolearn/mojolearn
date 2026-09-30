@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""The Apple steward queue for the algorithm expansion
-(docs/lanes/ALGORITHM_EXPANSION_PLAN.md, FINAL DECISIONS).
+"""The Apple steward queue for the algorithm expansion.
 
 The nine lanes build and verify on rented NVIDIA pods. Metal only compiles on
 a Mac, and the MacBook is off-limits to lanes, so the Apple column is the
@@ -9,7 +8,7 @@ columns name, instance, host, ip), reached with tools/cloudmac.sh. A Mac's
 MODEL is its name without a trailing -<suffix> (m4pro-a -> m4pro, m4-a -> m4,
 m3ultra-b -> m3ultra) and its GENERATION the chip family (M2, M3, M4).
 
-ROUTING (Andrew, 2026-09-27): an IDENTITY request goes to ONE Mac per
+ROUTING (2026-09-27): an IDENTITY request goes to ONE Mac per
 generation (the least busy one: fewest queued + working requests), not to
 every Mac: M2 -> m2pro, M3 -> m3ultra or m3ultra-b, M4 -> m4pro-a, m4pro-b
 or m4-a. MERGE GATE: a lane may merge once ANY one Apple steward PASSES and
@@ -56,7 +55,7 @@ ON THE LAPTOP (a lane's agent):
       generation, laptop spools are shipped. A queued request moves by an
       atomic mv out of the source queue (a request the steward already
       claimed is left where it is), so nothing is lost or run twice.
-  apple_steward.py flush-deferred --steward <mac>   (orchestrator, later;
+  apple_steward.py flush-deferred --steward <mac>   (run later;
       pushes each spooled commit to the Mac before shipping its requests)
 
 THE AMD STEWARD (`do-amd`, 2026-09-27: "treat AMD like Apple"). One
@@ -177,7 +176,7 @@ DEFERRED = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DEFERRED", "").spl
 #: requests to the other Macs of the generation.
 DRAIN = tuple(x for x in os.environ.get("MOJOLEARN_STEWARD_DRAIN", "").split(",") if x)
 #: SPEED JOBS go to the least busy Mac of the requested model or generation;
-#: the default model is the M4 Pro (Andrew, 2026-09-27).
+#: the default model is the M4 Pro (2026-09-27).
 SPEED_DEFAULT = os.environ.get("MOJOLEARN_STEWARD_SPEED", "m4pro")
 REMOTE_ROOT = "~/mojolearn-evidence/apple-steward"
 STEWARD_CLONE = "~/mojolearn"        # MOJOLEARN_STEWARD_REPO's default on the cloud Macs

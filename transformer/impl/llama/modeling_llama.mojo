@@ -195,7 +195,7 @@ calls the block twice. This file resolves it toward the differ: the table is
 COMPUTED once per configuration (which is what the cost sentence is about)
 and RECORDED on every call, off the same buffers, so every call's card is
 exactly section 9's thirty tags in exactly section 9's order. Three extra
-hashes per call. If the orchestrator wants the other reading, the three
+hashes per call. If the maintainer wants the other reading, the three
 `record_device` calls in `llama_attention_forward` are the only site.
 
 **DEVIATION 1025 -- `llama_rms_norm_kernel` is a TEMPORARY transcription and
@@ -419,7 +419,7 @@ STRICTLY LESS THAN. Refused by name below rather than silently wrapped."""
 # `transformer_fixture.mojo:925` and `:930`. This file may not import from
 # `transformer/checks/` (the two halves of this lane were written
 # concurrently by different agents and a shared type would have been a guess
-# by both), so the VALUES are restated here and the orchestrator owns
+# by both), so the VALUES are restated here and the maintainer owns
 # keeping them equal. If they ever disagree, the device plants at a point
 # the oracle does not and clause (a) fails at `attn.scores` on every planted
 # case while every unplanted case stays green -- which reads exactly like an

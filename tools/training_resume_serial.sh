@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Root-only remote orchestration. AUTHORED WITHOUT EXECUTION.
-# No provisioning or transfers. Never invoke from a subagent or Apple host.
+# No provisioning or transfers. Never invoke from an Apple host.
 # Usage: --vendor cuda|hip --gpu-arch sm_XX|gfxXXX --out /new/absolute/path
 # Optional: --incoming /actual/foreign-head8 --build-from /retained/base-campaign
 # Default builds once then runs continuous16 and head8; incoming mode reuses

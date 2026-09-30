@@ -18,7 +18,7 @@ order.
 **NOTHING IN THIS FILE HAS BEEN RUN.** Not once. The expected outputs quoted
 in `resample/README.md` are the SHAPE of what each line will print, not a
 transcript. Any number in this repository attributed to this lane is a
-fabrication until the orchestrator runs it.
+fabrication until the maintainer runs it.
 
 CHECKS
   check_resample_refusals             every bound and every unimplemented choice

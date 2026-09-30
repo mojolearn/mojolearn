@@ -2,7 +2,7 @@
 # tools/model_leg/run_local_m4.sh: THE APPLE COLUMNS OF THE MODEL LEG on this
 # M4: the Metal column through the identical GPU builds and the CPU column
 # through the host bindings, one prompt file, then the incumbent on the same
-# box through torch's mps device. FOR THE ORCHESTRATOR TO RUN LATER; it
+# box through torch's mps device. FOR THE MAINTAINER TO RUN LATER; it
 # compiles and runs on the Mac and this lane never executed it.
 #
 #   sh tools/model_leg/run_local_m4.sh                  everything, into $MOJOLEARN_EVIDENCE_ROOT/model-leg/<stamp>-apple-m4/

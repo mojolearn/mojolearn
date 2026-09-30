@@ -8,7 +8,7 @@ compiler has read any of it, no device has run it, no byte produced by it has
 been observed, and no file written by it has been loaded back. **Every
 "passes", "refuses" and "equals" below is a PREDICTION.** Written 2026-09-03
 by the checkpoint-file lane, DEVIATIONS 2050 through 2069, PROPOSED and not
-yet in the orchestrator's ledger. The design is
+yet in the maintainer's ledger. The design is
 `training/CHECKPOINT_FORMAT.md`; the commands that would falsify this are in
 its section 10.
 
@@ -1431,7 +1431,7 @@ def clause_iii(
 
 
 def clause_iv() raises -> Int:
-    """The comparator the orchestrator points at two vendors' files.
+    """The comparator the maintainer points at two vendors' files.
 
     A comparator that reported a difference everywhere, or nowhere, would be
     useless in exactly the situation it is for, so both directions are

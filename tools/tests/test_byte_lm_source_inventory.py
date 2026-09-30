@@ -1,4 +1,4 @@
-"""Authored host-only provenance fixtures; root executes, never subagents."""
+"""Host-only provenance fixtures."""
 import importlib.util
 from pathlib import Path
 

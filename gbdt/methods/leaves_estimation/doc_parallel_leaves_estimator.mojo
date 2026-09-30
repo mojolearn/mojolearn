@@ -67,7 +67,7 @@ over depthwise and lossguide: FLIP geomean=0.898 cells=4 quality=ok);
 `-D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1` restores the host partition.
 FAST stays OPT-IN (`-D MOJOLEARN_2551_DEVICE_PARTITION=1`): its verdict
 read NO FLIP on a taxi quality flag that is FAST's own round-to-round fit
-variation, left to the orchestrator. `partition_from_bins` below
+variation, left to the maintainer. `partition_from_bins` below
 (DEVIATION 90) reads every row's leaf back to the host, counting-sorts
 1M rows there on two passes, allocates two n_rows pinned buffers and one
 device buffer, and uploads the row order again: once per tree per

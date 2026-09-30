@@ -29,7 +29,7 @@ regenerate the same bits from the README's spec with no library RNG. The
 generator asserts that exactness with exact rationals for every element.
 
 THIS FILE ALSO CARRIES THE MAMBA-2 (SSD) AND MAMBA-3 (SISO) CORPORA (one
-corpus tool, the orchestrator's decision 2026-09-01). Each family lives in
+corpus tool, the maintainer's decision 2026-09-01). Each family lives in
 its own clearly fenced section below (mamba2: profile
 `mojolearn.identical.mamba2.fp32.v1`, `mamba/IDENTICAL_MAMBA2_CONTRACT.md`
 section 8g; mamba3: profile `mojolearn.identical.mamba3.siso.fp32.v1`,

@@ -196,7 +196,7 @@ generator drifting apart, which the position weight makes it do (a plain XOR
 would pass a permutation). It is not adversarial and is not claimed to be.
 
 ======================================================== SAFETY ON THIS LAPTOP
-The orchestrator runs this on the project owner's M4, which is also the
+The maintainer runs this on the project owner's M4, which is also the
 machine he works on, and that box's GPU governor drifts up to 1.7x within one
 session under heat (`the M4 drifts 1.7x in 20 minutes`). Four things follow,
 and they are requirements rather than preferences:

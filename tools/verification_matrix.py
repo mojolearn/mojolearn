@@ -8,8 +8,8 @@
     python3 tools/verification_matrix.py --check    # fail when the committed doc is stale
     python3 tools/verification_matrix.py --json     # the whole thing as data
 
-Andrew's question, 2026-09-16: "for every algorithm we ship, do we have all
-four kinds of bitwise-identity verification?" This tool answers it by READING
+The question (2026-09-16): for every algorithm we ship, do we have all four
+kinds of bitwise-identity verification? This tool answers it by READING
 THE TREE. Nothing here is typed in by hand; every cell names the file it came
 from, and re-running it after a merge produces the new answer rather than a
 stale one. It is not a CI gate and is not meant to run per commit. It runs

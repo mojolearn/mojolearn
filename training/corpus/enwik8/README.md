@@ -2,10 +2,8 @@
 
 The English kind of CONTRIBUTING.md (Performance claims) for every neural timing and
 quality claim, from 2026-09-11 night (the code kind is
-`training/corpus/pile_github`). Andrew asked for two corpora that are the
-norm, generalize and carry published benchmarks: "is shakespeare a good
-file? what generalizes? what is the norm? what are the benchmarks? we
-should take 2 corpora that generalize and that have benchmarks".
+`training/corpus/pile_github`). The two corpora are the norm, generalize
+and carry published benchmarks.
 `training/corpus/tinyshakespeare` (1.1 MB, a nanoGPT quick-start demo with
 no leaderboard) is retired as a timing corpus; it stays for the byte LM
 validation runs that already pin it.

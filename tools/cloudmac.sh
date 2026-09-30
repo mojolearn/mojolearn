@@ -1,8 +1,7 @@
 #!/bin/bash
 # tools/cloudmac.sh -- the AWS EC2 Macs that act as Apple stewards for the
-# algorithm expansion (docs/lanes/ALGORITHM_EXPANSION_PLAN.md). Subagents
-# never use the MacBook's CPU or GPU; every Apple build and Metal check runs
-# on these hosts.
+# algorithm expansion. Every Apple build and Metal check runs on these hosts,
+# never on a developer laptop.
 #
 #   tools/cloudmac.sh list                 name, instance, ip
 #   tools/cloudmac.sh ssh <name> [cmd]     a shell (or one command) on that Mac

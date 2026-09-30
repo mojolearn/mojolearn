@@ -176,7 +176,7 @@ DO_IMAGE="${MOJOLEARN_SMOKE_DO_IMAGE:-188571990}"
 # The API root is overridable only so the test can stand a local shim in for
 # DigitalOcean (the RunPod one, RP, is the same in tools/runpod_pod_lib.sh).
 DO_API=${MOJOLEARN_SMOKE_DO_API:-https://api.digitalocean.com/v2}
-DO_SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"   # "andrew macbook m4 air", ~/.ssh/id_ed25519
+DO_SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"   # the maintainer's ~/.ssh/id_ed25519
 DO_TAG=smoke
 DO_TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
 DO_GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-/tmp/mojolearn-do-gpu.lock}"

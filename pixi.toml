@@ -1208,8 +1208,8 @@ check-depthwise = "mojo run -I . checks/depthwise_check.mojo"
 # claims (three policies differ, budgets bind, NS model round-trips, the
 # hist-mode control after DEVIATION 261)
 check-grow-policy = "mojo run -I . checks/grow_policy_check.mojo"
-# The classical cuML-mirror lanes opened 2026-08-23 (orchestrator
-# cascadeprojects-a6, DEVIATIONS 600-699; IDENTITY_PATHS rows 40-48). One
+# The classical cuML-mirror lanes opened 2026-08-23 (DEVIATIONS 600-699;
+# IDENTITY_PATHS rows 40-48). One
 # task per check file, FAST; the IDENTICAL pass is the injector, exactly as
 # for every other gate here:  tools/with_identical_mode.sh pixi run check-cd
 check-cd = "mojo run -I . solver/checks/cd_check.mojo"

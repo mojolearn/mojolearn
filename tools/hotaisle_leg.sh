@@ -100,7 +100,7 @@
 #   in no argv on either machine. Both process lists are searched for it.
 #
 # THE SEGMENT LEASE (--segment-lease N --dollar-cap USD; the GPT-3 Small run's
-# AMD segments, 20 to 35 hours each, docs/HANDOFF_gpt3_small_run_2026-09-23.md).
+# AMD segments, 20 to 35 hours each).
 # The 60-minute rule of f. is this tool's, not the provider's. The API
 # (swagger read 2026-09-24) has NO maximum: AvailableVirtualMachineTypes
 # carries only MinimumReservationMinutes; a VM is billed hourly from the
@@ -114,8 +114,7 @@
 #      OnDemandPrice (cents/h) from GET .../virtual_machines/available/ times N
 #      minutes, rounded up to a cent, is the lease's price. Above the cap:
 #      "segment lease REFUSED ... above the --dollar-cap", nothing created.
-#      The balance is recorded, not enforced beyond the 500-cent floor (b.):
-#      Hot Aisle tops it up automatically (Andrew, 2026-09-25).
+#      The balance is recorded, not enforced beyond the 500-cent floor (b.).
 #   3. The Mac dead-man and the on-box watchdog take the long deadline
 #      (create + N minutes); the body's timeout(1) is the deadline minus the
 #      fetch reserve; slots, the stock wait, the verified delete and the
@@ -208,7 +207,7 @@
 # Inside a container rocm-smi reads sysfs and still lists both GPUs; that is
 # recorded, never used as the verdict.
 #
-# RUN OWED, 2gpu (nothing of it has run on a real VM; the orchestrator runs it):
+# RUN OWED, 2gpu (nothing of it has run on a real VM; the maintainer runs it):
 #   1. The dry run with two bodies, GREEN, both composed commands and pins shown:
 #        MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 MOJOLEARN_GPU_ARCHS=gfx942 \
 #        MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_longk_leg.sh \
@@ -2097,7 +2096,7 @@ read -r _op TEAM_MAX_VMS < <(J teams "$TMPD/teams.json" "$TEAM")
 BAL_BEFORE=$(balance_cents)
 log "team $TEAM balance at the start $(dollars "$BAL_BEFORE") ($BAL_BEFORE cents); VM limit $TEAM_MAX_VMS, slots $(slot_cap)"
 echo "balance_before_cents=$BAL_BEFORE" >> "$OUT/leg.txt"
-# no balance floor: the team balance tops up automatically (2026-09-25)
+# no balance floor here: the balance is recorded only (2026-09-25)
 c=$(api GET "user/ssh_keys/" "$TMPD/keys.json")
 [ "$c" = 200 ] && [ "$(J sshkey "$TMPD/keys.json" "$SSH_KEY_FP")" = yes ] \
   || die "REFUSING to rent: $SSH_KEY_FP is not registered on the account (HTTP $c); ssh would fail. Nothing was created." 2
@@ -2173,8 +2172,7 @@ if [ -n "$SEGMENT_LEASE" ]; then
 fi
 BAL_NEED=$(( LEASE_CENTS + MIN_BALANCE_CENTS ))
 { echo "lease_cents=$LEASE_CENTS"; echo "balance_required_cents=$BAL_NEED"; } >> "$OUT/leg.txt"
-# THE BALANCE IS NOT A LIMIT (Andrew, 2026-09-25): Hot Aisle tops the team
-# balance up automatically. The lease is priced against the cap above; the
+# THE BALANCE IS NOT A LIMIT (2026-09-25). The lease is priced against the cap above; the
 # balance is recorded for the cost record and only the $5.00 floor refuses.
 [ "$BAL_BEFORE" -ge "$BAL_NEED" ] 2>/dev/null \
   || log "note: balance $(dollars "$BAL_BEFORE") is below the whole lease ($_bill_minutes min at $_price cents/h = $(dollars "$LEASE_CENTS")) plus the floor; Hot Aisle tops up automatically, proceeding"

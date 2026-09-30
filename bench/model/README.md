@@ -35,9 +35,8 @@ DIVERGENT.
 
 ### The model source: the R2 dataset store, never a download on a box
 
-DEVIATION 2704 (`tools/stage_from_r2.sh`; Andrew, 2026-09-13: "cloudflare has
-datasets already saved and when using runpod we should ALWAYS use them; make
-sure all of our shit ships corpora from R2 instead of downloading"). The model
+DEVIATION 2704 (`tools/stage_from_r2.sh`, 2026-09-13): datasets and corpora
+are staged from the R2 store, never downloaded on a rented box. The model
 is held in the store like every corpus, pinned by size and sha256 in
 `bench/results/dataset_store/manifest.tsv`, one key per checkpoint file under
 `models/<name>/`, and staged onto a rented box by the runner right after the
@@ -111,7 +110,7 @@ shards' were, from the bytes' own size and sha256):
 
 The same eight lines for `TinyLlama/TinyLlama-1.1B-Chat-v1.0` and, with
 `HF_TOKEN` set for step (2) only, `meta-llama/Llama-3.2-1B`. The rows the
-orchestrator adds to `manifest.tsv` in step (4) have this shape (size and
+maintainer adds to `manifest.tsv` in step (4) have this shape (size and
 sha256 from the bytes on the Mac):
 
     models/SmolLM2-360M/config.json	<size>	<sha256>

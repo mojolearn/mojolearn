@@ -393,7 +393,7 @@ def test_over_the_dollar_cap_is_refused_before_the_create(world):
 
 
 def test_a_balance_short_of_the_whole_lease_proceeds_with_a_note(world):
-    """Hot Aisle tops the team balance up automatically (Andrew, 2026-09-25):
+    """The balance is not a limit (2026-09-25):
     a balance below the whole lease is recorded and noted, never a refusal;
     no balance refuses."""
     world.shim.balance = 17000        # above the $5 floor, below $179.40 + $5.00

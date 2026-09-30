@@ -49,6 +49,4 @@ taken at 2000 rows and the diff tool's `LANE_REVISIONS` already refuses them.
 ## What is owed
 
 The AMD recording, at the next release record. AMD was left alone entirely for
-this lane by Andrew's standing instruction.
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+this lane by standing policy.

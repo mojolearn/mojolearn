@@ -5,8 +5,7 @@ schedules written FOR A WAVEFRONT OF 64: the plans of
 `gemm/checks/gemm_int8_mma_tuned.mojo` in AMD's geometry, and a kernel that
 stages nothing.
 
-Lane lane/lowbit-amd-tuned, 2026-09-29 (Andrew: "why don't we port the tuned
-kernel to amd?"). Contract clause L-9 of `gemm/IDENTICAL_LOWBIT_CONTRACT.md`.
+Lane lane/lowbit-amd-tuned, 2026-09-29: the tuned kernel ported to AMD. Contract clause L-9 of `gemm/IDENTICAL_LOWBIT_CONTRACT.md`.
 The reference unit plan is `gemm/checks/gemm_int8_mma.mojo`; the tuned plans
 and the four-product kernel are lane/lowbit-mma-speed's
 `gemm/checks/gemm_int8_mma_tuned.mojo`; NEITHER IS EDITED HERE. This file
@@ -313,8 +312,7 @@ def int8_amd_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_mma_amd_into` takes. Reads the shape
     and may: every plan is the profile. THE MI325X'S MEASUREMENT, every plan
     of this file and of the tuned file timed in one run at the twelve rows,
-    with the launch bound stated (job 1790660119759,
-    `docs/lanes/progress/lowbit-amd-tuned.md`):
+    with the launch bound stated (job 1790660119759):
       - at the decode rows the reference's tile, ONE WAVE A BLOCK, 16-byte
         loads, four windows' loads per turn (`DIRECT_ONE_WAVE`) took the
         least time at seven of the eight rows (0.13 to 0.48 of fp32.v1) and

@@ -11,7 +11,7 @@ pattern JAX and CuPy use, so NVIDIA and AMD can release independently:
                        NVIDIA architecture the release carries)
     mojolearn-amd      ONLY mojolearn/hip/<arch>/...  (AMD, gfx942)
 
-`pip install mojolearn` JUST WORKS FOR EVERYONE (Andrew, 2026-09-26): the
+`pip install mojolearn` JUST WORKS FOR EVERYONE (since 2026-09-26): the
 Linux core requires BOTH plugins at its own version exactly
 (`Requires-Dist: mojolearn-nvidia==<v>`, `Requires-Dist: mojolearn-amd==<v>`,
 core_requirements), and each plugin requires exactly `mojolearn==<v>` back

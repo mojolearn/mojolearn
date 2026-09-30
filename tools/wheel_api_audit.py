@@ -172,7 +172,7 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: the core carries {len(stray)} GPU set member(s), e.g. {stray[0]}')
             if 'mojolearn/__init__.py' not in payload:
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
-            # `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26):
+            # `pip install mojolearn` WORKS FOR EVERYONE (since 2026-09-26):
             # the core requires BOTH plugins at its own version exactly, no
             # marker or GPU extra. NumPy remains optional for APIs and verification.
             extras = sorted(metadata.get_all('Provides-Extra', []))

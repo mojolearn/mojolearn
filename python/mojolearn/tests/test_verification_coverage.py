@@ -58,7 +58,7 @@ def test_inspection_and_batch_flags_route_to_suite():
 
 
 def test_a_pending_reason_annotates_and_only_a_blocking_one_withholds(monkeypatch):
-    """A PENDING REASON STOPPED DECIDING VISIBILITY (Andrew, 2026-09-20).
+    """A PENDING REASON STOPPED DECIDING VISIBILITY (2026-09-20).
 
     This test used to assert the opposite: that a lane in PUBLIC_PENDING_LANES
     was NOT in the public set, whatever its reason said. That is the rule that
@@ -152,8 +152,8 @@ def test_select_d_cpu_chooses_first_stationary_order_and_preserves_input(monkeyp
 
 
 def test_an_unreferenced_lane_no_longer_blocks_a_pass_but_a_wrong_one_does():
-    """THE GATE WAS LOOSENED ON PURPOSE, AND EXACTLY TWICE (Andrew,
-    2026-09-20). This test asserted the old rule, that any withheld or
+    """THE GATE WAS LOOSENED ON PURPOSE, AND EXACTLY TWICE
+    (2026-09-20). This test asserted the old rule, that any withheld or
     unreferenced lane cost the run its pass. It now asserts the new one and
     the line that was kept: DIVERGENT and REFUSED still gate, because they
     mean something WENT WRONG rather than something is missing, and passing

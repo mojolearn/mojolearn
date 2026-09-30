@@ -44,7 +44,7 @@ PY="${MOJOLEARN_VT_PYTHON:-pixi run -e gbmbench python}"
 py() { $PY "$@"; }
 MOJOLEARN_PYTHON="$PY"; export MOJOLEARN_PYTHON
 
-# THE ROW FLOOR IS ANDREW'S STANDING ORDER (2026-09-01) AND IS ENFORCED, NOT
+# THE ROW FLOOR IS A STANDING RULE (2026-09-01) AND IS ENFORCED, NOT
 # DOCUMENTED: never measure or decide tree performance below a million rows.
 if [ "$ROWS" -lt 1000000 ]; then
     echo "!! MOJOLEARN_VT_ROWS=$ROWS is below the 1,000,000-row tree floor; refusing" >&2

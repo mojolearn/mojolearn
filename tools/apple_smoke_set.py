@@ -3,9 +3,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE SMALL APPLE SET FOR ROUTINE WORK (2026-09-16).
 
-Andrew: "for our regular test we test much much much less of mac, maybe hardly
-any at all, 3-5 tests, rely on nvidia and amd and trust mojo, mac is a big
-problem".
+Routine testing runs very little on Apple: 3 to 5 lanes, relying on the NVIDIA
+and AMD columns for breadth.
 
 The Apple GPU is one machine, it cannot be rented, it runs one job at a time,
 and a full column is hours. NVIDIA and AMD are rented, parallel and cost a few
@@ -70,7 +69,7 @@ def derive(n, include_par=False):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("-n", type=int, default=5, help="how many lanes (Andrew asked for 3 to 5)")
+    ap.add_argument("-n", type=int, default=5, help="how many lanes (3 to 5 is the intended range)")
     ap.add_argument("--lanes-only", action="store_true", help="print just the comma list, for a command line")
     ap.add_argument("--include-par", action="store_true", help="do not drop par-* (they cannot state their claim on one GPU)")
     a = ap.parse_args()

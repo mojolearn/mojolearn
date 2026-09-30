@@ -12,8 +12,8 @@
 #                  leaves the Mac.
 #   @CORPUS_SHA@   the pinned sha256 from bench/results/dataset_store/manifest.tsv.
 #
-# WHY THE POD EXISTS AT ALL. The thread-count axis is the whole reason. Andrew
-# allows one core per agent on the shared Mac, so a trainer spinning up every
+# WHY THE POD EXISTS AT ALL. The thread-count axis is the whole reason. Local
+# runs get one core each on the shared Mac, so a trainer spinning up every
 # core cannot run there. The other axes are run here too, so that every axis
 # gets one coherent x86/Linux column instead of being split across machines;
 # the Mac contributes an independent arm64 column at one core.

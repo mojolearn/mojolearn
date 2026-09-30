@@ -475,8 +475,7 @@ __all__ = [
     "gpu_arch_how",
 ]
 
-# THE ALGORITHM EXPANSION'S DOORS (lane/algos-prep, 2026-09-27;
-# docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+# THE ALGORITHM EXPANSION'S DOORS (lane/algos-prep, 2026-09-27). Nine lanes
 # add public algorithms in parallel and none of them edits this file: each
 # owns `_expansion_<lane>.py`, whose `__all__` is what it makes public. They
 # are imported here in lane order (host_surface.EXPANSION_LANES) and their
@@ -528,8 +527,8 @@ globals().pop("_name", None)
 # bit -- and the shipped path is byte-identical on the other 3,486 lines
 # (bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md, corrected in place). The
 # entry was deleted when the surface was written, not when the reading was
-# withdrawn, because exposing an estimator is a shipping decision and Andrew
-# delegated it. Keep the mechanism: the next lane that is finished underneath
+# withdrawn, because exposing an estimator is a shipping decision.
+# Keep the mechanism: the next lane that is finished underneath
 # and unreachable from Python belongs in here, by name, not left to an
 # AttributeError -- and so does the next lane withheld on purpose, with the
 # purpose written out the way the GP's was.

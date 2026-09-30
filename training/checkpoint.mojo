@@ -6,7 +6,7 @@
 compiler has read it, no byte has ever been written to disk by it, and no
 file has ever been loaded back. Every "refuses" below is a PREDICTION.
 Written 2026-09-03 by the checkpoint-file lane, DEVIATIONS 2050 through 2069,
-PROPOSED and not yet in the orchestrator's ledger. The specification is
+PROPOSED and not yet in the maintainer's ledger. The specification is
 `training/CHECKPOINT_FORMAT.md` and the gate is
 `training/checks/checkpoint_check.mojo`, which has also never run.
 
@@ -1283,7 +1283,7 @@ def load_checkpoint(
 # ===========================================================================
 # THE TWO-FILE COMPARISON
 # ===========================================================================
-# This is the function the orchestrator points at two vendors' checkpoints.
+# This is the function the maintainer points at two vendors' checkpoints.
 # A bare `cmp -l a.bin b.bin` is the same verdict with less of an address.
 
 

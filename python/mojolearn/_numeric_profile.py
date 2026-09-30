@@ -16,7 +16,7 @@ FORMAT the matrix products compute in. They are independent: a profile is
 bitwise identical across vendors under `numeric_mode="identical"` exactly
 as `fp32_v1` is, and picking one never changes the mode.
 
-OPT IN (Andrew, 2026-09-29: "please make it opt in again"). Without an
+OPT IN (since 2026-09-29). Without an
 explicit keyword, environment or process-level opt-in, every family uses
 fp32_v1. A call that names no profile
 gets:
@@ -94,8 +94,7 @@ INFERENCE AND TRAINING ARE SEPARATE GATES. A row says `inference` and
 the TRAINING default, so the inference default never reaches a trainer; a
 trainer asked by name for a profile whose `training` is False refuses it.
 
-WHAT A ROW MUST SHOW BEFORE `inference` IS TRUE (docs/lanes/
-LOWBIT_UNITS_PLAN.md, the three gates): identity on three vendors with a
+WHAT A ROW MUST SHOW BEFORE `inference` IS TRUE (the three gates): identity on three vendors with a
 sabotage arm seen failing; the relative change in held-out perplexity
 against `fp32_v1`, measured as ONE complete configuration on two texts,
 with the change and the upper end of its interval both under 1 percent; and
@@ -181,8 +180,8 @@ REJECTED = {
                "held-out perplexity by 32.2 percent on enwik8 and 28.9 percent on pile_github "
                "(SmolLM2-360M, 2026-09-29), against a bar of 1 percent; the int8 activation "
                "codes cause nearly all of it",
-    "fixed15_int8_attention_v1": "DROPPED BEFORE ITS WHOLE CONFIGURATION WAS MEASURED (Andrew, "
-                                 "2026-09-29): int8 codes on the attention products alone read "
+    "fixed15_int8_attention_v1": "DROPPED BEFORE ITS WHOLE CONFIGURATION WAS MEASURED "
+                                 "(2026-09-29): int8 codes on the attention products alone read "
                                  "+0.6 percent on enwik8, which leaves little of a 1 percent bar, "
                                  "and int8 is not offered anywhere else",
 }
@@ -199,13 +198,11 @@ MEASURED = {
         "cuda": {"over": (0.34, 0.68), "box": "RTX 4090 (0.34 to 0.40) and H100 NVL (0.64 to 0.68)",
                  "what": "SmolLM2-360M, CausalLM.forward, prefill of 512 tokens at B=1, the whole "
                          "model (decode per token 0.30 to 0.48)",
-                 "source": "lane/lowbit-blocks (f), jobs nvc2-0020 and nvc3-0038, "
-                           "docs/lanes/progress/lowbit-blocks.md"},
+                 "source": "lane/lowbit-blocks (f), jobs nvc2-0020 and nvc3-0038"},
         "hip": {"over": (0.85, 0.89), "box": "MI325X",
                 "what": "SmolLM2-360M, CausalLM.forward, prefill of 512 tokens at B=1, the whole "
                         "model (decode per token 0.63 to 0.65)",
-                "source": "lane/lowbit-blocks (f), steward job 1790660933293, "
-                          "docs/lanes/progress/lowbit-blocks.md"},
+                "source": "lane/lowbit-blocks (f), steward job 1790660933293"},
         "metal": {"over": (3.40, 3.65), "box": "M3 Ultra (3.40 to 3.65) and M2 Pro (3.44 to 3.57)",
                   "what": "the complete 15-bit inference GEMM call at SmolLM2-360M's four "
                           "512-token rows (qkv, mlp_up, mlp_down, lm_head), the plan this "

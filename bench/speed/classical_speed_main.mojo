@@ -763,7 +763,7 @@ struct Emitter(Movable):
     def note(self):
         """One `FSPEED-NOTE` if any timed round's hash differs from the first.
 
-        Names the two hashes and nothing more: the orchestrator's table wants
+        Names the two hashes and nothing more: the maintainer's table wants
         to know THAT the arm is non-deterministic on this box, and the
         identity lanes are where WHICH stage moved gets answered.
         """

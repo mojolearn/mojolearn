@@ -17,8 +17,8 @@ clean-then-sabotaged pair, an arm that exists precisely because a device
 writes both halves of every pair into the same card. The SHIPPED path is
 byte-identical Apple M4 against AMD MI325X on the other 3,486 lines. See
 `bench/results/e1/GP_CROSS_VENDOR_DIVERGENCE.md` (corrected in place) and
-`gaussian_process/README.md`. With the sole blocker withdrawn, Andrew
-delegated the exposure decision and the orchestrator took it: expose.
+`gaussian_process/README.md`. With the sole blocker withdrawn, the
+estimator is exposed.
 
 **THERE IS NO REFERENCE GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
 none at the pinned commits, so this lane adds the capability per `ok-to-add-capability`.
@@ -34,7 +34,7 @@ thirteen for `gpr_predict`. The binding was written to that spelling
 verbatim (8c449b70) and the first `bash bindings/build_gp.sh` FAILED AT
 def_function ELABORATION (2026-09-01, log /tmp/build_gp_fast.log),
 exactly as `bindings/_mojolearn.mojo`'s header predicts above roughly
-nine arguments. The orchestrator renegotiated BOTH sides the same day to
+nine arguments. The maintainer renegotiated BOTH sides the same day to
 the tree's own fold -- the one `knn_search` took when its ten arguments
 hit the same wall: each entry point takes exactly TWO Python lists,
 `addrs` (every buffer address, order written in the binding docstring
@@ -67,8 +67,8 @@ byte-identical Apple M4 against AMD MI325X on every shipped-path line
 later: the identity harness's 136-lane record at 4048e1b51
 (bench/results/identity_break/2026-09-14_136-lanes/diff.three-columns.txt)
 reads IDENTICAL x3 on all 36 gp training cells and 36 infer cells across
-the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED ladder is UNRUN
-(HANDOFF_2026-09-01.md section 5): exposure is a correctness claim, not a
+the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED ladder is UNRUN:
+exposure is a correctness claim, not a
 speed claim.
 """
 

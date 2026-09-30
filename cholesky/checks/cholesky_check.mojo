@@ -5,7 +5,7 @@
 DEVIATIONS 1630-1646's gates. **THIS FILE IS NOT A DIGEST.** Every named path
 below has a SABOTAGE that flips it, and every sabotage is selectable at RUN
 TIME through `cholesky/checks/chol_sabotage.mojo` -- no source edit, no
-rebuild with a define, nothing an orchestrator forbidden to edit source
+rebuild with a define, nothing a maintainer forbidden to edit source
 cannot run. `check_cholesky_sabotages` drives all ten and states, per arm,
 whether it MUST fail, is EXPECTED INERT on this column, or is a REPORT.
 

@@ -2,9 +2,8 @@
 
 The second data kind of CONTRIBUTING.md (Performance claims) for neural timing
 claims (English text is `training/corpus/tinyshakespeare`; this is source
-code). Andrew, 2026-09-11, on what the two kinds are: "2 different but
-relatively normal things to train on, not edge cases; we build our
-software to handle GENERAL NORMAL CASES."
+code). The two kinds (2026-09-11) are two different but ordinary things to
+train on, not edge cases: the software is built for general, normal cases.
 
 `input.txt` is the 163 top-level `Lib/*.py` files of the CPython 3.12.0
 release tarball (`Python-3.12.0.tgz` from python.org, tarball sha256

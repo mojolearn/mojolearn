@@ -65,7 +65,7 @@ WHAT IS CHECKED
      lane with a table cell satisfies the invariant above while still
      vanishing from the command with no sentence anywhere.
 
-     Andrew settled it the same day: nothing is hidden. So this now checks
+     It was settled the same day: nothing is hidden. So this now checks
      that `host_surface.public_lane_scope()` returns EVERY lane the harness
      defines -- it fails when one is MISSING from the public set, which is the
      inversion of what it used to look for -- that each one comes back with a
@@ -378,8 +378,8 @@ def check(lanes=None, referenced=None, pending=None, covered=None, authoritative
         except RuntimeError as exc:
             bad.append(str(exc))
             exposure = {}
-    # EVERY LANE IS PUBLIC, AND THIS IS WHERE THAT CLAIM IS CHECKED (Andrew,
-    # 2026-09-20). The check is INVERTED from what it used to be. It used to
+    # EVERY LANE IS PUBLIC, AND THIS IS WHERE THAT CLAIM IS CHECKED
+    # (2026-09-20). The check is INVERTED from what it used to be. It used to
     # ask whether a lane outside the public set had a reason; it now asks
     # whether a lane is outside the public set AT ALL, because after this rule
     # there is no such thing. It is what fails the day someone reintroduces a

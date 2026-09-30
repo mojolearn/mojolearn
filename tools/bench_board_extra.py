@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE ALGOS FAMILY'S `extra` LANES: public algorithms COVERAGE.md listed as
-not raced without a good reason (Andrew, 2026-09-29: "why are 18 algos
-missing? good reason?"), raced through tools/bench_board_algos.py's worker
+not raced without a good reason (2026-09-29: 18 algorithms were missing),
+raced through tools/bench_board_algos.py's worker
 protocol, seed and parameter rules, and parameter check.
 
     qn-reg            QNRegressor(loss='squared_error')   cuml.solvers.QN(loss='l2') (NVIDIA),

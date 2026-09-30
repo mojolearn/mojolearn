@@ -362,15 +362,15 @@ _CLASSICAL_FAST = frozenset({
     # primitives. IDENTICAL-only from 2026-09-10 (their fused kernels were
     # then gated on IDENTICAL, so the lower tiers ran slower unfused arms);
     # those gates are gone and FAST runs the same kernels with the pins on
-    # the free schedule. Quality, never bits (docs/lanes/progress/neural.md).
+    # the free schedule. Quality, never bits.
     # The byte LM (`_mojolearn_byte_lm`) stays IDENTICAL only for now.
     "_mojolearn_training",
     "_mojolearn_mamba",
     "_mojolearn_transformer",
     "_mojolearn_embedding",
 })
-# Every expansion lane builds FAST too, sequence and cnn included (Andrew,
-# 2026-09-27); host_surface.EXPANSION_IDENTICAL_ONLY is empty.
+# Every expansion lane builds FAST too, sequence and cnn included
+# (2026-09-27); host_surface.EXPANSION_IDENTICAL_ONLY is empty.
 _CLASSICAL_FAST |= frozenset(host_surface.expansion_gpu_bindings("classical"))
 _FAST_TIERED = _TIERED | _CLASSICAL_FAST
 _IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED
