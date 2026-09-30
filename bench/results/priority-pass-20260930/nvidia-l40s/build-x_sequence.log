@@ -1,0 +1,1301 @@
+COMMAND ["bash", "bindings/build_x_sequence.sh"] ENV {}
+9683 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x117400000000, nodemask=1)
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:562:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ex.upload(sc + 1, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 1, 1)
+                  ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:562:73: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ex.upload(sc + 1, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 1, 1)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:625:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ex.upload(sc + 3, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 3, 1)
+                  ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:625:73: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ex.upload(sc + 3, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 3, 1)
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:778:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ap.p0 = P + s
+                ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:779:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ap.p1 = U + s
+                ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1298:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var th = pw + (6 + 2 * 5) * P + 2 * 5
+                     ~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1298:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var th = pw + (6 + 2 * 5) * P + 2 * 5
+                     ~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1314:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var y = hy + b * N
+                        ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1317:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var v = abs(y[i])
+                                ~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1323:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    pys[i] = ftz(identical_div(y[i], scale))
+                    ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1323:49: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    pys[i] = ftz(identical_div(y[i], scale))
+                                               ~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1325:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var t0 = ht[0]
+                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1326:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var t1 = ht[N - 1]
+                         ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1327:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var k = ftz(identical_div(pys[N - 1] - pys[0], t1 - t0)) if t1 != t0 else Float32(0.0)
+                                          ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1327:59: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var k = ftz(identical_div(pys[N - 1] - pys[0], t1 - t0)) if t1 != t0 else Float32(0.0)
+                                                       ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1328:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                th[0] = k
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1329:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                th[1] = pys[0] - ftz(identical_mul(k, t0))
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1329:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                th[1] = pys[0] - ftz(identical_mul(k, t0))
+                        ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1331:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    th[2 + j] = Float32(0.0)
+                    ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1334:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    hpar[b * P + j] = th[j]
+                    ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1334:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    hpar[b * P + j] = th[j]
+                                      ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1335:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                hinf[b * 4] = scale
+                ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1336:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                hinf[b * 4 + 1] = r[0]
+                ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1337:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                hinf[b * 4 + 2] = Float32(r[1])
+                ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1338:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                hinf[b * 4 + 3] = Float32(0.0)
+                ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:533:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        head(ex, net, P, hT, B, dout + b0 * net.O)
+                                ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:536:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p0 = dout + b0 * net.O
+                   ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:537:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p1 = dout + b0 * net.O
+                   ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:542:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p0 = w.hall[net.L - 1] + B * H
+                   ~~~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:13:
+./sequence/ops.mojo:263:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        while k < n and (Int(p + (start + k)) & 15) != 0:
+                             ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:13:
+./sequence/ops.mojo:270:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var q = (p + (start + k + j * SUMSQ_VEC)).load[width=SUMSQ_VEC, alignment=16]()
+                         ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:13:
+./sequence/ops.mojo:270:58: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var q = (p + (start + k + j * SUMSQ_VEC)).load[width=SUMSQ_VEC, alignment=16]()
+                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+                                                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:224:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    q.p0 = P + net.w_off(i)
+                           ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:245:57: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                gemm_epi(ex, acts[i], deltas[i + 1], Gr + net.w_off(i), fi, fo, B, 1, fi, fo, 1,
+                                                     ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:246:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                         EPI_L2GRAD, P + net.w_off(i), 0, alpha, Float32(B))
+                                     ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:249:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                cs.p1 = Gr + net.b_off(i)
+                        ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:255:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    gemm_epi(ex, deltas[i + 1], P + net.w_off(i), deltas[i], B, fi, fo, fo, 1, 1, fo,
+                                                ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:329:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        c.p0 = dX + b0 * D
+               ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:335:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        d.p1 = dout + b0 * O
+               ~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1140:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var dvec = g + P
+               ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1141:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var thn = dvec + P
+              ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1142:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var gn = thn + P
+             ~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1143:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q = gn + P
+            ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1144:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sm = q + P
+             ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1145:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ym = sm + MEM * P
+             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1146:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var rho = ym + MEM * P
+              ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1147:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var al = rho + MEM
+             ~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1160:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var aa = p_mul(p_ld(rho, idx), _dot(sm + idx * P, q, P))
+                                                ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1163:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                p_st(q, i, p_sub(p_ld(q, i), p_mul(aa, p_ld(ym + idx * P, i))))
+                                                            ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1167:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var yy = _dot(ym + last * P, ym + last * P, P)
+                          ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1167:45: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var yy = _dot(ym + last * P, ym + last * P, P)
+                                         ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1169:39: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                gamma = _pdiv(_dot(sm + last * P, ym + last * P, P), yy)
+                                   ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1169:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                gamma = _pdiv(_dot(sm + last * P, ym + last * P, P), yy)
+                                                  ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1179:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bb = p_mul(p_ld(rho, idx), _dot(ym + idx * P, q, P))
+                                                ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1182:49: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                p_st(q, i, p_fma3(coef, p_ld(sm + idx * P, i), p_ld(q, i)))
+                                             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1216:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                p_st(sm + slot * P, i, p_ld(q, i))
+                     ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1217:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                p_st(ym + slot * P, i, p_ld(dvec, i))
+                     ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:252:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        gemm(ex, inp, P + net.w_ih(l), w.gx[l], T * B, GH, din, din, 1, 1, din, False, GH)
+                      ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:253:34: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        bias_rows(ex, w.gx[l], P + net.b_ih(l), w.gx[l], T * B, GH)
+                               ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:257:35: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var hprev = w.hall[l] + s * B * H
+                        ~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:258:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var ghs = w.gh[l] + s * B * GH
+                      ~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:262:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p0 = w.gx[l] + s * B * GH
+                   ~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:264:29: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p2 = w.act[l] + s * B * GH
+                   ~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:266:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p4 = w.call[l] + s * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:267:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p5 = w.hall[l] + (s + 1) * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:268:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p6 = w.call[l] + (s + 1) * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:269:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p7 = P + net.w_hh(l)
+                   ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:270:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p8 = P + net.b_hh(l)
+                   ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:275:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        inp = w.hall[l] + B * H
+              ~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:276:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    return w.hall[net.L - 1] + T * B * H
+           ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:282:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    gemm(ex, hT, P + net.head(), yhat, B, O, H, H, 1, 1, H, False, O)
+                 ~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:283:27: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
+                        ~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:283:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    bias_rows(ex, yhat, P + net.head() + O * H, yhat, B, O)
+                        ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:291:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var hT = w.hall[net.L - 1] + T * B * H
+             ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:292:27: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    gemm(ex, w.dy, hT, Gr + net.head(), O, H, B, 1, O, H, 1, False, H)
+                       ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:293:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    colsum(ex, w.dy, Gr + net.head() + O * H, B, O)
+                     ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:293:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    colsum(ex, w.dy, Gr + net.head() + O * H, B, O)
+                     ~~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:297:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    gemm(ex, w.dy, P + net.head(), cur + (T - 1) * B * H, B, H, O, O, 1, H, 1, False, H)
+                   ~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:297:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    gemm(ex, w.dy, P + net.head(), cur + (T - 1) * B * H, B, H, O, O, 1, H, 1, False, H)
+                                   ~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:308:29: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p0 = w.act[l] + s * B * GH
+                   ~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:309:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p1 = w.gh[l] + s * B * GH
+                   ~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:310:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p2 = w.hall[l] + s * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:311:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p3 = w.call[l] + s * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:312:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p4 = w.call[l] + (s + 1) * B * H
+                   ~~~~~~~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:314:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p6 = cur + s * B * H
+                   ~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:316:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p8 = w.dgx + s * B * GH
+                   ~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:317:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p9 = w.dgh + s * B * GH
+                   ~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:319:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            a.p11 = P + net.w_hh(l)
+                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:335:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var inp = x if l == 0 else w.hall[l - 1] + B * H
+                                   ~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:336:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        gemm(ex, w.dgx, inp, Gr + net.w_ih(l), GH, din, T * B, 1, GH, din, 1, False, din)
+                             ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:337:39: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        gemm(ex, w.dgh, w.hall[l], Gr + net.w_hh(l), GH, H, T * B, 1, GH, H, 1, False, H)
+                                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:338:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        colsum(ex, w.dgx, Gr + net.b_ih(l), T * B, GH)
+                          ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:339:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        colsum(ex, w.dgh, Gr + net.b_hh(l), T * B, GH)
+                          ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:16:
+./sequence/recurrent.mojo:341:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            gemm(ex, w.dgx, P + net.w_ih(l), other, T * B, din, GH, GH, 1, din, 1, False, din)
+                            ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:117:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        gemm_epi(ex, acts[i], P + net.w_off(i), acts[i + 1], B, fo, fi, fi, 1, fo, 1,
+                              ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:15:
+./sequence/mlp_fit.mojo:118:34: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                 EPI_BIAS_ACT, P + net.b_off(i), 0 if act == ACT_SOFTMAX else act, Float32(0.0), Float32(0.0))
+                               ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+./sequence/exec_device.mojo:111:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=dst, src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+./sequence/exec_device.mojo:120:29: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+                        ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+./sequence/exec_device.mojo:120:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+                                      ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+./sequence/exec_device.mojo:120:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+./sequence/pyapi.mojo:1126:75: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    ex.download_async(FP(unsafe_from_address=Int(sse.unsafe_ptr())), outd + P, 1)
+                                                                     ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:248:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:249:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var season = a.p1 + t * n
+                 ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:250:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var trend = a.p2 + t * n
+                ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:251:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var rw = a.p3 + t * n
+             ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:252:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var resid = a.p4 + t * n
+                ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:253:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var work = a.p5 + t * 5 * n2
+               ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:255:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var w1 = work + n2
+             ~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:256:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var w2 = work + 2 * n2
+             ~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:257:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var w3 = work + 3 * n2
+             ~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:258:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var w4 = work + 4 * n2
+             ~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:259:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sortbuf = a.p6 + t * n
+                  ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:269:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sc = a.p3 + t * a.i6
+             ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:270:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:272:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var trend = yd + n
+                ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:273:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var seas = trend + n
+               ~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:274:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var states = seas + (m if m > 0 else 1)
+                 ~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:275:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var e = states + 5 * (n + h)
+            ~~~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:276:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var nm_scr = e + n
+                 ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:277:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var x = nm_scr + 64
+            ~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:278:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var lo = x + 4
+             ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:279:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var hi = lo + 4
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:280:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var f = hi + 4
+            ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+./sequence/theta.mojo:357:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var info = a.p2 + t * 8
+               ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:97:
+./sequence/croston.mojo:83:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:97:
+./sequence/croston.mojo:84:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var dem = a.p2 + t * 2 * n
+              ~~~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:97:
+./sequence/croston.mojo:85:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var itv = dem + n
+              ~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:100:
+./sequence/moe.mojo:82:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var gw = a.p1 + (e * 2 * F + f) * D
+             ~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:100:
+./sequence/moe.mojo:83:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var uw = a.p1 + (e * 2 * F + F + f) * D
+             ~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:100:
+./sequence/moe.mojo:105:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var dw = a.p1 + (e * D + d) * F
+                 ~~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:100:
+./sequence/moe.mojo:106:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var hj = a.p0 + (tok * k + j) * F
+                 ~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:76:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var fs = scratch + (n + 1) * n
+             ~~~~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:77:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var xo = fs + (n + 1)
+             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:78:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var xr = xo + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:79:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var xe = xr + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:80:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var xt = xe + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:92:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        st(fs, i, obj.eval(simplex + i * n))
+                           ~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:96:
+Imported from ./sequence/theta.mojo:18:
+./sequence/nm.mojo:232:57: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                changed |= _put(fs, i, obj.eval(simplex + i * n))
+                                                ~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:13:
+./sequence/ops.mojo:555:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var acc = gemm_dot(a.p9 + a.i4, b * GH, 1, a.p11, u, H, GH, ld(a.p5, t))
+                           ~~~~~^~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:23:
+./sequence/adafactor.mojo:169:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    st(a.p2, t, _sumsq_or_parts(a.p0, s, e - s, a.p3 + t * SUMSQ_THREADS, np))
+                                                ~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:23:
+./sequence/adafactor.mojo:195:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    lamb_ratio_tail(a, t, _sumsq_or_parts(a.p0, s, e - s, a.p4 + t * SUMSQ_THREADS, np),
+                                                          ~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:23:
+./sequence/adafactor.mojo:196:58: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    _sumsq_or_parts(a.p1, s, e - s, a.p5 + t * SUMSQ_THREADS, np))
+                                                    ~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:424:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:431:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sc = a.p3 + t * a.i8
+             ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:433:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var lo = x + kc
+             ~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:434:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var hi = lo + kc
+             ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:435:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var nm_scr = hi + kc
+                 ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:436:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ring = nm_scr + (kmax + 1) * kmax + (kmax + 1) + 4 * kmax
+               ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:436:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ring = nm_scr + (kmax + 1) * kmax + (kmax + 1) + 4 * kmax
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:436:56: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ring = nm_scr + (kmax + 1) * kmax + (kmax + 1) + 4 * kmax
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:437:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sinit = ring + m
+                ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:438:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var seas = sinit + m
+               ~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:439:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var qa = seas + n
+             ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:530:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var info = a.p2 + t * 10
+               ~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:552:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:553:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var pr = a.p1 + t * (6 + m)
+             ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:554:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ring = a.p3 + t * m
+               ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:559:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var o = a.p2 + t * (3 + m)
+            ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:577:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:578:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var o = a.p1 + t * (1 + m)
+            ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:579:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var seas = a.p3 + t * a.i8
+               ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:580:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var qa = seas + n
+             ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:581:58: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var r = ets_init_state(y, n, a.i3 == 1, season, m, o + 2, seas, qa)
+                                                       ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:224:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * n
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:225:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sc = a.p5 + t * a.i6
+             ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:227:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var s2 = r + n
+             ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:228:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var vb = s2 + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:229:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var x = vb + 2 * n
+            ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:230:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var lo = x + 16
+             ~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:231:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var hi = lo + 16
+             ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:232:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var cand = hi + 16
+               ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:233:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var nm_scr = cand + 16
+                 ~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:301:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var snap = a.p5 + t * a.i6 + (a.i6 - GARCH_SNAP)
+               ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:301:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var snap = a.p5 + t * a.i6 + (a.i6 - GARCH_SNAP)
+               ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:311:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var outp = a.p1 + t * (1 + k)
+               ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:315:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var info = a.p2 + t * 4
+               ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:321:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var par = x + off
+              ~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:326:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ar = rr + (m + h)    # m + h squared asymmetric resids
+             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:327:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sg = ar + (m + h)    # m + h variances
+             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:181:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var row = a.p6 + t * (P + 1)
+              ~~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:327:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sc = a.p7 + t * a.i4
+             ~~~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:329:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var th = ys + N
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:330:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var w = th + P
+            ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:331:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var y = a.p0 + t * N
+            ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:353:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var info = a.p6 + t * 4
+               ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:370:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var th = a.p0 + b * P
+             ~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:9:
+/root/mojolearn-priority-pass/./core/host_parallel.mojo:76:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:9:
+/root/mojolearn-priority-pass/./core/host_parallel.mojo:78:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:9:
+/root/mojolearn-priority-pass/./core/host_parallel.mojo:92:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:13:
+Imported from ./sequence/exec_device.mojo:15:
+Imported from ./sequence/dispatch.mojo:95:
+./sequence/stl.mojo:163:66: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        stl_ess(work1, k, ns, isdeg, nsjump, userw, work3, work2 + 1, work4)
+                                                           ~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:210:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var dvec = g + P
+               ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:211:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var thn = dvec + P
+              ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:212:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var gn = thn + P
+             ~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:213:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var q = gn + P
+            ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:214:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sm = q + P
+             ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:215:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ym = sm + MEM * P
+             ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:216:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var rho = ym + MEM * P
+              ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:217:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var al = rho + MEM
+             ~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:230:48: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var aa = mul(ld(rho, idx), _dot(sm + idx * P, q, P))
+                                            ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:233:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                st(q, i, sub(ld(q, i), mul(aa, ld(ym + idx * P, i))))
+                                                  ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:237:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var yy = _dot(ym + last * P, ym + last * P, P)
+                          ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:237:45: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var yy = _dot(ym + last * P, ym + last * P, P)
+                                         ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:239:37: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                gamma = div(_dot(sm + last * P, ym + last * P, P), yy)
+                                 ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:239:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                gamma = div(_dot(sm + last * P, ym + last * P, P), yy)
+                                                ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:249:48: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bb = mul(ld(rho, idx), _dot(ym + idx * P, q, P))
+                                            ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:252:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                st(q, i, fma3(coef, ld(sm + idx * P, i), ld(q, i)))
+                                       ~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:286:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                st(sm + slot * P, i, ld(q, i))
+                   ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:19:
+./sequence/prophet.mojo:287:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                st(ym + slot * P, i, ld(dvec, i))
+                   ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:297:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var rhs = qa + 4 * n
+              ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:298:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var dg = rhs + n
+             ~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:299:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var cf = dg + 4
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:233:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        return x + self.n_smooth() + 1 + Int(self.trend)
+               ~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:233:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        return x + self.n_smooth() + 1 + Int(self.trend)
+               ~~~~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:17:
+./sequence/ets.mojo:233:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        return x + self.n_smooth() + 1 + Int(self.trend)
+               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_x_sequence.mojo:14:
+Imported from ./sequence/pyapi.mojo:18:
+./sequence/garch.mojo:170:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var vol = x + 1 if self.has_mean else x
+                  ~~^~~
+<unknown>:0: note: '__add__' declared here
+built python/mojolearn/identical/_mojolearn_x_sequence.so

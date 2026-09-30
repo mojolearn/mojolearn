@@ -1,0 +1,6 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "-m", "pip", "install", "mojolearn==0.8.31", "numpy==2.5.2", "scipy==1.18.0"] ENV {}
+Requirement already satisfied: mojolearn==0.8.31 in /root/priority-pass/venv/lib/python3.14/site-packages (0.8.31)
+Requirement already satisfied: numpy==2.5.2 in /root/priority-pass/venv/lib/python3.14/site-packages (2.5.2)
+Requirement already satisfied: scipy==1.18.0 in /root/priority-pass/venv/lib/python3.14/site-packages (1.18.0)
+Requirement already satisfied: mojolearn-nvidia==0.8.31 in /root/priority-pass/venv/lib/python3.14/site-packages (from mojolearn==0.8.31) (0.8.31)
+Requirement already satisfied: mojolearn-amd==0.8.31 in /root/priority-pass/venv/lib/python3.14/site-packages (from mojolearn==0.8.31) (0.8.31)

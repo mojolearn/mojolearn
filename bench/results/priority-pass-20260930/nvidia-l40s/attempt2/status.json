@@ -1,0 +1,7 @@
+{
+  "state": "failed",
+  "phase": "build-byte_lm",
+  "vendor": "nvidia",
+  "utc": "2026-09-30T18:44:02.057032+00:00",
+  "error": "Command '['bash', 'bindings/build_byte_lm.sh']' returned non-zero exit status 2."
+}

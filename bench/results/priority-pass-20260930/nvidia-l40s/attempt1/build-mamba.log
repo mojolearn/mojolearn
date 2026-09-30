@@ -1,0 +1,43 @@
+COMMAND ["bash", "bindings/build_mamba.sh"] ENV {}
+!! MOJOLEARN_GPU_ARCHS=sm_89 (--target-accelerator); read the architecture back out of the built .so
+3890 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x726800000000, nodemask=1)
+Imported from /root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:163:
+./mamba/impl/modeling/modeling_mamba.mojo:546:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    src: UnsafePointer[Float32, origin],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:247:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:272:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:307:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:1906:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
+                        ~~~~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:1906:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:2482:28: error: use of unknown declaration 'mamba3_prefill_session_create_binding'
+            m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
+                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:2483:28: error: use of unknown declaration 'mamba3_prefill_session_close_binding'
+            m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
+                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/root/mojolearn-priority-pass/bindings/_mojolearn_mamba.mojo:2484:28: error: use of unknown declaration 'mamba3_prefill_session_forward_binding'
+            m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
+                           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/root/mojolearn-priority-pass/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

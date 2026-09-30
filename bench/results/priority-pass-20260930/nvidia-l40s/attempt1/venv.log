@@ -1,0 +1,1 @@
+COMMAND ["/root/mojolearn-priority-pass/.pixi/envs/default/bin/python3", "-m", "venv", "/root/priority-pass/venv"] ENV {}

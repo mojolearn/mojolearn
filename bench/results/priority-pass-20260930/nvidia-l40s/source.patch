@@ -1,0 +1,3436 @@
+diff --git a/bindings/_mojolearn_byte_lm.mojo b/bindings/_mojolearn_byte_lm.mojo
+index daa9dd66..e0f8e38e 100644
+--- a/bindings/_mojolearn_byte_lm.mojo
++++ b/bindings/_mojolearn_byte_lm.mojo
+@@ -65,7 +65,9 @@ from training.byte_lm_logits import (
+     BYTE_LOGITS_MAX_BATCH,
+     BYTE_LOGITS_MAX_CELLS,
+     byte_logits_from_params,
++    byte_logits_from_params_into,
+     byte_logits_resident,
++    byte_logits_resident_into,
+     byte_logits_validate,
+     byte_logits_validate_params,
+ )
+@@ -1237,7 +1239,10 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
+     byte_logits_validate(ids, bl[0], bl[1], cfg)
+     byte_logits_validate_params(params, cfg)
+     var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
+-    var logits = List[Float32]()
++    # lane/neural-net-experiment: the logits land in the caller's array by
++    # one device-to-host copy (`byte_logits_from_params_into`), no host
++    # List, no second copy; the caller's array is alive for the whole call.
++    var out = f32_ptr(addr[2])
+     var session = ByteLMSession()
+     session.busy = True
+     try:
+@@ -1246,7 +1251,7 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
+                 # DEVIATION 2513: the same keeper the other per-call path uses.
+                 BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
+             session.ctx = neural_ctx[_NEURAL_CTX]()
+-            logits = byte_logits_from_params(session.ctx.value(), params, ids, bl[0], bl[1], cfg)
++            byte_logits_from_params_into(session.ctx.value(), params, ids, bl[0], bl[1], cfg, out)
+             session.ctx.value().synchronize()
+             session.ctx = None
+     except error:
+@@ -1254,9 +1259,6 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
+         raise error
+     session.busy = False
+     session.usable = False
+-    if len(logits) != cells_out:
+-        raise Error("byte LM logits: wrong logits length")
+-    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[2]), cells_out)
+     return PythonObject(cells_out)
+ 
+ 
+@@ -1291,13 +1293,15 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
+     if owner[].trainer.value().completed_steps != claimed:
+         raise Error("byte LM: resident completed-step mismatch")
+     var step_before = owner[].trainer.value().completed_steps
+-    var logits = List[Float32]()
++    # lane/neural-net-experiment: one device-to-host copy into the caller's
++    # array (`byte_logits_resident_into`); see `_logits_forward_into`.
++    var out = f32_ptr(addr[1])
+     owner[].busy = True
+     try:
+         with GILReleased(Python()):
+             ref ctx = owner[].ctx.value()
+-            logits = byte_logits_resident(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
+-                                          owner[].logits_scratch)
++            byte_logits_resident_into(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
++                                      owner[].logits_scratch, out)
+             if owner[].trainer.value().completed_steps != step_before:
+                 raise Error("byte LM logits changed the completed step")
+             ctx.synchronize()
+@@ -1306,9 +1310,6 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
+         _mark_if_lost(owner[])
+         raise error
+     owner[].busy = False
+-    if len(logits) != cells_out:
+-        raise Error("byte LM logits: wrong logits length")
+-    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[1]), cells_out)
+     return PythonObject(cells_out)
+ 
+ 
+diff --git a/bindings/_mojolearn_mamba.mojo b/bindings/_mojolearn_mamba.mojo
+index 8bda2993..36ad119d 100644
+--- a/bindings/_mojolearn_mamba.mojo
++++ b/bindings/_mojolearn_mamba.mojo
+@@ -134,12 +134,12 @@ rc 134), an open defect. Build:
+ 
+ # DEVIATION 2486: shared byte-preserving host copies.
+ from bindings.hostptr import f32_ptr, read_f32, copy_f32
+-from std.memory import memcpy
++from std.memory import bitcast, memcpy
+ from std.time import perf_counter_ns
+ from std.sys.compile import is_defined
+ from mamba.impl.ops.mamba3_siso import m3_phase_tick
+ from mamba.impl.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
+-from std.os import abort
++from std.os import abort, getenv
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+@@ -207,7 +207,7 @@ from mamba.impl.modules.mamba3 import (
+ 
+ from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
+ from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
+-from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward
++from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, mamba3_prefill_backward_on
+ from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
+ from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
+ from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
+@@ -1759,6 +1759,502 @@ def _m3_session_export_run(mut s: Mamba3DecodeSession, a: List[Int]) raises -> I
+     return st.buf_len
+ 
+ 
++# ===========================================================================
++# lane/neural-net-experiment (2026-09-30): the Mamba-3 PREFILL session.
++#
++# `mamba3_forward_fresh` uploaded the nine weights (nine allocations and
++# copies with a wait), built the zero state and the stages, uploaded x, ran
++# the block, downloaded the five reports and freed everything, on EVERY
++# call; Samba runs two such blocks per forward and the board's
++# `mamba3-forward` cell is exactly this call. The prefill session keeps
++# the WEIGHTS on the device across calls, reused when the caller's bytes
++# are unchanged (an exact integer compare, as the transformer session
++# does), recopied into the same buffers when they moved (the block's own
++# non-finite refusal re-runs: `weights_checked` is cleared), and keeps the
++# x buffer. The zero state and the stages are still built per call: the
++# decode session builds its stages per step too, nothing resets them, and
++# a fresh construction is the certified zero state. Same kernels, same
++# launches, same order.
++# ===========================================================================
++
++
++struct Mamba3PrefillSession(Movable, Writable):
++    var ctx: Optional[DeviceContext]
++    var w: Optional[Mamba3DeviceWeights]
++    var w_host: List[Float32]
++    var dm: Int
++    var dx: Optional[DeviceBuffer[DType.float32]]
++    var busy: Bool
++    var usable: Bool
++    var weight_uploads: Int
++    var weight_recopies: Int
++    var weight_reuses: Int
++    # lane/neural-net-experiment (backward session): the last forward's
++    # recorded stages and zero state, kept for the backward that follows it
++    # in a training step. `stages_valid` is cleared whenever the retained
++    # weights change (recopy or upload), since the stages were computed on
++    # the old bytes. `x_stage` is the host staging list the backward
++    # downloads `dx` into to compare against the caller's x.
++    var stages: Optional[Mamba3DeviceStages]
++    var state: Optional[Mamba3DeviceState]
++    var stages_b: Int
++    var stages_l: Int
++    var stages_valid: Bool
++    var x_stage: List[Float32]
++    var backward_reuses: Int
++    var backward_recomputes: Int
++
++    def __init__(out self):
++        self.ctx = None
++        self.w = None
++        self.w_host = List[Float32]()
++        self.dm = 0
++        self.dx = None
++        self.busy = False
++        self.usable = True
++        self.weight_uploads = 0
++        self.weight_recopies = 0
++        self.weight_reuses = 0
++        self.stages = None
++        self.state = None
++        self.stages_b = 0
++        self.stages_l = 0
++        self.stages_valid = False
++        self.x_stage = List[Float32]()
++        self.backward_reuses = 0
++        self.backward_recomputes = 0
++
++    def write_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
++    def write_repr_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
++
++    def release(mut self):
++        self.drop_stages()
++        self.x_stage = List[Float32]()
++        self.dx = None
++        self.w = None
++        self.w_host = List[Float32]()
++        self.dm = 0
++        if self.ctx:
++            try: self.ctx.value().synchronize()
++            except: pass
++        self.ctx = None
++
++    def drop_stages(mut self):
++        self.stages_valid = False
++        self.stages = None
++        self.state = None
++        self.stages_b = 0
++        self.stages_l = 0
++
++    def __deinit__(deinit self): self.release()
++
++
++def _m3_retain_stages() -> Bool:
++    """MOJOLEARN_MAMBA3_RETAIN_STAGES=0 drops the forward's stages at the
++    end of the forward (the pre-session behaviour: every backward recomputes
++    the forward). Default on: the stages stay on the device for the
++    backward of the same training step."""
++    return String(getenv("MOJOLEARN_MAMBA3_RETAIN_STAGES")) != "0"
++
++
++def _m3_weight_lens(dims: Mamba3Dims) -> List[Int]:
++    """Element counts of the nine weights in slot order 1..9."""
++    var dm = dims.d_model
++    var di = dims.d_inner
++    var dip = dims.d_in_proj()
++    var nh = dims.nheads
++    var lens: List[Int] = [dm, dip * dm, nh, M3_D_STATE, M3_D_STATE, nh * M3_D_STATE,
++                           nh * M3_D_STATE, nh, dm * di]
++    return lens^
++
++
++def _m3_weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raises -> Bool:
++    """Whether the caller's nine weight arrays hold exactly the bytes in
++    `host` (their concatenation in slot order): an integer compare of the
++    bit patterns, eight lanes at a time."""
++    comptime W = 8
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        var p = _f32_ptr(a[s + 1])
++        var hp = host.unsafe_ptr()
++        var i = 0
++        var body = n - n % W
++        while i < body:
++            var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
++            var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](off + i))
++            if (x ^ y).reduce_or() != UInt32(0):
++                return False
++            i += W
++        while i < n:
++            if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(off + i)):
++                return False
++            i += 1
++        off += n
++    return True
++
++
++def _m3_weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
++    var total = 0
++    for s in range(9):
++        total += lens[s]
++    var out = List[Float32](length=total, fill=Float32(0))
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        if n > 0:
++            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
++        off += n
++    return out^
++
++
++def _m3_weights_recopy(ctx: DeviceContext, mut w: Mamba3DeviceWeights, a: List[Int]) raises:
++    """Changed caller bytes into the RETAINED device buffers, slot order,
++    one wait; `weights_checked` cleared so the block's own named refusal of
++    non-finite weights runs again on the next forward."""
++    ctx.enqueue_copy(dst_buf=w.norm_w, src_ptr=_f32_ptr(a[1]))
++    ctx.enqueue_copy(dst_buf=w.w_in, src_ptr=_f32_ptr(a[2]))
++    ctx.enqueue_copy(dst_buf=w.dt_bias, src_ptr=_f32_ptr(a[3]))
++    ctx.enqueue_copy(dst_buf=w.bnorm_w, src_ptr=_f32_ptr(a[4]))
++    ctx.enqueue_copy(dst_buf=w.cnorm_w, src_ptr=_f32_ptr(a[5]))
++    ctx.enqueue_copy(dst_buf=w.b_bias, src_ptr=_f32_ptr(a[6]))
++    ctx.enqueue_copy(dst_buf=w.c_bias, src_ptr=_f32_ptr(a[7]))
++    ctx.enqueue_copy(dst_buf=w.d_skip, src_ptr=_f32_ptr(a[8]))
++    ctx.enqueue_copy(dst_buf=w.w_out, src_ptr=_f32_ptr(a[9]))
++    ctx.synchronize()
++    w.weights_checked = False
++
++
++def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims) raises:
++    """Leave `s.w` holding this call's weights: reused, recopied, or freshly
++    uploaded (see the section header)."""
++    ref ctx = s.ctx.value()
++    var lens = _m3_weight_lens(dims)
++    # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
++    # against the byte compare).
++    if String(getenv("MOJOLEARN_MAMBA3_RETAIN_WEIGHTS")) == "0":
++        s.stages_valid = False
++        s.w = None
++        s.w_host = List[Float32]()
++        s.dm = 0
++        s.w = _m3_load_weights(ctx, a, dims)
++        s.weight_uploads += 1
++        return
++    if s.w and s.dm == dims.d_model:
++        if _m3_weights_same_bits(a, s.w_host, lens):
++            s.weight_reuses += 1
++            return
++        s.stages_valid = False
++        var fresh = _m3_weights_host_copy(a, lens)
++        try:
++            ref retained = s.w.value()
++            _m3_weights_recopy(ctx, retained, a)
++        except error:
++            s.w = None
++            s.w_host = List[Float32]()
++            s.dm = 0
++            raise error
++        s.w_host = fresh^
++        s.weight_recopies += 1
++        return
++    s.stages_valid = False
++    s.w = None
++    s.w_host = List[Float32]()
++    s.dm = 0
++    var host = _m3_weights_host_copy(a, lens)
++    s.w = _m3_load_weights(ctx, a, dims)
++    s.w_host = host^
++    s.dm = dims.d_model
++    s.weight_uploads += 1
++
++
++def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises -> Int:
++    """`_mamba3_run[True]` on the session: `a` is the fresh entry's 25-slot
++    list (state slots zero, never read)."""
++    var dims = Mamba3Dims.of(dm)
++    var nh = dims.nheads
++    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
++    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
++    var k_n = b * nh * M3_D_STATE
++    var v_n = b * nh * M3_HEADDIM
++    if not s.ctx:
++        s.ctx = neural_ctx[_NEURAL_CTX]()
++    var phase_tick = 0
++    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
++        phase_tick = Int(perf_counter_ns())
++    _m3_prefill_weights(s, a, dims)
++    # The previous forward's stages go before this call's are built.
++    s.drop_stages()
++    ref ctx = s.ctx.value()
++    ref dw = s.w.value()
++    m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
++    # The certified zero state and this call's stages, built per call.
++    var dstate = Mamba3DeviceState(ctx, b, dims)
++    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
++    m3_phase_tick(ctx, phase_tick, String("surface.stage_allocations"))
++    var n_x = b * l * dm
++    var have_dx = False
++    if s.dx:
++        have_dx = len(s.dx.value()) == n_x
++    if not have_dx:
++        s.dx = None
++        s.dx = mamba_device_alloc(ctx, max(n_x, 1))
++    ref dx = s.dx.value()
++    ctx.enqueue_copy(dst_buf=dx, src_ptr=_f32_ptr(a[0]))
++    ctx.synchronize()
++    m3_phase_tick(ctx, phase_tick, String("surface.x_upload"))
++    var trace = IdentityTrace.disabled()
++    mamba3_block_forward(
++        ctx, dstages, dstate, dw, dx, b, l, trace, String("py")
++    )
++    m3_phase_tick(ctx, phase_tick, String("surface.block"))
++    _m3_download_addr[False](ctx, dstages.residual_out, n_x, a[20])
++    _m3_download_addr[False](ctx, dstages.h_last, h_n, a[21])
++    _m3_download_addr[False](ctx, dstages.k_last, k_n, a[22])
++    _m3_download_addr[False](ctx, dstages.v_last, v_n, a[23])
++    _m3_download_addr[False](ctx, dstages.theta_last, theta_n, a[24])
++    ctx.synchronize()
++    m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
++    var out_len = dstate.buf_len
++    ctx.synchronize()
++    if _m3_retain_stages():
++        s.stages = dstages^
++        s.state = dstate^
++        s.stages_b = b
++        s.stages_l = l
++        s.stages_valid = True
++    else:
++        _ = dstate^
++        _ = dstages^
++    return out_len
++
++
++def _m3_x_same_bits(mut s: Mamba3PrefillSession, addr: Int, n: Int) raises -> Bool:
++    """Whether the caller's x (`n` floats at `addr`) holds exactly the
++    bytes of the retained device `s.dx`: `dx` comes down into `s.x_stage`
++    (one wait) and the two are compared as integers, eight lanes at a
++    time. Paid only by a backward, never by a forward-only workload."""
++    if len(s.x_stage) != n:
++        s.x_stage = List[Float32](length=n, fill=Float32(0))
++    if n == 0:
++        return True
++    ref ctx = s.ctx.value()
++    ref dx = s.dx.value()
++    if n == len(dx):
++        ctx.enqueue_copy(dst_ptr=s.x_stage.unsafe_ptr(), src_buf=dx)
++    else:
++        var view = dx.create_sub_buffer[DType.float32](0, n)
++        ctx.enqueue_copy(dst_ptr=s.x_stage.unsafe_ptr(), src_buf=view)
++    ctx.synchronize()
++    comptime W = 8
++    var p = _f32_ptr(addr)
++    var hp = s.x_stage.unsafe_ptr()
++    var i = 0
++    var body = n - n % W
++    while i < body:
++        var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
++        var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](i))
++        if (x ^ y).reduce_or() != UInt32(0):
++            return False
++        i += W
++    while i < n:
++        if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(i)):
++            return False
++        i += 1
++    return True
++
++
++def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
++                                 dims: Mamba3Dims) raises:
++    """The forward `mamba3_prefill_backward` runs before its VJP, on the
++    session: x uploaded into the retained `dx`, a fresh zero state and
++    fresh stages (the same constructions as the entry's), the block
++    forward on the retained weights; the stages then held for the VJP."""
++    s.drop_stages()
++    var n_x = b * l * dims.d_model
++    var have_dx = False
++    if s.dx:
++        have_dx = len(s.dx.value()) == n_x
++    if not have_dx:
++        s.dx = None
++        s.dx = mamba_device_alloc(s.ctx.value(), max(n_x, 1))
++    ref ctx = s.ctx.value()
++    ref dw = s.w.value()
++    ref dx = s.dx.value()
++    ctx.enqueue_copy(dst_buf=dx, src_ptr=_f32_ptr(a[0]))
++    ctx.synchronize()
++    var dstate = Mamba3DeviceState(ctx, b, dims)
++    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
++    var trace = IdentityTrace.disabled()
++    mamba3_block_forward(
++        ctx, dstages, dstate, dw, dx, b, l, trace, String("m3.backward.tail")
++    )
++    ctx.synchronize()
++    s.stages = dstages^
++    s.state = dstate^
++    s.stages_b = b
++    s.stages_l = l
++    s.stages_valid = True
++
++
++def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
++    """`mamba3_backward` on the session: `a` is the entry's 21-slot list
++    (x, nine weights, grad_output, grad_x, nine weight gradients).
++
++    The weights are the session's (reused when their bytes are unchanged,
++    as the forward does). The forward is recomputed only when it has to
++    be: when the session holds no stages, when they were recorded on
++    other weights, at another (B, L), or on an x whose bytes differ from
++    this call's. Otherwise the VJP runs on the stages the last forward
++    recorded -- the same buffers the entry's own recompute would fill
++    with the same bits, since the same kernels run on the same inputs.
++    The ten gradients come down straight into the caller's arrays."""
++    var dims = Mamba3Dims.of(dm)
++    var n_x = b * l * dm
++    if not s.ctx:
++        s.ctx = neural_ctx[_NEURAL_CTX]()
++    _m3_prefill_weights(s, a, dims)
++    var reuse = False
++    if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
++        if len(s.dx.value()) == n_x:
++            reuse = _m3_x_same_bits(s, a[0], n_x)
++    if reuse:
++        s.backward_reuses += 1
++    else:
++        s.backward_recomputes += 1
++        _m3_prefill_backward_forward(s, a, b, l, dims)
++    ref ctx = s.ctx.value()
++    ref dw = s.w.value()
++    ref stages = s.stages.value()
++    ref dx = s.dx.value()
++    var d_output = _m3_upload_addr(ctx, a[10], n_x)
++    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
++    var tk = Int(perf_counter_ns())
++    var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
++    _m3_download_addr[False](ctx, g.x, n_x, a[11])
++    _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[12])
++    _m3_download_addr[False](ctx, g.in_proj_weight, dims.d_in_proj() * dm, a[13])
++    _m3_download_addr[False](ctx, g.dt_bias, dims.nheads, a[14])
++    _m3_download_addr[False](ctx, g.B_norm_weight, M3_D_STATE, a[15])
++    _m3_download_addr[False](ctx, g.C_norm_weight, M3_D_STATE, a[16])
++    _m3_download_addr[False](ctx, g.B_bias, dims.nheads * M3_D_STATE, a[17])
++    _m3_download_addr[False](ctx, g.C_bias, dims.nheads * M3_D_STATE, a[18])
++    _m3_download_addr[False](ctx, g.D, dims.nheads, a[19])
++    _m3_download_addr[False](ctx, g.out_proj_weight, dm * dims.d_inner, a[20])
++    ctx.synchronize()
++    _ = g^
++    _ = d_output^
++
++
++def mamba3_prefill_session_create_binding() raises -> PythonObject:
++    return PythonObject(alloc=Mamba3PrefillSession())
++
++
++def mamba3_prefill_session_close_binding(session: PythonObject) raises -> PythonObject:
++    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
++    if owner[].busy: raise Error("mamba3 prefill session: busy")
++    owner[].usable = False
++    owner[].release()
++    return PythonObject(0)
++
++
++def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonObject,
++                                           params: PythonObject) raises -> PythonObject:
++    """`mamba3_forward_fresh` on a session: the same 15 pointers (x, nine
++    weights, y, and the four public reports) and 3 parameters (B, L,
++    d_model); the weights retained across calls."""
++    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
++    if len(addrs) != 15 or len(params) != 3:
++        raise Error("mamba3_prefill_session_forward: expected 15 addresses and 3 parameters (B, L, d_model)")
++    if owner[].busy: raise Error("mamba3 prefill session: busy")
++    if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
++    var a = List[Int]()
++    for i in range(10):
++        var p = Int(py=addrs[i])
++        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
++        a.append(p)
++    for i in range(10):
++        a.append(0)
++    for i in range(10, 15):
++        var p = Int(py=addrs[i])
++        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
++        a.append(p)
++    var b = Int(py=params[0])
++    var l = Int(py=params[1])
++    var dm = Int(py=params[2])
++    if b < 1 or l < 1:
++        raise Error("mamba3_prefill_session_forward: B and L must be positive")
++    owner[].busy = True
++    var out_len = 0
++    try:
++        with GILReleased(Python()):
++            out_len = _m3_prefill_run(owner[], a, b, l, dm)
++    except error:
++        owner[].busy = False
++        owner[].usable = False
++        owner[].release()
++        raise error
++    owner[].busy = False
++    return PythonObject(out_len)
++
++
++def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: PythonObject,
++                                            params: PythonObject) raises -> PythonObject:
++    """`mamba3_backward` on a session: the same 21 pointers and 3
++    parameters (B, L, d_model); the weights and the last forward's stages
++    retained across calls (see `_m3_prefill_backward_run`)."""
++    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
++        raise Error("mamba3 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
++    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
++    if len(addrs) != 21 or len(params) != 3:
++        raise Error("mamba3_prefill_session_backward: expected 21 addresses and 3 scalars")
++    if owner[].busy: raise Error("mamba3 prefill session: busy")
++    if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
++    var b = Int(py=params[0])
++    var l = Int(py=params[1])
++    var dm = Int(py=params[2])
++    if b <= 0 or l <= 0 or dm <= 0:
++        raise Error("mamba3_prefill_session_backward: B, L and d_model must be positive")
++    var a = List[Int]()
++    for i in range(21):
++        var address = Int(py=addrs[i])
++        if address == 0:
++            raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
++        a.append(address)
++    # The entry's own refusal of a non-finite grad_output, before any work.
++    var dy = _f32_ptr(a[10])
++    for i in range(b * l * dm):
++        var bits = bitcast[DType.uint32](dy.unsafe_load(i))
++        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
++            raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            _m3_prefill_backward_run(owner[], a, b, l, dm)
++    except error:
++        owner[].busy = False
++        owner[].usable = False
++        owner[].release()
++        raise error
++    owner[].busy = False
++    return PythonObject(0)
++
++
++def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonObject:
++    """[weight_uploads, weight_recopies, weight_reuses, backward_reuses,
++    backward_recomputes, stages_held] as ints: the A/B evidence for the
++    byte compares (how often the weights and the forward were reused)."""
++    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
++    var out = Python.list()
++    out.append(PythonObject(owner[].weight_uploads))
++    out.append(PythonObject(owner[].weight_recopies))
++    out.append(PythonObject(owner[].weight_reuses))
++    out.append(PythonObject(owner[].backward_reuses))
++    out.append(PythonObject(owner[].backward_recomputes))
++    out.append(PythonObject(1 if owner[].stages_valid else 0))
++    return out
++
++
+ def mamba3_session_create_binding() raises -> PythonObject:
+     return PythonObject(alloc=Mamba3DecodeSession())
+ 
+@@ -2033,6 +2529,13 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
+         m.def_function[mamba3_forward_binding]("mamba3_forward")
+         comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
+             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
++            # lane/neural-net-experiment: the fresh prefill on a session.
++            _ = m.add_type[Mamba3PrefillSession]("_Mamba3PrefillSession")
++            m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
++            m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
++            m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
++            m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
++            m.def_function[mamba3_prefill_session_info_binding]("mamba3_prefill_session_info")
+         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
+         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
+         m.def_function[mamba3_session_create_binding]("mamba3_session_create")
+diff --git a/bindings/_mojolearn_training.mojo b/bindings/_mojolearn_training.mojo
+index 363610a7..4c0d62bc 100644
+--- a/bindings/_mojolearn_training.mojo
++++ b/bindings/_mojolearn_training.mojo
+@@ -61,7 +61,7 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
+ 
+ # DEVIATION 2486: shared byte-preserving host copies.
+ from bindings.hostptr import f32_ptr, i32_ptr
+-from std.os import abort
++from std.os import abort, getenv
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+@@ -78,6 +78,7 @@ from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_p
+ from training.optimizer_multi_gpu import parallel_optimizer_step_host
+ from training.maximize import maximize_negate, maximize_negated_copy
+ from training.estimator import (
++    identical_clip_grad_norm_addrs_host,
+     identical_ce_loss_host,
+     identical_clip_grad_norm_host,
+     identical_optimizer_step_host,
+@@ -334,6 +335,50 @@ def clip_grad_norm_binding(
+     return PythonObject(n_total)
+ 
+ 
++def clip_grad_norm_multi_binding(
++    grad_addrs: PythonObject,
++    offsets_addr: PythonObject,
++    info_addr: PythonObject,
++    params: PythonObject,
++) raises -> PythonObject:
++    """`clip_grad_norm_binding` from the caller's J tensors in place
++    (`grad_addrs` a list of J float32 buffer addresses, tensor j's
++    `offsets[j] .. offsets[j+1]` values), so no flat host copy is packed
++    or unpacked; the same `identical_clip_grad_norm` over the same device
++    buffer (lane/neural-net-experiment). Single device only: a
++    MOJOLEARN_OPTIMIZER_DEVICE_COUNT above 1 is refused here and takes
++    the packed entry."""
++    if len(params) != 2:
++        raise Error(
++            "clip_grad_norm_multi: params must contain 2 values, got "
++            + String(len(params))
++        )
++    if String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) != "1":
++        raise Error("clip_grad_norm_multi: one device only; the packed clip_grad_norm serves several")
++    var n_tensors = Int(py=params[0])
++    if len(grad_addrs) != n_tensors:
++        raise Error(
++            "clip_grad_norm_multi: " + String(len(grad_addrs)) + " addresses for "
++            + String(n_tensors) + " tensors"
++        )
++    var addrs = List[Int]()
++    for j in range(n_tensors):
++        var a = Int(py=grad_addrs[j])
++        if a == 0:
++            raise Error("clip_grad_norm_multi: null gradient address at " + String(j))
++        addrs.append(a)
++    var op = _i32_ptr(Int(py=offsets_addr))
++    var fp = _f32_ptr(Int(py=info_addr))
++    var max_norm = Float32(Float64(py=params[1]))
++    var n_total = 0
++    with GILReleased(Python()):
++        var ctx = neural_ctx[_NEURAL_CTX]()
++        n_total = identical_clip_grad_norm_addrs_host(
++            ctx, addrs, op, fp, n_tensors, max_norm,
++        )
++    return PythonObject(n_total)
++
++
+ def ce_loss_binding(
+     loss_addr: PythonObject,
+     row_addr: PythonObject,
+@@ -790,6 +835,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
+         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
+         m.def_function[optimizer_step_binding]("optimizer_step")
+         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
++        m.def_function[clip_grad_norm_multi_binding]("clip_grad_norm_multi")
+         m.def_function[ce_loss_binding]("ce_loss")
+         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
+         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
+diff --git a/bindings/_mojolearn_transformer.mojo b/bindings/_mojolearn_transformer.mojo
+index a4e91d51..969faa4e 100644
+--- a/bindings/_mojolearn_transformer.mojo
++++ b/bindings/_mojolearn_transformer.mojo
+@@ -141,7 +141,7 @@ from std.python._cpython import GILReleased
+ from std.python.bindings import PythonModuleBuilder
+ 
+ from max.gpu.host import DeviceBuffer, DeviceContext
+-from std.memory import memcpy
++from std.memory import bitcast, memcpy
+ from std.os import getenv
+ from std.time import perf_counter_ns
+ from std.sys.compile import is_defined
+@@ -187,6 +187,7 @@ from transformer.checks.transformer_backward import (
+     BWD_ANY_SABOTAGE,
+     LlamaBackwardStages,
+     llama_decoder_layer_backward,
++    llama_decoder_layer_backward_device,
+ )
+ # lane/block-options (2026-09-17): the block options record and the two
+ # tails. `transformer/block_options.mojo` is the order's authority; the
+@@ -656,6 +657,31 @@ struct TransformerWorkspace(Movable):
+         return True
+ 
+ 
++struct TransformerBackwardWorkspace(Movable):
++    """The retained half of `transformer_session_backward`: the backward
++    stages for one shape and the device copy of grad_output. The forward
++    half is the session's `TransformerWorkspace` (stages, cache, rope, x)
++    at `smax = L`."""
++    var key: List[Int]
++    var bst: LlamaBackwardStages
++    var d_out: DeviceBuffer[DType.float32]
++
++    def __init__(out self, ctx: DeviceContext, dims: LlamaDims, b: Int, l: Int,
++                 window: Int, lean: Bool) raises:
++        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
++                    dims.intermediate, window, Int(lean)]
++        self.bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
++        self.d_out = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
++
++    def matches(self, key: List[Int]) -> Bool:
++        if len(key) != len(self.key):
++            return False
++        for i in range(len(key)):
++            if key[i] != self.key[i]:
++                return False
++        return True
++
++
+ struct TransformerSession(Movable, Writable):
+     """One Python-owned context/workspace; no retained host pointers or
+     float32 weights. Under `numeric_profile="fixed15_v1"` it RETAINS the
+@@ -667,6 +693,28 @@ struct TransformerSession(Movable, Writable):
+     var workspace: Optional[TransformerWorkspace]
+     var planes: Optional[LlamaInt15Weights]
+     var planes_key: List[Int]
++    var weights: Optional[LlamaDeviceWeights]
++    """lane/neural-net-experiment (2026-09-30): the block's float32 weights
++    RETAINED on the device across calls. A Python address is still not a
++    version: `weights_host` keeps the exact bytes that were uploaded, and
++    every call compares the caller's arrays against them bit for bit
++    (`_weights_same_bits`) before reusing the device copy. Changed bytes are
++    copied into the SAME device buffers (no reallocation) and revalidated by
++    the constructor's own `_validate_finite`; a different shape or options
++    record rebuilds. Default-record blocks only: an options block (`extended`)
++    keeps the per-call upload."""
++    var weights_key: List[Int]
++    var weights_host: List[Float32]
++    var weight_uploads: Int
++    var weight_recopies: Int
++    var weight_reuses: Int
++    var backward: Optional[TransformerBackwardWorkspace]
++    """lane/neural-net-experiment: the zero-state prefill backward's stages
++    and its grad_output buffer, retained across `transformer_session_backward`
++    calls the way the byte trainer retains `tr.backward[layer]` across steps
++    (no reset exists or is needed: every cell the backward reads it wrote
++    this call). Dropped with the forward workspace under the same budget."""
++    var backward_workspaces: Int
+     var busy: Bool
+     var closed: Bool
+     var contexts: Int
+@@ -677,6 +725,14 @@ struct TransformerSession(Movable, Writable):
+         self.workspace = Optional[TransformerWorkspace]()
+         self.planes = Optional[LlamaInt15Weights]()
+         self.planes_key = List[Int]()
++        self.weights = Optional[LlamaDeviceWeights]()
++        self.weights_key = List[Int]()
++        self.weights_host = List[Float32]()
++        self.weight_uploads = 0
++        self.weight_recopies = 0
++        self.weight_reuses = 0
++        self.backward = Optional[TransformerBackwardWorkspace]()
++        self.backward_workspaces = 0
+         self.busy = False
+         self.closed = False
+         self.contexts = 0
+@@ -691,8 +747,10 @@ struct TransformerSession(Movable, Writable):
+     def __deinit__(deinit self):
+         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
+         # destruction enqueues frees, which must drain before context death.
++        _ = self.backward^
+         _ = self.workspace^
+         _ = self.planes^
++        _ = self.weights^
+         if self.ctx:
+             try:
+                 self.ctx.value().synchronize()
+@@ -703,18 +761,195 @@ struct TransformerSession(Movable, Writable):
+     def clear(mut self) raises:
+         if self.ctx:
+             self.ctx.value().synchronize()
++        self.backward = None
+         self.workspace = None
+         self.planes = None
+         self.planes_key = List[Int]()
++        self.weights = None
++        self.weights_key = List[Int]()
++        self.weights_host = List[Float32]()
+         if self.ctx:
+             self.ctx.value().synchronize()
+ 
+ 
+-def _transformer_run_session(
++def _weights_key(dims: LlamaDims, opts: BlockOptions) -> List[Int]:
++    """The retained weights' identity: the shape and the options record."""
++    var key: List[Int] = [dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
++                          dims.intermediate]
++    var tail = opts.to_params()
++    for i in range(len(tail)):
++        key.append(tail[i])
++    return key^
++
++
++def _base_weight_lens(dims: LlamaDims) -> List[Int]:
++    """Element counts of the nine base weights in slot order 1..9."""
++    var dm = dims.d_model
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var it = dims.intermediate
++    var lens: List[Int] = [dm, dm, qw * dm, kw * dm, kw * dm, dm * qw,
++                           it * dm, it * dm, dm * it]
++    return lens^
++
++
++def _weights_same_bits(a: List[Int], host: List[Float32], lens: List[Int]) raises -> Bool:
++    """Whether the caller's nine base arrays hold exactly the bytes in
++    `host` (their concatenation in slot order): an integer compare of the
++    bit patterns, eight lanes at a time (`-0.0` and `+0.0` differ, NaN
++    payloads differ, as they must for a version check)."""
++    comptime W = 8
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        var p = _f32_ptr(a[s + 1])
++        var hp = host.unsafe_ptr()
++        var i = 0
++        var body = n - n % W
++        while i < body:
++            var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
++            var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](off + i))
++            if (x ^ y).reduce_or() != UInt32(0):
++                return False
++            i += W
++        while i < n:
++            if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(off + i)):
++                return False
++            i += 1
++        off += n
++    return True
++
++
++def _weights_host_copy(a: List[Int], lens: List[Int]) raises -> List[Float32]:
++    """The nine base arrays' bytes, concatenated in slot order."""
++    var total = 0
++    for s in range(9):
++        total += lens[s]
++    var out = List[Float32](length=total, fill=Float32(0))
++    var off = 0
++    for s in range(9):
++        var n = lens[s]
++        if n > 0:
++            memcpy(dest=out.unsafe_ptr() + off, src=_f32_ptr(a[s + 1]), count=n)
++        off += n
++    return out^
++
++
++def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int], lens: List[Int]) raises:
++    """Changed caller bytes into the RETAINED device buffers, slot order,
++    one wait, then the constructor's own refusal of non-finite weights
++    (DEVIATION 1875's order and names)."""
++    ctx.enqueue_copy(dst_buf=w.norm1_w, src_ptr=_f32_ptr(a[1]))
++    ctx.enqueue_copy(dst_buf=w.norm2_w, src_ptr=_f32_ptr(a[2]))
++    ctx.enqueue_copy(dst_buf=w.w_q, src_ptr=_f32_ptr(a[3]))
++    ctx.enqueue_copy(dst_buf=w.w_k, src_ptr=_f32_ptr(a[4]))
++    ctx.enqueue_copy(dst_buf=w.w_v, src_ptr=_f32_ptr(a[5]))
++    ctx.enqueue_copy(dst_buf=w.w_o, src_ptr=_f32_ptr(a[6]))
++    ctx.enqueue_copy(dst_buf=w.w_gate, src_ptr=_f32_ptr(a[7]))
++    ctx.enqueue_copy(dst_buf=w.w_up, src_ptr=_f32_ptr(a[8]))
++    ctx.enqueue_copy(dst_buf=w.w_down, src_ptr=_f32_ptr(a[9]))
++    ctx.synchronize()
++    _ = lens
++    w._validate_finite(ctx)
++
++
++def _stage_reset_on() -> Bool:
++    """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
++    reused workspace gets before each call. Bit-safe only if every cell a
++    call reads it also wrote this call; the identity gate decides."""
++    return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
++
++
++def _session_retain_cap_bytes() -> Int:
++    """Retained workspace budget per session: `MOJOLEARN_TRANSFORMER_RETAIN_MB`
++    (an integer, MiB), default 512. Was a fixed 64 MiB, which the board's
++    block shape (B1 L2048 DM384 FF1024: about 87 MiB of lean stages) exceeded
++    on every call, so the whole workspace was rebuilt per call."""
++    var cap_mb = 512
++    var s = String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_MB"))
++    if s != "":
++        try:
++            cap_mb = Int(atol(s))
++        except:
++            cap_mb = 512
++    if cap_mb < 0:
++        cap_mb = 0
++    return cap_mb * 1024 * 1024
++
++
++def _session_weights(
++    mut session: TransformerSession, dims: LlamaDims,
++    a: List[Int], opts: BlockOptions, tail: List[Int],
++) raises:
++    """Leave `session.weights` holding this call's weights: the retained
++    device copy when the caller's bytes equal the ones uploaded, a recopy
++    into the retained buffers when they differ, a fresh upload otherwise.
++    Options blocks (a non-default record or any tail address) take the
++    per-call upload as before; nothing is retained for them."""
++    ref ctx = session.ctx.value()
++    var extended = not opts.is_default()
++    for i in range(len(tail)):
++        if tail[i] != 0:
++            extended = True
++    # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
++    # block (the A/B against the byte compare; measured 0.3 ms per call on
++    # an L40S, where the upload it replaces was already cheap).
++    if String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) == "0":
++        extended = True
++    if extended:
++        session.weights = None
++        session.weights_key = List[Int]()
++        session.weights_host = List[Float32]()
++        session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
++        session.weight_uploads += 1
++        return
++    var key = _weights_key(dims, opts)
++    var lens = _base_weight_lens(dims)
++    var same_key = False
++    if session.weights:
++        same_key = len(session.weights_key) == len(key)
++        if same_key:
++            for i in range(len(key)):
++                if key[i] != session.weights_key[i]:
++                    same_key = False
++    if same_key:
++        if _weights_same_bits(a, session.weights_host, lens):
++            session.weight_reuses += 1
++            return
++        # Bytes moved: copy them into the retained buffers. A refusal below
++        # leaves the session without weights (the next call uploads anew).
++        var fresh = _weights_host_copy(a, lens)
++        try:
++            ref retained = session.weights.value()
++            _weights_recopy(ctx, retained, a, lens)
++        except error:
++            session.weights = None
++            session.weights_key = List[Int]()
++            session.weights_host = List[Float32]()
++            raise error
++        session.weights_host = fresh^
++        session.weight_recopies += 1
++        return
++    session.weights = None
++    session.weights_key = List[Int]()
++    session.weights_host = List[Float32]()
++    var host = _weights_host_copy(a, lens)
++    session.weights = _load_transformer_weights(ctx, dims, a, opts, tail)
++    session.weights_key = key^
++    session.weights_host = host^
++    session.weight_uploads += 1
++
++
++def _transformer_run_session[discard_cache: Bool = False](
+     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+     smax: Int, s0: Int, window: Int, opts: BlockOptions,
+ ) raises -> Int:
++    """`discard_cache` (lane/neural-net-experiment): the stateless prefill on
++    the session -- the caller passes no cache (slots 10 and 11 are 0), the
++    retained cache buffers are zero-filled on the device (the bytes a fresh
++    `LlamaKVCache` holds), nothing is uploaded or downloaded for it, and
++    `s0` is 0. Same kernels, same launches, same order."""
+     var dims = LlamaDims(dm, nh, nkv, hd, it)
+     dims.validate()
+     opts.validate(hd)
+@@ -727,7 +962,6 @@ def _transformer_run_session(
+     if not session.ctx:
+         session.ctx = neural_ctx[_NEURAL_CTX]()
+         session.contexts += 1
+-    ref ctx = session.ctx.value()
+     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+     var tk = Int(perf_counter_ns())
+     var lean = _lean_for(hd, opts)
+@@ -736,47 +970,242 @@ def _transformer_run_session(
+     if session.workspace:
+         reused = session.workspace.value().matches(key)
+     if not reused:
+-        ctx.synchronize()
++        session.ctx.value().synchronize()
+         session.workspace = None
+-        ctx.synchronize()
+-    # Always reread and revalidate weights; a Python address is not a version.
+-    var w = _load_transformer_weights(ctx, dims, a, opts, _tail_of(a, 13))
++        session.ctx.value().synchronize()
++    # Reread the caller's weights on EVERY call; a Python address is not a
++    # version. The device copy is reused only when the bytes are the same
++    # (`_session_weights`), recopied in place when they moved.
++    _session_weights(session, dims, a, opts, _tail_of(a, 13))
++    ref ctx = session.ctx.value()
++    ref w = session.weights.value()
+     _btick(ton, tk, "surface.weights_up")
+     if not reused:
+         session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
+         session.workspaces += 1
+     ref ws = session.workspace.value()
+-    if reused:
++    if reused and _stage_reset_on():
+         ws.stages.reset(ctx)
+-    # Host cache state is authoritative on EVERY call, including resets and
+-    # same-address edits. Copy into retained allocations, never trust a pointer.
+-    ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
+-    ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
++    comptime if discard_cache:
++        if s0 != 0:
++            raise Error("transformer: a discarded cache starts at cached_tokens 0")
++        # The bytes a fresh `LlamaKVCache` holds, on the device, no upload.
++        ws.kv.k.enqueue_fill(Float32(0.0))
++        ws.kv.v.enqueue_fill(Float32(0.0))
++    else:
++        # Host cache state is authoritative on EVERY call, including resets and
++        # same-address edits. Copy into retained allocations, never trust a pointer.
++        ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
++        ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
+     ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+     ctx.synchronize()
+     ws.kv.s = s0
+     _btick(ton, tk, "surface.cache_stages_x_up")
+     var trace = IdentityTrace.disabled()
++    # forward_only: no backward reads this entry's stages.
+     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
+-                                b, l, s0, trace, String("py"))
++                                b, l, s0, trace, String("py"), forward_only=True)
+     _btick(ton, tk, "surface.forward")
+-    _download_addr(ctx, ws.stages.residual2, b * l * dm, a[12])
+-    _download_addr(ctx, ws.kv.k, len(ws.kv.k), a[10])
+-    _download_addr(ctx, ws.kv.v, len(ws.kv.v), a[11])
++    # One wait for the downloads (the fresh entry's pattern): every owner
++    # stays alive through it.
++    _download_addr[False](ctx, ws.stages.residual2, b * l * dm, a[12])
++    comptime if not discard_cache:
++        _download_addr[False](ctx, ws.kv.k, len(ws.kv.k), a[10])
++        _download_addr[False](ctx, ws.kv.v, len(ws.kv.v), a[11])
++    ctx.synchronize()
+     _btick(ton, tk, "surface.outputs_down")
+     var result = ws.kv.s
+     # Bound retained device-buffer storage per model. Large legal calls still
+     # run, but release their workspace after completion rather than pinning it.
+-    var retain = ws.retained_bytes() <= 64 * 1024 * 1024
+-    _ = w^
+-    # Drain the per-call weight frees before returning to the next call.
+-    ctx.synchronize()
++    var retain = ws.retained_bytes() <= _session_retain_cap_bytes()
+     if not retain:
+         session.workspace = None
+         ctx.synchronize()
+     return result
+ 
+ 
++def transformer_session_forward_fresh_binding(
++    session: PythonObject, addrs: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """`transformer_session_forward` for a STATELESS prefill (lane/neural-net-
++    experiment, 2026-09-30): the same 13 (+11) addresses with the cache slots
++    10 and 11 ZERO, the same 10 (+17) params with `smax = L` and
++    `cached_tokens = 0`. The cache is the session's retained buffers,
++    zero-filled on the device; nothing of it crosses the host boundary. This
++    is `transformer_forward_fresh` on a session: weights retained across
++    calls (`_session_weights`), workspace retained under the budget."""
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer: session is busy or closed")
++    var a = _read_addrs_tail(addrs, 13, String("transformer_session_forward_fresh"))
++    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], String("transformer_session_forward_fresh"))
++    var p = _read_params(params, 10, String("transformer_session_forward_fresh"))
++    var opts = BlockOptions.from_params(p, 10)
++    owner[].busy = True
++    var result = 0
++    try:
++        with GILReleased(Python()):
++            try:
++                result = _transformer_run_session[True](owner[], a,
++                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
++            except error:
++                owner[].clear()
++                raise error
++    except error:
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    return PythonObject(result)
++
++
++def _transformer_run_session_backward(
++    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
++    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int,
++) raises:
++    """`_transformer_backward_run` on the session (lane/neural-net-experiment,
++    2026-09-30): the same forward from a zero cache at positions [0, L) and
++    the same backward on its stages, with the weights retained
++    (`_session_weights`), the forward workspace retained at `smax = L`, the
++    backward stages and the grad_output buffer retained, and the cache
++    zero-filled on the device. Same kernels, same launches, same order;
++    the ten gradients are written into the caller's buffers as before."""
++    var dims = LlamaDims(dm, nh, nkv, hd, it)
++    dims.validate()
++    if window < 0:
++        raise Error("transformer backward: window must be >= 0")
++    var opts = BlockOptions()
++    var qw = dims.q_width()
++    var kw = dims.kv_width()
++    var m = b * l
++    if not session.ctx:
++        session.ctx = neural_ctx[_NEURAL_CTX]()
++        session.contexts += 1
++    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
++    var tk = Int(perf_counter_ns())
++    var lean = transformer_lean_stages(hd)
++    # Weights: reused when the bytes are the same, recopied when they moved.
++    _session_weights(session, dims, a, opts, List[Int]())
++    ref ctx = session.ctx.value()
++    ref w = session.weights.value()
++    _btick(ton, tk, "surface.weights_up")
++    # The forward half at smax = L (the fresh-prefill shape).
++    var key = _workspace_key(b, l, dims, l, window, lean, opts)
++    var reused = False
++    if session.workspace:
++        reused = session.workspace.value().matches(key)
++    if not reused:
++        ctx.synchronize()
++        session.workspace = None
++        ctx.synchronize()
++        session.workspace = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
++        session.workspaces += 1
++    ref ws = session.workspace.value()
++    if reused and _stage_reset_on():
++        ws.stages.reset(ctx)
++    # The backward half.
++    var bkey: List[Int] = [b, l, dm, nh, nkv, hd, it, window, Int(lean)]
++    var breused = False
++    if session.backward:
++        breused = session.backward.value().matches(bkey)
++    if not breused:
++        ctx.synchronize()
++        session.backward = None
++        ctx.synchronize()
++        session.backward = TransformerBackwardWorkspace(ctx, dims, b, l, window, lean)
++        session.backward_workspaces += 1
++    ref bw = session.backward.value()
++    # Inputs: x and grad_output into retained buffers; the cache is the
++    # fresh zeros a `LlamaKVCache` holds.
++    ws.kv.k.enqueue_fill(Float32(0.0))
++    ws.kv.v.enqueue_fill(Float32(0.0))
++    ws.kv.s = 0
++    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
++    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
++    ctx.synchronize()
++    _btick(ton, tk, "surface.inputs_up")
++    var off = IdentityTrace.disabled()
++    llama_decoder_layer_forward(
++        ctx, ws.stages, ws.kv, ws.rope, w, ws.x, b, l, 0, off, String("pyf")
++    )
++    _btick(ton, tk, "surface.forward")
++    var offb = IdentityTrace.disabled()
++    llama_decoder_layer_backward_device(
++        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
++        b, l, 0, offb, String("pyb"),
++    )
++    _btick(ton, tk, "surface.backward")
++    _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
++    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
++    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[13])
++    _download_addr[False](ctx, bw.bst.dw_q, qw * dm, a[14])
++    _download_addr[False](ctx, bw.bst.dw_k, kw * dm, a[15])
++    _download_addr[False](ctx, bw.bst.dw_v, kw * dm, a[16])
++    _download_addr[False](ctx, bw.bst.dw_o, dm * qw, a[17])
++    _download_addr[False](ctx, bw.bst.dw_gate, it * dm, a[18])
++    _download_addr[False](ctx, bw.bst.dw_up, it * dm, a[19])
++    _download_addr[False](ctx, bw.bst.dw_down, dm * it, a[20])
++    ctx.synchronize()
++    _btick(ton, tk, "surface.outputs_down")
++    # The same budget as the forward path, on the forward half's count
++    # (the backward half is of the same order); both go together.
++    if ws.retained_bytes() > _session_retain_cap_bytes():
++        session.backward = None
++        session.workspace = None
++        ctx.synchronize()
++
++
++def transformer_session_backward_binding(
++    session: PythonObject, addrs: PythonObject, params: PythonObject,
++) raises -> PythonObject:
++    """`transformer_backward` on a session (lane/neural-net-experiment):
++    the same twenty-one addresses and eight scalars, word for word, the
++    weights, workspace and backward stages retained across calls."""
++    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
++        raise Error(
++            "transformer backward: no DETERMINISTIC tier (FAST or IDENTICAL"
++            " zero-state prefill backward)"
++        )
++    var owner = session.downcast_value_ptr[TransformerSession]()
++    if owner[].busy or owner[].closed:
++        raise Error("transformer: session is busy or closed")
++    if len(addrs) != 21 or len(params) != 8:
++        raise Error(
++            "transformer backward: expected 21 addresses and 8 scalars (B,"
++            " L, d_model, n_heads, n_kv_heads, head_dim, intermediate,"
++            " window)"
++        )
++    var a = List[Int]()
++    for i in range(21):
++        var address = Int(py=addrs[i])
++        if address == 0:
++            raise Error(
++                "transformer backward: null buffer address at slot "
++                + String(i)
++            )
++        a.append(address)
++    var b = Int(py=params[0])
++    var l = Int(py=params[1])
++    var dm = Int(py=params[2])
++    var nh = Int(py=params[3])
++    var nkv = Int(py=params[4])
++    var hd = Int(py=params[5])
++    var it = Int(py=params[6])
++    var window = Int(py=params[7])
++    owner[].busy = True
++    try:
++        with GILReleased(Python()):
++            try:
++                _transformer_run_session_backward(owner[], a, b, l, dm, nh, nkv, hd, it, window)
++            except error:
++                owner[].clear()
++                raise error
++    except error:
++        owner[].busy = False
++        raise error
++    owner[].busy = False
++    return PythonObject(0)
++
++
+ def transformer_session_create_binding() raises -> PythonObject:
+     return PythonObject(alloc=TransformerSession())
+ 
+@@ -1137,7 +1566,8 @@ def _transformer_run[discard_cache: Bool = False](
+     # offer. Prefill, chunked continuation and decode are all this one
+     # call; capacity growth past smax is refused by name downstream.
+     llama_decoder_layer_forward(
+-        ctx, stages, kv, rope, w, dx, b, l, s0, trace, String("py")
++        ctx, stages, kv, rope, w, dx, b, l, s0, trace, String("py"),
++        forward_only=True,
+     )
+ 
+     # The block output is residual2 (contract section 2's
+@@ -2544,6 +2974,9 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
+         m.def_function[transformer_session_close_binding]("transformer_session_close")
+         m.def_function[transformer_session_info_binding]("transformer_session_info")
+         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
++        # lane/neural-net-experiment: the stateless prefill on a session.
++        m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
++        m.def_function[transformer_session_backward_binding]("transformer_session_backward")
+         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
+         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
+         # NVIDIA's full public A/B gate admits discarded-cache prefill.
+diff --git a/gemm/checks/gemm_int8_mma.mojo b/gemm/checks/gemm_int8_mma.mojo
+index 473cfac8..d0877f25 100644
+--- a/gemm/checks/gemm_int8_mma.mojo
++++ b/gemm/checks/gemm_int8_mma.mojo
+@@ -126,6 +126,27 @@ comptime INT8_MMA_BLOCK_TILE_N = INT8_MMA_WARPS_N * INT8_MMA_TILE
+ #: on CDNA), the same on the host launch and inside the kernel.
+ comptime INT8_MMA_TPB = INT8_MMA_WARPS_M * INT8_MMA_WARPS_N * WARP_SIZE
+ 
++#: lane/neural-net-experiment (2026-09-30): the REUSE plan. In the reference
++#: plan one warp owns one 16 x 16 tile and reads every fragment of both
++#: operands from device memory at every k step (eight 4-byte or two 8-byte
++#: loads per unit step, one unit step per load pair). Here a warp owns a
++#: 32 x 32 tile: at each k step it loads the fragments of TWO A row-tiles
++#: and TWO B row-tiles and runs the four unit tiles they combine into, so
++#: every fragment feeds two unit tiles instead of one, and the next step's
++#: fragments are loaded before this step's units run (the loads and the
++#: units are independent). The bench board's gemm-int8 lane (4096^3) took
++#: 1,799 ms on an MI325X and 2,917 ms on an L40S against torch's int8 at
++#: 48 ms on the L40S: the reference plan is bound by its loads, not the
++#: unit. Contract L-9: an Int32 sum of exact int8 products is the same
++#: integer under every order, grouping and tile, so no plan here can move
++#: a bit; the epilogue stays `_store_cell` with the reference's arguments.
++#: MOJOLEARN_INT8_MMA_REFERENCE=1 (a build define) keeps the reference
++#: plan for the A/B and the equality gate.
++comptime INT8_MMA_REUSE = not is_defined["MOJOLEARN_INT8_MMA_REFERENCE"]()
++comptime INT8_MMA_REUSE_WARP_TILE = 2 * INT8_MMA_TILE
++comptime INT8_MMA_REUSE_BLOCK_TILE_M = INT8_MMA_WARPS_M * INT8_MMA_REUSE_WARP_TILE
++comptime INT8_MMA_REUSE_BLOCK_TILE_N = INT8_MMA_WARPS_N * INT8_MMA_REUSE_WARP_TILE
++
+ 
+ def int8_mma_admits(m: Int, n: Int, k: Int) -> Bool:
+     """Whether the matrix-unit plan serves the shape. Every shape the
+@@ -353,6 +374,209 @@ def _amd_warp_tile(
+     _store_cell(c, ea, eb, acc[3], ir + 3, j, m, n)
+ 
+ 
++@always_inline
++def _nvidia_warp_tile_reuse(
++    c: MutPointer[Float32, MutAnyOrigin],
++    qa: MutPointer[Int8, MutAnyOrigin],
++    ea: MutPointer[Int32, MutAnyOrigin],
++    qb: MutPointer[Int8, MutAnyOrigin],
++    eb: MutPointer[Int32, MutAnyOrigin],
++    lane: Int,
++    row0: Int,
++    col0: Int,
++    m: Int,
++    n: Int,
++    k: Int,
++    aligned: Bool,
++):
++    """`_nvidia_warp_tile` over a 32 x 32 warp tile: two A row-tiles (rows
++    row0.. and row0+16..) and four B n8 column groups, the same fragment
++    layout, each A fragment feeding four `mma.sync` and each B fragment
++    two. The next k step's fragments are loaded before this step's units
++    run. Same Int32 sums, same epilogue."""
++    var g = lane >> 2
++    var t = lane & 3
++    var acc = InlineArray[SIMD[DType.int32, 4], 8](fill=SIMD[DType.int32, 4](0))
++    # fragments of step kt: a[i][0..3] for A row-tile i, b[j][0..1] for B group j
++    var ka = t * 4
++    var a00 = _pack4(qa, row0 + g, ka, m, k, aligned)
++    var a01 = _pack4(qa, row0 + g + 8, ka, m, k, aligned)
++    var a02 = _pack4(qa, row0 + g, ka + 16, m, k, aligned)
++    var a03 = _pack4(qa, row0 + g + 8, ka + 16, m, k, aligned)
++    var a10 = _pack4(qa, row0 + 16 + g, ka, m, k, aligned)
++    var a11 = _pack4(qa, row0 + 24 + g, ka, m, k, aligned)
++    var a12 = _pack4(qa, row0 + 16 + g, ka + 16, m, k, aligned)
++    var a13 = _pack4(qa, row0 + 24 + g, ka + 16, m, k, aligned)
++    var b00 = _pack4(qb, col0 + g, ka, n, k, aligned)
++    var b01 = _pack4(qb, col0 + g, ka + 16, n, k, aligned)
++    var b10 = _pack4(qb, col0 + 8 + g, ka, n, k, aligned)
++    var b11 = _pack4(qb, col0 + 8 + g, ka + 16, n, k, aligned)
++    var b20 = _pack4(qb, col0 + 16 + g, ka, n, k, aligned)
++    var b21 = _pack4(qb, col0 + 16 + g, ka + 16, n, k, aligned)
++    var b30 = _pack4(qb, col0 + 24 + g, ka, n, k, aligned)
++    var b31 = _pack4(qb, col0 + 24 + g, ka + 16, n, k, aligned)
++    for kt in range(0, k, INT8_MMA_K_TILE):
++        var kn = kt + INT8_MMA_K_TILE + t * 4
++        var more = kt + INT8_MMA_K_TILE < k
++        # the next step's fragments, loaded now (zero codes past k)
++        var na00 = _pack4(qa, row0 + g, kn, m, k, aligned) if more else Int32(0)
++        var na01 = _pack4(qa, row0 + g + 8, kn, m, k, aligned) if more else Int32(0)
++        var na02 = _pack4(qa, row0 + g, kn + 16, m, k, aligned) if more else Int32(0)
++        var na03 = _pack4(qa, row0 + g + 8, kn + 16, m, k, aligned) if more else Int32(0)
++        var na10 = _pack4(qa, row0 + 16 + g, kn, m, k, aligned) if more else Int32(0)
++        var na11 = _pack4(qa, row0 + 24 + g, kn, m, k, aligned) if more else Int32(0)
++        var na12 = _pack4(qa, row0 + 16 + g, kn + 16, m, k, aligned) if more else Int32(0)
++        var na13 = _pack4(qa, row0 + 24 + g, kn + 16, m, k, aligned) if more else Int32(0)
++        var nb00 = _pack4(qb, col0 + g, kn, n, k, aligned) if more else Int32(0)
++        var nb01 = _pack4(qb, col0 + g, kn + 16, n, k, aligned) if more else Int32(0)
++        var nb10 = _pack4(qb, col0 + 8 + g, kn, n, k, aligned) if more else Int32(0)
++        var nb11 = _pack4(qb, col0 + 8 + g, kn + 16, n, k, aligned) if more else Int32(0)
++        var nb20 = _pack4(qb, col0 + 16 + g, kn, n, k, aligned) if more else Int32(0)
++        var nb21 = _pack4(qb, col0 + 16 + g, kn + 16, n, k, aligned) if more else Int32(0)
++        var nb30 = _pack4(qb, col0 + 24 + g, kn, n, k, aligned) if more else Int32(0)
++        var nb31 = _pack4(qb, col0 + 24 + g, kn + 16, n, k, aligned) if more else Int32(0)
++        # this step's eight unit steps: A row-tile i (0, 1) x B group j (0..3)
++        acc[0] = _imma_m16n8k32(a00, a01, a02, a03, b00, b01, acc[0])
++        acc[1] = _imma_m16n8k32(a00, a01, a02, a03, b10, b11, acc[1])
++        acc[2] = _imma_m16n8k32(a00, a01, a02, a03, b20, b21, acc[2])
++        acc[3] = _imma_m16n8k32(a00, a01, a02, a03, b30, b31, acc[3])
++        acc[4] = _imma_m16n8k32(a10, a11, a12, a13, b00, b01, acc[4])
++        acc[5] = _imma_m16n8k32(a10, a11, a12, a13, b10, b11, acc[5])
++        acc[6] = _imma_m16n8k32(a10, a11, a12, a13, b20, b21, acc[6])
++        acc[7] = _imma_m16n8k32(a10, a11, a12, a13, b30, b31, acc[7])
++        a00 = na00
++        a01 = na01
++        a02 = na02
++        a03 = na03
++        a10 = na10
++        a11 = na11
++        a12 = na12
++        a13 = na13
++        b00 = nb00
++        b01 = nb01
++        b10 = nb10
++        b11 = nb11
++        b20 = nb20
++        b21 = nb21
++        b30 = nb30
++        b31 = nb31
++    # C/D (16 x 8, s32): c0, c1 row g cols t*2 + 0, 1; c2, c3 row g + 8
++    comptime for i in range(2):
++        comptime for j in range(4):
++            var r0 = row0 + 16 * i + g
++            var jc = col0 + 8 * j + t * 2
++            var v = acc[i * 4 + j]
++            _store_cell(c, ea, eb, v[0], r0, jc, m, n)
++            _store_cell(c, ea, eb, v[1], r0, jc + 1, m, n)
++            _store_cell(c, ea, eb, v[2], r0 + 8, jc, m, n)
++            _store_cell(c, ea, eb, v[3], r0 + 8, jc + 1, m, n)
++
++
++@always_inline
++def _amd_warp_tile_reuse(
++    c: MutPointer[Float32, MutAnyOrigin],
++    qa: MutPointer[Int8, MutAnyOrigin],
++    ea: MutPointer[Int32, MutAnyOrigin],
++    qb: MutPointer[Int8, MutAnyOrigin],
++    eb: MutPointer[Int32, MutAnyOrigin],
++    lane: Int,
++    row0: Int,
++    col0: Int,
++    m: Int,
++    n: Int,
++    k: Int,
++    aligned: Bool,
++):
++    """`_amd_warp_tile` over a 32 x 32 warp tile: two A operands (rows
++    row0.. and row0+16..) and two B operands (columns col0.. and
++    col0+16..) per k step, the same lane layout, four MFMAs, each operand
++    feeding two. The next k step's operands are loaded before this step's
++    MFMAs run. Same Int32 sums, same epilogue."""
++    var i16 = lane & 15
++    var kq = (lane >> 4) * 8
++    var acc00 = SIMD[DType.int32, 4](0)
++    var acc01 = SIMD[DType.int32, 4](0)
++    var acc10 = SIMD[DType.int32, 4](0)
++    var acc11 = SIMD[DType.int32, 4](0)
++    var a0 = _pack8(qa, row0 + i16, kq, m, k, aligned)
++    var a1 = _pack8(qa, row0 + 16 + i16, kq, m, k, aligned)
++    var b0 = _pack8(qb, col0 + i16, kq, n, k, aligned)
++    var b1 = _pack8(qb, col0 + 16 + i16, kq, n, k, aligned)
++    for kt in range(0, k, INT8_MMA_K_TILE):
++        var kn = kt + INT8_MMA_K_TILE + kq
++        var more = kt + INT8_MMA_K_TILE < k
++        var na0 = _pack8(qa, row0 + i16, kn, m, k, aligned) if more else Int64(0)
++        var na1 = _pack8(qa, row0 + 16 + i16, kn, m, k, aligned) if more else Int64(0)
++        var nb0 = _pack8(qb, col0 + i16, kn, n, k, aligned) if more else Int64(0)
++        var nb1 = _pack8(qb, col0 + 16 + i16, kn, n, k, aligned) if more else Int64(0)
++        acc00 = llvm_intrinsic[
++            "llvm.amdgcn.mfma.i32.16x16x32.i8",
++            SIMD[DType.int32, 4],
++            has_side_effect=False,
++        ](a0, b0, acc00, Int32(0), Int32(0), Int32(0))
++        acc01 = llvm_intrinsic[
++            "llvm.amdgcn.mfma.i32.16x16x32.i8",
++            SIMD[DType.int32, 4],
++            has_side_effect=False,
++        ](a0, b1, acc01, Int32(0), Int32(0), Int32(0))
++        acc10 = llvm_intrinsic[
++            "llvm.amdgcn.mfma.i32.16x16x32.i8",
++            SIMD[DType.int32, 4],
++            has_side_effect=False,
++        ](a1, b0, acc10, Int32(0), Int32(0), Int32(0))
++        acc11 = llvm_intrinsic[
++            "llvm.amdgcn.mfma.i32.16x16x32.i8",
++            SIMD[DType.int32, 4],
++            has_side_effect=False,
++        ](a1, b1, acc11, Int32(0), Int32(0), Int32(0))
++        a0 = na0
++        a1 = na1
++        b0 = nb0
++        b1 = nb1
++    # D[i][j]: lane j + 16 (i // 4), register i % 4 -- per 16 x 16 tile
++    var ir = (lane >> 4) * 4
++    comptime for r in range(4):
++        _store_cell(c, ea, eb, acc00[r], row0 + ir + r, col0 + i16, m, n)
++        _store_cell(c, ea, eb, acc01[r], row0 + ir + r, col0 + 16 + i16, m, n)
++        _store_cell(c, ea, eb, acc10[r], row0 + 16 + ir + r, col0 + i16, m, n)
++        _store_cell(c, ea, eb, acc11[r], row0 + 16 + ir + r, col0 + 16 + i16, m, n)
++
++
++def identical_gemm_int8_mma_reuse_kernel(
++    c: MutPointer[Float32, MutAnyOrigin],
++    qa: MutPointer[Int8, MutAnyOrigin],
++    ea: MutPointer[Int32, MutAnyOrigin],
++    qb: MutPointer[Int8, MutAnyOrigin],
++    eb: MutPointer[Int32, MutAnyOrigin],
++    m_in: Int32,
++    n_in: Int32,
++    k_in: Int32,
++    aligned_in: Int32,
++):
++    """`identical_gemm_int8_mma_kernel` with a 32 x 32 tile per warp (the
++    reuse plan, `INT8_MMA_REUSE`): grid `(ceil(n / 64), ceil(m / 64), 1)`,
++    block `INT8_MMA_TPB`, the same 2 x 2 warps. A warp whose tile starts
++    beyond m or n returns whole (uniform across the warp)."""
++    var m = Int(m_in)
++    var n = Int(n_in)
++    var k = Int(k_in)
++    var aligned = aligned_in != Int32(0)
++    var warp = Int(thread_idx.x) // WARP_SIZE
++    var lane = Int(lane_id())
++    var wm = warp // INT8_MMA_WARPS_N
++    var wn = warp - wm * INT8_MMA_WARPS_N
++    var row0 = Int(block_idx.y) * INT8_MMA_REUSE_BLOCK_TILE_M + wm * INT8_MMA_REUSE_WARP_TILE
++    var col0 = Int(block_idx.x) * INT8_MMA_REUSE_BLOCK_TILE_N + wn * INT8_MMA_REUSE_WARP_TILE
++    if row0 >= m or col0 >= n:
++        return
++    comptime if is_nvidia_gpu():
++        _nvidia_warp_tile_reuse(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
++    elif is_amd_gpu():
++        _amd_warp_tile_reuse(c, qa, ea, qb, eb, lane, row0, col0, m, n, k, aligned)
++    else:
++        return
++
++
+ def identical_gemm_int8_mma_kernel(
+     c: MutPointer[Float32, MutAnyOrigin],
+     qa: MutPointer[Int8, MutAnyOrigin],
+@@ -429,6 +653,24 @@ def identical_gemm_int8_mma_into(
+         comptime if not INT8_MMA_UNSTATED_LOADS:
+             if mma_operands_aligned(Int(qa.unsafe_ptr()), Int(qb.unsafe_ptr())):
+                 aligned = Int32(1)
++        comptime if INT8_MMA_REUSE:
++            # the reuse plan: a 64 x 64 block tile (2 x 2 warps of 32 x 32)
++            var rgrid_x = (n + INT8_MMA_REUSE_BLOCK_TILE_N - 1) // INT8_MMA_REUSE_BLOCK_TILE_N
++            var rgrid_y = (m + INT8_MMA_REUSE_BLOCK_TILE_M - 1) // INT8_MMA_REUSE_BLOCK_TILE_M
++            ctx.enqueue_function[identical_gemm_int8_mma_reuse_kernel](
++                c.unsafe_ptr(),
++                qa.unsafe_ptr(),
++                ea.unsafe_ptr(),
++                qb.unsafe_ptr(),
++                eb.unsafe_ptr(),
++                Int32(m),
++                Int32(n),
++                Int32(k),
++                aligned,
++                grid_dim=(rgrid_x, rgrid_y, 1),
++                block_dim=(INT8_MMA_TPB, 1, 1),
++            )
++            return
+         ctx.enqueue_function[identical_gemm_int8_mma_kernel](
+             c.unsafe_ptr(),
+             qa.unsafe_ptr(),
+diff --git a/mamba/host/gen/mamba3_prefill_backward.mojo b/mamba/host/gen/mamba3_prefill_backward.mojo
+index 96534eda..ad9a9b78 100644
+--- a/mamba/host/gen/mamba3_prefill_backward.mojo
++++ b/mamba/host/gen/mamba3_prefill_backward.mojo
+@@ -13,7 +13,7 @@ from std.memory import bitcast
+ from std.os import getenv
+ from std.time import perf_counter_ns
+ 
+-from mamba.host.device_shim import DeviceContext
++from mamba.host.device_shim import DeviceBuffer, DeviceContext
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from mamba.host.gen.identity_trace import IdentityTrace
+@@ -67,7 +67,7 @@ from mamba.host.gen.modeling_mamba import (
+     mamba_upload,
+     mamba_zeros,
+ )
+-from mamba.checks.mamba3_fixture import Mamba3Weights
++from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
+ 
+ 
+ struct Mamba3PrefillGradients(Movable):
+@@ -155,6 +155,97 @@ def mamba3_prefill_backward(
+     var d_output = mamba_upload(
+         ctx, grad_output
+     )
++    var gradients = mamba3_prefill_backward_on(
++        ctx, device_weights, stages, x, d_output, b, l, dims, ton, tk
++    )
++
++    var result = Mamba3PrefillGradients()
++    result.x = mamba_download(ctx, gradients.x, m*dims.d_model)
++    result.block_norm_weight = mamba_download(ctx, gradients.block_norm_weight, dims.d_model)
++    result.in_proj_weight = mamba_download(ctx, gradients.in_proj_weight, dims.d_in_proj()*dims.d_model)
++    result.dt_bias = mamba_download(ctx, gradients.dt_bias, dims.nheads)
++    result.B_norm_weight = mamba_download(ctx, gradients.B_norm_weight, M3_D_STATE)
++    result.C_norm_weight = mamba_download(ctx, gradients.C_norm_weight, M3_D_STATE)
++    result.B_bias = mamba_download(ctx, gradients.B_bias, dims.nheads*M3_D_STATE)
++    result.C_bias = mamba_download(ctx, gradients.C_bias, dims.nheads*M3_D_STATE)
++    result.D = mamba_download(ctx, gradients.D, dims.nheads)
++    result.out_proj_weight = mamba_download(ctx, gradients.out_proj_weight, dims.d_model*dims.d_inner)
++    _mtick(ctx, ton, tk, "downloads")
++
++    # Explicit ownership extends all GPU buffers through synchronization.
++    _ = gradients^
++    _ = d_output^
++    _ = x^
++    _ = stages^
++    _ = state^
++    _ = device_weights^
++    _ = ctx^
++    return result^
++
++
++struct Mamba3DeviceGradients(Movable):
++    """The ten gradients of one zero-state prefill VJP, on the device, in
++    the public order (x, then the nine weights in forward order). The
++    session binding downloads them straight to the caller's arrays;
++    `mamba3_prefill_backward` downloads them into lists as before."""
++    var x: DeviceBuffer[DType.float32]
++    var block_norm_weight: DeviceBuffer[DType.float32]
++    var in_proj_weight: DeviceBuffer[DType.float32]
++    var dt_bias: DeviceBuffer[DType.float32]
++    var B_norm_weight: DeviceBuffer[DType.float32]
++    var C_norm_weight: DeviceBuffer[DType.float32]
++    var B_bias: DeviceBuffer[DType.float32]
++    var C_bias: DeviceBuffer[DType.float32]
++    var D: DeviceBuffer[DType.float32]
++    var out_proj_weight: DeviceBuffer[DType.float32]
++
++    def __init__(
++        out self,
++        var x: DeviceBuffer[DType.float32],
++        var block_norm_weight: DeviceBuffer[DType.float32],
++        var in_proj_weight: DeviceBuffer[DType.float32],
++        var dt_bias: DeviceBuffer[DType.float32],
++        var B_norm_weight: DeviceBuffer[DType.float32],
++        var C_norm_weight: DeviceBuffer[DType.float32],
++        var B_bias: DeviceBuffer[DType.float32],
++        var C_bias: DeviceBuffer[DType.float32],
++        var D: DeviceBuffer[DType.float32],
++        var out_proj_weight: DeviceBuffer[DType.float32],
++    ):
++        self.x = x^
++        self.block_norm_weight = block_norm_weight^
++        self.in_proj_weight = in_proj_weight^
++        self.dt_bias = dt_bias^
++        self.B_norm_weight = B_norm_weight^
++        self.C_norm_weight = C_norm_weight^
++        self.B_bias = B_bias^
++        self.C_bias = C_bias^
++        self.D = D^
++        self.out_proj_weight = out_proj_weight^
++
++
++def mamba3_prefill_backward_on(
++    ctx: DeviceContext,
++    mut device_weights: Mamba3DeviceWeights,
++    mut stages: Mamba3DeviceStages,
++    mut x: DeviceBuffer[DType.float32],
++    mut d_output: DeviceBuffer[DType.float32],
++    b: Int,
++    l: Int,
++    dims: Mamba3Dims,
++    ton: Bool,
++    mut tk: Int,
++) raises -> Mamba3DeviceGradients:
++    """The VJP's launches on device-resident operands: `stages` and `x` are
++    the forward's (recorded by `mamba3_block_forward` on `device_weights`
++    from the zero state), `d_output` the objective cotangent. Every
++    launch and its order are `mamba3_prefill_backward`'s, which now calls
++    this; the session binding (lane/neural-net-experiment) calls it with
++    the stages its last forward recorded, so a training step's backward
++    skips the forward recompute when x and the weights are byte for byte
++    the forward's. Synchronized on return; the gradients stay on the
++    device."""
++    var m = b * l
+     # lane/neural-apple2: every scratch below is filled and used on the one
+     # in-order `ctx` and kept alive to the final synchronize (the explicit
+     # last uses at the end), so its allocation needs no wait of its own.
+@@ -322,36 +413,18 @@ def mamba3_prefill_backward(
+     mamba3_backward_reduce_into(ctx,d_norm_w,d_norm_w_rows,ones,workspace,RED3_NORM_W,dims,m)
+     _mtick(ctx, ton, tk, "reduce")
+     ctx.synchronize()
+-
+-    var result = Mamba3PrefillGradients()
+-    result.x = mamba_download(ctx, d_x, m*dims.d_model)
+-    result.block_norm_weight = mamba_download(ctx, d_norm_w, dims.d_model)
+-    result.in_proj_weight = mamba_download(ctx, d_w_in, dims.d_in_proj()*dims.d_model)
+-    result.dt_bias = mamba_download(ctx, d_dt_bias_join, dims.nheads)
+-    result.B_norm_weight = mamba_download(ctx, d_bw, M3_D_STATE)
+-    result.C_norm_weight = mamba_download(ctx, d_cw, M3_D_STATE)
+-    result.B_bias = mamba_download(ctx, d_bb, dims.nheads*M3_D_STATE)
+-    result.C_bias = mamba_download(ctx, d_cb, dims.nheads*M3_D_STATE)
+-    result.D = mamba_download(ctx, d_d, dims.nheads)
+-    result.out_proj_weight = mamba_download(ctx, d_weight, dims.d_model*dims.d_inner)
+-    _mtick(ctx, ton, tk, "downloads")
+-
++    var gradients = Mamba3DeviceGradients(
++        d_x^, d_norm_w^, d_w_in^, d_dt_bias_join^, d_bw^, d_cw^, d_bb^, d_cb^,
++        d_d^, d_weight^,
++    )
+     # Explicit ownership extends all GPU buffers through synchronization.
+-    _ = d_norm_w^
+     _ = d_norm_w_rows^
+-    _ = d_x^
+-    _ = d_w_in^
+     _ = d_norm^
+     _ = d_in_proj^
+-    _ = d_cb^
+-    _ = d_bb^
+-    _ = d_cw^
+-    _ = d_bw^
+     _ = d_cw_rows^
+     _ = d_bw_rows^
+     _ = d_c_raw^
+     _ = d_b_raw^
+-    _ = d_dt_bias_join^
+     _ = d_dt_bias_rows_join^
+     _ = d_dt_raw_join^
+     _ = d_dt_join_available^
+@@ -425,19 +498,11 @@ def mamba3_prefill_backward(
+     _ = d_c_qk^
+     _ = d_b_qk^
+     _ = ones^
+-    _ = d_d^
+     _ = d_d_product^
+     _ = d_qkdot^
+     _ = d_v^
+     _ = d_z^
+     _ = d_skip^
+     _ = workspace^
+-    _ = d_weight^
+     _ = d_gate^
+-    _ = d_output^
+-    _ = x^
+-    _ = stages^
+-    _ = state^
+-    _ = device_weights^
+-    _ = ctx^
+-    return result^
++    return gradients^
+diff --git a/mamba/impl/modules/mamba3_prefill_backward.mojo b/mamba/impl/modules/mamba3_prefill_backward.mojo
+index e7e2225f..ccf99b71 100644
+--- a/mamba/impl/modules/mamba3_prefill_backward.mojo
++++ b/mamba/impl/modules/mamba3_prefill_backward.mojo
+@@ -10,7 +10,7 @@ from std.memory import bitcast
+ from std.os import getenv
+ from std.time import perf_counter_ns
+ 
+-from max.gpu.host import DeviceContext
++from max.gpu.host import DeviceBuffer, DeviceContext
+ from core.neural_context import process_ctx
+ from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
+ 
+@@ -71,7 +71,7 @@ from mamba.impl.modeling.modeling_mamba import (
+     mamba_upload,
+     mamba_zeros,
+ )
+-from mamba.checks.mamba3_fixture import Mamba3Weights
++from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
+ 
+ 
+ struct Mamba3PrefillGradients(Movable):
+@@ -159,6 +159,97 @@ def mamba3_prefill_backward(
+     var d_output = mamba_upload(
+         ctx, grad_output
+     )
++    var gradients = mamba3_prefill_backward_on(
++        ctx, device_weights, stages, x, d_output, b, l, dims, ton, tk
++    )
++
++    var result = Mamba3PrefillGradients()
++    result.x = mamba_download(ctx, gradients.x, m*dims.d_model)
++    result.block_norm_weight = mamba_download(ctx, gradients.block_norm_weight, dims.d_model)
++    result.in_proj_weight = mamba_download(ctx, gradients.in_proj_weight, dims.d_in_proj()*dims.d_model)
++    result.dt_bias = mamba_download(ctx, gradients.dt_bias, dims.nheads)
++    result.B_norm_weight = mamba_download(ctx, gradients.B_norm_weight, M3_D_STATE)
++    result.C_norm_weight = mamba_download(ctx, gradients.C_norm_weight, M3_D_STATE)
++    result.B_bias = mamba_download(ctx, gradients.B_bias, dims.nheads*M3_D_STATE)
++    result.C_bias = mamba_download(ctx, gradients.C_bias, dims.nheads*M3_D_STATE)
++    result.D = mamba_download(ctx, gradients.D, dims.nheads)
++    result.out_proj_weight = mamba_download(ctx, gradients.out_proj_weight, dims.d_model*dims.d_inner)
++    _mtick(ctx, ton, tk, "downloads")
++
++    # Explicit ownership extends all GPU buffers through synchronization.
++    _ = gradients^
++    _ = d_output^
++    _ = x^
++    _ = stages^
++    _ = state^
++    _ = device_weights^
++    _ = ctx^
++    return result^
++
++
++struct Mamba3DeviceGradients(Movable):
++    """The ten gradients of one zero-state prefill VJP, on the device, in
++    the public order (x, then the nine weights in forward order). The
++    session binding downloads them straight to the caller's arrays;
++    `mamba3_prefill_backward` downloads them into lists as before."""
++    var x: DeviceBuffer[DType.float32]
++    var block_norm_weight: DeviceBuffer[DType.float32]
++    var in_proj_weight: DeviceBuffer[DType.float32]
++    var dt_bias: DeviceBuffer[DType.float32]
++    var B_norm_weight: DeviceBuffer[DType.float32]
++    var C_norm_weight: DeviceBuffer[DType.float32]
++    var B_bias: DeviceBuffer[DType.float32]
++    var C_bias: DeviceBuffer[DType.float32]
++    var D: DeviceBuffer[DType.float32]
++    var out_proj_weight: DeviceBuffer[DType.float32]
++
++    def __init__(
++        out self,
++        var x: DeviceBuffer[DType.float32],
++        var block_norm_weight: DeviceBuffer[DType.float32],
++        var in_proj_weight: DeviceBuffer[DType.float32],
++        var dt_bias: DeviceBuffer[DType.float32],
++        var B_norm_weight: DeviceBuffer[DType.float32],
++        var C_norm_weight: DeviceBuffer[DType.float32],
++        var B_bias: DeviceBuffer[DType.float32],
++        var C_bias: DeviceBuffer[DType.float32],
++        var D: DeviceBuffer[DType.float32],
++        var out_proj_weight: DeviceBuffer[DType.float32],
++    ):
++        self.x = x^
++        self.block_norm_weight = block_norm_weight^
++        self.in_proj_weight = in_proj_weight^
++        self.dt_bias = dt_bias^
++        self.B_norm_weight = B_norm_weight^
++        self.C_norm_weight = C_norm_weight^
++        self.B_bias = B_bias^
++        self.C_bias = C_bias^
++        self.D = D^
++        self.out_proj_weight = out_proj_weight^
++
++
++def mamba3_prefill_backward_on(
++    ctx: DeviceContext,
++    mut device_weights: Mamba3DeviceWeights,
++    mut stages: Mamba3DeviceStages,
++    mut x: DeviceBuffer[DType.float32],
++    mut d_output: DeviceBuffer[DType.float32],
++    b: Int,
++    l: Int,
++    dims: Mamba3Dims,
++    ton: Bool,
++    mut tk: Int,
++) raises -> Mamba3DeviceGradients:
++    """The VJP's launches on device-resident operands: `stages` and `x` are
++    the forward's (recorded by `mamba3_block_forward` on `device_weights`
++    from the zero state), `d_output` the objective cotangent. Every
++    launch and its order are `mamba3_prefill_backward`'s, which now calls
++    this; the session binding (lane/neural-net-experiment) calls it with
++    the stages its last forward recorded, so a training step's backward
++    skips the forward recompute when x and the weights are byte for byte
++    the forward's. Synchronized on return; the gradients stay on the
++    device."""
++    var m = b * l
+     # lane/neural-apple2: every scratch below is filled and used on the one
+     # in-order `ctx` and kept alive to the final synchronize (the explicit
+     # last uses at the end), so its allocation needs no wait of its own.
+@@ -326,36 +417,18 @@ def mamba3_prefill_backward(
+     mamba3_backward_reduce_into(ctx,d_norm_w,d_norm_w_rows,ones,workspace,RED3_NORM_W,dims,m)
+     _mtick(ctx, ton, tk, "reduce")
+     ctx.synchronize()
+-
+-    var result = Mamba3PrefillGradients()
+-    result.x = mamba_download(ctx, d_x, m*dims.d_model)
+-    result.block_norm_weight = mamba_download(ctx, d_norm_w, dims.d_model)
+-    result.in_proj_weight = mamba_download(ctx, d_w_in, dims.d_in_proj()*dims.d_model)
+-    result.dt_bias = mamba_download(ctx, d_dt_bias_join, dims.nheads)
+-    result.B_norm_weight = mamba_download(ctx, d_bw, M3_D_STATE)
+-    result.C_norm_weight = mamba_download(ctx, d_cw, M3_D_STATE)
+-    result.B_bias = mamba_download(ctx, d_bb, dims.nheads*M3_D_STATE)
+-    result.C_bias = mamba_download(ctx, d_cb, dims.nheads*M3_D_STATE)
+-    result.D = mamba_download(ctx, d_d, dims.nheads)
+-    result.out_proj_weight = mamba_download(ctx, d_weight, dims.d_model*dims.d_inner)
+-    _mtick(ctx, ton, tk, "downloads")
+-
++    var gradients = Mamba3DeviceGradients(
++        d_x^, d_norm_w^, d_w_in^, d_dt_bias_join^, d_bw^, d_cw^, d_bb^, d_cb^,
++        d_d^, d_weight^,
++    )
+     # Explicit ownership extends all GPU buffers through synchronization.
+-    _ = d_norm_w^
+     _ = d_norm_w_rows^
+-    _ = d_x^
+-    _ = d_w_in^
+     _ = d_norm^
+     _ = d_in_proj^
+-    _ = d_cb^
+-    _ = d_bb^
+-    _ = d_cw^
+-    _ = d_bw^
+     _ = d_cw_rows^
+     _ = d_bw_rows^
+     _ = d_c_raw^
+     _ = d_b_raw^
+-    _ = d_dt_bias_join^
+     _ = d_dt_bias_rows_join^
+     _ = d_dt_raw_join^
+     _ = d_dt_join_available^
+@@ -429,19 +502,11 @@ def mamba3_prefill_backward(
+     _ = d_c_qk^
+     _ = d_b_qk^
+     _ = ones^
+-    _ = d_d^
+     _ = d_d_product^
+     _ = d_qkdot^
+     _ = d_v^
+     _ = d_z^
+     _ = d_skip^
+     _ = workspace^
+-    _ = d_weight^
+     _ = d_gate^
+-    _ = d_output^
+-    _ = x^
+-    _ = stages^
+-    _ = state^
+-    _ = device_weights^
+-    _ = ctx^
+-    return result^
++    return gradients^
+diff --git a/python/mojolearn/_linalg_impl.py b/python/mojolearn/_linalg_impl.py
+index 541af832..f251c73b 100644
+--- a/python/mojolearn/_linalg_impl.py
++++ b/python/mojolearn/_linalg_impl.py
+@@ -1011,10 +1011,13 @@ def _triu(M, r):
+     import array as _array
+     from ._expansion_decomp import _M
+     out = _array.array("f", M.s[:r * M.c])
+-    for i in range(r):
+-        for j in range(min(i, M.c)):
+-            out[i * M.c + j] = 0.0
+-    return _M(out, r, M.c)
++    # a slice assignment per row (one C-level copy each) instead of a
++    # Python store per zeroed cell (lane/neural-net-experiment)
++    c = M.c
++    for i in range(1, r):
++        w = min(i, c)
++        out[i * c:i * c + w] = _array.array("f", bytes(4 * w))
++    return _M(out, r, c)
+ 
+ 
+ class QRResult(tuple):
+@@ -1267,12 +1270,21 @@ def _svd_tall(k, A, full):
+     # trailing columns are the complement's basis.
+     h, tau = k.geqrf(Ug)
+     Qc = k.orgqr(h, tau, width)
+-    neg = [h.s[j * r + j] < 0.0 for j in range(r)]
+-    out = _array.array("f", Qc.s)
+-    for j in range(r):
+-        if neg[j]:
+-            out[j::width] = _array.array("f", [-v for v in out[j::width]])
+-    return _M(out, m, width), S, Vt
++    neg = [h.s[j * r + j] < 0.0 for j in range(r)] + [False] * (width - r)
++    # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
++    # was a Python loop over every value of each flipped column (m Python
++    # negations per column: at 1,000,000 rows and 220 columns, most of the
++    # bench board's 95.8 s svd on an MI325X). `neg_cols` is the kit's
++    # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
++    # values a device kernel already stored (so already flushed), the same
++    # bits the loop produced. MOJOLEARN_LINALG_LEGACY_SIGN=1 keeps the loop.
++    if os.environ.get("MOJOLEARN_LINALG_LEGACY_SIGN") == "1":
++        out = _array.array("f", Qc.s)
++        for j in range(r):
++            if neg[j]:
++                out[j::width] = _array.array("f", [-v for v in out[j::width]])
++        return _M(out, m, width), S, Vt
++    return Qc.neg_cols(neg), S, Vt
+ 
+ 
+ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
+diff --git a/python/mojolearn/_mamba_impl.py b/python/mojolearn/_mamba_impl.py
+index fdf24ce2..4230777b 100644
+--- a/python/mojolearn/_mamba_impl.py
++++ b/python/mojolearn/_mamba_impl.py
+@@ -91,6 +91,8 @@ prefill backward. Current scope and packaging boundaries are documented in
+ SUPPORT_MATRIX.md; older comments are not release certificates.
+ """
+ 
++import os
++
+ from . import _buffer as _buffers, _bufcheck as _checks
+ from ._array import Array as _Array
+ from ._arrays import _addr, _addr_ro
+@@ -372,6 +374,11 @@ class _MambaBase(NumericModeMixin):
+                 )
+         return mod
+ 
++    def _backward_native(self, extension, entry, native):
++        """The callable `_prefill_backward` hands the 21 addresses and the
++        parameters to; a block with a session substitutes its own."""
++        return native
++
+     def _prefill_backward(self, x, grad_output, entry):
+         what = type(self).__name__ + ".backward"
+         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
+@@ -402,6 +409,7 @@ class _MambaBase(NumericModeMixin):
+                 f"mojolearn {what}: loaded Mamba extension lacks {entry}; "
+                 "rebuild bindings/build_mamba.sh in IDENTICAL mode"
+             )
++        native = self._backward_native(extension, entry, native)
+         # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
+         gradients = ([empty(x.shape, "<f4")]
+                      + [empty(w.shape, "<f4") for w in weights])
+@@ -1581,13 +1589,73 @@ class Mamba3Block(_MambaBase):
+         addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
+                  + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
+                     _addr(theta_last)])
+-        ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
++        # lane/neural-net-experiment (2026-09-30): the session keeps the
++        # weights on the device across calls (reused only when their bytes
++        # are unchanged; the binding compares them). Same entry arithmetic.
++        session_forward = None
++        try:
++            session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
++        except ImportError:
++            session_forward = None
++        if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
++            if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
++                self._prefill_session = ext.mamba3_prefill_session_create()
++                self._prefill_binding = ext
++            session_forward(self._prefill_session, addrs, [b, l, self.d_model])
++        else:
++            ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
+         self.h_last_ = h_last
+         self.k_last_ = k_last
+         self.v_last_ = v_last
+         self.theta_last_ = theta_last
+         return y
+ 
++    def _backward_native(self, extension, entry, native):
++        # lane/neural-net-experiment (2026-09-30): the backward on the same
++        # session as the fresh prefill. The session keeps the weights and
++        # the last forward's stages on the device; the backward reuses the
++        # stages when x and the weights are byte for byte the forward's
++        # (the binding compares them) and recomputes the forward otherwise.
++        # Same launches, same order, as the entry's own recompute.
++        # MOJOLEARN_MAMBA3_LEGACY_SETUP=1 keeps the per-call entry.
++        session_backward = None
++        try:
++            session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
++        except ImportError:
++            session_backward = None
++        if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
++            return native
++        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not extension:
++            self._prefill_session = extension.mamba3_prefill_session_create()
++            self._prefill_binding = extension
++        session = self._prefill_session
++        return lambda addresses, params: session_backward(session, addresses, params)
++
++    def session_info(self):
++        """The prefill session's counters as a dict (None before the
++        first session call): weight uploads / recopies / reuses, backward
++        stage reuses / forward recomputes, stages held."""
++        session = getattr(self, "_prefill_session", None)
++        binding = getattr(self, "_prefill_binding", None)
++        info = getattr(binding, "mamba3_prefill_session_info", None) if binding is not None else None
++        if session is None or info is None:
++            return None
++        values = list(info(session))
++        keys = ("weight_uploads", "weight_recopies", "weight_reuses",
++                "backward_reuses", "backward_recomputes", "stages_held")
++        return dict(zip(keys, (int(v) for v in values)))
++
++    def __getstate__(self):
++        state = self.__dict__.copy()
++        for name in ("_prefill_session", "_prefill_binding"):
++            state.pop(name, None)
++        return state
++
++    def __setstate__(self, state):
++        self.__dict__.update(state)
++        self._prefill_session = None
++        self._prefill_binding = None
++
+     def _call(self, x, state, step):
+         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
+         x = _batch_tokens(x, what, self.d_model, step)
+diff --git a/python/mojolearn/_training_impl.py b/python/mojolearn/_training_impl.py
+index dbad46f4..a60bf3e0 100644
+--- a/python/mojolearn/_training_impl.py
++++ b/python/mojolearn/_training_impl.py
+@@ -106,6 +106,7 @@ from . import _numeric_profile
+ from fractions import Fraction
+ 
+ import ctypes
++import os
+ import numbers
+ import struct
+ from ._arrays import _addr, _addr_ro
+@@ -1180,7 +1181,6 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
+         )
+ 
+     offsets = _offsets_for(probes)
+-    flat, packed = _pack(gs, probes)
+     info = zeros((2,), "<f4")
+ 
+     # `params` is, in this exact order (mirrored word for word in
+@@ -1191,6 +1191,21 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
+     plist = [int(len(gs)), mn]
+ 
+     binding = _load(numeric_mode)
++    # lane/neural-net-experiment (2026-09-30): several tensors go to the
++    # device straight from their own memory and come back the same way
++    # (`clip_grad_norm_multi`), instead of a packed flat host copy before
++    # and an unpack after -- two host copies of every gradient per clip.
++    # The same device buffer, offsets and clip, so the same bits.
++    # MOJOLEARN_CLIP_PACKED=1 keeps the packed entry (the A/B); a binary
++    # without the entry, or several optimizer devices, take it too.
++    multi = getattr(binding, "clip_grad_norm_multi", None)
++    if (len(gs) > 1 and multi is not None
++            and os.environ.get("MOJOLEARN_CLIP_PACKED") != "1"
++            and os.environ.get("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1"):
++        multi([addr(g, name="tensor") for g in gs], addr_ro(offsets, name="offsets"),
++              addr(info, name="info"), plist)
++        return float(info[0])
++    flat, packed = _pack(gs, probes)
+     binding.clip_grad_norm(
+         addr(flat, name="grads"), addr_ro(offsets, name="offsets"),
+         addr(info, name="info"), plist,
+@@ -1661,16 +1676,87 @@ class WarmupLinearLR(_Schedule):
+         return _f32_round(peak + (lo - peak) * p)
+ 
+ 
++# lane/neural-net-experiment (2026-09-30): the cosine schedule's value is
++# DEFINED as the float32 nearest the exact rational value (the interval
++# route below), and that definition does not change. What changes is how
++# often the exact route runs: `_decay` first evaluates the same formula in
++# binary64 with a repository-owned Taylor cosine (no libm) and a RIGOROUS
++# error bound, and accepts the float32 it rounds to when the whole error
++# interval rounds to that same float32 (Ziv's test). Only when the interval
++# straddles a float32 rounding boundary, or the value is outside the normal
++# range, does the exact route decide. The answer is the same float32 either
++# way: the fast path never returns a value the exact route would not. The
++# bench board's lr-warmup-cosine lane (100,000 steps) took 332 s of exact
++# rational arithmetic on an MI325X host; MOJOLEARN_LR_EXACT_ONLY=1 restores
++# the exact route for every step (the A/B, and the digest check).
++_COS_F64_TERMS = 26
++#: absolute error bound on `_cos_pi_f64` (analysis in its docstring: the
++#: sum's rounding is under 2^-46 and the argument's under 2^-50; 2^-40
++#: leaves a 64x margin)
++_COS_F64_ERR = 2.0 ** -40
++_F64_EPS = 2.0 ** -52
++
++
++def _cos_pi_f64(p):
++    """cos(pi p) in binary64 for a rational p in [0, 1], by the Taylor
++    series on the reduced argument x = pi q, q = p or 1 - p in [0, 1/2]
++    (cos is odd about pi/2, an exact identity), 26 terms (the truncation
++    x^52 / 52! is below 1e-58 for x <= pi/2). Every operation is IEEE
++    binary64, so the value is the same on every host; its distance from
++    cos(pi p) is under `_COS_F64_ERR`: the argument x carries at most
++    three roundings of relative size 2^-53 (pi, float(q), the product),
++    an absolute error under 2^-50 that cos passes through with slope at
++    most 1, and the sum of 26 terms of magnitude at most 1 accumulates at
++    most 26 roundings, each at most 2^-53 of a partial sum whose magnitude
++    stays under 2 (a bound of 2^-47), plus each term's own three roundings
++    (under 2^-51 in all)."""
++    q = Fraction(p)
++    flip = q > Fraction(1, 2)
++    if flip:
++        q = 1 - q
++    x = math.pi * float(q)
++    x2 = x * x
++    total = 0.0
++    term = 1.0
++    for k in range(_COS_F64_TERMS):
++        total += term
++        term = -term * x2 / ((2 * k + 1) * (2 * k + 2))
++    return -total if flip else total
++
++
++def _f32_of_f64_decided(v, err):
++    """The float32 nearest a real number known to lie in [v - err, v + err]
++    (v, err binary64), or None when that interval is not inside one
++    float32's rounding cell (its two neighbouring midpoints), or when the
++    value is not a normal positive float32 (then the exact route's
++    flush-to-zero and overflow rules decide)."""
++    if not (v > 2.0 ** -120) or v >= 2.0 ** 127 or not (err >= 0.0):
++        return None
++    f = ctypes.c_float(v).value
++    bits = struct.unpack('<I', struct.pack('<f', f))[0]
++    up = struct.unpack('<f', struct.pack('<I', bits + 1))[0]
++    down = struct.unpack('<f', struct.pack('<I', bits - 1))[0]
++    # the midpoints of two adjacent float32s are exact in binary64
++    hi_mid = (f + up) / 2.0
++    lo_mid = (f + down) / 2.0
++    if v - err > lo_mid and v + err < hi_mid:
++        return f
++    return None
++
++
+ class WarmupCosineLR(_Schedule):
+     """Linear warmup over `warmup_steps`, then
+     `min_lr + (peak_lr - min_lr) * (1 + cos(pi p)) / 2` with
+-    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The cosine is
+-    exact rational arithmetic (see the section comment), never `math.cos`.
++    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The value is the
++    float32 nearest the exact rational expression (the interval route,
++    never `math.cos`); a binary64 evaluation with a rigorous error bound
++    answers first whenever it provably rounds to that same float32 (see
++    the section comment above `_cos_pi_f64`).
+     """
+ 
+     kind = "cosine"
+ 
+-    def _decay(self, p):
++    def _decay_exact(self, p):
+         peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
+ 
+         def interval(terms):
+@@ -1680,6 +1766,24 @@ class WarmupCosineLR(_Schedule):
+             return (a, b) if a <= b else (b, a)
+         return _decide_f32(interval)
+ 
++    def _decay(self, p):
++        if os.environ.get("MOJOLEARN_LR_EXACT_ONLY") == "1":
++            return self._decay_exact(p)
++        peak, lo = self.peak_lr, self.min_lr
++        span = peak - lo
++        if not (span > 0.0):
++            return self._decay_exact(p)
++        c = _cos_pi_f64(p)
++        v = lo + span * (1.0 + c) / 2.0
++        # the cosine's bound scaled into the value, plus the four roundings
++        # of the expression itself (each at most 2^-53 of an operand no
++        # larger than peak + v), with a factor of two of margin
++        err = span * _COS_F64_ERR + 8.0 * _F64_EPS * (peak + abs(v))
++        f = _f32_of_f64_decided(v, err)
++        if f is None:
++            return self._decay_exact(p)
++        return f
++
+ 
+ # ===================================================================
+ # GRADIENT ACCUMULATION (optimizer contract clause 9.2)
+diff --git a/python/mojolearn/_transformer_impl.py b/python/mojolearn/_transformer_impl.py
+index fa7d7f81..75df555e 100644
+--- a/python/mojolearn/_transformer_impl.py
++++ b/python/mojolearn/_transformer_impl.py
+@@ -963,6 +963,28 @@ class TransformerBlock(NumericModeMixin):
+             0, self.window,
+         )
+ 
++    def _call_fresh_session(self, x, ext):
++        """Stateless prefill on the resident session (lane/neural-net-
++        experiment, 2026-09-30): `transformer_session_forward_fresh` keeps
++        the weights on the device across calls (reused only when their
++        bytes are unchanged, the binding compares them) and the workspace
++        under its budget; the zero cache exists only on the device and never
++        crosses the boundary. The same entry arithmetic as
++        `transformer_session_forward` at cached_tokens 0."""
++        b, l = int(x.shape[0]), int(x.shape[1])
++        y = _buffers.empty((b, l, self.d_model), '<f4')
++        w = self._w  # noqa: F841  (keeps the arrays alive for the call)
++        wopt = self._wopt  # noqa: F841
++        if self._native_session is None:
++            self._native_session = ext.transformer_session_create()
++            self._session_binding = ext
++        addrs, params = self._with_tails(
++            [_addr_ro(x)] + self._weight_addrs() + [0, 0, _addr(y)],
++            [b, l, self.d_model, self.n_heads, self.n_kv_heads,
++             self.head_dim, self.intermediate, l, 0, self.window])
++        ext.transformer_session_forward_fresh(self._native_session, addrs, params)
++        return y
++
+     def _call_fresh(self, x, ext):
+         """Stateless prefill with the original zero cache owned only on device."""
+         b, l = int(x.shape[0]), int(x.shape[1])
+@@ -1006,6 +1028,12 @@ class TransformerBlock(NumericModeMixin):
+         if (state is None and not step and b > 0 and l > 0
+                 and self.window >= 0 and mode in ("identical", "fast")):
+             fresh_ext = ext
++            # The session's stateless prefill first (every vendor): weights
++            # and workspace retained across calls. The per-call fresh entry
++            # (NVIDIA builds) and the state-carrying session path follow.
++            if (reuse and _exports(ext, "transformer_session_forward_fresh")
++                    and os.environ.get("MOJOLEARN_TRANSFORMER_SESSION_FRESH") != "0"):
++                return self._call_fresh_session(x, ext)
+             if hasattr(fresh_ext, "transformer_forward_fresh"):
+                 return self._call_fresh(x, fresh_ext)
+         if state is None:
+@@ -1267,8 +1295,24 @@ class TransformerBlock(NumericModeMixin):
+         # grad_x, the nine weight gradients.
+         addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]
+                  + [_addr(g) for g in grads])
+-        native(addrs, [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+-                       self.head_dim, self.intermediate, self.window])
++        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
++                  self.head_dim, self.intermediate, self.window]
++        # lane/neural-net-experiment: the session entry keeps the weights,
++        # the forward workspace and the backward stages on the device
++        # across calls (Samba training calls this per block per step).
++        if (_exports(ext, "transformer_session_backward")
++                and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1"):
++            with self._runtime_lock:
++                if self._native_session is not None and self._session_binding is not ext:
++                    self._session_binding.transformer_session_close(self._native_session)
++                    self._native_session = None
++                    self._session_binding = None
++                if self._native_session is None:
++                    self._native_session = ext.transformer_session_create()
++                    self._session_binding = ext
++                ext.transformer_session_backward(self._native_session, addrs, params)
++            return dict(zip(("x",) + self._W_NAMES, grads))
++        native(addrs, params)
+         return dict(zip(("x",) + self._W_NAMES, grads))
+ 
+     def decode_session(self, state):
+diff --git a/sequence/pyapi.mojo b/sequence/pyapi.mojo
+index 8f87887e..a406c7b8 100644
+--- a/sequence/pyapi.mojo
++++ b/sequence/pyapi.mojo
+@@ -19,6 +19,9 @@ from sequence.garch import GARCH_SNAP
+ from sequence.prophet import MEM, ProphetData, _dot, _fg_prior
+ from sequence.prophet import div as _pdiv
+ from sequence.ops import add as p_add, fma3 as p_fma3, ld as p_ld, mul as p_mul, st as p_st, sub as p_sub
++from sequence.ops import sumsq_fold as _sumsq_fold_host
++from sequence.adafactor import af_alpha_tail, af_denom_tail
++from std.os import getenv as _getenv_seq
+ 
+ 
+ def fptr(addr: PythonObject, what: String) raises -> FP:
+@@ -470,6 +473,26 @@ def _fast_norms() -> Bool:
+     return GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+ 
+ 
++#: lane/neural-net-experiment (2026-09-30): under IDENTICAL, Adafactor's two
++#: whole-tensor norms are ONE THREAD's ascending chain of fmas (`sumsq_fold`),
++#: which a GPU thread walks at memory latency: the bench board's adafactor
++#: lane (one tensor of 16,777,216 values, 10 steps) took 10.7 s on an
++#: MI325X against torch eager's 5.8 ms, about a second per step, most of it
++#: those two chains. From HOST_FOLD_MIN values the SAME chain (the same
++#: `sumsq_fold`, the same order, the same fmas, so the same bits: the host
++#: binding runs this very code) is folded on the host: the parameter norm
++#: from the caller's own bytes before they are uploaded, the update norm
++#: from the update downloaded once. MOJOLEARN_SEQ_HOST_FOLD=0 keeps the
++#: device chains (the A/B and the digest check). FAST keeps its partials.
++comptime HOST_FOLD_MIN = 1 << 16
++
++
++def _host_folds() -> Bool:
++    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
++        return False
++    return String(_getenv_seq("MOJOLEARN_SEQ_HOST_FOLD")) != "0"
++
++
+ def _chunk_sumsq[E: Exec](mut ex: E, src: FP, start: Int, n: Int, parts: FP, slot: Int) raises -> Int:
+     """FAST: min(_PARTS, n) strided partial sums of squares of src[start:start+n]
+     into parts[slot:]; returns how many."""
+@@ -518,17 +541,30 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
+     if C > 0:
+         ex.upload(S2, fptr(addrs[3], "col_var"), C)
+     var fast = _fast_norms() and n >= FAST_NORM_MIN
++    var host_fold = _host_folds() and n >= HOST_FOLD_MIN
+     var parts = ex.alloc(_PARTS if fast else 1)
++    # the four scalars, mirrored on the host when the folds run there:
++    # [unused, alpha, rmean (device only), denom]
++    var hsc = List[Float32](length=4, fill=Float32(0.0))
+     var a = Args()
+     a.p0 = P
+     a.p1 = sc
+     a.i0 = n
+     a.f0 = fval(fp, 3)
+     a.f1 = rho
+-    if fast:
+-        a.p2 = parts
+-        a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
+-    ex.launch[OP_AF_ALPHA](a, 1)
++    if host_fold:
++        # ||p||^2 from the caller's bytes (the same bytes P was uploaded
++        # from), the same chain as op_af_alpha's; then its tail, into
++        # hsc[1], and up into sc[1] before anything reads sc
++        var ah = a
++        ah.p1 = FP(unsafe_from_address=Int(hsc.unsafe_ptr()))
++        af_alpha_tail(ah, _sumsq_fold_host(hp, 0, n, 1))
++        ex.upload(sc + 1, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 1, 1)
++    else:
++        if fast:
++            a.p2 = parts
++            a.i2 = _chunk_sumsq(ex, P, 0, n, parts, 0)
++        ex.launch[OP_AF_ALPHA](a, 1)
+     if wd != Float32(0.0):
+         var s = Args()
+         s.p0 = P
+@@ -576,10 +612,23 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
+     d.p1 = sc
+     d.i0 = n
+     d.f0 = fval(fp, 4)
+-    if fast:
+-        d.p2 = parts
+-        d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
+-    ex.launch[OP_AF_DENOM](d, 1)
++    if host_fold:
++        # ||u||^2 from the update downloaded once (one wait), the same
++        # chain as op_af_denom's; its tail reads alpha (hsc[1], the value
++        # sc[1] holds) and writes hsc[3], uploaded into sc[3]
++        var hu = List[Float32](length=n, fill=Float32(0.0))
++        var hup = FP(unsafe_from_address=Int(hu.unsafe_ptr()))
++        ex.download(hup, U, n)
++        var dh = d
++        dh.p1 = FP(unsafe_from_address=Int(hsc.unsafe_ptr()))
++        af_denom_tail(dh, _sumsq_fold_host(hup, 0, n, 1))
++        ex.upload(sc + 3, FP(unsafe_from_address=Int(hsc.unsafe_ptr())) + 3, 1)
++        _ = hu^
++    else:
++        if fast:
++            d.p2 = parts
++            d.i2 = _chunk_sumsq(ex, U, 0, n, parts, 0)
++        ex.launch[OP_AF_DENOM](d, 1)
+     var ap = Args()
+     ap.p0 = P
+     ap.p1 = U
+@@ -590,6 +639,7 @@ def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject,
+     if C > 0:
+         ex.download_async(fptr(addrs[3], "col_var"), S2, C)
+     ex.sync()
++    _ = hsc^
+     return PythonObject(n)
+ 
+ 
+diff --git a/tools/transformer_fresh_prefill_check.py b/tools/transformer_fresh_prefill_check.py
+index a0f4440e..fb2a8562 100644
+--- a/tools/transformer_fresh_prefill_check.py
++++ b/tools/transformer_fresh_prefill_check.py
+@@ -30,11 +30,11 @@ def main():
+             for length in (1, 7, 9, 65):
+                 x = rng.uniform(-0.5, 0.5, (2, length, dm)).astype(np.float32)
+                 state = allocate(2, length)
+-                expected = block.forward(x, state)
++                expected = np.asarray(block.forward(x, state))
+                 assert state.cached_tokens == length
+                 block.allocate_state = no_host_cache
+                 try:
+-                    actual = block.forward(x)
++                    actual = np.asarray(block.forward(x))
+                 finally:
+                     block.allocate_state = allocate
+                 assert np.array_equal(actual.view(np.uint32), expected.view(np.uint32)), (hd, window, length)
+diff --git a/tools/transformer_session_check.py b/tools/transformer_session_check.py
+index 63ff47e2..8ad6cf10 100644
+--- a/tools/transformer_session_check.py
++++ b/tools/transformer_session_check.py
+@@ -2,6 +2,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ """Bounded native context/workspace reuse check against the existing entry point."""
+ import argparse
++import os
+ import hashlib
+ import importlib.util
+ import json
+@@ -120,12 +121,18 @@ def main():
+             compare('recovery.' + kind, x, w, state, 0, 8, 0)
+             assert mod.transformer_session_info(owner)[0] == 1
+     elif args.group == 'budget':
+-        # About 72 MiB of device buffers: above the 64 MiB retention cap.
++        # About 72 MiB of device buffers: above a 64 MiB retention cap. The
++        # cap is MOJOLEARN_TRANSFORMER_RETAIN_MB (default 512 since
++        # lane/neural-net-experiment), read per call, so pin it here.
+         # Only one token is computed; this checks eviction, not throughput.
+-        x, w, state = make(256, 1, 32, 1024, 0)
+-        for iteration in range(2):
+-            compare('budget.' + str(iteration), x, w, state, 0, 1024, 0)
+-            assert list(mod.transformer_session_info(owner)) == [1, iteration + 1, False, 0]
++        os.environ['MOJOLEARN_TRANSFORMER_RETAIN_MB'] = '64'
++        try:
++            x, w, state = make(256, 1, 32, 1024, 0)
++            for iteration in range(2):
++                compare('budget.' + str(iteration), x, w, state, 0, 1024, 0)
++                assert list(mod.transformer_session_info(owner)) == [1, iteration + 1, False, 0]
++        finally:
++            del os.environ['MOJOLEARN_TRANSFORMER_RETAIN_MB']
+     else:
+         for iteration in range(3):
+             x, w, state = make(1, 1, 32, 8, 0)
+diff --git a/training/byte_lm.mojo b/training/byte_lm.mojo
+index d2b707bb..dedb9c42 100644
+--- a/training/byte_lm.mojo
++++ b/training/byte_lm.mojo
+@@ -1225,8 +1225,9 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
+                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+                     norm1_ready=norm1_ready)
+-        step_count_sync()
+-        ctx.synchronize()
++        if _byte_layer_sync():
++            step_count_sync()
++            ctx.synchronize()
+         comptime if BYTE_LM_RELEASE_EAGER:
+             tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
+         tr.forward.insert(layer, stages^)
+@@ -1283,6 +1284,20 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
+     return loss
+ 
+ 
++def _byte_layer_sync() -> Bool:
++    """lane/neural-net-experiment (2026-09-30): whether the step waits on
++    the host after EVERY layer's forward and backward (sixteen waits a step
++    at the board's depth, before the fused attention's own regime reads).
++    `MOJOLEARN_BYTE_LM_LAYER_SYNC=0` skips them: every launch sits on the
++    one in-order context, the next layer's kernels are enqueued behind this
++    layer's, and the eager-scratch release only drops buffer handles whose
++    frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
++    moves is the host idling per layer. Default ON (the measured behaviour)
++    until a box has run both; the step's `step.*` timing ticks read the
++    same either way."""
++    return String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC")) != "0"
++
++
+ def _byte_release_forward_scratch(ctx: DeviceContext,
+                                   mut fwd: LlamaDeviceStages) raises -> Int:
+     """After forward completion/trace: backward reads weights, not these
+@@ -1426,8 +1441,9 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
+             llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
+                 tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.backward[layer].d_x,
+                 config.batch, config.length, 0, trace, prefix)
+-        step_count_sync()
+-        ctx.synchronize()
++        if _byte_layer_sync():
++            step_count_sync()
++            ctx.synchronize()
+         comptime if BYTE_LM_STICKY_EAGER:
+             # A policy decision from an observed refusal, not a prediction of
+             # a numerical corner. Both directions use the existing eager
+diff --git a/training/byte_lm_logits.mojo b/training/byte_lm_logits.mojo
+index 678ba7fb..800bdca5 100644
+--- a/training/byte_lm_logits.mojo
++++ b/training/byte_lm_logits.mojo
+@@ -43,7 +43,7 @@ from training.byte_lm import (
+     _unpack_block,
+     byte_dims,
+ )
+-from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32
++from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into
+ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+ from gemm.checks.gemm_oracle import OP_NT
+ from embedding.checks.embedding_identical import identical_embedding_forward_into
+@@ -141,7 +141,7 @@ struct ByteLogitsScratch(Movable):
+         return self.batch == batch and self.length == length
+ 
+ 
+-def _logits_forward(
++def _logits_enqueue(
+     ctx: DeviceContext,
+     mut weights: List[LlamaDeviceWeights],
+     mut emb_w: DeviceBuffer[DType.float32],
+@@ -152,10 +152,11 @@ def _logits_forward(
+     batch: Int,
+     length: Int,
+     config: ByteConfig,
+-) raises -> List[Float32]:
++) raises:
+     """Embedding, the blocks and the head, as `_byte_forward_loss` launches
+-    them, into the scratch's call-shaped buffers; returns the downloaded
+-    logits `[batch * length, vocab]`, row-major.
++    them, into the scratch's call-shaped buffers; the logits are left in
++    `sc.logits` `[batch * length, vocab]`, row-major, NOT downloaded (the
++    two callers below download them differently). No completion wait here.
+ 
+     ONE completion wait, the download's (DEVIATION 2942). The ids copy, the
+     embedding, every block and the head GEMM are enqueued on the same
+@@ -195,10 +196,10 @@ def _logits_forward(
+                     next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+-                    next_norm_eps=Optional(weights[layer + 1].eps))
++                    next_norm_eps=Optional(weights[layer + 1].eps), forward_only=True)
+             else:
+                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
+-                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
++                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
+         else:
+             if fuse_next:
+                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
+@@ -206,16 +207,37 @@ def _logits_forward(
+                     next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+-                    next_norm_eps=Optional(weights[layer + 1].eps))
++                    next_norm_eps=Optional(weights[layer + 1].eps), forward_only=True)
+             else:
+                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
+-                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
++                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
+         sc.stages.insert(layer, st^)
+ 
+     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
+         m, vocab, dm, OP_NT)
+-    var out = download_f32(ctx, sc.logits, m * vocab)
+     _ = trace
++
++
++def _logits_forward(
++    ctx: DeviceContext,
++    mut weights: List[LlamaDeviceWeights],
++    mut emb_w: DeviceBuffer[DType.float32],
++    mut lm_w: DeviceBuffer[DType.float32],
++    mut rope: LlamaRopeTable,
++    mut sc: ByteLogitsScratch,
++    inputs: List[Int32],
++    batch: Int,
++    length: Int,
++    config: ByteConfig,
++) raises -> List[Float32]:
++    """`_logits_enqueue`, then the logits downloaded into a List (the
++    original return shape, kept for callers that want an owned List). The
++    bindings take `_logits_forward_into` instead, which skips this path's
++    pinned host buffer, element loop and second copy."""
++    var m = batch * length
++    var vocab = config.vocab_size
++    _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
++    var out = download_f32(ctx, sc.logits, m * vocab)
+     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
+         # The negative control for this lane's sweeps: one output bit moved
+         # after the arithmetic, so a passing sweep on this build would be a
+@@ -228,6 +250,68 @@ def _logits_forward(
+     return out^
+ 
+ 
++def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
++    """The same refusal `_logits_forward` makes over its List, over the
++    caller's memory, eight lanes at a time: the exponent-all-ones test on
++    the bits (an infinity or a NaN), and the FIRST offending flat index in
++    the message, found by the scalar tail once a vector has one. No
++    floating-point arithmetic, so no bit is judged differently."""
++    comptime W = 8
++    var exp = SIMD[DType.uint32, W](0x7F800000)
++    var i = 0
++    var body = n - n % W
++    while i < body:
++        var bits = bitcast[DType.uint32, W](destination.unsafe_load[width=W](i)) & exp
++        var hit = bits.eq(exp).select(SIMD[DType.uint32, W](1), SIMD[DType.uint32, W](0))
++        if hit.reduce_or() != UInt32(0):
++            break
++        i += W
++    while i < n:
++        if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
++            raise Error("byte LM logits: non-finite logit at flat index " + String(i)
++                        + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
++        i += 1
++
++
++def _logits_forward_into(
++    ctx: DeviceContext,
++    mut weights: List[LlamaDeviceWeights],
++    mut emb_w: DeviceBuffer[DType.float32],
++    mut lm_w: DeviceBuffer[DType.float32],
++    mut rope: LlamaRopeTable,
++    mut sc: ByteLogitsScratch,
++    inputs: List[Int32],
++    batch: Int,
++    length: Int,
++    config: ByteConfig,
++    destination: MutPointer[Float32, MutUntrackedOrigin],
++) raises:
++    """`_logits_enqueue`, then ONE device-to-host copy straight into `destination`
++    (`batch * length * vocab` floats the caller owns and keeps alive for
++    the whole call), then the non-finite refusal over that memory.
++
++    lane/neural-net-experiment (2026-09-30): the bindings used
++    `_logits_forward` and then copied its List into the caller's array. At
++    the board's LM shape (L2048, V8192: 64 MiB of logits) that was a 64 MiB
++    PINNED host allocation per call, a device-to-host copy into it, a
++    16.8M-element append loop into a List, the scan, a SIMD copy into the
++    caller's array and the pinned free -- all host work after the GPU was
++    done, and the reason `lm-forward` cost three `lm-train-step`s on the
++    L40S (147 ms against 46 ms; the training step returns 4 bytes). This is
++    DEVIATION 3120's fix (`download_f32_into`) applied to the logits: the
++    same bytes land in the same places, one transfer, no List.
++
++    The sabotage define moves the same bit it moved before (flat index 0,
++    after the copy, before the scan)."""
++    var m = batch * length
++    var vocab = config.vocab_size
++    _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
++    download_f32_into(ctx, sc.logits, m * vocab, destination)
++    comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
++        destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
++    _refuse_nonfinite_logits(destination, m * vocab)
++
++
+ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
+                             batch: Int, length: Int, config: ByteConfig) raises -> List[Float32]:
+     """The stateless call: upload the weights, embedding and head from host
+@@ -256,6 +340,33 @@ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: L
+     return out^
+ 
+ 
++def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
++                                 batch: Int, length: Int, config: ByteConfig,
++                                 destination: MutPointer[Float32, MutUntrackedOrigin]) raises:
++    """`byte_logits_from_params` writing straight into the caller's memory
++    (`_logits_forward_into`): the same uploads, kernels and order."""
++    byte_logits_validate(inputs, batch, length, config)
++    byte_logits_validate_params(params, config)
++    var offsets = config.offsets()
++    var vd = config.vocab_size * config.d_model
++    var weights = List[LlamaDeviceWeights]()
++    for layer in range(config.n_layers):
++        weights.append(_block_weights(ctx, params, layer, config))
++    var emb_host = List[Float32](capacity=vd)
++    var head_host = List[Float32](capacity=vd)
++    var head_base = offsets[config.n_tensors() - 1]
++    for i in range(vd):
++        emb_host.append(params[i])
++        head_host.append(params[head_base + i])
++    var emb_w = _upload(ctx, emb_host)
++    var lm_w = _upload(ctx, head_host)
++    var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
++    var sc = ByteLogitsScratch(ctx, batch, length, config)
++    _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, destination)
++    ctx.synchronize()
++    _ = sc^
++
++
+ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
+                          batch: Int, length: Int,
+                          mut scratch: Optional[ByteLogitsScratch]) raises -> List[Float32]:
+@@ -295,3 +406,41 @@ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[I
+         _byte_recover(ctx, tr, message)
+     tr.healthy = True
+     return out^
++
++
++def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
++                              batch: Int, length: Int,
++                              mut scratch: Optional[ByteLogitsScratch],
++                              destination: MutPointer[Float32, MutUntrackedOrigin]) raises:
++    """`byte_logits_resident` writing straight into the caller's memory
++    (`_logits_forward_into`); the same refresh, scratch rule and failure
++    convention. On a raise the caller's memory holds an unspecified prefix
++    of the copy, as `download_f32_into` says; the session binding does not
++    publish a failed call."""
++    var config = tr.config.copy()
++    byte_logits_validate(inputs, batch, length, config)
++    if not tr.healthy:
++        raise Error("byte LM: session lost; restore a retained export")
++    var rebuild = True
++    if scratch:
++        rebuild = not scratch.value().fits(batch, length)
++    if rebuild:
++        scratch = None
++        scratch = ByteLogitsScratch(ctx, batch, length, config)
++    tr.healthy = False
++    tr.shadow_valid = False
++    var failed = False
++    var message = String("")
++    try:
++        for layer in range(config.n_layers):
++            _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
++        _bind_emb_head(ctx, tr.buffers, config)
++        _logits_forward_into(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
++            scratch.value(), inputs, batch, length, config, destination)
++        ctx.synchronize()
++    except error:
++        failed = True
++        message = String(error)
++    if failed:
++        _byte_recover(ctx, tr, message)
++    tr.healthy = True
+diff --git a/training/estimator.mojo b/training/estimator.mojo
+index 197c16ac..d1997a63 100644
+--- a/training/estimator.mojo
++++ b/training/estimator.mojo
+@@ -557,6 +557,98 @@ def identical_clip_grad_norm_host(
+     info_ptr.unsafe_store(0, h.unsafe_ptr().unsafe_load(0))
+     info_ptr.unsafe_store(1, h.unsafe_ptr().unsafe_load(1))
+     _ = h^
++    _ = grad
++    _ = sumsq
++    _ = norms
++    _ = total_cell
++    _ = out2
++    _ = ws
++    _ = sab_partials
++    return n_total
++
++
++def identical_clip_grad_norm_addrs_host(
++    ctx: DeviceContext,
++    addrs: List[Int],
++    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
++    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
++    n_tensors: Int,
++    max_norm: Float32,
++) raises -> Int:
++    """`identical_clip_grad_norm_host` from the caller's J tensors IN PLACE
++    (lane/neural-net-experiment, 2026-09-30): `addrs[j]` is tensor j's
++    float32 buffer, `offsets` its slice of the one device buffer as
++    before. The J tensors are copied straight from their own memory into
++    that buffer's sub-buffers and back, so the Python surface no longer
++    packs them into one flat host array and unpacks it after (two host
++    copies of every gradient per clip: the bench board's clip-grad-norm
++    lane, 8 tensors of 2,097,152 values, spent most of its 25.7 ms on an
++    MI325X outside the device). THE ONE CALL THAT COMPUTES ANYTHING is
++    the same `identical_clip_grad_norm` over the same buffer with the
++    same offsets, so the norm, the coefficient and every scaled value are
++    the same bits."""
++    if max_norm <= Float32(0.0):
++        raise Error(
++            String("mojolearn training: max_norm must be > 0, got ")
++            + String(max_norm)
++            + String("; this entry point IS the clip, and 'no clipping' is")
++            + String(" spelled by not calling it (the optimizer step takes")
++            + String(" max_norm <= 0 as OFF because it has another job)")
++        )
++    refuse_nonfinite_scalar(String("max_norm"), max_norm)
++    var offsets = _offsets_from_ptr(offsets_ptr, n_tensors)
++    if len(addrs) != n_tensors:
++        raise Error(
++            String("mojolearn training: clip_grad_norm_multi needs one address per tensor, got ")
++            + String(len(addrs)) + String(" for ") + String(n_tensors)
++        )
++    var n_total = offsets[n_tensors]
++
++    var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
++    for j in range(n_tensors):
++        var n_j = offsets[j + 1] - offsets[j]
++        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
++        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
++        ctx.enqueue_copy(dst_buf=view, src_ptr=src)
++        _ = view^
++    ctx.synchronize()
++
++    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
++    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
++    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
++    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
++    var ws = ctx.enqueue_create_buffer[DType.float32](
++        identical_optimizer_workspace_floats(offsets)
++    )
++    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
++    ctx.synchronize()
++
++    # THE ONE CALL THAT COMPUTES ANYTHING.
++    _ = identical_clip_grad_norm(
++        ctx,
++        grad,
++        sumsq,
++        norms,
++        total_cell,
++        out2,
++        ws,
++        sab_partials,
++        offsets,
++        max_norm,
++    )
++
++    for j in range(n_tensors):
++        var n_j = offsets[j + 1] - offsets[j]
++        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
++        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
++        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
++        _ = view^
++    var h = ctx.enqueue_create_host_buffer[DType.float32](2)
++    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
++    ctx.synchronize()
++    info_ptr.unsafe_store(0, h.unsafe_ptr().unsafe_load(0))
++    info_ptr.unsafe_store(1, h.unsafe_ptr().unsafe_load(1))
++    _ = h^
+ 
+     _ = grad
+     _ = sumsq
+diff --git a/transformer/checks/transformer_backward.mojo b/transformer/checks/transformer_backward.mojo
+index d42deb88..a7d41f03 100644
+--- a/transformer/checks/transformer_backward.mojo
++++ b/transformer/checks/transformer_backward.mojo
+@@ -37,6 +37,7 @@ from gemm.checks.gemm_backward import (
+     gemm_backward_b_call,
+ )
+ from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
++from std.os import getenv
+ from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
+ from checks.numerics import (
+     identical_mul,
+@@ -2753,7 +2754,7 @@ def bwd_attention_eager_stages(
+ # ===========================================================================
+ 
+ 
+-def bwd_rms_norm[which: Int](
++def _bwd_rms_norm_kernels[which: Int](
+     ctx: DeviceContext,
+     mut dot_out: DeviceBuffer[DType.float32],
+     mut dx_out: DeviceBuffer[DType.float32],
+@@ -2901,7 +2902,9 @@ def bwd_rms_norm[which: Int](
+         pc.tick(ctx, "grad.norm2_kernels")
+     comptime if which != 1 and which != 2:
+         pc.tick(ctx, "grad.rmsnorm_kernels")
+-    identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++
++
++def _bwd_rms_norm_dw_tick[which: Int](ctx: DeviceContext, mut pc: StepPhaseClock) raises:
+     comptime if which == 1:
+         pc.tick(ctx, "grad.norm1_dW", "norm_dW")
+     comptime if which == 2:
+@@ -2910,6 +2913,90 @@ def bwd_rms_norm[which: Int](
+         pc.tick(ctx, "grad.rmsnorm_dW", "norm_dW")
+ 
+ 
++def bwd_rms_norm[which: Int](
++    ctx: DeviceContext,
++    mut dot_out: DeviceBuffer[DType.float32],
++    mut dx_out: DeviceBuffer[DType.float32],
++    mut dw_out: DeviceBuffer[DType.float32],
++    mut dh: DeviceBuffer[DType.float32],
++    mut dprod: DeviceBuffer[DType.float32],
++    mut rstd: DeviceBuffer[DType.float32],
++    mut dvcoef: DeviceBuffer[DType.float32],
++    mut ones: DeviceBuffer[DType.float32],
++    mut dy: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    mut weight: DeviceBuffer[DType.float32],
++    mut sumsq: DeviceBuffer[DType.float32],
++    residual_out: MutPointer[Float32, MutAnyOrigin],
++    residual_branch: MutPointer[Float32, MutAnyOrigin],
++    fuse_residual: Bool,
++    m: Int,
++    dm: Int,
++    eps: Float32,
++) raises:
++    """The three kernels (`_bwd_rms_norm_kernels`) then the weight-gradient
++    GEMM through `identical_gemm`, which allocates its own workspace and
++    waits twice (the entry every caller outside the transformer backward
++    uses)."""
++    _bwd_rms_norm_kernels[which](
++        ctx, dot_out, dx_out, dw_out, dh, dprod, rstd, dvcoef, ones, dy, x, weight, sumsq,
++        residual_out, residual_branch, fuse_residual, m, dm, eps,
++    )
++    var pc = StepPhaseClock(ctx)
++    identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++    _bwd_rms_norm_dw_tick[which](ctx, pc)
++
++
++def _norm_dw_own_workspace() -> Bool:
++    """MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1 restores `identical_gemm`
++    (its own workspace, two waits) for the norm weight gradients: the A/B
++    against the routed form below."""
++    return String(getenv("MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS")) == "1"
++
++
++def bwd_rms_norm_routed[which: Int](
++    ctx: DeviceContext,
++    mut workspace: GemmWorkspace,
++    mut dot_out: DeviceBuffer[DType.float32],
++    mut dx_out: DeviceBuffer[DType.float32],
++    mut dw_out: DeviceBuffer[DType.float32],
++    mut dh: DeviceBuffer[DType.float32],
++    mut dprod: DeviceBuffer[DType.float32],
++    mut rstd: DeviceBuffer[DType.float32],
++    mut dvcoef: DeviceBuffer[DType.float32],
++    mut ones: DeviceBuffer[DType.float32],
++    mut dy: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    mut weight: DeviceBuffer[DType.float32],
++    mut sumsq: DeviceBuffer[DType.float32],
++    residual_out: MutPointer[Float32, MutAnyOrigin],
++    residual_branch: MutPointer[Float32, MutAnyOrigin],
++    fuse_residual: Bool,
++    m: Int,
++    dm: Int,
++    eps: Float32,
++) raises:
++    """`bwd_rms_norm` with the weight-gradient GEMM on the block's retained
++    `GemmWorkspace` (lane/neural-net-experiment, 2026-09-30). Every other
++    GEMM of the block backward is routed that way; this one was the last
++    `identical_gemm` on the step path, and `identical_gemm` allocates a
++    workspace and WAITS TWICE per call to keep it alive
++    (`syncs.gemm.norm_dW`, 16 of the LM step's 162 waits on the L40S).
++    `GemmWorkspace.run` hands the same `identical_gemm_into` the same
++    operands and shape, so the same plan and the same bits; it waits only
++    when the workspace grows."""
++    _bwd_rms_norm_kernels[which](
++        ctx, dot_out, dx_out, dw_out, dh, dprod, rstd, dvcoef, ones, dy, x, weight, sumsq,
++        residual_out, residual_branch, fuse_residual, m, dm, eps,
++    )
++    var pc = StepPhaseClock(ctx)
++    if _norm_dw_own_workspace():
++        identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++    else:
++        workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
++    _bwd_rms_norm_dw_tick[which](ctx, pc)
++
++
+ # ===========================================================================
+ # THE BLOCK BACKWARD
+ # ===========================================================================
+@@ -3236,8 +3323,9 @@ def llama_decoder_layer_backward_device(
+         and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL
+     ):
+         fuse_norm2_residual = True
+-    bwd_rms_norm[2](
++    bwd_rms_norm_routed[2](
+         ctx,
++        bst.gemm_workspace,
+         bst.norm2_dot,
+         bst.norm2_dx,
+         bst.dw_norm2,
+@@ -3517,8 +3605,9 @@ def llama_decoder_layer_backward_device(
+     # this argument. That is a one-line edit to a file this lane may not
+     # touch.
+     # =====================================================================
+-    bwd_rms_norm[1](
++    bwd_rms_norm_routed[1](
+         ctx,
++        bst.gemm_workspace,
+         bst.norm1_dot,
+         bst.norm1_dx,
+         bst.dw_norm1,
+diff --git a/transformer/impl/llama/fused_attention.mojo b/transformer/impl/llama/fused_attention.mojo
+index 1c942ea1..adc033cf 100644
+--- a/transformer/impl/llama/fused_attention.mojo
++++ b/transformer/impl/llama/fused_attention.mojo
+@@ -1876,6 +1876,21 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
+ 
+ 
+ @always_inline
++def _attn_speculative() -> Bool:
++    """lane/neural-net-experiment (2026-09-30), `MOJOLEARN_ATTN_SPECULATIVE=1`:
++    the fused forward's regime scan runs BEHIND the fused kernels instead of
++    in front of them, so the one wait that reads the scan also covers the
++    kernels and the corner flag: one host round trip per layer instead of
++    two. The scan reads q_rope, k_cache and v_cache, which the fused
++    kernels never write, so it reads the same values; a refused regime
++    discards what the kernels wrote (ctxv, amax, denom, the estash) and the
++    caller runs the eager path exactly as before, so no bit moves. The
++    kernels run on out-of-regime operands only to be discarded: arithmetic
++    on inf or NaN faults nowhere and every loop is shape-bound. Default
++    off; the identity gate is the check."""
++    return String(getenv("MOJOLEARN_ATTN_SPECULATIVE")) == "1"
++
++
+ def _attn_timer_on() -> Bool:
+     """The per-kernel timers: compiled by `MOJOLEARN_ATTN_PHASE_TIMERS`,
+     switched on by the block timers' run-time switch."""
+@@ -7202,17 +7217,19 @@ def fused_forward_launch_ran(
+         return FUSED_REFUSED_REGIME
+     var ton = _attn_timer_on()
+     var tk = Int(perf_counter_ns())
+-    var amx = device_absmax4(
+-        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+-        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+-    )
+-    var qmax = amx[0]
+-    var kmax = amx[1]
+-    var vmax = amx[2]
+-    if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+-        return FUSED_REFUSED_REGIME
+-    _attn_tick(ctx, ton, tk, "fwd_regime_scan")
++    var speculative = _attn_speculative()
++    if not speculative:
++        var amx = device_absmax4(
++            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
++            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
++        )
++        var qmax = amx[0]
++        var kmax = amx[1]
++        var vmax = amx[2]
++        if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
++            return FUSED_REFUSED_REGIME
++        _attn_tick(ctx, ton, tk, "fwd_regime_scan")
+     var corner = _zero_flag(ctx)
+     var tq = fused_rows_per_block(hd)
+     var blocks = b * nh * ((l + tq - 1) // tq)
+@@ -7415,6 +7432,22 @@ def fused_forward_launch_ran(
+                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
+             )
+         _attn_tick(ctx, ton, tk, "fwd_kernel")
++    if speculative:
++        # The scan behind the kernels: its one wait covers them, and the
++        # flag read after it finds nothing pending.
++        var amx2 = device_absmax4(
++            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++            b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
++            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
++        )
++        var hit2 = _read_flag(ctx, corner)
++        _ = corner^
++        _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
++        if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
++            return FUSED_REFUSED_REGIME
++        if hit2:
++            return FUSED_CORNER
++        return FUSED_RAN
+     step_count_sync()
+     ctx.synchronize()
+     var hit = _read_flag(ctx, corner)
+@@ -9765,17 +9798,19 @@ def fused_forward_launch_estash_ran(
+                 return FUSED_REFUSED_REGIME
+             var ton = _attn_timer_on()
+             var tk = Int(perf_counter_ns())
+-            var amx = device_absmax4(
+-                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+-                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+-                v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+-            )
+-            var qmax = amx[0]
+-            var kmax = amx[1]
+-            var vmax = amx[2]
+-            if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+-                return FUSED_REFUSED_REGIME
+-            _attn_tick(ctx, ton, tk, "fwd_regime_scan")
++            var speculative = _attn_speculative()
++            if not speculative:
++                var amx = device_absmax4(
++                    ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                    b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
++                    v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
++                )
++                var qmax = amx[0]
++                var kmax = amx[1]
++                var vmax = amx[2]
++                if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
++                    return FUSED_REFUSED_REGIME
++                _attn_tick(ctx, ton, tk, "fwd_regime_scan")
+             var corner = _zero_flag(ctx)
+             var cells = b * nh * l * s
+             comptime if ATTN_V1_PACKED_ESTASH:
+@@ -9834,6 +9869,21 @@ def fused_forward_launch_estash_ran(
+             # estash slot either, and the backward's word carries the bit
+             # for both directions (the map is one arm bit, not two).
+             ran = _attn_fwd_r2_ran_word(arm, 32)
++            if speculative:
++                var amx2 = device_absmax4(
++                    ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
++                    b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
++                    v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
++                )
++                var hit2 = _read_flag(ctx, corner)
++                _ = corner^
++                _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
++                if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
++                    return FUSED_REFUSED_REGIME
++                kept_cells = cells
++                if hit2:
++                    return FUSED_CORNER
++                return FUSED_RAN
+             step_count_sync()
+             ctx.synchronize()
+             var hit = _read_flag(ctx, corner)
+diff --git a/transformer/impl/llama/modeling_llama.mojo b/transformer/impl/llama/modeling_llama.mojo
+index 67b03794..74d1d2cc 100644
+--- a/transformer/impl/llama/modeling_llama.mojo
++++ b/transformer/impl/llama/modeling_llama.mojo
+@@ -3401,6 +3401,36 @@ def silu_kernel(
+         silu_out.unsafe_store(i, ftz(identical_silu(z)))
+ 
+ 
++def swiglu_fused_kernel(
++    gated: MutPointer[Float32, MutAnyOrigin],
++    gate: MutPointer[Float32, MutAnyOrigin],
++    up: MutPointer[Float32, MutAnyOrigin],
++    n_in: Int32,
++):
++    """lane/neural-net-experiment (2026-09-30): S20 and S21 in one launch,
++    FORWARD-ONLY. Per element exactly `mlp_gated_kernel(silu_kernel(gate),
++    up)`: `z = ftz(gate)`, `sil = ftz(identical_silu(z))`, `gated =
++    ftz(identical_mul(ftz(sil), ftz(up)))`, the same operations in the same
++    order (and `ftz(ftz(v)) == ftz(v)`), so the same bits, one launch and
++    one `[M, intermediate]` write plus read fewer. `silu_out` is NOT
++    written: the backward reads it (`transformer_backward.mojo`, dup =
++    av * silu_out) and the trace records it, so the launcher takes this
++    kernel only when the caller says no backward follows and the trace is
++    off. Never under the S20 sabotage spelling."""
++    var n = Int(n_in)
++    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i >= n:
++        return
++    var z = ftz(gate.unsafe_load(i))
++    var sil = ftz(identical_silu(z))
++    gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
++
++
++def swiglu_fused_enabled() -> Bool:
++    """`MOJOLEARN_SWIGLU_FUSED=1`; read per block call, default off."""
++    return String(getenv("MOJOLEARN_SWIGLU_FUSED")) == "1"
++
++
+ def mlp_gated_kernel(
+     gated: MutPointer[Float32, MutAnyOrigin],
+     silu_out: MutPointer[Float32, MutAnyOrigin],
+@@ -4728,6 +4758,7 @@ def llama_mlp_forward(
+     m: Int,
+     mut trace: IdentityTrace,
+     prefix: String,
++    forward_only: Bool = False,
+ ) raises:
+     """`LlamaMLP.forward(x)` (:174-176).
+ 
+@@ -4828,7 +4859,25 @@ def llama_mlp_forward(
+     # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
+     #      otherwise, over the gate projection (gated) or the up
+     #      projection (ungated).
+-    if bias_gelu_fused or bias_silu_fused:
++    # lane/neural-net-experiment: S20 + S21 in one launch when no backward
++    # follows, the trace is off, the record is the default SiLU gated MLP
++    # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
++    var swiglu_fused = False
++    comptime if not SAB_S20_SILU_MUL_SIGMOID:
++        swiglu_fused = (forward_only and gated and opts.act_is_silu()
++                        and not bias_silu_fused and not bias_gelu_fused
++                        and not trace.enabled and swiglu_fused_enabled())
++    if swiglu_fused:
++        step_count_launch()
++        ctx.enqueue_function[swiglu_fused_kernel](
++            stages.gated.unsafe_ptr(),
++            stages.gate_proj.unsafe_ptr(),
++            stages.up_proj.unsafe_ptr(),
++            Int32(m * it),
++            grid_dim=(_grid(m * it), 1, 1),
++            block_dim=(LLAMA_TPB, 1, 1),
++        )
++    elif bias_gelu_fused or bias_silu_fused:
+         pass
+     elif opts.act_is_silu():
+         step_count_launch()
+@@ -4870,7 +4919,9 @@ def llama_mlp_forward(
+     pc.tick(ctx, "fwd.silu")
+ 
+     # ---- the gate product (:175). S21. Absent under an ungated MLP.
+-    if gated:
++    if swiglu_fused:
++        pass  # written by swiglu_fused_kernel above
++    elif gated:
+         step_count_launch()
+         ctx.enqueue_function[mlp_gated_kernel](
+             stages.gated.unsafe_ptr(),
+@@ -4953,6 +5004,7 @@ def llama_decoder_layer_forward_planted(
+     next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+     next_norm_eps: Optional[Float32] = None,
++    forward_only: Bool = False,
+ ) raises:
+     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
+ 
+@@ -5233,7 +5285,7 @@ def llama_decoder_layer_forward_planted(
+     pc.tick(ctx, "fwd.norm2")
+ 
+     # ---- self.mlp(...) (:322). S5, S20, S21.
+-    llama_mlp_forward(ctx, stages, w, m, trace, prefix)
++    llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
+     pc.mark(ctx)
+ 
+     # ---- residual + hidden_states (:323). S23, the same imported kernel.
+@@ -5289,9 +5341,14 @@ def llama_decoder_layer_forward(
+     next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+     next_norm_eps: Optional[Float32] = None,
++    forward_only: Bool = False,
+ ) raises:
+     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
+ 
++    `forward_only` (lane/neural-net-experiment): the caller promises no
++    backward reads this call's stages, which admits the forward-only
++    fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
++
+     Every argument is a scalar or a buffer or one of this file's own
+     structs; nothing from `transformer/checks/` crosses this boundary,
+     on purpose (the oracle half of this lane was written concurrently by a
+@@ -5320,4 +5377,5 @@ def llama_decoder_layer_forward(
+         next_norm_out=next_norm_out,
+         next_norm_weight=next_norm_weight,
+         next_norm_eps=next_norm_eps,
++        forward_only=forward_only,
+     )
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index 9d704a4e..fd202bb0 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -1380,6 +1380,37 @@ def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):
+             a.unsafe_store(j * n + i, Float32(0))
+ 
+ 
++def chol_diag(a: F32Ptr, info: F32Ptr, j: Int, n: Int):
++    """Column step j of `chol_serial`, the diagonal: `acc = a[j, j] - sum_p
++    l[j, p]^2` (p ascending, the same fma chain), the info store at the
++    first non-positive pivot, and `a[j, j] = sqrt(acc)`. Reads columns
++    0..j-1 of row j, final since their own steps. One thread."""
++    var acc = ftz(a.unsafe_load(j * n + j))
++    for p in range(j):
++        var l = ftz(a.unsafe_load(j * n + p))
++        acc = ftz(identical_mul_add(-l, l, acc))
++    if not (acc > Float32(0)):
++        if info.unsafe_load(0) == Float32(0):
++            info.unsafe_store(0, Float32(j + 1))
++        acc = Float32(1)
++    a.unsafe_store(j * n + j, sqrt0(acc))
++
++
++def chol_col_elem(a: F32Ptr, j: Int, i: Int, n: Int):
++    """Column step j of `chol_serial`, row i > j: `a[i, j] = (a[i, j] -
++    sum_p a[i, p] a[j, p]) / a[j, j]` (p ascending, the same fma chain,
++    the same `div0`), and the mirror cell `a[j, i]` zeroed. Reads columns
++    0..j-1 of rows i and j and the diagonal `a[j, j]` (`chol_diag`'s
++    store), all final; writes cells no other thread of the step reads.
++    One thread per row."""
++    var d = a.unsafe_load(j * n + j)
++    var s = ftz(a.unsafe_load(i * n + j))
++    for p in range(j):
++        s = ftz(identical_mul_add(-ftz(a.unsafe_load(i * n + p)), ftz(a.unsafe_load(j * n + p)), s))
++    a.unsafe_store(i * n + j, div0(s, d))
++    a.unsafe_store(j * n + i, Float32(0))
++
++
+ # DEVIATION 5320 (PIN; row 134): the Householder QR that KEEPS its reflectors
+ # (LAPACK geqrf, unblocked, dlarfg's sign: beta = -sign(alpha) * ||(alpha, x)||)
+ # and the explicit Q (orgqr, one column per thread): every norm is the scaled
+diff --git a/x_decomp/device.mojo b/x_decomp/device.mojo
+index 37e84eb8..be04de6a 100644
+--- a/x_decomp/device.mojo
++++ b/x_decomp/device.mojo
+@@ -35,6 +35,8 @@ from x_decomp.cells import (
+     bidx,
+     cd_row,
+     chol_serial,
++    chol_diag,
++    chol_col_elem,
+     colsum_cell,
+     ew_cell,
+     gemm_cell,
+@@ -446,6 +448,30 @@ def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
+         chol_serial(a, Int(n), info)
+ 
+ 
++def chol_diag_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
++    if block_idx.x == 0 and thread_idx.x == 0:
++        chol_diag(a, info, Int(j), Int(n))
++
++
++def chol_col_kernel(a: F32Ptr, j: Int32, n: Int32):
++    var jj = Int(j)
++    var i = jj + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
++    if i < Int(n):
++        chol_col_elem(a, jj, i, Int(n))
++
++
++def chol_serial_max() -> Int:
++    """Largest n whose Cholesky runs as ONE `chol_kernel` launch on one
++    thread (MOJOLEARN_XD_CHOL_SERIAL, default 16; timing only: the column
++    driver below stores the same cells in the same order). A value at or
++    above every n restores the one-thread kernel for the A/B."""
++    var v = String(getenv("MOJOLEARN_XD_CHOL_SERIAL", "16"))
++    try:
++        return Int(v)
++    except:
++        return 16
++
++
+ def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
+     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+     if i < Int(n):
+@@ -1345,7 +1371,26 @@ struct DevExec(Exec):
+         var ctx = xd_ctx()
+         var da = _up(ctx, a, n * n)
+         var di = ctx.enqueue_create_buffer[DType.float32](1)
+-        ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
++        # lane/neural-net-experiment (2026-09-30, the classical pass): the
++        # unblocked left-looking Cholesky ran as ONE thread for every n
++        # (n^3 / 6 fmas in a row). `chol_serial`'s cells, step by step:
++        # column j's diagonal on one thread (its j-long chain), then every
++        # row below it one thread per row (each its own j-long chain, the
++        # same chain `chol_serial` walks for that cell, reading only cells
++        # final before the step), and the mirror cell zeroed there. Same
++        # cells, same order per cell, same bits; 2n launches.
++        if n <= chol_serial_max():
++            ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
++        else:
++            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
++            for j in range(n):
++                ctx.enqueue_function[chol_diag_kernel](
++                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=1, block_dim=1
++                )
++                if n - j - 1 > 0:
++                    ctx.enqueue_function[chol_col_kernel](
++                        da.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j - 1), block_dim=TPB
++                    )
+         _down(ctx, da, a, n * n)
+         _down(ctx, di, info, 1)
+         ctx.synchronize()
+@@ -1356,14 +1401,27 @@ struct DevExec(Exec):
+ 
+     @staticmethod
+     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
+-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
+-            if n <= host_eigh_max():
+-                HostExec.eigh(a, w, v, n)
++        # lane/neural-net-experiment (2026-09-30): the two routes below were
++        # compiled for Metal FAST only. Both envs are honoured on every
++        # vendor and tier now, with their defaults unchanged (0: never),
++        # so a box can A/B them:
++        #   MOJOLEARN_XD_HOST_EIGH_MAX=n  the host executor's cyclic Jacobi
++        #     for n at or under it: the host column's own arithmetic, held
++        #     bit for bit to the device kernels by the identity gates.
++        #   MOJOLEARN_XD_PJ_EIGH_MIN=n  the round-robin ordering
++        #     (x_decomp/jacobi_par.mojo) from n up: NOT the pinned cyclic
++        #     order, so NOT the identical tier's bits -- an experiment the
++        #     digest check must report as MOVED. It is the only route here
++        #     whose rotations run across the GPU: the cyclic kernels are one
++        #     block of 256 threads for the whole solve (eigh at n = 4096
++        #     timed out on the AMD board).
++        if n <= host_eigh_max():
++            HostExec.eigh(a, w, v, n)
++            return
++        var lo = pj_eigh_min()
++        if lo > 0 and n >= lo:
++            if DevExec._eigh_par(a, w, v, n):
+                 return
+-            var lo = pj_eigh_min()
+-            if lo > 0 and n >= lo:
+-                if DevExec._eigh_par(a, w, v, n):
+-                    return
+         if jacobi2_eigh_on():
+             DevExec._eigh2(a, w, v, n)
+             return
+@@ -1605,10 +1663,13 @@ struct DevExec(Exec):
+         enqueue_fill(ctx, s_buf, nan)
+         enqueue_fill(ctx, v_buf, nan)
+         var done = False
+-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
+-            var lo = pj_svd_min()
+-            if lo > 0 and n >= lo:
+-                done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
++        # MOJOLEARN_XD_PJ_SVD_MIN=n: the round-robin one-sided Jacobi from n
++        # up, on every vendor and tier (lane/neural-net-experiment; it was
++        # Metal FAST only). Default 0: never. NOT the pinned cyclic order's
++        # bits under IDENTICAL: an experiment the digest check reports.
++        var lo_svd = pj_svd_min()
++        if lo_svd > 0 and n >= lo_svd:
++            done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
+         if done:
+             pass
+         elif jacobi2_on() and n >= J2_BOUNDED_MIN_N:

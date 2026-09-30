@@ -1,0 +1,7 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-priority-pass/tools/bench_board_algos.py", "race", "--lane", "clip-grad-norm", "--dataset", "synthetic", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-clip-grad-norm-synthetic-new", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/clip-grad-norm", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=0 ms=843.428 infer_ms=None digest=bea62536a1718eb8
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=1 ms=7.938 infer_ms=None digest=973aad3bdd470a4e
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=2 ms=7.847 infer_ms=None digest=439178bbb0006f5a
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=3 ms=7.695 infer_ms=None digest=0801b9636024f876
+ALGOS lane=clip-grad-norm dataset=synthetic arm=ours status=ok median_ms=7.846992462873459 quality={"norm": 0.999998927116394, "norm_rel_diff_vs_ours": 0.0}
