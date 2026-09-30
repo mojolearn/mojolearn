@@ -698,7 +698,7 @@ class KernelPCA(_XNeighbors):
         self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
         # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
         # auto asks for a few components (on by default since 2026-09-30:
-        # L40S CUDA and Apple Metal output bit-identical, residual < 1e-5,
+        # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
         # float64 reference match; MOJOLEARN_XN_KPCA_LANCZOS=0 turns it off).
         # Anything outside that scope, or a basis that does not converge,
         # takes the exact dense path below.
