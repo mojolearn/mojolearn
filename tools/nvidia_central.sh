@@ -37,7 +37,7 @@
 #
 # THE LEASE IS THE QUEUE. A pod is busy while any job is queued, starting or
 # running, a `run` holds a slot, or an `sh` command runs. It is DELETED by
-# itself 30 idle minutes after it was last busy (IDLE_MIN), through the RunPod
+# itself 60 idle minutes after it was last busy (IDLE_MIN), through the RunPod
 # API from the pod; a backstop process on the pod deletes it 15 minutes later
 # if the dispatcher did not; and the Mac watcher (below) deletes it when the
 # pod's backstop is dead or the pod stops answering. So nothing idles for
@@ -74,7 +74,7 @@ NVC_GPUS=${NVC_GPUS:-"NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Ge
 NVC_STOCK_WAIT=${NVC_STOCK_WAIT:-5}                   # minutes of out-of-stock retry per multi-GPU count
 NVC_STOCK_WAIT_1=${NVC_STOCK_WAIT_1:-30}              # ... and for the 1-GPU fallback
 NVC_MIN_BALANCE=${NVC_MIN_BALANCE:-10}                # `up` refuses below this RunPod balance (USD)
-NVC_IDLE_MIN=${NVC_IDLE_MIN:-30}
+NVC_IDLE_MIN=${NVC_IDLE_MIN:-60}
 NVC_GRACE_MIN=${NVC_GRACE_MIN:-15}
 NVC_CAP_MIN=${NVC_CAP_MIN:-240}                       # a job's default AND maximum wall-clock cap
 NVC_WATCH_SECONDS=${NVC_WATCH_SECONDS:-300}

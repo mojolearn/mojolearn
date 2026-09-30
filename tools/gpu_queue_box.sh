@@ -60,7 +60,7 @@
 # LEASE (plain mode, when <queue dir>/lease.conf exists: the NVIDIA pods).
 # The queue IS the pod's lease. While anything is queued, starting or running,
 # a GPU slot is held (a `run`), or a `hold` command runs, the pod is BUSY and
-# lease.last_busy is now. The deadline is last_busy + IDLE_MIN (30). At the
+# lease.last_busy is now. The deadline is last_busy + IDLE_MIN (60). At the
 # deadline the dispatcher marks the queue closing (submit refuses from then
 # on) and DELETEs the pod through the RunPod API (the key is the 0600
 # /tmp/mojolearn-lease.curlrc tools/runpod_guard.sh put on the pod). The
@@ -106,7 +106,7 @@ dispatcher_active() {
     if [ "$MODE" = systemd ]; then systemctl is-active --quiet "$SERVICE"; else ! lock_free $Q/daemon.lock; fi
 }
 leased() { [ "$MODE" = plain ] && [ -f $Q/lease.conf ]; }
-lease_conf() { IDLE_MIN=30; GRACE_MIN=15; POD_ID=''; CURLRC=/tmp/mojolearn-lease.curlrc; FAKE_DELETE=0
+lease_conf() { IDLE_MIN=60; GRACE_MIN=15; POD_ID=''; CURLRC=/tmp/mojolearn-lease.curlrc; FAKE_DELETE=0
     DELETE_URLS=''; IDLE_SEC=''; GRACE_SEC=''; [ -f $Q/lease.conf ] && . $Q/lease.conf
     IDLE_SEC=${IDLE_SEC:-$((IDLE_MIN * 60))}; GRACE_SEC=${GRACE_SEC:-$((GRACE_MIN * 60))}   # *_SEC: tests only
     [ -n "$DELETE_URLS" ] || DELETE_URLS="https://rest.runpod.io/v1/pods/$POD_ID https://api.runpod.io/v2/pods/$POD_ID"; }
