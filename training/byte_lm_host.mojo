@@ -39,6 +39,7 @@ the comparison is not reaching the arithmetic. The threaded path reverses the
 fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 """
 
+from std.os import getenv
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
@@ -55,9 +56,19 @@ from training.byte_lm_host_kernels import (
     gemm_nt_rows,
     hidden_fast,
     pack_nt_span,
+    _residual_add,
+    _silu_gated,
+    _softmax_head,
+    _value_sum_head,
+    copy_rows,
+    rms_norm_fast,
+    rope_rows,
 )
 from training.checks.loss_oracle import CeConfig, ce_forward_oracle
 from transformer.checks.transformer_fixture import (
+    attention_scale,
+    mask_fill,
+    unmasked_fill,
     ScorePlant,
     TransformerDims,
     TransformerWeights,
@@ -234,6 +245,287 @@ def byte_host_worker_count(threads: Int) raises -> Int:
     return cores
 
 
+# ===========================================================================
+# THE TOKEN SPLIT (lane/neural-pass5, 2026-09-30): one batch row over many
+# threads.
+#
+# `_threaded_rows` splits the work across BATCH ROWS, one row per task, so
+# the board's `lm-infer` (batch 1, 2048 tokens) and every one-row call ran
+# on ONE core of a 28- or 64-core host: 15x to 66x behind torch's CPU path.
+# `hidden_par` splits INSIDE a row along the axes the contracts already make
+# independent, and nothing else: a token's output cells in the norms, the
+# projections, the MLP and the head (each cell its own chain over k, the
+# same chain whoever runs it), and a (head, query) pair in attention (the
+# scores chain over head_dim, the softmax folds over the keys, the value
+# sum over the keys, each per query). Every stage runs the SAME kernels as
+# `block_fast` on chunk-local lists, so no float crosses a thread boundary
+# and no fold changes order; the pinned environment of `host_parallelize`
+# makes a chunk's bits the calling thread's. Two regions a block, one after
+# the other (no task starts another parallel region): the pre-attention
+# region per token chunk (norm1, q, k, v, rope) into shared q_r, k_r, v
+# tables, then a region per query chunk that runs all heads of its queries
+# (packing the head's keys and values itself) and the rest of the block for
+# those tokens (o_proj, residual, norm2, gate, up, SiLU, down, residual).
+# The head GEMM splits its token rows the same way. Taken when the batch
+# is smaller than the worker count, unless MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=0.
+# ===========================================================================
+
+
+def byte_host_token_split_enabled() -> Bool:
+    return String(getenv("MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT")) != "0"
+
+
+def _chunks(n: Int, workers: Int) -> Int:
+    var c = workers
+    if c > n:
+        c = n
+    if c < 1:
+        c = 1
+    return c
+
+
+def block_par(
+    held: List[List[List[Float32]]],
+    tb: Int,
+    x: List[Float32],
+    l: Int,
+    dims: TransformerDims,
+    ropes: List[RopeTable],
+    workers: Int,
+) raises -> List[Float32]:
+    """`block_fast(held[0], tb, x, l, dims, ropes[0])` over `workers`
+    threads, the section comment above. `held` and `ropes` are the caller's
+    one-element wrappers (the tensors are never copied). Returns the same
+    `[l, d_model]` residual."""
+    var dm = dims.d_model
+    var nh = dims.n_heads
+    var hd = dims.head_dim
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var inter = dims.intermediate
+    var n_rep = dims.n_rep()
+    var s = l
+    if len(x) != l * dm:
+        raise Error("byte LM host: block input has the wrong length")
+    if not all_finite_span(x, 0, len(x)):
+        raise Error("byte LM host: non-finite block input x")
+    var tasks = _chunks(l, workers)
+    var chunk = (l + tasks - 1) // tasks
+
+    # ---- region A: norm1, q, k, v, rope per token chunk into shared tables
+    var qr = List[Float32](length=l * qw, fill=Float32(0.0))
+    var kr = List[Float32](length=l * kw, fill=Float32(0.0))
+    var v = List[Float32](length=l * kw, fill=Float32(0.0))
+    var failed = List[Int](length=tasks, fill=0)
+    var tp = held.unsafe_ptr()
+    var rp = ropes.unsafe_ptr()
+    var xs = List[List[Float32]]()
+    xs.append(x.copy())
+    var xp = xs.unsafe_ptr()
+    var qrp = qr.unsafe_ptr()
+    var krp = kr.unsafe_ptr()
+    var vp = v.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+    var c_kv = dims.n_kv_heads
+
+    def _pre_task(c: Int) {imm tp, imm rp, imm xp, imm qrp, imm krp, imm vp, imm fp, imm chunk, imm l,
+                           imm dm, imm nh, imm hd, imm qw, imm kw, imm tb, imm c_kv}:
+        try:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > l:
+                hi = l
+            var rows = hi - lo
+            var xc = copy_rows(xp[][0], lo, hi, dm)
+            var n1 = rms_norm_fast(xc, tp[][tb], rows, dm)
+            var q = List[Float32](length=rows * qw, fill=Float32(0.0))
+            var k = List[Float32](length=rows * kw, fill=Float32(0.0))
+            var vv = List[Float32](length=rows * kw, fill=Float32(0.0))
+            gemm_nt_rows(n1, tp[][tb + 1], qw, dm, 0, rows, q)
+            gemm_nt_rows(n1, tp[][tb + 2], kw, dm, 0, rows, k)
+            gemm_nt_rows(n1, tp[][tb + 3], kw, dm, 0, rows, vv)
+            var qrc = rope_rows(q, nh, hd, lo, hi, rp[])
+            var krc = rope_rows(k, c_kv, hd, lo, hi, rp[])
+            for i in range(rows * qw):
+                qrp.unsafe_store(lo * qw + i, qrc[i])
+            for i in range(rows * kw):
+                krp.unsafe_store(lo * kw + i, krc[i])
+                vp.unsafe_store(lo * kw + i, vv[i])
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _pre_task(0)
+    else:
+        host_parallelize(_pre_task, tasks)
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("byte LM host: token chunk " + String(c) + " raised in the projections")
+
+    # ---- region B: attention over all heads and the rest of the block per
+    # query chunk. The mask table is the block's, read only.
+    var mfill = mask_fill()
+    var masks = List[Float32](length=l * s, fill=unmasked_fill())
+    for qi in range(l):
+        for j in range(qi + 1, s):
+            masks[qi * s + j] = mfill
+    var scale = attention_scale(hd)
+    var out = List[Float32](length=l * dm, fill=Float32(0.0))
+    var ms = List[List[Float32]]()
+    ms.append(masks^)
+    var mp = ms.unsafe_ptr()
+    var qrs = List[List[Float32]]()
+    qrs.append(qr^)
+    var krs = List[List[Float32]]()
+    krs.append(kr^)
+    var vs = List[List[Float32]]()
+    vs.append(v^)
+    var qtp = qrs.unsafe_ptr()
+    var ktp = krs.unsafe_ptr()
+    var vtp = vs.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    for c in range(tasks):
+        failed[c] = 0
+
+    def _post_task(c: Int) {imm tp, imm xp, imm mp, imm qtp, imm ktp, imm vtp, imm op, imm fp, imm chunk,
+                            imm l, imm s, imm dm, imm nh, imm hd, imm qw, imm kw, imm inter, imm n_rep,
+                            imm tb, imm scale}:
+        try:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > l:
+                hi = l
+            var rows = hi - lo
+            var mchunk = copy_rows(mp[][0], lo, hi, s)
+            var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
+            var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
+            var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
+            var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
+            var cell = List[Float32](length=rows * s, fill=Float32(0.0))
+            var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
+            var qsp = qtp[][0].unsafe_ptr()
+            var ksp = ktp[][0].unsafe_ptr()
+            var vsp = vtp[][0].unsafe_ptr()
+            var qmp = qmat.unsafe_ptr()
+            var kpp = kpack.unsafe_ptr()
+            var vpp = vpack.unsafe_ptr()
+            for h in range(nh):
+                var kvh = h // n_rep
+                for qi in range(rows):
+                    for d in range(hd):
+                        qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
+                for j in range(s):
+                    for d in range(hd):
+                        kpp.unsafe_store(d * s + j, ftz(ksp.unsafe_load(j * kw + kvh * hd + d)))
+                        vpp.unsafe_store(j * hd + d, ftz(vsp.unsafe_load(j * kw + kvh * hd + d)))
+                gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
+                _softmax_head(cell, mchunk, rows, s, scale, aweights)
+                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx)
+            var xc = copy_rows(xp[][0], lo, hi, dm)
+            var o = List[Float32](length=rows * dm, fill=Float32(0.0))
+            gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
+            var r1 = _residual_add(xc, o)
+            var n2 = rms_norm_fast(r1, tp[][tb + 5], rows, dm)
+            var gate = List[Float32](length=rows * inter, fill=Float32(0.0))
+            var up = List[Float32](length=rows * inter, fill=Float32(0.0))
+            gemm_nt_rows(n2, tp[][tb + 6], inter, dm, 0, rows, gate)
+            gemm_nt_rows(n2, tp[][tb + 7], inter, dm, 0, rows, up)
+            var gated = _silu_gated(gate, up)
+            var down = List[Float32](length=rows * dm, fill=Float32(0.0))
+            gemm_nt_rows(gated, tp[][tb + 8], dm, inter, 0, rows, down)
+            var res = _residual_add(r1, down)
+            for i in range(rows * dm):
+                op.unsafe_store(lo * dm + i, res[i])
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _post_task(0)
+    else:
+        host_parallelize(_post_task, tasks)
+    _ = xs^
+    _ = ms^
+    _ = qrs^
+    _ = krs^
+    _ = vs^
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("byte LM host: token chunk " + String(c) + " raised in attention or the MLP")
+    return out^
+
+
+def hidden_par(
+    held: List[List[List[Float32]]],
+    ropes: List[RopeTable],
+    row_ids: List[Int32],
+    l: Int,
+    dims: TransformerDims,
+    layers: Int,
+    workers: Int,
+) raises -> List[Float32]:
+    """`hidden_fast(held[0], ropes[0], ...)` with every block through
+    `block_par`."""
+    var dm = dims.d_model
+    var ep = held[0][0].unsafe_ptr()
+    var x = List[Float32](length=l * dm, fill=Float32(0.0))
+    var xp = x.unsafe_ptr()
+    for t in range(l):
+        var base = Int(row_ids[t]) * dm
+        for j in range(dm):
+            xp.unsafe_store(t * dm + j, ep.unsafe_load(base + j))
+    for layer in range(layers):
+        x = block_par(held, 1 + 9 * layer, x, l, dims, ropes, workers)
+    return x^
+
+
+def head_rows_par(
+    hidden: List[Float32],
+    held: List[List[List[Float32]]],
+    head_index: Int,
+    vocab: Int,
+    dm: Int,
+    l: Int,
+    reverse: Bool,
+    workers: Int,
+) raises -> List[Float32]:
+    """`gemm_nt_rows(hidden, held[0][head_index], vocab, dm, 0, l, out,
+    reverse)` with the token rows split over `workers` threads. Returns
+    `[l, vocab]`."""
+    var tasks = _chunks(l, workers)
+    var chunk = (l + tasks - 1) // tasks
+    var out = List[Float32](length=l * vocab, fill=Float32(0.0))
+    var failed = List[Int](length=tasks, fill=0)
+    var hs = List[List[Float32]]()
+    hs.append(hidden.copy())
+    var hp = hs.unsafe_ptr()
+    var wp = held.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+
+    def _head_task(c: Int) {imm hp, imm wp, imm op, imm fp, imm chunk, imm l, imm vocab, imm dm, imm reverse, imm head_index}:
+        try:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > l:
+                hi = l
+            var part = List[Float32](length=(hi - lo) * vocab, fill=Float32(0.0))
+            gemm_nt_rows(hp[][0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
+            for i in range((hi - lo) * vocab):
+                op.unsafe_store(lo * vocab + i, part[i])
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _head_task(0)
+    else:
+        host_parallelize(_head_task, tasks)
+    _ = hs^
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("byte LM host: head chunk " + String(c) + " raised")
+    return out^
+
+
 def _span(offsets: List[Int], j: Int, want: Int) raises -> Int:
     """The offset of registry tensor `j`, refusing a size other than `want`."""
     if offsets[j + 1] - offsets[j] != want:
@@ -304,6 +596,21 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
     var tasks = workers
     if tasks > batch:
         tasks = batch
+    if workers > batch and byte_host_token_split_enabled():
+        # the token split: each row over every worker, rows one after another
+        var dims_ts = TransformerDims(config.d_model, config.n_heads, config.n_kv, config.head_dim,
+                                      config.intermediate, config.length)
+        var row_ids_ts = List[Int32](length=length, fill=Int32(0))
+        for r in range(batch):
+            for t in range(length):
+                row_ids_ts[t] = inputs[r * length + t]
+            var hidden_ts = hidden_par(held, ropes, row_ids_ts, length, dims_ts, layers, workers)
+            var part_ts = head_rows_par(hidden_ts, held, head_index, vocab, config.d_model, length, reverse, workers)
+            for q in range(length * vocab):
+                logits[r * length * vocab + q] = part_ts[q]
+        _ = held^
+        _ = ropes^
+        return logits^
     var chunk = (batch + tasks - 1) // tasks
     var failed = List[Int](length=tasks, fill=0)
     var op = logits.unsafe_ptr()
@@ -380,9 +687,30 @@ def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: I
     var ropes = List[RopeTable]()
     ropes.append(build_rope_table(byte_host_dims(config)))
     var out = List[Int32](length=batch, fill=Int32(0))
-    var tasks = byte_host_worker_count(threads)
+    var workers_nb = byte_host_worker_count(threads)
+    var tasks = workers_nb
     if tasks > batch:
         tasks = batch
+    if workers_nb > batch and byte_host_token_split_enabled():
+        # the token split (see `block_par`): the hidden rows over every
+        # worker, the last row's head on the calling thread
+        var dims_ts = TransformerDims(config.d_model, config.n_heads, config.n_kv, config.head_dim,
+                                      config.intermediate, config.length)
+        var row_ids_ts = List[Int32](length=length, fill=Int32(0))
+        var last_ts = List[Float32](length=vocab, fill=Float32(0.0))
+        for r in range(batch):
+            for t in range(length):
+                row_ids_ts[t] = inputs[r * length + t]
+            var hidden_ts = hidden_par(held, ropes, row_ids_ts, length, dims_ts, layers, workers_nb)
+            gemm_nt_rows(hidden_ts, held[0][head_index], vocab, config.d_model, length - 1, length, last_ts, reverse)
+            var best = 0
+            for j in range(1, vocab):
+                if last_ts[j] > last_ts[best]:
+                    best = j
+            out[r] = Int32(best)
+        _ = held^
+        _ = ropes^
+        return out^
     var chunk = (batch + tasks - 1) // tasks
     var failed = List[Int](length=tasks, fill=0)
     var op = out.unsafe_ptr()
