@@ -963,6 +963,28 @@ class TransformerBlock(NumericModeMixin):
             0, self.window,
         )
 
+    def _call_fresh_session(self, x, ext):
+        """Stateless prefill on the resident session (lane/neural-net-
+        experiment, 2026-09-30): `transformer_session_forward_fresh` keeps
+        the weights on the device across calls (reused only when their
+        bytes are unchanged, the binding compares them) and the workspace
+        under its budget; the zero cache exists only on the device and never
+        crosses the boundary. The same entry arithmetic as
+        `transformer_session_forward` at cached_tokens 0."""
+        b, l = int(x.shape[0]), int(x.shape[1])
+        y = _buffers.empty((b, l, self.d_model), '<f4')
+        w = self._w  # noqa: F841  (keeps the arrays alive for the call)
+        wopt = self._wopt  # noqa: F841
+        if self._native_session is None:
+            self._native_session = ext.transformer_session_create()
+            self._session_binding = ext
+        addrs, params = self._with_tails(
+            [_addr_ro(x)] + self._weight_addrs() + [0, 0, _addr(y)],
+            [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+             self.head_dim, self.intermediate, l, 0, self.window])
+        ext.transformer_session_forward_fresh(self._native_session, addrs, params)
+        return y
+
     def _call_fresh(self, x, ext):
         """Stateless prefill with the original zero cache owned only on device."""
         b, l = int(x.shape[0]), int(x.shape[1])
@@ -1006,6 +1028,11 @@ class TransformerBlock(NumericModeMixin):
         if (state is None and not step and b > 0 and l > 0
                 and self.window >= 0 and mode in ("identical", "fast")):
             fresh_ext = ext
+            # The session's stateless prefill first (every vendor): weights
+            # and workspace retained across calls. The per-call fresh entry
+            # (NVIDIA builds) and the state-carrying session path follow.
+            if reuse and _exports(ext, "transformer_session_forward_fresh"):
+                return self._call_fresh_session(x, ext)
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)
         if state is None:

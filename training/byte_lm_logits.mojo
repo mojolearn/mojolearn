@@ -43,7 +43,7 @@ from training.byte_lm import (
     _unpack_block,
     byte_dims,
 )
-from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32
+from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
@@ -141,7 +141,7 @@ struct ByteLogitsScratch(Movable):
         return self.batch == batch and self.length == length
 
 
-def _logits_forward(
+def _logits_enqueue(
     ctx: DeviceContext,
     mut weights: List[LlamaDeviceWeights],
     mut emb_w: DeviceBuffer[DType.float32],
@@ -152,10 +152,11 @@ def _logits_forward(
     batch: Int,
     length: Int,
     config: ByteConfig,
-) raises -> List[Float32]:
+) raises:
     """Embedding, the blocks and the head, as `_byte_forward_loss` launches
-    them, into the scratch's call-shaped buffers; returns the downloaded
-    logits `[batch * length, vocab]`, row-major.
+    them, into the scratch's call-shaped buffers; the logits are left in
+    `sc.logits` `[batch * length, vocab]`, row-major, NOT downloaded (the
+    two callers below download them differently). No completion wait here.
 
     ONE completion wait, the download's (DEVIATION 2942). The ids copy, the
     embedding, every block and the head GEMM are enqueued on the same
@@ -214,8 +215,29 @@ def _logits_forward(
 
     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
         m, vocab, dm, OP_NT)
-    var out = download_f32(ctx, sc.logits, m * vocab)
     _ = trace
+
+
+def _logits_forward(
+    ctx: DeviceContext,
+    mut weights: List[LlamaDeviceWeights],
+    mut emb_w: DeviceBuffer[DType.float32],
+    mut lm_w: DeviceBuffer[DType.float32],
+    mut rope: LlamaRopeTable,
+    mut sc: ByteLogitsScratch,
+    inputs: List[Int32],
+    batch: Int,
+    length: Int,
+    config: ByteConfig,
+) raises -> List[Float32]:
+    """`_logits_enqueue`, then the logits downloaded into a List (the
+    original return shape, kept for callers that want an owned List). The
+    bindings take `_logits_forward_into` instead, which skips this path's
+    pinned host buffer, element loop and second copy."""
+    var m = batch * length
+    var vocab = config.vocab_size
+    _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
+    var out = download_f32(ctx, sc.logits, m * vocab)
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         # The negative control for this lane's sweeps: one output bit moved
         # after the arithmetic, so a passing sweep on this build would be a
@@ -226,6 +248,68 @@ def _logits_forward(
             raise Error("byte LM logits: non-finite logit at flat index " + String(i)
                         + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
     return out^
+
+
+def _refuse_nonfinite_logits(out: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
+    """The same refusal `_logits_forward` makes over its List, over the
+    caller's memory, eight lanes at a time: the exponent-all-ones test on
+    the bits (an infinity or a NaN), and the FIRST offending flat index in
+    the message, found by the scalar tail once a vector has one. No
+    floating-point arithmetic, so no bit is judged differently."""
+    comptime W = 8
+    var exp = SIMD[DType.uint32, W](0x7F800000)
+    var i = 0
+    var body = n - n % W
+    while i < body:
+        var bits = bitcast[DType.uint32, W](out.unsafe_load[width=W](i)) & exp
+        var hit = bits.eq(exp).select(SIMD[DType.uint32, W](1), SIMD[DType.uint32, W](0))
+        if hit.reduce_or() != UInt32(0):
+            break
+        i += W
+    while i < n:
+        if (bitcast[DType.uint32](out.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            raise Error("byte LM logits: non-finite logit at flat index " + String(i)
+                        + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
+        i += 1
+
+
+def _logits_forward_into(
+    ctx: DeviceContext,
+    mut weights: List[LlamaDeviceWeights],
+    mut emb_w: DeviceBuffer[DType.float32],
+    mut lm_w: DeviceBuffer[DType.float32],
+    mut rope: LlamaRopeTable,
+    mut sc: ByteLogitsScratch,
+    inputs: List[Int32],
+    batch: Int,
+    length: Int,
+    config: ByteConfig,
+    out: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`_logits_enqueue`, then ONE device-to-host copy straight into `out`
+    (`batch * length * vocab` floats the caller owns and keeps alive for
+    the whole call), then the non-finite refusal over that memory.
+
+    lane/neural-net-experiment (2026-09-30): the bindings used
+    `_logits_forward` and then copied its List into the caller's array. At
+    the board's LM shape (L2048, V8192: 64 MiB of logits) that was a 64 MiB
+    PINNED host allocation per call, a device-to-host copy into it, a
+    16.8M-element append loop into a List, the scan, a SIMD copy into the
+    caller's array and the pinned free -- all host work after the GPU was
+    done, and the reason `lm-forward` cost three `lm-train-step`s on the
+    L40S (147 ms against 46 ms; the training step returns 4 bytes). This is
+    DEVIATION 3120's fix (`download_f32_into`) applied to the logits: the
+    same bytes land in the same places, one transfer, no List.
+
+    The sabotage define moves the same bit it moved before (flat index 0,
+    after the copy, before the scan)."""
+    var m = batch * length
+    var vocab = config.vocab_size
+    _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
+    download_f32_into(ctx, sc.logits, m * vocab, out)
+    comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
+        out.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](out.unsafe_load(0)) ^ UInt32(1)))
+    _refuse_nonfinite_logits(out, m * vocab)
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
@@ -254,6 +338,33 @@ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: L
     ctx.synchronize()
     _ = sc^
     return out^
+
+
+def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
+                                 batch: Int, length: Int, config: ByteConfig,
+                                 out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """`byte_logits_from_params` writing straight into the caller's memory
+    (`_logits_forward_into`): the same uploads, kernels and order."""
+    byte_logits_validate(inputs, batch, length, config)
+    byte_logits_validate_params(params, config)
+    var offsets = config.offsets()
+    var vd = config.vocab_size * config.d_model
+    var weights = List[LlamaDeviceWeights]()
+    for layer in range(config.n_layers):
+        weights.append(_block_weights(ctx, params, layer, config))
+    var emb_host = List[Float32](capacity=vd)
+    var head_host = List[Float32](capacity=vd)
+    var head_base = offsets[config.n_tensors() - 1]
+    for i in range(vd):
+        emb_host.append(params[i])
+        head_host.append(params[head_base + i])
+    var emb_w = _upload(ctx, emb_host)
+    var lm_w = _upload(ctx, head_host)
+    var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
+    var sc = ByteLogitsScratch(ctx, batch, length, config)
+    _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, out)
+    ctx.synchronize()
+    _ = sc^
 
 
 def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
@@ -295,3 +406,41 @@ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[I
         _byte_recover(ctx, tr, message)
     tr.healthy = True
     return out^
+
+
+def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
+                              batch: Int, length: Int,
+                              mut scratch: Optional[ByteLogitsScratch],
+                              out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+    """`byte_logits_resident` writing straight into the caller's memory
+    (`_logits_forward_into`); the same refresh, scratch rule and failure
+    convention. On a raise the caller's memory holds an unspecified prefix
+    of the copy, as `download_f32_into` says; the session binding does not
+    publish a failed call."""
+    var config = tr.config.copy()
+    byte_logits_validate(inputs, batch, length, config)
+    if not tr.healthy:
+        raise Error("byte LM: session lost; restore a retained export")
+    var rebuild = True
+    if scratch:
+        rebuild = not scratch.value().fits(batch, length)
+    if rebuild:
+        scratch = None
+        scratch = ByteLogitsScratch(ctx, batch, length, config)
+    tr.healthy = False
+    tr.shadow_valid = False
+    var failed = False
+    var message = String("")
+    try:
+        for layer in range(config.n_layers):
+            _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
+        _bind_emb_head(ctx, tr.buffers, config)
+        _logits_forward_into(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
+            scratch.value(), inputs, batch, length, config, out)
+        ctx.synchronize()
+    except error:
+        failed = True
+        message = String(error)
+    if failed:
+        _byte_recover(ctx, tr, message)
+    tr.healthy = True
