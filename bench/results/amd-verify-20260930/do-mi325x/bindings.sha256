@@ -1,0 +1,6 @@
+48106ba1a69a20c1d37767cacb0c21de38d759443a7c609a3243cba05f419057  /root/amd-verify/native/mamba-anglenaive.so
+f7bad7da9f21da2709b63950bb7bea4e02baf0fd141d79bbdcee122f3ab23acf  /root/amd-verify/native/mamba-new.so
+4bb8913a8732638481c511f5b346408c48f941b903f2237eed30b3ea653395f1  /root/amd-verify/native/linalg.so
+df93248f3647fd8496d50954535a62fc1df332be77022b5d06079681bacdac09  /root/amd-verify/native/x_neighbors.so
+ab118fa98f2017991e908ce9b29fb386b9f8747bcc8ca75471a14718b4e387d7  /root/amd-verify/native/x_decomp.so
+a83c644d223ac9263375a35d8401646ea720593f1ceb51e571d1877897d8e37b  /root/amd-verify/native/training.so
