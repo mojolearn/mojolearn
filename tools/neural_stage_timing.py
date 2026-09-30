@@ -68,6 +68,23 @@ def main(argv=None):
             steady = sorted(ms[1:]) if len(ms) > 1 else ms
             print("SUMMARY %s first=%.3f median_after_first=%.3f ms" % (
                 lane, ms[0], steady[len(steady) // 2]), flush=True)
+            # The output digest of the last call (None on the training
+            # lanes, whose outputs are losses): the sweep compares it across
+            # toggles, so a toggle that moves a bit shows as a changed digest.
+            try:
+                digest = runner.digest()
+            except Exception as exc:
+                digest = "unavailable (%s)" % exc
+            losses = None
+            try:
+                outs = runner.outputs()
+                if "losses" in outs:
+                    losses = [float(v) for v in outs["losses"]]
+            except Exception:
+                losses = None
+            print("DIGEST %s %s" % (lane, digest), flush=True)
+            if losses is not None:
+                print("LOSSES %s %s" % (lane, json.dumps(losses)), flush=True)
             trainer = getattr(runner, "trainer", None)
             report = getattr(trainer, "attention_stage_report", None)
             if callable(report):

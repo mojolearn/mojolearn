@@ -853,6 +853,13 @@ def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int],
     w._validate_finite(ctx)
 
 
+def _stage_reset_on() -> Bool:
+    """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
+    reused workspace gets before each call. Bit-safe only if every cell a
+    call reads it also wrote this call; the identity gate decides."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
+
+
 def _session_retain_cap_bytes() -> Int:
     """Retained workspace budget per session: `MOJOLEARN_TRANSFORMER_RETAIN_MB`
     (an integer, MiB), default 512. Was a fixed 64 MiB, which the board's
@@ -884,6 +891,11 @@ def _session_weights(
     for i in range(len(tail)):
         if tail[i] != 0:
             extended = True
+    # MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0: the per-call upload for every
+    # block (the A/B against the byte compare; measured 0.3 ms per call on
+    # an L40S, where the upload it replaces was already cheap).
+    if String(getenv("MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS")) == "0":
+        extended = True
     if extended:
         session.weights = None
         session.weights_key = List[Int]()
@@ -972,7 +984,7 @@ def _transformer_run_session[discard_cache: Bool = False](
         session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
         session.workspaces += 1
     ref ws = session.workspace.value()
-    if reused:
+    if reused and _stage_reset_on():
         ws.stages.reset(ctx)
     comptime if discard_cache:
         if s0 != 0:
@@ -990,8 +1002,9 @@ def _transformer_run_session[discard_cache: Bool = False](
     ws.kv.s = s0
     _btick(ton, tk, "surface.cache_stages_x_up")
     var trace = IdentityTrace.disabled()
+    # forward_only: no backward reads this entry's stages.
     llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
-                                b, l, s0, trace, String("py"))
+                                b, l, s0, trace, String("py"), forward_only=True)
     _btick(ton, tk, "surface.forward")
     # One wait for the downloads (the fresh entry's pattern): every owner
     # stays alive through it.
@@ -1087,7 +1100,7 @@ def _transformer_run_session_backward(
         session.workspace = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
         session.workspaces += 1
     ref ws = session.workspace.value()
-    if reused:
+    if reused and _stage_reset_on():
         ws.stages.reset(ctx)
     # The backward half.
     var bkey: List[Int] = [b, l, dm, nh, nkv, hd, it, window, Int(lean)]
@@ -1553,7 +1566,8 @@ def _transformer_run[discard_cache: Bool = False](
     # offer. Prefill, chunked continuation and decode are all this one
     # call; capacity growth past smax is refused by name downstream.
     llama_decoder_layer_forward(
-        ctx, stages, kv, rope, w, dx, b, l, s0, trace, String("py")
+        ctx, stages, kv, rope, w, dx, b, l, s0, trace, String("py"),
+        forward_only=True,
     )
 
     # The block output is residual2 (contract section 2's

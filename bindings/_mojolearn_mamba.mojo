@@ -139,7 +139,7 @@ from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.modules.mamba3_transfer import M3_BULK_TRANSFER, m3_upload, m3_download
-from std.os import abort
+from std.os import abort, getenv
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -1891,6 +1891,15 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     uploaded (see the section header)."""
     ref ctx = s.ctx.value()
     var lens = _m3_weight_lens(dims)
+    # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
+    # against the byte compare).
+    if String(getenv("MOJOLEARN_MAMBA3_RETAIN_WEIGHTS")) == "0":
+        s.w = None
+        s.w_host = List[Float32]()
+        s.dm = 0
+        s.w = _m3_load_weights(ctx, a, dims)
+        s.weight_uploads += 1
+        return
     if s.w and s.dm == dims.d_model:
         if _m3_weights_same_bits(a, s.w_host, lens):
             s.weight_reuses += 1
