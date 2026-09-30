@@ -30,11 +30,11 @@ def main():
             for length in (1, 7, 9, 65):
                 x = rng.uniform(-0.5, 0.5, (2, length, dm)).astype(np.float32)
                 state = allocate(2, length)
-                expected = block.forward(x, state)
+                expected = np.asarray(block.forward(x, state))
                 assert state.cached_tokens == length
                 block.allocate_state = no_host_cache
                 try:
-                    actual = block.forward(x)
+                    actual = np.asarray(block.forward(x))
                 finally:
                     block.allocate_state = allocate
                 assert np.array_equal(actual.view(np.uint32), expected.view(np.uint32)), (hd, window, length)
