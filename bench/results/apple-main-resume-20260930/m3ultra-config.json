@@ -6,6 +6,8 @@
     "algos/label-propagation/istella/rows=full",
     "algos/label-spreading/taxi/rows=full",
     "algos/label-spreading/istella/rows=full",
+    "algos/kernel-pca/taxi/rows=full",
+    "algos/kernel-pca/istella/rows=full",
     "classical/hdbscan/taxi/rows=full",
     "classical/hdbscan/istella/rows=full",
     "classical2/nystroem/taxi/rows=full",
@@ -302,19 +304,19 @@
     "algos/lr-warmup-linear/synthetic/rows=full",
     "algos/lr-warmup-cosine/synthetic/rows=full",
     "algos/jl-min-dim/synthetic/rows=full",
-    "algos/logreg-cv/taxi/rows=full",
-    "algos/kernel-pca/taxi/rows=full",
-    "algos/kernel-pca/istella/rows=full"
+    "algos/logreg-cv/taxi/rows=full"
   ],
   "extra_args": [
     "--mojolearn-wheel",
-    "/Users/ec2-user/board-resume-main-10523ede1/wheel/mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+    "/Users/ec2-user/board-resume-main-3d0da1acf/wheel/mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
     "--arm-budget-s",
     "300",
     "--race-deadline-s",
-    "900"
+    "900",
+    "--round-seconds",
+    "300"
   ],
-  "source_commit": "10523ede164135c2293d16f857b49c157eab71aa",
+  "source_commit": "3d0da1acf5303ebe7463222544b5791d78c93c09",
   "previous_root": "/Users/ec2-user/board-resume",
   "previous_version": "0.8.25",
   "original_plan": [

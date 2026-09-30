@@ -8,9 +8,9 @@ except BlockingIOError:
     raise SystemExit(0)
 if (B / 'apple-main-activated.json').exists():
     raise SystemExit(0)
-commit = '10523ede164135c2293d16f857b49c157eab71aa'
-root = '/Users/ec2-user/board-resume-main-10523ede1'
-job = '1790789447486-speed-apple-main-wheel-10523ede16'
+commit = '3d0da1acf5303ebe7463222544b5791d78c93c09'
+root = '/Users/ec2-user/board-resume-main-3d0da1acf'
+job = '1790790532709-speed-apple-main-wheel-3d0da1acf5'
 hosts = {'m3ultra-b': '54.157.1.251', 'm2pro': '54.237.205.45'}
 key = str(pathlib.Path.home() / '.ssh/mambik-l8.pem')
 ssh_opts = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
@@ -36,7 +36,7 @@ if not verdict:
 if verdict.get('result') != 'PASS':
     (B / 'apple-main-build-failure.json').write_text(json.dumps(verdict, indent=2))
     raise SystemExit('Wheel build failed; Apple boards remain blocked')
-artifact = B / 'apple-main-10523ede1'
+artifact = B / 'apple-main-3d0da1acf'
 artifact.mkdir(exist_ok=True)
 remote_wheel = remote(hosts['m3ultra-b'], 'python3 -', '''import pathlib
 w=list((pathlib.Path.home()/'mojolearn-wt/steward-m3ultra-b/python/dist').glob('*.whl'))
