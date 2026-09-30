@@ -1,0 +1,20 @@
+{
+  "rows": 3000,
+  "features": 11,
+  "fit_transform_ms": [
+    423.3744170051068,
+    523.1131670298055
+  ],
+  "output_sha256": [
+    "c2df493317696b9e600e03a8c098f7114226dfc1fff6c8738527f48fa69c4109",
+    "c2df493317696b9e600e03a8c098f7114226dfc1fff6c8738527f48fa69c4109"
+  ],
+  "repeat_identical": true,
+  "vendor": "metal",
+  "input_sha256": "c46893ee250b9e5547f8f9e32a7acf7794167e074b51858b0aa8a2d67d4a00e8",
+  "relative_residual": 4.338196504249936e-06,
+  "orthogonality_max_abs": 6.67572021484375e-06,
+  "fit_transform_vs_transform_relative_max": 7.0730657171225175e-06,
+  "passed": true,
+  "scope": "Experimental opt-in. Same-device repeatability only; Apple/AMD identity NOT certified."
+}
