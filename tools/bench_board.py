@@ -1989,7 +1989,7 @@ def params_probe(ctx, race, arms):
     if race["family"] == "trees":
         cmd, extra = tree_cmd(ctx, sub)
         cmd = cmd + ["--params-only"]
-        run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
+        run_race_logged(ctx, cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900, nice=ctx["nice"])
         try:
             with open(log, errors="replace") as fh:
                 text = fh.read()
@@ -2019,7 +2019,7 @@ def params_probe(ctx, race, arms):
     for f in os.listdir(probe_dir):
         if f.endswith(".params.json"):
             os.remove(os.path.join(probe_dir, f))
-    run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+    run_race_logged(ctx, cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
     found = [f for f in os.listdir(probe_dir) if f.endswith(".params.json")]
     if not found:
         return {}
@@ -2238,10 +2238,22 @@ def note_host_memory(rec, kills, arms):
     print("bench_board:   %s" % rec["failure"], flush=True)
 
 
+def run_race_logged(ctx, cmd, env, log, ceiling, **kwargs):
+    """One shared wall-clock budget, including separate inference launches."""
+    remaining = ctx.get("_race_stop", time.monotonic() + 900) - time.monotonic()
+    if remaining <= 0:
+        os.makedirs(os.path.dirname(log), exist_ok=True)
+        with open(log, "a") as fh:
+            fh.write("\n=== bench_board: TIMEOUT: race budget exhausted; launch skipped\n")
+        return 124
+    return run_logged(cmd, env, log, min(ceiling, remaining), **kwargs)
+
+
 def run_race(ctx, race):
     """Run one race and return its record (status, rc, log, cells). Opponents
     the store already holds for this key are not run; their stored cells join
     the race (tools/bench_board_store.py)."""
+    ctx = dict(ctx, _race_stop=time.monotonic() + min(900, ctx.get("race_timeout_s", 900)))
     stored = stored_opponents(ctx, race)
     full = race
     if stored:
@@ -2279,7 +2291,7 @@ def _run_race(ctx, race):
         log = os.path.join(ctx["out"], "raw", "trees", tag + ".log")
         if os.path.exists(log):
             os.replace(log, log + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900,
+        rc = run_race_logged(ctx, cmd, child_env(ctx, extra), log, ctx["race_deadline_s"] + 900,
                         nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc)
         parsed = parse_tree_log(log)
@@ -2295,7 +2307,7 @@ def _run_race(ctx, race):
         jpath = neural_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_race_logged(ctx, cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]), shape=race.get("shape"))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2311,7 +2323,7 @@ def _run_race(ctx, race):
         jpath = algos_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_race_logged(ctx, cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2329,7 +2341,7 @@ def _run_race(ctx, race):
         jpath = more_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_race_logged(ctx, cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2345,7 +2357,7 @@ def _run_race(ctx, race):
         jpath = classical_json_path(ctx, race)
         if os.path.exists(jpath):
             os.replace(jpath, jpath + ".previous")
-        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rc = run_race_logged(ctx, cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
         rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
                    race_json=os.path.relpath(jpath, ctx["out"]))
         r = load_result(jpath) if os.path.exists(jpath) else None
@@ -2367,6 +2379,14 @@ def _run_race(ctx, race):
                         os.remove(os.path.join(work, f))
                     except OSError:
                         pass
+    if rc == 124 or time.monotonic() >= ctx.get("_race_stop", float("inf")):
+        rc = 124
+        rec["rc"] = rc
+        rec["timeout_s"] = min(900, ctx.get("race_timeout_s", 900))
+        rec["reason"] = "TIMEOUT: race exceeded wall-clock budget; partial measurements preserved"
+        for cell in cells:
+            if str(cell.get("status", "")).startswith("UNKNOWN"):
+                cell["status"] = "timeout"
     rec["cells"] = add_ratios(cells)
     rec["finished"] = now_utc()
     rec["status"] = "done" if rc == 0 else "failed"
@@ -3019,6 +3039,9 @@ def build_parser():
     p.add_argument("--ctd-data", default=None,
                    help="classical block dir (default <cache>/ctd-data); prep is untimed and once")
     p.add_argument("--verify-data", action="store_true", help="sha256 the dataset files too")
+    p.add_argument("--race-timeout-s", type=int, default=900, choices=range(1, 901),
+                   metavar="1..900", help="wall-clock limit for every race, including neural and inference (max 900 seconds)")
+    p.add_argument("--race-id", help="run exactly this race from the plan")
     p.add_argument("--arm-budget-s", type=int, default=3600,
                    help="trees: per-arm budget (MOJOLEARN_SPEED_BUDGET_S)")
     p.add_argument("--race-deadline-s", type=int, default=6 * 3600,
@@ -3309,6 +3332,10 @@ def main(argv=None):
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
                        cpu_arm=not args.no_cpu_arm)
+    if args.race_id:
+        races = [r for r in races if r["id"] == args.race_id]
+        if len(races) != 1:
+            raise SystemExit("--race-id must identify exactly one planned race: " + args.race_id)
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
@@ -3393,6 +3420,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
+           "race_timeout_s": args.race_timeout_s,
            "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),

@@ -2994,15 +2994,17 @@ def _lanczos_top(k, A, nc):
     return th.take_cols(top), V
 
 
-def _top_eig(k, A, nc, fast=False):
+def _top_eig(k, A, nc, fast=False, iterative=False):
     """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
     columns, each column signed by sklearn's svd_flip(u_based_decision=True).
     fast (FAST mode, eigen_solver 'auto'): the Lanczos route under sklearn's
-    ARPACK policy (_lanczos_top), the exact dense solve otherwise."""
+    ARPACK policy (_lanczos_top), the exact dense solve otherwise.
+    iterative opts ClassicalMDS into that policy on every numeric backend."""
     n = A.r
     got = None
-    if fast and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC and _os.environ.get(
-            "MOJOLEARN_XD_LANCZOS", "1" if _kit_vendor(k) == "metal" else "0") == "1":
+    if (0 < nc < _LANCZOS_MAX_NC and n > _LANCZOS_MIN_N
+            and (iterative or (fast and _os.environ.get(
+                "MOJOLEARN_XD_LANCZOS", "1" if _kit_vendor(k) == "metal" else "0") == "1"))):
         got = _lanczos_top(k, A, nc)
     if got is not None:
         w, V = got
@@ -3222,7 +3224,12 @@ class ClassicalMDS(_Base):
             D2 = k.ew("sq", Dm)
             self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
-        w, V = _top_eig(k, B, int(self.n_components), fast=self.numeric_mode_ == "fast")
+        # A full n-by-n Jacobi solve is cubic even when only two axes are
+        # requested (the board uses 5,000 rows). Use the same bounded,
+        # deterministic top-k route as KernelPCA on CPU and every GPU.
+        w, V = _top_eig(k, B, int(self.n_components),
+                        fast=self.numeric_mode_ == "fast", iterative=True)
+        w = k.ew("maxs", w, s=0.0)
         self.eigenvalues_ = w.out((w.c,))
         self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
         self.embedding_ = self.embedding_m_.out()
