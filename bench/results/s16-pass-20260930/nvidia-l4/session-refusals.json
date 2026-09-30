@@ -1,0 +1,48 @@
+{
+  "backend": "cuda",
+  "group": "refusals",
+  "reverse_order": false,
+  "arrays": 15,
+  "ownership": [
+    1,
+    5,
+    false,
+    5712
+  ],
+  "samples": [
+    {
+      "case": "admit",
+      "baseline_ms": 1401.9050169736147,
+      "retained_ms": 0.5488917231559753
+    },
+    {
+      "case": "recovery.x",
+      "baseline_ms": 0.5073733627796173,
+      "retained_ms": 0.45201368629932404
+    },
+    {
+      "case": "recovery.weight",
+      "baseline_ms": 0.4895031452178955,
+      "retained_ms": 0.4594540223479271
+    },
+    {
+      "case": "recovery.cache",
+      "baseline_ms": 0.49750320613384247,
+      "retained_ms": 0.4482930526137352
+    },
+    {
+      "case": "recovery.capacity",
+      "baseline_ms": 0.4881424829363823,
+      "retained_ms": 0.4560621455311775
+    }
+  ],
+  "refusals": {
+    "x": "llama: NaN in hidden_states at flat index 0 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)",
+    "weight": "llama: infinity in q_proj.weight at flat index 0 REFUSED (row 39: an infinity in an input is a computed NaN one seam later)",
+    "cache": "llama: NaN in past_key_values.key_cache at flat index 0 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)",
+    "capacity": "llama_decoder_layer_forward: the cache would grow to 9 past its capacity 8"
+  },
+  "warm_baseline_median_ms": null,
+  "warm_retained_median_ms": null,
+  "binding_sha256": "c7b3c299855e2974555fcc84be81c4e1d77084b08dbabde8f93af1e2f06c2a38"
+}

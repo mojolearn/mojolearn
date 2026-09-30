@@ -109,6 +109,24 @@ def ftz(x: Float32) -> Float32:
         # Apple IDENTICAL kernels take it.
         var sz = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
         return sz if abs(x) < Float32(1.17549435082228750797e-38) else x
+    # THE HARDWARE FLUSH (lane/neural-net-experiment, 2026-09-30, the S16
+    # pass), in code compiled FOR an NVIDIA GPU: `mul.rn.ftz.f32 x, 1.0`.
+    # The GEMM seam has spelled its own flush this way since DEVIATION 2706
+    # (`gemm_identical._fold_flush[True]`, `_tuned_step`): a binary32 times
+    # one is exact, so the instruction's only effect is the `.ftz` flush of
+    # a subnormal RESULT to its signed zero, which is this function's
+    # definition; a zero keeps its sign, an infinity is unchanged. One
+    # instruction where the integer spelling below is six, on every flush
+    # of every IDENTICAL kernel on the column (the Mamba-3 backward chains
+    # flush twice a step). `tools/probe_ftz_hw.mojo` compares the two
+    # spellings over ALL 2^32 words on the device. The one word class the
+    # hardware may not return unchanged is a NaN with a payload (the
+    # arithmetic unit may return the canonical NaN): the identity contract
+    # refuses NaN payloads at every seam that could see one (row 39), and a
+    # NaN in a training step is a failed step whatever its payload.
+    # `-D MOJOLEARN_FTZ_HW_OFF=1` restores the integer spelling for the A/B.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_HW_OFF"]() and is_nvidia_gpu():
+        return llvm_intrinsic["llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False](x, Float32(1.0))
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (

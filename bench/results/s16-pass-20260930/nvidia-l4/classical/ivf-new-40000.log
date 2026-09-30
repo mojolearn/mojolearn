@@ -1,0 +1,2 @@
+17218 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x398400000000, nodemask=2)
+{"ms": 2474.236582405865, "digest": "5bf7822421de6cd5efcde8f02dd066822016f4e0a946af82fe28f805c2b8b761", "case": "ivf", "size": 40000, "env": {}}

@@ -1,0 +1,69 @@
+### baseline  (defaults)
+    transformer-forward     5.432 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.051 ms  digest=481c50cae2dd749e
+    samba-forward          14.910 ms  digest=ddce61948b8456e0
+    samba-train-step      148.679 ms  digest=None
+    lm-forward             85.919 ms  digest=4a8e781b0739a038
+    lm-train-step         109.115 ms  digest=None
+### no_retain_weights  MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0 MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0
+    transformer-forward     5.428 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.426 ms  digest=481c50cae2dd749e
+    samba-forward          15.519 ms  digest=ddce61948b8456e0
+    samba-train-step      150.503 ms  digest=None
+    lm-forward             87.081 ms  digest=4a8e781b0739a038
+    lm-train-step         109.413 ms  digest=None
+### legacy_fresh_entry  MOJOLEARN_TRANSFORMER_SESSION_FRESH=0
+    transformer-forward     5.153 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.169 ms  digest=481c50cae2dd749e
+    samba-forward          14.337 ms  digest=ddce61948b8456e0
+    samba-train-step      147.811 ms  digest=None
+    lm-forward             84.728 ms  digest=4a8e781b0739a038
+    lm-train-step         109.335 ms  digest=None
+### no_stage_reset  MOJOLEARN_TRANSFORMER_STAGE_RESET=0
+    transformer-forward     4.846 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.037 ms  digest=481c50cae2dd749e
+    samba-forward          14.229 ms  digest=ddce61948b8456e0
+    samba-train-step      145.575 ms  digest=None
+    lm-forward             84.314 ms  digest=4a8e781b0739a038
+    lm-train-step         109.713 ms  digest=None
+### speculative_attn  MOJOLEARN_ATTN_SPECULATIVE=1
+    transformer-forward     5.545 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.021 ms  digest=481c50cae2dd749e
+    samba-forward          14.691 ms  digest=ddce61948b8456e0
+    samba-train-step      149.356 ms  digest=None
+    lm-forward             88.472 ms  digest=4a8e781b0739a038
+    lm-train-step         109.814 ms  digest=None
+### swiglu_fused  MOJOLEARN_SWIGLU_FUSED=1
+    transformer-forward     5.421 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.275 ms  digest=481c50cae2dd749e
+    samba-forward          16.761 ms  digest=ddce61948b8456e0
+    samba-train-step      154.359 ms  digest=None
+    lm-forward             87.586 ms  digest=4a8e781b0739a038
+    lm-train-step         110.371 ms  digest=None
+### no_layer_sync  MOJOLEARN_BYTE_LM_LAYER_SYNC=0
+    transformer-forward     5.409 ms  digest=d5a2b289afdb5709
+    mamba3-forward          4.932 ms  digest=481c50cae2dd749e
+    samba-forward          14.481 ms  digest=ddce61948b8456e0
+    samba-train-step      148.892 ms  digest=None
+    lm-forward             87.148 ms  digest=4a8e781b0739a038
+    lm-train-step         109.933 ms  digest=None
+### all_on  MOJOLEARN_ATTN_SPECULATIVE=1 MOJOLEARN_BYTE_LM_LAYER_SYNC=0 MOJOLEARN_SWIGLU_FUSED=1 MOJOLEARN_TRANSFORMER_STAGE_RESET=0
+    transformer-forward     4.868 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.186 ms  digest=481c50cae2dd749e
+    samba-forward          14.405 ms  digest=ddce61948b8456e0
+    samba-train-step      148.984 ms  digest=None
+    lm-forward             87.745 ms  digest=4a8e781b0739a038
+    lm-train-step         109.778 ms  digest=None
+
+| experiment | transformer-forward | mamba3-forward | samba-forward | samba-train-step | lm-forward | lm-train-step |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | 5.432 (1.00x) | 5.051 (1.00x) | 14.910 (1.00x) | 148.679 (1.00x) | 85.919 (1.00x) | 109.115 (1.00x) |
+| no_retain_weights | 5.428 (1.00x) same | 5.426 (1.07x) same | 15.519 (1.04x) same | 150.503 (1.01x) same | 87.081 (1.01x) same | 109.413 (1.00x) same |
+| legacy_fresh_entry | 5.153 (0.95x) same | 5.169 (1.02x) same | 14.337 (0.96x) same | 147.811 (0.99x) same | 84.728 (0.99x) same | 109.335 (1.00x) same |
+| no_stage_reset | 4.846 (0.89x) same | 5.037 (1.00x) same | 14.229 (0.95x) same | 145.575 (0.98x) same | 84.314 (0.98x) same | 109.713 (1.01x) same |
+| speculative_attn | 5.545 (1.02x) same | 5.021 (0.99x) same | 14.691 (0.99x) same | 149.356 (1.00x) same | 88.472 (1.03x) same | 109.814 (1.01x) same |
+| swiglu_fused | 5.421 (1.00x) same | 5.275 (1.04x) same | 16.761 (1.12x) same | 154.359 (1.04x) same | 87.586 (1.02x) same | 110.371 (1.01x) same |
+| no_layer_sync | 5.409 (1.00x) same | 4.932 (0.98x) same | 14.481 (0.97x) same | 148.892 (1.00x) same | 87.148 (1.01x) same | 109.933 (1.01x) same |
+| all_on | 4.868 (0.90x) same | 5.186 (1.03x) same | 14.405 (0.97x) same | 148.984 (1.00x) same | 87.745 (1.02x) same | 109.778 (1.01x) same |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.
