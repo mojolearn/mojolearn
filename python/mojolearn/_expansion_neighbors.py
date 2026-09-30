@@ -706,10 +706,10 @@ class KernelPCA(_XNeighbors):
         kit = None
         if (os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS", "1") != "0"
                 and self.eigen_solver == "auto" and n > 200 and 0 < c < 10):
-            from ._expansion_decomp import _Kit, _kit_vendor
+            from ._expansion_decomp import _Kit
+            # Every column (CUDA, HIP, Metal and the CPU host binding) takes
+            # this route, so a CPU-only install gives the GPUs' bits.
             kit = _Kit(self.numeric_mode_used())
-            if _kit_vendor(kit) not in ("cuda", "hip", "metal"):
-                kit = None
         result = None
         if kit is not None:
             import array
