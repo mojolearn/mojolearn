@@ -1876,6 +1876,21 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
 
 
 @always_inline
+def _attn_speculative() -> Bool:
+    """lane/neural-net-experiment (2026-09-30), `MOJOLEARN_ATTN_SPECULATIVE=1`:
+    the fused forward's regime scan runs BEHIND the fused kernels instead of
+    in front of them, so the one wait that reads the scan also covers the
+    kernels and the corner flag: one host round trip per layer instead of
+    two. The scan reads q_rope, k_cache and v_cache, which the fused
+    kernels never write, so it reads the same values; a refused regime
+    discards what the kernels wrote (ctxv, amax, denom, the estash) and the
+    caller runs the eager path exactly as before, so no bit moves. The
+    kernels run on out-of-regime operands only to be discarded: arithmetic
+    on inf or NaN faults nowhere and every loop is shape-bound. Default
+    off; the identity gate is the check."""
+    return String(getenv("MOJOLEARN_ATTN_SPECULATIVE")) == "1"
+
+
 def _attn_timer_on() -> Bool:
     """The per-kernel timers: compiled by `MOJOLEARN_ATTN_PHASE_TIMERS`,
     switched on by the block timers' run-time switch."""
@@ -7202,17 +7217,19 @@ def fused_forward_launch_ran(
         return FUSED_REFUSED_REGIME
     var ton = _attn_timer_on()
     var tk = Int(perf_counter_ns())
-    var amx = device_absmax4(
-        ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-        b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-        v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
-    )
-    var qmax = amx[0]
-    var kmax = amx[1]
-    var vmax = amx[2]
-    if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
-        return FUSED_REFUSED_REGIME
-    _attn_tick(ctx, ton, tk, "fwd_regime_scan")
+    var speculative = _attn_speculative()
+    if not speculative:
+        var amx = device_absmax4(
+            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+        )
+        var qmax = amx[0]
+        var kmax = amx[1]
+        var vmax = amx[2]
+        if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+            return FUSED_REFUSED_REGIME
+        _attn_tick(ctx, ton, tk, "fwd_regime_scan")
     var corner = _zero_flag(ctx)
     var tq = fused_rows_per_block(hd)
     var blocks = b * nh * ((l + tq - 1) // tq)
@@ -7415,6 +7432,22 @@ def fused_forward_launch_ran(
                 grid_dim=(blocks, 1, 1), block_dim=(nt, 1, 1),
             )
         _attn_tick(ctx, ton, tk, "fwd_kernel")
+    if speculative:
+        # The scan behind the kernels: its one wait covers them, and the
+        # flag read after it finds nothing pending.
+        var amx2 = device_absmax4(
+            ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+            v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+        )
+        var hit2 = _read_flag(ctx, corner)
+        _ = corner^
+        _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+        if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
+            return FUSED_REFUSED_REGIME
+        if hit2:
+            return FUSED_CORNER
+        return FUSED_RAN
     step_count_sync()
     ctx.synchronize()
     var hit = _read_flag(ctx, corner)
@@ -9765,17 +9798,19 @@ def fused_forward_launch_estash_ran(
                 return FUSED_REFUSED_REGIME
             var ton = _attn_timer_on()
             var tk = Int(perf_counter_ns())
-            var amx = device_absmax4(
-                ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
-                v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
-            )
-            var qmax = amx[0]
-            var kmax = amx[1]
-            var vmax = amx[2]
-            if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
-                return FUSED_REFUSED_REGIME
-            _attn_tick(ctx, ton, tk, "fwd_regime_scan")
+            var speculative = _attn_speculative()
+            if not speculative:
+                var amx = device_absmax4(
+                    ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                    v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+                )
+                var qmax = amx[0]
+                var kmax = amx[1]
+                var vmax = amx[2]
+                if not regime_product_ok(hd, qmax, kmax) or not regime_finite(vmax):
+                    return FUSED_REFUSED_REGIME
+                _attn_tick(ctx, ton, tk, "fwd_regime_scan")
             var corner = _zero_flag(ctx)
             var cells = b * nh * l * s
             comptime if ATTN_V1_PACKED_ESTASH:
@@ -9834,6 +9869,21 @@ def fused_forward_launch_estash_ran(
             # estash slot either, and the backward's word carries the bit
             # for both directions (the map is one arm bit, not two).
             ran = _attn_fwd_r2_ran_word(arm, 32)
+            if speculative:
+                var amx2 = device_absmax4(
+                    ctx, q_rope.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * l * nh * hd, k_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    b * nkv * s * hd, v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), b * nkv * s * hd,
+                    v_cache.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), 0,
+                )
+                var hit2 = _read_flag(ctx, corner)
+                _ = corner^
+                _attn_tick(ctx, ton, tk, "fwd_regime_scan_behind_and_corner_flag")
+                if not regime_product_ok(hd, amx2[0], amx2[1]) or not regime_finite(amx2[2]):
+                    return FUSED_REFUSED_REGIME
+                kept_cells = cells
+                if hit2:
+                    return FUSED_CORNER
+                return FUSED_RAN
             step_count_sync()
             ctx.synchronize()
             var hit = _read_flag(ctx, corner)

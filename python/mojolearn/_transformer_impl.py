@@ -963,6 +963,28 @@ class TransformerBlock(NumericModeMixin):
             0, self.window,
         )
 
+    def _call_fresh_session(self, x, ext):
+        """Stateless prefill on the resident session (lane/neural-net-
+        experiment, 2026-09-30): `transformer_session_forward_fresh` keeps
+        the weights on the device across calls (reused only when their
+        bytes are unchanged, the binding compares them) and the workspace
+        under its budget; the zero cache exists only on the device and never
+        crosses the boundary. The same entry arithmetic as
+        `transformer_session_forward` at cached_tokens 0."""
+        b, l = int(x.shape[0]), int(x.shape[1])
+        y = _buffers.empty((b, l, self.d_model), '<f4')
+        w = self._w  # noqa: F841  (keeps the arrays alive for the call)
+        wopt = self._wopt  # noqa: F841
+        if self._native_session is None:
+            self._native_session = ext.transformer_session_create()
+            self._session_binding = ext
+        addrs, params = self._with_tails(
+            [_addr_ro(x)] + self._weight_addrs() + [0, 0, _addr(y)],
+            [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+             self.head_dim, self.intermediate, l, 0, self.window])
+        ext.transformer_session_forward_fresh(self._native_session, addrs, params)
+        return y
+
     def _call_fresh(self, x, ext):
         """Stateless prefill with the original zero cache owned only on device."""
         b, l = int(x.shape[0]), int(x.shape[1])
@@ -1006,6 +1028,12 @@ class TransformerBlock(NumericModeMixin):
         if (state is None and not step and b > 0 and l > 0
                 and self.window >= 0 and mode in ("identical", "fast")):
             fresh_ext = ext
+            # The session's stateless prefill first (every vendor): weights
+            # and workspace retained across calls. The per-call fresh entry
+            # (NVIDIA builds) and the state-carrying session path follow.
+            if (reuse and _exports(ext, "transformer_session_forward_fresh")
+                    and os.environ.get("MOJOLEARN_TRANSFORMER_SESSION_FRESH") != "0"):
+                return self._call_fresh_session(x, ext)
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)
         if state is None:
@@ -1267,8 +1295,24 @@ class TransformerBlock(NumericModeMixin):
         # grad_x, the nine weight gradients.
         addrs = ([_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr_ro(dy)]
                  + [_addr(g) for g in grads])
-        native(addrs, [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                       self.head_dim, self.intermediate, self.window])
+        params = [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                  self.head_dim, self.intermediate, self.window]
+        # lane/neural-net-experiment: the session entry keeps the weights,
+        # the forward workspace and the backward stages on the device
+        # across calls (Samba training calls this per block per step).
+        if (_exports(ext, "transformer_session_backward")
+                and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1"):
+            with self._runtime_lock:
+                if self._native_session is not None and self._session_binding is not ext:
+                    self._session_binding.transformer_session_close(self._native_session)
+                    self._native_session = None
+                    self._session_binding = None
+                if self._native_session is None:
+                    self._native_session = ext.transformer_session_create()
+                    self._session_binding = ext
+                ext.transformer_session_backward(self._native_session, addrs, params)
+            return dict(zip(("x",) + self._W_NAMES, grads))
+        native(addrs, params)
         return dict(zip(("x",) + self._W_NAMES, grads))
 
     def decode_session(self, state):

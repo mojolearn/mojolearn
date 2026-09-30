@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Bounded native context/workspace reuse check against the existing entry point."""
 import argparse
+import os
 import hashlib
 import importlib.util
 import json
@@ -120,12 +121,18 @@ def main():
             compare('recovery.' + kind, x, w, state, 0, 8, 0)
             assert mod.transformer_session_info(owner)[0] == 1
     elif args.group == 'budget':
-        # About 72 MiB of device buffers: above the 64 MiB retention cap.
+        # About 72 MiB of device buffers: above a 64 MiB retention cap. The
+        # cap is MOJOLEARN_TRANSFORMER_RETAIN_MB (default 512 since
+        # lane/neural-net-experiment), read per call, so pin it here.
         # Only one token is computed; this checks eviction, not throughput.
-        x, w, state = make(256, 1, 32, 1024, 0)
-        for iteration in range(2):
-            compare('budget.' + str(iteration), x, w, state, 0, 1024, 0)
-            assert list(mod.transformer_session_info(owner)) == [1, iteration + 1, False, 0]
+        os.environ['MOJOLEARN_TRANSFORMER_RETAIN_MB'] = '64'
+        try:
+            x, w, state = make(256, 1, 32, 1024, 0)
+            for iteration in range(2):
+                compare('budget.' + str(iteration), x, w, state, 0, 1024, 0)
+                assert list(mod.transformer_session_info(owner)) == [1, iteration + 1, False, 0]
+        finally:
+            del os.environ['MOJOLEARN_TRANSFORMER_RETAIN_MB']
     else:
         for iteration in range(3):
             x, w, state = make(1, 1, 32, 8, 0)

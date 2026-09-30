@@ -35,6 +35,8 @@ from x_decomp.cells import (
     bidx,
     cd_row,
     chol_serial,
+    chol_diag,
+    chol_col_elem,
     colsum_cell,
     ew_cell,
     gemm_cell,
@@ -444,6 +446,30 @@ def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, t
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         chol_serial(a, Int(n), info)
+
+
+def chol_diag_kernel(a: F32Ptr, info: F32Ptr, j: Int32, n: Int32):
+    if block_idx.x == 0 and thread_idx.x == 0:
+        chol_diag(a, info, Int(j), Int(n))
+
+
+def chol_col_kernel(a: F32Ptr, j: Int32, n: Int32):
+    var jj = Int(j)
+    var i = jj + 1 + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        chol_col_elem(a, jj, i, Int(n))
+
+
+def chol_serial_max() -> Int:
+    """Largest n whose Cholesky runs as ONE `chol_kernel` launch on one
+    thread (MOJOLEARN_XD_CHOL_SERIAL, default 16; timing only: the column
+    driver below stores the same cells in the same order). A value at or
+    above every n restores the one-thread kernel for the A/B."""
+    var v = String(getenv("MOJOLEARN_XD_CHOL_SERIAL", "16"))
+    try:
+        return Int(v)
+    except:
+        return 16
 
 
 def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
@@ -1345,7 +1371,26 @@ struct DevExec(Exec):
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
-        ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        # lane/neural-net-experiment (2026-09-30, the classical pass): the
+        # unblocked left-looking Cholesky ran as ONE thread for every n
+        # (n^3 / 6 fmas in a row). `chol_serial`'s cells, step by step:
+        # column j's diagonal on one thread (its j-long chain), then every
+        # row below it one thread per row (each its own j-long chain, the
+        # same chain `chol_serial` walks for that cell, reading only cells
+        # final before the step), and the mirror cell zeroed there. Same
+        # cells, same order per cell, same bits; 2n launches.
+        if n <= chol_serial_max():
+            ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
+        else:
+            ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+            for j in range(n):
+                ctx.enqueue_function[chol_diag_kernel](
+                    da.unsafe_ptr(), di.unsafe_ptr(), Int32(j), Int32(n), grid_dim=1, block_dim=1
+                )
+                if n - j - 1 > 0:
+                    ctx.enqueue_function[chol_col_kernel](
+                        da.unsafe_ptr(), Int32(j), Int32(n), grid_dim=_blocks(n - j - 1), block_dim=TPB
+                    )
         _down(ctx, da, a, n * n)
         _down(ctx, di, info, 1)
         ctx.synchronize()
@@ -1356,14 +1401,27 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
-            if n <= host_eigh_max():
-                HostExec.eigh(a, w, v, n)
+        # lane/neural-net-experiment (2026-09-30): the two routes below were
+        # compiled for Metal FAST only. Both envs are honoured on every
+        # vendor and tier now, with their defaults unchanged (0: never),
+        # so a box can A/B them:
+        #   MOJOLEARN_XD_HOST_EIGH_MAX=n  the host executor's cyclic Jacobi
+        #     for n at or under it: the host column's own arithmetic, held
+        #     bit for bit to the device kernels by the identity gates.
+        #   MOJOLEARN_XD_PJ_EIGH_MIN=n  the round-robin ordering
+        #     (x_decomp/jacobi_par.mojo) from n up: NOT the pinned cyclic
+        #     order, so NOT the identical tier's bits -- an experiment the
+        #     digest check must report as MOVED. It is the only route here
+        #     whose rotations run across the GPU: the cyclic kernels are one
+        #     block of 256 threads for the whole solve (eigh at n = 4096
+        #     timed out on the AMD board).
+        if n <= host_eigh_max():
+            HostExec.eigh(a, w, v, n)
+            return
+        var lo = pj_eigh_min()
+        if lo > 0 and n >= lo:
+            if DevExec._eigh_par(a, w, v, n):
                 return
-            var lo = pj_eigh_min()
-            if lo > 0 and n >= lo:
-                if DevExec._eigh_par(a, w, v, n):
-                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
@@ -1605,10 +1663,13 @@ struct DevExec(Exec):
         enqueue_fill(ctx, s_buf, nan)
         enqueue_fill(ctx, v_buf, nan)
         var done = False
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
-            var lo = pj_svd_min()
-            if lo > 0 and n >= lo:
-                done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
+        # MOJOLEARN_XD_PJ_SVD_MIN=n: the round-robin one-sided Jacobi from n
+        # up, on every vendor and tier (lane/neural-net-experiment; it was
+        # Metal FAST only). Default 0: never. NOT the pinned cyclic order's
+        # bits under IDENTICAL: an experiment the digest check reports.
+        var lo_svd = pj_svd_min()
+        if lo_svd > 0 and n >= lo_svd:
+            done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
         if done:
             pass
         elif jacobi2_on() and n >= J2_BOUNDED_MIN_N:

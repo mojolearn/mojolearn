@@ -91,6 +91,8 @@ prefill backward. Current scope and packaging boundaries are documented in
 SUPPORT_MATRIX.md; older comments are not release certificates.
 """
 
+import os
+
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
@@ -372,6 +374,11 @@ class _MambaBase(NumericModeMixin):
                 )
         return mod
 
+    def _backward_native(self, extension, entry, native):
+        """The callable `_prefill_backward` hands the 21 addresses and the
+        parameters to; a block with a session substitutes its own."""
+        return native
+
     def _prefill_backward(self, x, grad_output, entry):
         what = type(self).__name__ + ".backward"
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
@@ -402,6 +409,7 @@ class _MambaBase(NumericModeMixin):
                 f"mojolearn {what}: loaded Mamba extension lacks {entry}; "
                 "rebuild bindings/build_mamba.sh in IDENTICAL mode"
             )
+        native = self._backward_native(extension, entry, native)
         # DEVIATION 2409: the gradients are fresh `mojolearn.Array`s.
         gradients = ([empty(x.shape, "<f4")]
                      + [empty(w.shape, "<f4") for w in weights])
@@ -1581,12 +1589,72 @@ class Mamba3Block(_MambaBase):
         addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
                  + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
                     _addr(theta_last)])
-        ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
+        # lane/neural-net-experiment (2026-09-30): the session keeps the
+        # weights on the device across calls (reused only when their bytes
+        # are unchanged; the binding compares them). Same entry arithmetic.
+        session_forward = None
+        try:
+            session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
+        except ImportError:
+            session_forward = None
+        if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
+            if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
+                self._prefill_session = ext.mamba3_prefill_session_create()
+                self._prefill_binding = ext
+            session_forward(self._prefill_session, addrs, [b, l, self.d_model])
+        else:
+            ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
         self.h_last_ = h_last
         self.k_last_ = k_last
         self.v_last_ = v_last
         self.theta_last_ = theta_last
         return y
+
+    def _backward_native(self, extension, entry, native):
+        # lane/neural-net-experiment (2026-09-30): the backward on the same
+        # session as the fresh prefill. The session keeps the weights and
+        # the last forward's stages on the device; the backward reuses the
+        # stages when x and the weights are byte for byte the forward's
+        # (the binding compares them) and recomputes the forward otherwise.
+        # Same launches, same order, as the entry's own recompute.
+        # MOJOLEARN_MAMBA3_LEGACY_SETUP=1 keeps the per-call entry.
+        session_backward = None
+        try:
+            session_backward = getattr(extension, "mamba3_prefill_session_backward", None)
+        except ImportError:
+            session_backward = None
+        if session_backward is None or os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") == "1":
+            return native
+        if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not extension:
+            self._prefill_session = extension.mamba3_prefill_session_create()
+            self._prefill_binding = extension
+        session = self._prefill_session
+        return lambda addresses, params: session_backward(session, addresses, params)
+
+    def session_info(self):
+        """The prefill session's counters as a dict (None before the
+        first session call): weight uploads / recopies / reuses, backward
+        stage reuses / forward recomputes, stages held."""
+        session = getattr(self, "_prefill_session", None)
+        binding = getattr(self, "_prefill_binding", None)
+        info = getattr(binding, "mamba3_prefill_session_info", None) if binding is not None else None
+        if session is None or info is None:
+            return None
+        values = list(info(session))
+        keys = ("weight_uploads", "weight_recopies", "weight_reuses",
+                "backward_reuses", "backward_recomputes", "stages_held")
+        return dict(zip(keys, (int(v) for v in values)))
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for name in ("_prefill_session", "_prefill_binding"):
+            state.pop(name, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._prefill_session = None
+        self._prefill_binding = None
 
     def _call(self, x, state, step):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"

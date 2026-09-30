@@ -1380,6 +1380,37 @@ def chol_serial(a: F32Ptr, n: Int, info: F32Ptr):
             a.unsafe_store(j * n + i, Float32(0))
 
 
+def chol_diag(a: F32Ptr, info: F32Ptr, j: Int, n: Int):
+    """Column step j of `chol_serial`, the diagonal: `acc = a[j, j] - sum_p
+    l[j, p]^2` (p ascending, the same fma chain), the info store at the
+    first non-positive pivot, and `a[j, j] = sqrt(acc)`. Reads columns
+    0..j-1 of row j, final since their own steps. One thread."""
+    var acc = ftz(a.unsafe_load(j * n + j))
+    for p in range(j):
+        var l = ftz(a.unsafe_load(j * n + p))
+        acc = ftz(identical_mul_add(-l, l, acc))
+    if not (acc > Float32(0)):
+        if info.unsafe_load(0) == Float32(0):
+            info.unsafe_store(0, Float32(j + 1))
+        acc = Float32(1)
+    a.unsafe_store(j * n + j, sqrt0(acc))
+
+
+def chol_col_elem(a: F32Ptr, j: Int, i: Int, n: Int):
+    """Column step j of `chol_serial`, row i > j: `a[i, j] = (a[i, j] -
+    sum_p a[i, p] a[j, p]) / a[j, j]` (p ascending, the same fma chain,
+    the same `div0`), and the mirror cell `a[j, i]` zeroed. Reads columns
+    0..j-1 of rows i and j and the diagonal `a[j, j]` (`chol_diag`'s
+    store), all final; writes cells no other thread of the step reads.
+    One thread per row."""
+    var d = a.unsafe_load(j * n + j)
+    var s = ftz(a.unsafe_load(i * n + j))
+    for p in range(j):
+        s = ftz(identical_mul_add(-ftz(a.unsafe_load(i * n + p)), ftz(a.unsafe_load(j * n + p)), s))
+    a.unsafe_store(i * n + j, div0(s, d))
+    a.unsafe_store(j * n + i, Float32(0))
+
+
 # DEVIATION 5320 (PIN; row 134): the Householder QR that KEEPS its reflectors
 # (LAPACK geqrf, unblocked, dlarfg's sign: beta = -sign(alpha) * ||(alpha, x)||)
 # and the explicit Q (orgqr, one column per thread): every norm is the scaled

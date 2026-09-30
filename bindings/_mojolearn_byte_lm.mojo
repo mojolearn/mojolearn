@@ -65,7 +65,9 @@ from training.byte_lm_logits import (
     BYTE_LOGITS_MAX_BATCH,
     BYTE_LOGITS_MAX_CELLS,
     byte_logits_from_params,
+    byte_logits_from_params_into,
     byte_logits_resident,
+    byte_logits_resident_into,
     byte_logits_validate,
     byte_logits_validate_params,
 )
@@ -1237,7 +1239,10 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
     byte_logits_validate(ids, bl[0], bl[1], cfg)
     byte_logits_validate_params(params, cfg)
     var keep_context = String(getenv("MOJOLEARN_BYTE_LM_KEEP_CONTEXT")) == "1"
-    var logits = List[Float32]()
+    # lane/neural-net-experiment: the logits land in the caller's array by
+    # one device-to-host copy (`byte_logits_from_params_into`), no host
+    # List, no second copy; the caller's array is alive for the whole call.
+    var out = f32_ptr(addr[2])
     var session = ByteLMSession()
     session.busy = True
     try:
@@ -1246,7 +1251,7 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
                 # DEVIATION 2513: the same keeper the other per-call path uses.
                 BYTE_LM_CONTEXT_KEEPER.get_or_create_ptr()[].ensure()
             session.ctx = neural_ctx[_NEURAL_CTX]()
-            logits = byte_logits_from_params(session.ctx.value(), params, ids, bl[0], bl[1], cfg)
+            byte_logits_from_params_into(session.ctx.value(), params, ids, bl[0], bl[1], cfg, out)
             session.ctx.value().synchronize()
             session.ctx = None
     except error:
@@ -1254,9 +1259,6 @@ def byte_lm_logits_binding(addresses: PythonObject, dims: PythonObject,
         raise error
     session.busy = False
     session.usable = False
-    if len(logits) != cells_out:
-        raise Error("byte LM logits: wrong logits length")
-    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[2]), cells_out)
     return PythonObject(cells_out)
 
 
@@ -1291,13 +1293,15 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
     if owner[].trainer.value().completed_steps != claimed:
         raise Error("byte LM: resident completed-step mismatch")
     var step_before = owner[].trainer.value().completed_steps
-    var logits = List[Float32]()
+    # lane/neural-net-experiment: one device-to-host copy into the caller's
+    # array (`byte_logits_resident_into`); see `_logits_forward_into`.
+    var out = f32_ptr(addr[1])
     owner[].busy = True
     try:
         with GILReleased(Python()):
             ref ctx = owner[].ctx.value()
-            logits = byte_logits_resident(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
-                                          owner[].logits_scratch)
+            byte_logits_resident_into(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
+                                      owner[].logits_scratch, out)
             if owner[].trainer.value().completed_steps != step_before:
                 raise Error("byte LM logits changed the completed step")
             ctx.synchronize()
@@ -1306,9 +1310,6 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
         _mark_if_lost(owner[])
         raise error
     owner[].busy = False
-    if len(logits) != cells_out:
-        raise Error("byte LM logits: wrong logits length")
-    copy_f32(logits.unsafe_ptr(), f32_ptr(addr[1]), cells_out)
     return PythonObject(cells_out)
 
 
