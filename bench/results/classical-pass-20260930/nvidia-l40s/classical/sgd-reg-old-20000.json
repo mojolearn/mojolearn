@@ -1,0 +1,12 @@
+{
+  "ms": 87896.80903218687,
+  "digest": "431ad9f1214c29a2f886ebaabd7d6aa37cdd880efe02da2a0c00a93e9736211f",
+  "quality": {
+    "score": 0.9998983262209755
+  },
+  "case": "sgd-reg",
+  "size": 20000,
+  "env": {
+    "MOJOLEARN_X_LINEAR_SGD_HOST": "0"
+  }
+}
