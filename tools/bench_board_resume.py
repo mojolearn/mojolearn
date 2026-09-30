@@ -41,6 +41,10 @@ def main():
  cfg=json.loads((root/'resume-config.json').read_text());out=root/'board';out.mkdir(exist_ok=True)
  failures=root/'exceptions.json';exc=json.loads(failures.read_text()) if failures.exists() else {}
  stop=time.monotonic()+a.chunk_seconds
+ def yield_after_race(*_):
+  nonlocal stop
+  stop=0
+ signal.signal(signal.SIGUSR1,yield_after_race)
  while True:
   records=json.loads((out/'board.json').read_text()).get('races',{}) if (out/'board.json').exists() else {}
   status=coverage(cfg['plan'],records,exc);write(root/'coverage.json',status)

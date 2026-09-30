@@ -73,8 +73,17 @@ for n in (17,257):
  # A non-Euclidean distance example with multiple positive axes.
  D=np.minimum(D,n-D);check(D,'precomputed')
 check(np.zeros((17,3),'f4'),'euclidean')
-X=np.load(a.large_data) if a.large_data else data(5000,14)
+X=data(5000,14)
 X=np.ascontiguousarray(X[np.arange(min(len(X),5000))*len(X)//min(len(X),5000)],dtype='f4')
 check(X,'euclidean',cpu=False,reference=False)
+
+# Exercise the actual stalled taxi input too when the board cache is present.
+board_data=Path(a.large_data) if a.large_data else Path.home()/'board-resume/cache/algos-data/rows-full/manifold-taxi.npz'
+if board_data.exists():
+ source=np.load(board_data)
+ X=source['X'] if isinstance(source,np.lib.npyio.NpzFile) else source
+ X=np.ascontiguousarray(X[::max(1,(len(X)+4999)//5000)],dtype='f4')
+ check(X,'euclidean',cpu=False,reference=False)
+ records[-1]['dataset']='board manifold-taxi, same stride subset'
 
 Path(a.out).write_text(json.dumps({'vendor':m._kit_vendor(gpu),'records':records,'passed':True},indent=2)+'\n')
