@@ -540,8 +540,8 @@ every column. **The run structure is computed ONCE over `T` and reused for all
 GEMM falls off. The bound is stated rather than left implicit: `V * T` grows
 with the position count, so at `T = 100000` the same two passes are `1.3e10`
 comparisons and `PLAN_SCAN` stops being the right plan. R2 as a
-single-threaded serial scan over `V = 128256` is **a scheduling embarrassment
-and not a numerical one**, since integer addition is exact and associative, so
+single-threaded serial scan over `V = 128256` is **a scheduling cost and not
+a numerical one**, since integer addition is exact and associative, so
 swapping in `gbdt/gpu_util/kernel/scan.mojo`'s parallel scan cannot move a
 bit.
 
