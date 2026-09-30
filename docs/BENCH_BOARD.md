@@ -23,7 +23,7 @@ full contract. In short:
   refused by name; a FAST-only Apple run passes
   `--families trees,classical,classical2`.
 - One seed per race: 7, or 42 where the cuML benchmark sets 42 (`spectral`,
-  `algos/target-encoder`). One timed round after one warm-up (`--rounds`, default 1; Andrew, 2026-09-29).
+  `algos/target-encoder`). One timed round after one warm-up (`--rounds`, default 1).
 - Settings: NVIDIA's own benchmark values on every lane their harnesses
   cover, on our arm and every opponent arm (below, "NVIDIA's harnesses").
 - Output: one directory with `board.json` (box fingerprint and every cell) and
@@ -444,7 +444,7 @@ missing GaussianMixture, GP, Nystroem and RBFSampler).
 ## The algos family (the algorithm expansion)
 
 `tools/bench_board_algos.py` races every algorithm of the algorithm
-expansion (`docs/lanes/ALGORITHM_EXPANSION_PLAN.md`: the nine lane tables,
+expansion (the nine lane tables,
 their Additions and the long tail) against its opponents. It speaks the
 classical2 worker protocol (one persistent worker per arm, one warm-up, the
 timed rounds interleaved with the arm order rotated, outputs saved after the

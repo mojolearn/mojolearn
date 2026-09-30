@@ -113,7 +113,7 @@ COLUMN_DEFINE=""
 # FAST AND IDENTICAL (lane neural, 2026-09-27; IDENTICAL-only from
 # 2026-09-10 under DEVIATION 2490). FAST compiles the same kernels with the
 # pins in checks/numerics.mojo on the free schedule and promises quality,
-# never bits (docs/lanes/progress/neural.md). The DETERMINISTIC tier ships
+# never bits. The DETERMINISTIC tier ships
 # for the tree lanes (gbdt, rf, trees) only and is refused here by name.
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
     echo 'build_embedding.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; this binding builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2

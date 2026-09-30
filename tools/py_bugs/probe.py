@@ -5,7 +5,7 @@
 touched, on whatever the install resolves (MOJOLEARN_VENDOR=cpu for the CPU
 column). Run it on the base tree and on the lane's tree, same box, same job,
 and diff the two JSONs (`--diff A B`): a case's digest must not move unless the
-lane moved it on purpose (docs/lanes/progress/py-bugs.md names each one).
+lane moved it on purpose.
 
     probe.py --out FILE.json [--only case,case]
     probe.py --diff BASE.json NEW.json

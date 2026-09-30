@@ -2,7 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE BENCH BOARD'S PARAMETER CHECK: same seed, same tuning parameters, enforced.
 
-Andrew (2026-09-29): "they need to be comparable same seed same tuning params".
+The rule (2026-09-29): races are comparable only at the same seed and the same
+tuning parameters.
 Every board driver (trees, classical, classical2, neural, algos) calls
 `enforce(...)` once per race, after it has CONSTRUCTED every arm and before the
 first timed round:

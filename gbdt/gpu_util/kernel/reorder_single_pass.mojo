@@ -129,7 +129,7 @@ kernel.
 #     3-launch path leaves them. Same buffers, same geometry, same
 #     signature -- which is what makes the wiring one line.
 #
-# A/B: the orchestrator measures the 5M rung intra-leg (FAST NVIDIA,
+# A/B: the maintainer measures the 5M rung intra-leg (FAST NVIDIA,
 # routed vs. `launch_stable_partition` at the same commit); the row is
 # where the default flips if the number says so.
 #
@@ -529,7 +529,7 @@ def launch_stable_partition_routed[
     take the single-pass kernel too -- same permutation by construction,
     see the file banner -- and a level whose BOUND is under the threshold
     keeps the 3-launch path byte for byte, which preserves the gate the
-    orchestrator's Apple byte-compare runs.
+    maintainer's Apple byte-compare runs.
     """
     comptime single_pass = reorder_single_pass_for[TARGET_COLUMN, identical]()
 

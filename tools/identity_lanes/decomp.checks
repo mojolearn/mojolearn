@@ -1,5 +1,5 @@
-# the decomp lane's per-seam check drivers and their sabotage arms (pass 2;
-# docs/lanes/progress/decomp.md). Each patch edits x_decomp/cells.mojo, the one
+# the decomp lane's per-seam check drivers and their sabotage arms (pass 2).
+# Each patch edits x_decomp/cells.mojo, the one
 # source both columns run, so the driver's device AND host columns must leave
 # its independent oracle.
 x_decomp/checks/fold_ew_check.mojo	x_decomp/checks/sabotage/5300_gemm_order.patch

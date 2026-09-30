@@ -84,8 +84,7 @@ the arithmetic the lane hashes.
 
 ## Not covered, and not faked
 
-Nine of the 21 are not covered by any lane here, for reasons in
-`docs/lanes/LANE_STATUS_laneless-public-classes.md`: the two decode sessions
+Nine of the 21 are not covered by any lane here: the two decode sessions
 have no CPU route at all (a test holds their refusal instead), and the seven
 `parallel_*` entries are multi-device drivers whose worker operations are
 absent from `_parallel_pool.CPU_OPERATIONS`, so every one of them refuses BY

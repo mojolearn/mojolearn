@@ -1720,7 +1720,7 @@ def check_svr_fold_order(rfx: RegFixture, res: OracleResult[DType.float32]) rais
     THAT IS FALSE UNDER SVR, and this measures how false it is here.
 
     NOT A FIX: the function is deliberately untouched (out of this lane's
-    scope, and the docstring is the orchestrator's to correct). What is
+    scope, and the docstring is the maintainer's to correct). What is
     checked instead is that its ORDER STAYS TOTAL, which it does for a reason
     the docstring does not state: the sort key is `(index << 32) | position`
     and the POSITION is unique, so equal indices are broken by their position
@@ -1926,7 +1926,7 @@ def check_svr_sabotage_reach(
     The sabotages are compile-time `-D` defines, so this function cannot turn
     them on. What it does is measure, from the oracle's own run, the
     PRECONDITION each one needs, and print the prediction beside it. The
-    orchestrator then rebuilds under each define and checks the printed
+    maintainer then rebuilds under each define and checks the printed
     prediction against the printed result.
 
       SAB_FOLD_ROTATE   `start = block_idx.x % nnz` in `update_f_kernel`.

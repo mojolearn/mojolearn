@@ -33,7 +33,7 @@ no RELOAD-MOVED, no REFUSED cell on any column.
 The one DIVERGENT cell is `kmeans-sqrt/wide`, part `inertia` only (centers,
 labels and scales agree): Apple and AMD hash 52ea06cbbcc24144, the H100
 1a7e4ac5b8c0caaf. The H100 column stands alone; no earlier record carries the
-lane. Brief: `docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md`.
+lane.
 
 **CLOSED at 9fde8f5f7, and this record's `kmeans-sqrt` cells are superseded.**
 The two hashes are float64(62807200.0) and float64(62807196.0), one float32 ulp

@@ -76,5 +76,5 @@ test_gbdt_group_id, test_gbdt_search_option_guards, test_gbdt_input_safety and
 test_host_surface: 228 passed on the Metal route; test_gbdt_group_id 15 passed on the CPU
 route. docs_facts --check and wheel_ci pins pass.
 
-Not run here: NVIDIA and AMD columns (owed to the next release record, Andrew's Sep 15
+Not run here: NVIDIA and AMD columns (owed to the next release record, the Sep 15
 rule), and fixtures other than base, ties and odd.

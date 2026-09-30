@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# THE PREP LANE'S CLASSICAL HOST GATE PROBES (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+# THE PREP LANE'S CLASSICAL HOST GATE PROBES.
 #
 # Owned by the `prep` expansion lane; merged by tools/classical_host_gate.py
 # (`_merge_gate_fragments`). Only needed for a lane the manifest declares as an

@@ -3,8 +3,8 @@
 Lane `lane/batch-invariance-2`. The three opt-in parts of
 `tools/identity_break.py` (`--batch-grad`, `--batch-scale`, `--ragged`) on 26
 lanes, nine fixtures, two repeats, every other part (train, infer, model,
-batch) run as usual, at commit 1cc7a2f47. The batch2 agent committed this
-directory unreviewed at Andrew's stop (d4a3cb79b). It was reviewed on restart,
+batch) run as usual, at commit 1cc7a2f47. This directory was committed
+unreviewed when the run was stopped (d4a3cb79b). It was reviewed on restart,
 2026-09-15 about 11:15 ET; the review is the last section.
 
 | column | box | how | cells |
@@ -13,7 +13,7 @@ directory unreviewed at Andrew's stop (d4a3cb79b). It was reviewed on restart,
 | `nvidia-h100-sm_90a.json` | RunPod H100 80GB HBM3, one GPU, pod xbhbu11dsetza0 | 24 bindings built on the box from 1cc7a2f47; lanes split into two harness processes on the one GPU (a, b), merged | 234 |
 | `amd-mi325x-gfx942.json` | DigitalOcean MI325X, one GPU, droplet 600680353 | as the H100, `MOJOLEARN_GPU_ARCHS=gfx942` | 234 |
 
-Both boxes were rented at about 09:46 ET, before Andrew's 10:30 ET rule
+Both boxes were rented at about 09:46 ET, before the 10:30 ET rule
 limiting GPU boxes to PyPI release records. Both were deleted and verified
 gone (pod `DELETE -> 204`, then `HTTP 404`; droplet `DELETE -> 204`, then
 `HTTP 404`). The leg directories, logs and body are in

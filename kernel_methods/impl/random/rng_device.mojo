@@ -15,12 +15,12 @@ nothing in this repository needed a float32 uniform or a Gaussian until now.
 `core/` is not this lane's directory to edit, so the two missing functions are
 implemented HERE, beside their caller.mojo` and `resample/checks/index_map.mojo`.
 
-**RECORDED FOR THE ORCHESTRATOR: THE RIGHT LONG-TERM HOME FOR BOTH IS
+**RECORDED FOR THE MAINTAINER: THE RIGHT LONG-TERM HOME FOR BOTH IS
 `core/philox.mojo`, and moving them there is a one-file change this lane must
 not make.** `resample/checks/index_map.mojo::draw_unit_float` already
 inlines `next_float`'s two lines for its own use, so the move would delete a
 duplication as well as this one. `kernel_methods/README.md`'s WHAT THE
-ORCHESTRATOR MUST WIRE carries the item.
+MAINTAINER MUST WIRE carries the item.
 
 A LEAF MODULE ON PURPOSE. It imports `core/philox.mojo` and
 `checks/numerics.mojo` and NOTHING ELSE in this lane, so that both

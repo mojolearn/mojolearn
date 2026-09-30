@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Old path vs new path for the classical pass (EXPERIMENTS.md), one process per arm.
+"""Old path vs new path for the classical pass, one process per arm.
 
     python tools/classical_pass_ab.py case <name> <size> --out f.json   # one arm (env set by caller)
     python tools/classical_pass_ab.py all --out dir [--ivf-off-so path]  # every case, both arms

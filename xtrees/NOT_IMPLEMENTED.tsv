@@ -1,5 +1,4 @@
-# The trees expansion lane's options NOT carried, and why (docs/lanes/ALGORITHM_EXPANSION_PLAN.md,
-# CURRENT DIRECTIVES item 2, option parity). Every row is REFUSED BY NAME at the API.
+# The trees expansion lane's options NOT carried, and why (option parity). Every row is REFUSED BY NAME at the API.
 # status: deliberate (an identity or container reason; stays refused) | not yet (a real debt)
 # their_thing	status	upstream	why / where it would go
 sklearn/tree/_classes.py::splitter='random'	IMPLEMENTED	sklearn	2026-09-27: one ExtraTrees tree without bootstrap (lane trees-dt-random)

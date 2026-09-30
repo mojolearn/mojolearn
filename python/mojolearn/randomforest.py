@@ -116,8 +116,7 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # `max_depth=INT32_MAX`, matching the table at
 # `ensemble/randomforest.mojo:43`. Two entry points into one forest
 # therefore disagreed about what an unspecified depth means.
-# CLOSED -- ALIGNED on Andrew's delegated decision 2026-09-01,
-# orchestrator. The history above stands: the wrapper shipped 16 (first
+# CLOSED -- ALIGNED by decision on 2026-09-01. The history above stands: the wrapper shipped 16 (first
 # under a name claiming it was cuML's, then, from the morning of
 # 2026-09-01, honestly as a named deviation) and the value below was 16
 # until the alignment later that same day. It is now 2147483647,

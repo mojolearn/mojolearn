@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE NEIGHBORS EXPANSION LANE'S ONE SOURCE (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md,
-"Lane 3: neighbors + kernel").
+"""THE NEIGHBORS EXPANSION LANE'S ONE SOURCE (algorithm expansion lane 3:
+neighbors + kernel).
 
 Every primitive the lane's estimators run is an ITEM FUNCTION here: the work
 of one output element (or one row, or the whole of a sequential solve),

@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Reference arithmetic of the low-bit candidates, in PyTorch.
 
-Lane lane/lowbit-quality, 2026-09-29. Plan `docs/lanes/LOWBIT_UNITS_PLAN.md`,
-contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` (clauses L-1 to L-7), seams
+Lane lane/lowbit-quality, 2026-09-29. Contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` (clauses L-1 to L-7), seams
 `checks/numerics.mojo` (the block headed LOW-BIT STORAGE SEAMS).
 
 WHAT THIS IS. A simulation of what a matrix product computes under each
@@ -248,12 +247,12 @@ def product_nt(A, B, kind_a, kind_b, acc64=False):
     return product_prepared(prepare(A, kind_a), prepare(B, kind_b), acc64=acc64)
 
 
-#: ANDREW, 2026-09-29: int8 is dropped as a model's arithmetic, and so is the
+#: DECIDED 2026-09-29: int8 is dropped as a model's arithmetic, and so is the
 #: int8-attention mix (finalist F2). DROPPED MEANS ONLY THIS: the flag does
 #: not offer them. It does not stop a measurement: every arm that was planned
 #: or queued is run to the end and reported with its numbers, and carries
 #: this note in the tables. No NEW int8 rescue arm is added.
-DROPPED_NOTE = "dropped 2026-09-29, Andrew (not offered by the flag)"
+DROPPED_NOTE = "dropped 2026-09-29 (not offered by the flag)"
 
 
 def is_dropped_kind(kind):

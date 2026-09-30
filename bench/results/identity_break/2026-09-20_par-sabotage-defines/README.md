@@ -7,7 +7,7 @@ against the 32 host bindings built from this tree.
 
 ## The hole this lane was opened on
 
-`docs/lanes/SABOTAGE_AUDIT_2026-09-16.md` put 28 `par-*` lanes in category (c):
+The 2026-09-16 sabotage audit put 28 `par-*` lanes in category (c):
 "no host family and no host sabotage define reaches the lane at all". Four
 `*_PARALLEL_SABOTAGE` defines existed (Cholesky, GMM, hierarchy, resample) and
 had been watched failing the NATIVE multi-GPU checks under `training/checks/`,
@@ -304,7 +304,7 @@ TWO FOOTNOTES FROM THAT LEG, kept rather than resolved:
 Every column in this directory is `--repeats 2`, because
 `verification_matrix.stable_digest()` refuses a part with fewer than two
 repeats and a sabotage column at one repeat has its move silently discarded.
-Andrew's standing instruction as of 2026-09-20 is `--repeats 1` everywhere.
+The standing policy as of 2026-09-20 is `--repeats 1` everywhere.
 THIS BRANCH CHANGES NO DEFAULT either way -- `tools/identity_break.py`'s
 `--repeats` default is untouched -- and the number above is what these
 particular columns were produced with, recorded rather than argued. The

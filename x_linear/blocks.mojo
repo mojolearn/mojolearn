@@ -4,8 +4,7 @@
 
 x_linear/device.mojo `fit_device` launches `fit_kernel` with grid_dim=1: a
 fit is one program on ONE block of LINEAR_TPB = 256 threads, and its row
-passes are one thread's chain per output over all n rows
-(docs/lanes/progress/py-bugs.md, item 5). A block cannot wait on another
+passes are one thread's chain per output over all n rows. A block cannot wait on another
 block inside a launch, so a fit that uses the whole GPU cannot be one
 launch. Here (FAST, Apple, n >= XB_MIN_ROWS) the fit's control and its
 small dense algebra (m x m) run on the host, and every pass over the rows is

@@ -9,7 +9,7 @@
 # The Mac is an AWS EC2 Mac already held (dedicated host, nothing to rent or
 # delete), named in ~/mojolearn-evidence/cloudmacs.tsv (name instance host ip;
 # MOJOLEARN_CLOUDMAC_REG overrides) and reached as ec2-user with
-# ~/.ssh/mambik-l8.pem (MOJOLEARN_CLOUDMAC_KEY). It has no GitHub access: this
+# the key in MOJOLEARN_CLOUDMAC_KEY (~/.config/mojolearn/cloudmac.env). It has no GitHub access: this
 # checkout's HEAD is pushed to the Mac's bare repo (~/mojolearn.git) as
 # refs/steward/<sha> and checked out detached in ~/lmbox/mojolearn, where the
 # body runs (the body's BOX is ~/lmbox on the apple arm). No credential goes to
@@ -29,8 +29,9 @@
 # never stops the body. Exit: the body's exit code, 3 busy, 4 gave up waiting.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$HOME/.config/mojolearn/cloudmac.env" ] && . "$HOME/.config/mojolearn/cloudmac.env"
 REG="${MOJOLEARN_CLOUDMAC_REG:-$HOME/mojolearn-evidence/cloudmacs.tsv}"
-KEY="${MOJOLEARN_CLOUDMAC_KEY:-$HOME/.ssh/mambik-l8.pem}"
+KEY="${MOJOLEARN_CLOUDMAC_KEY:?set MOJOLEARN_CLOUDMAC_KEY (see ~/.config/mojolearn/cloudmac.env)}"
 HOST=""; BODY=""; OUT=""; MINUTES=600; POLL=60
 while [ $# -gt 0 ]; do
     case "$1" in

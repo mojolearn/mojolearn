@@ -263,7 +263,7 @@ fi
 # 3, 595 s at 4 and 476 s at 5; with the 295 s around it, P=4 is about 890 s
 # (15 minutes) cold, where the 2 x 2 default of 63089d263 would have been
 # about 25 minutes even at full speed. Four workers stay inside the Apple
-# release budget of five cores (Andrew, 2026-09-21; the M4 has 4P + 6E cores
+# release budget of five cores (2026-09-21; the M4 has 4P + 6E cores
 # and 16 GB), and at about 1.2 GB peak per mojo compile they need about
 # 5 GB. One worker each, not two: the measurements are all at one worker, and
 # 4 x 2 would be eight compiler threads on a five core budget.

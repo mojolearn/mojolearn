@@ -75,8 +75,7 @@ fits in one process and a `wide` fit in 0.44 s against 31.21 s here.
 `odd` refusing while `base` succeeded was never explainable by the data: they
 are the same shape and within 3% of the same edge count. Arrival time is the
 only thing that separated them, and what was arriving was a neighbour's
-allocation. The full reading is
-`docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md`.
+allocation. The measurements are in `bench/results/dbscan_oom/2026-09-16/`.
 
 ### What is established, and what is not
 

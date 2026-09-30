@@ -445,7 +445,7 @@ def test_refusals_create_nothing(world, setup, phrase):
 
 
 def test_a_low_balance_still_creates(world):
-    """The team balance tops up automatically (2026-09-25): a balance under
+    """The balance is not a limit (2026-09-25): a balance under
     $5 is recorded, never a refusal."""
     world.cloud.balance = 400
     rc, text = smoke(world)

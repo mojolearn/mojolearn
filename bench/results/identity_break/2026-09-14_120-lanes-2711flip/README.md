@@ -32,5 +32,4 @@ What this record closes:
   cells the 118-lane run (arm 0) also has, and the Apple column matches both.
 - mamba2-dtlimit: DIVERGENT between the H100 and the MI300X in the arm-0 run and MOVED once on the
   MI300X there; at this commit the two vendors agree on all nine fixtures. That is what a race on
-  one side looks like across two runs, so the AMD side stays open (probe recipe in
-  docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md); it is not caused or fixed by 2711.
+  one side looks like across two runs, so the AMD side stays open; it is not caused or fixed by 2711.

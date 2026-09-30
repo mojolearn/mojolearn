@@ -1,6 +1,6 @@
 name: Light checks
 
-# LIGHT TOUCH (Andrew, Sep 15 2026): the ONLY workflow that runs by itself.
+# LIGHT TOUCH: the ONLY workflow that runs by itself.
 # One Linux runner, Python only, no Mojo build, no bindings, no matrix, a hard
 # ten minute cap. Everything heavy is manual with confirm RUN-HEAVY.
 on:

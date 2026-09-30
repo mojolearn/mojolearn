@@ -13019,8 +13019,7 @@ def main():
 
 
 # ------------------------------------------------ the algorithm expansion's lanes
-#: THE EXPANSION LANES' IDENTITY LANES (lane/algos-prep, 2026-09-27;
-#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+#: THE EXPANSION LANES' IDENTITY LANES (lane/algos-prep, 2026-09-27). Nine lanes
 #: add algorithms in parallel, and this file would be the one every one of
 #: them edits. So none of them edits it: each owns ONE fragment,
 #: `tools/identity_lanes/<lane>.py`, written against this module's own API

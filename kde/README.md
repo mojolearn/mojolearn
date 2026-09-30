@@ -105,7 +105,7 @@ The measurements, identity evidence and flip verdict for both are in the
 section below this list and in `bench/results/kde_finish_2026-09-11/`.
 
 RUN OWED from DEVIATION 2625's lane (items 1 and 4 are DEVIATIONS 2626 and
-2660 above; the pod was reaped at the orchestrator's wind-down):
+2660 above; the pod was reaped at the maintainer's wind-down):
 1. Port `t1_simd_logk_kernel`'s SIMD accumulator into
    `kde_tiled_logk_kernel` for all three metrics, weights and kernels, then
    on the H100 `pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1

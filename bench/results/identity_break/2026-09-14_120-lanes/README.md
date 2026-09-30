@@ -26,8 +26,7 @@ IDENTICAL=1476, N/A=684`. Every column is stable inside itself (no MOVED anywher
   per-fit dump: after the 42 preceding lanes in one process the step output and every backward
   gradient are canonical NaN in every element, inputs and state equal to a cold run. DEVIATION
   2712, open: an uninitialized device read in the Mamba-2 step and backward, visible where the
-  allocator hands back non-zero memory (`docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md`
-  section 3.2).
+  allocator hands back non-zero memory.
 
 A first attempt at the AMD column on a DigitalOcean MI325X (24.04 ROCm image) aborted with a GPU
 memory access fault right after the mamba1 lane, before mamba2 (`amd-mi325x-gfx942.partial.*`,

@@ -1,7 +1,7 @@
 # Public CPU inference for Mamba, Samba and the byte LM (2026-09-15)
 
-Lane `lane/inference-neural-forward`, commit 0b459d9e8. Andrew, Sep 15: train on a GPU,
-infer anywhere. The new public classes, over the shipped `_mojolearn_neural_host`:
+Lane `lane/inference-neural-forward`, commit 0b459d9e8. The rule since Sep 15: train on a
+GPU, infer anywhere. The new public classes, over the shipped `_mojolearn_neural_host`:
 
 | family | public call | lanes |
 |---|---|---|

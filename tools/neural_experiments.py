@@ -5,7 +5,7 @@
 experiment's environment and print one table.
 
 lane/neural-net-experiment (2026-09-30). Every experiment on the branch is
-a runtime toggle (EXPERIMENTS.md lists them), so one wheel serves every A/B.
+a runtime toggle, so one wheel serves every A/B.
 Each configuration runs in its OWN subprocess (the bindings read most
 toggles at load or at first use), for the lanes given, `--calls` calls
 each; the table shows the median after the first call, the ratio to the
@@ -22,7 +22,7 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
 
 A configuration whose digest MOVED is not a speed result; it is a bug
 report against that toggle (or a stage the toggle legitimately drops from
-the card, see EXPERIMENTS.md), and it must not be kept.
+the card), and it must not be kept.
 """
 import argparse
 import json

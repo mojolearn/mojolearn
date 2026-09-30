@@ -1190,7 +1190,7 @@ def fit_non_symmetric_tree[
     random_seed: UInt64 = UInt64(0),
     # ---- A TEST KNOB, and the only reason it is a parameter ----
     # "A configuration that cannot be varied inside one process cannot be
-    # measured here, so make it a parameter" -- RESUME.md, earned on this
+    # measured here, so make it a parameter" -- a lesson earned on this
     # box. THE CORE COUNT IS THE ONLY MACHINE-DEPENDENT INPUT this
     # algorithm has: it sizes every strided grid and it is what
     # `IDENTITY_PATHS.md` row 7 had to PIN when it turned out to be

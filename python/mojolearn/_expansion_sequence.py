@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE SEQUENCE LANE'S PUBLIC DOOR (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+"""THE SEQUENCE LANE'S PUBLIC DOOR.
 
 Owned by the `sequence` expansion lane. `mojolearn/__init__.py` imports this
 module and exposes every name in `__all__` lazily as `mojolearn.<name>`; a name

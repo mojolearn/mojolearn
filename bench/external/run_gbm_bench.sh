@@ -29,12 +29,12 @@ DATA="${GBM_BENCH_DATA:-$HOME/datasets/gbm-bench}"
 DATASET="${1:?dataset required (year, covtype, higgs, fraud, epsilon, airline, bosch)}"
 NTREES="${2:?ntrees required}"
 case "${3:-}" in
-  # THE SYMMETRIC-TREES PAIR IS CATBOOST ONLY -- Andrew's standing order
-  # (2026-08-22): LightGBM has no symmetric-tree mode (leaf-wise is its
+  # THE SYMMETRIC-TREES PAIR IS CATBOOST ONLY (standing rule since
+  # 2026-08-22): LightGBM has no symmetric-tree mode (leaf-wise is its
   # only growth algorithm), so a lgbm arm in this pair compares different
   # algorithms and is NOT run here. LightGBM stays in the FOREST pairs.
   gbdt)   ALGOS="mojolearn-gbdt-gpu,cat-cpu" ;;
-  # LIGHTGBM IS EXCLUDED EVERYWHERE (Andrew, 2026-08-22 evening): the
+  # LIGHTGBM IS EXCLUDED EVERYWHERE (2026-08-22): the
   # forest comparator is multicore sklearn -- RF and ET's home library.
   # The lgbm arms stay registered in the adapter for the NVIDIA leg only.
   pairs)  ALGOS="mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu" ;;

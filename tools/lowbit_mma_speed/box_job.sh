@@ -39,7 +39,7 @@
 #                poisons every output and refuses a surviving poison, the two
 #                digests must agree, cold run and run of record
 #   quant-price-noflat  the quantizer phase WITHOUT the multi-second flat
-#                products (the orchestrator, 2026-09-29)
+#                products (2026-09-29)
 #
 # Every phase runs even when an earlier one failed (a red phase is a
 # finding); the exit is non-zero when any phase's was. The box name is what

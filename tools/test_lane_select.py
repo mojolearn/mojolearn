@@ -301,7 +301,7 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
 
 
 def test_an_unattributable_path_is_refused_by_name_and_selects_nothing():
-    """NO FALLBACK (Andrew, 2026-09-22). A path the map cannot place selects
+    """NO FALLBACK (2026-09-22). A path the map cannot place selects
     NOTHING, is named in `unattributed`, and every caller refuses to run: the
     CLI exits non-zero printing UNATTRIBUTED PATH. It used to widen to every
     lane, which made a narrow run and a full sweep look alike."""
@@ -1519,7 +1519,7 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      moved
       kmeans_oracle        63 -> 64  x-cluster-kmeans-init (KMeans and
                                      MiniBatchKMeans init as an array or a
-                                     callable, session 3 of the cluster lane);
+                                     callable, from the cluster lane);
                                      x-cluster-dbscan-metrics and
                                      x-cluster-hdbscan-epsilon reach no KMeans;
                                      no old lane moved

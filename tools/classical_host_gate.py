@@ -582,8 +582,7 @@ LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None,
                    **{lane: None for lane in _KMEANS_LANES}}
 
 
-#: THE EXPANSION LANES' GATE PROBES (lane/algos-prep, 2026-09-27;
-#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Each of
+#: THE EXPANSION LANES' GATE PROBES (lane/algos-prep, 2026-09-27). Each of
 #: the nine lanes owns `tools/classical_host_lanes/<lane>.py`, which may bind
 #: LANES, PROBE_NAMES, LANE_PROBE_ROWS (dicts) and KIND_PROBES (a tuple) for
 #: ITS OWN inference lanes, the same shapes as the tables above. It runs in a

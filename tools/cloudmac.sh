@@ -1,8 +1,7 @@
 #!/bin/bash
 # tools/cloudmac.sh -- the AWS EC2 Macs that act as Apple stewards for the
-# algorithm expansion (docs/lanes/ALGORITHM_EXPANSION_PLAN.md). Subagents
-# never use the MacBook's CPU or GPU; every Apple build and Metal check runs
-# on these hosts.
+# algorithm expansion. Every Apple build and Metal check runs on these hosts,
+# never on a developer laptop.
 #
 #   tools/cloudmac.sh list                 name, instance, ip
 #   tools/cloudmac.sh ssh <name> [cmd]     a shell (or one command) on that Mac
@@ -18,16 +17,16 @@
 #   tools/cloudmac.sh stop-all             TERMINATE instances and RELEASE hosts
 #                                          (hosts can only be released after 24 h)
 #
-# The hosts live in the mambik AWS account (profile `mambik`), us-east-1d.
-# Its org policy refuses RunInstances without `lane` and `owner` tags.
-# HARD RULE (Andrew, 2026-09-27): this tool must NEVER allocate, launch or
-# extend a Mac, and no one may add Apple hosts or hours without Andrew's
-# express permission. It only manages hosts that already exist.
+# Local settings (AWS profile, SSH key) come from ~/.config/mojolearn/cloudmac.env,
+# which is never committed; MOJOLEARN_CLOUDMAC_* in the environment override it.
+# The hosts are in us-east-1d. This tool never allocates, launches or extends
+# a Mac; it only manages hosts that already exist.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$HOME/.config/mojolearn/cloudmac.env" ] && . "$HOME/.config/mojolearn/cloudmac.env"
 REG="${MOJOLEARN_CLOUDMAC_REG:-$HOME/mojolearn-evidence/cloudmacs.tsv}"   # name  instance  host  ip
-KEY="${MOJOLEARN_CLOUDMAC_KEY:-$HOME/.ssh/mambik-l8.pem}"
-AWSP=(--profile "${MOJOLEARN_CLOUDMAC_PROFILE:-mambik}" --region us-east-1)
+KEY="${MOJOLEARN_CLOUDMAC_KEY:?set MOJOLEARN_CLOUDMAC_KEY (see ~/.config/mojolearn/cloudmac.env)}"
+AWSP=(--profile "${MOJOLEARN_CLOUDMAC_PROFILE:?set MOJOLEARN_CLOUDMAC_PROFILE}" --region us-east-1)
 SSH_OPTS=(-i "$KEY" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
           -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
 
@@ -147,7 +146,7 @@ stop-all)
         [ -n "$n" ] || continue
         aws ec2 terminate-instances "${AWSP[@]}" --instance-ids "$inst" --query 'TerminatingInstances[0].CurrentState.Name' --output text
         echo "$n: release host $host after termination completes and 24 h have passed:"
-        echo "  aws ec2 release-hosts --profile mambik --region us-east-1 --host-ids $host"
+        echo "  aws ec2 release-hosts --profile $MOJOLEARN_CLOUDMAC_PROFILE --region us-east-1 --host-ids $host"
     done < "$REG"
     ;;
 *) sed -n 2,19p "$0"; exit 2 ;;

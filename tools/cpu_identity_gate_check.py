@@ -405,7 +405,7 @@ def _part_values(cell, part):
 _ALL_FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
 
 #: OWED cell parts the MOJOLEARN_HOST_SABOTAGE build does not move, EXEMPT
-#: from the owed check's "must move" rule (Andrew, 2026-09-22). Each entry is
+#: from the owed check's "must move" rule (2026-09-22). Each entry is
 #: (lane, part, fixtures, reason) and stands for one (lane, fixture, part)
 #: per fixture. Measured on CPU identity gate run 35728134044 (99f10a932):
 #: the same 92 parts, and only those, did not move on x86-a, arm64 and

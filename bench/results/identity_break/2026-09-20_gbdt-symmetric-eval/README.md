@@ -3,7 +3,7 @@
 lane/close-no-cpu-path-gbdt. The new lane's first column and the arm that
 must move it, with `gbdt-symmetric` in both columns so the two lanes can be
 held against each other. **CPU ONLY. No GPU column was taken; three are
-owed** (see `docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md`, section 3).
+owed**.
 
 Apple M4, macOS 26.5.2 arm64, `MOJOLEARN_NUMERIC_MODE=identical`,
 `vendor=cpu-apple-m4`, `--repeats 2`, `--lanes gbdt-symmetric-eval,gbdt-symmetric`.

@@ -26,7 +26,7 @@ cross-vendor half is earned ONLY by an E-series leg (section 8) and never
 by anything built on one machine.
 
 **BUILD ORDER IS SEQUENTIAL BEHIND MAMBA-2 — see section 11.** This is
-the orchestrator's staggering decision: the shared segsum / chunk-cumsum /
+the maintainer's staggering decision: the shared segsum / chunk-cumsum /
 serial-state-passing substrate and the gemm-cell plumbing must exist ONCE,
 in the Mamba-2 implementation round, and be certified (mamba2 contract
 section 11 phases 0-2) before any Mamba-3 arithmetic lands on it. This
@@ -92,7 +92,7 @@ message is itself a mamba3 forward FIX — see the fragility note below).
 | the angle chain | `mamba_ssm/ops/triton/mamba3/angle_dt.py::angle_dt_fwd_kernel` (:83-122): `tanh_approx(angle)*π` (:94), `*dt` (:101), chunked cumsum (:104-105), mod 2π as `x - 2π*floor(x/2π)` (:108), state modded per chunk (:115-117) | shape and mod SPELLING; its PER-CHUNK mod placement is refused (DEVIATION 829) |
 | per-token recurrence SEMANTICS | `test_mamba3_siso.py::mamba3_siso_step_ref` (:34-146): the three-term update `S = α·S + β·(k_prev⊗v_prev) + γ·(k⊗v)` with `α = exp(adt)`, `β = (1-σ(trap))·dt·α`, `γ = σ(trap)·dt` (:119-127), per-token angle mod (:109-111); the module's `step` (mamba3.py:314-440, CuteDSL `mamba3_step_fn`, "Only tested on H100" :320) and `ops/triton/mamba3/mamba3_siso_step.py` | SEMANTICS ONLY; the rounding is the `STEP_UPSTREAM_RECURRENCE` required-RED arm (DEVIATION 831) |
 | decode rotation, "what vendors run" | `mamba_ssm/ops/triton/mamba3/mamba3_mimo_rotary_step.py::rotary_qk_inference_kernel`: tanh respelled as `sigmoid(2x)*2-1`, `tl.cos`/`tl.sin`, and the updated angle state stored WITHOUT the mod-2π reduction | cited as a THIRD trig spelling and a mod-placement divergence; refused (DEVIATION 829). The prefill kernel's PTX `cos.approx`/`sin.approx`/`tanh.approx` (`ops/triton/mamba3/utils.py`:13-69) are a SECOND; the test refs' torch.cos/sin/tanh the first |
-| the shipped surface's dtype | `mamba_ssm/ops/triton/mamba3/mamba3_siso_combined.py::mamba3_siso_combined` (:390-399): Q/K/V/Trap/Angles/Z force-cast to bfloat16 before the kernel | REFUSED — the profile is Float32 everywhere (Andrew's order, as mamba2); `mamba3_siso_fwd_ref`'s fp32 default is the witness that this is a surface fact, not the math |
+| the shipped surface's dtype | `mamba_ssm/ops/triton/mamba3/mamba3_siso_combined.py::mamba3_siso_combined` (:390-399): Q/K/V/Trap/Angles/Z force-cast to bfloat16 before the kernel | REFUSED — the profile is Float32 everywhere (project policy, as mamba2); `mamba3_siso_fwd_ref`'s fp32 default is the witness that this is a surface fact, not the math |
 | the B/C norm | `mamba_ssm/ops/triton/layernorm_gated.py::rms_norm_ref` (:18-39) at `z=None`, `group_size=None`: `rstd = 1/sqrt(mean(x²)+eps)` (:29), `x*rstd*weight` (:30); class `RMSNorm` (:415-437), no bias (:425) | mamba2 S1-S3/S21 machinery INHERITED; eps 1e-5 by construction (mamba3.py:126-127), not the ref's 1e-6 default |
 | the residual/norm wrapper | `mamba_ssm/modules/block.py::Block.forward`, non-fused arm (:51-53, :67): `residual = hidden + residual`, `hidden = norm(residual)`, then mixer | mamba2 S1-S3/S22, INHERITED (mamba2 cited HF's Mamba2Block; with no HF mamba3, the in-repo Block is the citation — same arithmetic) |
 | the projections' arithmetic | profile `mojolearn.identical.gemm.fp32.v1` (`gemm/IDENTICAL_FP32_CONTRACT.md`), certified three-vendor | this repository, INHERITED |
@@ -153,7 +153,7 @@ are inputs to this profile.
 
 The stale sentence in `archive/research/IDENTICAL_SSM_NOTES.md` ("only `portable_cosf`
 exists", "`portable_sinf` not asked for") predates DEVIATION 820 and is
-flagged to the orchestrator for the fix-docs-on-discovery pass; that file
+flagged to the maintainer for the fix-docs-on-discovery pass; that file
 is not this contract's to edit.
 
 ## 3. Profile constants
@@ -173,7 +173,7 @@ is not this contract's to edit.
 | block norm eps | per config `layer_norm_epsilon`, default path as mamba2 | block.py; inherited |
 | softplus threshold | 20.0, `<=` | `identical_softplus` inherited; F.softplus's own default threshold (mamba3.py:196) |
 | in_proj layout | z, x, B, C, dd_dt, dd_A, trap, angle — widths d_inner, d_inner, G·N, G·N, H, H, H, 32 | mamba3.py:106-107, :177-186 |
-| dtype | Float32 everywhere (weights, activations, all four state pieces) | Andrew's order; the shipped surface's bf16 casts (mamba3_siso_combined.py:390-399) REFUSED |
+| dtype | Float32 everywhere (weights, activations, all four state pieces) | project policy; the shipped surface's bf16 casts (mamba3_siso_combined.py:390-399) REFUSED |
 
 `is_mimo=True`, `is_outproj_norm=True`, `fuse_pregate_headwise_norm`,
 `rope_fraction=1.0`, `ngroups > 1`, varlen (`cu_seqlens`/`seq_idx`) and
@@ -484,7 +484,7 @@ tools/identity_break.py and python/mojolearn/tests/test_ragged_lengths.py.
 ## 11. Build order — SEQUENTIAL BEHIND THE MAMBA-2 SSD CORE
 
 Nothing below starts until the mamba2 contract's phases 0-2 (primitives,
-host oracle, SSD core on device) are CERTIFIED — the orchestrator's
+host oracle, SSD core on device) are CERTIFIED — the maintainer's
 staggering decision. The shared substrate (serial chunk cumsum, segsum
 rebuild, serial state pass, gemm cells, the S1-S3 norm machinery,
 `identical_clamp`) must exist once and be green before Mamba-3
@@ -519,7 +519,7 @@ arithmetic lands on it. Then, smallest first, one gate per phase:
 
 ---
 
-## RUN RECORD — 2026-09-01 evening, Apple column (orchestrator runs; the implementation lane wrote, never ran)
+## RUN RECORD — 2026-09-01 evening, Apple column (maintainer runs; the implementation lane wrote, never ran)
 
 Commit at run: 979302e7 (implementation commits 7ac1112e / 99a620d8 /
 0eac05ed). Build `-D MOJOLEARN_NUMERIC_IDENTICAL=1`, M4, one process at a
@@ -605,7 +605,7 @@ in the RUN RECORD below.
 Commit at run: `c6e86966`, the SAME commit and the SAME command on both
 boxes:
 `MOJOLEARN_IDENTITY_TRACE=... tools/with_identical_mode.sh pixi run mojo run -I . mamba/checks/mamba3_check.mojo`.
-Box: a DigitalOcean MI325X droplet, gfx942. Orchestrator ran both arms.
+Box: a DigitalOcean MI325X droplet, gfx942. The maintainer ran both arms.
 
 - **APPLE (M4): GATE A, B and C PASS.**
 - **AMD (MI325X, gfx942): GATE A, B and C PASS.**

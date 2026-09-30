@@ -4,7 +4,7 @@
 # CONTRIBUTING.md (Performance claims) (2026-09-11): torch.rand data here is a smoke fixture only; the classical timing path on taxi and Istella-S is tools/classical_two_datasets.py (DEVIATION 2570).
 """THE GPU BASELINE THAT ACTUALLY EXISTS ON THIS MACHINE.
 
-Andrew's rule, 2026-08-20: if a GPU library for the algorithm runs on the
+The rule (2026-08-20): if a GPU library for the algorithm runs on the
 MacBook, benchmark against THAT. A CPU-only baseline is permitted only when
 no GPU option exists.
 
@@ -17,7 +17,7 @@ GPU brute-force k-NN writes exactly what is below: `cdist` + `argmin` +
 Thirty lines each, no exotic knowledge. That is the honest opponent and it
 is a much harder one than scikit-learn's CPU.
 
-SCALE. Andrew, same day: never test without scale, and row count alone is
+SCALE. Never test without scale, and row count alone is
 not scale. The standing board ran 4,000,000 x 32 with k=64, which is large
 in rows and small in every dimension that decides the cost. Real k-means
 builds an IVF coarse quantizer at k = 1k-64k over embeddings of width

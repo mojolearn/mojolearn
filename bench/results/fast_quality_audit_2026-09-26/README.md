@@ -1,4 +1,4 @@
-# FAST quality audit (Sep 26 2026, Andrew: accuracy over speed)
+# FAST quality audit (Sep 26 2026: accuracy over speed)
 Method: paired by seed/subset, >= 5 seeds, >= 2 datasets, current FAST vs the pre-approximation reference build.
 
 | Item | Result | Verdict |

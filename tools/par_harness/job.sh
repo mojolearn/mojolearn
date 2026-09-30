@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/par_harness/job.sh: THE ONE LIGHT JOB of lane/par-harness
-# (docs/lanes/progress/par-harness.md), one NVIDIA queue job on TWO GPU slots.
+# run as one NVIDIA queue job on TWO GPU slots.
 #   clean     each par-* lane below through tools/algos_lane_check.sh on the
 #             base fixture, one lane per call so one failure never hides the
 #             rest: on this two-GPU slot every lane is on the DEVICE AXIS (the

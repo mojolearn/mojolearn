@@ -517,7 +517,7 @@ def _part_value(cell, part, min_repeats=1):
     return None
 
 
-#: EVERY CELL IS FITTED ONCE (Andrew, 2026-09-19). A reference needs two
+#: EVERY CELL IS FITTED ONCE (2026-09-19). A reference needs two
 #: witnesses of the same hash, and a second device class is a better witness
 #: than a second fit on the same box: it separates "this box moves run to run"
 #: from "this box differs from the others" in one comparison. Two fits on one

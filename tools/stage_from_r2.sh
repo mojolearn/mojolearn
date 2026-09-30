@@ -1,7 +1,7 @@
 #!/bin/sh
-# tools/stage_from_r2.sh -- DEVIATION 2704 (Andrew, 2026-09-13: "cloudflare has
-# datasets already saved and when using runpod we should ALWAYS use them"; and:
-# "make sure all of our shit ships corpora from R2 instead of downloading").
+# tools/stage_from_r2.sh -- DEVIATION 2704 (2026-09-13): the datasets are
+# already saved in Cloudflare R2, and every rented box stages datasets and
+# corpora from R2 instead of downloading them.
 #
 # THE ONE LINE A RUNNER CALLS AFTER THE SOURCE IS UNPACKED ON THE BOX:
 #

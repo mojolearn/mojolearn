@@ -33,7 +33,7 @@ gather kernels' stat read turns from contiguous to indirect -- through the
 SAME index register they already load for the compressed-index gather, so
 no new load stream, but the coalescing changes on the hot kernel. The
 recons' answer is that both competitors eat that gather at every row of
-every histogram and win anyway; the orchestrator's A/B is where that claim
+every histogram and win anyway; the maintainer's A/B is where that claim
 is priced on this implementation (see archive/research/LOSSGUIDE.md, DEVIATION 1902 ledger).
 
 BIT-EXACT BY CONSTRUCTION (the invariant, stated once and relied on by
@@ -53,7 +53,7 @@ launches and traffic, not a number -- same standing as DEVIATION 1903, and
 unlike 1901, which does re-associate.
 
 Guarded FAST-only THIS ROUND anyway, by the routing row: transcription-
-exactness is an argument until the orchestrator's byte-compare A/B makes
+exactness is an argument until the maintainer's byte-compare A/B makes
 it a measurement; the IDENTICAL column keeps the stat-moving path
 byte for byte, so the merge gate's compare passes by construction.
 """

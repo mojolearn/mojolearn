@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The `algos` family of tools/bench_board.py: every algorithm of the
-algorithm expansion (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, the nine lane
-tables, their Additions and the long tail) against its opponents on the same
+algorithm expansion (the nine lane tables, their Additions and the long
+tail) against its opponents on the same
 box, interleaved round by round, quality beside every time.
 
     python3 tools/bench_board_algos.py prep --data DIR --lanes sgd-clf,ivf-pq --datasets taxi
@@ -156,7 +156,7 @@ def _preload_cuda_libs(names):
 # ---------------------------------------------------------------------------
 # THE TABLE. One entry per algorithm (a class pair such as SGDClassifier /
 # SGDRegressor is two entries). Keys:
-#   xlane   the expansion lane that owns the class (docs/lanes/progress/<xlane>.md)
+#   xlane   the expansion lane that owns the class
 #   ours    candidate public names, first exported wins
 #   kind    the worker that runs it (est, ts, graph, ann, layer, optim, linalg,
 #           als, shap)

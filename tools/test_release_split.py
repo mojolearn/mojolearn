@@ -35,7 +35,7 @@ class SplitBase(sev.Base):
 
 class Switch(SplitBase):
     def test_the_split_layout_is_the_only_one(self):
-        """The combined Linux wheel is gone (Andrew, 2026-09-26, after 0.8.22
+        """The combined Linux wheel is gone (2026-09-26, after 0.8.22
         went out split end to end); so are --split-linux and --combined-linux."""
         r = self.release()
         self.assertEqual(r.STEPS, release.Release.STEPS)

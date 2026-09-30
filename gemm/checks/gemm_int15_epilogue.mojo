@@ -4,7 +4,7 @@
 function a kernel calls at its store: the three exact Int32 sums of a cell
 (`HH`, `HL + LH`, `LL`) to the cell's float32.
 
-Lane lane/lowbit-int15, 2026-09-29, the epilogue fold (orchestrator's
+Lane lane/lowbit-int15, 2026-09-29, the epilogue fold (maintainer's
 approval of the five-point interface, same day). Contract clauses W-5 (the
 recombination in Int64), W-6 (the pinned Int64 to float32 seam) and W-7
 (the scale `2^(ea[i] + eb[j])`); the seams are `checks/numerics_int15.mojo`'s,

@@ -1,4 +1,4 @@
-"""The CPU-pod build route is opt-in (--build-backend cpu-box, Andrew 2026-09-25): one
+"""The CPU-pod build route is opt-in (--build-backend cpu-box, 2026-09-25): one
 tools/release_linux_build.sh per set, all three launched together, each
 writing the release-build tree pack_wheel.py and proof_ok read; the GPU legs
 stay available by name and a CPU leg never takes the NVIDIA GPU walk."""

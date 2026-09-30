@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE LANE MAP FROM THE IMPORT GRAPH ALONE (handoff 2026-09-22, item 3).
+"""THE LANE MAP FROM THE IMPORT GRAPH ALONE.
 
 `tools/lane_select.py` derives lane -> source files and the light release
 default runs only the lanes whose files a change reaches. Its Mojo side

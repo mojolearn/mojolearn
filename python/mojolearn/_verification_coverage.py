@@ -60,7 +60,7 @@ def inventory(harness, table, vendor_class):
     stale = set(vref.stale_reference_lanes(table, harness))
     parallel_cpu = {name for name in covered if name.startswith("par-")}
     lanes = {}
-    # NOTHING IS HIDDEN, SO NOTHING IS `excluded` (Andrew, 2026-09-20). Every
+    # NOTHING IS HIDDEN, SO NOTHING IS `excluded` (2026-09-20). Every
     # lane is in the public surface; the inventory now says what the verifier
     # DOES with each one. `not_applicable` replaced `excluded` because the
     # older word described a decision we no longer make: these lanes were

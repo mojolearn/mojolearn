@@ -882,7 +882,7 @@ def check_condensed_tree_vs_oracle() raises:
         var dc = _i32_differ(out.condensed.children, oracle.condensed.children)
         var ds = _i32_differ(out.condensed.sizes, oracle.condensed.sizes)
         var dl = _bits_differ(out.condensed.lambdas, oracle.condensed.lambdas)
-        # ORCHESTRATOR DIAGNOSTIC, kept because it is what localized the
+        # MAINTAINER DIAGNOSTIC, kept because it is what localized the
         # first defect this check found. Counts matching while contents
         # differ separates a LABELING difference from a shape difference.
         if dp != 0 or dc != 0 or ds != 0:

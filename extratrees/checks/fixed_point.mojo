@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Fixed-point label accumulation. DEVIATION 135, ruled and closed.
 
-Andrew, 2026-08-21: **fixed point.** This file is the ruling.
+Decided 2026-08-21: **fixed point.** This file is the ruling.
 
 WHY THE QUESTION EXISTED
 ------------------------

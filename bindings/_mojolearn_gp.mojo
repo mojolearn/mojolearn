@@ -23,7 +23,7 @@ arguments; mojotrees' widest binding takes nine and that is not a
 coincidence". THE FIRST BUILD CONFIRMED IT: `bash bindings/build_gp.sh`
 failed AT def_function ELABORATION on 2026-09-01 (log
 /tmp/build_gp_fast.log, the stdlib error pointing at def_function's
-signature), before any artifact existed. The orchestrator renegotiated BOTH
+signature), before any artifact existed. The maintainer renegotiated BOTH
 sides the same day.
 
 THE FOLD IS THE TREE'S OWN PRECEDENT, NOT A NEW MECHANISM. When

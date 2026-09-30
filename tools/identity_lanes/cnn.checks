@@ -1,4 +1,4 @@
-# the cnn lane's seam check and one sabotage patch per seam (pass 2; docs/lanes/progress/cnn.md)
+# the cnn lane's seam check and one sabotage patch per seam (pass 2)
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5700_col2im_order.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5701_dw_serial.patch
 x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5702_bn_fold_order.patch

@@ -23,7 +23,7 @@ WHAT IS OWED AND IS NOT HERE
     `d = 4096`, `T = 4096`. The largest case here is `V = 300`. A
     128256 x 4096 `dW` is 2.10 GB and `[[no-heavy-local-compute]]` binds
     every author in this tree; the shipped shape belongs on a rented GPU
-    and this file must not put it on Andrew's laptop. **That is a COST
+    and this file must not put it on a developer's laptop. **That is a COST
     decision and not a confidence one**, and contract 11.2 calls
     `V = 128256` mandatory, so the gap is named here, named in the check's
     SCOPE line, and left open rather than quietly dropped.

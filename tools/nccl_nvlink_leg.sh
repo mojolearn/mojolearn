@@ -1,6 +1,6 @@
 #!/bin/bash
 # WOUND DOWN 2026-09-12, NEVER RUN. DO NOT RUN THIS FOR "THE PRICE OF
-# DETERMINISM" -- that framing was withdrawn by Andrew before this leg
+# DETERMINISM" -- that framing was withdrawn before this leg
 # executed, and a better-measured number would not repair it.
 #
 # The reason is not the hardware, so a faster box does not fix it. Pricing

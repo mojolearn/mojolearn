@@ -249,7 +249,7 @@ NOT A CANDIDATE FOR THE `kernel_matrix.mojo` NUMERIC/SCHEDULING TEST as
 it stands: that table's rows are knobs this project chooses. This is a
 vendor property nobody chose, and it belongs in the table as a
 CAPABILITY row. The lane charter forbids editing that file, so the row
-is stated here and the orchestrator should move it.
+is stated here and the maintainer should move it.
 
 THE IDENTICAL-MODE ALIGNMENT (DEVIATION 403, 2026-08-22). The paragraph
 above establishes that cuML's exact behavior is not reproducible on

@@ -45,7 +45,7 @@ declaration that something else already enforces:
                     --compare` reports every file this map attributes that no
                     import path reaches.
 
-NO FALLBACK, NO GUESS (Andrew, 2026-09-22). A selector that misses an
+NO FALLBACK, NO GUESS (2026-09-22). A selector that misses an
 affected lane is far worse than one that runs a few extra, and one that
 silently runs EVERYTHING is the other failure: the 0.8.14 release-check
 widened to 645 cells because two verifier edits and three corpus manifests
@@ -4729,8 +4729,7 @@ def gate_lanes(ref, path=CLASSICAL_GATE, every=None):
 
 
 # ------------------------------------------------ the expansion fragments
-#: THE ALGORITHM EXPANSION'S PER-LANE FILES (lane/algos-prep, 2026-09-27;
-#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Each of the nine lanes owns one
+#: THE ALGORITHM EXPANSION'S PER-LANE FILES (lane/algos-prep, 2026-09-27). Each of the nine lanes owns one
 #: file in each shared registry, and a change to one selects THAT expansion
 #: lane's identity lanes, never every lane:
 #:   tools/identity_lanes/<id>.py            its identity lanes, executed by the
@@ -5284,7 +5283,7 @@ def _deleted(path, ref):
 
 
 def refuse_unattributed(sel, out=print):
-    """THE SELECTOR NEVER WIDENS AND NEVER GUESSES (Andrew, 2026-09-22). A path
+    """THE SELECTOR NEVER WIDENS AND NEVER GUESSES (2026-09-22). A path
     it cannot attribute is printed by name and nothing runs: the caller exits
     non-zero until the mapping is fixed. Returns True when it refused."""
     if not sel.get("unattributed"):

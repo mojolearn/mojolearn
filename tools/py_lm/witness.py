@@ -6,7 +6,7 @@
 One run is one column (one tree, one device). Two columns compare with
 `--compare A B`: every digest must be equal. Run it on the BASE tree and on
 the lane tree, same box, same job, both devices, and compare base == lane per
-device (the before == after rule of docs/lanes/progress/py-lm.md).
+device (the before == after rule).
 
   causal   CausalLM over the eight synthetic checkpoint families
            (`_causal_lm_fixtures`), float32, bfloat16 and int8 weights:

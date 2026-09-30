@@ -7,7 +7,7 @@ off in a default build. When its A/B shows a gain with equal digests (or,
 for a FAST change that moves bits, a paired quality check that matches or
 beats the before arm), its line here flips to `not is_defined[..._OFF]`: on
 by default, and `-D <name>_OFF` reverts it. The state of every switch is
-recorded in docs/lanes/progress/ann-apple3.md.
+the line below that names it.
 
 Build an arm with `MOJOLEARN_MOJO_BUILD_FLAGS="-D <name>"` (every
 bindings/build_*.sh passes it to `mojo build`); tools/ann_apple2_ab.sh takes

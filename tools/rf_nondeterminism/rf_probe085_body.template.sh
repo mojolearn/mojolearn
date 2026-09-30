@@ -12,7 +12,7 @@
 # ARMS (wide fixture, 2000 rows, 16 trees, depth 8 -- the lane's own configuration):
 #   cols16  max_features=1.0   THE SHIPPED DEFAULT. A user sets nothing to get this.
 #   cols10  max_features=0.625 INTERNAL CONTROL: <=10 columns was 0/600 on 0.8.6, so this
-#           must stay stable. If BOTH arms move, the probe is not measuring what I think.
+#           must stay stable. If BOTH arms move, the probe is not measuring what it claims to.
 #           If NEITHER moves, the probe is insensitive on this wheel and proves nothing.
 #
 # 0.8.5 does NOT ship mojolearn/_identity_break.py (that packaging is newer), so the

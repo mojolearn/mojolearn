@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The sequence lane's optimizers against float64 NumPy restatements of
 torch.optim's update rules, at a tolerance. Parity with torch itself was
-checked on the lane's pod (docs/lanes/progress/sequence.md)."""
+checked on the lane's pod."""
 import numpy as np
 
 import mojolearn as ml

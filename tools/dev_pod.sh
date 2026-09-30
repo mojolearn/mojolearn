@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/dev_pod.sh -- ONE long-lived development box per lane and vendor, for
-# the algorithm expansion (docs/lanes/ALGORITHM_EXPANSION_PLAN.md). A lane's
+# the algorithm expansion. A lane's
 # agent edits in its Mac worktree, then syncs, builds, verifies and times on
 # its box. A lane may hold an NVIDIA box AND an AMD box at once.
 #
@@ -47,8 +47,8 @@
 # MOJOLEARN_DEVPOD_AMD_RETRY_MINUTES (default 15); then a Hot Aisle MI300X VM
 # through tools/hotaisle_vm_lib.sh (its own Mac dead-man, on-box watchdog that
 # DELETEs the VM at the lease, described mojolearn:devpod-<key>:<utc>; cap
-# MOJOLEARN_DEVPOD_HA_CAP_USD, default 150, for the whole lease; the team
-# balance tops up by itself). On a 2x MI300X VM every command is pinned to
+# MOJOLEARN_DEVPOD_HA_CAP_USD, default 150, for the whole lease; the
+# balance is recorded, not enforced). On a 2x MI300X VM every command is pinned to
 # GPU 0. On Hot Aisle the login is `hotaisle`; every box command runs as root
 # through `sudo -n -H bash -c`, so /root/mojolearn is the tree on every box.
 # DigitalOcean is never used here.
@@ -79,12 +79,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
 # Comma-separated; RunPod places the pod on whichever of these has stock.
 # Identity needs any NVIDIA; speed is judged before/after on the SAME pod.
-# Andrew 2026-09-28: 13 H100s at $3.49/h emptied the account in four hours. Identity work
+# 2026-09-28: 13 H100s at $3.49/h cost too much in four hours. Identity work
 # needs no H100: the default list stops at the cheap cards, and an H100/H200/A100/B200 in
-# MOJOLEARN_DEVPOD_GPUS is refused unless MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1 (Andrew's OK only).
+# MOJOLEARN_DEVPOD_GPUS is refused unless MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1 (explicit approval only).
 NV_GPUS="${MOJOLEARN_DEVPOD_GPUS:-NVIDIA GeForce RTX 4090,NVIDIA L40S,NVIDIA RTX 6000 Ada Generation,NVIDIA RTX A6000,NVIDIA A40}"
 case "$NV_GPUS" in *H100*|*H200*|*A100*|*B200*)
-    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without Andrew's OK (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
+    [ "${MOJOLEARN_DEVPOD_ALLOW_BIG_GPU:-0}" = 1 ] || { echo "dev_pod: $NV_GPUS includes an H100/H200/A100/B200; refused without explicit approval (MOJOLEARN_DEVPOD_ALLOW_BIG_GPU=1)" >&2; exit 2; } ;;
 esac
 # At most this many live RunPod pods on the account, counted from the API at every up.
 MAX_RUNPOD_PODS="${MOJOLEARN_DEVPOD_MAX_PODS:-3}"
@@ -325,8 +325,7 @@ if amd == "1" and image.startswith("rocm/"):
     req["dockerStartCmd"] = [Path(bootstrap).read_text()]
 json.dump(req, open(out, "w"), indent=2)
 PY
-    # OUT OF STOCK IS RETRIED, NOTHING ELSE IS (2026-09-27, FINAL DECISIONS in
-    # docs/lanes/ALGORITHM_EXPANSION_PLAN.md). Each attempt arms its own
+    # OUT OF STOCK IS RETRIED, NOTHING ELSE IS (2026-09-27). Each attempt arms its own
     # dead-man before the create and disarms it when nothing was created; a
     # create that fails for any reason but stock dies at once. Every attempt is
     # logged to $STATE_ROOT/<key>.attempts.log.
@@ -487,10 +486,10 @@ host)
 up)
     [ ! -f "$D/state.env" ] || die "$KEY already has a box ($D/state.env); down it first"
     if [ "$VENDOR" != amd ]; then
-        # Andrew 2026-09-28: "share a runpod or 2 runpods and not create 12 of them". A lane
+        # 2026-09-28: one or two shared RunPod pods, never one per lane. A lane
         # never rents its own NVIDIA pod; every lane submits to the shared pods.
         [ "${MOJOLEARN_DEVPOD_VIA_CENTRAL:-0}" = 1 ] || [ "${MOJOLEARN_DEVPOD_OWN_NVIDIA:-0}" = 1 ] \
-            || die "lanes do not rent NVIDIA pods: use the shared pods (tools/nvidia_central.sh sync/submit; the pods come up with tools/nvidia_central.sh up). MOJOLEARN_DEVPOD_OWN_NVIDIA=1 only with Andrew's OK"
+            || die "lanes do not rent NVIDIA pods: use the shared pods (tools/nvidia_central.sh sync/submit; the pods come up with tools/nvidia_central.sh up). MOJOLEARN_DEVPOD_OWN_NVIDIA=1 only with explicit approval"
         _live=$(curl -s -m 20 -H "Content-Type: application/json" -H "Authorization: Bearer $(cat "$HOME/.mojolearn_runpod_key" 2>/dev/null)" https://api.runpod.io/graphql \
             -d '{"query":"query { myself { pods { id } } }"}' | python3 -c 'import sys,json; print(len(json.load(sys.stdin)["data"]["myself"]["pods"]))' 2>/dev/null)
         [ -n "$_live" ] || die "could not count live RunPod pods; refusing to rent (cap $MAX_RUNPOD_PODS)"

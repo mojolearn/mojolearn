@@ -16,7 +16,7 @@ expression, not a different order.
 
 * **SCATTERED VALUES, NEVER UNIFORM OR CONSECUTIVE.** Bins, indices,
   targets and weights are all hashed. A uniform fixture verifies the total
-  and nothing about placement -- the histogram lesson in `RESUME.md`, where
+  and nothing about placement -- the histogram lesson, where
   the same kernel reported 0 wrong of 512 under uniform bins and 490 wrong
   under scattered ones.
 * **SIZES ARE NOT MULTIPLES OF THE BLOCK GEOMETRY.** `CTR_BLOCK_SIZE` is

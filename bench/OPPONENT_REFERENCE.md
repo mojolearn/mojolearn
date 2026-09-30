@@ -1938,7 +1938,7 @@ breakdown and logs).
 
 cuML k-means returned a different centroid digest in every round; ours held one.
 
-Istella-S, measured by the orchestrator the same night on RunPod pod
+Istella-S, measured by the maintainer the same night on RunPod pod
 n03kul7dt759n0 (NVIDIA H200, driver 580.95.05; H100 stock was out, same sm_90a
 build), cuML 26.08, both trees built on that pod, the same harness, 1 warm-up plus
 5 interleaved rounds. Istella-S 2,043,304 x 220. Evidence
@@ -2383,7 +2383,7 @@ ours 0.126517 / 0.971896, CatBoost 0.125832 / 0.972819, XGBoost 0.125110 /
 0.973774; lossguide ours 0.122045 / 0.975037, CatBoost 0.121096 / 0.975462,
 XGBoost 0.125110 / 0.973774.
 
-READ THIS HONESTLY. We beat CatBoost on four of its six cells, and the two
+HOW TO READ THIS. We beat CatBoost on four of its six cells, and the two
 symmetric cells are the strongest (0.525x on taxi as CORRECTED above, 0.811x on
 Istella-S) on CatBoost's OWN policy -- and most of the taxi margin is the fixed
 cost we pay before the first tree, not a faster boosting loop. On Istella-S
@@ -2485,7 +2485,7 @@ WITHIN the train slice (see the density note below).
 | SymmetricTree | CatBoost GPU | 9,883 | 0.741531 | 0.128211 | - |
 | SymmetricTree | ours-nocat (codes as numbers) | 425 | 0.723855 | 0.130338 | - |
 
-Read it honestly: on the CTR path we are 1.21x CatBoost's time, and slightly
+In summary: on the CTR path we are 1.21x CatBoost's time, and slightly
 AHEAD of it on both quality figures (AUC 0.742155 against 0.741531, logloss
 0.128135 against 0.128211). The `ours-nocat` row is the more useful one: the
 same 26 columns split as ORDERED NUMBERS run 28x faster (425 ms) and score
@@ -2597,8 +2597,8 @@ container `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`).
 Full write-up, every hash and the logs:
 `bench/results/nccl_determinism_2026-09-12/`.
 
-**THE "PRICE OF DETERMINISM" HALF OF THIS SECTION IS WITHDRAWN (2026-09-12,
-Andrew).** The heading used to read "determinism and price" and the text used
+**THE "PRICE OF DETERMINISM" HALF OF THIS SECTION IS WITHDRAWN
+(2026-09-12).** The heading used to read "determinism and price" and the text used
 to conclude that determinism costs 7-20% at gradient-bucket sizes and about 2x
 at kilobyte messages. That is not a quantity this experiment can produce, and
 no rerun on better hardware would repair it:

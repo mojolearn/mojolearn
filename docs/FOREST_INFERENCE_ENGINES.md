@@ -78,7 +78,7 @@ resident-kernel measurements: Apple M4 FAST improved the two-output fixture;
 H100 IDENTICAL improved both two- and seven-output fixtures. All 1,440
 handcrafted IDENTICAL output-bit records match across CUDA scalar/vector and
 Metal vector routes. These are bounded synthetic resident-kernel results;
-the [vector-kernel report](lanes/FOREST_VECTOR_GROVES.md) gives their limits.
+the vector-kernel records state their limits.
 Separate eight-call throughput blocks on H100 validated the full public ET
 path on HIGGS and Year, with identical outputs across transient, resident and
 borrowed-buffer paths. RF and several single-call measurements remained noisy;
@@ -92,7 +92,7 @@ bytes. Pickle retains the estimator state as before.
 
 ## Source and qualification
 
-The [source audit and implementation plan](lanes/GPU_FOREST_INFERENCE_NEXT.md)
+The source audit
 pins nvForest v26.08.00 and its actual row/tree/grove GPU dispatch. The shared
 Mojo implementation is `core/forest_inference.mojo`; declared deviations cover
 flat-array layout, fixed group topology and mode-specific arithmetic. It is not
@@ -170,11 +170,8 @@ Metal (FAST and IDENTICAL, 2026-09-10) and on NVIDIA IDENTICAL (L40S,
 2026-09-17), and the L40S A/B on HIGGS, Covtype and Year at 100 and 500
 trees read the same output hashes from both layouts with the packed one
 faster on every model (RF/HIGGS 100 trees 45.9 to 24.8 ms per call in
-eight-call blocks, 500 trees 224 to 128 ms; the table is in
-[LANE_STATUS_lane-forest-groves-cpu-and-speed.md](lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md)).
-Metal speed under the packed default is not measured. See the
-[layout experiment](lanes/GPU_FOREST_INFERENCE_NEXT.md#next-layout-experiment-after-io-measurement)
-for the source basis.
+eight-call blocks, 500 trees 224 to 128 ms).
+Metal speed under the packed default is not measured.
 
 ## Host inference with no GPU
 
@@ -235,17 +232,15 @@ another association and nothing else, so the comparison against the GPU
 engine is watched to fail on association alone. `tools/forest_groves_identity.py`
 is the comparison: every rf and et lane's fixtures fitted, saved as a groves
 archive, reloaded through `host_model` and diffed against the GPU groves
-predictions bit for bit, then the HIGGS and Covtype sized models. The numbers
-are in [LANE_STATUS_lane-forest-groves-cpu-and-speed.md](lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md).
+predictions bit for bit, then the HIGGS and Covtype sized models.
 
 What this promises is only what has been measured. `tools/forest_host_gate.py
 record` runs on a GPU box and writes the SHA-256 of that box's predictions for
 a saved model and a regenerable fixture; `tools/forest_host_gate.py check`
 runs on the CPU box and exits 0 only when the host predictions hash the same.
 `.github/workflows/forest-host-gate.yml` runs the check on seven hosted CPUs
-against the fixtures under `bench/results/forest_host/`, and the brief
-[BRIEF_forest_host_inference_2026-09-13.md](lanes/BRIEF_forest_host_inference_2026-09-13.md)
-records which recordings exist and which are still owed. A CPU or a vendor
+against the fixtures under `bench/results/forest_host/`, and those fixtures
+are the record of which recordings exist. A CPU or a vendor
 not in that record is not certified.
 
 ### Host threads (lane/infer-speed-trees, 2026-09-17)
@@ -267,6 +262,4 @@ non-decreasing keeps the linear count. Logloss and CrossEntropy
 `predict_proba` columns come from the binding in one pass
 (`gbdt_sigmoid_pair`, `forest_host_gbdt_sigmoid_pair`, DEVIATION 2902), the
 same `p` and the same one double subtraction per row the Python
-comprehension of DEVIATION 2333 computed. The numbers, the identity
-evidence and what is owed are in
-[LANE_STATUS_lane-infer-speed-trees.md](lanes/LANE_STATUS_lane-infer-speed-trees.md).
+comprehension of DEVIATION 2333 computed.

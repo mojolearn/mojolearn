@@ -201,7 +201,7 @@ the T3 run or the release was touched.
 
 ## Files
 
-`RESUME.md` (the lane's running state), `kernel_map.md`,
+`kernel_map.md`,
 `legs/leg{1,2,3,4}/` (each leg's `session.txt`, `ab/`, `ptx/`, `lean-*/`,
 `replay-*.clean.log` and `replay-*/`, `item-timers.summary.*`, `nsys-*/`,
 `diag_t3.log`, `verify/`, `runner.console.log`; larger raw files in

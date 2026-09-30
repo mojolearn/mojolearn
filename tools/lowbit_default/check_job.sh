@@ -76,7 +76,7 @@ phase build-byte-lm pass env MOJOLEARN_GPU_ARCHS=$ARCH sh bindings/build_byte_lm
 # the portable math library SambaStack's optimizer dlopens (the tree's own
 # recipe, as tools/gap_column_leg.sh builds it); without it the Samba tests skip
 phase build-portable-math pass env PYTHONPATH=$PWD/packaging/portable_math pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('$PWD/python/mojolearn/.libs/libMojolearnMath.so'))"
-# THE WHOLE SUITE NEEDS EVERY BINDING (orchestrator, 2026-09-29): every
+# THE WHOLE SUITE NEEDS EVERY BINDING (2026-09-29): every
 # other IDENTICAL GPU binding and every host binding, four at a time, each
 # with its own log; one phase line per binding that fails.
 build_one() {  # script
@@ -117,7 +117,7 @@ phase gate-transformer pass pixi run check-transformer
 phase gate-transformer-int15 pass pixi run check-transformer-int15
 phase gate-transformer-int15-sabotage fail pixi run check-transformer-int15-sabotage
 
-# THE WHOLE SUITE, not a list (orchestrator, 2026-09-29)
+# THE WHOLE SUITE, not a list (2026-09-29)
 phase python-tests pass sh -c "cd python && pixi run -e test python -m pytest -q -rsfE -p no:cacheprovider mojolearn/tests"
 grep -E 'passed|failed|error|skipped' "$OUT/python-tests.log" | tail -3 | sed 's/^/    | /'
 grep -E '^SKIPPED' "$OUT/python-tests.log" | cut -c1-300 | sed 's/^/    | /'

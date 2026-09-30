@@ -1,5 +1,5 @@
 #!/bin/bash
-# The strides pass (EXPERIMENTS.md) on one NVIDIA box: each change against its restore.
+# The strides pass on one NVIDIA box: each change against its restore.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 O=/root/strides; mkdir -p $O

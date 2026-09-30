@@ -102,7 +102,7 @@
 #
 # TWO LANES, TWO PROVIDERS, AND WHY THAT IS NOT AN ACCIDENT
 # =========================================================
-# `archive/plans/IDENTICAL_GEMM_PLAN.md`'s RENTING section, amended by Andrew 2026-08-23:
+# `archive/plans/IDENTICAL_GEMM_PLAN.md`'s RENTING section, amended 2026-08-23:
 #
 #     identity / E2 lane   DigitalOcean droplets, their e2_remote_leg.sh
 #     this lane            RunPod, tools/runpod_guard.sh arm FIRST
@@ -674,7 +674,7 @@ VENDOR=""
 MODE="dry"
 MINUTES="${MOJOLEARN_GEMM_LEG_MINUTES:-60}"
 MINUTES_CAP=60
-# THE SEGMENT LEASE (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, E4). A training
+# THE SEGMENT LEASE (for GPT-3 Small training segments). A training
 # segment is 6 to 40 hours, and the one-hour cap above is right for a
 # verification leg and wrong for it. `--segment-lease N --dollar-cap USD`
 # names a lease above one hour BY NAME and binds it to a dollar figure:
@@ -3539,7 +3539,7 @@ export PATH
 # `ptxas` and it stops requiring the newer driver's embedded compiler. A CUDA
 # devel image ships one. Exported ONLY when a ptxas is actually found and the
 # variable is not already set, and LOGGED either way -- a silent fallback is
-# how "it ran" and "it ran the way I think it ran" come apart.
+# how "it ran" and "it ran as intended" come apart.
 # ONLY WHEN THE DRIVER NEEDS IT (2026-08-29). This exported the escape
 # whenever a ptxas existed, so a driver-580 host that MAX supports natively
 # was still compiled through the image's CUDA 12.4 ptxas, and the isolation
@@ -4766,7 +4766,7 @@ RELEASE_SOURCE
         ro_verify "$OUT/route-overlay.txt" || leg_die "route overlay not verified"
         leg_say "  route overlay from the tooling checkout: $RO_FILES"
     fi
-    # DEVIATION 2704 (Andrew, 2026-09-13): every leg stages its datasets and
+    # DEVIATION 2704 (2026-09-13): every leg stages its datasets and
     # corpora from R2 here, after the source is unpacked and before any body
     # runs; a raw download on the box is a fallback that stage.log makes
     # visible. Default keys: the neural corpora (this runner's payloads);

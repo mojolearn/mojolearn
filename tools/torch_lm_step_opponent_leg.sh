@@ -4,8 +4,8 @@
 # item 5), measured once per GPU. VENDOR-AGNOSTIC: the same file runs on an
 # AMD ROCm box and on an NVIDIA CUDA box; it detects which one it is on.
 #
-# AMD FIRST (Andrew, 2026-09-11: the deciding speed column is the Instinct
-# MI325X on DigitalOcean). The orchestrator's DigitalOcean runner copies the
+# AMD FIRST (2026-09-11: the deciding speed column is the Instinct
+# MI325X on DigitalOcean). The DigitalOcean runner copies the
 # source to /root/mojolearn and runs, on the droplet:
 #
 #   cd /root/mojolearn && MOJOLEARN_REPO_COMMIT=<sha> \

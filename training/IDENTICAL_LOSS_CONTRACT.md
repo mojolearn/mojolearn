@@ -111,8 +111,7 @@ below are pinned on the one-rounding argument and on internal consistency, NOT
 on having read ATen, and each is marked UNVERIFIED AGAINST THE REFERENCE where
 it appears: the log-sum-exp spelling of 4.2, the label smoothing combine of
 section 5, and the division of 4.5. When a checkout lands those are the first
-three to re-read, and a disagreement is a finding rather than an
-embarrassment.
+three to re-read, and a disagreement is a finding to record.
 
 **MAX's logsoftmax is evidence about MAX and not about the reference**, and it
 is worth recording because it is the spelling a kernel author reaches for.

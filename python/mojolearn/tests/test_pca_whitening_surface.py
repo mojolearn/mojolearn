@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Authored PCA whitening boundary checks; never run by a subagent.
+"""PCA whitening boundary checks.
 
 Default cases use host binding sentinels, not numerical PCA implementations.
 The explicit opt-in cases require root-only remote CUDA/HIP IDENTICAL work.

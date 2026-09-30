@@ -18,7 +18,7 @@ not the target is labeled by its own numbers in every line printed.
 
 INPUT KINDS (MOJOLEARN_ATTN_KINDS, comma separated):
   file:<dir>  REAL ACTIVATIONS, the kind a timing or promotion claim quotes
-              (CONTRIBUTING.md (Performance claims), Andrew 2026-09-11: the two
+              (CONTRIBUTING.md (Performance claims), 2026-09-11: the two
               kinds are two ORDINARY corpora that differ in what they are,
               never an adversarial fixture). `<dir>` holds q.bin, k.bin,
               v.bin, dctx.bin and meta.txt as the backward launcher dumps
@@ -67,7 +67,7 @@ WHAT IT ASSERTS, per kind:
      MOJOLEARN_ATTN_ROUNDS (7) timed rounds, the two arms alternated
      inside each round (A B, then B A), each sample one `PRICE` line;
      medians and achieved TFLOP/s at the end. Achieved TFLOP/s is the
-     HANDOFF_speed_gemm definition applied to attention: useful flops over
+     GEMM price definition applied to attention: useful flops over
      the VISIBLE cells only, `4 * cells * head_dim` forward (two
      contractions) and `10 * cells * head_dim` backward (five: the score
      recompute, dP, dV, dQ, dK), divided by the median milliseconds times

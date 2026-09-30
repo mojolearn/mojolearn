@@ -69,7 +69,7 @@
 # already registered for a different project name ("A pending trusted
 # publisher matching this configuration has already been registered for a
 # different project name"), so the two new projects cannot share `pypi`.
-# `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26): the Linux
+# `pip install mojolearn` WORKS FOR EVERYONE (since 2026-09-26): the Linux
 # core requires mojolearn-nvidia==<v> AND mojolearn-amd==<v>, so pip can
 # resolve mojolearn==<v> only once both plugins are on the index. THE PLUGIN
 # JOBS RUN FIRST and the core's job LAST: `publish` needs `publish_plugins`

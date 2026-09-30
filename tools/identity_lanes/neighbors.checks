@@ -1,4 +1,4 @@
-# the neighbors lane's per-seam check drivers and sabotage arms (pass 2; docs/lanes/progress/neighbors.md)
+# the neighbors lane's per-seam check drivers and sabotage arms (pass 2)
 x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5206_sqdist_fold_reversed.patch
 x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5207_select_tie_high.patch
 x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5208_rbf_fold_reversed.patch

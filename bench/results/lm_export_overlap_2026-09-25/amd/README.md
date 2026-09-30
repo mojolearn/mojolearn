@@ -4,7 +4,7 @@ Branch `lane/lm-export-overlap-amd` (on `lane/lm-export-overlap`). This is
 the AMD proof of the merged byte LM export lane (device state copied
 straight into the caller's buffer) and the overlapped per-step hash of
 `tools/lm_segment.py run`, plus the progress PUTs a resume reads from R2.
-Scope is the light validation Andrew asked for: the NEW binding only,
+Scope is a light validation: the NEW binding only,
 everything once. The OLD digests are the H100's
 (`bench/results/byte_lm_export_fast_2026-09-25/h100/export_old.json`,
 step 101 from the same checkpoint).

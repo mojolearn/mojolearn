@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sanity of the CNN trainer's pieces (Linear, softmax cross entropy, SGD)
 against float64 NumPy, and that CNNClassifier learns a separable task. The
-whole trajectory against torch is a two-stage check recorded in
-docs/lanes/progress/cnn.md (torch and the bindings live in different
-interpreters on the dev pod)."""
+whole trajectory against torch is a two-stage check (torch and the bindings
+live in different interpreters on the dev pod)."""
 import numpy as np
 
 

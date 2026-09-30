@@ -175,8 +175,7 @@ a column count well above 220."""
 
 comptime BORROW_X_COLUMNS = not is_defined["MOJOLEARN_2550_HOST_COPY"]()
 """DEVIATION 2550 (2026-09-11), DEFAULT ON in both tiers since 2026-09-11
-(flipped on Andrew's order on one dataset, Istella-S on the MI325X; taxi
-owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
+(flipped on one dataset, Istella-S on the MI325X; taxi owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
 Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
 into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
 again into its own `List` before quantization, so a 1M x 220 fit paid two

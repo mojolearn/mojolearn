@@ -15,7 +15,7 @@ hash      `CausalLM.load(path)` with NO keyword must print the fp32_v1
           with no keyword. Same ids as tools/lowbit_blocks/model_logits.py
           (B=2, L=64, splitmix64 seed 0x6c6f7762). Exit 1 on any mismatch.
 generate  what a user who passes nothing gets from `generate` against what
-          fp32_v1 gave them (the orchestrator's condition before the merge):
+          fp32_v1 gave them (the maintainer's condition before the merge):
           a 512-token prompt at B=1, N new tokens, (a) the default model
           (fp32_v1) and (b) a model loaded with
           numeric_profile="fp32_v1" (its resident session where the binding

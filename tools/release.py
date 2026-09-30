@@ -119,8 +119,8 @@ pipelines stop at their publish step and say so.
 
 THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py). Linux ships as
 three PyPI projects, mojolearn (the core), mojolearn-nvidia and mojolearn-amd,
-the only Linux layout since 0.8.22 (Andrew, 2026-09-26: the combined wheel is
-removed; 0.8.20 and earlier stay installable). `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26): the Linux
+the only Linux layout since 0.8.22 (2026-09-26: the combined wheel is
+removed; 0.8.20 and earlier stay installable). `pip install mojolearn` WORKS FOR EVERYONE (since 2026-09-26): the Linux
 core requires BOTH plugins at its own version exactly, so pip can resolve
 `mojolearn==<v>` only once mojolearn-nvidia and mojolearn-amd <v> are both on
 the index. The PLUGINS PUBLISH FIRST and the CORE LAST. Each column gates its
@@ -468,8 +468,8 @@ def gpu_legs(ctx):
 #: DigitalOcean has a GPU droplet live (the DigitalOcean leg refuses a rental
 #: then, one GPU droplet at a time on the account) or no usable token.
 #: cpu-box: tools/release_linux_build.sh --archs gfx942 on a RunPod CPU pod,
-#: the opt-in CPU route for the AMD set alone (Andrew, 2026-09-26, 0.8.23:
-#: DigitalOcean refused on billing and Hot Aisle had no MI300X). gfx942 is
+#: the opt-in CPU route for the AMD set alone (2026-09-26, 0.8.23:
+#: DigitalOcean was unavailable and Hot Aisle had no MI300X). gfx942 is
 #: compiled ahead of time from --target-accelerator, so no AMD GPU is needed to
 #: build it; the AMD column still runs the wheel on a real MI300X. Never auto.
 AMD_BUILD_PROVIDERS = ("auto", "do", "hotaisle", "cpu-box")
@@ -657,7 +657,7 @@ def linux_legs(ctx):
 
 def launch_detached(ctx, legs):
     """THE ONE LAUNCH POINT for the Linux builds and the GPU columns. Every leg
-    is launched at once, with no stagger (Andrew, 2026-09-25: a release is
+    is launched at once, with no stagger (2026-09-25: a release is
     parallel only). Each runs detached (its own session, so this script can
     exit or be interrupted without killing a paid rental) and writes its exit
     code last. A leg that is running is left alone, a leg whose output checks
@@ -2168,7 +2168,7 @@ class Release:
 
     def mac_cross_check(self):
         """THE MAC WHEEL AGAINST THE OTHER VENDORS BEFORE IT PUBLISHES
-        (Andrew, 2026-09-26: light). publish-macos waits on no GPU column, so
+        (2026-09-26: light). publish-macos waits on no GPU column, so
         until now the Apple column was compared with nothing before the macOS
         wheel went up. It is diffed here, in seconds and with nothing rented,
         against the newest earlier release's recorded NVIDIA and AMD columns:

@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/lm_controls_body.sh -- the negative controls of the GPT-3 Small run
-# (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, section 6 item 7) on ONE rented NVIDIA
+# on ONE rented NVIDIA
 # box, as a MOJOLEARN_GEMM_LEG_EXTRA body for tools/gemm_remote_leg.sh. With
 # `--arm amd` it runs on an AMD box (tools/hotaisle_leg.sh or
 # tools/do_extra_leg.sh), and `--controls "" --steps N --devices 0,1` makes it

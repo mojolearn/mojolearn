@@ -35,8 +35,8 @@ THE ONE ACCESSOR FOR EVERY BINDING (lane/devctx-lifetime, 2026-09-28).
 not only the neural ones; `neural_ctx` is the same slot under its first name.
 The merged-m2-fix lane found the same Metal queue exhaustion in the GP, SVM,
 KernelRidge, GMM and Cholesky bindings, and this lane moved every remaining
-per-call `DeviceContext()` in a binding entry onto this accessor (the audit is
-docs/lanes/progress/devctx-lifetime.md). Rules for a caller:
+per-call `DeviceContext()` in a binding entry onto this accessor (the proof is
+tools/devctx_lifetime_proof.sh). Rules for a caller:
 
   * One slot name per binding .so and numeric tier, spelled
     `"Mojo<Binding>ContextIdentical" if <mode> == IDENTICAL else

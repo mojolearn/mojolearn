@@ -3,7 +3,7 @@
 Heavy CPU work leaves the shared Mac and runs on one RunPod CPU pod per lane.
 That covers host binding builds, identity_break CPU columns, sabotage builds
 and pytest modules. The Mac keeps Metal checks and one-core quick checks. No
-GPU is rented, so Andrew's release-only GPU rule is untouched.
+GPU is rented, so the release-only GPU rule is untouched.
 
 ## One command
 

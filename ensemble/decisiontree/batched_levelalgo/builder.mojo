@@ -522,9 +522,7 @@ then ran on the two datasets of section 9 at 1M rows, IDENTICAL tier, on the
 M4 (`bench/results/rf_2502_m4_2026-09-11/`): taxi 7206..7295 -> 6403..6554
 ms, logloss 0.525912 -> 0.525910; Istella-S 34667..42381 -> 16346..18130 ms,
 logloss 0.145578 -> 0.145560. A fit-time win on both kinds with equal
-logloss is the flip condition, and Andrew ratified it the same day: "if
-things are improving now with these 2 datasets we should be turning those
-deviations on". The forest a classifier ships CHANGED with this flip (taxi
+logloss is the flip condition, and it was met the same day. The forest a classifier ships CHANGED with this flip (taxi
 1M IDENTICAL hash 0ae984630cfca2a8 -> d8f64dae01de00bd, Istella
 15e38312cb4bb870 -> 574b24d0d7af51d0; the rf-clf fingerprints move, rf-reg
 does not). The text below describes the ON arm.

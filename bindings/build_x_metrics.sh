@@ -1,6 +1,6 @@
 #!/bin/sh
 # The metrics expansion lane's GPU binding: evaluation metrics and
-# model_selection helpers (x_metrics/; docs/lanes/ALGORITHM_EXPANSION_PLAN.md item 1a).
+# model_selection helpers (x_metrics/).
 set -eu
 MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."

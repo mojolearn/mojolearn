@@ -4,7 +4,7 @@
 
 **NOT YET WIRED** into `bindings/_mojolearn_estimators.mojo` or
 `python/mojolearn/` -- those directories are not this lane's. The README's
-WHAT THE ORCHESTRATOR MUST WIRE names the tasks; this file is the entry a
+WHAT THE MAINTAINER MUST WIRE names the tasks; this file is the entry a
 binding should reach, shaped like `cholesky/estimator.mojo::
 cholesky_factor_host` and `kde/estimator.mojo::kde_score_samples_host`.
 

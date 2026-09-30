@@ -10,7 +10,7 @@ cuBLAS for `CUBLAS_OP_T, CUBLAS_OP_N`, and `raft/linalg/detail/lstsq.cuh:
 implementation, so `CONTRIBUTING.md (Algorithms and references)` says call the MAX equivalent -- and the MAX
 equivalent is MEASURED unusable at this shape:
 
-- `bench/results/LANE_covariance-unblock_2026-08-19.md`, orchestrator
+- `bench/results/LANE_covariance-unblock_2026-08-19.md`, maintainer
   postscript: `linalg.matmul[transpose_b=True]` delivers ~25 GFLOP/s on the
   32 x 32 x 4,000,000 Gram product (322.9 ms, `PHASE pca.gemm_nt_core`)
   against ~248 GFLOP/s on square shapes. The product reads 512 MB once, so

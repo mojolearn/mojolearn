@@ -84,7 +84,7 @@ pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . \
     decomposition/checks/jacobi_sm120a_probe.mojo "$OUT/odd_x.f32" > "$OUT/probe_jit.txt" 2> "$OUT/probe_jit.err"
 say "probe_jit_exit=$?"
 
-# 4. The one-screen summary the orchestrator reads first.
+# 4. The one-screen summary the maintainer reads first.
 for f in probe_aot probe_aot_arm1 probe_jit; do
     [ -f "$OUT/$f.txt" ] || continue
     say "== $f"
