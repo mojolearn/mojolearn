@@ -1,0 +1,22 @@
+diff --git a/x_linear/sgd.mojo b/x_linear/sgd.mojo
+index ab5469b5e..3a5d5a82d 100644
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -294,7 +294,7 @@ def sgd_one(
+         r_lo = span.r0
+         r_hi = span.r1
+         if span.resume():
+-            intercept = ld(span.st_in(), ST_INTERCEPT)
++            intercept = Float32(0)  # SABOTAGE e2e: a resumed launch forgets the intercept
+             u = ld(span.st_in(), ST_U)
+             eta = ld(span.st_in(), ST_ETA)
+             best = ld(span.st_in(), ST_BEST)
+@@ -709,7 +709,7 @@ def sgd_one_warp[K: Int](
+                 if j < d:
+                     wr[kk] = ld(span.w_in(), j)
+                     qr[kk] = ld(span.q_in(), j)
+-            intercept = ld(span.st_in(), ST_INTERCEPT)
++            intercept = Float32(0)  # SABOTAGE e2e: a resumed launch forgets the intercept
+             u = ld(span.st_in(), ST_U)
+             eta = ld(span.st_in(), ST_ETA)
+             best = ld(span.st_in(), ST_BEST)
