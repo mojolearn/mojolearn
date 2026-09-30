@@ -1181,7 +1181,6 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
         )
 
     offsets = _offsets_for(probes)
-    flat, packed = _pack(gs, probes)
     info = zeros((2,), "<f4")
 
     # `params` is, in this exact order (mirrored word for word in
@@ -1192,6 +1191,21 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     plist = [int(len(gs)), mn]
 
     binding = _load(numeric_mode)
+    # lane/neural-net-experiment (2026-09-30): several tensors go to the
+    # device straight from their own memory and come back the same way
+    # (`clip_grad_norm_multi`), instead of a packed flat host copy before
+    # and an unpack after -- two host copies of every gradient per clip.
+    # The same device buffer, offsets and clip, so the same bits.
+    # MOJOLEARN_CLIP_PACKED=1 keeps the packed entry (the A/B); a binary
+    # without the entry, or several optimizer devices, take it too.
+    multi = getattr(binding, "clip_grad_norm_multi", None)
+    if (len(gs) > 1 and multi is not None
+            and os.environ.get("MOJOLEARN_CLIP_PACKED") != "1"
+            and os.environ.get("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") == "1"):
+        multi([addr(g, name="tensor") for g in gs], addr_ro(offsets, name="offsets"),
+              addr(info, name="info"), plist)
+        return float(info[0])
+    flat, packed = _pack(gs, probes)
     binding.clip_grad_norm(
         addr(flat, name="grads"), addr_ro(offsets, name="offsets"),
         addr(info, name="info"), plist,

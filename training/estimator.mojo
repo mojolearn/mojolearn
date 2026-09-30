@@ -557,6 +557,98 @@ def identical_clip_grad_norm_host(
     info_ptr.unsafe_store(0, h.unsafe_ptr().unsafe_load(0))
     info_ptr.unsafe_store(1, h.unsafe_ptr().unsafe_load(1))
     _ = h^
+    _ = grad
+    _ = sumsq
+    _ = norms
+    _ = total_cell
+    _ = out2
+    _ = ws
+    _ = sab_partials
+    return n_total
+
+
+def identical_clip_grad_norm_addrs_host(
+    ctx: DeviceContext,
+    addrs: List[Int],
+    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_tensors: Int,
+    max_norm: Float32,
+) raises -> Int:
+    """`identical_clip_grad_norm_host` from the caller's J tensors IN PLACE
+    (lane/neural-net-experiment, 2026-09-30): `addrs[j]` is tensor j's
+    float32 buffer, `offsets` its slice of the one device buffer as
+    before. The J tensors are copied straight from their own memory into
+    that buffer's sub-buffers and back, so the Python surface no longer
+    packs them into one flat host array and unpacks it after (two host
+    copies of every gradient per clip: the bench board's clip-grad-norm
+    lane, 8 tensors of 2,097,152 values, spent most of its 25.7 ms on an
+    MI325X outside the device). THE ONE CALL THAT COMPUTES ANYTHING is
+    the same `identical_clip_grad_norm` over the same buffer with the
+    same offsets, so the norm, the coefficient and every scaled value are
+    the same bits."""
+    if max_norm <= Float32(0.0):
+        raise Error(
+            String("mojolearn training: max_norm must be > 0, got ")
+            + String(max_norm)
+            + String("; this entry point IS the clip, and 'no clipping' is")
+            + String(" spelled by not calling it (the optimizer step takes")
+            + String(" max_norm <= 0 as OFF because it has another job)")
+        )
+    refuse_nonfinite_scalar(String("max_norm"), max_norm)
+    var offsets = _offsets_from_ptr(offsets_ptr, n_tensors)
+    if len(addrs) != n_tensors:
+        raise Error(
+            String("mojolearn training: clip_grad_norm_multi needs one address per tensor, got ")
+            + String(len(addrs)) + String(" for ") + String(n_tensors)
+        )
+    var n_total = offsets[n_tensors]
+
+    var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
+    for j in range(n_tensors):
+        var n_j = offsets[j + 1] - offsets[j]
+        var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
+        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
+        ctx.enqueue_copy(dst_buf=view, src_ptr=src)
+        _ = view^
+    ctx.synchronize()
+
+    var sumsq = ctx.enqueue_create_buffer[DType.float32](n_tensors)
+    var norms = ctx.enqueue_create_buffer[DType.float32](n_tensors)
+    var total_cell = ctx.enqueue_create_buffer[DType.float32](1)
+    var out2 = ctx.enqueue_create_buffer[DType.float32](2)
+    var ws = ctx.enqueue_create_buffer[DType.float32](
+        identical_optimizer_workspace_floats(offsets)
+    )
+    var sab_partials = ctx.enqueue_create_buffer[DType.float32](SAB_CHUNKS)
+    ctx.synchronize()
+
+    # THE ONE CALL THAT COMPUTES ANYTHING.
+    _ = identical_clip_grad_norm(
+        ctx,
+        grad,
+        sumsq,
+        norms,
+        total_cell,
+        out2,
+        ws,
+        sab_partials,
+        offsets,
+        max_norm,
+    )
+
+    for j in range(n_tensors):
+        var n_j = offsets[j + 1] - offsets[j]
+        var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=addrs[j])
+        var view = grad.create_sub_buffer[DType.float32](offsets[j], n_j)
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+        _ = view^
+    var h = ctx.enqueue_create_host_buffer[DType.float32](2)
+    ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=out2)
+    ctx.synchronize()
+    info_ptr.unsafe_store(0, h.unsafe_ptr().unsafe_load(0))
+    info_ptr.unsafe_store(1, h.unsafe_ptr().unsafe_load(1))
+    _ = h^
 
     _ = grad
     _ = sumsq
