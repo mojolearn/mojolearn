@@ -55,6 +55,10 @@ try:
    built.unlink(missing_ok=True)
    run(['bash','bindings/build_'+module+'.sh'],phase+'.log',cwd=src,timeout=3600)
    receipt.write_text(key)
+ for label,src in sources.items():
+  dest=out/'native'/label;dest.mkdir(parents=True,exist_ok=True)
+  for module in ['transformer','mamba','byte_lm']:
+   name='_mojolearn_'+module+'.so';shutil.copy2(src/'python/mojolearn/identical'/name,dest/name)
  site=P(subprocess.check_output([str(py),'-c','import sysconfig; print(sysconfig.get_paths()["purelib"])'],text=True).strip())/'mojolearn'
  lanes=['transformer-forward','mamba3-forward','lm-forward','samba-forward','lm-train-step','samba-train-step']
  manifest={'parent':parent,'candidate':candidate,'source_patch_sha256':hashlib.sha256(patch).hexdigest(),'base_distribution':'mojolearn 0.8.31; Python sources and three IDENTICAL bindings replaced from the named revision','vendor':a.vendor,'backend':backend,'arch':arch,'lanes':lanes,'rounds':5,'reused_parent_results_from':str(prior) if reuse_ok else None,'artifacts':{}}
@@ -101,6 +105,9 @@ try:
    pair[label]=json.loads(files[0].read_text())
   old=pair['parent']['arms']['ours'];new=pair['candidate']['arms']['ours']
   summary[lane]={'parent_ms':old['median_ms'],'candidate_ms':new['median_ms'],'parent_over_candidate':old['median_ms']/new['median_ms'] if old['median_ms'] and new['median_ms'] else None,'ours_digests_equal':old['digests']==new['digests'],'arms':{k:v['arms'] for k,v in pair.items()},'quality':{k:v['quality'] for k,v in pair.items()}}
+ off=json.loads(next((out/'candidate-sync-off').glob('lm-train-step*.json')).read_text())['arms']['ours']
+ on=summary['lm-train-step']['arms']['candidate']['ours']
+ (out/'sync-comparison.json').write_text(json.dumps({'sync_on_ms':on['median_ms'],'sync_off_ms':off['median_ms'],'digests_equal':on['digests']==off['digests'],'sync_off_status':off['status']},indent=2)+'\n')
  (out/'comparison.json').write_text(json.dumps(summary,indent=2)+'\n')
  phase='complete';stamp('finished');(out/'complete.json').write_text(json.dumps(manifest,indent=2)+'\n')
 except Exception as e:
