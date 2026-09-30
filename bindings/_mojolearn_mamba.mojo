@@ -2146,6 +2146,58 @@ def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, 
     _ = d_output^
 
 
+def mamba3_prefill_session_create_binding() raises -> PythonObject:
+    return PythonObject(alloc=Mamba3PrefillSession())
+
+
+def mamba3_prefill_session_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if owner[].busy: raise Error("mamba3 prefill session: busy")
+    owner[].usable = False
+    owner[].release()
+    return PythonObject(0)
+
+
+def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonObject,
+                                           params: PythonObject) raises -> PythonObject:
+    """`mamba3_forward_fresh` on a session: the same 15 pointers (x, nine
+    weights, y, and the four public reports) and 3 parameters (B, L,
+    d_model); the weights retained across calls."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    if len(addrs) != 15 or len(params) != 3:
+        raise Error("mamba3_prefill_session_forward: expected 15 addresses and 3 parameters (B, L, d_model)")
+    if owner[].busy: raise Error("mamba3 prefill session: busy")
+    if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
+    var a = List[Int]()
+    for i in range(10):
+        var p = Int(py=addrs[i])
+        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
+        a.append(p)
+    for i in range(10):
+        a.append(0)
+    for i in range(10, 15):
+        var p = Int(py=addrs[i])
+        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
+        a.append(p)
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    if b < 1 or l < 1:
+        raise Error("mamba3_prefill_session_forward: B and L must be positive")
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _m3_prefill_run(owner[], a, b, l, dm)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    return PythonObject(out_len)
+
+
 def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: PythonObject,
                                             params: PythonObject) raises -> PythonObject:
     """`mamba3_backward` on a session: the same 21 pointers and 3
