@@ -99,6 +99,8 @@ IMPORT_MAP = {
 SUBSTITUTIONS = (
     ("mamba/impl/ops/mamba3_siso.mojo",
      r"lib_smem_page_fits_for\[TARGET_COLUMN, \d+\]\(\)", "False"),
+    ("mamba/impl/modules/mamba3_backward.mojo",
+     r"lib_smem_page_fits_for\[TARGET_COLUMN, M3_S16_SMEM48_BYTES\]\(\)", "False"),
     ("mamba/impl/modules/mamba3_refusal.mojo",
      r'comptime M3_DEVICE_REFUSAL = not is_defined\["MOJOLEARN_MAMBA3_LEGACY_REFUSAL"\]\(\)',
      "comptime M3_DEVICE_REFUSAL = False"),

@@ -7,6 +7,9 @@ from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from std.os import getenv
+from std.time import perf_counter_ns
+from checks.kernel_matrix import TARGET_COLUMN, lib_smem_page_fits_for
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_mul_add, identical_rsqrt, identical_sigmoid, identical_silu, identical_tanh, portable_cosf, portable_sinf, identical_mul
 from mamba.checks.mamba3_fixture import M3_A_FLOOR, M3_D_STATE, M3_HEADDIM, M3_NUM_ROPE_ANGLES, M3_PI, M3_RMS_EPS, Mamba3Dims
@@ -358,6 +361,209 @@ def mamba3_s16_qk_shared_kernel(
     d_k.unsafe_store(rowh * M3_D_STATE + n, dk)
 
 
+#: lane/neural-net-experiment (2026-09-30, the S16 pass): the L40S priced
+#: the staged kernel above at 21.9 ms against the naive 23.8 (8%), where
+#: the instruction count says a few ms. The staged kernel's per-thread
+#: `kl` / `ql` arrays are LOCAL memory indexed at run time (64 words a
+#: thread; 384 threads a multiprocessor next to 99 KB of staged pages
+#: leave no L1 for them), so every chain step still pays a cached device
+#: load, as the naive kernel's did. Two more arms, the same chains:
+#:   regs   `mamba3_s16_qk_regs_kernel`: the j and i loops are unrolled at
+#:          compile time over M3_S16_QK_MAXQ, so `kl` / `ql` are registers
+#:          and the guards are predicates; the p loop stays a loop.
+#:   smem48 `mamba3_s16_qk_smem48_kernel`: `kl` for every n of the block's
+#:          row in threadgroup memory ([j][n], 32 KB) beside the staged
+#:          v / d_y page (16 KB), the dq chain and then the dk chain each
+#:          over its own page (their accumulators are separate, so each
+#:          chain's order is untouched). Exactly the column's 48 KB; only
+#:          where `lib_smem_page_fits_for` says the page fits.
+#: MOJOLEARN_MAMBA3_S16_QK_ARM = naive | shared | regs (default) | smem48
+#: picks the launch at run time, one build for the whole sweep; under
+#: MOJOLEARN_MAMBA_TIMING the S16 driver prints a wall per kernel.
+comptime M3_S16_SMEM48_BYTES = (M3_S16_QK_MAXQ * M3_D_STATE + M3_S16_QK_MAXQ * M3_HEADDIM) * 4
+comptime M3_S16_SMEM48_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S16_SMEM48_BYTES]()
+
+
+def m3_s16_qk_arm() -> Int:
+    var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
+    if a == "naive":
+        return 0
+    if a == "shared":
+        return 1
+    if a == "smem48":
+        return 3
+    return 2
+
+
+def mamba3_s16_qk_regs_kernel(
+    d_q: MutPointer[Float32, MutAnyOrigin],
+    d_k: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    k: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, qsize_in: Int32,
+):
+    """`mamba3_s16_qk_shared_kernel` with the per-thread products in
+    registers: the j and i loops unrolled over M3_S16_QK_MAXQ at compile
+    time, each step predicated on the naive kernel's own bounds."""
+    var b = Int(b_in); var l = Int(l_in); var nh = Int(nh_in); var qs = Int(qsize_in)
+    var vs = stack_allocation[M3_S16_QK_MAXQ * M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dys = stack_allocation[M3_S16_QK_MAXQ * M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var lrow = stack_allocation[M3_S16_QK_MAXQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var lcol = stack_allocation[M3_S16_QK_MAXQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var vtok = stack_allocation[M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dytok = stack_allocation[M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var rowh = Int(block_idx.x)
+    var n = Int(thread_idx.x)
+    if rowh >= b * l * nh:
+        return
+    var h = rowh % nh; var token = (rowh // nh) % l; var bb = rowh // (nh * l)
+    var chunk = token // qs; var inner = token % qs
+    var nc = (l + qs - 1) // qs
+    var lbase = ((bb * nc + chunk) * nh + h) * qs * qs
+    var e = n
+    while e < qs * M3_HEADDIM:
+        var j = e // M3_HEADDIM
+        var p = e - j * M3_HEADDIM
+        var tj = chunk * qs + j
+        var vv = Float32(0.0)
+        var dv = Float32(0.0)
+        if tj < l:
+            vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
+            dv = ftz(d_y.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
+        vs[e] = vv
+        dys[e] = dv
+        e += M3_D_STATE
+    if n < qs:
+        lrow[n] = ftz(seg_l.unsafe_load(lbase + inner * qs + n))
+        lcol[n] = ftz(seg_l.unsafe_load(lbase + n * qs + inner))
+    if n < M3_HEADDIM:
+        vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
+        dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
+    barrier()
+    var kl = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var ql = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    comptime for j in range(M3_S16_QK_MAXQ):
+        if j < inner:
+            var tj = chunk * qs + j
+            var kv = Float32(0.0)
+            if tj < l:
+                kv = ftz(k.unsafe_load(((bb * l + tj) * nh + h) * M3_D_STATE + n))
+            kl[j] = ftz(identical_mul(kv, lrow[j]))
+        elif j > inner and j < qs:
+            var ti = chunk * qs + j
+            var qv = Float32(0.0)
+            if ti < l:
+                qv = ftz(q.unsafe_load(((bb * l + ti) * nh + h) * M3_D_STATE + n))
+            ql[j] = ftz(identical_mul(qv, lcol[j]))
+    var dq = Float32(0.0); var dk = Float32(0.0)
+    for p in range(M3_HEADDIM):
+        var dy_i = dytok[p]
+        var vt = vtok[p]
+        comptime for j in range(M3_S16_QK_MAXQ):
+            if j < inner:
+                if chunk * qs + j < l:
+                    dq = ftz(identical_mul_add(dy_i, ftz(identical_mul(kl[j], vs[j * M3_HEADDIM + p])), dq))
+        comptime for i in range(M3_S16_QK_MAXQ):
+            if i > inner and i < qs:
+                if chunk * qs + i < l:
+                    dk = ftz(identical_mul_add(dys[i * M3_HEADDIM + p], ftz(identical_mul(ql[i], vt)), dk))
+    d_q.unsafe_store(rowh * M3_D_STATE + n, dq)
+    d_k.unsafe_store(rowh * M3_D_STATE + n, dk)
+
+
+def mamba3_s16_qk_smem48_kernel(
+    d_q: MutPointer[Float32, MutAnyOrigin],
+    d_k: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    k: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, qsize_in: Int32,
+):
+    """`mamba3_s16_qk_shared_kernel` with the block's `kl` / `ql` products
+    in threadgroup memory ([j][n]), the dq chain over the k page and the
+    v page, then the dk chain over the q page and the d_y page (the same
+    two arrays, refilled; the two chains have separate accumulators, so
+    each keeps the naive order). 48 KB of threadgroup memory."""
+    var b = Int(b_in); var l = Int(l_in); var nh = Int(nh_in); var qs = Int(qsize_in)
+    var prod = stack_allocation[M3_S16_QK_MAXQ * M3_D_STATE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var page = stack_allocation[M3_S16_QK_MAXQ * M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var rowh = Int(block_idx.x)
+    var n = Int(thread_idx.x)
+    if rowh >= b * l * nh:
+        return
+    var h = rowh % nh; var token = (rowh // nh) % l; var bb = rowh // (nh * l)
+    var chunk = token // qs; var inner = token % qs
+    var nc = (l + qs - 1) // qs
+    var lbase = ((bb * nc + chunk) * nh + h) * qs * qs
+    var tokbase = ((bb * l + token) * nh + h) * M3_HEADDIM
+    # phase 1: the v page and thread n's kl[j] for j < inner
+    var e = n
+    while e < qs * M3_HEADDIM:
+        var j = e // M3_HEADDIM
+        var p = e - j * M3_HEADDIM
+        var tj = chunk * qs + j
+        var vv = Float32(0.0)
+        if tj < l:
+            vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p))
+        page[e] = vv
+        e += M3_D_STATE
+    for j in range(inner):
+        var tj = chunk * qs + j
+        var kv = Float32(0.0)
+        if tj < l:
+            kv = ftz(k.unsafe_load(((bb * l + tj) * nh + h) * M3_D_STATE + n))
+        prod[j * M3_D_STATE + n] = ftz(identical_mul(kv, ftz(seg_l.unsafe_load(lbase + inner * qs + j))))
+    barrier()
+    var dq = Float32(0.0)
+    for p in range(M3_HEADDIM):
+        var dy_i = ftz(d_y.unsafe_load(tokbase + p))
+        for j in range(inner):
+            if chunk * qs + j < l:
+                dq = ftz(identical_mul_add(dy_i, ftz(identical_mul(prod[j * M3_D_STATE + n], page[j * M3_HEADDIM + p])), dq))
+    d_q.unsafe_store(rowh * M3_D_STATE + n, dq)
+    barrier()
+    # phase 2: the d_y page and thread n's ql[i] for i > inner
+    e = n
+    while e < qs * M3_HEADDIM:
+        var i = e // M3_HEADDIM
+        var p = e - i * M3_HEADDIM
+        var ti = chunk * qs + i
+        var dv = Float32(0.0)
+        if ti < l:
+            dv = ftz(d_y.unsafe_load(((bb * l + ti) * nh + h) * M3_HEADDIM + p))
+        page[e] = dv
+        e += M3_D_STATE
+    for i in range(inner + 1, qs):
+        var ti = chunk * qs + i
+        var qv = Float32(0.0)
+        if ti < l:
+            qv = ftz(q.unsafe_load(((bb * l + ti) * nh + h) * M3_D_STATE + n))
+        prod[i * M3_D_STATE + n] = ftz(identical_mul(qv, ftz(seg_l.unsafe_load(lbase + i * qs + inner))))
+    barrier()
+    var dk = Float32(0.0)
+    for p in range(M3_HEADDIM):
+        var vt = ftz(v.unsafe_load(tokbase + p))
+        for i in range(inner + 1, qs):
+            if chunk * qs + i < l:
+                dk = ftz(identical_mul_add(page[i * M3_HEADDIM + p], ftz(identical_mul(prod[i * M3_D_STATE + n], vt)), dk))
+    d_k.unsafe_store(rowh * M3_D_STATE + n, dk)
+
+
+def _s16_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
+    """MOJOLEARN_MAMBA_TIMING: a wall per S16 kernel, `timing m3bwd.s16.<name>`."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print("timing m3bwd.s16." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
+
+
 def mamba3_s16_qk_backward_kernel(
     d_q: MutPointer[Float32, MutAnyOrigin],
     d_k: MutPointer[Float32, MutAnyOrigin],
@@ -471,12 +677,34 @@ def mamba3_backward_s16_s15_into(
         if qsize > M3_S16_V_MAXQ:
             raise Error("mamba3 backward S16: chunk size " + String(qsize) + " above the shared d_v page (" + String(M3_S16_V_MAXQ) + ")")
         comptime if M3_S16_QK_SHARED:
-            if qsize > M3_S16_QK_MAXQ:
-                raise Error("mamba3 backward S16: chunk size " + String(qsize) + " above the shared q/k page (" + String(M3_S16_QK_MAXQ) + ")")
-            ctx.enqueue_function[mamba3_s16_qk_shared_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
+            var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+            var tk = Int(perf_counter_ns())
+            var arm = m3_s16_qk_arm()
+            if arm == 0:
+                ctx.enqueue_function[mamba3_s16_qk_backward_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(cells),1,1), block_dim=(M3_BWD_TPB,1,1))
+                _s16_tick(ctx, ton, tk, "qk_naive")
+            else:
+                if qsize > M3_S16_QK_MAXQ:
+                    raise Error("mamba3 backward S16: chunk size " + String(qsize) + " above the shared q/k page (" + String(M3_S16_QK_MAXQ) + ")")
+                var took = False
+                comptime if M3_S16_SMEM48_FITS:
+                    if arm == 3:
+                        ctx.enqueue_function[mamba3_s16_qk_smem48_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
+                        _s16_tick(ctx, ton, tk, "qk_smem48")
+                        took = True
+                if not took:
+                    if arm == 1:
+                        ctx.enqueue_function[mamba3_s16_qk_shared_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
+                        _s16_tick(ctx, ton, tk, "qk_shared")
+                    else:
+                        ctx.enqueue_function[mamba3_s16_qk_regs_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
+                        _s16_tick(ctx, ton, tk, "qk_regs")
         else:
             ctx.enqueue_function[mamba3_s16_qk_backward_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(qcells),1,1), block_dim=(M3_BWD_TPB,1,1))
         ctx.enqueue_function[mamba3_s16_v_shared_kernel](d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_HEADDIM,1,1))
+        comptime if M3_S16_QK_SHARED:
+            var tv = Int(perf_counter_ns())
+            _s16_tick(ctx, String(getenv("MOJOLEARN_MAMBA_TIMING")) != "", tv, "v_shared")
     else:
         ctx.enqueue_function[mamba3_s16_qkv_backward_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_v.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(_grid(cells),1,1), block_dim=(M3_BWD_TPB,1,1))
     ctx.enqueue_function[mamba3_s15_backward_kernel](d_krot.unsafe_ptr(), d_scale.unsafe_ptr(), d_ks.unsafe_ptr(), krot.unsafe_ptr(), scale.unsafe_ptr(), Int32(b*l*dims.nheads), grid_dim=(_grid(b*l*dims.nheads),1,1), block_dim=(M3_BWD_TPB,1,1))
