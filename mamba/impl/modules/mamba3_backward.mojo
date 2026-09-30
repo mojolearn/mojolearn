@@ -385,16 +385,20 @@ comptime M3_S16_SMEM48_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S16_SMEM4
 
 
 def m3_s16_qk_arm() -> Int:
+    """The S16 q/k arm: `regs` by default (lane/neural-pass4, 2026-09-30:
+    on the L4 `regs` read 9.2 ms against `regs2`'s 10.8 at the board shape
+    and 83.5 against 86.0 at the default shape, the same bits on every arm;
+    `regs2` was the S16 pass's default and stays one env value away)."""
     var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
     if a == "naive":
         return 0
     if a == "shared":
         return 1
-    if a == "regs":
-        return 2
+    if a == "regs2":
+        return 4
     if a == "smem48":
         return 3
-    return 4
+    return 2
 
 
 #: The staged q/k arms (shared, regs, regs2) claim 33 to 36 KB of threadgroup

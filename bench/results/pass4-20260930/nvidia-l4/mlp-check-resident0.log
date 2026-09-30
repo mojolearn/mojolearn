@@ -1,0 +1,6 @@
+49097 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x785980000000, nodemask=2)
+mlp_step_check mode identical rows 256 steps 64
+  per-operation step: median 1.804 ms (first 1226.207 ms)
+  fused step:         median 1.112 ms (first 1.162 ms)  ratio 1.62x
+  losses: first 2.057237 last 1.095671 digest fa1140555d4cfc02
+MLP_STEP_CHECK PASS (64 steps, every byte equal)

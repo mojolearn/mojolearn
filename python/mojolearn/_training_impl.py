@@ -113,7 +113,7 @@ from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, memory_at, zeros
 from ._bufcheck import (
     base_format, dtype_name, is_integer, is_native_f32, memcopy, memzero,
     nelems, probe,
@@ -374,7 +374,24 @@ def _pack(arrays, probes):
     """
     if len(arrays) == 1:
         return arrays[0], False
+    # lane/neural-pass4 (2026-09-30): a registry whose tensors sit END TO
+    # END in one buffer, in registry order (`SambaStack`'s views of its flat
+    # buffer, and any caller who laid its tensors out that way), is borrowed
+    # WHOLE: a writable view over the range, so neither the pack nor the
+    # unpack copies anything. The device then writes the caller's storage
+    # directly, exactly as in the single-tensor case; the caller holds the
+    # owning objects across the call, as `step` documents.
     total = sum(nelems(pb.shape) for pb in probes)
+    end = addr_ro(arrays[0], name="tensor")
+    base = end
+    for a, pb in zip(arrays, probes):
+        if pb.readonly or addr_ro(a, name="tensor") != end:
+            break
+        end += pb.nbytes
+    else:
+        if total > 0:
+            flat = Array.from_buffer(memory_at(base, end - base, writable=True).cast("f"))
+            return flat, False
     flat = empty((total,), "<f4")
     base = addr(flat, name="flat")
     at = 0
@@ -407,6 +424,41 @@ def _unpack_into(flat, arrays, probes):
 # ===================================================================
 
 
+#: lane/neural-pass4 (2026-09-30): `MOJOLEARN_OPTIMIZER_RESIDENT=0` keeps
+#: every optimizer's moments on the host and the per-call `optimizer_step`
+#: (the before arm of the A/B, `tools/optimizer_resident_check.py`).
+_RESIDENT_ENV = "MOJOLEARN_OPTIMIZER_RESIDENT"
+_RESIDENT_ENTRIES = ("optimizer_resident_open", "optimizer_resident_close",
+                     "optimizer_resident_download", "optimizer_resident_upload",
+                     "optimizer_resident_step")
+
+
+def _resident_enabled(binding, wanted):
+    """Whether an optimizer keeps `m` and `v` ON THE DEVICE between steps.
+
+    `optimizer_step` moved seven registry-sized buffers a step (parameters,
+    gradient, `m`, `v` up; parameters, `m`, `v` down), and on the Samba step
+    at the board shape that transport was 55.7 of 147.6 ms on an L4, more
+    than the whole Mamba-3 backward. The moments are the optimizer's own
+    state and nothing reads them between steps, so they stay on the
+    binding's context (`optimizer_resident_*`): four transfers fewer a
+    step, the same `identical_optimizer_step` on the same buffers, the same
+    bits. `exp_avg` and `exp_avg_sq` remain readable (a download on access)
+    and assignable (an upload). Off when `wanted` is False (a caller that
+    builds an optimizer per step, as `SmallMLPTrainer` does), when the
+    environment says `MOJOLEARN_OPTIMIZER_RESIDENT=0`, when a multi-device
+    optimizer count is set (that route lives in the per-call entry), and on
+    a binding without the entries (an older build, a CPU-only install, the
+    test fakes)."""
+    if wanted is False:
+        return False
+    if os.environ.get(_RESIDENT_ENV, "1") == "0":
+        return False
+    if os.environ.get("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1") != "1":
+        return False
+    return all(callable(getattr(binding, n, None)) for n in _RESIDENT_ENTRIES)
+
+
 class _Optimizer(NumericModeMixin):
     """The shared half of `SGD`, `Adam` and `AdamW`.
 
@@ -423,8 +475,16 @@ class _Optimizer(NumericModeMixin):
     _BINDING = _EXT_NAME
     _KIND = None
 
-    def __init__(self, params, where, lr_schedule=None, accumulation_steps=1):
+    def __init__(self, params, where, lr_schedule=None, accumulation_steps=1,
+                 resident=None):
         self._where = where
+        #: The resident moments (`_resident_enabled`): the binding's handle
+        #: once `step` opened one, the module that owns it, whether the host
+        #: copies `_m` / `_v` are current, and what the caller asked.
+        self._res = None
+        self._res_binding = None
+        self._host_fresh = True
+        self._resident_wanted = resident
         # A trainer runs only under a numeric profile whose TRAINING gates have passed.
         _numeric_profile.require_training("mojolearn.%s" % where)
         self.params = _as_seq(params, "params", where)
@@ -457,8 +517,8 @@ class _Optimizer(NumericModeMixin):
         #: signature for both and one state pair means a checkpoint has one
         #: shape (optimizer contract, `optimizer_step_oracle`). Both are
         #: `mojolearn.Array` (DEVIATION 2404).
-        self.exp_avg = zeros((self.n_total,), "<f4")
-        self.exp_avg_sq = zeros((self.n_total,), "<f4")
+        self._m = zeros((self.n_total,), "<f4")
+        self._v = zeros((self.n_total,), "<f4")
         #: SGD's per-tensor `buf_initialized` flag, contract 7.3b. 0 means
         #: this tensor's momentum buffer has never been written, so the first
         #: step COPIES the gradient into it instead of running the
@@ -477,6 +537,70 @@ class _Optimizer(NumericModeMixin):
         self.total_norm_ = None
         #: The clamped coefficient the most recent step applied, or None.
         self.clip_coef_ = None
+
+    # -- the moments: host arrays, or a resident pair mirrored on access ----
+    def _download(self):
+        if self._res is not None and not self._host_fresh:
+            self._res_binding.optimizer_resident_download(
+                self._res, addr(self._m, name="exp_avg"),
+                addr(self._v, name="exp_avg_sq"), int(self.n_total))
+            self._host_fresh = True
+
+    def _upload(self):
+        if self._res is not None:
+            self._res_binding.optimizer_resident_upload(
+                self._res, addr(self._m, name="exp_avg"),
+                addr(self._v, name="exp_avg_sq"), int(self.n_total))
+            self._host_fresh = True
+
+    @property
+    def exp_avg(self):
+        """Adam's first moment (SGD's momentum buffer), a `mojolearn.Array`
+        of `n_total` floats. With the moments resident this is a download
+        on access, so read it once per use, not per element."""
+        self._download()
+        return self._m
+
+    @exp_avg.setter
+    def exp_avg(self, value):
+        self._m = value
+        self._upload()
+
+    @property
+    def exp_avg_sq(self):
+        """Adam's second moment; see `exp_avg`."""
+        self._download()
+        return self._v
+
+    @exp_avg_sq.setter
+    def exp_avg_sq(self, value):
+        self._v = value
+        self._upload()
+
+    def _open_resident(self, binding):
+        """Open the resident pair on the first `step` (and upload the host
+        moments, which a `load_state_dict` may have filled)."""
+        if self._res is not None or self._resident_wanted is False:
+            return
+        if not _resident_enabled(binding, self._resident_wanted):
+            self._resident_wanted = False
+            return
+        self._res_binding = binding
+        self._res = int(binding.optimizer_resident_open(int(self.n_total)))
+        self._upload()
+
+    @property
+    def resident_(self):
+        """True once the moments live on the device."""
+        return self._res is not None
+
+    def __del__(self):
+        res, binding = getattr(self, "_res", None), getattr(self, "_res_binding", None)
+        if res is not None and binding is not None:
+            try:
+                binding.optimizer_resident_close(res)
+            except Exception:
+                pass
 
     # -- the parameters every algorithm shares --------------------------
     def _config(self):
@@ -645,21 +769,36 @@ class _Optimizer(NumericModeMixin):
         # asked for. A wrong-arm measurement that is correctly labelled
         # by accident is the failure that read-back exists to prevent.
         binding = _load(getattr(self, "numeric_mode", None))
+        self._open_resident(binding)
         # Every array is held in a local across the call. The Mojo side takes
         # raw addresses, borrows and retains nothing, which is only sound
         # while the owning objects are alive (`_buffer.py`). `addr` (writable
         # required) for everything the kernel writes; `addr_ro` for the
         # offsets registry, which it only reads.
-        binding.optimizer_step(
-            addr(flat_p, name="params"),
-            addr(flat_g, name="grads"),
-            addr(self.exp_avg, name="exp_avg"),
-            addr(self.exp_avg_sq, name="exp_avg_sq"),
-            addr_ro(self.offsets, name="offsets"),
-            addr(self.buf_initialized, name="buf_initialized"),
-            addr(info, name="info"),
-            plist,
-        )
+        if self._res is not None:
+            # the moments stay on the device; the host copies are stale
+            # until the next read of `exp_avg` / `exp_avg_sq` downloads them
+            binding.optimizer_resident_step(
+                addr(flat_p, name="params"),
+                addr(flat_g, name="grads"),
+                addr_ro(self.offsets, name="offsets"),
+                addr(self.buf_initialized, name="buf_initialized"),
+                addr(info, name="info"),
+                plist,
+                self._res,
+            )
+            self._host_fresh = False
+        else:
+            binding.optimizer_step(
+                addr(flat_p, name="params"),
+                addr(flat_g, name="grads"),
+                addr(self._m, name="exp_avg"),
+                addr(self._v, name="exp_avg_sq"),
+                addr_ro(self.offsets, name="offsets"),
+                addr(self.buf_initialized, name="buf_initialized"),
+                addr(info, name="info"),
+                plist,
+            )
 
         if packed_p:
             _unpack_into(flat_p, self.params, pprobes)
@@ -791,9 +930,10 @@ class SGD(_Optimizer):
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
-                 accumulation_steps=1, maximize=False, **kwargs):
+                 accumulation_steps=1, maximize=False, resident=None, **kwargs):
         _refuse_unknown(kwargs, "SGD")
-        super().__init__(params, "SGD", lr_schedule, accumulation_steps)
+        super().__init__(params, "SGD", lr_schedule, accumulation_steps,
+                         resident=resident)
         if nesterov and (momentum == 0.0 or dampening != 0.0):
             raise ValueError(
                 "mojolearn.SGD: nesterov=True needs momentum > 0 and "
@@ -913,10 +1053,10 @@ class Adam(_Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, **kwargs):
+                 maximize=False, resident=None, **kwargs):
         _refuse_unknown(kwargs, type(self).__name__)
         super().__init__(params, type(self).__name__, lr_schedule,
-                         accumulation_steps)
+                         accumulation_steps, resident=resident)
         try:
             b1, b2 = betas
         except (TypeError, ValueError):
@@ -968,11 +1108,11 @@ class AdamW(Adam):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, **kwargs):
+                 maximize=False, resident=None, **kwargs):
         super().__init__(params, lr=lr, betas=betas, eps=eps,
                          weight_decay=weight_decay, lr_schedule=lr_schedule,
                          accumulation_steps=accumulation_steps,
-                         maximize=maximize, **kwargs)
+                         maximize=maximize, resident=resident, **kwargs)
 
 
 #: torch parameter names this surface does not have, and the reason each is

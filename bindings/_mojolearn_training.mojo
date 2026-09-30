@@ -82,7 +82,10 @@ from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
     identical_optimizer_step_host,
+    identical_optimizer_step_resident_host,
 )
+from std.ffi import _Global
+from max.gpu.host import DeviceBuffer
 from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
     mlp_train_step_host, mlp_validate_shape,
@@ -279,6 +282,198 @@ def optimizer_step_binding(
                 ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
                 lr, beta1, beta2, eps, weight_decay, momentum, dampening,
                 max_norm,
+            )
+    return PythonObject(n_total)
+
+
+# ===========================================================================
+# THE RESIDENT OPTIMIZER MOMENTS (lane/neural-pass4, 2026-09-30).
+#
+# `optimizer_step` moves seven registry-sized buffers a step: parameters,
+# gradient, `m` and `v` up, parameters, `m` and `v` down. On the Samba step at
+# the board shape (5.7 M parameters, L4, PCIe) that transport is 55.7 of
+# 147.6 ms, more than the Mamba-3 backward. `m` and `v` are the optimizer's
+# own state and nothing else reads them between steps, so a Python optimizer
+# may keep them here: `optimizer_resident_open` allocates a pair on the
+# binding's context (zero filled, as `zeros` filled them), `optimizer_resident_step`
+# runs the SAME `identical_optimizer_step` on that pair (four transfers fewer
+# a step), `optimizer_resident_download` / `_upload` move them for a
+# `state_dict` / `load_state_dict`, `optimizer_resident_close` frees them.
+# Storage: `std.ffi._Global` (the pattern of core/neural_context.mojo), one
+# slot per tier. A handle is an index into the pool; a closed handle's slot
+# is reused by the next open.
+# ===========================================================================
+
+
+struct _OptPool(Defaultable, Movable):
+    var m: List[DeviceBuffer[DType.float32]]
+    var v: List[DeviceBuffer[DType.float32]]
+    #: floats held by each slot; 0 marks a free slot
+    var n: List[Int]
+
+    def __init__(out self):
+        self.m = List[DeviceBuffer[DType.float32]]()
+        self.v = List[DeviceBuffer[DType.float32]]()
+        self.n = List[Int]()
+
+
+comptime _OPT_POOL_NAME = "MojoNeuralTrainingOptPoolIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingOptPoolFast"
+comptime _OPT_POOL = _Global[StorageType=_OptPool, name=_OPT_POOL_NAME, init_fn=_OptPool.__init__]
+
+
+def _opt_pool_handle(handle: PythonObject, want: Int) raises -> Int:
+    var h = Int(py=handle)
+    var pool = _OPT_POOL.get_or_create_ptr()
+    if h < 0 or h >= len(pool[].n) or pool[].n[h] == 0:
+        raise Error("optimizer_resident: handle " + String(h) + " is not open")
+    if want > 0 and pool[].n[h] != want:
+        raise Error(
+            "optimizer_resident: handle " + String(h) + " holds "
+            + String(pool[].n[h]) + " floats, the call names " + String(want)
+        )
+    return h
+
+
+def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObject:
+    """Allocate a resident `(m, v)` pair of `n_total` floats each, zero
+    filled. Returns the handle."""
+    var n = Int(py=n_total)
+    if n < 1:
+        raise Error("optimizer_resident_open: n_total must be >= 1, got " + String(n))
+    var h = -1
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var pool = _OPT_POOL.get_or_create_ptr()
+        var m = ctx.enqueue_create_buffer[DType.float32](n)
+        var v = ctx.enqueue_create_buffer[DType.float32](n)
+        m.enqueue_fill(Float32(0.0))
+        v.enqueue_fill(Float32(0.0))
+        # The fills are ordered before every later use on the one in-order
+        # context, and every host read (the download) waits.
+        for j in range(len(pool[].n)):
+            if pool[].n[j] == 0 and h < 0:
+                h = j
+        if h < 0:
+            pool[].m.append(m^)
+            pool[].v.append(v^)
+            pool[].n.append(n)
+            h = len(pool[].n) - 1
+        else:
+            pool[].m[h] = m^
+            pool[].v[h] = v^
+            pool[].n[h] = n
+    return PythonObject(h)
+
+
+def optimizer_resident_close_binding(handle: PythonObject) raises -> PythonObject:
+    """Free a handle's pair (after the queue drains). Returns the handle."""
+    var h = _opt_pool_handle(handle, 0)
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        ctx.synchronize()
+        var pool = _OPT_POOL.get_or_create_ptr()
+        pool[].m[h] = ctx.enqueue_create_buffer[DType.float32](1)
+        pool[].v[h] = ctx.enqueue_create_buffer[DType.float32](1)
+        pool[].n[h] = 0
+    return PythonObject(h)
+
+
+def optimizer_resident_download_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """The pair to host memory (`n_total` floats each). Returns `n_total`."""
+    var n = Int(py=n_total)
+    var h = _opt_pool_handle(handle, n)
+    var mp = _f32_ptr(Int(py=m_addr))
+    var vp = _f32_ptr(Int(py=v_addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var pool = _OPT_POOL.get_or_create_ptr()
+        ctx.enqueue_copy(dst_ptr=mp, src_buf=pool[].m[h])
+        ctx.enqueue_copy(dst_ptr=vp, src_buf=pool[].v[h])
+        ctx.synchronize()
+    return PythonObject(n)
+
+
+def optimizer_resident_upload_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """Host memory (`n_total` floats each) into the pair. Returns `n_total`."""
+    var n = Int(py=n_total)
+    var h = _opt_pool_handle(handle, n)
+    var mp = _f32_ptr(Int(py=m_addr))
+    var vp = _f32_ptr(Int(py=v_addr))
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var pool = _OPT_POOL.get_or_create_ptr()
+        ctx.enqueue_copy(dst_buf=pool[].m[h], src_ptr=mp)
+        ctx.enqueue_copy(dst_buf=pool[].v[h], src_ptr=vp)
+        ctx.synchronize()
+    return PythonObject(n)
+
+
+def optimizer_resident_step_binding(
+    param_addr: PythonObject,
+    grad_addr: PythonObject,
+    offsets_addr: PythonObject,
+    init_addr: PythonObject,
+    info_addr: PythonObject,
+    params: PythonObject,
+    handle: PythonObject,
+) raises -> PythonObject:
+    """`optimizer_step` with `m` and `v` taken from the handle's resident
+    pair instead of two host buffers: the same `params` list (its 12 or 13
+    slots, word for word), the same buffers otherwise, the same step. The
+    single-device route only (`MOJOLEARN_OPTIMIZER_DEVICE_COUNT` is the
+    per-call optimizer's; the Python side keeps that route there). Returns
+    `N`."""
+    if len(params) != 12 and len(params) != 13:
+        raise Error(
+            "optimizer_resident_step: params must contain 12 or 13 values, got "
+            + String(len(params))
+        )
+    var h = _opt_pool_handle(handle, 0)
+    var pp = _f32_ptr(Int(py=param_addr))
+    var gp = _f32_ptr(Int(py=grad_addr))
+    var maximize = len(params) == 13 and Int(py=params[12]) != 0
+    var op = _i32_ptr(Int(py=offsets_addr))
+    var ip = _i32_ptr(Int(py=init_addr))
+    var fp = _f32_ptr(Int(py=info_addr))
+    var n_tensors = Int(py=params[0])
+    var kind = Int(py=params[1])
+    var t = Int(py=params[2])
+    var nesterov = Int(py=params[3])
+    var lr = Float32(Float64(py=params[4]))
+    var beta1 = Float32(Float64(py=params[5]))
+    var beta2 = Float32(Float64(py=params[6]))
+    var eps = Float32(Float64(py=params[7]))
+    var weight_decay = Float32(Float64(py=params[8]))
+    var momentum = Float32(Float64(py=params[9]))
+    var dampening = Float32(Float64(py=params[10]))
+    var max_norm = Float32(Float64(py=params[11]))
+    var n_total = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var pool = _OPT_POOL.get_or_create_ptr()
+        if maximize:
+            if n_tensors < 1 or op[n_tensors] < Int32(0):
+                raise Error("optimizer_resident_step: maximize needs a registry with offsets[J] >= 0")
+            var n_flat = Int(op[n_tensors])
+            var neg = maximize_negated_copy(gp, n_flat)
+            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            n_total = identical_optimizer_step_resident_host(
+                ctx, pp, np_, pool[].m[h], pool[].v[h], op, ip, fp, n_tensors,
+                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                momentum, dampening, max_norm,
+            )
+            if max_norm > Float32(0.0):
+                for i in range(n_flat):
+                    gp[i] = maximize_negate(neg[i])
+        else:
+            n_total = identical_optimizer_step_resident_host(
+                ctx, pp, gp, pool[].m[h], pool[].v[h], op, ip, fp, n_tensors,
+                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                momentum, dampening, max_norm,
             )
     return PythonObject(n_total)
 
@@ -908,6 +1103,11 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[accumulate_parallel_available_binding]("accumulate_parallel_available")
         m.def_function[optimizer_parallel_available_binding]("optimizer_parallel_available")
         m.def_function[optimizer_step_binding]("optimizer_step")
+        m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")
+        m.def_function[optimizer_resident_close_binding]("optimizer_resident_close")
+        m.def_function[optimizer_resident_download_binding]("optimizer_resident_download")
+        m.def_function[optimizer_resident_upload_binding]("optimizer_resident_upload")
+        m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
         m.def_function[clip_grad_norm_multi_binding]("clip_grad_norm_multi")
         m.def_function[ce_loss_binding]("ce_loss")
