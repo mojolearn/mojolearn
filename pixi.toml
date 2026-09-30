@@ -1,5 +1,5 @@
 [workspace]
-authors = ["Andrew Hendel <ajhendel@gmail.com>"]
+authors = ["Andrew Hendel <916698+ajhendel@users.noreply.github.com>"]
 channels = ["https://conda.modular.com/max", "conda-forge"]
 name = "mojolearn"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
