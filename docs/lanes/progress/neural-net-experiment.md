@@ -263,3 +263,15 @@ whether every "same bits" row's digest stays. The compile risk is real
 too: none of the Mojo here was built (no toolchain in this session); the
 measuring agent's first build will find the syntax slips, as it did on
 the first pass.
+
+## The direction pass (2026-09-30 evening)
+
+Read the L40S ceiling table before writing anything: fixed15's tuned
+product is 2.1x PyTorch FP32 at the qkv shapes and 0.6x at mlp_up, its
+training operation 0.8x; the fp32 identical arm sits at 0.65x PyTorch
+FP32 everywhere. The assessment and the four commits are in
+EXPERIMENTS.md, "The direction pass". Two of them are tools that make the
+next run answer "where does the time go" for gemm-int8 and for the Samba
+backward; the other two are fixed15 (a run-time plan override for the
+wide-N sweep; the planes quantizer as one block per row). The measuring
+lane's compile fixes are cherry-picked onto the branch.
