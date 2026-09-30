@@ -1,0 +1,208 @@
+COMMAND ["/root/neural-toggle-sweep/venv/bin/python", "/root/mojolearn-neural-toggle-sweep/tools/neural_experiments.py", "--set", "nvidia", "--calls", "10", "--json", "/root/neural-toggle-sweep/sweep-nvidia.json"]
+### baseline  (defaults)
+    FAILED (exit 1); stderr tail:
+3679 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ab000000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### no_retain_weights  MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0 MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0
+    FAILED (exit 1); stderr tail:
+3781 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a7440000000, nodemask=2)
+3781 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x71fc00000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### legacy_fresh_entry  MOJOLEARN_TRANSFORMER_SESSION_FRESH=0
+    FAILED (exit 1); stderr tail:
+3862 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b7d00000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### no_stage_reset  MOJOLEARN_TRANSFORMER_STAGE_RESET=0
+    FAILED (exit 1); stderr tail:
+3945 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x198e40000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### speculative_attn  MOJOLEARN_ATTN_SPECULATIVE=1
+    FAILED (exit 1); stderr tail:
+4047 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x307440000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### swiglu_fused  MOJOLEARN_SWIGLU_FUSED=1
+    FAILED (exit 1); stderr tail:
+4128 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30f640000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### no_layer_sync  MOJOLEARN_BYTE_LM_LAYER_SYNC=0
+    FAILED (exit 1); stderr tail:
+4211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x503b80000000, nodemask=1)
+4211 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x191640000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+### all_on  MOJOLEARN_ATTN_SPECULATIVE=1 MOJOLEARN_BYTE_LM_LAYER_SYNC=0 MOJOLEARN_SWIGLU_FUSED=1 MOJOLEARN_TRANSFORMER_STAGE_RESET=0
+    FAILED (exit 1); stderr tail:
+4313 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796c00000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 106, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/neural_stage_timing.py", line 53, in main
+    bbn.make_inputs(lane, args.shape, args.calls + 1, path)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 644, in make_inputs
+    spec, (xshape, xrange) = mamba_weight_spec(model, d)
+                             ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 581, in mamba_weight_spec
+    corpus = _load_mamba_corpus()
+  File "/root/mojolearn-neural-toggle-sweep/tools/bench_board_neural.py", line 491, in _load_mamba_corpus
+    spec.loader.exec_module(mod)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 759, in exec_module
+  File "<frozen importlib._bootstrap>", line 491, in _call_with_frames_removed
+  File "/root/mojolearn-neural-toggle-sweep/mamba/corpus/gen_corpus.py", line 67, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+
+
+| experiment | transformer-forward | mamba3-forward | samba-forward | samba-train-step | lm-forward | lm-train-step |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| no_retain_weights | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| legacy_fresh_entry | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| no_stage_reset | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| speculative_attn | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| swiglu_fused | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| no_layer_sync | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+| all_on | FAILED | FAILED | FAILED | FAILED | FAILED | FAILED |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.

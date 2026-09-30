@@ -1,0 +1,24 @@
+COMMAND ["/root/neural-toggle-sweep/venv/bin/python", "/root/mojolearn-neural-toggle-sweep/tools/neural_experiments.py", "--lane", "transformer-forward", "--only", "baseline", "--gemm-arms", "shipped,tuned128,half,quarter,kpack,kfoldv", "--calls", "10", "--json", "/root/neural-toggle-sweep/gemm-arms-transformer-forward.json"]
+### baseline  (defaults)
+    transformer-forward     2.590 ms  digest=d5a2b289afdb5709
+### gemm_arm_tuned128  MOJOLEARN_GEMM_ARM=tuned128
+    transformer-forward     2.562 ms  digest=d5a2b289afdb5709
+### gemm_arm_half  MOJOLEARN_GEMM_ARM=half
+    transformer-forward     2.541 ms  digest=d5a2b289afdb5709
+### gemm_arm_quarter  MOJOLEARN_GEMM_ARM=quarter
+    transformer-forward     2.622 ms  digest=d5a2b289afdb5709
+### gemm_arm_kpack  MOJOLEARN_GEMM_ARM=kpack
+    transformer-forward     2.679 ms  digest=d5a2b289afdb5709
+### gemm_arm_kfoldv  MOJOLEARN_GEMM_ARM=kfoldv
+    transformer-forward     2.559 ms  digest=d5a2b289afdb5709
+
+| experiment | transformer-forward |
+|---|---:|
+| baseline | 2.590 (1.00x) |
+| gemm_arm_tuned128 | 2.562 (0.99x) same |
+| gemm_arm_half | 2.541 (0.98x) same |
+| gemm_arm_quarter | 2.622 (1.01x) same |
+| gemm_arm_kpack | 2.679 (1.03x) same |
+| gemm_arm_kfoldv | 2.559 (0.99x) same |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.
