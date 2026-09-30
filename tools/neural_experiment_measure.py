@@ -36,8 +36,13 @@ try:
  for label,src in sources.items():
   for module in ['transformer','byte_lm']:
    phase=label+'-build-'+module
-   (src/'python/mojolearn/identical'/('_mojolearn_'+module+'.so')).unlink(missing_ok=True)
+   built=src/'python/mojolearn/identical'/('_mojolearn_'+module+'.so')
+   key=hashlib.sha256((src/('bindings/_mojolearn_'+module+'.mojo')).read_bytes()+(src/('bindings/build_'+module+'.sh')).read_bytes()+(src/'training/byte_lm_logits.mojo').read_bytes() if module=='byte_lm' else (src/'bindings/_mojolearn_transformer.mojo').read_bytes()+(src/'bindings/build_transformer.sh').read_bytes()).hexdigest()
+   receipt=out/(phase+'.source-sha256')
+   if built.exists() and receipt.exists() and receipt.read_text()==key:continue
+   built.unlink(missing_ok=True)
    run(['bash','bindings/build_'+module+'.sh'],phase+'.log',cwd=src,timeout=3600)
+   receipt.write_text(key)
  site=P(subprocess.check_output([str(py),'-c','import sysconfig; print(sysconfig.get_paths()["purelib"])'],text=True).strip())/'mojolearn'
  lanes=['transformer-forward','lm-forward','samba-forward','lm-train-step','samba-train-step']
  manifest={'parent':parent,'candidate':candidate,'source_patch_sha256':hashlib.sha256(patch).hexdigest(),'base_distribution':'mojolearn 0.8.31; Python sources and two IDENTICAL bindings replaced from the named revision','vendor':a.vendor,'backend':backend,'arch':arch,'lanes':lanes,'rounds':5,'artifacts':{}}

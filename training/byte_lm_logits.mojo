@@ -250,7 +250,7 @@ def _logits_forward(
     return out^
 
 
-def _refuse_nonfinite_logits(out: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
+def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
     """The same refusal `_logits_forward` makes over its List, over the
     caller's memory, eight lanes at a time: the exponent-all-ones test on
     the bits (an infinity or a NaN), and the FIRST offending flat index in
@@ -261,13 +261,13 @@ def _refuse_nonfinite_logits(out: MutPointer[Float32, MutUntrackedOrigin], n: In
     var i = 0
     var body = n - n % W
     while i < body:
-        var bits = bitcast[DType.uint32, W](out.unsafe_load[width=W](i)) & exp
+        var bits = bitcast[DType.uint32, W](destination.unsafe_load[width=W](i)) & exp
         var hit = bits.eq(exp).select(SIMD[DType.uint32, W](1), SIMD[DType.uint32, W](0))
         if hit.reduce_or() != UInt32(0):
             break
         i += W
     while i < n:
-        if (bitcast[DType.uint32](out.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+        if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
             raise Error("byte LM logits: non-finite logit at flat index " + String(i)
                         + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
         i += 1
@@ -284,9 +284,9 @@ def _logits_forward_into(
     batch: Int,
     length: Int,
     config: ByteConfig,
-    out: MutPointer[Float32, MutUntrackedOrigin],
+    destination: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
-    """`_logits_enqueue`, then ONE device-to-host copy straight into `out`
+    """`_logits_enqueue`, then ONE device-to-host copy straight into `destination`
     (`batch * length * vocab` floats the caller owns and keeps alive for
     the whole call), then the non-finite refusal over that memory.
 
@@ -306,10 +306,10 @@ def _logits_forward_into(
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
-    download_f32_into(ctx, sc.logits, m * vocab, out)
+    download_f32_into(ctx, sc.logits, m * vocab, destination)
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
-        out.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](out.unsafe_load(0)) ^ UInt32(1)))
-    _refuse_nonfinite_logits(out, m * vocab)
+        destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
+    _refuse_nonfinite_logits(destination, m * vocab)
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
@@ -342,7 +342,7 @@ def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: L
 
 def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
                                  batch: Int, length: Int, config: ByteConfig,
-                                 out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+                                 destination: MutPointer[Float32, MutUntrackedOrigin]) raises:
     """`byte_logits_from_params` writing straight into the caller's memory
     (`_logits_forward_into`): the same uploads, kernels and order."""
     byte_logits_validate(inputs, batch, length, config)
@@ -362,7 +362,7 @@ def byte_logits_from_params_into(ctx: DeviceContext, params: List[Float32], inpu
     var lm_w = _upload(ctx, head_host)
     var rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
     var sc = ByteLogitsScratch(ctx, batch, length, config)
-    _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, out)
+    _logits_forward_into(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config, destination)
     ctx.synchronize()
     _ = sc^
 
@@ -411,7 +411,7 @@ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[I
 def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[Int32],
                               batch: Int, length: Int,
                               mut scratch: Optional[ByteLogitsScratch],
-                              out: MutPointer[Float32, MutUntrackedOrigin]) raises:
+                              destination: MutPointer[Float32, MutUntrackedOrigin]) raises:
     """`byte_logits_resident` writing straight into the caller's memory
     (`_logits_forward_into`); the same refresh, scratch rule and failure
     convention. On a raise the caller's memory holds an unspecified prefix
@@ -436,7 +436,7 @@ def byte_logits_resident_into(ctx: DeviceContext, mut tr: ByteTrainer, inputs: L
             _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
         _bind_emb_head(ctx, tr.buffers, config)
         _logits_forward_into(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
-            scratch.value(), inputs, batch, length, config, out)
+            scratch.value(), inputs, batch, length, config, destination)
         ctx.synchronize()
     except error:
         failed = True
