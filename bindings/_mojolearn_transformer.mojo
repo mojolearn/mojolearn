@@ -1067,12 +1067,12 @@ def _transformer_run_session_backward(
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
-    ref ctx = session.ctx.value()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var lean = transformer_lean_stages(hd)
     # Weights: reused when the bytes are the same, recopied when they moved.
-    _session_weights(session, ctx, dims, a, opts, List[Int]())
+    _session_weights(session, dims, a, opts, List[Int]())
+    ref ctx = session.ctx.value()
     ref w = session.weights.value()
     _btick(ton, tk, "surface.weights_up")
     # The forward half at smax = L (the fresh-prefill shape).

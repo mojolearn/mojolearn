@@ -1,0 +1,3878 @@
+{
+  "transformer-forward": {
+    "parent_ms": 4.103539511561394,
+    "candidate_ms": 5.370918661355972,
+    "parent_over_candidate": 0.7640293533183746,
+    "ours_digests_equal": true,
+    "arms": {
+      "parent": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709"
+          ],
+          "info": {
+            "call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+            "cls": "TransformerBlock",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_transformer_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 4.103539511561394,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1554.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1540.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1538.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1539.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1539.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1539.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            11.116765439510345,
+            4.103539511561394,
+            4.224915057420731,
+            3.0800271779298782,
+            3.538433462381363
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "eps": 1e-06,
+            "rope_theta": 10000.0
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1330.4855860769749
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 1.6625374555587769,
+          "mem": [
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 141.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 998.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1000.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1003.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1003.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1003.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13286.8,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1003.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            3.369862213730812,
+            2.5418736040592194,
+            1.4849212020635605,
+            1.4454219490289688,
+            1.6625374555587769
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "eps": 1e-06,
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 2433.917397633195
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 3.258984535932541,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1085.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1088.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1087.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1087.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1088.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1088.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            3.258984535932541,
+            3.2836031168699265,
+            4.956208169460297,
+            1.8379278481006622,
+            1.6886070370674133
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "eps": 1e-06,
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 181.50433711707592
+        }
+      },
+      "candidate": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709",
+            "d5a2b289afdb5709"
+          ],
+          "info": {
+            "call": "mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+            "cls": "TransformerBlock",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_transformer_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 5.370918661355972,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1516.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1520.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1519.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1519.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1519.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1519.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            7.694056257605553,
+            5.685357376933098,
+            5.370918661355972,
+            3.2857172191143036,
+            3.3325068652629852
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "eps": 1e-06,
+            "rope_theta": 10000.0
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 732.8120265156031
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c",
+            "abdef70c3cb8222c"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 1.6178805381059647,
+          "mem": [
+            {
+              "children_mb": 435.4,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 929.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 442.4,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 931.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 451.5,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 934.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 463.5,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 934.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 468.5,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 934.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 472.5,
+              "gpu_mb": 46.9,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 934.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            3.118915483355522,
+            3.111826255917549,
+            1.5172511339187622,
+            1.3386234641075134,
+            1.6178805381059647
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "eps": 1e-06,
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 797.7651450783014
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "transformer-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-transformer-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee",
+            "71a347dc3796e6ee"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 3.298746421933174,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1084.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1087.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1087.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1087.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1090.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 78.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1090.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            3.298746421933174,
+            4.327937960624695,
+            3.1584668904542923,
+            4.968555644154549,
+            2.3566260933876038
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "eps": 1e-06,
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 190.15472009778023
+        }
+      }
+    },
+    "quality": {
+      "parent": {
+        "ours": {},
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 4.76837158203125e-07,
+          "max_rel_diff_vs_ours": 1.0202790667303321e-07
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 4.76837158203125e-07,
+          "max_rel_diff_vs_ours": 1.0202790667303321e-07
+        }
+      },
+      "candidate": {
+        "ours": {},
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 4.76837158203125e-07,
+          "max_rel_diff_vs_ours": 1.0202790667303321e-07
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 4.76837158203125e-07,
+          "max_rel_diff_vs_ours": 1.0202790667303321e-07
+        }
+      }
+    }
+  },
+  "lm-forward": {
+    "parent_ms": 102.29320079088211,
+    "candidate_ms": 54.66770380735397,
+    "parent_over_candidate": 1.8711815874205693,
+    "ours_digests_equal": true,
+    "arms": {
+      "parent": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038"
+          ],
+          "info": {
+            "call": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+            "config": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_byte_lm.so",
+            "native_vendor": "cuda",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 102.29320079088211,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 2279.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1847.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1879.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1897.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1898.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1898.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            119.25281956791878,
+            112.4851293861866,
+            102.29320079088211,
+            102.25933790206909,
+            101.2281347066164
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "config_readback": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}"
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1764.6693531423807
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same twin to logits; logits.cpu()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 38.16605545580387,
+          "mem": [
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 226.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1141.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1205.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1206.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1206.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1206.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 14219.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1206.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            38.35674002766609,
+            38.16605545580387,
+            38.18517364561558,
+            37.793297320604324,
+            37.670133635401726
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 3541.8510362505913
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same twin to logits; logits.cpu()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 38.90054486691952,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1013.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1077.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1078.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1078.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1079.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1079.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            39.037447422742844,
+            38.44258934259415,
+            38.90054486691952,
+            38.58720511198044,
+            38.96593116223812
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 137.7765964716673
+        }
+      },
+      "candidate": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038",
+            "4a8e781b0739a038"
+          ],
+          "info": {
+            "call": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+            "config": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_byte_lm.so",
+            "native_vendor": "cuda",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 54.66770380735397,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 2277.0,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1715.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1715.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1715.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1715.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1715.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            53.21848578751087,
+            54.66770380735397,
+            55.546000599861145,
+            52.60969698429108,
+            56.69621005654335
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "config_readback": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}"
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1488.5047320276499
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c",
+            "60f050971dc5c13c"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same twin to logits; logits.cpu()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 42.63701103627682,
+          "mem": [
+            {
+              "children_mb": 451.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1112.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 483.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1176.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 499.9,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1176.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 635.6,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1176.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 651.6,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1176.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 686.6,
+              "gpu_mb": 154.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1176.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            42.63701103627682,
+            43.15987043082714,
+            40.769726037979126,
+            40.890589356422424,
+            43.33655722439289
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1100.6259266287088
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "lm-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489",
+            "778a030e30bcc489"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same twin to logits; logits.cpu()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 42.8701713681221,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1010.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1074.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1074.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1074.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1074.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 173.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1075.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            44.50726881623268,
+            42.8701713681221,
+            41.29453934729099,
+            41.886456310749054,
+            44.33491826057434
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 166.18979535996914
+        }
+      }
+    },
+    "quality": {
+      "parent": {
+        "ours": {
+          "mean_nll": 9.01873340416645
+        },
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 1.341104507446289e-06,
+          "max_rel_diff_vs_ours": 1.8410635226647602e-06,
+          "mean_nll": 9.018733375427612
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 1.3709068298339844e-06,
+          "max_rel_diff_vs_ours": 1.8819760453906437e-06,
+          "mean_nll": 9.018733374242045
+        }
+      },
+      "candidate": {
+        "ours": {
+          "mean_nll": 9.01873340416645
+        },
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 1.341104507446289e-06,
+          "max_rel_diff_vs_ours": 1.8410635226647602e-06,
+          "mean_nll": 9.018733375427612
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 1.3709068298339844e-06,
+          "max_rel_diff_vs_ours": 1.8819760453906437e-06,
+          "mean_nll": 9.018733374242045
+        }
+      }
+    }
+  },
+  "samba-forward": {
+    "parent_ms": 11.001233011484146,
+    "candidate_ms": 11.125979945063591,
+    "parent_over_candidate": 0.9887877801150636,
+    "ours_digests_equal": true,
+    "arms": {
+      "parent": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0"
+          ],
+          "info": {
+            "call": "mojolearn.SambaStack(config, weights).forward(inputs)",
+            "config": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_samba_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 11.001233011484146,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1589.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1592.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1592.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1592.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1592.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1592.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            11.001233011484146,
+            9.303292259573936,
+            11.39209046959877,
+            9.428933262825012,
+            11.795081198215485
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "config_readback": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 887.1944006532431
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same stack twin to logits",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 4.101987928152084,
+          "mem": [
+            {
+              "children_mb": 16453.4,
+              "gpu_mb": 160.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1867.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 16453.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1868.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 16453.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1868.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 16453.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1868.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 16453.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1868.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 16453.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1868.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            4.652824252843857,
+            3.4407712519168854,
+            4.101987928152084,
+            3.835011273622513,
+            5.7060606777668
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 154728.1264718622
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same stack twin to logits",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 42.35726781189442,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1241.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1242.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1242.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1242.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1242.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1242.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            45.50426825881004,
+            41.782716289162636,
+            52.39860340952873,
+            42.245250195264816,
+            42.35726781189442
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 300.99122785031796
+        }
+      },
+      "candidate": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0",
+            "ddce61948b8456e0"
+          ],
+          "info": {
+            "call": "mojolearn.SambaStack(config, weights).forward(inputs)",
+            "config": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_samba_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 11.125979945063591,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1601.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1605.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1605.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1605.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1605.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1605.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            11.125979945063591,
+            8.83566215634346,
+            9.967828169465065,
+            11.254673823714256,
+            11.445028707385063
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "config_readback": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 777.2869970649481
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e",
+            "63033464d7d69f0e"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same stack twin to logits",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 4.533896222710609,
+          "mem": [
+            {
+              "children_mb": 506.5,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1400.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 517.5,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1401.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 525.0,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1402.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 576.2,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1402.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 628.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1403.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 634.3,
+              "gpu_mb": 64.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1403.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            4.533896222710609,
+            4.45200502872467,
+            3.862891346216202,
+            8.25684703886509,
+            7.291773334145546
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 22688.41159529984
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "samba-forward",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-forward-full.npz"
+          ],
+          "digest_stable": true,
+          "digests": [
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226",
+            "dcc326b0dc4c9226"
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "no_grad forward of the same stack twin to logits",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 41.827548295259476,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1238.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1240.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1240.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1240.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1240.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 137.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1240.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            45.07051222026348,
+            41.827548295259476,
+            41.50543548166752,
+            41.981128975749016,
+            41.57043248414993
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "dropout": 0.0,
+            "eps": 1e-05,
+            "max_grad_norm": "n/a",
+            "rope_theta": 10000.0,
+            "seed": 7
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 315.8391173928976
+        }
+      }
+    },
+    "quality": {
+      "parent": {
+        "ours": {
+          "mean_nll": 5.635909657868805
+        },
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 2.1457672119140625e-06,
+          "max_rel_diff_vs_ours": 1.2063743210625853e-06,
+          "mean_nll": 5.635909659249959
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 2.2351741790771484e-06,
+          "max_rel_diff_vs_ours": 1.2566399177735262e-06,
+          "mean_nll": 5.6359096626758
+        }
+      },
+      "candidate": {
+        "ours": {
+          "mean_nll": 5.635909657868805
+        },
+        "torch-compile-fp32": {
+          "max_abs_diff_vs_ours": 2.1457672119140625e-06,
+          "max_rel_diff_vs_ours": 1.2063743210625853e-06,
+          "mean_nll": 5.635909659249959
+        },
+        "torch-eager-fp32": {
+          "max_abs_diff_vs_ours": 2.2351741790771484e-06,
+          "max_rel_diff_vs_ours": 1.2566399177735262e-06,
+          "mean_nll": 5.6359096626758
+        }
+      }
+    }
+  },
+  "lm-train-step": {
+    "parent_ms": 45.364707708358765,
+    "candidate_ms": 44.959885999560356,
+    "parent_over_candidate": 1.0090040643964793,
+    "ours_digests_equal": true,
+    "arms": {
+      "parent": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "call": "mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
+            "config": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_byte_lm.so",
+            "native_vendor": "cuda",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 45.364707708358765,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 2276.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1625.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1625.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1625.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1625.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1625.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            45.364707708358765,
+            45.78372463583946,
+            45.43139599263668,
+            45.141080394387245,
+            44.91930268704891
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "config_readback": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "eps": 1e-08,
+            "lr": 0.001,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 2254.9012638628483
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 19.08763311803341,
+          "mem": [
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 614.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 720.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 720.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 720.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 720.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 15120.1,
+              "gpu_mb": 720.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1255.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            19.29999142885208,
+            19.12366785109043,
+            19.08763311803341,
+            18.925100564956665,
+            19.08724382519722
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 7874.231079593301
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 23.124543949961662,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 789.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            21.861154586076736,
+            21.735696122050285,
+            23.124543949961662,
+            29.4768325984478,
+            29.50366958975792
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 260.35511679947376
+        }
+      },
+      "candidate": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "call": "mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
+            "config": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_byte_lm.so",
+            "native_vendor": "cuda",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 44.959885999560356,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 2277.0,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1588.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1588.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1588.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1588.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1588.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            44.959885999560356,
+            44.84965093433857,
+            44.96183805167675,
+            45.172253623604774,
+            44.865164905786514
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "config_readback": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+            "eps": 1e-08,
+            "lr": 0.001,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1517.8685672581196
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 19.350450485944748,
+          "mem": [
+            {
+              "children_mb": 472.7,
+              "gpu_mb": 568.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1197.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 481.7,
+              "gpu_mb": 727.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1199.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 488.7,
+              "gpu_mb": 729.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1199.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 506.7,
+              "gpu_mb": 729.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1199.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 513.7,
+              "gpu_mb": 729.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1199.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 535.2,
+              "gpu_mb": 729.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1199.4,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            25.80616995692253,
+            19.350450485944748,
+            19.36359889805317,
+            19.069349393248558,
+            19.210878759622574
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1256.0600023716688
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "lm-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-lm-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "sdpa": {
+              "backend": "efficient",
+              "enabled": {
+                "cudnn": false,
+                "efficient": true,
+                "flash": false,
+                "math": false
+              },
+              "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+              "probes": [
+                {
+                  "backend": "efficient",
+                  "ok": true
+                }
+              ],
+              "requested": "auto",
+              "selection": "global switches: only efficient enabled"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 21.800804883241653,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 789.7,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 959.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1266.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            21.800804883241653,
+            21.759813651442528,
+            21.640855818986893,
+            23.36917258799076,
+            22.23266288638115
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 244.88432705402374
+        }
+      }
+    },
+    "quality": {
+      "parent": {
+        "ours": {
+          "loss_first_step": 9.018733024597168,
+          "loss_last_step": 5.619289398193359,
+          "steps": 6
+        },
+        "torch-compile-fp32": {
+          "loss_first_abs_diff_vs_ours": 9.5367431640625e-07,
+          "loss_first_step": 9.018733978271484,
+          "loss_last_abs_diff_vs_ours": 0.0001277923583984375,
+          "loss_last_step": 5.619417190551758,
+          "steps": 6
+        },
+        "torch-eager-fp32": {
+          "loss_first_abs_diff_vs_ours": 0.0,
+          "loss_first_step": 9.018733024597168,
+          "loss_last_abs_diff_vs_ours": 0.000110626220703125,
+          "loss_last_step": 5.6194000244140625,
+          "steps": 6
+        }
+      },
+      "candidate": {
+        "ours": {
+          "loss_first_step": 9.018733024597168,
+          "loss_last_step": 5.619289398193359,
+          "steps": 6
+        },
+        "torch-compile-fp32": {
+          "loss_first_abs_diff_vs_ours": 9.5367431640625e-07,
+          "loss_first_step": 9.018733978271484,
+          "loss_last_abs_diff_vs_ours": 0.0001277923583984375,
+          "loss_last_step": 5.619417190551758,
+          "steps": 6
+        },
+        "torch-eager-fp32": {
+          "loss_first_abs_diff_vs_ours": 0.0,
+          "loss_first_step": 9.018733024597168,
+          "loss_last_abs_diff_vs_ours": 0.00011444091796875,
+          "loss_last_step": 5.619403839111328,
+          "steps": 6
+        }
+      }
+    }
+  },
+  "samba-train-step": {
+    "parent_ms": 144.40415054559708,
+    "candidate_ms": 141.17255248129368,
+    "parent_over_candidate": 1.0228911215920078,
+    "ours_digests_equal": true,
+    "arms": {
+      "parent": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+            "config": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_samba_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 144.40415054559708,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1671.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1673.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1674.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1674.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1674.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1674.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            146.78225107491016,
+            143.05890910327435,
+            144.40415054559708,
+            145.97396925091743,
+            143.05928722023964
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "config_readback": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1140.8595032989979
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 40.06350040435791,
+          "mem": [
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 366.0,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 311.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 311.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 311.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 311.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 837.3,
+              "gpu_mb": 311.2,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2942.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            41.10403545200825,
+            38.911232724785805,
+            40.06350040435791,
+            44.25734654068947,
+            38.200048729777336
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 534580.061538145
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 129.90193627774715,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 336.1,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1431.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1433.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1433.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1433.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1433.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1433.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            134.0150311589241,
+            122.94789962470531,
+            122.05216847360134,
+            144.41918395459652,
+            129.90193627774715
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 524.2572799324989
+        }
+      },
+      "candidate": {
+        "ours": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "ours",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "call": "mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+            "config": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "mojolearn",
+            "module_path": "/root/neural-experiment-results/venv/lib/python3.14/site-packages/mojolearn/_samba_impl.py",
+            "numeric_mode_env": "identical",
+            "numeric_mode_used": "identical",
+            "pre_clock_fit": false,
+            "vendor_used": "cuda",
+            "version": "0.8.31"
+          },
+          "median_ms": 141.17255248129368,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1685.7,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1692.2,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1694.1,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1694.3,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1694.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": null,
+              "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+              "host_mb": 1694.6,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            146.97005972266197,
+            141.17255248129368,
+            140.73443971574306,
+            140.85653237998486,
+            141.37743040919304
+          ],
+          "params_record": {
+            "__library__": "mojolearn",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "config_readback": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 1066.9321119785309
+        },
+        "torch-compile-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-compile-fp32",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "torch.compile (inductor, default mode)",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch compile, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "compile-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 38.85802440345287,
+          "mem": [
+            {
+              "children_mb": 682.4,
+              "gpu_mb": 270.5,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2255.2,
+              "gpu_mb": 316.8,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 9724.3,
+              "gpu_mb": 316.8,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13265.4,
+              "gpu_mb": 316.8,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13265.4,
+              "gpu_mb": 316.8,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 13265.4,
+              "gpu_mb": 316.8,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 2290.8,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            38.85802440345287,
+            37.421634420752525,
+            39.77597691118717,
+            39.80797529220581,
+            36.86170466244221
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 23870.61705812812
+        },
+        "torch-eager-fp32": {
+          "command": [
+            "/root/neural-experiment-results/venv/bin/python",
+            "/root/mojolearn-neural-experiment/tools/bench_board_neural.py",
+            "worker",
+            "--arm",
+            "torch-eager-fp32",
+            "--lane",
+            "samba-train-step",
+            "--shape",
+            "full",
+            "--data",
+            "/root/neural-experiment-results/work/neural-samba-train-step-full.npz"
+          ],
+          "digest_stable": null,
+          "digests": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "info": {
+            "autocast_probe": null,
+            "call": "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; mean CE; backward; torch.optim.AdamW step; loss.item()",
+            "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+            "compile": "eager",
+            "corpus_import_switches_restored": {
+              "deterministic_algorithms": false,
+              "num_threads": 64
+            },
+            "device": "gpu",
+            "device_name": "NVIDIA L40S",
+            "input_home": "host",
+            "library": "torch",
+            "mode": "torch eager, float32, TF32 off",
+            "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+            "pre_clock_fit": false,
+            "precision": "float32, TF32 off",
+            "precision_readback": {
+              "cuda_matmul_allow_tf32": false,
+              "cudnn_allow_tf32": false,
+              "float32_matmul_precision": "highest"
+            },
+            "setting": "eager-fp32",
+            "torch_backend": "cuda",
+            "torch_threads": 64,
+            "torch_version_cuda": "13.0",
+            "torch_version_hip": null,
+            "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+            "version": "2.13.0+cu130"
+          },
+          "median_ms": 140.99405705928802,
+          "mem": [
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 336.1,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1435.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1436.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1436.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1436.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1436.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            },
+            {
+              "children_mb": 2.0,
+              "gpu_mb": 382.4,
+              "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+              "host_mb": 1436.9,
+              "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+            }
+          ],
+          "ms": [
+            134.57171618938446,
+            145.95283940434456,
+            120.4879991710186,
+            140.99405705928802,
+            145.297197625041
+          ],
+          "params_record": {
+            "__library__": "torch",
+            "amsgrad": false,
+            "betas": [
+              0.9,
+              0.999
+            ],
+            "capturable": false,
+            "decoupled_weight_decay": true,
+            "differentiable": false,
+            "dropout": 0.0,
+            "eps": 1e-08,
+            "foreach": null,
+            "fused": null,
+            "lr": 0.001,
+            "max_grad_norm": null,
+            "maximize": false,
+            "seed": 7,
+            "weight_decay": 0.01
+          },
+          "span": {
+            "input_home": "host",
+            "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+            "pre_clock_fit": false
+          },
+          "status": "ok",
+          "warmup_ms": 521.1226977407932
+        }
+      }
+    },
+    "quality": {
+      "parent": {
+        "ours": {
+          "loss_first_step": 5.6359100341796875,
+          "loss_last_step": 3.538167953491211,
+          "steps": 6
+        },
+        "torch-compile-fp32": {
+          "loss_first_abs_diff_vs_ours": 0.0,
+          "loss_first_step": 5.6359100341796875,
+          "loss_last_abs_diff_vs_ours": 1.430511474609375e-06,
+          "loss_last_step": 3.5381665229797363,
+          "steps": 6
+        },
+        "torch-eager-fp32": {
+          "loss_first_abs_diff_vs_ours": 4.76837158203125e-07,
+          "loss_first_step": 5.635909557342529,
+          "loss_last_abs_diff_vs_ours": 1.430511474609375e-06,
+          "loss_last_step": 3.5381665229797363,
+          "steps": 6
+        }
+      },
+      "candidate": {
+        "ours": {
+          "loss_first_step": 5.6359100341796875,
+          "loss_last_step": 3.538167953491211,
+          "steps": 6
+        },
+        "torch-compile-fp32": {
+          "loss_first_abs_diff_vs_ours": 0.0,
+          "loss_first_step": 5.6359100341796875,
+          "loss_last_abs_diff_vs_ours": 1.430511474609375e-06,
+          "loss_last_step": 3.5381665229797363,
+          "steps": 6
+        },
+        "torch-eager-fp32": {
+          "loss_first_abs_diff_vs_ours": 4.76837158203125e-07,
+          "loss_first_step": 5.635909557342529,
+          "loss_last_abs_diff_vs_ours": 1.430511474609375e-06,
+          "loss_last_step": 3.5381665229797363,
+          "steps": 6
+        }
+      }
+    }
+  }
+}
