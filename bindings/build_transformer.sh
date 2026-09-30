@@ -126,7 +126,7 @@ COLUMN_DEFINE=""
 # lower tiers ran the slower unfused arms. Those gates are gone (2794391bf):
 # FAST compiles the same kernels and launches with the pins in
 # checks/numerics.mojo on the free schedule, lands flat in python/mojolearn/,
-# and promises quality, never bits (docs/lanes/progress/neural.md). The
+# and promises quality, never bits. The
 # DETERMINISTIC tier ships for the tree lanes only and is refused here.
 MODE_DEFINE="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
 case "${MOJOLEARN_NUMERIC_MODE:-identical}" in

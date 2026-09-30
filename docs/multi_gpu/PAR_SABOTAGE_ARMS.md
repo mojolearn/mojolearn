@@ -3,7 +3,7 @@
 `lane/par-sabotage-defines`, 2026-09-20. THE MANIFEST a two-device leg reads.
 
 A sabotage nobody has watched fail is indistinguishable from no sabotage. On
-2026-09-16 the [sabotage audit](../lanes/SABOTAGE_AUDIT_2026-09-16.md) found
+2026-09-16 a sabotage audit found
 that **no `par-*` lane had an arm that reached its CELLS**: the four defines
 that existed (Cholesky, GMM, hierarchy, resample) defended the native
 multi-GPU CHECKS under `training/checks/`, never an `identity_break` column.

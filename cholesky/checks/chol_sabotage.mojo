@@ -13,7 +13,7 @@ the shipped bits never depend on this file.
 
 Same construction as `hierarchy/checks/sabotage_tile.mojo`, and for the
 same reason: a sabotage arm does not belong in a production kernel, and a
-sabotage that requires editing source cannot be run by an orchestrator that
+sabotage that requires editing source cannot be run by a maintainer that
 is forbidden to edit source.
 
 DEVIATION 1642.

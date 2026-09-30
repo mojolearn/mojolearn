@@ -1,0 +1,351 @@
+8727 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f2c0000000, nodemask=2)
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:311:19: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var cptr = fw + cslot
+               ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:324:109: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            _ = lbfgs[logistic_objective](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+                                                                                                       ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:383:106: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var it = lbfgs[logistic_objective](t, x, y, n, d, iw, cptr, fw, th, p, max_iter, tol, fw, work, cptr + 1)
+                                                                                                    ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:706:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var swp = y + n
+              ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:708:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var epr = fw + problems * (n + d)  # the host's epochs run per problem
+              ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:722:48: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var idx_b = t.row(2 * problems + 1).bitcast[Int32]()
+                        ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:723:49: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var draws0 = t.row(2 * problems + 2).bitcast[Int32]()
+                         ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                 unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:724:49: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var draws1 = t.row(2 * problems + 3).bitcast[Int32]()
+                         ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+                                                 unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:728:45: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+                var order = t.row(2 * c + 1).bitcast[Int32]()
+                            ~~~~~~~~~~~~~~~~^~~~~~~~
+                                             unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:770:45: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+                var order = t.row(2 * c + 1).bitcast[Int32]()
+                            ~~~~~~~~~~~~~~~~^~~~~~~~
+                                             unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:800:29: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ys = fw + c * (n + d)
+                         ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:801:28: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var q = ys + n
+                        ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:13:
+./x_linear/sgd.mojo:802:30: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var idx = iw + c * n
+                          ~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:190:
+./x_linear/blocks.mojo:222:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                acc = xb_dot_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows)
+                                    ~~~^~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:190:
+./x_linear/blocks.mojo:222:54: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                acc = xb_dot_scaled(rw + (n + r0), x + r0 * d, j, k, d, rows)
+                                                   ~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:197:
+./x_linear/blocks_gram.mojo:209:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var z = rw + (blk * XB_TPB + tid) * d
+            ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:30:
+./x_linear/team.mojo:132:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var rw = scratch + TEAM_SLOTS
+             ~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:30:
+./x_linear/team.mojo:133:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var own = rw + max(bufs, TEAM_ROW_BUFS) * n + tid * per_thread
+              ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:30:
+./x_linear/team.mojo:133:49: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var own = rw + max(bufs, TEAM_ROW_BUFS) * n + tid * per_thread
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:39:27: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var ix = t.row(kp + 1).bitcast[Int32]()
+             ~~~~~~~~~~~~~^~~~~~~~
+                           unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:65:27: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var ix = t.row(kp + 1).bitcast[Int32]()
+             ~~~~~~~~~~~~~^~~~~~~~
+                           unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:21:
+./x_linear/logcv.mojo:181:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sr = sl + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:19:
+./x_linear/ops.mojo:336:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var base = x + i * d
+                       ~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:19:
+./x_linear/ops.mojo:339:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var xv = (base + j).unsafe_strided_load[width=8](d)
+                          ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:154:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var g = fw + n
+            ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:155:15: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var h = g + m
+            ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:156:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var step = h + m * m
+               ~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:157:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var trial = step + m
+                ~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:158:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var s1 = trial + m
+             ~~~~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:14:
+./x_linear/glm.mojo:159:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var s2 = s1 + n
+             ~~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:15:
+./x_linear/huber.mojo:273:105: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var it = lbfgs[huber_objective](t, x, y, n, d, ip, fp, res, th, p, ldi(ip, 0), ld(fp, 2), fw, 0, fw + lbfgs_work(p))
+                                                                                                     ~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:16:
+./x_linear/bayes.mojo:162:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            wsum = t_sum(t, y + n, n)
+                            ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:16:
+./x_linear/bayes.mojo:285:68: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
+                                                                ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:16:
+./x_linear/bayes.mojo:285:80: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, sw, fw + 3 * d * d + 5 * d)
+                                                                ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:16:
+./x_linear/bayes.mojo:411:71: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
+                                                                   ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:16:
+./x_linear/bayes.mojo:411:83: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var sse = _t_sse(t, x, y, n, d, fw, xm, ym, res, 0, False, fw + 3 * d * d + 4 * d)
+                                                                   ~~~~~~~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:20:
+./x_linear/cd.mojo:241:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var fid = y + n
+              ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:20:
+./x_linear/cd.mojo:295:38: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+                    var te = t.row(2).bitcast[Int32]()
+                             ~~~~~~~~^~~~~~~~
+                                      unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:30:
+./x_linear/team.mojo:123:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        return self.rows_at.unsafe_origin_cast[MutAnyOrigin]() + k * self.n
+               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:18:
+./x_linear/quantile.mojo:59:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        den = t_sum(t, y + n, n)
+                       ~~^~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:18:
+./x_linear/quantile.mojo:370:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            row_dots(x, lo, hi, d, fwp, beta, fwp + ab)
+                                              ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:110:27: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        wsum = t_sum(t, y + wo, n)
+                        ~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:145:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        t_centered_gram(t, x, n, d, fw + xm, 0, fw, gg)
+                                    ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:302:65: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, fwp + zz, mm, sw, fi, wo, wsum, fwp + la, fwp + lb, lo, hi)
+                                                            ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:302:97: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, fwp + zz, mm, sw, fi, wo, wsum, fwp + la, fwp + lb, lo, hi)
+                                                                                            ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:302:107: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    _loo_rows(x, y, n, d, fwp, ym, xm, rhs, fwp + zz, mm, sw, fi, wo, wsum, fwp + la, fwp + lb, lo, hi)
+                                                                                                      ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:306:45: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                              wo, wsum, fwp + la, fwp + lb, lo, hi)
+                                        ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:19:
+./x_linear/ridge.mojo:306:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                              wo, wsum, fwp + la, fwp + lb, lo, hi)
+                                                  ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:20:
+./x_linear/cd.mojo:126:22: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var tr = t.row(1).bitcast[Int32]()
+             ~~~~~~~~^~~~~~~~
+                      unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_linear.mojo:20:
+Imported from ./x_linear/device.mojo:26:
+Imported from ./x_linear/dispatch.mojo:20:
+./x_linear/cd.mojo:127:22: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var te = t.row(2).bitcast[Int32]()
+             ~~~~~~~~^~~~~~~~
+                      unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+built python/mojolearn/identical/_mojolearn_x_linear.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

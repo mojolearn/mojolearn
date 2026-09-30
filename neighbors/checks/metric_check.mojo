@@ -25,7 +25,7 @@ each carries an arm that MUST FAIL if the seam is broken:
                                duplicate point
 
 PREDICTED AND OBSERVED. Every sabotage clause below states what it
-PREDICTS when the seam is broken. The OBSERVED half is the orchestrator's
+PREDICTS when the seam is broken. The OBSERVED half is the maintainer's
 to fill in from the run; `neighbors/README.md` is where it goes.
 
 THE THREE LEVELS OF TRUTH are in `neighbors/checks/metric_oracle.mojo`:
@@ -531,7 +531,7 @@ def check_metric_cosine_norm_flag() raises:
     ever returns the wrong flag, or the cosine branch is pointed at
     `row_norm_kernel`'s `take_sqrt = 0` arm): the sabotaged matrix equals
     the honest one, `moved == 0`, and clause 1 raises. OBSERVED: the
-    orchestrator's run fills this in.
+    maintainer's run fills this in.
 
     Clause 2 is the other half and is the one that catches a SWAPPED pair
     rather than a single wrong flag: the sabotaged run must still agree

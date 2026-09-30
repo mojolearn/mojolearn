@@ -145,3 +145,14 @@ bench/results/e1g/*/remote/tools-venv/
 
 # Which sources each built binding came from (tools/binding_stamps.py)
 python/.binding-stamps/
+
+# Working notes stay local: lane progress, handoffs, takeovers, plans and
+# session diaries are never part of the public repository.
+docs/lanes/
+docs/HANDOFF*
+docs/TAKEOVER*
+docs/*_TAKEOVER*
+HANDOFF*.md
+EXPERIMENTS.md
+**/RESUME.md
+**/NOTES.md

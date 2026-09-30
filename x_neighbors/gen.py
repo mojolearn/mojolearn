@@ -601,7 +601,7 @@ from x_neighbors.eigh import op_eigh
 
 def gpu_binding():
     ops = ", ".join(f"op_{o[0]}" for o in OPS)
-    return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md):\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
+    return (HDR + GEN + '"""THE NEIGHBORS EXPANSION LANE\'S GPU BINDING:\nevery export is xn_<op>(addresses, ints, floats) over x_neighbors/device_ops.mojo."""\n'
             + BIND_HEAD + "from checks.vendor import COMPILED_VENDOR\n"
             + f"from x_neighbors.device_ops import {ops}\n"
             + f"from x_neighbors.iter_device import {', '.join('op_' + c[0] for c in CUSTOM_OPS)}\n" + wrappers() + """

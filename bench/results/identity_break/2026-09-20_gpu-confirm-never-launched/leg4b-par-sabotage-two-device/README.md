@@ -43,7 +43,7 @@ factorization. None of those four errors appears in the clean two-device
 column or in either one-device column.
 
 `MOJOLEARN_GMM_PARALLEL_SABOTAGE` and `MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE`
-had, per `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`, only ever been run as
+had, per the 2026-09-16 sabotage audit, only ever been run as
 `mojo run -D ...` against standalone check programs and had **never been
 compiled into a binding**. This is the first run of either against the lanes.
 

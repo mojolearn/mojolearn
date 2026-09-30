@@ -12,7 +12,7 @@ plans and the dispatchers are `gemm/checks/gemm_int15.mojo`; the answer is
 still take the reference unit plan.
 
 ONE LAUNCH (FUSED), AND THE TWO-LAUNCH PATH KEPT AS AN ARM (2026-09-29,
-the epilogue fold, the orchestrator's approval of the five-point interface).
+the epilogue fold, the maintainer's approval of the five-point interface).
   SUMS      `gemm_int8_mma_tuned.mojo`, another lane's kernel and not
             edited here: the two planes of each operand staged once per
             window in threadgroup memory, four unit steps per tile, three

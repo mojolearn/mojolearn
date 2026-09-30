@@ -1,6 +1,6 @@
 #!/bin/sh
 # The prep expansion lane's GPU binding: preprocessing additions, naive Bayes,
-# discriminant analysis (x_prep/, naive_bayes/; docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md lane 5).
+# discriminant analysis (x_prep/, naive_bayes/; algorithm expansion lane 5).
 set -eu
 MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."

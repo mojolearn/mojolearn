@@ -153,8 +153,7 @@ def main() raises:
         trace.record_device[DType.float32](ctx, tag + ".P_final", res.ws.P, rd2 * b)
 
         # ------------------------------------------------------------------
-        # DECISION STAGES (added 2026-08-24, Andrew's "are there more hashes
-        # we can take"). Every stage above is a float BUFFER. These three are
+        # DECISION STAGES (added 2026-08-24, to take more hashes). Every stage above is a float BUFFER. These three are
         # the CHOICES the pipeline made, and until now they were recorded
         # nowhere, on any card, in this lane.
         #

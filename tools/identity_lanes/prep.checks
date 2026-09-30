@@ -1,4 +1,4 @@
-# the prep lane's per-seam check drivers and sabotage arms (DEVIATIONS 5400-5409; docs/lanes/progress/prep.md)
+# the prep lane's per-seam check drivers and sabotage arms (DEVIATIONS 5400-5409)
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5400_fold.patch
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5401_contraction.patch
 x_prep/seams/prep_check.mojo	x_prep/seams/sabotage/seam_5402_sort_key.patch

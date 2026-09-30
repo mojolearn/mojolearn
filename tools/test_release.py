@@ -93,7 +93,7 @@ class LegTests(unittest.TestCase):
         self._t.cleanup()
 
     def test_launch_is_all_at_once_and_detaches(self):
-        # no stagger for any backend (Andrew, 2026-09-25): every leg launched
+        # no stagger for any backend (2026-09-25): every leg launched
         # back to back, nothing slept between them
         ctx = Ctx()
         legs = [leg(self.tmp), leg(self.tmp, "cuda-sm_90a", "cuda", "sm_90a"), leg(self.tmp, "hip-gfx942", "hip", "gfx942")]

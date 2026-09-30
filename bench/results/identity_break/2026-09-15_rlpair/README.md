@@ -14,7 +14,7 @@ run as usual.
 | `cpu-apple-m4.probe.json` | Apple M4 CPU, CPU-only package, one core, shared machine | A PROBE, NOT A RECORD: this lane's harness over the python tree and host bindings of the UNMERGED lane/cpu-training-samba (4cc3609e2 plus its uncommitted work, host set `cpu-apple-m4.probe.host-bindings.sha256`), because the Mamba, Transformer and Samba CPU paths are not on main yet. `byte-lm` and `byte-lm-resident` have no CPU trainer and are not run. 1509 s | 90 stable, rlpair STABLE=90 |
 
 No AMD column. The MI325X leg was not rented: Hot Aisle had no single-GPU
-stock and the DigitalOcean lock was held when this ran, and Andrew's rule of
+stock and the DigitalOcean lock was held when this ran, and the rule of
 2026-09-15 then limited GPU runs to PyPI release records. The AMD column (and a
 fresh NVIDIA column) come with the next release record, which will carry the
 part without any change here.

@@ -443,7 +443,7 @@ def verify(root, out):
             'scope': str(len(expected)) + ' installed jobs; byte-LM when present is one step only; UMAP six held-out quality fixtures per mode; not universal identity'}
 
 
-# DEVIATION 2297: THE SMOKE TIER. Andrew's release policy, 2026-09-09.
+# DEVIATION 2297: THE SMOKE TIER. Release policy, 2026-09-09.
 #
 # Re-proving every numerical surface on every architecture of every release
 # mostly re-proves the same thing: the kernels are one source, and a compile

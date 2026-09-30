@@ -36,8 +36,7 @@ AOT-built with `--target-accelerator sm_120a` writes cells 0..32 of the 17 x 17 
 `c = 0` cells of the 33 threads whose `c = 1` cell is also live in the split-K kernel's strided
 arm), repeatably, and the Jacobi handed a correct matrix in that same binary matches the Mac. The
 four refusals are the Jacobi being handed that Gram; the sentence above calling it a contract
-violation in the sweep is superseded. Brief `docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md`
-sections 9 and 10; the fix arm is `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` in
+violation in the sweep is superseded. The fix arm is `-D MOJOLEARN_2711_GRAM_STRIDED_SCALAR=1` in
 `core/gram_splitk.mojo`, its 5090 confirmation owed through `tools/jacobi_sm120a_probe_leg.sh`.
 
 ## Second leg, arm 1 (2026-09-14, `2026-09-14_111431-nvidia-rtx5090-jacobi-probe-b`)

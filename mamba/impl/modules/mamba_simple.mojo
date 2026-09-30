@@ -777,8 +777,7 @@ def check_reference_decode() raises:
 
     var trace = IdentityTrace()
 
-    # Deliberately small (Andrew's order 3: no performance work, small
-    # data). The cases are chosen for COVERAGE of the recurrence, not size:
+    # Deliberately small (no performance work, small data). The cases are chosen for COVERAGE of the recurrence, not size:
     # L = 1 (the window is all zeros and one decode step is the whole
     # sequence), L = 4 (the first token whose conv reads no padding at all
     # is token 3), L > d_conv with B > 1 (a window that has rolled, several

@@ -32,7 +32,7 @@ implementation of `hist_one_byte.cu`:
   Because the addends are bit-for-bit the values the fused 8-bit /
   shared-Int32 arms compute inline, and integer addition is associative,
   the per-cell totals this family flushes are BIT-IDENTICAL to that arm's
-  for the same rows -- which is the gate the orchestrator can hold it to.
+  for the same rows -- which is the gate the maintainer can hold it to.
 
   XGBoost quantizes once per ROUND; this implementation re-permutes the stat planes
   at every split, so the quantize pass runs per LEVEL over exactly the

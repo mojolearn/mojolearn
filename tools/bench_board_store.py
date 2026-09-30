@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE OPPONENT STORE: an opponent is measured once per KEY and reused.
 
-Andrew (2026-09-29): "we don't always run the opponent, only when we need a
-new datapoint; we store the opponent with the device it was on and the
-time".
+The rule (2026-09-29): the opponent runs only when a new datapoint is needed,
+and each opponent result is stored with the device it ran on and the time.
 
 Every finished opponent cell of a board run is appended to one JSONL file
 (tools/bench_board.py --opponent-store, default <out>/../opponent-store.jsonl)

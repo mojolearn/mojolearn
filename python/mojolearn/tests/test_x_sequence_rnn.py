@@ -3,8 +3,7 @@
 """The sequence lane's recurrent models against a float64 NumPy restatement of
 PyTorch's cell equations (nn.RNN / nn.LSTM / nn.GRU), at a tolerance; and the
 fit's loss going down. Runs on whatever binding the install resolves (GPU or
-CPU host). Parity with torch's training itself was checked on the lane's pod
-(docs/lanes/progress/sequence.md)."""
+CPU host). Parity with torch's training itself was checked on the lane's pod."""
 import numpy as np
 
 import mojolearn as ml

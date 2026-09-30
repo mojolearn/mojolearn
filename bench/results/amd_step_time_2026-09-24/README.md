@@ -520,7 +520,7 @@ Pass 2: leg 1 $2.14 (43 min, 2026-09-25; balance $27.71 -> $25.67 at teardown, $
 
 ## Files
 
-`RESUME.md` (the lane's running state), `kernel_map.md` (written before any
+`kernel_map.md` (written before any
 rental), `history_*_breakdown_*.tsv` (the two B1 itemizations recovered from
 git history), `lanes_gemm_nonpar.txt`, `legs/<stamp>-hotaisle-mi300x-leg*/`
 (each leg's runner record and `remote/amd-step-time/`: `session.txt`,

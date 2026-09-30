@@ -1,6 +1,6 @@
 # T1c: the live NVIDIA plus AMD segment at the target shape
 
-Evidence only. `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md` section 10, T1(c),
+Evidence only. GPT-3 Small run plan section 10, T1(c),
 2026-09-22. A RunPod H100 80GB HBM3 pod (coordinator, shards 0 to 43) and a
 DigitalOcean MI325X droplet (worker, shards 44 to 63) trained the same three
 optimizer steps of the 162M shape (K = 64, batch 4, the enwik8 id stream, the
@@ -8,7 +8,7 @@ T1 recipe) from the NVIDIA T1 seed checkpoint, through
 `tools/lm_segment.py --live-role coordinator|worker` over the chained fold,
 the AMD worker reaching the coordinator through an ssh tunnel opened on the
 AMD box (`link.log`: TUNNEL_UP). Bodies rendered by `tools/lm_segment_leg.py`;
-the boxes were joined by `tools/lm_live_link.sh` after the orchestrator's
+the boxes were joined by `tools/lm_live_link.sh` after the
 first two attempts (a recipe and stream mismatch, refused on both boxes by
 name; then a DigitalOcean bundle unpack failure).
 

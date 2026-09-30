@@ -40,8 +40,7 @@ WHY THIS FILE RUNS A CASE **SET** WHERE THE MAMBA GATE RUNS ONE SHAPE
 ----------------------------------------------------------------------
 DEVIATION 1100. `mamba/checks/mamba_check.mojo` runs ONE shape per build
 and reads it from the environment, because that lane was cut to a single
-compile at a time after Andrew's machine was crashed by seven agents
-compiling Mojo at once (`[[no-heavy-local-compute]]`). That reasoning is
+compile at a time because parallel Mojo compiles overload a laptop. That reasoning is
 about COMPILES, not about runs, and it is preserved here: this file is still
 one build. What changed is that three of the thirteen sabotage arms are
 unfirable except on a fixture that PLANTS a bit pattern no hashed value can
@@ -3428,7 +3427,7 @@ def main() raises:
 #    `attn_mask_kernel` says it is not: `-inf` and `-FLT_MAX` differ at
 #    EVERY masked cell. The contract is FROZEN and this lane does not amend
 #    it, so the finding is here and in this file's expectation table's
-#    `note` field. What the orchestrator should decide is whether the
+#    `note` field. What the maintainer should decide is whether the
 #    contract's sentence is wrong or whether it meant "the plant is what
 #    separates this arm from `S13_MASK_SELECT`", which is true and is a
 #    different sentence.

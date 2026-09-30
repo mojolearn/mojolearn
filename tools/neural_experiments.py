@@ -5,7 +5,7 @@
 experiment's environment and print one table.
 
 lane/neural-net-experiment (2026-09-30). Every experiment on the branch is
-a runtime toggle (EXPERIMENTS.md lists them), so one wheel serves every A/B.
+a runtime toggle, so one wheel serves every A/B.
 Each configuration runs in its OWN subprocess (the bindings read most
 toggles at load or at first use), for the lanes given, `--calls` calls
 each; the table shows the median after the first call, the ratio to the
@@ -22,7 +22,7 @@ baseline, and whether the output DIGEST equals the baseline's (`same` /
 
 A configuration whose digest MOVED is not a speed result; it is a bug
 report against that toggle (or a stage the toggle legitimately drops from
-the card, see EXPERIMENTS.md), and it must not be kept.
+the card), and it must not be kept.
 """
 import argparse
 import json
@@ -53,11 +53,20 @@ EXPERIMENTS = {
     "mamba3_legacy": {"MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
     "mamba3_no_retain_stages": {"MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"},
     "norm_dw_own_ws": {"MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"},
+    # the S16 q/k backward arms (lane/neural-net-experiment, the S16 pass):
+    # the default is `regs2`; each arm is the same chains in the same order
+    "s16_naive": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "naive"},
+    "s16_shared": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "shared"},
+    "s16_regs": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs"},
+    "s16_smem48": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "smem48"},
     "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1", "MOJOLEARN_SWIGLU_FUSED": "1",
                "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0", "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
 }
 SETS = {
     "priority": ["baseline", "mamba3_legacy", "mamba3_no_retain_stages", "norm_dw_own_ws"],
+    # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
+    # samba-train-step, or the timing tool for the per-kernel walls)
+    "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs", "s16_smem48"],
     "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
     "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",

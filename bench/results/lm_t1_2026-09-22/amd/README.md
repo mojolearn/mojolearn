@@ -1,6 +1,6 @@
 # T1, AMD arm: cross-vendor at the target shape on an MI325X, and the endurance
 
-Evidence only. `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md` section 10, T1(b) and E7,
+Evidence only. GPT-3 Small run plan section 10, T1(b) and E7,
 2026-09-22 on a DigitalOcean `gpu-mi325x1-256gb` droplet (gfx942), rented by
 `tools/do_extra_leg.sh amd --segment-lease 150 --dollar-cap 12` (priced live:
 150 minutes at $3.80 an hour is at most $9.50; `leg.txt`), body

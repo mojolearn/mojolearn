@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# THE TREES LANE'S IDENTITY LANES (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+# THE TREES LANE'S IDENTITY LANES.
 #
 # Owned by the `trees` expansion lane. tools/identity_break.py executes this
 # file in ITS OWN namespace after every helper and registry exists

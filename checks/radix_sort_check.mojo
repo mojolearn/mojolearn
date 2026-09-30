@@ -9,7 +9,7 @@ stable sort. So a sort that is perfectly sorted and reorders ties is not a
 slow version of the right answer, it is the wrong answer, and it is the
 failure this file is built to see.
 
-This is the same trap `RESUME.md` records for the histogram: a check whose
+This is the same trap the histogram check fell into: a check whose
 expected value is the same in every cell verifies the total and nothing
 about placement. Sortedness is exactly such a check -- it compares each
 output slot only with its neighbour, so any permutation within an equal-key

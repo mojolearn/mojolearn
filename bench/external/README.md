@@ -25,7 +25,7 @@ a caveat.
 | `mojolearn-gbdt-gpu` | the CatBoost oblivious-tree implementation | gbm-bench's `CatAlgorithm` param for param |
 | `cat-cpu` | gbm-bench's own CatBoost arm | (theirs, untouched) |
 
-**The symmetric-trees pair is CatBoost ONLY (Andrew's standing order,
+**The symmetric-trees pair is CatBoost ONLY (standing rule since
 2026-08-22).** LightGBM has no symmetric-tree mode -- leaf-wise is its only
 growth algorithm -- so a lgbm arm beside the symmetric pair compares
 different algorithms and is excluded from it. LightGBM remains the
@@ -53,7 +53,7 @@ trees.
     pixi run -e gbmbench bash bench/external/run_gbm_bench.sh covtype 100 forest
 
 Shorthands: `gbdt` = `mojolearn-gbdt-gpu,cat-cpu` (the symmetric pair is
-CatBoost ONLY — Andrew's standing order); `forest` =
+CatBoost ONLY); `forest` =
 `mojolearn-rf-gpu,skl-rf-cpu,mojolearn-et-gpu,skl-et-cpu` (LightGBM is
 excluded from every Mac pair; its arms stay registered for the NVIDIA leg).
 All arms of one invocation run interleaved in ONE process (the box drifts

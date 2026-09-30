@@ -1,7 +1,7 @@
 #!/bin/sh
 # THE LOSSGUIDE RUNG DEVIATION 1902 ASKED FOR AND NO HARNESS PROVIDED.
 #
-# `ridx_only_splits_for`'s docstring names its own gate: "the orchestrator's
+# `ridx_only_splits_for`'s docstring names its own gate: "the maintainer's
 # A/B (byte-compare of the FAST model pre/post routing, plus the 1M/2M
 # LOSSGUIDE rungs) is where the default dies if the gather costs more than
 # the reorder saved". `tools/fast_replication_ab.sh` runs lanes `gbdt rf et`

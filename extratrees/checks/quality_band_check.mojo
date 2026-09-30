@@ -485,7 +485,7 @@ def main() raises:
             " block minimum is marked a duplicate whenever it equals the"
             " previous iteration's flag. Transcribed faithfully per rule 1;"
             " see DEVIATIONS.md. Whether to keep it is an OPEN item in"
-            " PLAN.md and is Andrew's call, because a workaround here changes"
+            " PLAN.md and is a maintainer decision, because a workaround here changes"
             " the algorithm and CONTRIBUTING.md says that is a fork,"
             " not a workaround."
         )

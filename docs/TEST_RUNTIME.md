@@ -88,7 +88,7 @@ batchscale, ragged and stepfull probes are the other 76%. The end-model check
 of the same cells at one repeat is therefore about 74 s, and about 8 s on the
 base fixture alone. `tools/verify_lanes.py --apple-pass` (`pixi run -e test
 apple-pass`) is that selection on `base,denormal,odd` under a 600-second
-budget; see [VERIFICATION_TIERS.md](lanes/VERIFICATION_TIERS.md#the-apple-pass).
+budget.
 
 ## Scheduler
 

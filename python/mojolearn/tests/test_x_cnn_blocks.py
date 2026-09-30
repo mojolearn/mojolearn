@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Correctness sanity of Dropout2d, the adaptive (global) pools and the
 ResNet BasicBlock against float64 NumPy references of PyTorch's semantics.
-The BasicBlock is also compared with torchvision's by a two-stage check
-recorded in docs/lanes/progress/cnn.md."""
+The BasicBlock is also compared with torchvision's by a two-stage check."""
 import numpy as np
 
 from mojolearn.tests.test_x_cnn_batchnorm import ref_bn

@@ -40,8 +40,7 @@ THE MOVE IS PIN. There are exactly two entries:
   environment there moved 74 `denormal`-fixture cells of the gbdt,
   cross-val and saved-model lanes on the CUDA column (measured at 762f811cc).
   Moving GBDT to the caller's environment is a column re-record and is the
-  trees lane's call (docs/lanes/progress/cpu.md, "the GBDT environment
-  question"). Its bits do not depend on the task count: a pool task runs
+  trees lane's call (the GBDT environment question). Its bits do not depend on the task count: a pool task runs
   with FTZ+DAZ even at n = 1. OPEN, named: gbdt_oracle's serial small-fit
   arm (`n_rows * n_features < 2^18`) runs on the calling thread.
 
@@ -55,7 +54,6 @@ or result can be subnormal before its flush. A target with neither register
 CELLS THAT MOVED (DEVIATION 5900; each was thread-count dependent before,
 none moved at MOJOLEARN_CPU_THREADS=1): `logistic-unpenalized-no-intercept`
 on `dupes` (infer, batch), CPU column only; it now equals the CUDA column.
-The full per-lane record is in docs/lanes/progress/cpu.md.
 
 `host_fp_env` / `host_fp_env_set` are exported for a caller that owns its
 own threads.

@@ -1,6 +1,6 @@
 #!/bin/bash
-# tools/amd_central.sh -- THE CENTRAL AMD BOX (Andrew, 2026-09-28: "a central
-# permanent for 24 hours amd pod on hot aisle that each subagent uses").
+# tools/amd_central.sh -- THE CENTRAL AMD BOX (2026-09-28): one shared
+# Hot Aisle AMD VM, kept up for 24 hours, that every lane submits to.
 #
 # ONE Hot Aisle MI300X (gfx942) box that every lane shares for AMD identity
 # checks and AMD speed work. No lane rents its own AMD box any more.

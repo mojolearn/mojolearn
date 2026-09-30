@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""GPU binding of the sequence expansion lane (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md,
-Lane 6). Every entry is `sequence/pyapi.mojo`'s, run on a `DeviceExec`; the
+"""GPU binding of the sequence expansion lane (algorithm
+expansion lane 6). Every entry is `sequence/pyapi.mojo`'s, run on a `DeviceExec`; the
 CPU host binding `bindings/_mojolearn_x_sequence_host.mojo` exports the same
 names over a `HostExec`, the same element bodies (`sequence/ops.mojo`)."""
 from std.os import abort

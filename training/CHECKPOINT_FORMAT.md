@@ -2,7 +2,7 @@
 
 Written 2026-09-03 by the checkpoint-file lane.
 **DEVIATIONS 2050 through 2069 are this lane's, PROPOSED and not yet in the
-orchestrator's ledger.** 1550-1589 belong to the training-loop lane and
+maintainer's ledger.** 1550-1589 belong to the training-loop lane and
 1581-1589 are reserved by `TRAINING_LOOP_PLAN.md` for the NVIDIA leg, so this
 lane took a fresh block rather than borrowing from a reservation.
 
@@ -459,7 +459,7 @@ a `CKPT_REFUSE_SHAPE`.**
 `compare_checkpoint_files` returns `""` when two files are byte-for-byte
 identical and otherwise a report naming the first differing offset, the section
 that offset falls in, and both files' `h_all` and `h_file`. That is the
-function the orchestrator points at two vendors' checkpoints; a bare `cmp` is
+function the maintainer points at two vendors' checkpoints; a bare `cmp` is
 the same verdict with less of an address.
 
 ### 7.1 The file-I/O idiom, and why this one
@@ -697,8 +697,8 @@ not written yet.
 | `training/checkpoint.mojo` | NOT COMPILED | NOT COMPILED | NOT COMPILED |
 | `training/checks/checkpoint_check.mojo` | NOT COMPILED | NOT COMPILED | NOT COMPILED |
 
-**RUN OWED.** The orchestrator runs these; this lane runs nothing
-(`[[subagents-no-local-tests]]`). In order, cheapest first:
+**RUN OWED.** The maintainer runs these; this lane runs nothing.
+In order, cheapest first:
 
     # 1. does it compile at all
     pixi run mojo build -I . training/checks/checkpoint_check.mojo -o /tmp/ckptchk

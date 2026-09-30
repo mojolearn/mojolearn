@@ -49,7 +49,7 @@ THAN ONE.
     such parameter (`neighbors/NOT_IMPLEMENTED.tsv` records the epilogue
     template as not implemented). Adding one is the NEIGHBORS lane's call, not
     this lane's, and it is named in this lane's README under WHAT THE
-    ORCHESTRATOR MUST WIRE.
+    MAINTAINER MUST WIRE.
 
     THE EPILOGUE IS NOT A DECORATION. `max(core[col], max(core[row],
     alpha*d))` is not monotone in `d` alone, because `core[col]` varies

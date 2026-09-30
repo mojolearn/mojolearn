@@ -82,7 +82,7 @@ fragments, into three Int32 accumulators per cell: HH, HL + LH (the two
 share their power of two in the recombination, so they share a register),
 LL. It stores the three sums and NOTHING ELSE: the recombination in Int64,
 the pinned conversion and the scale are the fifteen-bit profile's seams and
-live in its own file. THE FUSED FORM (`FUSED` True, the orchestrator's
+live in its own file. THE FUSED FORM (`FUSED` True, the maintainer's
 interface with lane/lowbit-int15) is the same kernel whose last step hands
 each cell's three sums to `int15_store_cell` (lane/lowbit-int15's
 `gemm/checks/gemm_int15_epilogue.mojo`), which applies the mask,
@@ -473,7 +473,11 @@ def int8_pieces_dispatch_for(low_bandwidth: Bool, m: Int, n: Int, k: Int) -> Int
                 return INT8_PIECES_PLAN_SQUARE
             if k > 8192:
                 return INT8_PIECES_PLAN_SMALL
-            if m >= 4096 and k <= 1024:
+            # the tall dW rows: mlp_up's (14336 x 4096 x 512) took plan 0
+            # (52.0 against 47.2 TFLOPS); mlp_down's (4096 x 14336 x 512)
+            # lost 5% on it (1.380 against 1.318 ms, the strides-pass
+            # evidence), so only the taller one takes it
+            if m > 8192 and k <= 1024:
                 return INT8_PIECES_PLAN_SMALL
     return int8_pieces_dispatch(m, n, k)
 
@@ -523,8 +527,7 @@ def int8_direct_is_probe(which: Int) -> Bool:
 def int8_tuned_dispatch(m: Int, n: Int, k: Int) -> Int:
     """The plan `identical_gemm_int8_mma_tuned_into` takes. Reads the shape
     and may: every plan is the profile. The choice is the H100's
-    measurement of 2026-09-29 (job nvc3-0020,
-    `docs/lanes/progress/lowbit-mma-speed.md`): at the four 512-token rows
+    measurement of 2026-09-29 (job nvc3-0020): at the four 512-token rows
     the 128 x 128 block of sixteen 32 x 32 warps took the least time of the
     thirteen plans, and at the eight decode rows the 32 x 32 block of four
     16 x 16 warps did (the ROW plan, written for them, took two to four

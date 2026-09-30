@@ -92,7 +92,7 @@ R = (np.random.default_rng(0).random((20000, 2000)) < 0.01).astype(np.float32)
 run("ALS(32f,5it)", lambda: ml.AlternatingLeastSquares(factors=32, iterations=5, random_state=0).fit(R))
 run("ALS(32f,5it,cg)", lambda: ml.AlternatingLeastSquares(factors=32, iterations=5, use_cg=True, random_state=0).fit(R))
 n3 = int(os.environ.get("N3", "2000"))
-# Isomap is never timed at 10k rows (Andrew 2026-09-28: it hung on AMD there; its
+# Isomap is never timed at 10k rows (2026-09-28: it hung on AMD there; its
 # n x n eigh is the wall past a few thousand rows)
 n3i = min(n3, int(os.environ.get("N3_ISOMAP", "3000")))
 run("Isomap(10nn)", lambda: ml.Isomap(n_neighbors=10).fit(X[:n3i]))

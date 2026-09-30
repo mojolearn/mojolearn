@@ -95,7 +95,7 @@ scope.
 | D_has_hdim | False (D is per-head, shape [H]) | mamba2.py:49 |
 | rmsnorm / norm_before_gate | True / False | mamba2.py:50-51 |
 | d_ssm | d_inner (d_mlp = 0) | mamba2.py:46 default (d_ssm=None) |
-| dtype | Float32 everywhere (weights, activations, state) | Andrew's order |
+| dtype | Float32 everywhere (weights, activations, state) | project policy |
 
 Changing any of these is a v2. `D_has_hdim=True`, `norm_before_gate=True`,
 `rmsnorm=False` (z-gate inside the scan), `ngroups > 1`, `d_mlp > 0` and
@@ -455,7 +455,7 @@ follow the lane's naming convention.
    control read on every column. RUN OWED — this is the phase the
    completion claim lives or dies on.
 
-## RUN RECORD, 2026-09-01 evening (Apple M4, nice -19, one process at a time, with_identical_mode; orchestrator's box)
+## RUN RECORD, 2026-09-01 evening (Apple M4, nice -19, one process at a time, with_identical_mode; maintainer's box)
 
 Everything below ran the day the contract and its implementation landed.
 ONE COLUMN. Nothing here is a cross-vendor claim; phase 6 owns that.

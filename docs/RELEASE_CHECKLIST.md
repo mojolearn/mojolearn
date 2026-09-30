@@ -333,7 +333,7 @@ RunPod has no MI300X (the 1x VM, or the 2x VM pinned to GPU 0 when no 1x is in
 stock, `--hotaisle-spec`, `--hotaisle-cap`); DigitalOcean when Hot Aisle refuses
 before creating anything (no key, stock, slot, balance or cap). Hot Aisle's
 guards are `tools/hotaisle_vm_lib.sh`'s: the whole lease priced live against the
-cap (the balance tops up automatically and is only recorded), a Mac dead-man before the create, an on-box
+cap (the balance is only recorded), a Mac dead-man before the create, an on-box
 watchdog verified from two sessions, DELETE then GET 404 before the slot is
 released. `tools/tests/test_hotaisle_release_shim.py` tests both against a
 local stand-in API; `bench/results/release_hotaisle_2026-09-25/` is the real
@@ -380,7 +380,7 @@ lines above say WHICH leg is wrong before the packer says that one is.
 
 ## 2c. The CPU build route: opt-in only
 
-**Policy (2026-09-25, Andrew): no CPU anywhere by default.** `pixi run release`
+**Policy (2026-09-25): no CPU anywhere by default.** `pixi run release`
 compiles on the GPU legs of section 2. The CPU pods below run only with
 `--build-backend cpu-box`.
 
@@ -531,7 +531,7 @@ so NVIDIA and AMD can ship independently:
 | `mojolearn_nvidia-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
 | `mojolearn_amd-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
 
-`pip install mojolearn` works for everyone (Andrew, 2026-09-26): on Linux the
+`pip install mojolearn` works for everyone (since 2026-09-26): on Linux the
 core requires BOTH plugins at its own version exactly, so one command installs
 all three, and each plugin pins the core back (a cycle pip resolves). The
 core's METADATA is the combined wheel's plus exactly those two

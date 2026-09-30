@@ -12,9 +12,9 @@ stage BY BITS.
 The DEFAULT is one shape, B = 1, L = 4, d_model = 8, and one launch. The
 shape is read from the environment (`MOJOLEARN_MAMBA_CHECK_B`, `_L`, `_DM`)
 so that closing a clause that demands a bigger fold costs ONE build and not
-one build per shape; nothing here sweeps. Andrew's machine was
-crashed on 2026-08-23 by seven agents compiling Mojo at once, and this lane
-was cut to a single compile at a time at the smallest shape that exists. What
+one build per shape; nothing here sweeps. Parallel Mojo compiles overload a
+laptop, so this lane runs a single compile at a time at the smallest shape
+that exists. What
 this file gates is clause (a) of section 8 at one point, plus clause (f), the
 falsifiability of the seams this lane owns. Everything else is OWED and is
 listed at the foot of this docstring so that no reader mistakes a green line

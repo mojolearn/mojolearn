@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """VAR against a float64 NumPy least-squares restatement of statsmodels'
 estimator; parity with statsmodels itself (within 1e-5 on params, sigma_u and
-forecasts) was checked on the lane's pod (docs/lanes/progress/sequence.md)."""
+forecasts) was checked on the lane's pod."""
 import numpy as np
 
 import mojolearn as ml

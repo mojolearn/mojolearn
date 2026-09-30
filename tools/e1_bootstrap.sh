@@ -259,7 +259,7 @@ fi
 
 if run_phase 8; then
 step "phase 8: the classical lanes (gemm, cd, kde, linkage, svm, metrics) -- both modes, cards + checks"
-# Andrew's order 2026-08-23 (via the orchestrator): everything that exists
+# The rule since 2026-08-23: everything that exists
 # today must be bit-identical across all three GPUs. One card per lane per
 # mode (the drivers read MOJOLEARN_IDENTITY_TRACE from the environment and
 # print their compiled mode on the banner), plus each lane's gate in both
@@ -472,8 +472,8 @@ for mode in identical fast; do
   MOJOLEARN_TRANSFORMER_CHECK_CLAUSE_D="$_tfx_clause_d" \
     run_lane_arm transformer "$mode" pixi run mojo run -I . transformer/checks/transformer_check.mojo
   # THE THIRTEEN LANES THAT WERE BUILT FOR THIS AND NEVER LISTED.
-  # DEVIATION 1937, 2026-08-28. Andrew asked the obvious question -- is
-  # EVERYTHING identical -- and the honest answer was that sixteen of the
+  # DEVIATION 1937, 2026-08-28. The obvious question -- is EVERYTHING
+  # identical -- had the answer was that sixteen of the
   # tree's twenty-nine algorithm directories had ever been in a round. The
   # other thirteen were not unbuilt: every one carries `ftz`,
   # `identical_mul_add`, a `GLOBAL_NUMERIC_MODE` gate and a check driver, and

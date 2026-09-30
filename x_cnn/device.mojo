@@ -390,7 +390,7 @@ def device_gemm(
     # N*OH*OW rows) name their split plan: the dispatcher's SPLIT 16x16 and,
     # on NVIDIA, the long-k group rule's own workspace and wait were 2x to 7x
     # slower on the RTX 4090 at the CNNClassifier and Conv2d shapes, bits
-    # equal on every plan (the forced-plan sweep, progress/cnn.md phase 4).
+    # equal on every plan (the forced-plan sweep).
     # A plan is the EXECUTION plan: the partition and fold come from `k`.
     # No floor on `k`, so the lane checks' small fixtures take this path on
     # every column too.

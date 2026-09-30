@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE PREP LANE'S PUBLIC DOOR (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+"""THE PREP LANE'S PUBLIC DOOR.
 
 Owned by the `prep` expansion lane. `mojolearn/__init__.py` imports this
 module and makes every name in `__all__` public as `mojolearn.<name>`; a name
@@ -2445,7 +2445,7 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
         var = pr.alloc(K * d) if shr is not None else _NONE
         # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
-        # QuadraticDiscriminantAnalysis' paired quality check, docs/lanes/progress/prep-apple.md)
+        # QuadraticDiscriminantAnalysis' paired quality check)
         pr.stage("class_stats", K * d, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
         gflag, gofs = 0, 0
         if self.priors is not None:

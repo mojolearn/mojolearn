@@ -2506,7 +2506,7 @@ def fit_with_test(
         # THE TIER IS A BUILD DEFINE (checks/numerics.mojo:9-16) AND AN IDENTICAL GBDT BUILD SHIPS -- the
         # runtime `determinism` option is validated but wired to nothing,
         # and a comment here used to claim it pinned the integer flush,
-        # which was false (caught 2026-08-21 when Andrew asked why the
+        # which was false (caught 2026-08-21 in a review of why the
         # nondeterministic mirror was not the default: it already was).
         # This block still governs the shipped APPLE configuration because
         # Metal's threadgroup atomics are integer-only, so the hist_2

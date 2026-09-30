@@ -1,7 +1,6 @@
 """Authored stdlib artifact-boundary tests; ROOT ONLY, never a GPU/model test.
 
-Not executed by the authoring subagent. Root may run this file under the
-remote resource guard. Fixtures are at most two MiB; no model data is created.
+Run this file under the remote resource guard. Fixtures are at most two MiB; no model data is created.
 """
 import importlib.util
 import json

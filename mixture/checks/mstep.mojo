@@ -1080,7 +1080,7 @@ def gmm_precision_cholesky(
     FACTOR it fed forward is the same factor. A `tag_prefix` argument on
     `potrf_lower` and `chol_logdet` would let a caller nest their stages
     inside a per-component card, and `mixture/README.md`'s WHAT THE
-    ORCHESTRATOR MUST WIRE names it as a change the Cholesky lane could make.
+    MAINTAINER MUST WIRE names it as a change the Cholesky lane could make.
     It was NOT made here.
 
     SYNCHRONIZES, once per component, twice: `potrf_lower` reads `info` back

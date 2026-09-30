@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""lane/py-bugs regressions (docs/lanes/progress/py-bugs.md).
+"""lane/py-bugs regressions.
 
 1. No platform libm and no interpreter-dependent sum in the Python front
    door's float math (DEVIATIONS 6900-6902): the pinned helpers are checked

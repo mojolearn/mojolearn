@@ -106,7 +106,7 @@ def test_a_named_profile_is_honored_or_refused_by_family(monkeypatch):
     assert g.resolve(None, family="mamba1") == "fixed15_v1"
 
 
-def test_the_names_andrew_chose_are_registered(monkeypatch):
+def test_the_chosen_names_are_registered(monkeypatch):
     g = _fresh(monkeypatch)
     assert list(g.PROFILES) == ["fp32_v1", "fixed15_v1"]
     assert g.PROFILES["fixed15_v1"]["status"] == "experimental"

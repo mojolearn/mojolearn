@@ -605,7 +605,7 @@ def test_every_family_says_why_it_ships_or_does_not():
 
 
 def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
-    """Andrew's call (2026-09-16): the inference boundary keeps CPU TRAINING
+    """Decided 2026-09-16: the inference boundary keeps CPU TRAINING
     OF MODELS internal; it was never meant to exclude analysis functions that
     compute a statistic from the caller's own data. bootstrap, the permutation
     test, Monte Carlo integration and kpss_test train no model, so each must be
@@ -918,7 +918,7 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     public = host_surface.public_reference_lanes()
 
     assert len(public) == len(set(public)), "a lane is listed twice"
-    # NOTHING IS HIDDEN ANY MORE (Andrew, 2026-09-20). These two assertions
+    # NOTHING IS HIDDEN ANY MORE (2026-09-20). These two assertions
     # used to demand the opposite: that no prefix-excluded lane and no pending
     # lane was public. That was the rule that hid 76 lanes behind a list and a
     # prefix. `public_reference_lanes()` is now the COMPARABLE set -- what the

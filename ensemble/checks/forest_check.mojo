@@ -450,7 +450,7 @@ def arm_d_unimplemented_arms(ctx: DeviceContext) raises -> Int:
         # which asserts multiset equality AND that the buffer really is
         # ascending, i.e. still holds the seed chain, bounds and stride
         # through the sort. This red was MEASURED, not predicted: the
-        # flag-on gate run of 2026-09-01 (orchestrator, ffb61151) failed
+        # flag-on gate run of 2026-09-01 (ffb61151) failed
         # here by construction ("i 0 got 1 want 981", 1325 rows), the
         # one arm the DEVIATION 2010 block had not anticipated.
         var want_vals = List[Int]()

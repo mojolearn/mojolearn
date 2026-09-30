@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compile the trees expansion lane's binding (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, lane 7).
+# Compile the trees expansion lane's binding (algorithm expansion lane 7).
 set -eu
 MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."

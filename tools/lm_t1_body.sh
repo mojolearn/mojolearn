@@ -1,5 +1,5 @@
 #!/bin/sh
-# tools/lm_t1_body.sh -- T1 of docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md: the
+# tools/lm_t1_body.sh -- T1 of the GPT-3 Small run: the
 # segment runner at the TARGET shape on one rented box, as a
 # MOJOLEARN_GEMM_LEG_EXTRA body. Placeholders are substituted by the launcher
 # (RunPod passes no environment to a body):

@@ -2146,7 +2146,7 @@ def backward_stage_tag(i: Int) raises -> String:
     This file may not import from `transformer/checks/`'s oracle half in
     the direction that would make the two halves one module -- the forward
     lane made the same split and its `PLANT_AT_*` constants carry the same
-    note. **The ORCHESTRATOR owns keeping these two lists equal.** If they
+    note. **The MAINTAINER owns keeping these two lists equal.** If they
     ever disagree, `tools/identity_trace_diff.py` aligns two tag SEQUENCES
     and produces a WRONG ALIGNMENT that pairs one run's stage against
     another run's different stage and reports a plausible answer, which

@@ -9,7 +9,7 @@ BITS.
 
 **NOTHING IN THIS FILE HAS RUN.** Every command below is RUN OWED; no
 kernel here has ever compiled. The pixi task registrations
-(`check-mamba2-block` etc.) are the ORCHESTRATOR's to add -- pixi.toml is
+(`check-mamba2-block` etc.) are the MAINTAINER's to add -- pixi.toml is
 not this lane's editable set -- so the raw commands are spelled:
 
     # gates (a) card==oracle + card tags, (b) 8 repeated launches,

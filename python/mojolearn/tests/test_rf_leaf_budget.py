@@ -127,8 +127,7 @@ OPEN, AND OWED TO ANOTHER LANE
 `rf("clf", max_leaf_nodes=64, ...)` and will now RAISE instead of fitting.
 The one-line fix is `max_leaves=64`, which sets the identical slot-5 value
 the alias used to set, so the cell's own hash does not move; it is outside
-this lane's editable set and is recorded in the handoff rather than applied
-here.
+this lane's editable set and is not applied here.
 
 HOW TO RUN IT
 -------------

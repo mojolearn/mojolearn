@@ -544,8 +544,7 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   # THE TOOLKIT IS 12.5, ON PURPOSE: the oldest ptxas that accepts our PTX
   # (sm_90a is PTX ISA 8.5). A CUDA 13 cubin (ELF ABI 8) and a zstd fatbin load
   # only on a 580+ driver; 12.5 cubins with LZ4 compression load on the same
-  # drivers the PTX wheel does (measured on driver 570, 2026-09-26,
-  # docs/lanes/NVIDIA_CUBIN_RESUME.md), so the driver floor does not rise.
+  # drivers the PTX wheel does (measured on driver 570, 2026-09-26), so the driver floor does not rise.
   # ptxas and fatbinary come from NVIDIA's cuda_nvcc redist archive, pinned by
   # sha256 (the pip wheel nvidia-cuda-nvcc-cu12 carries no fatbinary).
   CUDA_TOOLS_VERSION=12.5.82

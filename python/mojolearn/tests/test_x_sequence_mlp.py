@@ -4,7 +4,7 @@
 the same random_state, so the same initial weights and sample order): the
 loss curves and predictions agree to float32 tolerance. Skipped without
 scikit-learn; on the lane's pod it held to 3e-6 over Adam, SGD invscaling and
-SGD adaptive (docs/lanes/progress/sequence.md)."""
+SGD adaptive."""
 import numpy as np
 
 import mojolearn as ml

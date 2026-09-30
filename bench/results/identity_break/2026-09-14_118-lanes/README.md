@@ -4,7 +4,7 @@ The first three-vendor run of the 118-lane harness (the 47 lanes of the morning 
 census lanes merged as 71faae781, one per public constructor value that selects a numeric path).
 Two columns are here; the Apple M4 column is retaken at the next commit because the process that
 was writing it lost its estimators binding mid-run (an in-place overwrite of the shared checkout's
-binary by the orchestrator, recorded in the handoff) and it is not trusted.
+binary) and it is not trusted.
 
 | column | box | commit | cells |
 |---|---|---|---|

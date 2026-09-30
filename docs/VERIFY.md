@@ -1088,8 +1088,6 @@ of GPU-trained models, not CPU training of CTR tables. Both lanes passed all
 nine fixtures twice from an installed development wheel and join the default
 CPU set. This does not replace final release-wheel qualification.
 
-See [the evidence audit and remaining work](lanes/LANE_STATUS_verification_evidence_audit.md).
-
 ### Admitting one verified group without rewriting other references
 
 To generate a scoped candidate while preserving every other lane, combine

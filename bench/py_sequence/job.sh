@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lane py-sequence: before/after on ONE box in ONE job (docs/lanes/progress/py-sequence.md).
+# Lane py-sequence: before/after on ONE box in ONE job.
 #   BASE = lane/apple2-merged's base commit (a detached worktree beside this tree), NEW = this tree.
 #   1. each tree: build the sequence family's bindings once (GPU + CPU host, stamped), then every
 #      sequence-family identity lane once per column (merged_check clean: GPU vs CPU AGREE);

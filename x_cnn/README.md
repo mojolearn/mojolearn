@@ -1,6 +1,6 @@
 # x_cnn: the CNN lane (convolution, pooling, normalization, the CNN trainer, graph convolution)
 
-Lane 8 of docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md. Public classes (door
+Lane 8 of the algorithm expansion. Public classes (door
 `python/mojolearn/_expansion_cnn.py`): Conv1d, Conv2d, MaxPool1d/2d,
 AvgPool1d/2d, AdaptiveAvgPool2d, AdaptiveMaxPool2d, BatchNorm1d/2d,
 Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.

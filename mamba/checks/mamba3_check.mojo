@@ -13,7 +13,7 @@ RUN OWED): the portable trig pair's device certification,
 `tools/with_identical_mode.sh pixi run check-portable-trig` (or
 `pixi run mojo run -I . checks/portable_trig_check.mojo`), and mamba2's
 gates re-green if any shared file moved. The pixi task registration
-(`check-mamba3-block`) is the ORCHESTRATOR's to confirm; the raw commands
+(`check-mamba3-block`) is the MAINTAINER's to confirm; the raw commands
 are spelled:
 
     # gates (a) card==oracle + the 28 card tags, (b) 8 repeated launches,

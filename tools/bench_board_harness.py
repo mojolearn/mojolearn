@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """WHERE THE BOARD'S SETTINGS COME FROM: NVIDIA's two benchmark harnesses.
 
-Andrew (2026-09-29): "use the harness for nvidia for classical ml and for
-decision trees and use their tuning params for us and the opponent", and "why
-would our settings EVER differ from theirs? the point is so they don't".
+The rule (2026-09-29): on NVIDIA, classical ML and decision trees run through
+NVIDIA's own benchmark harness, with its tuning parameters for our arm and the
+opponent alike. Our settings never differ from theirs; that is the point.
 
 For every lane one of NVIDIA's harnesses covers, each parameter that harness
 sets EXPLICITLY is the board's value, on OUR arm and on EVERY opponent arm.

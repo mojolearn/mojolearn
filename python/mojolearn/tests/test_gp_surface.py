@@ -31,7 +31,7 @@ tolerance or name comparisons and are asserted in every tier.
 WHAT THIS DOES NOT PROVE. It does not gate the arithmetic -- the lane's
 own checks do, eleven per tier with nine runtime sabotage arms. It is one
 machine and one vendor per run. And it makes no speed claim: the gp speed
-ladder is UNRUN (HANDOFF_2026-09-01.md section 5).
+ladder is UNRUN.
 
 HOW TO RUN IT
 -------------

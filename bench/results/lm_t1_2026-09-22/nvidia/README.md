@@ -1,6 +1,6 @@
 # T1, NVIDIA arm: the segment runner at the target shape on 2x H100
 
-Evidence only. `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md` section 10, T1(a) and
+Evidence only. GPT-3 Small run plan section 10, T1(a) and
 T1(d), 2026-09-22 on a RunPod pod with two H100 80GB HBM3 (driver 580.126.09),
 commit 424b8fab4's source built on the box (`build_base` 63 s, `build_byte_lm`
 141 s), body `tools/lm_t1_body.sh`, arm `nvidia`. Shape 4x2048 d768 12 layers

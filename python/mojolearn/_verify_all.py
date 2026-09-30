@@ -191,7 +191,7 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
     if vendor_class == "cpu":
         surface = host_surface()
         # EVERY LANE IS PUBLIC; WHAT VARIES IS WHETHER THIS BOX CAN COMPARE IT
-        # (Andrew, 2026-09-20). `comparable_lanes()` is the execution set, and
+        # (2026-09-20). `comparable_lanes()` is the execution set, and
         # it is NOT a visibility filter: the lanes it leaves out are reported
         # by name, with the reason, in the run's lane accounting. It exists
         # because running them would not help. A `par-*` driver on one device
@@ -631,7 +631,7 @@ LANE_HELD = "HELD"
 LANE_NOT_RUN = "NOT RUN"
 LANE_UNDECLARED = "UNDECLARED"
 #: A LOOSER TIER, SO A LANE WE CANNOT FULLY CHECK IS NOT LEFT WITH NOTHING
-#: (Andrew, 2026-09-20). A `par-*` driver on one device cannot prove its
+#: (2026-09-20). A `par-*` driver on one device cannot prove its
 #: claim, that two devices hash equal to one cell for cell. It can still be
 #: constructed, run, and checked for sanity, and a smoke test is strictly more
 #: than the shrug `NOT APPLICABLE` gives on its own.
@@ -814,7 +814,7 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=No
 #: ONE derivation -- `host_surface.PUBLIC_INAPPLICABLE_PREFIXES` with a written
 #: sentence -- it cannot be reached from `PUBLIC_PENDING_LANES` at all, and
 #: `test_not_applicable_has_exactly_one_derivation` holds it there.
-#: ANDREW, 2026-09-20, after the narrower rule was argued and decided against:
+#: DECIDED 2026-09-20, after the narrower rule was argued and rejected:
 #: OWED, HELD and NOT RUN stop gating too. A run reads VERIFIED when nothing
 #: DIVERGED and nothing REFUSED, whatever else is unreferenced or inapplicable.
 #:

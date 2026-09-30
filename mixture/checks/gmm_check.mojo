@@ -7,7 +7,7 @@
     tools/with_identical_mode.sh pixi run mojo run -I . mixture/checks/gmm_check.mojo
 
 **NOTHING IN THIS FILE HAS BEEN COMPILED OR RUN.** Every expectation below is
-a PREDICTION until an orchestrator runs it. Where a prediction could be wrong
+a PREDICTION until a maintainer runs it. Where a prediction could be wrong
 in an interesting way it is named rather than smoothed over.
 
 THE ORDER OF THE CHECKS IS AN ARGUMENT

@@ -176,7 +176,7 @@ must be read with it in mind.
 
 | constant | value | source | mirrored or CHOSEN |
 |---|---|---|---|
-| dtype | Float32 everywhere | Andrew's order; cuVS instantiates `float` | mirrored |
+| dtype | Float32 everywhere | project policy; cuVS instantiates `float` | mirrored |
 | `which` | `LA` on the negated Laplacian | `spectral_embedding.cu:180` | mirrored |
 | alpha clamp | `1e-9`, `fabs(x) < t ? 0 : x` | `lanczos.cuh:374` | mirrored |
 | u clamp | `1e-7`, same select | `lanczos.cuh:385-386` | mirrored |

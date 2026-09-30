@@ -3,7 +3,7 @@
 
 The opt-in independent-reference gate runs only on remote Linux CUDA/HIP,
 with MOJOLEARN_RUN_SMALL_MLP_GPU=1 and process-selected IDENTICAL bindings.
-Never execute this suite in a subagent or on Apple hardware.
+Never execute this suite on Apple hardware.
 """
 import ctypes
 import hashlib

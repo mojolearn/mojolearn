@@ -39,8 +39,8 @@ done
 $PIXI run -e default python - "$EV" <<'PY'
 import json, re, sys
 ev = sys.argv[1]
-# Apple IDENTICAL, 1,000,000 rows, lane/apple2-merged (docs/lanes/progress/trees-apple2.md,
-# m4pro-a steward 1790619284873; dart:taxi from trees-apple.md)
+# Apple IDENTICAL, 1,000,000 rows, lane/apple2-merged (m4pro-a steward
+# 1790619284873; dart:taxi from the earlier trees-apple run)
 apple = {
     "gbdt-symmetric:taxi": "8e760782efae56c8", "gbdt-depthwise:taxi": "5694af7699036c65",
     "gbdt-lossguide:taxi": "b1761eecc6dfbc73", "rf:taxi": "452a173087f86a9d",

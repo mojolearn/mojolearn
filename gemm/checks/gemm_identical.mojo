@@ -1339,7 +1339,7 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
 
 #: lane/apple-seam-repair, 2026-09-18. The per-step repair inlined into the
 #: tuned kernel's 64-cell register tile made the Apple metallib 10x larger and
-#: the Apple GEMM sum ~2.4x slower (LANE_STATUS_apple-seam-repair.md). The
+#: the Apple GEMM sum ~2.4x slower. The
 #: tuned kernel therefore takes an EXACT block admission instead: while
 #: staging, each thread keeps the minimum biased exponent of the NONZERO
 #: operand words it loaded (A and B separately); the block reduces them once

@@ -190,7 +190,7 @@ struct Fixture(Movable):
                 # HASHED AND SCATTERED. `r % folds` makes every binary
                 # feature the constant 0 and makes every histogram cell
                 # carry the same value, which is the pattern that reported
-                # two broken kernels correct (see RESUME.md).
+                # two broken kernels correct.
                 var x = UInt32(r * 2654435761 + f * 40503 + 0x2545F491)
                 x ^= x << 13
                 x ^= x >> 17

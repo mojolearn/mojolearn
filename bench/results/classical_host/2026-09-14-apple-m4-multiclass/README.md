@@ -25,8 +25,7 @@ reload byte-equal).
 EQUAL (36 comparisons: predict_proba, predict, decision_function and the
 identity_break hash per fixture). No GPU column was passed: the
 `logistic-multiclass` lane is not yet in `tools/identity_break.py`, so there
-is no committed vendor JSON with its infer cell (the lane body is in
-`docs/lanes/BRIEF_logistic_multiclass_2026-09-14.md`, section 5).
+is no committed vendor JSON with its infer cell.
 
 `check_apple-m4_sabotage.json`: verdict EXPECTED MISMATCH SEEN. Under the
 descending dot-product fold of MOJOLEARN_HOST_SABOTAGE, `decision_function`,

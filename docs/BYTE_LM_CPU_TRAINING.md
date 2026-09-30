@@ -98,7 +98,7 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   gradients' summation order exact, because they sum across every row and so
   cross every thread boundary. That is a large build whose payoff is making an
   already-fast thing faster, against a real risk to the bit identity that is the
-  point. It should be justified by a workload that 37 ms a step makes painful,
+  point. It should be justified by a workload for which 37 ms a step is too slow,
   not by the limit's existence.
 - Nothing about other algorithm families. Trees and the classical models have
   no backward pass; the CPU paths they do have are the host bindings in the

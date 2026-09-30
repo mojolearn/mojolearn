@@ -42,8 +42,7 @@ most `PQ_FAST_ROWS_PER_CODE` rows per code, a seeded uniform sample of the
 residuals (FAISS's `max_points_per_centroid` rule; the coarse quantizer
 already samples the same way under FAST on Apple, `IVF_FAST_TRAINSET`). Every
 row is still encoded against the trained codebooks. IDENTICAL trains on every
-row. Quality: bench/speed/ann_fast_quality.py, recorded in
-docs/lanes/progress/ann-apple.md."""
+row. Quality: bench/speed/ann_fast_quality.py."""
 comptime PQ_FAST_ROWS_PER_CODE = 256
 
 comptime PQ_FAST_SEED = ANN3_PQ_SEED and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()

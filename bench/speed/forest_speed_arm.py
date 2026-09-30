@@ -1117,8 +1117,8 @@ def main(argv=None):
         spec.emit_refused(lane, "all", "nothing could be constructed on this "
                                        "box; see the refusals above")
         return 1
-    # THE PARAMETER CHECK (tools/bench_board_params.py; Andrew, 2026-09-29:
-    # "same seed same tuning params"), before the first timed round. Each
+    # THE PARAMETER CHECK (tools/bench_board_params.py, 2026-09-29: same seed,
+    # same tuning parameters), before the first timed round. Each
     # arm's model is constructed, not fitted, and its parameters are read
     # back from the object; a seed or a shared parameter that differs
     # refuses the race by name. The CPU proxy arms are ours on another

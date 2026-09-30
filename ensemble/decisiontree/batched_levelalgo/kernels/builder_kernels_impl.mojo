@@ -602,7 +602,7 @@ comptime TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES = 16 * 1024
 # -- the reach proof, since the forest cannot move under the flag by
 # construction. 0 is the only value a shipping caller may pass.
 #
-# UNVERIFIED, RUN OWED (orchestrator; archive/plans/ensemble/PLAN.md "2026-09-01
+# UNVERIFIED, RUN OWED (archive/plans/ensemble/PLAN.md "2026-09-01
 # candidate round"). The candidate arm is P = 4.
 # =========================================================
 # `-D MOJOLEARN_2012_SMEM_COPIES4=1` selects P = 4; 1 is shipped.

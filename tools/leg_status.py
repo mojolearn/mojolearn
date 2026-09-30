@@ -41,7 +41,7 @@ SEVERITY, and a process exit code taken from the worst severity present:
 
 THE POINT OF THE INFRA CLASS, AND ITS ONE DANGER
 =================================================
-Andrew's ask, 2026-08-30: name the reason an arm failed -- a RunPod lease
+The requirement (2026-08-30): name the reason an arm failed -- a RunPod lease
 expiring, an AMD readiness timeout, a per-arm budget -- so that a red cell is
 not read as a broken library. That is right, and the repository has already
 paid for the lesson twice: the 2026-08-27 "outage" was a NEGATIVE RUNPOD

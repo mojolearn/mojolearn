@@ -93,8 +93,8 @@ import os
 import sys
 
 # ------------------------------------------------ the algorithm expansion
-#: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics;
-#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
+#: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics).
+#: Nine lanes
 #: add algorithms in parallel, and this manifest would be the file every one
 #: of them edits. So none of them edits it: each lane owns ONE file beside
 #: this one, `_surface_<lane>.py`, holding only literal data, and the
@@ -107,7 +107,7 @@ import sys
 #: what it was.
 EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics")
 #: The expansion lanes whose GPU binding builds IDENTICAL ONLY. EMPTY SINCE
-#: 2026-09-27 (Andrew: FAST AND IDENTICAL on every lane, neural included):
+#: 2026-09-27 (FAST AND IDENTICAL on every lane, neural included):
 #: all nine expansion bindings build FAST and IDENTICAL and join
 #: `_backend._CLASSICAL_FAST`, exactly as classical ML does since 2026-09-25.
 #: The tuple stays so the tier plumbing (`expansion_gpu_bindings("identical-only")`,
@@ -915,7 +915,7 @@ TRAINING_LANE_NAMES = {
     # batch cells IDENTICAL x4 before the gate ran.
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
-    # lane/neural session 2 (2026-09-27): maximize= on SGD, Adam and AdamW
+    # lane/neural (2026-09-27): maximize= on SGD, Adam and AdamW
     # (DEVIATION 6200, training/maximize.mojo) through the same host binding;
     # CPU == NVIDIA on all nine fixtures (algos_lane_check, 2026-09-28).
     "optim-maximize": "SGD, Adam and AdamW with maximize=True",
@@ -2692,9 +2692,9 @@ FAMILIES = (
             "Ships: bootstrap, permutation_test and monte_carlo_integrate compute an answer from a "
             "user's own data and a user's own function. They train no model and there is nothing to "
             "save, so the saved-model inference boundary never had a side for them to fall on and "
-            "they used to refuse on a CPU-only install, which is indefensible for cheap analysis "
-            "functions a user calls on their laptop. Andrew's call (2026-09-16, "
-            "lane/expose-inference-surface): the boundary exists to keep CPU TRAINING OF MODELS "
+            "they used to refuse on a CPU-only install, which is wrong for cheap analysis "
+            "functions a user calls on their laptop. Decided 2026-09-16 "
+            "(lane/expose-inference-surface): the boundary exists to keep CPU TRAINING OF MODELS "
             "internal, not to exclude analysis. This binding registers the three entries and no "
             "fit, and _backend already routes _mojolearn_resample here, so shipping it is the whole "
             "change."
@@ -3155,7 +3155,7 @@ LANE_UNDECLARED = "UNDECLARED"
 LANE_STATUSES = (LANE_EXPOSED, LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD,
                  LANE_UNDECLARED)
 
-#: NOTHING IS HIDDEN FROM THE SHIPPED VERIFIER (Andrew, 2026-09-20). Every
+#: NOTHING IS HIDDEN FROM THE SHIPPED VERIFIER (2026-09-20). Every
 #: lane the harness defines is PUBLIC. `PUBLIC_PENDING_LANES`,
 #: `PUBLIC_INAPPLICABLE_PREFIXES` and `PUBLIC_REFERENCE_CANDIDATES` stopped
 #: being removal mechanisms that day and became ANNOTATION: a reason no longer
@@ -3633,8 +3633,8 @@ def pending_blocks_comparison(lane, device_class="cpu"):
     """The `PUBLIC_PENDING_LANES` reason for `lane`, when that reason means the
     verifier cannot COMPARE it here, else None.
 
-    THIS IS THE WHOLE OF WHAT A PENDING REASON STILL DECIDES (Andrew,
-    2026-09-20). It used to decide visibility -- every entry in the dict was
+    THIS IS THE WHOLE OF WHAT A PENDING REASON STILL DECIDES
+    (2026-09-20). It used to decide visibility -- every entry in the dict was
     removed from the public set, whatever its reason said. Now only three
     classes of reason block the comparison, and the rest are caveats carried
     beside a lane the verifier runs and reports honestly:

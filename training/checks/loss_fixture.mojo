@@ -115,8 +115,8 @@ WHAT IS OWED, AND THIS FILE COVERS NONE OF IT
 * **`training/corpus/`.** The float64 reference of contract 12.3's A3 arm.
 * **The shipped vocabulary.** `shipped_v128256` is in the table and is OFF
   by default (`MOJOLEARN_LOSS_CHECK_SHIPPED_V`), because the host oracle
-  is `O(N*V)` scalar Mojo with a `List` copy per fold and Andrew's box may
-  not be pushed (`[[no-heavy-local-compute]]`). Contract 3.2's carry is
+  is `O(N*V)` scalar Mojo with a `List` copy per fold and a developer laptop
+  must not be pushed. Contract 3.2's carry is
   reachable at `V = 300` without it, which is why the default set is
   honest rather than merely cheap.
 """

@@ -1249,7 +1249,7 @@ def check_kde_cosine_norm_is_the_sqrt_norm() raises:
        `take_sqrt = 0` arm, this clause is the one that fires. PREDICTED
        BEHAVIOUR when the seam is broken: every cell equal, so
        `moved == 0`, so this raises. OBSERVED: filled in by the
-       orchestrator's run.
+       maintainer's run.
 
     3. COSINE IS NOT ANY OTHER METRIC. Its distance matrix must differ
        from euclidean's and from sqeuclidean's, which proves the new arm

@@ -1,6 +1,6 @@
 # The GPT-3 Small run's token stream, produced three times on three CPUs
 
-Evidence only. E3 of `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`, 2026-09-22.
+Evidence only. Step E3 of the GPT-3 Small run plan, 2026-09-22.
 FineWeb-Edu sample-10BT shards 000, 001, 002, 003 (train) and 013 (held out,
 every one of its rows), staged from R2 and pinned, one document per parquet
 row, through the pinned vocabulary `vocab/mojolearn-bpe-fineweb-edu-50257-v1`

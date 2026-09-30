@@ -3,7 +3,7 @@
 """`mojolearn.identical.gemm.int15i64.v1` over ATTENTION HEADS in one launch:
 the score product S11 of every (batch, head) at once.
 
-Lane lane/lowbit-default, 2026-09-29 (the orchestrator's lever 1: the
+Lane lane/lowbit-default, 2026-09-29 (the maintainer's lever 1: the
 resident decode step under numeric_profile="fixed15_v1" spent its time in
 one gather, two quantizer launches, one product and one scatter PER HEAD).
 

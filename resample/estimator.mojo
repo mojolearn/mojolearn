@@ -5,7 +5,7 @@
 
 **NOT YET WIRED** into `bindings/_mojolearn_estimators.mojo` or
 `python/mojolearn/` -- those directories are not this lane's. The README's
-`WHAT THE ORCHESTRATOR MUST WIRE` names the exact Python surface; this file is
+`WHAT THE MAINTAINER MUST WIRE` names the exact Python surface; this file is
 the entry it should reach, shaped like `kde/estimator.mojo::
 kde_score_samples_host` and `glm/estimator.mojo::ols_fit_host`.
 

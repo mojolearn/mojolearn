@@ -83,7 +83,7 @@ DEFAULT_PAR_DEVICES = (0, 1)
 #: WHICH SCOPE TO RUN. `--par quick` IS the two-physical-GPU check: one lane
 #: per family, run once on the two-device group with the placement witness.
 #: Use it, with `--par-self-test`, for every routine run and every rented box.
-#: NEVER RUN `--par all` WITHOUT ANDREW'S EXPRESS PERMISSION (2026-09-20): it
+#: NEVER RUN `--par all` WITHOUT EXPRESS MAINTAINER APPROVAL (2026-09-20): it
 #: is every lane on all nine fixtures (2.4 hours on two RTX 4090s when each
 #: lane still ran twice; `par-resample` alone was about 300 s per fixture).
 #: The default scope (every lane, base fixture) also needs a reason.

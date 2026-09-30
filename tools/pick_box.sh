@@ -3,8 +3,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 #
 # pick_box.sh: which rented box can take a leg RIGHT NOW, in the order
-# CONTRIBUTING.md (Comparing against libraries without a GPU path) sets (Andrew, 2026-09-11: "use hot aisle first if we
-# can, digital ocean second if we can, runpod 3rd.. DO NOT WAIT").
+# CONTRIBUTING.md (Comparing against libraries without a GPU path) sets (2026-09-11: Hot Aisle first,
+# DigitalOcean second, RunPod third, never wait).
 #
 #   tools/pick_box.sh [--need amd|any] [--spec 13core|8core|2gpu] [--gpu "NVIDIA H100 80GB HBM3"]
 #

@@ -73,7 +73,7 @@ that has never been shown capable of failing does not count, and a control
 that runs every time is stronger than a sabotage somebody performed once
 and reverted.
 
-SABOTAGES FOR THE ORCHESTRATOR TO PERFORM BY HAND, each reverted, on the
+SABOTAGES FOR THE MAINTAINER TO PERFORM BY HAND, each reverted, on the
 seams the in-process controls cannot reach (they are inside kernels):
 
     (a) `row_vector_binary_mult_kernel` indexing `idx % n_cols` instead of

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """AutoARIMA's search on series whose order is known. The chosen orders and
-AICs were held against statsmodels' ARIMA on the lane's pod
-(docs/lanes/progress/sequence.md)."""
+AICs were held against statsmodels' ARIMA on the lane's pod."""
 import numpy as np
 
 import mojolearn as ml

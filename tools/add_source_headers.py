@@ -17,8 +17,8 @@ what licence it carries, or that a DOI exists, and neither they nor anyone
 downstream of them has any way to find out. That is how attribution is
 actually lost.
 
-Two lines, the same two on every file: the SPDX identifier and Andrew
-Hendel's copyright. Nothing else. Every line of Mojo in this repository was
+Two lines, the same two on every file: the SPDX identifier and the
+copyright line. Nothing else. Every line of Mojo in this repository was
 written for it, so there is no third line to add and nothing to point at.
 
 Measured before the first run, 2026-08-31: 2 of 982 `.mojo` files and 0 of

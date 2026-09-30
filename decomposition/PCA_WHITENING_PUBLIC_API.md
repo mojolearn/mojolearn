@@ -55,6 +55,6 @@ MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_RUN_PCA_WHITEN_GPU=1 \
 ```
 
 This change is authored and unqualified. No tests, builds, models or
-measurements were executed by the authoring subagent. Existing kernel code and
+measurements were executed when it was written. Existing kernel code and
 historical cards do not establish new Python-path, installed-wheel, or
 cross-vendor whitening qualification; those need retained root-run evidence.

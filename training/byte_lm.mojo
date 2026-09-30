@@ -554,8 +554,7 @@ struct ByteBuffers(Movable):
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
-        # DEVIATION 3011 (BRIEF_lm_step_memory_2026-09-10.md section 3,
-        # rank 3): `ce_shift` IS `logits` and `ce_weights` and `ce_dlogits`
+        # DEVIATION 3011: `ce_shift` IS `logits` and `ce_weights` and `ce_dlogits`
         # ARE `ce_expo`. Five `[M, V]` allocations become two, which is
         # 3 * M * V * 4 bytes -- 1,178 MiB at B1/L2048/V50257 and eight
         # times that at the batch 4 operating point
@@ -707,9 +706,9 @@ def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWei
     """Flat parameters -> the block's nine tensors, in ONE launch.
 
     Was nine `_copy_into` launches and one `ctx.synchronize()`. The nine
-    became one through `byte_block_copy` (codex/metal-block-copy-fusion,
-    commit 1895b0287, which carries its own Metal receipt); the wait
-    went because it enforced nothing. Every caller queues further work on
+    became one through `byte_block_copy` (commit 1895b0287, which carries
+    its own Metal receipt); the wait went because it enforced nothing.
+    Every caller queues further work on
     the SAME in-order context and reads no host memory in between, and each
     one already waits after its loop over the blocks (`byte_lm.mojo`
     forward and gradient, `byte_lm_logits.mojo`). A wait that only delays

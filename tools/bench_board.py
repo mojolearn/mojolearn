@@ -913,7 +913,7 @@ def box_key(box):
     the same library bytes. A board mixing two boxes is the patchwork that
     produced a wrong CatBoost headline (bench_all_ours.sh).
 
-    NVIDIA (Andrew's orchestrator, 2026-09-29): a shared RunPod pod deletes
+    NVIDIA (2026-09-29): a shared RunPod pod deletes
     itself when idle, and each race holds ours and its opponents measured
     together in one run, so a race is valid on its own. An NVIDIA board
     therefore resumes on a NEW pod when the GPU model, the driver major
@@ -3101,8 +3101,8 @@ _DRIVER_KEY = {"trees": "tree_driver", "classical": "classical_driver", "classic
 def _driver_has_params_check(ctx, family):
     """Does this family's driver call tools/bench_board_params.py? A finished
     race whose record has no MATCHED check is run again once it does, so every
-    race on the board ends up checked (Andrew, 2026-09-29: same seed, same
-    tuning parameters, enforced). Only the driver this run uses is read: the
+    race on the board ends up checked (2026-09-29: same seed, same tuning
+    parameters, enforced). Only the driver this run uses is read: the
     trees driver (bench/speed/forest_speed_arm.py) calls the check itself, and
     reading tools/speed_gbdt_arm.py beside it made a driver without the check
     (a stub, an older driver) rerun its finished races on every resume."""

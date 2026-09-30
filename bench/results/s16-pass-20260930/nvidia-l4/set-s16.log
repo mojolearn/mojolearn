@@ -1,0 +1,25 @@
+### baseline  (defaults)
+    mamba3-forward          5.074 ms  digest=481c50cae2dd749e
+    samba-train-step      163.822 ms  digest=None
+### s16_naive  MOJOLEARN_MAMBA3_S16_QK_ARM=naive
+    mamba3-forward          4.988 ms  digest=481c50cae2dd749e
+    samba-train-step      261.911 ms  digest=None
+### s16_shared  MOJOLEARN_MAMBA3_S16_QK_ARM=shared
+    mamba3-forward          4.856 ms  digest=481c50cae2dd749e
+    samba-train-step      226.966 ms  digest=None
+### s16_regs  MOJOLEARN_MAMBA3_S16_QK_ARM=regs
+    mamba3-forward          4.909 ms  digest=481c50cae2dd749e
+    samba-train-step      143.294 ms  digest=None
+### s16_smem48  MOJOLEARN_MAMBA3_S16_QK_ARM=smem48
+    mamba3-forward          4.877 ms  digest=481c50cae2dd749e
+    samba-train-step      170.819 ms  digest=None
+
+| experiment | mamba3-forward | samba-train-step |
+|---|---:|---:|
+| baseline | 5.074 (1.00x) | 163.822 (1.00x) |
+| s16_naive | 4.988 (0.98x) same | 261.911 (1.60x) same |
+| s16_shared | 4.856 (0.96x) same | 226.966 (1.39x) same |
+| s16_regs | 4.909 (0.97x) same | 143.294 (0.87x) same |
+| s16_smem48 | 4.877 (0.96x) same | 170.819 (1.04x) same |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.

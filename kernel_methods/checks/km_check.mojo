@@ -5,7 +5,7 @@
 DEVIATIONS 1660-1689's gates. **THIS FILE IS NOT A DIGEST.** Every named path
 below has a SABOTAGE that flips it, every sabotage is selectable at RUN TIME
 through `kernel_methods/checks/km_sabotage.mojo` -- no source edit, no
-rebuild with a define, nothing an orchestrator forbidden to edit source
+rebuild with a define, nothing a maintainer forbidden to edit source
 cannot run -- and `check_km_sabotages` drives all thirteen, SWEEPING the
 fixtures rather than naming one.
 

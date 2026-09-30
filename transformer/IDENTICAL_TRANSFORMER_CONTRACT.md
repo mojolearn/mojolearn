@@ -142,7 +142,7 @@ value is a v2 or merely a different model.
 
 | constant | value | frozen? | source |
 |---|---|---|---|
-| dtype | Float32 for weights, activations, accumulators, the KV cache and the rotary table | **YES** | Andrew's order |
+| dtype | Float32 for weights, activations, accumulators, the KV cache and the rotary table | **YES** | project policy |
 | rms eps | `1e-6` (`0x358637BD`) | **YES** | `LlamaConfig.rms_norm_eps`, configuration_llama.py:73 |
 | rope theta | `10000.0` (`0x461C4000`) | **YES** | `RopeParameters` default base, modeling_rope_utils.py:177 |
 | rope type | `default` only, so `attention_scaling` is exactly `1.0` and the multiply at modeling_llama.py:124-125 is bit-inert and is NOT spelled | **YES** | `compute_default_rope_parameters` :103-109 |

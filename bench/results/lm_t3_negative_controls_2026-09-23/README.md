@@ -1,6 +1,6 @@
 # T3 negative controls at the real shape, 2026-09-23
 
-Plan section 6 item 7 (`docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`): controls that
+GPT-3 Small run plan section 6 item 7: controls that
 must be seen to fail, at the real shape, once. Every run started from route
 A's `ckpt_00000100.blm` of the live T3 run (R2 `runs/t3/2026-09-22/A/1/`,
 1,945,780,168 bytes, sha256 `80cd2126a89ba6d8...`, read only), ran two
@@ -162,5 +162,5 @@ none DIVERGENT against the CPU column on a 4090 and on an MI325X
 (`bench/results/release_verification/2026-09-25_pypi_0818/`). Both check
 boxes were deleted and confirmed gone (`wheel-0.8.18/*/leg_teardown.txt`);
 about $1 and $3. Segment A/4 (AMD) started on 0.8.18 at 02:07 UTC; route B
-stays held on Andrew's instruction while the AMD and NVIDIA step-time lanes
+stays held by decision while the AMD and NVIDIA step-time lanes
 continue.

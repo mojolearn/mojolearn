@@ -1,4 +1,4 @@
-"""Authored file-only orchestration fixtures; no execution by subagents."""
+"""File-only orchestration fixtures."""
 import importlib.util
 from pathlib import Path
 from types import SimpleNamespace

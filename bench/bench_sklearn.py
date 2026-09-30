@@ -323,7 +323,7 @@ def main():
         # there because we do less and are more fragile on collinear X, and
         # quoting it as a GPU result was measuring the wrong variable.
         #
-        # The rule this now follows, Andrew 2026-08-20: the comparison holds
+        # The rule this now follows (2026-08-20): the comparison holds
         # everything the same and varies the DEVICE. An arm where their side
         # runs a different decomposition cannot be on the board, however
         # flattering. If someone wants the gelsd figure for a

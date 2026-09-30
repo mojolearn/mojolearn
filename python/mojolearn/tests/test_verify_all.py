@@ -200,7 +200,7 @@ def _counts(**kw):
 def test_verdict_exit_codes():
     # a refused part did not run, so it costs the run its pass
     # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
-    # OWED STOPPED GATING ON 2026-09-20 (Andrew). Only DIVERGENT and REFUSED
+    # OWED STOPPED GATING ON 2026-09-20. Only DIVERGENT and REFUSED
     # gate now: they mean something went WRONG, not that something is missing.
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
     assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED

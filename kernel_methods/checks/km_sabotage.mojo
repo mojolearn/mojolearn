@@ -19,7 +19,7 @@ otherwise, so the shipped bits never depend on this file.
 Same construction as `cholesky/checks/chol_sabotage.mojo` and
 `hierarchy/checks/sabotage_tile.mojo`, and for the same two reasons: a
 sabotage arm does not belong in a production kernel, and a sabotage that
-requires editing source cannot be run by an orchestrator that is forbidden to
+requires editing source cannot be run by a maintainer that is forbidden to
 edit source. DEVIATION 1687.
 
 ONE DUPLICATION IS TAKEN HERE AND IT IS NAMED. `sabotage_rbf_epilogue_kernel`

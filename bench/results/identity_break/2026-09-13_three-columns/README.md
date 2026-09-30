@@ -18,7 +18,7 @@ and GBDT lanes that have save/load.
 IDENTICAL=261, N/A=243`, exit 0. No DIVERGENT, MOVED or RELOAD-MOVED cell on any column.
 
 What this closes. Before today k-means, PCA, OLS, k-NN, KDE and the four GBDT lanes had
-only an AMD witness at the 0.8.x default (docs/lanes/BRIEF_amd_confirmations_2026-09-12.md);
+only an AMD witness at the 0.8.x default;
 every lane now has the three-vendor diff at the shipped default. And no gate had separated
 inference from training: the `infer` column is predictions on rows the model never saw, and
 the `model` column is the saved bytes themselves, equal on all three vendors for RF, ET and

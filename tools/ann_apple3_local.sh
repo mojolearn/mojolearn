@@ -1,8 +1,6 @@
 #!/bin/bash
 # tools/ann_apple3_local.sh (lane ann-apple3, 2026-09-28): the lane's A/B on
-# THE LAPTOP GPU (Apple M4, 10 GPU cores, 16 GB), allowed for this round by
-# the brief's 21:25Z update after m3ultra-b was terminated
-# (~/mojolearn-evidence/apple3_speed_brief.md, Machines).
+# a local Apple GPU (Apple M4, 10 GPU cores, 16 GB).
 #
 # EVERY build goes through `tools/mac_slot.py run` (one CPU slot, nice 19, one
 # compile job) and EVERY fit through ONE `tools/mac_slot.py metal` job, with
@@ -21,8 +19,8 @@
 #       (tools/ann_apple3_tab.py reads it).
 #   tools/ann_apple3_local.sh clean          deletes $ARMS
 #
-# ANN_LOCAL_N (default 1000000) is the IVF row count; the row count goes in
-# the progress file with every laptop row.
+# ANN_LOCAL_N (default 1000000) is the IVF row count; record it with every
+# local row.
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1

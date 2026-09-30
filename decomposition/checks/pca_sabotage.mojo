@@ -12,7 +12,7 @@ whenever `arm == PCA_SAB_NONE`, so no shipped bit depends on this file.
 Same construction, and for the same reason, as
 `cholesky/checks/chol_sabotage.mojo` and `hierarchy/checks/sabotage_tile.mojo`:
 a sabotage arm does not belong in a production kernel, and a sabotage that
-requires editing source cannot be run by an orchestrator that is forbidden to
+requires editing source cannot be run by a maintainer that is forbidden to
 edit source.
 
 DEVIATION 585.

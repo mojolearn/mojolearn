@@ -22,8 +22,7 @@ seeded uniform sample, so a stride over them is one too. The draws come from
 cluster/'s `HostRng` (splitmix64), so one seed gives one index.
 
 FAST only: it moves the codebooks' and centroids' bits. Its paired quality
-check is recall at k against exact search (bench/speed/ann_fast_quality.py),
-recorded in docs/lanes/progress/ann-apple3.md."""
+check is recall at k against exact search (bench/speed/ann_fast_quality.py)."""
 from cluster.impl.detail.kmeans import HostRng
 
 #: lanes of one distance step
