@@ -57,7 +57,8 @@ wrapper reads it once.
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
-from std.os import abort
+from std.os import abort, getenv
+from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -368,17 +369,28 @@ def gemm_int8_binding(
     _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int8"))
     if k > INT8_MAX_K:
         raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
+    # lane/neural-net-experiment (2026-09-30): MOJOLEARN_LOWBIT_TIMING=1
+    # prints one line per phase of this call (`timing int8.<phase> <ms>
+    # ms`), a synchronize around each, so the board's gemm-int8 cell can be
+    # read as context + uploads + kernel + download + drains. Measurement
+    # only: the phases and their order are unchanged when it is off.
+    var ton = String(getenv("MOJOLEARN_LOWBIT_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
+        _lowbit_tick(ctx, ton, tk, "context")
         var dqa = _dev_i8(ctx, qa_address, m * k)
         var dea = _dev_i32(ctx, ea_address, m)
         var dqb = _dev_i8(ctx, qb_address, n * k)
         var deb = _dev_i32(ctx, eb_address, n)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+        _lowbit_tick(ctx, ton, tk, "uploads_and_alloc")
         identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
         ctx.synchronize()
+        _lowbit_tick(ctx, ton, tk, "kernel")
         ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
         ctx.synchronize()
+        _lowbit_tick(ctx, ton, tk, "download")
         _ = dqa^
         _ = dea^
         _ = dqb^
@@ -391,7 +403,19 @@ def gemm_int8_binding(
         # 2520's mechanism; the native backtrace of the `transformer-bf16w`
         # hang blames exactly this library). Host-side drain, no arithmetic.
         ctx.synchronize()
+        _lowbit_tick(ctx, ton, tk, "free_and_drain")
     return PythonObject(m * n)
+
+
+def _lowbit_tick(ctx: DeviceContext, on: Bool, mut t: Int, name: String) raises:
+    """MOJOLEARN_LOWBIT_TIMING: synchronize, print `timing int8.<name> <ms>
+    ms`, advance `t`. A no-op when off."""
+    if not on:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    print("timing int8." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
 
 
 def quantize_int8_binding(

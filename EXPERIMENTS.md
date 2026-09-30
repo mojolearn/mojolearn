@@ -189,3 +189,26 @@ with the row's env unset and then set, and compare the digests / the
 identity gate. For the neural rows `tools/neural_experiments.py` already
 prints the digest; for the classical rows the lane's own identity check
 does.
+
+## The direction pass (same branch, 2026-09-30 evening, unmeasured)
+
+After the L40S ceiling and step measurements (`bench/results/gemm-ceiling-20260930`,
+the neural priority run). Four commits: two diagnostic tools that make the
+next run answer a question, two fixed15 changes. Plus the measuring lane's
+compile fixes cherry-picked (the prefill session bindings I had dropped,
+`mut` operands on the device-resident backward).
+
+| question | tool / change | how to run |
+|---|---|---|
+| gemm-int8: where do the 2.4 s go (the kernel is milliseconds)? | `MOJOLEARN_LOWBIT_TIMING=1` prints the binding's phases; `tools/int8_profile.py` times the Python side around them | `python tools/int8_profile.py --calls 5` |
+| Samba step 136 vs 40 ms: which backward stages? | `tools/mamba3_backward_timing.py` (parses `MOJOLEARN_MAMBA_TIMING=1`'s per-stage walls, sorted, with shares) | `python tools/mamba3_backward_timing.py --batch 8 --length 512 --d-model 768` |
+| fixed15 mlp_up at 18 TFLOPS: is it the plan? | `MOJOLEARN_INT15_PLAN=<n>` forces the sums kernel's plan (0..10; 4, 5, 6 are the tall blocks) | `MOJOLEARN_INT15_PRICE_ONLY=mlp_up.t512 MOJOLEARN_INT15_PLAN=5 <price binary>` per plan |
+| fixed15 conversions (67 -> 24 TFLOPS): the planes quantizer read every operand twice | one block per row, one read one write (`int15_planes_row_block_kernel`); same bits | `MOJOLEARN_INT15_ROW_BLOCK=0` restores the parallel schedule |
+
+What the ceiling run says the fixed15 losses are (qkv.t512, L40S, ms):
+tuned product 0.255; planes of X 0.046; planes of W 0.137; the
+training operation measured 0.709 -- 0.27 ms more than the sum of its
+parts, which is orchestration (waits and allocations between the
+conversions and the product), not arithmetic. At mlp_up.t512 the product
+alone is 3.31 ms for 3.5x the MACs of qkv (0.255): the plan, not the
+conversions (1.5 ms), is the loss there.
