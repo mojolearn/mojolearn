@@ -37,6 +37,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_b_call,
 )
 from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
+from std.os import getenv
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from checks.numerics import (
     identical_mul,
@@ -2753,7 +2754,7 @@ def bwd_attention_eager_stages(
 # ===========================================================================
 
 
-def bwd_rms_norm[which: Int](
+def _bwd_rms_norm_kernels[which: Int](
     ctx: DeviceContext,
     mut dot_out: DeviceBuffer[DType.float32],
     mut dx_out: DeviceBuffer[DType.float32],
@@ -2901,13 +2902,99 @@ def bwd_rms_norm[which: Int](
         pc.tick(ctx, "grad.norm2_kernels")
     comptime if which != 1 and which != 2:
         pc.tick(ctx, "grad.rmsnorm_kernels")
-    identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+
+
+def _bwd_rms_norm_dw_tick[which: Int](ctx: DeviceContext, mut pc: StepPhaseClock) raises:
     comptime if which == 1:
         pc.tick(ctx, "grad.norm1_dW", "norm_dW")
     comptime if which == 2:
         pc.tick(ctx, "grad.norm2_dW", "norm_dW")
     comptime if which != 1 and which != 2:
         pc.tick(ctx, "grad.rmsnorm_dW", "norm_dW")
+
+
+def bwd_rms_norm[which: Int](
+    ctx: DeviceContext,
+    mut dot_out: DeviceBuffer[DType.float32],
+    mut dx_out: DeviceBuffer[DType.float32],
+    mut dw_out: DeviceBuffer[DType.float32],
+    mut dh: DeviceBuffer[DType.float32],
+    mut dprod: DeviceBuffer[DType.float32],
+    mut rstd: DeviceBuffer[DType.float32],
+    mut dvcoef: DeviceBuffer[DType.float32],
+    mut ones: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    residual_out: MutPointer[Float32, MutAnyOrigin],
+    residual_branch: MutPointer[Float32, MutAnyOrigin],
+    fuse_residual: Bool,
+    m: Int,
+    dm: Int,
+    eps: Float32,
+) raises:
+    """The three kernels (`_bwd_rms_norm_kernels`) then the weight-gradient
+    GEMM through `identical_gemm`, which allocates its own workspace and
+    waits twice (the entry every caller outside the transformer backward
+    uses)."""
+    _bwd_rms_norm_kernels[which](
+        ctx, dot_out, dx_out, dw_out, dh, dprod, rstd, dvcoef, ones, dy, x, weight, sumsq,
+        residual_out, residual_branch, fuse_residual, m, dm, eps,
+    )
+    var pc = StepPhaseClock(ctx)
+    identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    _bwd_rms_norm_dw_tick[which](ctx, pc)
+
+
+def _norm_dw_own_workspace() -> Bool:
+    """MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1 restores `identical_gemm`
+    (its own workspace, two waits) for the norm weight gradients: the A/B
+    against the routed form below."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS")) == "1"
+
+
+def bwd_rms_norm_routed[which: Int](
+    ctx: DeviceContext,
+    mut workspace: GemmWorkspace,
+    mut dot_out: DeviceBuffer[DType.float32],
+    mut dx_out: DeviceBuffer[DType.float32],
+    mut dw_out: DeviceBuffer[DType.float32],
+    mut dh: DeviceBuffer[DType.float32],
+    mut dprod: DeviceBuffer[DType.float32],
+    mut rstd: DeviceBuffer[DType.float32],
+    mut dvcoef: DeviceBuffer[DType.float32],
+    mut ones: DeviceBuffer[DType.float32],
+    mut dy: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut sumsq: DeviceBuffer[DType.float32],
+    residual_out: MutPointer[Float32, MutAnyOrigin],
+    residual_branch: MutPointer[Float32, MutAnyOrigin],
+    fuse_residual: Bool,
+    m: Int,
+    dm: Int,
+    eps: Float32,
+) raises:
+    """`bwd_rms_norm` with the weight-gradient GEMM on the block's retained
+    `GemmWorkspace` (lane/neural-net-experiment, 2026-09-30). Every other
+    GEMM of the block backward is routed that way; this one was the last
+    `identical_gemm` on the step path, and `identical_gemm` allocates a
+    workspace and WAITS TWICE per call to keep it alive
+    (`syncs.gemm.norm_dW`, 16 of the LM step's 162 waits on the L40S).
+    `GemmWorkspace.run` hands the same `identical_gemm_into` the same
+    operands and shape, so the same plan and the same bits; it waits only
+    when the workspace grows."""
+    _bwd_rms_norm_kernels[which](
+        ctx, dot_out, dx_out, dw_out, dh, dprod, rstd, dvcoef, ones, dy, x, weight, sumsq,
+        residual_out, residual_branch, fuse_residual, m, dm, eps,
+    )
+    var pc = StepPhaseClock(ctx)
+    if _norm_dw_own_workspace():
+        identical_gemm(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    else:
+        workspace.run(ctx, dw_out, ones, dprod, 1, dm, m, OP_NN)
+    _bwd_rms_norm_dw_tick[which](ctx, pc)
 
 
 # ===========================================================================
@@ -3236,8 +3323,9 @@ def llama_decoder_layer_backward_device(
         and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL
     ):
         fuse_norm2_residual = True
-    bwd_rms_norm[2](
+    bwd_rms_norm_routed[2](
         ctx,
+        bst.gemm_workspace,
         bst.norm2_dot,
         bst.norm2_dx,
         bst.dw_norm2,
@@ -3517,8 +3605,9 @@ def llama_decoder_layer_backward_device(
     # this argument. That is a one-line edit to a file this lane may not
     # touch.
     # =====================================================================
-    bwd_rms_norm[1](
+    bwd_rms_norm_routed[1](
         ctx,
+        bst.gemm_workspace,
         bst.norm1_dot,
         bst.norm1_dx,
         bst.dw_norm1,
