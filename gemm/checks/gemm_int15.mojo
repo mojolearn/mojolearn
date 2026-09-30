@@ -101,6 +101,10 @@ row whose largest value lies in that tail and of no other row.
 """
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, lane_id, thread_idx
+from std.memory import stack_allocation
+from std.os import getenv
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys import is_defined, llvm_intrinsic
 from std.sys.info import is_amd_gpu, is_nvidia_gpu
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -507,6 +511,88 @@ def int15_planes_kernel(
     lo.unsafe_store(i, int15_piece_lo(code))
 
 
+#: lane/neural-net-experiment (2026-09-30): the ROW-BLOCK schedule of the
+#: planes quantizer. The PARALLEL schedule reads a row-major operand TWICE
+#: (the chunk maxima, then the planes) and writes the maxima between: for
+#: the mlp_up weights (14336 x 4096, 235 MB) the L40S ceiling run priced
+#: `planes.b.parallel` at 1.48 ms, about 590 MB of traffic at half the
+#: box's bandwidth. Here ONE BLOCK OWNS ONE ROW: the row is staged into
+#: threadgroup memory once, its absmax is a tree of the threads' maxima,
+#: the exponent is clause W-1 of that absmax, and the planes are written
+#: from the staged values. One read, one write. THE SAME BITS: a maximum
+#: of magnitudes is the same float under every grouping (W-10's own
+#: argument for the parallel schedule), and a plane is a function of its
+#: own value and its row's exponent. Rows of at most INT15_ROW_BLOCK_COLS
+#: values (32 KB of threadgroup memory); longer rows and the transposed
+#: orientation keep the parallel schedule. MOJOLEARN_INT15_ROW_BLOCK=0
+#: keeps the parallel schedule for every row (the A/B).
+comptime INT15_ROW_BLOCK_COLS = 8192
+
+
+def int15_row_block_on() -> Bool:
+    return String(getenv("MOJOLEARN_INT15_ROW_BLOCK")) != "0"
+
+
+def int15_planes_row_block_kernel(
+    hi: MutPointer[Int8, MutAnyOrigin],
+    lo: MutPointer[Int8, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+):
+    """One block per row of a ROW-MAJOR operand: the row staged once, its
+    absmax by a tree, clause W-1 once, clauses W-2 and W-3 per value from
+    the staged row."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var r = Int(block_idx.x)
+    if r >= rows:
+        return
+    var sh = stack_allocation[
+        INT15_ROW_BLOCK_COLS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var red = stack_allocation[
+        INT15_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    var base = r * cols
+    var best = Float32(0.0)
+    var c = tid
+    while c < cols:
+        var raw = x.unsafe_load(base + c)
+        sh[c] = raw
+        var v = ftz(raw)
+        if v < Float32(0.0):
+            v = -v
+        if v > best:
+            best = v
+        c += INT15_TPB
+    red[tid] = best
+    barrier()
+    var active = INT15_TPB // 2
+    while active > 0:
+        if tid < active:
+            var o = red[tid + active]
+            if o > red[tid]:
+                red[tid] = o
+        barrier()
+        active = active // 2
+    var ex = int15_row_exponent(red[0])
+    if tid == 0:
+        e.unsafe_store(r, Int32(ex))
+    c = tid
+    while c < cols:
+        var code = quantize_int15_value(sh[c], ex)
+        var h = int15_piece_hi(code)
+        comptime if INT15_PIECE_SABOTAGE:
+            if h == Int8(-128):
+                h = Int8(-127)
+        hi.unsafe_store(base + c, h)
+        lo.unsafe_store(base + c, int15_piece_lo(code))
+        c += INT15_TPB
+
+
 struct Int15QuantWorkspace(Movable):
     """The chunk maxima of the parallel quantizer, on ONE in-order
     context. Grown on demand; growth drains the context first."""
@@ -608,9 +694,23 @@ def quantize_planes_int15_parallel_device(
     cols: Int,
     transposed: Bool,
 ) raises:
-    """The PARALLEL schedule, straight to planes. Asynchronous."""
+    """The PARALLEL schedule, straight to planes. Asynchronous. A row-major
+    operand whose rows fit the row-block kernel takes that schedule (one
+    read, one write; the same bits) unless MOJOLEARN_INT15_ROW_BLOCK=0."""
     if rows <= 0 or cols <= 0:
         raise Error("quantize_planes_int15_parallel: rows and cols must be positive")
+    if not transposed and cols <= INT15_ROW_BLOCK_COLS and int15_row_block_on():
+        ctx.enqueue_function[int15_planes_row_block_kernel](
+            hi.unsafe_ptr(),
+            lo.unsafe_ptr(),
+            e.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(rows),
+            Int32(cols),
+            grid_dim=(rows, 1, 1),
+            block_dim=(INT15_TPB, 1, 1),
+        )
+        return
     var s_row = cols
     var s_col = 1
     if transposed:
