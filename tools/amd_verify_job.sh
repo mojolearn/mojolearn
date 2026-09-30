@@ -61,6 +61,8 @@ cp $N/training.so $T/_mojolearn_training.so
 cp -r python/mojolearn/*.py $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
 st mlp-check; timeout 1800 $PY tools/mlp_step_check.py --json $O/mlp-check-256.json > $O/mlp-check-256.log 2>&1; rc mlp-check-256 $?
 timeout 1800 $PY tools/mlp_step_check.py --rows 32 --json $O/mlp-check-32.json > $O/mlp-check-32.log 2>&1; rc mlp-check-32 $?
+$PY -m pip -q install pytest >> $O/pip.log 2>&1; cp -r python/mojolearn/tests $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
+for f in 1 0; do st mlp-tests-fused$f; (cd /tmp && MOJOLEARN_RUN_SMALL_MLP_GPU=1 MOJOLEARN_MLP_FUSED=$f timeout 1800 $PY -m pytest -q -rs -p no:cacheprovider $SITE/tests/test_small_mlp_surface.py $SITE/tests/test_small_mlp_numerical_edges.py) > $O/mlp-tests-fused$f.log 2>&1; rc mlp-tests-fused$f $?; done
 timeout 900 $PY tools/matmul_digest.py > $O/matmul.json 2>$O/matmul.err; rc matmul $?
 # 1d. fixed15 price harness (exact integer sums: digests must equal the L40S's)
 st build-int15
