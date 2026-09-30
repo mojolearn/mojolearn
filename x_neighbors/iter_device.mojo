@@ -1070,7 +1070,7 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k:
     var dx = _buf(ctx, x, m * c, True)
     var dr = _buf(ctx, 0, n * c, False)
     if n * c > 0:
-        ctx.enqueue_function[lp_knn_product_kernel](dc.unsafe_ptr(), dv.unsafe_ptr(), dx.unsafe_ptr(), dr.unsafe_ptr(),
+        ctx.enqueue_function[lp_knn_product_kernel](dc.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), _p(dv), _p(dx), _p(dr),
             Int64(n), Int64(m), Int64(k), Int64(c), finite,
             grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1))
     _down(ctx, dr, res, n * c)
