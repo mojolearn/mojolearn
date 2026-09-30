@@ -230,3 +230,27 @@ Run, in this order: `python tools/mamba3_backward_timing.py --batch 2 --length 5
 ms; the digest gate says the bits), the Samba board cell, the gemm-int8
 board cell (expect ~50 ms), the price harness at bwd_dx and mlp_up (the
 transposed A/B and the table), then `mamba/checks` and `gemm/checks` gates.
+
+## The S16 pass (2026-09-30 night, unmeasured)
+
+The strides pass's S16 rewrite gained 8% where the instruction count says
+the kernel should take a few milliseconds. The likely reason: its per-thread
+`kl` / `ql` arrays (64 words a thread) are local memory indexed at run
+time, and with 99 KB of staged pages a multiprocessor has no L1 left for
+them, so every chain step still pays a cached device load, as the naive
+kernel's did. Two more arms of the same chains, selectable at run time in
+one build, plus a wall per S16 kernel under `MOJOLEARN_MAMBA_TIMING=1`:
+
+| arm | `MOJOLEARN_MAMBA3_S16_QK_ARM` | what |
+|---|---|---|
+| naive | `naive` | the original one-thread-per-cell kernel |
+| shared | `shared` | the strides pass's staged kernel (local `kl` / `ql`) |
+| regs (default) | unset or `regs` | the j and i loops unrolled at compile time so `kl` / `ql` are registers and the bounds are predicates |
+| smem48 | `smem48` | `kl` for the block's whole row in threadgroup memory beside the staged page, 48 KB; the dq chain then the dk chain, each over its own page (NVIDIA and AMD only) |
+
+Run: `python tools/mamba3_backward_timing.py --batch 2 --length 512 --d-model 384`
+under each arm (the `m3bwd.s16.qk_*` rows), then
+`python tools/neural_experiments.py --set s16 --lane mamba3-forward --lane samba-train-step`
+for the digests and the step. Also in this pass: the plan table's dW rule
+narrowed to the row that measured faster (mlp_up's dW; mlp_down's keeps the
+H100 choice, the 5% loss).
