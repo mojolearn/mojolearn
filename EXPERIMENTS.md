@@ -254,3 +254,16 @@ under each arm (the `m3bwd.s16.qk_*` rows), then
 for the digests and the step. Also in this pass: the plan table's dW rule
 narrowed to the row that measured faster (mlp_up's dW; mlp_down's keeps the
 H100 choice, the 5% loss).
+
+Second batch of the same pass, the stages after S16 and a profiler for the
+Python around the step:
+
+| change | restore | what |
+|---|---|---|
+| angle d_dt staged | build define `MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1` | the angle stage's d_dt half (a 8k-step suffix fold a thread, each step a device load) folds from a staged column of d_theta, one block per (batch, head); the folds are the naive kernel's, ascending from each token's own index; sequences over 4096 keep the naive kernel |
+| S17 tail tile 32 | edit `M3_S17_TP` (32 where the column's page allows 48 KB, else 8) | the chunk-end `add` chain stages 32 value columns a barrier instead of 8 (128 barriers a chunk instead of 512); thread 0's chain is the same chain in the same order |
+| `tools/samba_step_profile.py` | (a tool) | inclusive walls of the Python leaves of one Samba train step (block forward/backward, head loss, embedding, optimizer step) and the remainder, "everything else", which is Python between the leaves |
+
+Run: `python tools/samba_step_profile.py --calls 5` for the Python
+breakdown; `python tools/mamba3_backward_timing.py ...` for the angle and
+S17 rows against the two restores.
