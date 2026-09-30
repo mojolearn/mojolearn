@@ -89,10 +89,14 @@ try:
     run([py, '-m', 'pip', 'freeze'], 'packages.txt')
     native = out / 'native'; native.mkdir(exist_ok=True)
     phase = 'build-linalg-int8-reference'
+    for stale in (root / 'python/mojolearn/identical/_mojolearn_linalg.so', root / 'python/mojolearn/_mojolearn_linalg.so'):
+        stale.unlink(missing_ok=True)
     run(['bash', 'bindings/build_linalg.sh'], phase + '.log', extra={'MOJOLEARN_MOJO_BUILD_FLAGS': '-D MOJOLEARN_INT8_MMA_REFERENCE=1'})
     lin_ref = native / '_mojolearn_linalg.int8-reference.so'; shutil.move(str(built('linalg')), lin_ref)
     for m in MODULES:
         phase = 'build-' + m
+        for stale in (root / 'python/mojolearn/identical' / ('_mojolearn_%s.so' % m), root / 'python/mojolearn' / ('_mojolearn_%s.so' % m)):
+            stale.unlink(missing_ok=True)   # build_byte_lm.sh refuses an existing output
         run(['bash', 'bindings/build_%s.sh' % m], phase + '.log')
         shutil.copy2(built(m), native / ('_mojolearn_%s.so' % m))
     site = P(subprocess.check_output([str(py), '-c', 'import sysconfig;print(sysconfig.get_paths()["purelib"])'],
