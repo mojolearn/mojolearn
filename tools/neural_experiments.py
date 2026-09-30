@@ -61,9 +61,12 @@ EXPERIMENTS = {
     "s16_regs": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs"},
     "s16_regs2": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs2"},
     "s16_smem48": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "smem48"},
-    # the S17 tail chain arms (lane/neural-pass5): the default is `pipe`
-    # (operand pairs prefetched a group ahead); `shared` is the S16 pass's
-    "s17_tail_shared": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "shared"},
+    # the S17 tail chain arms (lane/neural-pass5): the default is `shared`
+    # (the S16 pass's kernel); `pipe` prefetches the operand pairs a group
+    # ahead (measured slower on the L4), `dbuf` stages the next tile while
+    # the chain runs; the same chain in the same order on every arm
+    "s17_tail_pipe": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "pipe"},
+    "s17_tail_dbuf": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "dbuf"},
     # the optimizer's moments on the host and the per-call optimizer_step
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
@@ -79,7 +82,7 @@ SETS = {
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],
     # the S17 tail arms on the Mamba lanes (--lane mamba3-forward --lane samba-train-step)
-    "s17": ["baseline", "s17_tail_shared"],
+    "s17": ["baseline", "s17_tail_pipe", "s17_tail_dbuf"],
     "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
     "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",
