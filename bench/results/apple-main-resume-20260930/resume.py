@@ -40,6 +40,11 @@ def main():
  while True:
   records=json.loads((out/'board.json').read_text()).get('races',{}) if (out/'board.json').exists() else {}
   status=coverage(cfg['plan'],records,exc);write(root/'coverage.json',status)
+  if (root/'previous-board.json').exists():
+   prior=json.loads((root/'previous-board.json').read_text()).get('races',{})
+   combined=coverage(cfg.get('original_plan',cfg['plan']),{**prior,**records},exc)
+   combined['provenance']={'prior_board':str(root/'previous-board.json'),'current_board':str(out/'board.json'),'current_source':cfg.get('source_commit'),'note':'Coverage summary across separate wheel records; previous measurements are not relabeled as current.'}
+   write(root/'combined-coverage.json',combined)
   if not status['pending']:return 0 if status['complete'] else 2
   if time.monotonic()>=stop:return 75
   rid=status['pending'][0]

@@ -37,7 +37,7 @@ for name,host,port in targets:
   if time.time()-s['last_backup']>600:
    dest=B/'resumed-results';dest.mkdir(exist_ok=True);tmp=dest/(name+'.partial')
    with tmp.open('wb') as out:
-    r=subprocess.run(ssh+['tar --exclude=cache --exclude=.pixi -czf - -C '+remote_root+' .'],stdout=out,stderr=subprocess.PIPE,timeout=300)
+    r=subprocess.run(ssh+['tar --exclude=cache --exclude=.pixi --exclude=wheel -czf - -C '+remote_root+' .'],stdout=out,stderr=subprocess.PIPE,timeout=300)
    if r.returncode==0:tmp.replace(dest/(name+'.tar.gz'));s['last_backup']=time.time()
   if s['pending'] and not s['active'] and not s['blocked'] and s['data_ready']:
    if name=='nvidia':result=run(['bash','tools/nvidia_central.sh','submit','board-resume','--cap','240','/root/board-resume/run.sh'])
