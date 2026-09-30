@@ -16,6 +16,7 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
+    lu_solve_col,
     div0,
     sqrt0,
     sub,
@@ -340,6 +341,75 @@ def lu_info_init_kernel(info: F32Ptr):
 def lu_pivot_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         lu_pivot(a, piv, Int(k), Int(n))
+
+
+comptime LU_PIVOT_TPB = 256
+
+
+def lu_pivot_block_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
+    """`lu_pivot` on ONE BLOCK of LU_PIVOT_TPB threads (lane/neural-net-
+    experiment, 2026-09-30, the classical pass): the largest |a[i, k]| for
+    i >= k, ties to the LOWEST row. Comparisons only, no arithmetic, so the
+    result is the serial scan's by construction: every thread starts from
+    (|a[k, k]|, k) and takes a later row only on a STRICT greater value,
+    exactly as the serial scan does, and the tree combine prefers the
+    greater value and, on equal values, the lower row. A NaN never wins a
+    strict compare, so it is skipped as the serial scan skips it; a NaN at
+    row k makes every compare false and keeps row k, as the serial scan
+    does. The serial scan was one thread walking a column of n strided
+    loads per step: at n = 8192 on an MI325X that was most of a 600 s
+    factorization (bench_board 0.8.25, `lu-factor`)."""
+    var kk = Int(k)
+    var nn = Int(n)
+    var rv = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var ri = stack_allocation[
+        LU_PIVOT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    var best = abs(ftz(a.unsafe_load(kk * nn + kk)))
+    var p = kk
+    var i = kk + 1 + tid
+    while i < nn:
+        var v = abs(ftz(a.unsafe_load(i * nn + kk)))
+        if v > best:
+            best = v
+            p = i
+        i += LU_PIVOT_TPB
+    rv.unsafe_store(tid, best)
+    ri.unsafe_store(tid, Int32(p))
+    barrier()
+    var active = LU_PIVOT_TPB // 2
+    while active > 0:
+        if tid < active:
+            var ov = rv.unsafe_load(tid + active)
+            var oi = ri.unsafe_load(tid + active)
+            var cv = rv.unsafe_load(tid)
+            var ci = ri.unsafe_load(tid)
+            if ov > cv or (ov == cv and oi < ci):
+                rv.unsafe_store(tid, ov)
+                ri.unsafe_store(tid, oi)
+        barrier()
+        active = active // 2
+    if tid == 0:
+        piv.unsafe_store(kk, ri.unsafe_load(0))
+
+
+def lu_pivot_parallel() -> Bool:
+    """`MOJOLEARN_XD_LU_PIVOT_SERIAL=1` restores the one-thread pivot scan
+    (the A/B arm); default the block kernel."""
+    return String(getenv("MOJOLEARN_XD_LU_PIVOT_SERIAL")) != "1"
+
+
+def lu_solve_cols_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
+    """One thread per right-hand side column (`lu_solve_col`): the columns
+    are independent in every statement of the serial solve, so the bits are
+    the serial solve's. The serial solve was one thread for n^2 * nrhs
+    dependent multiply-adds: 616 s at 8192 x 64 on an MI325X."""
+    var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if c < Int(nrhs):
+        lu_solve_col(lu, piv, b, Int(n), Int(nrhs), Int(trans), c)
 
 
 def lu_swap_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32):
@@ -1213,8 +1283,14 @@ struct DevExec(Exec):
             ctx.enqueue_function[lu_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
         else:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
+        var pivot_block = lu_pivot_parallel()
         for k in range(n if n > lu_serial_max() else 0):
-            ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
+            if pivot_block:
+                ctx.enqueue_function[lu_pivot_block_kernel](
+                    da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+                )
+            else:
+                ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
             ctx.enqueue_function[lu_swap_kernel](
                 da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n), block_dim=TPB
             )
@@ -1246,9 +1322,16 @@ struct DevExec(Exec):
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
         var db = _up(ctx, b, n * nrhs)
-        ctx.enqueue_function[lu_solve_kernel](
-            dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
-        )
+        if String(getenv("MOJOLEARN_XD_LU_SOLVE_SERIAL")) == "1":
+            ctx.enqueue_function[lu_solve_kernel](
+                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
+            )
+        else:
+            # One thread per right-hand side (lane/neural-net-experiment).
+            ctx.enqueue_function[lu_solve_cols_kernel](
+                dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans),
+                grid_dim=_blocks(nrhs), block_dim=TPB,
+            )
         _down(ctx, db, b, n * nrhs)
         ctx.synchronize()
         _ = dl^
