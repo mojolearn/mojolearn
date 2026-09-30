@@ -31,7 +31,7 @@ build() {  # module tag [flags]
   so=$(ls -t python/mojolearn/identical/_mojolearn_$1.so python/mojolearn/_mojolearn_$1.so 2>/dev/null | head -1)
   [ -n "$so" ] && cp $so $N/$2.so && sha256sum $N/$2.so >> $O/bindings.sha256
 }
-build mamba mamba-naive "-D MOJOLEARN_MAMBA3_S16_QK_NAIVE=1 -D MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE=1"
+build mamba mamba-anglenaive "-D MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1"
 build mamba mamba-new
 for m in linalg x_neighbors x_decomp; do build $m $m; done
 cp -r python/mojolearn/*.py $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
@@ -39,12 +39,18 @@ for m in linalg x_neighbors x_decomp; do [ -f $N/$m.so ] && cp $N/$m.so $T/_mojo
 # 1a. Kernel PCA (the NVIDIA/Apple/CPU runs used this input and this check)
 for r in 256 1000 10000; do st kpca-$r
   timeout 1800 $PY tools/kernel_pca_trial_check.py --data /root/taxi-board-10000.npy --rows $r --out $O/kpca-rows-$r.json > $O/kpca-rows-$r.log 2>&1; rc kpca-$r $?; done
-# 1b. Mamba-3 backward, naive vs new
-for arm in naive new; do cp $N/mamba-$arm.so $T/_mojolearn_mamba.so; st m3-$arm
+# 1b. Mamba-3 backward: the five S16 arms (PR #6) and the angle-naive build; digests must equal each other and the NVIDIA ones
+cp $N/mamba-new.so $T/_mojolearn_mamba.so
+for arm in regs2 regs shared smem48 naive; do st m3-$arm; export MOJOLEARN_MAMBA3_S16_QK_ARM=$arm
   timeout 1200 $PY tools/mamba3_backward_timing.py --batch 2 --length 512 --d-model 384 --calls 4 > $O/m3bwd-board-$arm.log 2>&1; rc m3bwd-board-$arm $?
+  timeout 1200 $PY tools/mamba3_backward_timing.py --batch 8 --length 512 --d-model 768 --calls 3 > $O/m3bwd-default-$arm.log 2>&1; rc m3bwd-default-$arm $?
   timeout 1200 $PY tools/strides_digest.py 2 512 384 > $O/digest-board-$arm.json 2>$O/digest-board-$arm.err; rc digest-board-$arm $?
   timeout 1800 $PY tools/strides_digest.py 8 512 768 > $O/digest-default-$arm.json 2>$O/digest-default-$arm.err; rc digest-default-$arm $?
-done
+done; unset MOJOLEARN_MAMBA3_S16_QK_ARM
+cp $N/mamba-anglenaive.so $T/_mojolearn_mamba.so; st m3-anglenaive
+timeout 1200 $PY tools/mamba3_backward_timing.py --batch 2 --length 512 --d-model 384 --calls 4 > $O/m3bwd-board-anglenaive.log 2>&1; rc m3bwd-board-anglenaive $?
+timeout 1200 $PY tools/strides_digest.py 2 512 384 > $O/digest-board-anglenaive.json 2>$O/digest-board-anglenaive.err; rc digest-board-anglenaive $?
+cp $N/mamba-new.so $T/_mojolearn_mamba.so
 # 1c. board cells, new bindings
 for lane in samba-train-step gemm-int8; do st race-$lane
   timeout 3600 $PY tools/bench_board_neural.py race --lane $lane --shape full --arms ours --rounds 5 \
