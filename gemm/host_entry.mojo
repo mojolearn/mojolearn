@@ -106,7 +106,14 @@ def identical_gemm_host(
     var c = ctx.enqueue_create_buffer[DType.float32](m * n)
     ctx.enqueue_copy(dst_buf=a, src_ptr=a_ptr)
     ctx.enqueue_copy(dst_buf=b, src_ptr=b_ptr)
-    ctx.synchronize()
+    # NO WAIT AFTER THE UPLOADS (lane/apple-mlp-fused, 2026-09-30). The
+    # uploads and the GEMM's launches sit on one in-order context, so the
+    # wait that stood here ordered nothing (DEVIATION 2721's argument; the
+    # Samba ops' `samba_linear_forward_host` never had it). The caller's
+    # pointers outlive the call, so the uploads may read them whenever the
+    # queue reaches them. `identical_gemm` still waits before it returns
+    # (its workspace's lifetime), and the download below waits once more.
+    # One host round trip fewer per `matmul`; same kernels, same bits.
 
     # THE ONE LINE THAT COMPUTES ANYTHING. Everything above is transport and
     # everything below is transport.

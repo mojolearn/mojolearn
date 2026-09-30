@@ -28,7 +28,7 @@ import threading
 
 from . import _backend, _linalg_impl, _training_impl
 from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes,
+    addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, zeros,
 )
 from ._bufcheck import (
     flat_view, is_int32, is_integer, is_native_f32, le_bytes, probe,
@@ -39,6 +39,8 @@ _SHAPES = ((16, 8), (16,), (3, 16), (3,))
 _TOTAL = 195
 _MAX_STEP = (1 << 31) - 1
 _STATE_SCHEMA = 'mojolearn.small-mlp-trainer.v1'
+#: `mlp_train_step`'s modes (mirrored in `training/mlp_ops.mojo`).
+_MODE_FORWARD, _MODE_GRADS, _MODE_TRAIN = 0, 1, 2
 _FILE_SCHEMA = 'mojolearn.small-mlp-checkpoint.v1'
 _FILE_LIMIT = 32768
 #: `numpy.finfo(numpy.float32).max`, as a Python float.
@@ -205,6 +207,25 @@ def _require_mode():
     return mode
 
 
+def _fused_enabled(binding):
+    """Whether the step runs as ONE binding call (`mlp_train_step`,
+    lane/apple-mlp-fused, 2026-09-30) or as the twelve calls it was.
+
+    Same kernels, same operands, same order, same bits either way (the
+    fused entry is those calls with the intermediates kept on the device);
+    what differs is the host round trips a step pays, which on a Metal box
+    is most of the step. `MOJOLEARN_MLP_FUSED=0` restores the per-operation
+    path (the A/B, `tools/mlp_step_check.py`); a multi-device optimizer
+    count keeps it too, that route living in the per-operation optimizer.
+    A binding without the entry (an older build, the test fakes) takes the
+    per-operation path."""
+    if os.environ.get('MOJOLEARN_MLP_FUSED', '1') == '0':
+        return False
+    if os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1') != '1':
+        return False
+    return callable(getattr(binding, 'mlp_train_step', None))
+
+
 def _optimizer(parameters, config, state=None):
     opt = _training_impl.AdamW(
         parameters, lr=config['lr'], betas=(config['beta1'], config['beta2']),
@@ -285,6 +306,11 @@ class SmallMLPTrainer:
     train_step returns pre-update loss/logits and all four parameter gradients,
     plus input_grad when requested. No clipping, dropout, mixed precision,
     automatic differentiation or configurable layer shapes are supported.
+    A step is ONE binding call when the training binding offers
+    `mlp_train_step` (the same kernels the per-operation calls ran, on the
+    same operands in the same order, so the same bits; the intermediates
+    stay on the device and the step pays seven host round trips instead of
+    about forty); `MOJOLEARN_MLP_FUSED=0` restores the per-operation calls.
     State changes are serialized and published only after the whole step
     succeeds. A checkpoint is a separate bounded MLP format, not a Llama file.
     """
@@ -376,7 +402,11 @@ class SmallMLPTrainer:
         with self._lock:
             x = _batch(X)
             binding = self._binding()
-            _, result = self._forward(x, self._opt.params, binding)
+            if _fused_enabled(binding):
+                _, result, _, _ = self._fused(x, zeros((len(x),), '<i4'), self._opt.params,
+                                              self._opt, self._config, binding, _MODE_FORWARD)
+            else:
+                _, result = self._forward(x, self._opt.params, binding)
             _require_mode()
             return result
 
@@ -405,12 +435,82 @@ class SmallMLPTrainer:
             raise RuntimeError('SmallMLPTrainer input gradient shape mismatch')
         return loss, logits, grads, input_grad
 
+    @staticmethod
+    def _fused(x, y, weights, opt, config, binding, mode, return_input_grad=False):
+        """`_forward` (mode 0), `_gradient` (mode 1) or `_gradient` and
+        `opt.step(grads)` (mode 2) as ONE binding call; see `_fused_enabled`.
+        Returns `(loss, logits, grads, input_grad)` shaped as `_gradient`
+        returns them (`loss` is 0.0 and `grads` is None under mode 0).
+        Under mode 2 the weights, `opt.exp_avg`, `opt.exp_avg_sq` and
+        `opt.buf_initialized` are written in place and `opt.t` advances,
+        which is what `opt.step` did through `_unpack_into`."""
+        rows = len(x)
+        train = mode == _MODE_TRAIN
+        loss = zeros((1,), '<f4')
+        logits = empty((rows, 3), '<f4')
+        grads = [empty(shape, '<f4') for shape in _SHAPES]
+        dx = empty((rows, 8), '<f4') if return_input_grad else zeros((1,), '<f4')
+        info = zeros((3,), '<f4')
+        if train:
+            m, v, flags, t = opt.exp_avg, opt.exp_avg_sq, opt.buf_initialized, opt.t + 1
+        else:
+            m, v, flags, t = zeros((1,), '<f4'), zeros((1,), '<f4'), zeros((4,), '<i4'), 1
+        weight_addr = addr if train else addr_ro
+        # `addresses` and `params` are, in this exact order (mirrored word
+        # for word in `bindings/_mojolearn_training.mojo::mlp_train_step_binding`):
+        #
+        #     addresses: x, y, w1, b1, w2, b2, m, v, flags, loss, logits,
+        #                dw1, db1, dw2, db2, dx, info
+        #     params:    rows, mode, t, lr, beta1, beta2, eps, weight_decay,
+        #                want_input_grad
+        #
+        # A silent reorder here is a WRONG ANSWER and not a crash. If you
+        # change either list, change the binding's comment in the same edit.
+        addresses = [addr_ro(x, name='X'), addr_ro(y, name='targets')]
+        addresses += [weight_addr(w, name=n) for w, n in zip(weights, _NAMES)]
+        addresses += [addr(m, name='m'), addr(v, name='v'), addr(flags, name='flags'),
+                      addr(loss, name='loss'), addr(logits, name='logits')]
+        addresses += [addr(g, name=n + ' gradient') for g, n in zip(grads, _NAMES)]
+        addresses += [addr(dx, name='input_grad'), addr(info, name='info')]
+        params = [int(rows), int(mode), int(t), float(config['lr']), float(config['beta1']),
+                  float(config['beta2']), float(config['eps']), float(config['weight_decay']),
+                  1 if return_input_grad else 0]
+        written = binding.mlp_train_step(addresses, params)
+        if written != logits.size or not all_finite(logits):
+            raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+        if mode == _MODE_FORWARD:
+            return 0.0, logits, None, None
+        value = float(loss[0])
+        if not math.isfinite(value):
+            raise RuntimeError('SmallMLPTrainer loss is not finite')
+        for g in grads:
+            if not all_finite(g):
+                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+        input_grad = None
+        if return_input_grad:
+            if not all_finite(dx):
+                raise RuntimeError('SmallMLPTrainer step returned an invalid result')
+            input_grad = dx
+        if train:
+            # What `opt.step` records beside the buffers it wrote.
+            opt.t = t
+            opt.packed_ = True
+            opt.total_norm_ = None
+            opt.clip_coef_ = None
+            opt.lr_ = float(_training_impl._round_f32(config['lr']))
+        return value, logits, grads, input_grad
+
     def loss_and_grads(self, X, targets):
         """Compute a mean-CE microbatch gradient without advancing the optimizer."""
         with self._lock:
             x = _batch(X)
             y = _targets(targets, len(x))
-            loss, _, grads, _ = self._gradient(x, y, self._opt.params, self._binding())
+            binding = self._binding()
+            if _fused_enabled(binding):
+                loss, _, grads, _ = self._fused(x, y, self._opt.params, self._opt,
+                                                self._config, binding, _MODE_GRADS)
+            else:
+                loss, _, grads, _ = self._gradient(x, y, self._opt.params, binding)
             return loss, grads
 
     def apply_gradients(self, gradients):
@@ -443,8 +543,12 @@ class SmallMLPTrainer:
                 raise ValueError('SmallMLPTrainer step counter is exhausted')
             binding = self._binding()
             working = _optimizer(weights, config, moments)
-            loss, logits, grads, input_grad = self._gradient(x, y, weights, binding, return_input_grad)
-            working.step(grads)
+            if _fused_enabled(binding):
+                loss, logits, grads, input_grad = self._fused(
+                    x, y, weights, working, config, binding, _MODE_TRAIN, return_input_grad)
+            else:
+                loss, logits, grads, input_grad = self._gradient(x, y, weights, binding, return_input_grad)
+                working.step(grads)
             # Validation and all potentially allocating result construction
             # precede the single live optimizer-pointer publication.
             _validate_state(_state(weights, working, config, schedule))
