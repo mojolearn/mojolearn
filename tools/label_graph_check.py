@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Targeted compact label-graph checks; never runs the full benchmark board."""
-import argparse, hashlib, importlib.util, json, os, resource, sys, time
+import argparse, hashlib, importlib.util, json, os, resource, subprocess, sys, time
 from pathlib import Path
 os.environ.setdefault('MOJOLEARN_NUMERIC_MODE','identical')
 os.environ.setdefault('OPENBLAS_NUM_THREADS','2')
@@ -41,6 +41,7 @@ for n,m,k in [(17,17,1),(33,33,7),(9,9,9),(11,23,7)]:
    expected=np.empty((n,3),np.float32);call(gpu,'matmul',[want,x,expected],[n,m,3])
    for b,(cols,vals) in zip([gpu,host],pairs):
     actual=np.empty_like(expected);call(b,'lp_knn_product',[cols,vals,x,actual],[n,m,k,3]);same(actual,expected)
+  print(f'PASS graph/product n={n} m={m} k={k} variant={variant}',flush=True)
   records.append({'check':'graph-and-product','n':n,'m':m,'k':k,'variant':variant})
 
 def cls(base,dense=False):
@@ -66,6 +67,7 @@ for base in [mod.LabelPropagation,mod.LabelSpreading]:
   for field in ['label_distributions_','transduction_']:same(np.asarray(getattr(sparse,field)),np.asarray(getattr(dense,field)))
   same(np.asarray(sparse.predict_proba(Q)),np.asarray(dense.predict_proba(Q)))
   assert sparse.n_iter_==dense.n_iter_
+  print(f'PASS dense parity {base.__name__} n={n} k={k}',flush=True)
   records.append({'check':'public-dense-parity','algorithm':base.__name__,'n':n,'k':k,'max_iter':iters,'n_iter':sparse.n_iter_,
     'digest':hashlib.sha256(np.asarray(sparse.label_distributions_).tobytes()).hexdigest()})
 
@@ -77,20 +79,32 @@ def bounded(fn):
  def alloc(shape,*args,**kw):
   global max_cells
   cells=int(np.prod(shape));max_cells=max(max_cells,cells)
-  assert cells<=n*k, ('unexpected dense allocation',shape)
+  if cells>n*k:raise MemoryError(('unexpected dense allocation',shape))
   return fn(shape,*args,**kw)
  return alloc
 mod.empty=bounded(old_empty);mod._empty_out=bounded(old_out)
-for base in [mod.LabelPropagation,mod.LabelSpreading]:
- class Large(cls(base)):
+def large_class(base,dense=False):
+ class Large(cls(base,dense)):
   def _knn_sq(self,Q,R,k,exclude_self):
    ids=((np.arange(len(Q),dtype=np.int64)[:,None]+np.arange(k))%len(R)).astype(np.int32)
    return None,mod.Array.from_buffer(ids)
+ return Large
+for base in [mod.LabelPropagation,mod.LabelSpreading]:
+ Large=large_class(base)
  t=time.perf_counter();X=np.zeros((n,1),np.float32);y=np.where(np.arange(n)%10==0,np.arange(n)%3,-1)
+ try:
+  large_class(base,True)(kernel='knn',n_neighbors=k,max_iter=2).fit(X,y)
+ except MemoryError as exc:
+  assert exc.args[0][1]==(n,n),exc
+ else:raise AssertionError('allocation guard did not reject legacy dense graph')
+ max_cells=0
  model=Large(kernel='knn',n_neighbors=k,max_iter=2).fit(X,y);prediction=np.asarray(model.predict_proba(X[:20000]))
  assert np.isfinite(prediction).all()
+ print(f'PASS memory scaling {base.__name__} n={n} k={k}',flush=True)
  records.append({'check':'public-memory-scaling','algorithm':base.__name__,'rows':n,'neighbors':k,
-   'largest_python_allocation_cells':max_cells,'wall_s':time.perf_counter()-t,'neighbor_search':'fixed ring fixture; not a full neighbor-search benchmark'})
-r={'passed':True,'vendor':gpu.x_neighbors_vendor(),'numeric_mode':gpu.x_neighbors_numeric_mode(),'checks':records,
+   'legacy_dense_allocation_rejected':True,'largest_python_allocation_cells':max_cells,
+   'distribution_digest':hashlib.sha256(np.asarray(model.label_distributions_).tobytes()).hexdigest(),
+   'prediction_digest':hashlib.sha256(prediction.tobytes()).hexdigest(),'wall_s':time.perf_counter()-t,'neighbor_search':'fixed ring fixture; not a full neighbor-search benchmark'})
+r={'passed':True,'commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),'vendor':gpu.x_neighbors_vendor(),'numeric_mode':gpu.x_neighbors_numeric_mode(),'checks':records,
  'peak_rss_native_units':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,'rss_units':'bytes' if sys.platform=='darwin' else 'KiB'}
 Path(a.out).parent.mkdir(parents=True,exist_ok=True);Path(a.out).write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r),flush=True)
