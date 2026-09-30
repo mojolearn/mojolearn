@@ -1886,9 +1886,10 @@ def _m3_weights_recopy(ctx: DeviceContext, mut w: Mamba3DeviceWeights, a: List[I
     w.weights_checked = False
 
 
-def _m3_prefill_weights(mut s: Mamba3PrefillSession, ctx: DeviceContext, a: List[Int], dims: Mamba3Dims) raises:
+def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3Dims) raises:
     """Leave `s.w` holding this call's weights: reused, recopied, or freshly
     uploaded (see the section header)."""
+    ref ctx = s.ctx.value()
     var lens = _m3_weight_lens(dims)
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
     # against the byte compare).
@@ -1936,11 +1937,11 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     var v_n = b * nh * M3_HEADDIM
     if not s.ctx:
         s.ctx = neural_ctx[_NEURAL_CTX]()
-    ref ctx = s.ctx.value()
     var phase_tick = 0
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
-    _m3_prefill_weights(s, ctx, a, dims)
+    _m3_prefill_weights(s, a, dims)
+    ref ctx = s.ctx.value()
     ref dw = s.w.value()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
     # The certified zero state and this call's stages, built per call.

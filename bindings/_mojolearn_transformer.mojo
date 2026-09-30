@@ -878,7 +878,7 @@ def _session_retain_cap_bytes() -> Int:
 
 
 def _session_weights(
-    mut session: TransformerSession, ctx: DeviceContext, dims: LlamaDims,
+    mut session: TransformerSession, dims: LlamaDims,
     a: List[Int], opts: BlockOptions, tail: List[Int],
 ) raises:
     """Leave `session.weights` holding this call's weights: the retained
@@ -886,6 +886,7 @@ def _session_weights(
     into the retained buffers when they differ, a fresh upload otherwise.
     Options blocks (a non-default record or any tail address) take the
     per-call upload as before; nothing is retained for them."""
+    ref ctx = session.ctx.value()
     var extended = not opts.is_default()
     for i in range(len(tail)):
         if tail[i] != 0:
@@ -961,7 +962,6 @@ def _transformer_run_session[discard_cache: Bool = False](
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
-    ref ctx = session.ctx.value()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var lean = _lean_for(hd, opts)
@@ -970,13 +970,14 @@ def _transformer_run_session[discard_cache: Bool = False](
     if session.workspace:
         reused = session.workspace.value().matches(key)
     if not reused:
-        ctx.synchronize()
+        session.ctx.value().synchronize()
         session.workspace = None
-        ctx.synchronize()
+        session.ctx.value().synchronize()
     # Reread the caller's weights on EVERY call; a Python address is not a
     # version. The device copy is reused only when the bytes are the same
     # (`_session_weights`), recopied in place when they moved.
-    _session_weights(session, ctx, dims, a, opts, _tail_of(a, 13))
+    _session_weights(session, dims, a, opts, _tail_of(a, 13))
+    ref ctx = session.ctx.value()
     ref w = session.weights.value()
     _btick(ton, tk, "surface.weights_up")
     if not reused:
@@ -1079,12 +1080,12 @@ def _transformer_run_session_backward(
     if not session.ctx:
         session.ctx = neural_ctx[_NEURAL_CTX]()
         session.contexts += 1
-    ref ctx = session.ctx.value()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
     var lean = transformer_lean_stages(hd)
     # Weights: reused when the bytes are the same, recopied when they moved.
-    _session_weights(session, ctx, dims, a, opts, List[Int]())
+    _session_weights(session, dims, a, opts, List[Int]())
+    ref ctx = session.ctx.value()
     ref w = session.weights.value()
     _btick(ton, tk, "surface.weights_up")
     # The forward half at smax = L (the fresh-prefill shape).
