@@ -1401,14 +1401,27 @@ struct DevExec(Exec):
 
     @staticmethod
     def eigh(a: F32Ptr, w: F32Ptr, v: F32Ptr, n: Int) raises:
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
-            if n <= host_eigh_max():
-                HostExec.eigh(a, w, v, n)
+        # lane/neural-net-experiment (2026-09-30): the two routes below were
+        # compiled for Metal FAST only. Both envs are honoured on every
+        # vendor and tier now, with their defaults unchanged (0: never),
+        # so a box can A/B them:
+        #   MOJOLEARN_XD_HOST_EIGH_MAX=n  the host executor's cyclic Jacobi
+        #     for n at or under it: the host column's own arithmetic, held
+        #     bit for bit to the device kernels by the identity gates.
+        #   MOJOLEARN_XD_PJ_EIGH_MIN=n  the round-robin ordering
+        #     (x_decomp/jacobi_par.mojo) from n up: NOT the pinned cyclic
+        #     order, so NOT the identical tier's bits -- an experiment the
+        #     digest check must report as MOVED. It is the only route here
+        #     whose rotations run across the GPU: the cyclic kernels are one
+        #     block of 256 threads for the whole solve (eigh at n = 4096
+        #     timed out on the AMD board).
+        if n <= host_eigh_max():
+            HostExec.eigh(a, w, v, n)
+            return
+        var lo = pj_eigh_min()
+        if lo > 0 and n >= lo:
+            if DevExec._eigh_par(a, w, v, n):
                 return
-            var lo = pj_eigh_min()
-            if lo > 0 and n >= lo:
-                if DevExec._eigh_par(a, w, v, n):
-                    return
         if jacobi2_eigh_on():
             DevExec._eigh2(a, w, v, n)
             return
@@ -1650,10 +1663,13 @@ struct DevExec(Exec):
         enqueue_fill(ctx, s_buf, nan)
         enqueue_fill(ctx, v_buf, nan)
         var done = False
-        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and COMPILED_VENDOR == "metal":
-            var lo = pj_svd_min()
-            if lo > 0 and n >= lo:
-                done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
+        # MOJOLEARN_XD_PJ_SVD_MIN=n: the round-robin one-sided Jacobi from n
+        # up, on every vendor and tier (lane/neural-net-experiment; it was
+        # Metal FAST only). Default 0: never. NOT the pinned cyclic order's
+        # bits under IDENTICAL: an experiment the digest check reports.
+        var lo_svd = pj_svd_min()
+        if lo_svd > 0 and n >= lo_svd:
+            done = _svd_par_of_r(ctx, r_buf, v_buf, s_buf, n)
         if done:
             pass
         elif jacobi2_on() and n >= J2_BOUNDED_MIN_N:
