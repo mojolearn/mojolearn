@@ -1,0 +1,4 @@
+{
+  "reason": "User requested stopping failing cloud Mac board runs for memory-scaling fixes; preserve hosts and results. Do not auto-resume.",
+  "utc": 1790787737.169111
+}

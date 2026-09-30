@@ -1,0 +1,183 @@
+bench_board: [1/1] neural/mamba3-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 287s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/mamba3-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 88s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/samba-train-step/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 179s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/samba-forward/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 155s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/samba-infer/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 190s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/mlp-train-step/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 8s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/mlp-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 6s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/lm-infer/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 16s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/lm-host-train-step/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 30s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/gemm-bf16/gaussian/shape=full arms=ours,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 5s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: [1/1] neural/gemm-int8/gaussian/shape=full arms=ours
+bench_board:   done rc=0 14s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/huber/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 899s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/huber/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 554s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/bayesian-ridge/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 5s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/bayesian-ridge/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 999s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/ard/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/ard/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 394s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/lars/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/lars/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 64s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/lasso-lars/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/lasso-lars/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 49s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/quantile/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 753s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/quantile/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 3977s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/perceptron/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 202s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/perceptron/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 956s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/pa-clf/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 202s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/pa-clf/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1225s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/pa-reg/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 209s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/pa-reg/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1254s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/ridge-clf/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 5s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/ridge-clf/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 66s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/sgd-ocsvm/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 206s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/sgd-ocsvm/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1002s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/ridge-cv/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/ridge-cv/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 385s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/lasso-cv/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 27s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/lasso-cv/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1198s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/enet-cv/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 27s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/enet-cv/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1229s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/logreg-cv/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/logreg-cv/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/isotonic/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 10s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/isotonic/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 18s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/minibatch-kmeans/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/minibatch-kmeans/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 9s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/bisecting-kmeans/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 7s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/bisecting-kmeans/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 39s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/meanshift/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 28s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/meanshift/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 41s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/optics/taxi/rows=full arms=ours,ours-fast,sklearn-cpu

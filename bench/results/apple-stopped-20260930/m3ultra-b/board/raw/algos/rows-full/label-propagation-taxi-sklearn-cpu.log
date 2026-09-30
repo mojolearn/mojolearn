@@ -1,0 +1,8 @@
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/semi_supervised/_label_propagation.py:324: ConvergenceWarning: max_iter=1000 was reached without convergence.
+  warnings.warn(
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/semi_supervised/_label_propagation.py:231: RuntimeWarning: invalid value encountered in divide
+  probabilities /= normalizer
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/semi_supervised/_label_propagation.py:324: ConvergenceWarning: max_iter=1000 was reached without convergence.
+  warnings.warn(
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/semi_supervised/_label_propagation.py:231: RuntimeWarning: invalid value encountered in divide
+  probabilities /= normalizer
