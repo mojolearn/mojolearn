@@ -139,3 +139,53 @@ neural training step's 162 synchronizes, whose largest sites are the
 per-layer waits (16), the attention regime reads (16 + 16 backward) and
 the norm gradient GEMMs (16), the first two of which the toggles above
 already address.
+
+## The priority-list pass (same branch, 2026-09-30, unmeasured)
+
+Ten more commits after the classical pass, one per item of the priority
+list, none measured here. Each keeps the identical tier's bits by
+construction (the argument is in each commit message) or is an explicit,
+off-by-default, bits-moving experiment marked as such. Every one has an
+env that restores the old route, so the A/B is one env per row. The
+digest line of `tools/neural_experiments.py` (or the identity gates for
+the classical lanes) is the arbiter: a MOVED digest on a row marked "same
+bits" is a bug in this branch, not a finding.
+
+| item | commit | what changed | restore the old route with |
+|---|---|---|---|
+| Samba backward sessions | `3f5dac18a` | Mamba-3 backward on the prefill session: weights retained, the last forward's stages reused when x and the weights are byte for byte the forward's, gradients downloaded straight to the caller. `Mamba3Block.session_info()` reports reuse counts. | `MOJOLEARN_MAMBA3_LEGACY_SETUP=1` (per-call entry); `MOJOLEARN_MAMBA3_RETAIN_STAGES=0` (recompute every backward) |
+| LM training step waits | `aa812f164` | the two RMSNorm weight-gradient GEMMs on the block's retained workspace: the last `identical_gemm` on the step path, 2 waits per norm gone (`syncs.gemm.norm_dW`, 16 of 162 on the L40S) | `MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS=1` |
+| gemm-int8 61x | `9b1326101` | the unit plan with a 32 x 32 tile per warp, every fragment feeding two unit tiles, the next step's fragments loaded ahead (NVIDIA IMMA and AMD MFMA). Order-free Int32 sums: cannot move a bit. | build define `-D MOJOLEARN_INT8_MMA_REFERENCE=1` |
+| eigh 24,810x / timeout | `262819f9e` | the host-Jacobi and round-robin route envs honoured on every vendor and tier (defaults unchanged: never). Round-robin is NOT the pinned order's bits. | `MOJOLEARN_XD_HOST_EIGH_MAX=0`, `MOJOLEARN_XD_PJ_EIGH_MIN=0`, `MOJOLEARN_XD_PJ_SVD_MIN=0` (the defaults) |
+| svd / qr serial | `ddddaaefc` | `numpy.linalg.svd`'s Q sign flips as one kit multiply per column instead of a Python loop over every value (1M rows x 220 columns); `_triu` by row slices | `MOJOLEARN_LINALG_LEGACY_SIGN=1` |
+| cholesky serial (x_decomp) | `c94d5bf70` | the kit's Cholesky as a column driver (diagonal chain on one thread, the column below one thread per row) instead of one thread for all of n^3 / 6 | `MOJOLEARN_XD_CHOL_SERIAL=99999` |
+| lr-warmup-cosine 2,612x | `5ebf9a802` | the value decided in binary64 with a rigorous error bound (repository Taylor cosine, no libm); the exact rational route only on a rounding boundary. Checked bit-equal on 12,927 values here. | `MOJOLEARN_LR_EXACT_ONLY=1` |
+| adafactor 1,852x | `494aa6142` | the two whole-tensor norms folded on the host (the same `sumsq_fold` chain) instead of one GPU thread each | `MOJOLEARN_SEQ_HOST_FOLD=0` |
+| clip-grad-norm 43x | `8fed0959e` | the J tensors copied to the device from their own memory and back (`clip_grad_norm_multi`), no packed host copy and unpack | `MOJOLEARN_CLIP_PACKED=1` |
+| perceptron / pa-clf / pa-reg / sgd-ocsvm | (no new commit) | all four fit through `_sgd_fit` -> `ALGO_SGD`, so they already take the classical pass's host route (`556daa80b`) | `MOJOLEARN_X_LINEAR_SGD_HOST=0` |
+
+Not done, and why:
+
+* **louvain / pagerank**: a separate project, as the list says; nothing on
+  this branch.
+* **AMD neural measurement, Apple lm-forward**: measurement items, nothing
+  to write; run the sweep in "Run the sweep" on those boxes.
+* **eigh at n = 4096 under the pinned cyclic order**: no bit-preserving
+  fast route exists on a GPU (one block, n(n-1)/2 serial rotations a
+  sweep). The round-robin env is the honest alternative and it moves the
+  bits; adopting it means pinning that order, a contract change.
+* **qr 'reduced' on taxi (1M x 11, 4.0 s)**: not explained by reading; the
+  per-column staged kernels account for tens of milliseconds. Worth a
+  `MOJOLEARN_XD_*` timing pass on the box before more code.
+* **the cholesky/ lane (the public `Cholesky` class, 557 ms at n = 8192
+  on the MI325X, 17x torch)**: a blocked factorization already; not
+  touched here. The x_decomp kit's one-thread Cholesky (above) is the
+  serial one.
+
+How to test this pass, per row: build the binding the row names (mamba,
+transformer/byte_lm, linalg for gemm-int8, x_decomp, x_sequence for
+adafactor, training for clip and the schedule), run the lane's board cell
+with the row's env unset and then set, and compare the digests / the
+identity gate. For the neural rows `tools/neural_experiments.py` already
+prints the digest; for the classical rows the lane's own identity check
+does.

@@ -224,3 +224,42 @@ Two things the identity gates must confirm before any of it ships: the
 host SGD form equals the device form bit for bit (the tier's own claim, but
 the route is new), and the IVF scan's results on a 64-lane AMD wavefront
 equal the per-query path's (the merge now folds all 64 lanes).
+
+## The priority-list pass (2026-09-30)
+
+Ten commits `3f5dac18a`..`aa812f164` on the same branch, one per item of
+the priority list handed over after the classical pass, all unmeasured;
+the table with each commit, its change and its restore-env is in
+EXPERIMENTS.md, "The priority-list pass". The reasoning in one line each:
+
+* the Mamba-3 backward recomputed the forward it had just run: now it
+  reuses the forward's stages on the session when x and the weights are
+  byte for byte the forward's (a download-and-compare, paid by the
+  backward only), else recomputes with the entry's own constructions;
+* the LM step's last unrouted GEMM (the norm dW, `identical_gemm`, two
+  waits per call) is on the retained workspace: 16 waits per step;
+* the int8 unit plan read every fragment from device memory per unit
+  step with nothing loaded ahead; a 32 x 32 warp tile halves the loads
+  per unit step and prefetches the next step (order-free integer sums);
+* eigh's only parallel route (round-robin Jacobi) changes the pinned
+  order; it is exposed by env on every vendor as an explicit experiment,
+  and the host route likewise; neither is on by default;
+* svd's 95.8 s on istella was mostly a Python loop negating a million
+  values per column; the kit's per-column multiply does the same flip;
+* the x_decomp Cholesky ran on one thread; it is a 2n-launch column
+  driver now, the same cells in the same order per cell;
+* lr-warmup-cosine ran exact rational arithmetic per step; a binary64
+  evaluation with a proven error bound decides the same float32 unless
+  the value sits on a rounding boundary (12,927 values checked equal);
+* adafactor folded 16.7M squares on one GPU thread twice a step; the same
+  chain runs on the host from the caller's bytes and one download;
+* clip_grad_norm_ packed and unpacked every gradient on the host; the
+  tensors now go to their device slices directly;
+* perceptron / PA / one-class SVM already take the classical pass's host
+  SGD route (verified: all four fit through `_sgd_fit` -> `ALGO_SGD`).
+
+What only a box can say: whether each row moves the cell it targets, and
+whether every "same bits" row's digest stays. The compile risk is real
+too: none of the Mojo here was built (no toolchain in this session); the
+measuring agent's first build will find the syntax slips, as it did on
+the first pass.
