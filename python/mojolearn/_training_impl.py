@@ -106,6 +106,7 @@ from . import _numeric_profile
 from fractions import Fraction
 
 import ctypes
+import os
 import numbers
 import struct
 from ._arrays import _addr, _addr_ro
@@ -1661,16 +1662,87 @@ class WarmupLinearLR(_Schedule):
         return _f32_round(peak + (lo - peak) * p)
 
 
+# lane/neural-net-experiment (2026-09-30): the cosine schedule's value is
+# DEFINED as the float32 nearest the exact rational value (the interval
+# route below), and that definition does not change. What changes is how
+# often the exact route runs: `_decay` first evaluates the same formula in
+# binary64 with a repository-owned Taylor cosine (no libm) and a RIGOROUS
+# error bound, and accepts the float32 it rounds to when the whole error
+# interval rounds to that same float32 (Ziv's test). Only when the interval
+# straddles a float32 rounding boundary, or the value is outside the normal
+# range, does the exact route decide. The answer is the same float32 either
+# way: the fast path never returns a value the exact route would not. The
+# bench board's lr-warmup-cosine lane (100,000 steps) took 332 s of exact
+# rational arithmetic on an MI325X host; MOJOLEARN_LR_EXACT_ONLY=1 restores
+# the exact route for every step (the A/B, and the digest check).
+_COS_F64_TERMS = 26
+#: absolute error bound on `_cos_pi_f64` (analysis in its docstring: the
+#: sum's rounding is under 2^-46 and the argument's under 2^-50; 2^-40
+#: leaves a 64x margin)
+_COS_F64_ERR = 2.0 ** -40
+_F64_EPS = 2.0 ** -52
+
+
+def _cos_pi_f64(p):
+    """cos(pi p) in binary64 for a rational p in [0, 1], by the Taylor
+    series on the reduced argument x = pi q, q = p or 1 - p in [0, 1/2]
+    (cos is odd about pi/2, an exact identity), 26 terms (the truncation
+    x^52 / 52! is below 1e-58 for x <= pi/2). Every operation is IEEE
+    binary64, so the value is the same on every host; its distance from
+    cos(pi p) is under `_COS_F64_ERR`: the argument x carries at most
+    three roundings of relative size 2^-53 (pi, float(q), the product),
+    an absolute error under 2^-50 that cos passes through with slope at
+    most 1, and the sum of 26 terms of magnitude at most 1 accumulates at
+    most 26 roundings, each at most 2^-53 of a partial sum whose magnitude
+    stays under 2 (a bound of 2^-47), plus each term's own three roundings
+    (under 2^-51 in all)."""
+    q = Fraction(p)
+    flip = q > Fraction(1, 2)
+    if flip:
+        q = 1 - q
+    x = math.pi * float(q)
+    x2 = x * x
+    total = 0.0
+    term = 1.0
+    for k in range(_COS_F64_TERMS):
+        total += term
+        term = -term * x2 / ((2 * k + 1) * (2 * k + 2))
+    return -total if flip else total
+
+
+def _f32_of_f64_decided(v, err):
+    """The float32 nearest a real number known to lie in [v - err, v + err]
+    (v, err binary64), or None when that interval is not inside one
+    float32's rounding cell (its two neighbouring midpoints), or when the
+    value is not a normal positive float32 (then the exact route's
+    flush-to-zero and overflow rules decide)."""
+    if not (v > 2.0 ** -120) or v >= 2.0 ** 127 or not (err >= 0.0):
+        return None
+    f = ctypes.c_float(v).value
+    bits = struct.unpack('<I', struct.pack('<f', f))[0]
+    up = struct.unpack('<f', struct.pack('<I', bits + 1))[0]
+    down = struct.unpack('<f', struct.pack('<I', bits - 1))[0]
+    # the midpoints of two adjacent float32s are exact in binary64
+    hi_mid = (f + up) / 2.0
+    lo_mid = (f + down) / 2.0
+    if v - err > lo_mid and v + err < hi_mid:
+        return f
+    return None
+
+
 class WarmupCosineLR(_Schedule):
     """Linear warmup over `warmup_steps`, then
     `min_lr + (peak_lr - min_lr) * (1 + cos(pi p)) / 2` with
-    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The cosine is
-    exact rational arithmetic (see the section comment), never `math.cos`.
+    `p = (t - warmup) / (total - warmup)`, then `min_lr`. The value is the
+    float32 nearest the exact rational expression (the interval route,
+    never `math.cos`); a binary64 evaluation with a rigorous error bound
+    answers first whenever it provably rounds to that same float32 (see
+    the section comment above `_cos_pi_f64`).
     """
 
     kind = "cosine"
 
-    def _decay(self, p):
+    def _decay_exact(self, p):
         peak, lo = Fraction(self.peak_lr), Fraction(self.min_lr)
 
         def interval(terms):
@@ -1679,6 +1751,24 @@ class WarmupCosineLR(_Schedule):
             b = lo + (peak - lo) * (1 + c_hi) / 2
             return (a, b) if a <= b else (b, a)
         return _decide_f32(interval)
+
+    def _decay(self, p):
+        if os.environ.get("MOJOLEARN_LR_EXACT_ONLY") == "1":
+            return self._decay_exact(p)
+        peak, lo = self.peak_lr, self.min_lr
+        span = peak - lo
+        if not (span > 0.0):
+            return self._decay_exact(p)
+        c = _cos_pi_f64(p)
+        v = lo + span * (1.0 + c) / 2.0
+        # the cosine's bound scaled into the value, plus the four roundings
+        # of the expression itself (each at most 2^-53 of an operand no
+        # larger than peak + v), with a factor of two of margin
+        err = span * _COS_F64_ERR + 8.0 * _F64_EPS * (peak + abs(v))
+        f = _f32_of_f64_decided(v, err)
+        if f is None:
+            return self._decay_exact(p)
+        return f
 
 
 # ===================================================================
