@@ -507,7 +507,7 @@ def _moments_pass_kernel(
 # block (k, slice) sums its rows' addends per chain in a fixed thread layout
 # and writes one partial per chain; a second kernel adds the partials over
 # the slices. The same addends and finals as 5110/5121, another summation
-# order: bits move, quality is the paired check's (progress file).
+# order: bits move, quality is the paired check's.
 comptime MOMF_ROWS = 2048  # rows per slice
 
 
@@ -881,8 +881,7 @@ def _grid(n: Int) -> Int:
 
 struct _ClusterContext(Defaultable, Movable):
     """ONE process-lifetime DeviceContext for every x_cluster entry (the
-    x_cnn `_Global` pattern; ALGORITHM_EXPANSION_BRIEFS.md "one
-    DeviceContext per process"). A context per call hung the SECOND
+    x_cnn `_Global` pattern: one DeviceContext per process). A context per call hung the SECOND
     `x_cluster_call` in a process on an RTX 4090 (futex wait): the context
     was a field declared BEFORE the call's buffers, so it was torn down
     while they still held its allocations; on Metal a context per call also

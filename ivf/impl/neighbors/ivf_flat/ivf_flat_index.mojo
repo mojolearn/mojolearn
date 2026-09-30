@@ -284,7 +284,7 @@ def ivf_refuse_algorithm(name: String) raises:
             " cpp/include/cuvs/neighbors/hnsw.hpp is a CPU search over a"
             " graph built on the GPU (hnsw::from_cagra). It is assigned to"
             " the ann expansion lane as CAGRA's CPU-serving form"
-            " (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, Lane 9). The"
+            " (algorithm expansion lane 9). The"
             " sentence that stood here, that CONTRIBUTING.md forbids a CPU"
             " path, was wrong: CONTRIBUTING has no such rule, and CPU-only"
             " installs train and predict (corrected 2026-09-27)."

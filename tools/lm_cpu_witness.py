@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The CPU witness column of the GPT-3 Small run (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md,
-section 6, items 5 and 6): replay recorded GPU arithmetic from a checkpoint with
+"""The CPU witness column of the GPT-3 Small run: replay recorded GPU arithmetic from a checkpoint with
 the HOST byte LM binding (`_mojolearn_byte_lm_host`) and compare float32 bits
 and sha256 digests to the run's chain.
 

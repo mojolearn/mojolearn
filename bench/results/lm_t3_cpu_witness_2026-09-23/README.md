@@ -1,6 +1,6 @@
 # T3 CPU witness: route A segment 1 replayed on a CPU, 2026-09-23
 
-The CPU witness column of `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md` (section 6,
+The CPU witness column of the GPT-3 Small run (plan section 6,
 items 5 and 6), run once against the live T3 run's first segment (route A,
 2-GPU H100, `runs/t3/2026-09-22/A/1/` in R2). A rented RunPod CPU pod loaded
 the run's checkpoints and recomputed recorded GPU arithmetic with the HOST
@@ -117,8 +117,8 @@ binding), the check logs, `gate.txt`, `lscpu.txt`, `wheel.sha256`,
 ## The A/2 to A/3 boundary and segment 3, 2026-09-25
 
 The same CPU witness column, run once more against the T3 live segment
-(route A segment 3, two vendors: an H100 coordinator and an MI325X worker,
-`docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`): from A/2's final checkpoint
+(route A segment 3, two vendors: an H100 coordinator and an MI325X
+worker): from A/2's final checkpoint
 (`runs/t3/2026-09-22/A/2/ckpt_00002000.blm`), every one of the 64 shard
 losses of step 2001 against A/3's own chain line 2001; from A/3's final
 checkpoint (`runs/t3/2026-09-22/A/3/ckpt_00002400.blm`), the held-out loss

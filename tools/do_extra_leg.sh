@@ -140,7 +140,7 @@ usage() {
 }
 
 VENDOR=""; MINUTES=60; DRY=0; GATES=1
-# THE SEGMENT LEASE (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, E4): a lease above
+# THE SEGMENT LEASE (for GPT-3 Small training segments): a lease above
 # one hour, named, and bound to a dollar figure at the size's own hourly
 # price read from the sizes API BEFORE the create. Both flags or neither.
 SEGMENT_LEASE=""; DOLLAR_CAP=""; SEGMENT_CAP_MINUTES=2880

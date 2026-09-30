@@ -1,7 +1,7 @@
 # Forest host inference fixtures
 
 Read by `.github/workflows/forest-host-gate.yml` and `tools/forest_host_gate.py`
-(the forest host lane, 2026-09-13, docs/lanes/BRIEF_forest_host_inference_2026-09-13.md).
+(the forest host lane, 2026-09-13).
 
 One directory per recording. Each holds
 

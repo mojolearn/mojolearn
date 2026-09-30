@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The trees expansion lane's binding (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md,
+"""The trees expansion lane's binding (algorithm expansion
 lane 7): the ensemble glue of `xtrees/ops.mojo`, registered by
 `xtrees/api.mojo::register`. The trees themselves are fitted through the
 existing `_mojolearn_rf` / `_mojolearn_gbdt` entry points."""

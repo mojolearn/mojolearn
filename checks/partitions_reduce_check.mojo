@@ -24,7 +24,7 @@ WHAT IT COMPARES, AND WHY EACH RULE IS HERE
    agree. A fixture where every element carries the same value verifies a
    total and nothing about placement. That is not hypothetical here: the same
    kernel at the same parameters gave 0 wrong of 512 on a uniform plant and
-   490 wrong of 512 on a scattered one (`RESUME.md`).
+   490 wrong of 512 on a scattered one.
 
 2. **The oracle is EXACT, not tolerated.** Every planted value is an integer
    in `[-63, 63]`, and a leaf holds at most 40,000 of them, so every partial

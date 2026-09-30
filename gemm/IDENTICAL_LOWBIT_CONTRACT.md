@@ -369,9 +369,8 @@ must fail.
 
 ### 6.7 What was measured
 
-Filled from runs of record only; see `docs/lanes/progress/lowbit-int15.md`
-for the tables and the runs they come from. Until a run is recorded there,
-no sentence of this contract states a time.
+Filled from runs of record only. Until a run is recorded, no sentence of
+this contract states a time.
 
 ### 6.8 Clause W-9: the products of a training step
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One box, one build: the priority-list pass (EXPERIMENTS.md), each row's
+"""One box, one build: the priority-list pass, each row's
 new route against its restore env, output hashes compared.
 
 Measurement overlay (2026-09-30), not a released wheel: mojolearn 0.8.31 in an

@@ -22,7 +22,7 @@ checkpoint. K, the shape, the optimizer, the learning-rate table and the data
 schedule are the RECIPE and never change between segments; the device count
 and the vendor do. Steps are numbered globally: a checkpoint is
 `ckpt_<global step>.blm`, so nothing about the cadence depends on which
-segment a step is in (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, section 6).
+segment a step is in.
 
 WHAT IS WRITTEN, EVERY STEP: one line of `chain.jsonl` with the global step,
 every shard's loss (float32 bits), the learning-rate bits the device used,
@@ -67,9 +67,8 @@ NEGATIVE CONTROLS. `--zero-moments` restores the checkpoint with zeroed
 AdamW moments and must FAIL an `--expect-chain` at the first step; a recipe
 whose K, shape, schedule or tokens differ from the checkpoint's is refused
 by name before any device work. `mojolearn.cross_vendor` holds the one-ulp
-control for the multi-vendor segment. `--control` runs one of the plan's
-controls (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, section 6 item 7) against
-the real chain; see `parse_control`. A control is STAMPED into every chain
+control for the multi-vendor segment. `--control` runs one of the run's
+negative controls against the real chain; see `parse_control`. A control is STAMPED into every chain
 line (`control`) and into segment.json, writes no checkpoint and refuses
 `--upload-urls`, so its output can never be mistaken for a real run's.
 

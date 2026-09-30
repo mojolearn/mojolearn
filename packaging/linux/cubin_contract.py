@@ -12,7 +12,7 @@ whatever ptxas that driver carries, fmad on. packaging/linux/ptx_contract.py
 pins the rounding in the PTX (`.rn`, never contracted); this pass removes the
 JIT itself: the machine code is made once, at build time, by a pinned ptxas
 with contraction off, and the driver only loads it (and inflates it).
-Measured on an RTX 4090 (2026-09-26, docs/lanes/NVIDIA_CUBIN_RESUME.md): the
+Measured on an RTX 4090 (2026-09-26): the
 0.8.19 release column JIT-compiled 794 modules from PTX; the same column from
 fatbins reads the same bits in every cell.
 

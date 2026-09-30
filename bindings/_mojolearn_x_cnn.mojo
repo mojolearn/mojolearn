@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""THE CNN LANE'S GPU BINDING (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, lane 8).
+"""THE CNN LANE'S GPU BINDING (algorithm expansion lane 8).
 Host addresses in, host addresses out; the work is x_cnn/device.mojo. The CPU
 twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32

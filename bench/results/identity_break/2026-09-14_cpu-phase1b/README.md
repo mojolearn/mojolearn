@@ -1,7 +1,7 @@
 # The CPU column, phase 1b: agglomerative, et-clf, et-reg, iforest (2026-09-14)
 
 The fourth column of `tools/identity_break.py` for the four lanes of
-`docs/lanes/BRIEF_cpu_training_2026-09-13.md` phase 1 that the 2026-09-13
+CPU training phase 1 that the 2026-09-13
 merge (c4883127f) left open, run on this Mac (Apple M4, macOS 26.5, Mojo
 1.0.0, host builds `--target-cpu apple-m1`) through the CPU-only package
 path: no GPU set under `python/mojolearn/`, the host bindings under

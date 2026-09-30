@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The low-bit timing table and the cross-box hash comparison
-(lane/lowbit-units, docs/lanes/LOWBIT_UNITS_PLAN.md).
+(lane/lowbit-units).
 
 Reads the `LOWBIT` lines bench/gemm_lowbit_price_main.mojo prints (one file
 per box, tools/lowbit_units/price_job.sh's lowbit.tsv) and, where a box has

@@ -1,5 +1,5 @@
 #!/bin/bash
-# The direction pass's diagnostics on one NVIDIA box (EXPERIMENTS.md "The direction pass").
+# The direction pass's diagnostics on one NVIDIA box.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 O=/root/direction; mkdir -p $O

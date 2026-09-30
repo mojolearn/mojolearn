@@ -79,8 +79,7 @@ implementation symbols. The frozen candidate lacks the new root
 `BpeTokenizer` and `tokenizer.BpeTokenizer` names; it already contains the
 tokenizer implementation under the old name. No existing wheel export is
 missing from the merged source. This is a naming addition for the following
-wheel, not two additional algorithms. The source change's own tokenizer and
-BPE training identity/sabotage evidence is in `LANE_STATUS_tokenized-corpus.md`.
+wheel, not two additional algorithms.
 
 The scanner now includes explicitly declared deprecated imports even when
 they are outside a submodule's `__all__`, so compatibility aliases cannot be

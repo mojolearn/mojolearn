@@ -78,8 +78,7 @@ par-mlp there.
 
 ## Reproducing
 
-`docs/lanes/LANE_STATUS_lane-cpu-verifier-par-samba.md` carries the
-commands. The one that costs a whole run if forgotten:
+The one setting that costs a whole run if forgotten:
 `MOJOLEARN_NUMERIC_MODE=identical` must be exported, because
 `identity_break._run_reference` defaults the WANTED mode to `fast` and
 refuses before the first fit.

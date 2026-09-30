@@ -814,7 +814,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
     # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
     # fallbacks are gone: FAST runs the same kernels and the same launches with
     # the pins in checks/numerics.mojo compiled to the free schedule. FAST
-    # promises quality, never bits (docs/lanes/progress/neural.md). The
+    # promises quality, never bits. The
     # DETERMINISTIC tier stays tree-only: refuse to exist under it.
     comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         abort(

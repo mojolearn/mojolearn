@@ -1,4 +1,4 @@
-"""THE NEIGHBORS LANE'S HOST SURFACE FRAGMENT (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+"""THE NEIGHBORS LANE'S HOST SURFACE FRAGMENT.
 
 Owned by the `neighbors` expansion lane and merged by host_surface.py at import
 (`EXPANSION_LANES`). Literal data only: no imports, no calls but dict(...).

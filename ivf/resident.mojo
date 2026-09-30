@@ -25,7 +25,7 @@ WHAT DOES NOT CHANGE. `ivf_flat_search_prepared` is the body every search
 ran after its own preparation: the same statements over the same bytes, so
 a search through a handle returns the bits a one-shot search returns (the
 ivf, ivf-euclidean, ivf-filter and par-ivf lanes, base against head, both
-columns, docs/lanes/progress/py-dn-ann.md).
+columns).
 """
 from std.ffi import _Global
 

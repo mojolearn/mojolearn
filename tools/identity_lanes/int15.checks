@@ -1,4 +1,4 @@
-# The fifteen-bit profile's seam check drivers, one sabotage patch per seam (docs/lanes/progress/lowbit-int15.md).
+# The fifteen-bit profile's seam check drivers, one sabotage patch per seam.
 # Each patch turns ONE arm on as a source edit at its use site, so the driver must build, run and FAIL.
 #   device value flip   every cell the three kernels store          gemm_int15_check: the device oracle gates
 #   piece hi clamp      the split writes -127 for a high piece -128  gemm_int15_check: the conversions gate, the planted worst cases

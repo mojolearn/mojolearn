@@ -30,7 +30,7 @@ the [support matrix](SUPPORT_MATRIX.md) and [identity paths](IDENTITY_PATHS.md).
   sensible CPU defaults for gradient boosting. After that, CPU speed: the
   host kernels multithreaded and vectorized under the same pinned-fold rule,
   inference first, judged on the bench board against the CPU learners on
-  all cores (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, "Phase 3: CPU speed").
+  all cores.
 
 ## Planned work
 

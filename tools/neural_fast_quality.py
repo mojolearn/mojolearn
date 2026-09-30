@@ -5,8 +5,7 @@
 
 The neural bindings (training, mamba, transformer, embedding) build FAST since
 2026-09-27 (lane neural). FAST is the same kernels with the pins in
-checks/numerics.mojo on the free schedule. This tool is the quality rule
-(docs/lanes/ALGORITHM_EXPANSION_PLAN.md, item 1b): at least 5 seeds on at least
+checks/numerics.mojo on the free schedule. This tool is the quality rule: at least 5 seeds on at least
 2 datasets, FAST against IDENTICAL from the SAME initial weights and the SAME
 batches, and both against torch eager float32 (TF32 off) from those same
 weights and batches.

@@ -1,7 +1,7 @@
 # T0 on the M4: the six-segment tooling at a small shape
 
 Evidence only. `mojolearn verify` does not run this and no release depends on
-it. This is the local, no-rental step of `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`
+it. This is the local, no-rental step of the GPT-3 Small run plan's
 section 10 for the five Python-side items of section 8, taken 2026-09-22 on
 the local Apple M4 (Metal, one job at a time under `tools/mac_slot.py`) at
 shapes far below the target. It proves the protocol and the tooling and says

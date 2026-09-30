@@ -3,7 +3,7 @@
 """`mojolearn.identical.gemm.int8i32.v1` on Apple's FLOAT matrix unit, in
 EXACT CHUNKS. A PROBE, not a plan of the profile.
 
-Lane lane/lowbit-units, 2026-09-29 (`docs/lanes/LOWBIT_UNITS_PLAN.md`). The
+Lane lane/lowbit-units, 2026-09-29. The
 flat realization is `gemm/checks/gemm_lowbit.mojo`; the answer is
 `gemm/host/gemm_lowbit_oracle.mojo::gemm_int8_oracle`; the gate is
 `gemm/checks/gemm_int8_apple_chunk_check.mojo`.

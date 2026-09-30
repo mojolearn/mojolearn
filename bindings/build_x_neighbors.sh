@@ -1,5 +1,5 @@
 #!/bin/sh
-# The neighbors expansion lane's GPU binding (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+# The neighbors expansion lane's GPU binding.
 set -eu
 MACOS_FLOOR="11.0"
 cd "$(dirname "$0")/.."

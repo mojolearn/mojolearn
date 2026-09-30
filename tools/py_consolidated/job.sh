@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/py_consolidated/job.sh: THE ONE CHECK of the twelve merged py-* lanes
-# (docs/lanes/progress/py-consolidated.md), one NVIDIA queue job on one shared
+# run as one NVIDIA queue job on one shared
 # pod, the pod's x86 CPU as the CPU column. ONE tree (the pod disks are shared):
 #   base  `git apply -R tools/py_consolidated/base.patch` (lane/apple2-merged's
 #         code), every selected lane's GPU and CPU arm once (tools/py_consolidated/check.py

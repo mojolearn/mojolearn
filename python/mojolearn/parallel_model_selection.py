@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Independent cross-validation folds assigned to explicit GPU workers.
 
-Physical multi-GPU qualification is pending; see LANE_STATUS_multigpu-cv.md.
+Physical multi-GPU qualification is pending.
 This schedules whole fits. It does not partition one fit across device memory.
 """
 import os

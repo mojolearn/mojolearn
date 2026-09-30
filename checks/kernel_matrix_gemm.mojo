@@ -24,7 +24,7 @@ def lib_gemm_stage_ftz_for[column: Int]() -> Bool:
     22.4% lower fixed-shape GEMM sum; 700-step enwik8/Pile comparisons
     improve 13.9%/15.3% with identical loss and state witnesses. The FMA
     rounding seam and fold topology do not change. Other columns remain
-    on their existing path. See LANE_STATUS_gemm-kernel-speed.md.
+    on their existing path.
     """
     return column == COLUMN_NVIDIA or column == COLUMN_AMD
 

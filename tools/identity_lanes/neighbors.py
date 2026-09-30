@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-# THE NEIGHBORS LANE'S IDENTITY LANES (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+# THE NEIGHBORS LANE'S IDENTITY LANES.
 #
 # Owned by the `neighbors` expansion lane. tools/identity_break.py executes this
 # file in ITS OWN namespace after every helper and registry exists
@@ -375,7 +375,7 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
     mean, cov = m.predict(X[256:320, :4], return_cov=True)
     # normalize_y=True needs StandardScaler.fit, which has no host binding
-    # (CPU gap owed in docs/lanes/progress/neighbors.md); the second model
+    # (an owed CPU gap); the second model
     # takes a shifted target and a second kernel instead
     y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
     k2 = ml.ConstantKernel(4.0) * ml.RBF(0.5) + ml.WhiteKernel(0.05)

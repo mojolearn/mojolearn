@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/algos_lane_check.sh <lane[,lane...]> [--sabotage <patch>] [--pass 1|2] [--fixtures f,g] [--out DIR]
 #
-# THE ONE LANE CHECK OF THE ALGORITHM EXPANSION (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md):
+# THE ONE LANE CHECK OF THE ALGORITHM EXPANSION:
 # builds every binding the lanes run (GPU and CPU host) that is missing or
 # stale, fits each lane on the GPU and on the CPU, diffs train/infer/model/
 # batch and exits 0 only on AGREE (and, with --sabotage, DISAGREE under the

@@ -25,7 +25,7 @@ What diverges. ONE lane, `gbdt-feature-freq` (`ExperimentalTwoLevelFeatureFreq`,
 and its `base` cell is the single MOVED (two fits in one process on the Mac differed, once, never
 reproduced in thirteen later runs). It is the first cross-vendor divergence the tool has found
 on a shipped surface; its prior evidence was AMD against NVIDIA only. Diagnosis lane
-`lane/feature-freq-divergence`, brief `docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md`.
+`lane/feature-freq-divergence`.
 
 What did not run. The two CPU byte-LM lanes refused on both GPU boxes because the leg body did
 not build `bindings/build_byte_lm_host.sh` (18 ONE-COLUMN cells; the seven-runner CPU gate

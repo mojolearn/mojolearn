@@ -49,7 +49,7 @@ carries
 
 The workflow's `COVERED_LANES` is the list of lanes with a CPU
 implementation: gemm-pinned, kde, holtwinters, lasso, elasticnet and svc
-(phase 1 of `docs/lanes/BRIEF_cpu_training_2026-09-13.md`, 2026-09-13) and
+(CPU training phase 1, 2026-09-13) and
 agglomerative, et-clf, et-reg and iforest (phase 1b, 2026-09-14). A covered
 lane must read STABLE on every fixture and `IDENTICAL x4` against the three
 GPU columns (`--diff ... --require-columns 4 --lanes <covered>`), because

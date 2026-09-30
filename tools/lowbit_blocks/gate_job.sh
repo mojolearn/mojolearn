@@ -4,7 +4,7 @@
 #  2. the same program with -D MOJOLEARN_LOWBIT_SABOTAGE=1: MUST report failures
 #  3. THE DEFAULT GATE: transformer/checks/transformer_check.mojo built from this
 #     tree and from a clean worktree at the merge base (whose block sources are
-#     main's byte for byte; see the progress file), run on the same GPU; their
+#     main's byte for byte), run on the same GPU; their
 #     outputs and identity cards must be identical.
 set -u
 cd /root/mojolearn-lowbit-blocks

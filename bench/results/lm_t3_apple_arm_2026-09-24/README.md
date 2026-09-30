@@ -41,7 +41,7 @@ working-set limit and 2.25 times the physical memory. The 1.95 GB of state
 (parameters, m, v), the gradient, the three rollback shadows and the
 embedding copies fit; the activations at batch 4 x 2048 (the [M, V]
 cross-entropy buffers alone are 1.65 GB each at M = 8,192) do not. This is
-what `docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md` section 7 predicted from the
+what the GPT-3 Small run plan (section 7) predicted from the
 H100's figure; the measurement above is the M4's own.
 
 ## What was not done, and why

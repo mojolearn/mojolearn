@@ -24,7 +24,7 @@ seconds.
 | `so_sha256.txt` | the four host binaries |
 | `cpu-prod.log`, `cpu-sab.log` | the harness output |
 | `build.*.log` | the four builds |
-| `lane_table.md` | the per-lane audit table (also in `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`) |
+| `lane_table.md` | the per-lane audit table |
 
 Both columns record `host.column = cpu`, `cpu_model = Apple M4`, commit
 bfb8f725ab2b30a94e8596b407775095e37c2508, mode identical, 22 cells, complete.
@@ -52,8 +52,7 @@ fixtures. That part is `identity_break._hfile(path)`, the sha256 of the saved
 file, and for these estimators the file holds the fitted index (the caller's
 own rows as fitted) plus scalars. No arithmetic result enters it, and both
 host arms perturb distances computed at query time, so no host sabotage arm
-can reach it. This is the same shape as the open radius question and is
-written up in `docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`.
+can reach it. This is the same shape as the open radius question.
 
 The ninth is `tsvd/ties model`, which is different. The base fixture moves and
 the integer `ties` fixture does not, so that arm is fixture inert rather than
@@ -87,8 +86,7 @@ descending instead of ascending. An order perturbation cannot change a sum
 whose values add exactly, and `ties` is integer valued, so the arm is inert
 there. That site is the only arm `linalg`, `mamba` and `transformer` reach and
 one of two for `training` and `neural`, so on `ties` those five families have
-no working negative control. Written up as finding 1 of
-`docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`.
+no working negative control. This is finding 1 of the audit.
 
 ## Correction, 2026-09-16
 

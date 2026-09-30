@@ -1,8 +1,7 @@
 # The DBSCAN hipErrorOutOfMemory on a "192 GB card" (lane/amd-dbscan-oom)
 
-Three boxes, 2026-09-16, all terminated and VERIFIED gone (HTTP 404). The
-reading is `docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md`; these are the
-numbers it stands on, and every one of them can be re-derived from the JSON.
+Three boxes, 2026-09-16, all terminated and VERIFIED gone (HTTP 404). These are the
+measurements, and every one of them can be re-derived from the JSON.
 
 | file | box | what it shows |
 |---|---|---|

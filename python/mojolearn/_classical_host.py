@@ -484,8 +484,8 @@ _FORMATS = {
 
 
 def _merge_expansion_doors():
-    """THE EXPANSION LANES' SAVED-MODEL ROUTES (lane/algos-prep, 2026-09-27;
-    docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Each lane's door,
+    """THE EXPANSION LANES' SAVED-MODEL ROUTES (lane/algos-prep, 2026-09-27).
+    Each lane's door,
     `_expansion_<lane>.py`, may carry `CLASSICAL_HOST_BASENAMES` (its GPU
     binding -> its host binding) and `classical_host_formats()` (format ->
     {estimator: host class}), called here once this module is complete so

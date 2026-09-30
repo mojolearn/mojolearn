@@ -4,8 +4,7 @@
 
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . bench/gemm_lowbit_price_main.mojo
 
-Lane lane/lowbit-units, 2026-09-29 (`docs/lanes/LOWBIT_UNITS_PLAN.md`, order
-of work 2). Contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` section 3 says of
+Lane lane/lowbit-units, 2026-09-29. Contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` section 3 says of
 every low-bit plan that none has been timed against the fp32 plans. This
 file is that timing. It certifies nothing: the gates are
 `gemm/checks/gemm_lowbit_check.mojo` and

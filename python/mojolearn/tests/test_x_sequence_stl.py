@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """STL's decomposition identities and batch behaviour. Agreement with
 statsmodels' STL (within 4e-5 on robust and jumped configurations) was checked
-on the lane's pod (docs/lanes/progress/sequence.md)."""
+on the lane's pod."""
 import numpy as np
 
 import mojolearn as ml

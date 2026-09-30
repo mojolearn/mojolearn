@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE ONE LANE CHECK OF THE ALGORITHM EXPANSION: GPU == CPU, BIT FOR BIT
-(lane/algos-prep, 2026-09-27; docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+(lane/algos-prep, 2026-09-27).
 
     tools/algos_lane_check.sh <lane[,lane...]> [--sabotage <patch>] [--pass 1|2] [--fixtures f,g] [--out DIR]
 
