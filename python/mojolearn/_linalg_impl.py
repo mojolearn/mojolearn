@@ -1011,10 +1011,13 @@ def _triu(M, r):
     import array as _array
     from ._expansion_decomp import _M
     out = _array.array("f", M.s[:r * M.c])
-    for i in range(r):
-        for j in range(min(i, M.c)):
-            out[i * M.c + j] = 0.0
-    return _M(out, r, M.c)
+    # a slice assignment per row (one C-level copy each) instead of a
+    # Python store per zeroed cell (lane/neural-net-experiment)
+    c = M.c
+    for i in range(1, r):
+        w = min(i, c)
+        out[i * c:i * c + w] = _array.array("f", bytes(4 * w))
+    return _M(out, r, c)
 
 
 class QRResult(tuple):
@@ -1267,12 +1270,21 @@ def _svd_tall(k, A, full):
     # trailing columns are the complement's basis.
     h, tau = k.geqrf(Ug)
     Qc = k.orgqr(h, tau, width)
-    neg = [h.s[j * r + j] < 0.0 for j in range(r)]
-    out = _array.array("f", Qc.s)
-    for j in range(r):
-        if neg[j]:
-            out[j::width] = _array.array("f", [-v for v in out[j::width]])
-    return _M(out, m, width), S, Vt
+    neg = [h.s[j * r + j] < 0.0 for j in range(r)] + [False] * (width - r)
+    # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
+    # was a Python loop over every value of each flipped column (m Python
+    # negations per column: at 1,000,000 rows and 220 columns, most of the
+    # bench board's 95.8 s svd on an MI325X). `neg_cols` is the kit's
+    # elementwise multiply by -1.0 / +1.0 per column: an exact sign flip of
+    # values a device kernel already stored (so already flushed), the same
+    # bits the loop produced. MOJOLEARN_LINALG_LEGACY_SIGN=1 keeps the loop.
+    if os.environ.get("MOJOLEARN_LINALG_LEGACY_SIGN") == "1":
+        out = _array.array("f", Qc.s)
+        for j in range(r):
+            if neg[j]:
+                out[j::width] = _array.array("f", [-v for v in out[j::width]])
+        return _M(out, m, width), S, Vt
+    return Qc.neg_cols(neg), S, Vt
 
 
 def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
