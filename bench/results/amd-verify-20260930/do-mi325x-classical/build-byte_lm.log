@@ -1,0 +1,1374 @@
+COMMAND ["bash", "bindings/build_byte_lm.sh"]
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:133:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+    """lane/neural-apple (2026-09-28): [gated, granted, denied, need_bytes,
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1381:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [ids int32[B*(L+1)], out float32[n]]; returns the loss. No update."""
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1400:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [summed float32[n]]; commits one step; returns completed steps."""
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1514:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [] (an empty fold) or [prefix float32[n]]: start this worker's
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1532:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [ids int32[B*(L+1)]]: one shard's gradient, folded into the
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1548:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [gradient float32[n]]: fold a host-held gradient into the device total."""
+       ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1561:8: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'a'
+    """addresses = [out float32[n]]: the device fold's total."""
+       ^
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:25:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:376:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
+                        ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:376:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
+                                                               ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:376:76: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
+                                                                         ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:376:86: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        lp[base + rank] = byte_gradient_device(cp[rank], tp[rank], sp[base + rank])
+                                                                                   ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:377:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        _require_device_finite(cp[rank], tp[rank].scan,
+                                               ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:377:60: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        _require_device_finite(cp[rank], tp[rank].scan,
+                                                         ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:378:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            tp[rank].buffers.grad, n, "shard gradients")
+                            ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:380:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        fp[rank] = 1
+                        ~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:42:
+./core/device_scan.mojo:416:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:45:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:45:63: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+                                                         ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+./training/byte_lm_parallel.mojo:45:78: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        total[i] = ftz(identical_mul_add(Float32(1), ftz(total[i]), ftz(shard[i])))
+                                                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+./transformer/impl/llama/modeling_llama.mojo:762:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:43:
+./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:43:
+./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+Imported from ./training/byte_lm_parallel.mojo:23:
+./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+Imported from ./training/byte_lm_parallel.mojo:23:
+./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:62:
+Imported from ./training/byte_lm_parallel.mojo:23:
+./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:2268:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            part.unsafe_ptr() + off, b0_p, Int32(n0),
+            ~~~~~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:2275:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            part.unsafe_ptr() + off, b1_p, Int32(n1),
+            ~~~~~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:2282:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            part.unsafe_ptr() + off, b2_p, Int32(n2),
+            ~~~~~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:2289:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            part.unsafe_ptr() + off, b3_p, Int32(n3),
+            ~~~~~~~~~~~~~~~~~~^~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:43:
+./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:1949:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5323:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                qT[c * TST + r] = qv
+                ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5324:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dT[c * TST + r] = dcv
+                ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5338:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ys[i] = yv
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5339:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dss[i] = dsv
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3617:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5357:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var ad = _amma_load_t(dss + (k8 * 8) * BJ + fj * 8, BJ)
+                                              ~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5357:67: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var ad = _amma_load_t(dss + (k8 * 8) * BJ + fj * 8, BJ)
+                                              ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5358:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var ay = _amma_load_t(ys + (k8 * 8) * BJ + fj * 8, BJ)
+                                              ~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5358:66: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var ay = _amma_load_t(ys + (k8 * 8) * BJ + fj * 8, BJ)
+                                              ~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5360:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var bq = _amma_load_t(qT + (fd * 8) * TST + k8 * 8, TST)
+                                              ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5360:67: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var bq = _amma_load_t(qT + (fd * 8) * TST + k8 * 8, TST)
+                                              ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5361:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var bd = _amma_load_t(dT + (fd * 8) * TST + k8 * 8, TST)
+                                              ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5361:67: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                        var bd = _amma_load_t(dT + (fd * 8) * TST + k8 * 8, TST)
+                                              ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5377:73: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        dka[q][e] = _step_preflushed(dss[tl * BJ + jl], qT[d * TST + tl], dka[q][e])
+                                                                     ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5377:91: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        dka[q][e] = _step_preflushed(dss[tl * BJ + jl], qT[d * TST + tl], dka[q][e])
+                                                                                        ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5378:72: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        dva[q][e] = _step_preflushed(ys[tl * BJ + jl], dT[d * TST + tl], dva[q][e])
+                                                                     ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:5378:90: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        dva[q][e] = _step_preflushed(ys[tl * BJ + jl], dT[d * TST + tl], dva[q][e])
+                                                                                       ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7983:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        dT[p * DST + r] = x
+        ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7987:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        drow[tid] = ftz(denom.unsafe_load((bb * nh + h) * l + tt))
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7990:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        emin[sg] = ed
+        ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7994:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        bd = min(bd, emin[w])
+                     ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8006:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            vb[r * VST + p] = x
+            ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8010:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            emin[sg] = ev
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8014:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bv = min(bv, emin[w])
+                         ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8023:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(dT + (8 * p8) * DST + fr * 8, DST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8023:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(dT + (8 * p8) * DST + fr * 8, DST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8024:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(vb + (fk * 8) * VST + 8 * p8, VST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8024:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(vb + (fk * 8) * VST + 8 * p8, VST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8028:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e] * Float32(1.0000001)
+                        ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8030:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+                        ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8037:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        d = _step_preflushed(dT[p * DST + rl], vb[jl * VST + p], d)
+                                             ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8037:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        d = _step_preflushed(dT[p * DST + rl], vb[jl * VST + p], d)
+                                                               ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8038:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tdy[rl * 33 + jl] = d
+                    ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8049:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var dyv = ftz(tdy[r * 33 + jj])
+                                  ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8052:60: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var yv = ftz(identical_div(ftz(e), drow[r]))
+                                                       ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8053:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ty[r * 33 + jj] = yv
+                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8058:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tdy[r * 33 + jj] = dyv
+                    ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8066:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    z = _step_preflushed(tdy[tid * 33 + jj], ty[tid * 33 + jj], z)
+                                         ~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8066:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    z = _step_preflushed(tdy[tid * 33 + jj], ty[tid * 33 + jj], z)
+                                                             ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8193:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        qT[p * RST + r] = ftz(q_rope.unsafe_load(rb))
+        ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8194:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        dT[p * RST + r] = ftz(dctx.unsafe_load(rb))
+        ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8198:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        mrow[tid] = ftz(amax.unsafe_load(row))
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8199:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        drow[tid] = ftz(denom.unsafe_load(row))
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8209:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kv[r * KST + p] = x
+            ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8213:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var af = _amma_load_t(qT + (8 * p8) * RST + fr * 8, RST)
+                                  ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8213:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var af = _amma_load_t(qT + (8 * p8) * RST + fr * 8, RST)
+                                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8214:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                  ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8214:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8217:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ts[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+            ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8226:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kv[r * KST + p] = x
+            ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8230:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var af = _amma_load_t(dT + (8 * p8) * RST + fr * 8, RST)
+                                  ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8230:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var af = _amma_load_t(dT + (8 * p8) * RST + fr * 8, RST)
+                                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8231:38: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                  ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8231:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8235:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e] * Float32(1.0000001)
+                ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8237:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e]
+                ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8248:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var sc = _pmul(ts[r * 33 + jj], scale_in)
+                                   ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8250:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var e = ftz(identical_exp(ftz(ftz(masked) - mrow[r])))
+                                                                ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8251:60: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var yv = ftz(identical_div(ftz(e), drow[r]))
+                                                       ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8252:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ts[r * 33 + jj] = yv
+                    ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8254:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var dyv = ftz(tdy[r * 33 + jj])
+                                  ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8255:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tdy[r * 33 + jj] = dyv
+                    ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8263:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    z = _step_preflushed(tdy[tid * 33 + jj], ts[tid * 33 + jj], z)
+                                         ~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:8263:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    z = _step_preflushed(tdy[tid * 33 + jj], ts[tid * 33 + jj], z)
+                                                             ~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:564:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sh[c] = raw
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:571:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = best
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:576:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var o = red[tid + active]
+                    ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:577:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if o > red[tid]:
+                   ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:578:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = o
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:581:36: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var ex = int15_row_exponent(red[0])
+                                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:586:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var code = quantize_int15_value(sh[c], ex)
+                                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:688:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        tile[(ty + k) * (INT15_TILE + 1) + tx] = v
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+./gemm/checks/gemm_int15.mojo:698:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var v = tile[tx * (INT15_TILE + 1) + ty + k]
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:43:
+./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:519:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:524:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var other = red[tid + step]
+                        ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:528:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if other > red[tid]:
+                           ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:529:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    red[tid] = other
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:531:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:531:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                red[tid] = identical_fmax(red[tid], other)
+                                          ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:68:
+./training/checks/loss.mojo:534:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var total = red[0]
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3047:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3047:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3047:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3047:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3048:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3048:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3048:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3048:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3699:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3852:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea0
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3853:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb0
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3862:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var atc = at + cur * ASZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3863:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var btc = bt + cur * BSZ
+                  ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3864:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var wmc = wmin + cur * 2 * NSG
+                  ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3871:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[sg] = ea
+                ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3872:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wmin[NSG + sg] = eb
+                ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3881:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmc[q])
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3882:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmc[NSG + q])
+                           ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3893:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3893:64: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(atc + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3895:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3895:77: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(btc + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3906:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = atc[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3909:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = btc[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3916:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ean = _admit_warp_min(_amma_stage[BM, KB, NT, True, AST](at + nxt * ASZ, ra, tid, a_ofast))
+                                                                             ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3917:82: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var ebn = _admit_warp_min(_amma_stage[BN, KB, NT, False, BST](bt + nxt * BSZ, rb, tid, b_ofast))
+                                                                              ~~~^~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3919:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + sg] = ean
+                    ~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3920:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    wmin[nxt * 2 * NSG + NSG + sg] = ebn
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3933:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3943:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3957:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[Int(block_idx.y) * m * n + gi * n + gj] = outv[2 * (fm * FN + fq) + e]
+                        ~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3959:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        c[cbase + gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                        ~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7254:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7255:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7287:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7288:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7370:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7371:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7386:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7387:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7393:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7394:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7420:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:7421:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7678:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        qT[p * QST + r] = x
+        ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7682:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        emin[sg] = eq
+        ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7686:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        bq = min(bq, emin[w])
+                     ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7699:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kv[r * KST + p] = x
+            ~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7703:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            emin[sg] = ek
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7707:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bk = min(bk, emin[w])
+                         ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7716:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(qT + (8 * p8) * QST + fr * 8, QST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7716:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(qT + (8 * p8) * QST + fr * 8, QST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7717:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7717:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7720:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+                    ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7727:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        d = _step_preflushed(qT[p * QST + rl], kv[jl * KST + p], d)
+                                             ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7727:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        d = _step_preflushed(qT[p * QST + rl], kv[jl * KST + p], d)
+                                                               ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7728:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    tile[rl * 33 + jl] = d
+                    ~~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7738:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var masked = ftz(_pmul(tile[r * 33 + jj], scale_in) + Float32(0.0))
+                                           ~~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7818:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kv[c * VST + jj] = x
+            ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7834:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                wT[jj * WST + r] = w
+                ~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7838:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            emin[sg] = ev
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7839:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            emin[NSG + sg] = ew
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7844:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bv = min(bv, emin[w])
+                         ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7845:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bw = min(bw, emin[NSG + w])
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7863:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(wT + (k8 * 8) * WST + fr * 8, WST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7863:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var af = _amma_load_t(wT + (k8 * 8) * WST + fr * 8, WST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7864:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(kv + (fc * 8) * VST + k8 * 8, VST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7864:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    var bf = _amma_load_t(kv + (fc * 8) * VST + k8 * 8, VST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7879:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        wT[(k8 * 8 + kk) * WST + fr * 8 + frow],
+                                        ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:75:
+./transformer/impl/llama/fused_attention.mojo:7880:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                        kv[c * VST + k8 * 8 + kk],
+                                        ~~^~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:43:
+./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3669:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3669:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3671:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3677:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3683:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3683:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3685:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3691:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3719:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3719:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3719:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3722:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3728:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3730:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3730:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:46:
+./gemm/checks/gemm_identical.mojo:3730:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:55:
+./gemm/checks/gemm_int8_mma_tuned.mojo:2484:41: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    _pieces_with_plan[False](ctx, sp, sp.bitcast[Float32](), sp, sp, ah, al, bh, bl, m, n, k, plan)
+                                      ~~^~~~~~~~
+                                         unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:319:
+./gemm/checks/gemm_int15_heads.mojo:94:11: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        c + bh_idx * l * s, ea + bh_idx * l, eb + (bb * nkv + kvh) * s,
+        ~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:319:
+./gemm/checks/gemm_int15_heads.mojo:94:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        c + bh_idx * l * s, ea + bh_idx * l, eb + (bb * nkv + kvh) * s,
+                            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:319:
+./gemm/checks/gemm_int15_heads.mojo:94:49: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        c + bh_idx * l * s, ea + bh_idx * l, eb + (bb * nkv + kvh) * s,
+                                             ~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:174:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:242:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:339:42: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:339:59: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                      ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:341:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:341:74: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:342:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:342:74: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:211:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:451:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                ahf[fm] = _amma_load_t(ath + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                       ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:451:61: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                ahf[fm] = _amma_load_t(ath + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:452:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                       ~~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:452:61: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                alf[fm] = _amma_load_t(atl + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:454:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:454:74: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                bhf[fq] = _amma_load_t(bth + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:455:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:455:74: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                blf[fq] = _amma_load_t(btl + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:204:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[(p4 + e) * ST + r] = v
+                ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:235:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[(p4 + e) * ST + r] = v
+                ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:45:
+Imported from ./gemm/checks/gemm_int15.mojo:146:
+./gemm/checks/gemm_int15_apple.mojo:266:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[r * ST + p4 + e] = v
+                ~~~^~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:55:
+./gemm/checks/gemm_int8_mma_tuned.mojo:1726:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:55:
+./gemm/checks/gemm_int8_mma_tuned.mojo:1823:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    as_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:55:
+./gemm/checks/gemm_int8_mma_tuned.mojo:1824:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    bs_: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Imported from ./training/byte_lm.mojo:93:
+Imported from ./transformer/impl/llama/modeling_llama.mojo:314:
+Imported from ./transformer/impl/llama/int15_block.mojo:55:
+./gemm/checks/gemm_int8_mma_tuned.mojo:873:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Int32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:426:30: warning: assignment to 'out_p' was never used; assign to '_' instead?
+    var out_p = List[Float32]()
+                             ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:427:30: warning: assignment to 'out_m' was never used; assign to '_' instead?
+    var out_m = List[Float32]()
+                             ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:428:30: warning: assignment to 'out_v' was never used; assign to '_' instead?
+    var out_v = List[Float32]()
+                             ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:430:31: warning: assignment to 'out_flags' was never used; assign to '_' instead?
+    var out_flags = List[Bool]()
+                              ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:431:23: warning: assignment to 'loss' was never used; assign to '_' instead?
+    var loss = Float32(0)
+                      ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:432:23: warning: assignment to 'result_step' was never used; assign to '_' instead?
+    var result_step = completed
+                      ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1247:20: warning: assignment to 'session.busy' was never used; assign to '_' instead?
+    session.busy = True
+                   ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1362:9: warning: ref 'i' was never used, remove it?
+    for i in range(count):
+        ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1626:9: warning: ref 'i' was never used, remove it?
+    for i in range(count):
+        ^
+/root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:1744:9: warning: ref 'i' was never used, remove it?
+    for i in range(count):
+        ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:60:
+./training/byte_lm_model_pool.mojo:335:39: warning: assignment to 'values' was never used; assign to '_' instead?
+            var values = List[Float32]()
+                                      ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:579:20: warning: assignment to 'm' was never used; assign to '_' instead?
+    var m = Float32(0.0)
+                   ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:589:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:609:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:610:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn-amd-verify/bindings/_mojolearn_byte_lm.mojo:51:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:657:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built python/mojolearn/identical/_mojolearn_byte_lm.so; attention_memory_profile=estash; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence

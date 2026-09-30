@@ -1,0 +1,28 @@
+{
+  "backend": "hip",
+  "group": "budget",
+  "reverse_order": false,
+  "arrays": 2,
+  "ownership": [
+    1,
+    2,
+    false,
+    0
+  ],
+  "samples": [
+    {
+      "case": "budget.0",
+      "baseline_ms": 314.46985399816185,
+      "retained_ms": 4.036289996292908
+    },
+    {
+      "case": "budget.1",
+      "baseline_ms": 5.082858995592687,
+      "retained_ms": 3.7176100013311952
+    }
+  ],
+  "refusals": {},
+  "warm_baseline_median_ms": null,
+  "warm_retained_median_ms": null,
+  "binding_sha256": "eb611847d573b09590409362cecbcd7eb21fe30e95d4bee5779731999e61fed3"
+}

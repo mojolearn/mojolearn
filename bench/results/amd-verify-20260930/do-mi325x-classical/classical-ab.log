@@ -1,0 +1,36 @@
+COMMAND ["/root/classical-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/classical_pass_ab.py", "all", "--out", "/root/classical-pass/classical", "--ivf-off-so", "/root/classical-pass/native/_mojolearn_ivf.scan-off.so"]
+### lu-old-1024
+{"tag": "lu-old-1024", "ms": 9383.982482999272, "digest": "b53aeffc5bf56d980f02582434de9e06c89bea0fe0da49a93c265ab2c2708548", "status": null}
+### lu-new-1024
+{"tag": "lu-new-1024", "ms": 400.99700599967036, "digest": "b53aeffc5bf56d980f02582434de9e06c89bea0fe0da49a93c265ab2c2708548", "status": null}
+### lu-new-8192
+{"tag": "lu-new-8192", "ms": 11310.52333000116, "digest": "2a296d1d25da0a2c77bb94fb743e0f5e7300e509f15b576c2e8107357d6584e3", "status": null}
+{"tag": "lu-verdict", "same_digest": true, "speedup_at_digest_size": 23.40162730044669}
+### sgd-reg-old-20000
+{"tag": "sgd-reg-old-20000", "ms": 32253.422989000683, "digest": "f2571b6b6c94680d2064049a2dd8e61f5cf2372ac1a057bc0262c5fae5ea0ad8", "status": null}
+### sgd-reg-new-20000
+{"tag": "sgd-reg-new-20000", "ms": 3193.4750030050054, "digest": "f2571b6b6c94680d2064049a2dd8e61f5cf2372ac1a057bc0262c5fae5ea0ad8", "status": null}
+### sgd-reg-new-1000000
+{"tag": "sgd-reg-new-1000000", "ms": 174994.1538790008, "digest": "308d00bac4bac078b29f7df27b76e5d2aa6417ea3e15d80d6a60e43e44ba4c37", "status": null}
+{"tag": "sgd-reg-verdict", "same_digest": true, "speedup_at_digest_size": 10.099788775127648}
+### sgd-clf-old-20000
+{"tag": "sgd-clf-old-20000", "ms": 32544.936592996237, "digest": "a6cb75bf0e2f93da8e1bed8f10ddcd2f5343e106136f0400f2a0e38ef09b3512", "status": null}
+### sgd-clf-new-20000
+{"tag": "sgd-clf-new-20000", "ms": 3131.105047999881, "digest": "a6cb75bf0e2f93da8e1bed8f10ddcd2f5343e106136f0400f2a0e38ef09b3512", "status": null}
+### sgd-clf-new-1000000
+{"tag": "sgd-clf-new-1000000", "ms": 172840.68281099462, "digest": "bcac4b45fd82f48b9b4dfbcaf540fdd683a0c3ba9936aab6cac29a529c491f32", "status": null}
+{"tag": "sgd-clf-verdict", "same_digest": true, "speedup_at_digest_size": 10.394073687749831}
+### lars-old-200000
+{"tag": "lars-old-200000", "ms": 45703.20028399874, "digest": "97a2c17f10a7f5eee3240cb6beaa94896778509f5f2fe8d73acd2924f7016569", "status": null}
+### lars-new-200000
+{"tag": "lars-new-200000", "ms": 35842.176760001166, "digest": "97a2c17f10a7f5eee3240cb6beaa94896778509f5f2fe8d73acd2924f7016569", "status": null}
+### lars-new-1000000
+{"tag": "lars-new-1000000", "ms": 36663.65437800414, "digest": "88fba1aba928096eb3fcd66ec60acf614419fda2d6ef388c6fe088c4732241ab", "status": null}
+{"tag": "lars-verdict", "same_digest": true, "speedup_at_digest_size": 1.2751234555319249}
+### ivf-old-40000
+{"tag": "ivf-old-40000", "ms": 2258.23442699766, "digest": "deec079c73e236719706b252600cd9f73738ce2aeae213a19621e0d090e04417", "status": null}
+### ivf-new-40000
+{"tag": "ivf-new-40000", "ms": 831.8519479944371, "digest": "deec079c73e236719706b252600cd9f73738ce2aeae213a19621e0d090e04417", "status": null}
+### ivf-new-400000
+{"tag": "ivf-new-400000", "ms": 4041.9003550050547, "digest": "26a769d35c913838182682f8609813564afeb1457475acda2baba53ba239f156", "status": null}
+{"tag": "ivf-verdict", "same_digest": true, "speedup_at_digest_size": 2.7147071452344087}

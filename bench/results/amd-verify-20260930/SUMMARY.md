@@ -13,3 +13,22 @@ board's AMD part finished. Parts 2 and 3 (classical pass, priority pass) still r
 | fixed15 price harness, 422 DIGEST lines, transposed tile on and off | 0 differ | yes (= L40S) |
 | fused small-MLP step vs per-operation, 64 steps, 256 and 32 rows | PASS, every byte equal (1.41x / 1.43x) | — |
 | small-MLP GPU gate, fused and per-operation | 26 / 26 each | — |
+
+## Part 2: classical pass on AMD (tools/classical_pass_run.py amd)
+
+Old path vs new path on AMD: same digest for all five (LU 23.4x, SGD-reg 10.1x, SGD-clf 10.4x, LARS 1.28x, IVF 2.71x
+at the digest shapes). Neural toggle sweep on AMD: every experiment's digests equal to baseline.
+
+**Cross-vendor: THREE CASES DIFFER FROM NVIDIA, old and new paths alike (so not caused by the fixes).**
+
+| case | NVIDIA L40S (= L4 0.8.31 wheel GPU = CPU) | AMD (this job, cold gfx942 build) |
+|---|---|---|
+| LU 1024 / 8192 | b53aeffc5bf56d98 / 2a296d1d25da0a2c | same / same |
+| SGD-clf 20000 / 1000000 | a6cb75bf0e2f93da / bcac4b45fd82f48b | same / same |
+| **SGD-reg 20000 / 1000000** | 431ad9f1214c29a2 / f07701df3903e412 | **f2571b6b6c94680d / 308d00bac4bac078** |
+| **LARS 200000** / 1000000 | 356afc301a0d55c1 / 88fba1aba928096e | **97a2c17f10a7f5ee** / same |
+| **IVF 40000** / 400000 | 5bf7822421de6cd5 / 26a769d35c913838 | **deec079c73e23671** / same |
+
+The released 0.8.31 wheel on the L4 gives the NVIDIA digests on both its GPU and CPU columns, so the CPU
+reference agrees with NVIDIA. Next: the released 0.8.31 wheel (cached gfx942 binaries) on AMD, GPU and CPU
+columns, to tell a cold-build artifact from a shipped divergence.
