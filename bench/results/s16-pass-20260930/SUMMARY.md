@@ -22,3 +22,8 @@ Job `tools/s16_job.sh` (nvc1-0001). Overlay: mojolearn 0.8.31, Python sources an
 | samba-forward / lm-forward / lm-train-step (flush off -> on) | 16.3 / 91.0 / 116.0 ms | 14.9 / 85.9 / 109.1 ms |
 
 `regs` is 3-15% faster than the `regs2` default on the L4 (same bits). AMD and Apple: not run.
+
+## fixed15 plan table (L4, product `int15i64.v1.tuned`, table vs `MOJOLEARN_INT15_BOX=high`)
+422 digests, 0 differ. Table faster on lm_head t512 (1.44x), mlp_up t512 (1.49x), mlp_down bwd_dx (1.46x),
+mlp_up bwd_dw (1.26x), lm_head bwd_dw (1.22x); even elsewhere, except mlp_down t512 bwd_dw: table 5.100 ms vs
+high 4.384 ms (the table is 14% slower on that row; the dW rule change did not return it to the H100 choice on the L4).
