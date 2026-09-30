@@ -1039,13 +1039,32 @@ class SkewedChi2Sampler(_XNeighbors):
 # ====================================================================== LabelPropagation
 class _LabelPropagationBase(_XNeighbors):
     """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
-    graph (rbf, or the knn connectivity graph with each row's own point as
-    its first neighbor), the product / clamp iteration with their stopping
+    RBF graph or compact kNN connectivity graph (including each row's own
+    point as its first neighbor), the product / clamp iteration with their stopping
     rule (sum |L - L_prev| < tol, checked before each step), the final row
     normalization and `transduction_`. Callable kernels are refused. Float32
     where theirs is float64; the neighbor ties go to the lower index."""
 
     _variant = None
+
+    def _compact_graph(self, idx, n_reference, variant):
+        n, k = idx.shape
+        cols = empty((n, k), "<i4")
+        vals = empty((n, k), "<f4")
+        self._op("lp_knn_graph", [(idx, 0), (cols, 1), (vals, 1)],
+                 (n, n_reference, k, variant))
+        return cols, vals, n_reference
+
+    def _graph_product(self, G, labels):
+        if not isinstance(G, tuple):
+            return self._matmul(G, labels)
+        cols, vals, m = G
+        n, k = cols.shape
+        c = labels.shape[1]
+        out = _empty_out((n, c), "<f4")
+        self._op("lp_knn_product", [(cols, 0), (vals, 0), (labels, 0), (out, 1)],
+                 (n, m, k, c))
+        return out
 
     def _graph_affinity(self, X):
         n = X.shape[0]
@@ -1075,11 +1094,16 @@ class _LabelPropagationBase(_XNeighbors):
         else:
             a = _f32_scalar(1.0 - float(self.alpha))
             ys = [[a * v for v in row] for row in ld0]
-        G = self._build_graph(X)
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_sq(X, X, k, False)
+            G = self._compact_graph(idx, n, 0 if self._variant == "propagation" else 1)
+        else:
+            G = self._build_graph(X)
         ld = Array.from_list(ld0, "<f4")
         ystatic = Array.from_list(ys, "<f4")
         unlabeled = _i32(unl, "unlabeled")
-        if not _HOST_LOOP_LP:
+        if not _HOST_LOOP_LP and not isinstance(G, tuple):
             # The loop below as ONE resident op (x_neighbors/iter_device.mojo):
             # the same items in the same order, the graph uploaded once, tol
             # passed as its float64 bits so the stopping test is Python's.
@@ -1102,7 +1126,7 @@ class _LabelPropagationBase(_XNeighbors):
                 converged = True
                 break
             prev = ld
-            nxt = self._matmul(G, ld)
+            nxt = self._graph_product(G, ld)
             out = _empty_out((n, C), "<f4")
             if self._variant == "propagation":
                 self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
@@ -1131,11 +1155,10 @@ class _LabelPropagationBase(_XNeighbors):
         if self.kernel == "knn":
             k = min(int(self.n_neighbors), n)
             _, idx = self._knn_sq(Q, self.X_, k, False)
-            W = _empty_out((nq, n), "<f4")
-            self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
+            W = self._compact_graph(idx, n, 2)
         else:
             W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
-        P = self._matmul(W, self.label_distributions_)
+        P = self._graph_product(W, self.label_distributions_)
         out = empty(P.shape, "<f4")
         self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
         return out

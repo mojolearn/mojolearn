@@ -57,6 +57,13 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
     # (x_linear/tops.mojo); the path itself (d x d) on the lead.
     var ym = Float32(0)
     comptime if is_gpu():
+        # ip[4] (device only; x_linear/device.mojo `fit_device` always
+        # appends it for LARS): 1 when `xg_gram_kernel` already wrote the
+        # centered Gram into fw[gg, gg + d*d) from the same means, so the
+        # team's own Gram, 96 million-row chains per thread on one block,
+        # is skipped. The means are recomputed here regardless (the same
+        # statements give the same values).
+        var pre_gram = ldi(ip, 4) != 0
         if fi:
             t_col_means(t, x, n, d, fw, xm)
             ym = t_mean(t, y, n, 1)
@@ -64,7 +71,8 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
             if t.lead():
                 fill(fw, xm, d, Float32(0))
             t.sync()
-        t_centered_gram(t, x, n, d, fw, xm, fw, gg)
+        if not pre_gram:
+            t_centered_gram(t, x, n, d, fw, xm, fw, gg)
         t_centered_xty(t, x, y, n, d, fw, xm, ym, fw, xty)
     else:
         # the host: one row pass per statistic, vector accumulators (lane linear-cpu)

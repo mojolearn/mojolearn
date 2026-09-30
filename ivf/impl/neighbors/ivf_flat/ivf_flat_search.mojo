@@ -92,6 +92,7 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     fast_ivf_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.gpu import WARP_SIZE
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE
 from ivf.checks.list_layout import (
@@ -155,17 +156,25 @@ measurement."""
 
 comptime IVF_IDENTICAL_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"]()
 )
-"""IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
+"""lane/neural-net-experiment (2026-09-30, the classical pass): EVERY
+vendor, not Apple alone. The Apple gate left NVIDIA and AMD on the host
+round trip per query: 526 s on an L40S and 265 s on an MI325X for
+`classical2/ivf` on istella (4,000 queries), against 4.9 s on an M3 Ultra
+running this kernel (bench_board 0.8.25). The kernel is written on
+WARP_SIZE (its launch below and its lane merge follow it), and its
+arithmetic is the pinned path's term for term; the identity gate on each
+vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
+restores the per-query path.
+
+IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
 for every query in one launch (`identical_ivf_scan.mojo`), the pinned
 distance arithmetic and the `(distance, original index)` key, instead of a
 host round trip per query. Same neighbours, same order, same bits."""
 
 comptime IVF_FAST_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_IVF_FAST_SCAN_OFF"]()
 )
 """FAST on Apple: steps 3-5 for every query in one launch
@@ -697,7 +706,7 @@ def ivf_flat_search_prepared(
                                 Int32(n_queries), Int32(dim), Int32(n_probes),
                                 Int32(k),
                                 grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                block_dim=IIVF_QPB * 32,
+                                block_dim=IIVF_QPB * WARP_SIZE,
                             )
                         else:
                             ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
@@ -707,7 +716,7 @@ def ivf_flat_search_prepared(
                                 d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
                                 Int32(n_queries), Int32(dim), Int32(n_probes),
                                 Int32(k),
-                                grid_dim=grid, block_dim=FIVF_QPB * 32,
+                                grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
                             )
                 var fd = download_f32(ctx, d_od, n_queries * k)
                 var fi = download_u32(ctx, d_oi, n_queries * k)

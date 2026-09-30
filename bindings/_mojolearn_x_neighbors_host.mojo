@@ -11,7 +11,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_neighbors.eigh import op_eigh
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from x_neighbors.host_ops import X_NEIGHBORS_HOST_SABOTAGE, op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_ocsvm, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_louvain, op_svgp, op_svgp_var
-from x_neighbors.iter_host import op_lp_iterate, op_pr_iterate, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_predict
+from x_neighbors.iter_host import op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_kpca_transform, op_kernel_matmul, op_svgp_stats, op_svgp_predict
 
 
 def _a(v: PythonObject, k: Int) raises -> Int:
@@ -650,6 +650,33 @@ def svgp_var_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     return PythonObject(None)
 
 
+def lp_knn_graph_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_idx = _a(a_, 0)
+    var v_cols = _a(a_, 1)
+    var v_vals = _a(a_, 2)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_k = _n(i_, 2)
+    var v_variant = _n(i_, 3)
+    with GILReleased(Python()):
+        op_lp_knn_graph(v_idx, v_cols, v_vals, v_n, v_m, v_k, v_variant)
+    return PythonObject(None)
+
+
+def lp_knn_product_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
+    var v_cols = _a(a_, 0)
+    var v_vals = _a(a_, 1)
+    var v_x = _a(a_, 2)
+    var v_res = _a(a_, 3)
+    var v_n = _n(i_, 0)
+    var v_m = _n(i_, 1)
+    var v_k = _n(i_, 2)
+    var v_c = _n(i_, 3)
+    with GILReleased(Python()):
+        op_lp_knn_product(v_cols, v_vals, v_x, v_res, v_n, v_m, v_k, v_c)
+    return PythonObject(None)
+
+
 def lp_iterate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_g = _a(a_, 0)
     var v_ld = _a(a_, 1)
@@ -866,6 +893,8 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[louvain_binding]("xn_louvain")
     m.def_function[svgp_binding]("xn_svgp")
     m.def_function[svgp_var_binding]("xn_svgp_var")
+    m.def_function[lp_knn_graph_binding]("xn_lp_knn_graph")
+    m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
     m.def_function[lp_iterate_binding]("xn_lp_iterate")
     m.def_function[pr_iterate_binding]("xn_pr_iterate")
     m.def_function[pcs_resident_binding]("xn_pcs_resident")

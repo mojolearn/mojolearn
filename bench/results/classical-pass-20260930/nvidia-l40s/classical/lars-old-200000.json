@@ -1,0 +1,12 @@
+{
+  "ms": 9162.008454091847,
+  "digest": "356afc301a0d55c121bfb817effa6f9f818459b6e628f88b73efd5558868a476",
+  "quality": {
+    "score": 0.9999581365430179
+  },
+  "case": "lars",
+  "size": 200000,
+  "env": {
+    "MOJOLEARN_X_LINEAR_LARS_GRID_GRAM": "0"
+  }
+}

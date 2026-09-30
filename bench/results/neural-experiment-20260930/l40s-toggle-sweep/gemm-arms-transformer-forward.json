@@ -1,0 +1,108 @@
+[
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {},
+  "first": {
+   "transformer-forward": 785.663
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.59
+  },
+  "name": "baseline",
+  "returncode": 0,
+  "stderr_tail": "4395 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b1040000000, nodemask=2)\n4395 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x533f40000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_GEMM_ARM": "tuned128"
+  },
+  "first": {
+   "transformer-forward": 766.131
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.562
+  },
+  "name": "gemm_arm_tuned128",
+  "returncode": 0,
+  "stderr_tail": "4478 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x110cc0000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_GEMM_ARM": "half"
+  },
+  "first": {
+   "transformer-forward": 774.894
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.541
+  },
+  "name": "gemm_arm_half",
+  "returncode": 0,
+  "stderr_tail": "4580 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5234c0000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_GEMM_ARM": "quarter"
+  },
+  "first": {
+   "transformer-forward": 786.424
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.622
+  },
+  "name": "gemm_arm_quarter",
+  "returncode": 0,
+  "stderr_tail": "4661 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33a400000000, nodemask=1)\n"
+ },
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_GEMM_ARM": "kpack"
+  },
+  "first": {
+   "transformer-forward": 938.861
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.679
+  },
+  "name": "gemm_arm_kpack",
+  "returncode": 0,
+  "stderr_tail": "4744 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x305900000000, nodemask=1)\n4744 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a2a00000000, nodemask=2)\n"
+ },
+ {
+  "digest": {
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_GEMM_ARM": "kfoldv"
+  },
+  "first": {
+   "transformer-forward": 818.942
+  },
+  "losses": {},
+  "median": {
+   "transformer-forward": 2.559
+  },
+  "name": "gemm_arm_kfoldv",
+  "returncode": 0,
+  "stderr_tail": "4846 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31cd80000000, nodemask=1)\n"
+ }
+]
