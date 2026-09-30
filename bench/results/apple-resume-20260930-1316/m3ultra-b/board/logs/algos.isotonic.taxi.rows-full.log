@@ -1,0 +1,12 @@
+
+=== 2026-09-30T11:27:45Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane isotonic --dataset taxi --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/board-resume/board/raw/algos/rows-full --work /Users/ec2-user/board-resume/board/work --ours-python /Users/ec2-user/board-resume/cache/venv/bin/python --theirs-python /Users/ec2-user/board-resume/cache/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/isotonic", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "ours-fast", "sklearn-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=isotonic dataset=taxi arm=ours round=0 ms=1411.742 infer_ms=9.270209000533214 digest=7fcaec126a7e2767
+ALGOS-ROUND lane=isotonic dataset=taxi arm=ours-fast round=0 ms=21324.853 infer_ms=9.409249998498126 digest=7fcaec126a7e2767
+ALGOS-ROUND lane=isotonic dataset=taxi arm=sklearn-cpu round=0 ms=90.164 infer_ms=4.660082999180304 digest=d736990c55dae982
+ALGOS-ROUND lane=isotonic dataset=taxi arm=ours-fast round=1 ms=1342.680 infer_ms=9.282125000027008 digest=7fcaec126a7e2767
+ALGOS-ROUND lane=isotonic dataset=taxi arm=sklearn-cpu round=1 ms=90.470 infer_ms=4.564208000374492 digest=d736990c55dae982
+ALGOS-ROUND lane=isotonic dataset=taxi arm=ours round=1 ms=1404.785 infer_ms=9.07862500025658 digest=7fcaec126a7e2767
+ALGOS lane=isotonic dataset=taxi arm=ours status=ok median_ms=1404.7853749998467 quality={"finite": true, "r2": 0.8970688429121374, "rmse": 5.109874317483644}
+ALGOS lane=isotonic dataset=taxi arm=ours-fast status=ok median_ms=1342.679916000634 quality={"finite": true, "r2": 0.8970688429121374, "rmse": 5.109874317483644}
+ALGOS lane=isotonic dataset=taxi arm=sklearn-cpu status=ok median_ms=90.46983400003228 quality={"finite": true, "r2": 0.8970688434403619, "rmse": 5.109874304372162}

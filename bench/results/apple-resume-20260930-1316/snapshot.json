@@ -1,0 +1,18 @@
+{
+  "m3ultra-b": {
+    "archive_sha256": "3a55a4f2219f311ea0fdefcbc5d5e0f088b54fa99ada139dc0c05beef161bcc5",
+    "backup_utc": "2026-09-30T13:16:35.482037+00:00",
+    "planned": 431,
+    "records_in_plan": 129,
+    "missing": 302,
+    "neural_missing": []
+  },
+  "m2pro": {
+    "archive_sha256": "4cf65925ea49dbffddd85b4ecf3af4ebd7ac50b859d9c9157bf7d58b5da07b8b",
+    "backup_utc": "2026-09-30T13:16:39.239158+00:00",
+    "planned": 431,
+    "records_in_plan": 106,
+    "missing": 325,
+    "neural_missing": []
+  }
+}

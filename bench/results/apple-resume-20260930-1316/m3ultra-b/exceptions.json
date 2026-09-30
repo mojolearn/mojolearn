@@ -1,0 +1,6 @@
+{
+  "algos/logreg-cv/taxi/rows=full": {
+    "exit": 124,
+    "reason": "No race result; inspect measurements.log; never counted as complete"
+  }
+}

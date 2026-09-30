@@ -1,0 +1,6 @@
+
+=== 2026-09-30T08:17:28Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py race --lane gemm-int8 --shape full --arms ours --rounds 1 --out /Users/ec2-user/board-resume/board/raw/neural/shape-full --work /Users/ec2-user/board-resume/board/work --ours-python /Users/ec2-user/board-resume/cache/venv/bin/python --theirs-python /Users/ec2-user/board-resume/cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-int8", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-int8 arm=ours round=0 ms=6462.806 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=1 ms=6425.101 digest=9b16c7064e10cecd
+NEURAL lane=gemm-int8 arm=ours status=ok median_ms=6425.100875000226 quality={"max_rel_err_vs_fp64": 0.0}

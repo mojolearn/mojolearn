@@ -1,0 +1,4 @@
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/neighbors/_nearest_centroid.py:244: UserWarning: self.within_class_std_dev_ has at least 1 zero standard deviation.Inputs within the same classes for at least 1 feature are identical.
+  warnings.warn(
+/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/sklearn/neighbors/_nearest_centroid.py:244: UserWarning: self.within_class_std_dev_ has at least 1 zero standard deviation.Inputs within the same classes for at least 1 feature are identical.
+  warnings.warn(

@@ -1,0 +1,634 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "samba-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-samba-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "ddce61948b8456e0",
+        "ddce61948b8456e0"
+      ],
+      "info": {
+        "call": "mojolearn.SambaStack(config, weights).forward(inputs)",
+        "config": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/mojolearn/_samba_impl.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 96.36054200018407,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 285.2,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 329.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        96.36054200018407
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "config_readback": "{\"d_model\": 384, \"dropout\": 0.0, \"head_dim\": 64, \"intermediate\": 1024, \"layers\": [\"mamba3\", \"attention\", \"mamba3\", \"attention\"], \"n_heads\": 6, \"n_kv_heads\": 6, \"norm_eps\": 9.999999747378752e-06, \"tie_embeddings\": true, \"vocab\": 256}",
+        "dropout": 0.0,
+        "eps": 1e-05,
+        "max_grad_norm": "n/a",
+        "rope_theta": 10000.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 139.463541999703
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "samba-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-samba-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "REFUSED: torch-compile-bf16 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils.h>\\n\\n\\n    [[max_total_threads_per_threadgroup(384)]]\\n    kernel void generated_kernel_0(\\n        device bfloat* out_ptr1,\\n        constant long* in_ptr0,\\n        constant float* in_ptr1,\\n        constant float* in_ptr2,\\n        device c10::metal::ErrorMessages* error_buf,\\n        uint2 thread_pos [[thread_position_in_grid]],\\n        uint2 group_pos [[thread_position_in_threadgroup]]\\n    ) {\\n        auto xindex = thread_pos.x;\\n        auto r0_index = thread_pos.y;\\n        int x0 = xindex;\\n        int r0_1 = r0_index;\\n        threadgroup float tmp_acc_0[12];\\n        auto tmp0 = in_ptr0[x0];\\n        if ((tmp0 < 0 || tmp0 >= 256)) {\\n            TORCH_REPORT_ERROR(error_buf, \"Index \", tmp0, \" out of range [0, \", 256, \")\");\\n            return;\\n        }\\n        auto tmp1 = in_ptr1[r0_1 + 384*tmp0];\\n        auto tmp2 = tmp1 * tmp1;\\n        auto tmp3 = c10::metal::threadgroup_sum(tmp_acc_0, tmp2, r0_index * 1, 384);\\n        auto tmp4 = in_ptr2[r0_1];\\n        if ((tmp0 < 0 || tmp0 >= 256)) {\\n            TORCH_REPORT_ERROR(error_buf, \"Index \", tmp0, \" out of range [0, \", 256, \")\");\\n            return;\\n        }\\n        auto tmp5 = 0.0026041666666666665;\\n        auto tmp6 = tmp3 * tmp5;\\n        auto tmp7 = 1e-05;\\n        auto tmp8 = tmp6 + tmp7;\\n        auto tmp9 = metal::precise::sqrt(tmp8);\\n        auto tmp10 = 1.0;\\n        auto tmp11 = tmp10 / tmp9;\\n        auto tmp12 = tmp11 * tmp10;\\n        auto tmp13 = tmp1 * tmp12;\\n        auto tmp14 = tmp4 * tmp13;\\n        auto tmp15 = static_cast<bfloat>(tmp14);\\n        out_ptr1[r0_1 + 384*x0] = static_cast<bfloat>(tmp15);\\n    }\\n\\n\\n\\n\\n    kernel void generated_kernel_1(\\n        device bfloat* out_ptr0,\\n        constant float* in_ptr0,\\n        device c10::metal::ErrorMessages* error_buf,\\n        uint xindex [[thread_position_in_grid]]\\n    ) {\\n   ",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "no_grad forward of the same stack twin to logits",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 8
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 8,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+        "version": "2.13.0"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "dropout": 0.0,
+        "eps": 1e-05,
+        "max_grad_norm": "n/a",
+        "rope_theta": 10000.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "samba-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-samba-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "REFUSED: torch-compile-fp32 on mps failed in round 0 (compile happens here): InductorError('SyntaxError: failed to compile #include <c10/metal/error.h>\\n#include <c10/metal/reduction_utils.h>\\n#include <c10/metal/utils.h>\\n\\n\\n    [[max_total_threads_per_threadgroup(384)]]\\n    kernel void generated_kernel_0(\\n        device float* out_ptr1,\\n        constant long* in_ptr0,\\n        constant float* in_ptr1,\\n        constant float* in_ptr2,\\n        device c10::metal::ErrorMessages* error_buf,\\n        uint2 thread_pos [[thread_position_in_grid]],\\n        uint2 group_pos [[thread_position_in_threadgroup]]\\n    ) {\\n        auto xindex = thread_pos.x;\\n        auto r0_index = thread_pos.y;\\n        int x0 = xindex;\\n        int r0_1 = r0_index;\\n        threadgroup float tmp_acc_0[12];\\n        auto tmp0 = in_ptr0[x0];\\n        if ((tmp0 < 0 || tmp0 >= 256)) {\\n            TORCH_REPORT_ERROR(error_buf, \"Index \", tmp0, \" out of range [0, \", 256, \")\");\\n            return;\\n        }\\n        auto tmp1 = in_ptr1[r0_1 + 384*tmp0];\\n        auto tmp2 = tmp1 * tmp1;\\n        auto tmp3 = c10::metal::threadgroup_sum(tmp_acc_0, tmp2, r0_index * 1, 384);\\n        auto tmp4 = in_ptr2[r0_1];\\n        if ((tmp0 < 0 || tmp0 >= 256)) {\\n            TORCH_REPORT_ERROR(error_buf, \"Index \", tmp0, \" out of range [0, \", 256, \")\");\\n            return;\\n        }\\n        auto tmp5 = 0.0026041666666666665;\\n        auto tmp6 = tmp3 * tmp5;\\n        auto tmp7 = 1e-05;\\n        auto tmp8 = tmp6 + tmp7;\\n        auto tmp9 = metal::precise::sqrt(tmp8);\\n        auto tmp10 = 1.0;\\n        auto tmp11 = tmp10 / tmp9;\\n        auto tmp12 = tmp11 * tmp10;\\n        auto tmp13 = tmp1 * tmp12;\\n        auto tmp14 = tmp4 * tmp13;\\n        out_ptr1[r0_1 + 384*x0] = static_cast<float>(tmp14);\\n    }\\n\\n\\n\\n\\n    [[max_total_threads_per_threadgroup(128)]]\\n    kernel void generated_kernel_1(\\n        device float* out_ptr0,\\n        constant float* in_ptr0,\\n        device c10::metal::ErrorMessages* error_buf,\\n        uint2 thread_pos [[thread_position_in_grid]],\\n        uin",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "autocast_probe": null,
+        "call": "no_grad forward of the same stack twin to logits",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 8
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 8,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+        "version": "2.13.0"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "dropout": 0.0,
+        "eps": 1e-05,
+        "max_grad_norm": "n/a",
+        "rope_theta": 10000.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "samba-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-samba-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "63e8fabe8920d1c4",
+        "63e8fabe8920d1c4"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "no_grad forward of the same stack twin to logits",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 8
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 8,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+        "version": "2.13.0"
+      },
+      "median_ms": 52.76420800009873,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": 168.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 436.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": 168.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 438.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        52.76420800009873
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "dropout": 0.0,
+        "eps": 1e-05,
+        "max_grad_norm": "n/a",
+        "rope_theta": 10000.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 771.1821249999957
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "samba-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-samba-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9d10c9ef60171778",
+        "9d10c9ef60171778"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "no_grad forward of the same stack twin to logits",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 8
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 8,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "embedding; per layer mamba/corpus/gen_corpus.py m3_forward or tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps 1e-5; tied head; mean CE",
+        "version": "2.13.0"
+      },
+      "median_ms": 57.79495900014808,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": 168.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 432.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": 168.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 440.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        57.79495900014808
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "dropout": 0.0,
+        "eps": 1e-05,
+        "max_grad_norm": "n/a",
+        "rope_theta": 10000.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 574.257082999793
+    }
+  },
+  "commit": "a19d159d7d3a7322d0159e6c3482de29c4464109",
+  "dataset": "bytes",
+  "finished": "2026-09-30T08:12:50Z",
+  "inputs": {
+    "init": "SambaStack._init_tensor rules on default_rng(7)",
+    "lane": "samba-forward",
+    "parameters": 5664944,
+    "schedule": "the LM lanes' byte schedule",
+    "seed": 7,
+    "sha256": {
+      "batches": "9228fa406a3dd38c",
+      "w:embed.weight": "540d8713e7b354aa",
+      "w:layers.0.B_bias": "4fcbec4ade9b5fcf",
+      "w:layers.0.B_norm.weight": "02722f124d0f1736",
+      "w:layers.0.C_bias": "4fcbec4ade9b5fcf",
+      "w:layers.0.C_norm.weight": "02722f124d0f1736",
+      "w:layers.0.D": "6ea78411bee8a810",
+      "w:layers.0.block_norm.weight": "702cc37cfd91cac6",
+      "w:layers.0.dt_bias": "d8e72877d64b91eb",
+      "w:layers.0.in_proj.weight": "48bb34097b6a9c5f",
+      "w:layers.0.out_proj.weight": "5172ae34002f8d44",
+      "w:layers.1.down_proj.weight": "1148da1e4f95ab17",
+      "w:layers.1.gate_proj.weight": "b6416587cad9ec3c",
+      "w:layers.1.input_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.1.k_proj.weight": "64431f5df0a31abd",
+      "w:layers.1.o_proj.weight": "0be228f877a95b4b",
+      "w:layers.1.post_attention_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.1.q_proj.weight": "a52e55fedd7a0210",
+      "w:layers.1.up_proj.weight": "faed6044fbe4a9b3",
+      "w:layers.1.v_proj.weight": "96a2de8c487c2b16",
+      "w:layers.2.B_bias": "4fcbec4ade9b5fcf",
+      "w:layers.2.B_norm.weight": "02722f124d0f1736",
+      "w:layers.2.C_bias": "4fcbec4ade9b5fcf",
+      "w:layers.2.C_norm.weight": "02722f124d0f1736",
+      "w:layers.2.D": "6ea78411bee8a810",
+      "w:layers.2.block_norm.weight": "702cc37cfd91cac6",
+      "w:layers.2.dt_bias": "f7048b7c9592a8e0",
+      "w:layers.2.in_proj.weight": "9671583a3aef641b",
+      "w:layers.2.out_proj.weight": "0c2d4ec038a30128",
+      "w:layers.3.down_proj.weight": "117bd15e3846fe4a",
+      "w:layers.3.gate_proj.weight": "ebf3c632489bb0d1",
+      "w:layers.3.input_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.3.k_proj.weight": "894f40e9497e613f",
+      "w:layers.3.o_proj.weight": "6a70eb72ec82c8b5",
+      "w:layers.3.post_attention_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.3.q_proj.weight": "ba0bd8c3c76adc2c",
+      "w:layers.3.up_proj.weight": "84335d5dd21f303b",
+      "w:layers.3.v_proj.weight": "9f3f43c14357e323",
+      "w:norm_f.weight": "702cc37cfd91cac6"
+    },
+    "shape": {
+      "batch": 2,
+      "d_model": 384,
+      "intermediate": 1024,
+      "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "layers": [
+        "mamba3",
+        "attention",
+        "mamba3",
+        "attention"
+      ],
+      "length": 512,
+      "n_heads": 6,
+      "name": "full",
+      "vocab": 256
+    },
+    "steps": 2,
+    "stream": {
+      "bytes": 12377620,
+      "files": 169,
+      "package_dir": "/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/mojolearn",
+      "sha256": "cd31155c8727dcea4c7252a1de1097c2ee5d49f545ddc4d199b1743b755a7119",
+      "source": "installed mojolearn package .py sources, sorted by path, concatenated"
+    }
+  },
+  "lane": "samba-forward",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "dropout": 0.0,
+          "eps": 1e-05,
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "dropout": 0.0,
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "dropout": 0.0,
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "dropout": 0.0,
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "dropout": 0.0,
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 0.0,
+        "param": "dropout",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 0.0,
+        "param": "dropout",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 0.0,
+        "param": "dropout",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 0.0,
+        "param": "dropout",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      }
+    ],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/samba-forward",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "mean_nll": 5.635909657868805
+    },
+    "torch-eager-bf16": {
+      "max_abs_diff_vs_ours": 0.016691718250513077,
+      "max_rel_diff_vs_ours": 0.009384270651553388,
+      "mean_nll": 5.636022721380185
+    },
+    "torch-eager-fp32": {
+      "max_abs_diff_vs_ours": 2.6226043701171875e-06,
+      "max_rel_diff_vs_ours": 1.4744575035209375e-06,
+      "mean_nll": 5.635909674282805
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+  "shape_record": {
+    "batch": 2,
+    "d_model": 384,
+    "intermediate": 1024,
+    "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+    "layers": [
+      "mamba3",
+      "attention",
+      "mamba3",
+      "attention"
+    ],
+    "length": 512,
+    "n_heads": 6,
+    "name": "full",
+    "vocab": 256
+  },
+  "started": "2026-09-30T08:10:15Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-compile-fp32": "float32, TF32 off",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-fp32": "float32, TF32 off"
+  }
+}

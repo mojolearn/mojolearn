@@ -1,0 +1,129 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/board-resume/cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gemm-int8",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/board-resume/board/work/neural-gemm-int8-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9b16c7064e10cecd",
+        "9b16c7064e10cecd"
+      ],
+      "info": {
+        "call": "mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/board-resume/cache/venv/lib/python3.13/site-packages/mojolearn/linalg.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "profile": "mojolearn.identical.gemm.fp32.v1",
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 6425.100875000226,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 218.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 234.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        6425.100875000226
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 6462.805708999895
+    }
+  },
+  "commit": "a19d159d7d3a7322d0159e6c3482de29c4464109",
+  "dataset": "gaussian",
+  "finished": "2026-09-30T08:17:42Z",
+  "inputs": {
+    "inputs": "A [m,k], B [n,k] = default_rng(7).integers(-127, 128) int8; C = A B^T",
+    "lane": "gemm-int8",
+    "seed": 7,
+    "sha256": {
+      "a": "4157ef2ec27e9864",
+      "b": "43e1e9a5539cbe4b"
+    },
+    "shape": {
+      "k": 4096,
+      "label": "4096x4096x4096",
+      "m": 4096,
+      "n": 4096,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "gemm-int8",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/gemm-int8",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_err_vs_fp64": 0.0
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "4096x4096x4096",
+  "shape_record": {
+    "k": 4096,
+    "label": "4096x4096x4096",
+    "m": 4096,
+    "n": 4096,
+    "name": "full"
+  },
+  "started": "2026-09-30T08:17:28Z",
+  "torch_settings": {}
+}

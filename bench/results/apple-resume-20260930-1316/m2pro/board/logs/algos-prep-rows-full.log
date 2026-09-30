@@ -1,0 +1,66 @@
+
+=== 2026-09-30T08:17:45Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes huber --datasets taxi
+CTD-PREP block=reg-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+MORE-PREP dataset=taxi seconds=0.4
+
+=== 2026-09-30T08:32:48Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes huber --datasets istella
+CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+MORE-PREP dataset=istella seconds=4.0
+
+=== 2026-09-30T08:42:09Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes bayesian-ridge --datasets taxi
+
+=== 2026-09-30T08:42:17Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes bayesian-ridge --datasets istella
+
+=== 2026-09-30T08:59:30Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ard --datasets taxi
+
+=== 2026-09-30T08:59:36Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ard --datasets istella
+
+=== 2026-09-30T09:06:13Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lars --datasets taxi
+
+=== 2026-09-30T09:06:19Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lars --datasets istella
+
+=== 2026-09-30T09:07:27Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lasso-lars --datasets taxi
+
+=== 2026-09-30T09:07:33Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lasso-lars --datasets istella
+
+=== 2026-09-30T09:08:25Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes quantile --datasets taxi
+
+=== 2026-09-30T09:21:01Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes quantile --datasets istella
+
+=== 2026-09-30T10:28:53Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes perceptron --datasets taxi
+CTD-PREP block=cls-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+MORE-PREP dataset=taxi seconds=0.5
+
+=== 2026-09-30T10:32:19Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes perceptron --datasets istella
+CTD-PREP block=cls-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+MORE-PREP dataset=istella seconds=4.1
+
+=== 2026-09-30T10:48:21Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes pa-clf --datasets taxi
+
+=== 2026-09-30T10:51:46Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes pa-clf --datasets istella
+
+=== 2026-09-30T11:12:15Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes pa-reg --datasets taxi
+
+=== 2026-09-30T11:17:18Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes pa-reg --datasets istella
+
+=== 2026-09-30T11:38:16Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ridge-clf --datasets taxi
+
+=== 2026-09-30T11:38:24Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ridge-clf --datasets istella
+
+=== 2026-09-30T11:39:33Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes sgd-ocsvm --datasets taxi
+
+=== 2026-09-30T11:43:02Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes sgd-ocsvm --datasets istella
+
+=== 2026-09-30T11:59:47Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ridge-cv --datasets taxi
+
+=== 2026-09-30T11:59:55Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes ridge-cv --datasets istella
+
+=== 2026-09-30T12:07:25Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lasso-cv --datasets taxi
+
+=== 2026-09-30T12:07:55Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes lasso-cv --datasets istella
+
+=== 2026-09-30T12:27:56Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes enet-cv --datasets taxi
+
+=== 2026-09-30T12:28:27Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes enet-cv --datasets istella
+
+=== 2026-09-30T12:48:59Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_algos.py prep --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --lanes logreg-cv --datasets taxi

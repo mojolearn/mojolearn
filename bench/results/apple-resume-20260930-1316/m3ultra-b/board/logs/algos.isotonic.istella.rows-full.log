@@ -1,0 +1,12 @@
+
+=== 2026-09-30T11:28:20Z /Users/ec2-user/board-resume/cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane isotonic --dataset istella --data /Users/ec2-user/board-resume/cache/algos-data/rows-full --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/board-resume/board/raw/algos/rows-full --work /Users/ec2-user/board-resume/board/work --ours-python /Users/ec2-user/board-resume/cache/venv/bin/python --theirs-python /Users/ec2-user/board-resume/cache/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"seed": "none (deterministic)"}, "source": "get_params"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/isotonic", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "ours-fast", "sklearn-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=isotonic dataset=istella arm=ours round=0 ms=972.093 infer_ms=6.969542000661022 digest=cabead0683a0c1d2
+ALGOS-ROUND lane=isotonic dataset=istella arm=ours-fast round=0 ms=933.973 infer_ms=7.163750000472646 digest=cabead0683a0c1d2
+ALGOS-ROUND lane=isotonic dataset=istella arm=sklearn-cpu round=0 ms=37.886 infer_ms=2.3689999998168787 digest=4507832b6b3a7f16
+ALGOS-ROUND lane=isotonic dataset=istella arm=ours-fast round=1 ms=900.328 infer_ms=6.999584000368486 digest=cabead0683a0c1d2
+ALGOS-ROUND lane=isotonic dataset=istella arm=sklearn-cpu round=1 ms=37.455 infer_ms=2.2584159996767994 digest=4507832b6b3a7f16
+ALGOS-ROUND lane=isotonic dataset=istella arm=ours round=1 ms=941.806 infer_ms=6.891042001370806 digest=cabead0683a0c1d2
+ALGOS lane=isotonic dataset=istella arm=ours status=ok median_ms=941.8055410005763 quality={"finite": true, "r2": 0.18798545682734658, "rmse": 0.7527353839075482}
+ALGOS lane=isotonic dataset=istella arm=ours-fast status=ok median_ms=900.3281250006694 quality={"finite": true, "r2": 0.18798545682734658, "rmse": 0.7527353839075482}
+ALGOS lane=isotonic dataset=istella arm=sklearn-cpu status=ok median_ms=37.454834000527626 quality={"finite": true, "r2": 0.18798545904822483, "rmse": 0.7527353828781741}

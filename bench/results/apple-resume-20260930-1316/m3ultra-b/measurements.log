@@ -1,0 +1,92 @@
+bench_board: REFUSING to resume /Users/ec2-user/board-resume/board on a different box or wheel:
+  was {"gpu": "Apple M3 Ultra", "hostname": "ip-172-31-37-211.ec2.internal", "mojolearn": "0.8.25", "vendor": "apple", "wheel_sha256": "ee1187c950c29e791c906cb3beb1c45206e4d8534fea897bc839db4505b38548"}
+  now {"gpu": "Apple M3 Ultra", "hostname": "ip-172-31-43-215.ec2.internal", "mojolearn": "0.8.25", "vendor": "apple", "wheel_sha256": "ee1187c950c29e791c906cb3beb1c45206e4d8534fea897bc839db4505b38548"}
+One board is one box and one set of library bytes; use a new --out.
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/logreg-cv/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/logreg-cv/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 5225s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/isotonic/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 27s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/isotonic/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 13s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/minibatch-kmeans/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/minibatch-kmeans/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 7s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/bisecting-kmeans/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 5s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/bisecting-kmeans/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 22s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/meanshift/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 28s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/meanshift/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 32s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/optics/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1537s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/optics/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 65s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/affinity-prop/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 16s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/affinity-prop/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 20s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/lof/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 17s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/lof/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 1266s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/nearest-centroid/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/nearest-centroid/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 20s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/radius-neighbors/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/radius-neighbors/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 18s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/ocsvm/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/ocsvm/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 7s
+bench_board: board /Users/ec2-user/board-resume/board/BOARD.md
+bench_board: algos prep rows=full lanes=1 datasets=taxi
+bench_board: [1/1] algos/kernel-pca/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
