@@ -3401,6 +3401,36 @@ def silu_kernel(
         silu_out.unsafe_store(i, ftz(identical_silu(z)))
 
 
+def swiglu_fused_kernel(
+    gated: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """lane/neural-net-experiment (2026-09-30): S20 and S21 in one launch,
+    FORWARD-ONLY. Per element exactly `mlp_gated_kernel(silu_kernel(gate),
+    up)`: `z = ftz(gate)`, `sil = ftz(identical_silu(z))`, `gated =
+    ftz(identical_mul(ftz(sil), ftz(up)))`, the same operations in the same
+    order (and `ftz(ftz(v)) == ftz(v)`), so the same bits, one launch and
+    one `[M, intermediate]` write plus read fewer. `silu_out` is NOT
+    written: the backward reads it (`transformer_backward.mojo`, dup =
+    av * silu_out) and the trace records it, so the launcher takes this
+    kernel only when the caller says no backward follows and the trace is
+    off. Never under the S20 sabotage spelling."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var z = ftz(gate.unsafe_load(i))
+    var sil = ftz(identical_silu(z))
+    gated.unsafe_store(i, ftz(identical_mul(ftz(sil), ftz(up.unsafe_load(i)))))
+
+
+def swiglu_fused_enabled() -> Bool:
+    """`MOJOLEARN_SWIGLU_FUSED=1`; read per block call, default off."""
+    return String(getenv("MOJOLEARN_SWIGLU_FUSED")) == "1"
+
+
 def mlp_gated_kernel(
     gated: MutPointer[Float32, MutAnyOrigin],
     silu_out: MutPointer[Float32, MutAnyOrigin],
@@ -4728,6 +4758,7 @@ def llama_mlp_forward(
     m: Int,
     mut trace: IdentityTrace,
     prefix: String,
+    forward_only: Bool = False,
 ) raises:
     """`LlamaMLP.forward(x)` (:174-176).
 
@@ -4828,7 +4859,25 @@ def llama_mlp_forward(
     # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
     #      otherwise, over the gate projection (gated) or the up
     #      projection (ungated).
-    if bias_gelu_fused or bias_silu_fused:
+    # lane/neural-net-experiment: S20 + S21 in one launch when no backward
+    # follows, the trace is off, the record is the default SiLU gated MLP
+    # and the build is not the S20 sabotage spelling (`swiglu_fused_kernel`).
+    var swiglu_fused = False
+    comptime if not SAB_S20_SILU_MUL_SIGMOID:
+        swiglu_fused = (forward_only and gated and opts.act_is_silu()
+                        and not bias_silu_fused and not bias_gelu_fused
+                        and not trace.enabled and swiglu_fused_enabled())
+    if swiglu_fused:
+        step_count_launch()
+        ctx.enqueue_function[swiglu_fused_kernel](
+            stages.gated.unsafe_ptr(),
+            stages.gate_proj.unsafe_ptr(),
+            stages.up_proj.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    elif bias_gelu_fused or bias_silu_fused:
         pass
     elif opts.act_is_silu():
         step_count_launch()
@@ -4870,7 +4919,9 @@ def llama_mlp_forward(
     pc.tick(ctx, "fwd.silu")
 
     # ---- the gate product (:175). S21. Absent under an ungated MLP.
-    if gated:
+    if swiglu_fused:
+        pass  # written by swiglu_fused_kernel above
+    elif gated:
         step_count_launch()
         ctx.enqueue_function[mlp_gated_kernel](
             stages.gated.unsafe_ptr(),
@@ -4953,6 +5004,7 @@ def llama_decoder_layer_forward_planted(
     next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
+    forward_only: Bool = False,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -5233,7 +5285,7 @@ def llama_decoder_layer_forward_planted(
     pc.tick(ctx, "fwd.norm2")
 
     # ---- self.mlp(...) (:322). S5, S20, S21.
-    llama_mlp_forward(ctx, stages, w, m, trace, prefix)
+    llama_mlp_forward(ctx, stages, w, m, trace, prefix, forward_only=forward_only)
     pc.mark(ctx)
 
     # ---- residual + hidden_states (:323). S23, the same imported kernel.
@@ -5289,8 +5341,13 @@ def llama_decoder_layer_forward(
     next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
     next_norm_eps: Optional[Float32] = None,
+    forward_only: Bool = False,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
+
+    `forward_only` (lane/neural-net-experiment): the caller promises no
+    backward reads this call's stages, which admits the forward-only
+    fusions (`swiglu_fused_kernel` under `MOJOLEARN_SWIGLU_FUSED=1`).
 
     Every argument is a scalar or a buffer or one of this file's own
     structs; nothing from `transformer/checks/` crosses this boundary,
@@ -5320,4 +5377,5 @@ def llama_decoder_layer_forward(
         next_norm_out=next_norm_out,
         next_norm_weight=next_norm_weight,
         next_norm_eps=next_norm_eps,
+        forward_only=forward_only,
     )

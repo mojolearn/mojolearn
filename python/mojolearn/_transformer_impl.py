@@ -1031,7 +1031,8 @@ class TransformerBlock(NumericModeMixin):
             # The session's stateless prefill first (every vendor): weights
             # and workspace retained across calls. The per-call fresh entry
             # (NVIDIA builds) and the state-carrying session path follow.
-            if reuse and _exports(ext, "transformer_session_forward_fresh"):
+            if (reuse and _exports(ext, "transformer_session_forward_fresh")
+                    and os.environ.get("MOJOLEARN_TRANSFORMER_SESSION_FRESH") != "0"):
                 return self._call_fresh_session(x, ext)
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)

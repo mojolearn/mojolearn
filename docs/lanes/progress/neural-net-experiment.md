@@ -129,6 +129,47 @@ Not written, on purpose:
 - **The 3.7 GB training-step peak**: diagnosed by the tool's report, not
   guessed at.
 
+## Third pass: the L40S numbers, and the toggle round
+
+The owner's L40S run of the first two passes (five rounds, medians, all six
+output digests equal to before):
+
+| cell | before | after | compiled torch |
+|---|---:|---:|---:|
+| transformer-forward | 4.130 | 4.359 | 1.794 |
+| mamba3-forward | 3.858 | 4.248 | 8.402 |
+| lm-forward | 105.836 | 50.425 | 37.663 |
+| samba-forward | 10.408 | 8.647 | 3.934 |
+| lm-train-step | 45.001 | 44.427 | 18.937 |
+| samba-train-step | 141.844 | 137.481 | 40.199 |
+
+Read: the LM-forward diagnosis was right (halved); the two block cells got
+0.2 to 0.4 ms SLOWER, which is the exact byte compare of the weights on a
+box where the upload it replaces was already cheap; the training steps did
+not move, so their cost is the backward kernels, not orchestration. The
+"before" for the block cells was already a newer wheel than the 0.8.25
+record the first pass diagnosed from (4.1 ms, not 6.5).
+
+So the third pass makes every candidate a RUNTIME TOGGLE, default off for
+the new ones, and adds `tools/neural_experiments.py` to run them all on one
+build and print one table with the digest check. `EXPERIMENTS.md` at the
+repo root is the README: what each toggle does, where it should help, and
+the order to try them per vendor. New in this pass:
+
+- `MOJOLEARN_ATTN_SPECULATIVE=1`: the fused attention's regime scan behind
+  the kernels, one host round trip per layer instead of two (plain and
+  estash forwards). Same bits: a refused regime discards and reruns eager.
+- `MOJOLEARN_SWIGLU_FUSED=1`: `swiglu_fused_kernel`, S20 and S21 in one
+  launch, forward-only (`forward_only=True` threaded through
+  `llama_decoder_layer_forward` from the block-forward entries and the
+  LM logits path; the backward reads `silu_out`, so never where one
+  follows; never with the trace on; never under the S20 sabotage).
+- `MOJOLEARN_TRANSFORMER_STAGE_RESET=0`, `MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS=0`,
+  `MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0`, `MOJOLEARN_TRANSFORMER_SESSION_FRESH=0`:
+  the A/B arms of the first two passes.
+- The timing tool prints `DIGEST` and `LOSSES` per lane so the sweep can
+  flag a toggle that moved a bit.
+
 ## What it does NOT change (next, and why not here)
 
 - `TransformerBlock.backward` still recomputes the forward and re-uploads

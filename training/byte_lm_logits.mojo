@@ -196,10 +196,10 @@ def _logits_enqueue(
                     next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(weights[layer + 1].eps))
+                    next_norm_eps=Optional(weights[layer + 1].eps), forward_only=True)
             else:
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
-                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
         else:
             if fuse_next:
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
@@ -207,10 +207,10 @@ def _logits_enqueue(
                     next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_eps=Optional(weights[layer + 1].eps))
+                    next_norm_eps=Optional(weights[layer + 1].eps), forward_only=True)
             else:
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
-                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
         sc.stages.insert(layer, st^)
 
     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
