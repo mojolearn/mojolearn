@@ -473,7 +473,11 @@ def int8_pieces_dispatch_for(low_bandwidth: Bool, m: Int, n: Int, k: Int) -> Int
                 return INT8_PIECES_PLAN_SQUARE
             if k > 8192:
                 return INT8_PIECES_PLAN_SMALL
-            if m >= 4096 and k <= 1024:
+            # the tall dW rows: mlp_up's (14336 x 4096 x 512) took plan 0
+            # (52.0 against 47.2 TFLOPS); mlp_down's (4096 x 14336 x 512)
+            # lost 5% on it (1.380 against 1.318 ms, the strides-pass
+            # evidence), so only the taller one takes it
+            if m > 8192 and k <= 1024:
                 return INT8_PIECES_PLAN_SMALL
     return int8_pieces_dispatch(m, n, k)
 
