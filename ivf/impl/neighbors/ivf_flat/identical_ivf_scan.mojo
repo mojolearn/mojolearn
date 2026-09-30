@@ -118,14 +118,16 @@ def identical_ivf_scan_kernel[KM: Int](
         var bk = tk[0]
         var bd = td[0]
         var bi = ti[0]
-        comptime for sh in [16, 8, 4, 2, 1]:
-            var ok = shuffle_xor(bk, UInt32(sh))
-            var od = shuffle_xor(bd, UInt32(sh))
-            var oi = shuffle_xor(bi, UInt32(sh))
-            if _kless(ok, oi, bk, bi):
-                bk = ok
-                bd = od
-                bi = oi
+        # Every lane of the warp, 64 on AMD (lane/neural-net-experiment).
+        comptime for sh in [32, 16, 8, 4, 2, 1]:
+            comptime if sh < WARP_SIZE:
+                var ok = shuffle_xor(bk, UInt32(sh))
+                var od = shuffle_xor(bd, UInt32(sh))
+                var oi = shuffle_xor(bi, UInt32(sh))
+                if _kless(ok, oi, bk, bi):
+                    bk = ok
+                    bd = od
+                    bi = oi
         if tk[0] == bk and ti[0] == bi:
             comptime for j in range(KM - 1):
                 tk[j] = tk[j + 1]
