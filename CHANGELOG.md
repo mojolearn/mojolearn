@@ -4,6 +4,11 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.32 (published 2026-09-30)
+
+- Ship merged main: KernelPCA GPU top-k Lanczos on by default in scope (exact dense path otherwise), ordered-boosting speed with the Apple 256-thread histogram cap, the GBDT split-score fix (gradients snapped onto the histogram's fixed-point grid), the fused small-MLP training step, and the strides, S16 and priority passes on the neural kernels.
+- Reuse completed checks on merged main and unchanged native binaries. No fresh numerical verification or installed wheel smoke is run for this release.
+
 ## 0.8.31 (published 2026-09-29)
 
 - Ship the merged HDBSCAN sparse mutual-reachability MST, preserving exact tie order and avoiding the quadratic graph above 46,340 rows. The lane passed Apple, NVIDIA and AMD identity checks, including matching 70,000-row card hashes.
