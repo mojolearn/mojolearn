@@ -845,11 +845,71 @@ def mamba3_theta_reverse_kernel(
         d_rate.unsafe_store(rowh*M3_NUM_ROPE_ANGLES+r,ftz(identical_mul(carry,ftz(dt.unsafe_load(rowh)))))
 
 
+#: lane/neural-net-experiment (2026-09-30, the S16 pass): the angle stage's
+#: d_dt half. `mamba3_angle_reduce_kernel`'s second half is one thread per
+#: (token, head) folding, for each of the 32 angles, the suffix of d_theta
+#: from its token to the end of the sequence -- 8k dependent adds a thread
+#: at L = 512, each a device load 768 bytes from the last (a new line each),
+#: on 6,144 threads: the L40S priced the stage at 2.0 ms (5% of the pass).
+#: The folds are pinned (each token's suffix ascending from its own index,
+#: so no prefix is shared between tokens) and stay exactly as they are;
+#: what moves is WHERE a value waits: one block per (batch, head) stages
+#: each angle's whole column of d_theta once (L words), and each thread
+#: folds its token's suffixes from threadgroup memory. SAME BITS.
+#: Columns up to M3_ANGLE_DT_MAXL words take it; longer sequences keep the
+#: old kernel. MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE=1 (a build define) keeps
+#: the old kernel for the A/B.
+comptime M3_ANGLE_DT_SHARED = not is_defined["MOJOLEARN_MAMBA3_ANGLE_DT_NAIVE"]()
+comptime M3_ANGLE_DT_MAXL = 4096
+comptime M3_ANGLE_DT_TPB = 256
+
+
+def mamba3_angle_dt_shared_kernel(
+    d_dt: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
+    angle_raw: MutPointer[Float32, MutAnyOrigin],
+    b_in:Int32,l_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
+):
+    """`mamba3_angle_reduce_kernel`'s d_dt half over a staged column: block
+    (batch, head), thread `tid` the tokens `tid, tid + TPB, ...`; for each
+    angle r the column d_theta[:, h, r] is staged, then each token folds
+    its suffix ascending from itself, as the naive kernel does."""
+    var b=Int(b_in);var l=Int(l_in);var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
+    var col=stack_allocation[M3_ANGLE_DT_MAXL,Scalar[DType.float32],address_space=AddressSpace.SHARED]()
+    var blk=Int(block_idx.x);var tid=Int(thread_idx.x)
+    if blk>=b*nh:return
+    var h=blk%nh;var bb=blk//nh
+    # every token's running accdt, over the angles in order
+    var acc=stack_allocation[16,Scalar[DType.float32]]()
+    var slots=(l+M3_ANGLE_DT_TPB-1)//M3_ANGLE_DT_TPB
+    for sl in range(16):
+        acc[sl]=Float32(0.0)
+    for r in range(M3_NUM_ROPE_ANGLES):
+        var u=tid
+        while u<l:
+            col[u]=ftz(d_theta.unsafe_load(((bb*l+u)*nh+h)*M3_NUM_ROPE_ANGLES+r))
+            u+=M3_ANGLE_DT_TPB
+        barrier()
+        for sl in range(slots):
+            var li=tid+sl*M3_ANGLE_DT_TPB
+            if li<l:
+                var token=bb*l+li
+                var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
+                var carry=Float32(0.0)
+                for uu in range(li,l):
+                    carry=ftz(carry+col[uu])
+                acc[sl]=ftz(identical_mul_add(carry,rate,acc[sl]))
+        barrier()
+    for sl in range(slots):
+        var li=tid+sl*M3_ANGLE_DT_TPB
+        if li<l:
+            d_dt.unsafe_store((bb*l+li)*nh+h,acc[sl])
+
+
 def mamba3_angle_reduce_kernel(
     d_angle: MutPointer[Float32, MutAnyOrigin], d_dt: MutPointer[Float32, MutAnyOrigin],
     d_rate: MutPointer[Float32, MutAnyOrigin], d_theta: MutPointer[Float32, MutAnyOrigin],
     angle_raw: MutPointer[Float32, MutAnyOrigin], dt: MutPointer[Float32, MutAnyOrigin],
-    b_in:Int32,l_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,
+    b_in:Int32,l_in:Int32,nh_in:Int32,dip_in:Int32,col_angle_in:Int32,do_dt_in:Int32,
 ):
     var b=Int(b_in);var l=Int(l_in);var m=b*l;var nh=Int(nh_in);var dip=Int(dip_in);var ca=Int(col_angle_in)
     var cell=Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
@@ -861,7 +921,7 @@ def mamba3_angle_reduce_kernel(
         var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var tv=ftz(identical_tanh(raw))
         var prime=ftz(identical_mul(M3_PI,ftz(Float32(1.0)-ftz(identical_mul(tv,tv)))))
         d_angle.unsafe_store(cell,ftz(identical_mul(acc,prime)))
-    if cell<m*nh:
+    if cell<m*nh and do_dt_in!=Int32(0):
         var token=cell//nh;var h=cell%nh;var bb=token//l;var li=token%l;var accdt=Float32(0.0)
         for r in range(M3_NUM_ROPE_ANGLES):
             var raw=ftz(angle_raw.unsafe_load(token*dip+ca+r));var rate=ftz(identical_mul(ftz(identical_tanh(raw)),M3_PI))
@@ -879,7 +939,12 @@ def mamba3_backward_angle_into(
     var chains=b*dims.nheads*M3_NUM_ROPE_ANGLES
     ctx.enqueue_function[mamba3_theta_reverse_kernel](d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),grid_dim=(_grid(chains),1,1),block_dim=(M3_BWD_TPB,1,1))
     var m=b*l;var cells=m*M3_NUM_ROPE_ANGLES if m*M3_NUM_ROPE_ANGLES>m*dims.nheads else m*dims.nheads
-    ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    var dt_shared=False
+    comptime if M3_ANGLE_DT_SHARED:
+        dt_shared=l<=M3_ANGLE_DT_MAXL and (l+M3_ANGLE_DT_TPB-1)//M3_ANGLE_DT_TPB<=16
+    ctx.enqueue_function[mamba3_angle_reduce_kernel](d_angle.unsafe_ptr(),d_dt.unsafe_ptr(),d_rate.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),dt.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),Int32(0 if dt_shared else 1),grid_dim=(_grid(cells),1,1),block_dim=(M3_BWD_TPB,1,1))
+    if dt_shared:
+        ctx.enqueue_function[mamba3_angle_dt_shared_kernel](d_dt.unsafe_ptr(),d_theta.unsafe_ptr(),in_proj.unsafe_ptr(),Int32(b),Int32(l),Int32(dims.nheads),Int32(dims.d_in_proj()),Int32(dims.col_angle()),grid_dim=(b*dims.nheads,1,1),block_dim=(M3_ANGLE_DT_TPB,1,1))
 
 
 def mamba3_dt_softplus_partial_kernel(
@@ -1379,7 +1444,12 @@ def mamba3_s17_operands_shared_kernel(
         d_dacs_rec.unsafe_store(th,ftz(-rec_scalar))
 
 
-comptime M3_S17_TP = 8
+#: lane/neural-net-experiment (2026-09-30, the S16 pass): the tail's tile
+#: was 8 value columns (8 KB of threadgroup memory, 512 barriers a chunk at
+#: L = 512); 32 columns where the column's page allows it (32 KB, 128
+#: barriers). The chain thread 0 walks is the same chain in the same
+#: order; only the staging cadence moves.
+comptime M3_S17_TP = 32 if lib_smem_page_fits_for[TARGET_COLUMN, 49152]() else 8
 
 
 def mamba3_s17_tail_shared_kernel(
