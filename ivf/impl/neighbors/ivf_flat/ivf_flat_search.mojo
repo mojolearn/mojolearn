@@ -166,8 +166,9 @@ running this kernel (bench_board 0.8.25). The kernel is written on
 WARP_SIZE (its launch below and its lane merge follow it), and its
 arithmetic is the pinned path's term for term; the identity gate on each
 vendor is the check, as it was on Apple. `MOJOLEARN_IVF_IDENTICAL_SCAN_OFF`
-restores the per-query path."""
-"""IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
+restores the per-query path.
+
+IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
 for every query in one launch (`identical_ivf_scan.mojo`), the pinned
 distance arithmetic and the `(distance, original index)` key, instead of a
 host round trip per query. Same neighbours, same order, same bits."""
