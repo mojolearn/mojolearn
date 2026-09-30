@@ -593,6 +593,119 @@ def int15_planes_row_block_kernel(
         c += INT15_TPB
 
 
+#: lane/neural-net-experiment (2026-09-30): the TRANSPOSED orientation's
+#: schedules with coalesced reads. For an operand stored `cols x rows`
+#: (the backward's transposing quantizer, clause W-9), the parallel
+#: schedule's thread maps put adjacent threads on adjacent LOGICAL
+#: columns of one logical row, which are `rows` words apart in storage:
+#: every warp load touched 32 lines for 32 words. The L40S ceiling run
+#: priced the bwd_dx training operation at 14 TFLOPS with a 45-TFLOPS
+#: multiply, the conversions the rest. Here the absmax kernel puts
+#: adjacent threads on adjacent logical rows (adjacent storage words) of
+#: one chunk, and the planes kernel goes through a 32 x 32 tile of
+#: threadgroup memory: the tile is read along storage and written along
+#: the planes' rows, both coalesced. SAME BITS: each chunk maximum is the
+#: same maximum of the same magnitudes, and each plane is the same
+#: function of its own value and its row's exponent.
+#: MOJOLEARN_INT15_TRANSPOSED_TILE=0 keeps the old maps (the A/B).
+comptime INT15_TILE = 32
+comptime INT15_TILE_ROWS = 8
+
+
+def int15_transposed_tile_on() -> Bool:
+    return String(getenv("MOJOLEARN_INT15_TRANSPOSED_TILE")) != "0"
+
+
+def int15_absmax_chunk_t_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+    chunks_in: Int32,
+):
+    """`int15_absmax_chunk_kernel` for the transposed orientation (`x` is
+    `cols x rows` row-major; logical `(r, c)` at `x[c * rows + r]`):
+    thread `t` is chunk `t // rows` of logical row `t % rows`, so a warp
+    reads 32 consecutive storage words per step."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var chunks = Int(chunks_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= rows * chunks:
+        return
+    var ch = t // rows
+    var r = t - ch * rows
+    var c0 = ch * INT15_ABSMAX_CHUNK
+    var c1 = c0 + INT15_ABSMAX_CHUNK
+    if c1 > cols:
+        c1 = cols
+    comptime if INT15_QUANT_SABOTAGE:
+        if ch == chunks - 1:
+            c1 = c0
+    var best = Float32(0.0)
+    for c in range(c0, c1):
+        var v = ftz(x.unsafe_load(c * rows + r))
+        if v < Float32(0.0):
+            v = -v
+        if v > best:
+            best = v
+    part.unsafe_store(r * chunks + ch, best)
+
+
+def int15_planes_t_tile_kernel(
+    hi: MutPointer[Int8, MutAnyOrigin],
+    lo: MutPointer[Int8, MutAnyOrigin],
+    e: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+):
+    """`int15_planes_kernel` for the transposed orientation through a
+    32 x 32 tile: block `(bx, by)` covers logical rows `bx * 32 ..` and
+    logical columns `by * 32 ..`; the tile is loaded along storage
+    (consecutive logical rows of one column per warp) into threadgroup
+    memory, then each thread reads its `(r, c)` back and writes planes
+    along `c` (consecutive words of one planes row per warp). Clauses W-2
+    and W-3 per value under row `r`'s exponent, as before."""
+    var rows = Int(rows_in)
+    var cols = Int(cols_in)
+    var tile = stack_allocation[
+        INT15_TILE * (INT15_TILE + 1), Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var tx = Int(thread_idx.x)
+    var ty = Int(thread_idx.y)
+    var r0 = Int(block_idx.x) * INT15_TILE
+    var c0 = Int(block_idx.y) * INT15_TILE
+    # load: thread (tx, ty + k) reads logical (r0 + tx, c0 + ty + k) at
+    # x[(c0 + ty + k) * rows + r0 + tx]: tx runs along storage
+    var k = 0
+    while k < INT15_TILE:
+        var r = r0 + tx
+        var c = c0 + ty + k
+        var v = Float32(0.0)
+        if r < rows and c < cols:
+            v = x.unsafe_load(c * rows + r)
+        tile[(ty + k) * (INT15_TILE + 1) + tx] = v
+        k += INT15_TILE_ROWS
+    barrier()
+    # store: thread (tx, ty + k) writes logical (r0 + ty + k, c0 + tx) at
+    # hi[(r0 + ty + k) * cols + c0 + tx]: tx runs along the planes row
+    k = 0
+    while k < INT15_TILE:
+        var r = r0 + ty + k
+        var c = c0 + tx
+        if r < rows and c < cols:
+            var v = tile[tx * (INT15_TILE + 1) + ty + k]
+            var code = quantize_int15_value(v, Int(e.unsafe_load(r)))
+            var h = int15_piece_hi(code)
+            comptime if INT15_PIECE_SABOTAGE:
+                if h == Int8(-128):
+                    h = Int8(-127)
+            hi.unsafe_store(r * cols + c, h)
+            lo.unsafe_store(r * cols + c, int15_piece_lo(code))
+        k += INT15_TILE_ROWS
+
+
 struct Int15QuantWorkspace(Movable):
     """The chunk maxima of the parallel quantizer, on ONE in-order
     context. Grown on demand; growth drains the context first."""
@@ -628,17 +741,28 @@ def _parallel_exponents(
     """The first two launches: chunk maxima, then one exponent per row."""
     var chunks = int15_quant_chunks(cols)
     work.ensure(ctx, rows * chunks)
-    ctx.enqueue_function[int15_absmax_chunk_kernel](
-        work.part.unsafe_ptr(),
-        x.unsafe_ptr(),
-        Int32(rows),
-        Int32(cols),
-        Int32(chunks),
-        Int32(s_row),
-        Int32(s_col),
-        grid_dim=((rows * chunks + INT15_TPB - 1) // INT15_TPB, 1, 1),
-        block_dim=(INT15_TPB, 1, 1),
-    )
+    if s_row == 1 and s_col == rows and int15_transposed_tile_on():
+        ctx.enqueue_function[int15_absmax_chunk_t_kernel](
+            work.part.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(rows),
+            Int32(cols),
+            Int32(chunks),
+            grid_dim=((rows * chunks + INT15_TPB - 1) // INT15_TPB, 1, 1),
+            block_dim=(INT15_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[int15_absmax_chunk_kernel](
+            work.part.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(rows),
+            Int32(cols),
+            Int32(chunks),
+            Int32(s_row),
+            Int32(s_col),
+            grid_dim=((rows * chunks + INT15_TPB - 1) // INT15_TPB, 1, 1),
+            block_dim=(INT15_TPB, 1, 1),
+        )
     ctx.enqueue_function[int15_exponent_kernel](
         e.unsafe_ptr(),
         work.part.unsafe_ptr(),
@@ -717,6 +841,18 @@ def quantize_planes_int15_parallel_device(
         s_row = 1
         s_col = rows
     _parallel_exponents(ctx, e, x, work, rows, cols, s_row, s_col)
+    if transposed and int15_transposed_tile_on():
+        ctx.enqueue_function[int15_planes_t_tile_kernel](
+            hi.unsafe_ptr(),
+            lo.unsafe_ptr(),
+            e.unsafe_ptr(),
+            x.unsafe_ptr(),
+            Int32(rows),
+            Int32(cols),
+            grid_dim=((rows + INT15_TILE - 1) // INT15_TILE, (cols + INT15_TILE - 1) // INT15_TILE, 1),
+            block_dim=(INT15_TILE, INT15_TILE_ROWS, 1),
+        )
+        return
     ctx.enqueue_function[int15_planes_kernel](
         hi.unsafe_ptr(),
         lo.unsafe_ptr(),
