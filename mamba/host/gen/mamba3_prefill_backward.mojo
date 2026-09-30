@@ -226,10 +226,10 @@ struct Mamba3DeviceGradients(Movable):
 
 def mamba3_prefill_backward_on(
     ctx: DeviceContext,
-    device_weights: Mamba3DeviceWeights,
-    stages: Mamba3DeviceStages,
-    x: DeviceBuffer[DType.float32],
-    d_output: DeviceBuffer[DType.float32],
+    mut device_weights: Mamba3DeviceWeights,
+    mut stages: Mamba3DeviceStages,
+    mut x: DeviceBuffer[DType.float32],
+    mut d_output: DeviceBuffer[DType.float32],
     b: Int,
     l: Int,
     dims: Mamba3Dims,
