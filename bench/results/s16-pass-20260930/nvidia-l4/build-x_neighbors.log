@@ -1,0 +1,692 @@
+9362 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x592cc0000000, nodemask=2)
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+./x_neighbors/device_ops.mojo:538:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+./x_neighbors/device_ops.mojo:1011:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+./x_neighbors/device_ops.mojo:1461:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+./x_neighbors/device_ops.mojo:1520:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:714:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        pd[lb + s] = inf
+        ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:715:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        pi[lb + s] = Int32(-1)
+        ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:722:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fs[q] = fx.unsafe_load(j0 * d + q)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:729:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var dv = fs[jj * d + c]
+                         ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:736:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var b = fs[jj * d + f]
+                                ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:745:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        if dist < pd[lb + k - 1]:
+                                  ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:747:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            while s > 0 and dist < pd[lb + s - 1]:
+                                                   ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:748:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                pd[lb + s] = pd[lb + s - 1]
+                                ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:748:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                pd[lb + s] = pd[lb + s - 1]
+                                             ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:749:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                pi[lb + s] = pi[lb + s - 1]
+                                ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:749:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                                pi[lb + s] = pi[lb + s - 1]
+                                             ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:751:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            pd[lb + s] = dist
+                            ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:752:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            pi[lb + s] = Int32(j)
+                            ~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:756:7: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    pn[tid] = Int32(n_donors)
+    ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:759:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var bd = best_d + t * k
+                 ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:760:25: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var bi = best_i + t * k
+                 ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:764:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            total += Int(pn[tid + u])
+                         ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:772:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var ix = pi[(tid + u) * IMPS_KMAX + h]
+                             ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:774:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                        var dv2 = pd[(tid + u) * IMPS_KMAX + h]
+                                  ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:885:20: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var K = qp + r0 * d
+                ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:887:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            _launch_kernel(ctx, qp + r0 * d, _p(d_fx), kp, rows, nf, d, kind, degree, gamma, coef0)
+                                ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:902:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_matmul(ctx, _p(d_kc), _p(d_al), rp + r0 * c, rows, nf, c)
+                                                ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:938:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_kernel(ctx, qp + r0 * d, _p(d_y), _p(d_k), rows, m, d, kind, degree, gamma, coef0)
+                            ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:939:50: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_matmul(ctx, _p(d_k), _p(d_w), rp + r0 * c, rows, m, c)
+                                              ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:988:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_scaled_rbf(ctx, xp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+                                ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:994:26: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            _p(d_ks), yp + r0, _p(d_bv), Int64(rows), Int64(m), Int64(1),
+                      ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:1034:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_scaled_rbf(ctx, qp + r0 * d, _p(d_z), _p(d_k), _p(d_ks), rows, m, d, gamma, variance)
+                                ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:1035:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _launch_matmul(ctx, _p(d_ks), _p(d_al), mp + r0, rows, m, 1)
+                                                ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:1037:35: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            _p(d_ks), _p(d_c), vp + r0, Int64(rows), Int64(m), kdiag,
+                               ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:34:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ar[q] = acc.unsafe_load(r * nc + q)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:35:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sr[q] = sk.unsafe_load((r * degree + p) * nc + q)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:41:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if ar[a] != Float32(0):
+               ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:42:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                nz[found] = Int32(a)
+                ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:44:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        cnt_slot[0] = Int32(found)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:46:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var cnt = Int(cnt_slot[0])
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:54:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var a = Int(nz[e])
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:55:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var av = ar[a]
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:59:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s0 = ftz(identical_mul_add(av, sr[b], s0))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:63:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s1 = ftz(identical_mul_add(av, sr[b], s1))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:67:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s2 = ftz(identical_mul_add(av, sr[b], s2))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:395:
+./x_neighbors/pcs_sparse.mojo:71:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s3 = ftz(identical_mul_add(av, sr[b], s3))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:332:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ar[q] = acc.unsafe_load(r * nc + q)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:333:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sr[q] = sk.unsafe_load((r * degree + p) * nc + q)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:345:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var av = ar[a]
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:349:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s0 = ftz(identical_mul_add(av, sr[b], s0))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:353:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s1 = ftz(identical_mul_add(av, sr[b], s1))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:357:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s2 = ftz(identical_mul_add(av, sr[b], s2))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:361:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s3 = ftz(identical_mul_add(av, sr[b], s3))
+                                           ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:494:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ys[q] = y.unsafe_load(j0 * d + q)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:504:63: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var df = _sub(x.unsafe_load(t * d + f), ys[jj * d + f])
+                                                            ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:578:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bd = best_d + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:579:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bi = best_i + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:590:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            fs[q] = fx.unsafe_load(j0 * d + q)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:596:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var dv = fs[jj * d + c]
+                         ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:604:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var b = fs[jj * d + f]
+                            ~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:833:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hp[0] = hp[0] + Float32(1e-3)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+./x_neighbors/iter_device.mojo:833:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            hp[0] = hp[0] + Float32(1e-3)
+                    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:721:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var acc_row = scr + t * 2 * nc          # the running product
+                  ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:722:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sk = scr + t * 2 * nc + nc          # this degree's sketch
+             ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:722:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sk = scr + t * 2 * nc + nc          # this degree's sketch
+             ~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:764:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var o = sk + t * nc
+            ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:785:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ar = acc + r * nc
+             ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:786:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sr = sk + (r * degree + p) * nc
+             ~~~^~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:1032:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bd = best_d + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:1033:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bi = best_i + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:98:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        sl[3] = Int32(0)
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:101:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    while Int(sl[3]) < max_iter:
+              ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:113:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        rv[tid] = bv
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:114:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ri[tid] = bi
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:119:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                              ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:119:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                       ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:119:51: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                                ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:119:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                                             ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:120:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv[tid] = rv[tid + w]
+                    ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:120:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv[tid] = rv[tid + w]
+                              ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:121:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri[tid] = ri[tid + w]
+                    ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:121:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri[tid] = ri[tid + w]
+                              ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:124:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var gi = Int(ri[0])
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:147:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        rv[tid] = ov
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:148:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ri[tid] = oi
+        ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:149:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        rv2[tid] = mv
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:150:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ri2[tid] = mi
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:155:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_min(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                              ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:155:42: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_min(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                       ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:155:51: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_min(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                                ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:155:64: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_min(rv[tid], ri[tid], rv[tid + w], ri[tid + w]):
+                                                             ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:156:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv[tid] = rv[tid + w]
+                    ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:156:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv[tid] = rv[tid + w]
+                              ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:157:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri[tid] = ri[tid + w]
+                    ~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:157:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri[tid] = ri[tid + w]
+                              ~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:158:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv2[tid], ri2[tid], rv2[tid + w], ri2[tid + w]):
+                              ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:158:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv2[tid], ri2[tid], rv2[tid + w], ri2[tid + w]):
+                                        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:158:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv2[tid], ri2[tid], rv2[tid + w], ri2[tid + w]):
+                                                  ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:158:68: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if _takes_max(rv2[tid], ri2[tid], rv2[tid + w], ri2[tid + w]):
+                                                                ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:159:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv2[tid] = rv2[tid + w]
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:159:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    rv2[tid] = rv2[tid + w]
+                               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:160:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri2[tid] = ri2[tid + w]
+                    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:160:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    ri2[tid] = ri2[tid + w]
+                               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:165:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var gj = Int(ri[0])
+                         ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:170:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                if Int(ri2[0]) >= 0:
+                       ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:171:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    gmax2 = g.unsafe_load(Int(ri2[0]))
+                                              ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:174:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            sl[2] = Int32(stop)
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:176:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sl[3] = sl[3] + 1
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:176:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sl[3] = sl[3] + 1
+                        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:178:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sl[0] = Int32(gi)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:179:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sl[1] = Int32(gj)
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:180:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sf[0] = d[0]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:181:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                sf[1] = d[1]
+                ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:183:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(sl[2]) != 0:
+               ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:185:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var si = Int(sl[0])
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:186:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var sj = Int(sl[1])
+                     ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:187:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var dai = sf[0]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:188:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var daj = sf[1]
+                  ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:14:
+./x_neighbors/block_ops.mojo:197:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        iters.unsafe_store(0, sl[3])
+                              ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Imported from ./x_neighbors/iter_device.mojo:39:
+/root/mojolearn-s16-measure/./core/device_zero.mojo:98:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            p8 + n_vec * 16, Int32(tail),
+            ~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:10:
+/root/mojolearn-s16-measure/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:10:
+/root/mojolearn-s16-measure/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:13:
+Imported from ./x_neighbors/device_ops.mojo:10:
+/root/mojolearn-s16-measure/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+/root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:42:18: warning: assignment to 'sweeps' was never used; assign to '_' instead?
+    var sweeps = 0
+                 ^
+Included from /root/mojolearn-s16-measure/bindings/_mojolearn_x_neighbors.mojo:14:
+Included from ./x_neighbors/iter_device.mojo:1056:
+./x_neighbors/lp_knn.mojo:50:13: warning: ref 'e' was never used, remove it?
+        for e in range(counts[i]):
+            ^
+built python/mojolearn/identical/_mojolearn_x_neighbors.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)

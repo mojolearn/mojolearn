@@ -1,0 +1,28 @@
+{
+  "backend": "cuda",
+  "group": "budget",
+  "reverse_order": false,
+  "arrays": 2,
+  "ownership": [
+    1,
+    2,
+    false,
+    0
+  ],
+  "samples": [
+    {
+      "case": "budget.0",
+      "baseline_ms": 1496.3298635557294,
+      "retained_ms": 8.270992897450924
+    },
+    {
+      "case": "budget.1",
+      "baseline_ms": 5.964664742350578,
+      "retained_ms": 6.810864433646202
+    }
+  ],
+  "refusals": {},
+  "warm_baseline_median_ms": null,
+  "warm_retained_median_ms": null,
+  "binding_sha256": "c7b3c299855e2974555fcc84be81c4e1d77084b08dbabde8f93af1e2f06c2a38"
+}

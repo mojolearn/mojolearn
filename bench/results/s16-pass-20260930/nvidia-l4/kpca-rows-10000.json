@@ -1,0 +1,20 @@
+{
+  "rows": 10000,
+  "features": 11,
+  "fit_transform_ms": [
+    3022.9843324050307,
+    1664.3205182626843
+  ],
+  "output_sha256": [
+    "1b442b0e601b9bfb4be81319343ecd56c3ad1085670563fb4c783327cc5a7628",
+    "1b442b0e601b9bfb4be81319343ecd56c3ad1085670563fb4c783327cc5a7628"
+  ],
+  "repeat_identical": true,
+  "vendor": "cuda",
+  "input_sha256": "62050adcc4e85217e7141a328e0043d60ecb943a1309d3a8f978e0da7d250b3c",
+  "relative_residual": 3.992021902377019e-06,
+  "orthogonality_max_abs": 6.079673767089844e-06,
+  "fit_transform_vs_transform_relative_max": 9.367233360535465e-06,
+  "passed": true,
+  "scope": "Experimental opt-in. Same-device repeatability only; Apple/AMD identity NOT certified."
+}

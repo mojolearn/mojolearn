@@ -1,0 +1,3 @@
+1731 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x181b40000000, nodemask=2)
+words 4294967296  non-NaN words that differ: 0   NaN words that differ: 16777213
+PROBE_FTZ_HW PASS on NVIDIA L4 : mul.rn.ftz by one returns ftz's word for every non-NaN float32

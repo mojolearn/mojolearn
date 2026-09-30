@@ -1,0 +1,12 @@
+6fbcf757c6de775a102e56a51dad8db15404289e520d5cb41d13a5556870b4e7  /root/s16/native/mamba-anglenaive.so
+58809e3f1005080c098de21f4a4d1bf2788edd3e00536335b7587ba426e5e4c3  /root/s16/native/mamba-ftzoff.so
+d21cad5eba3c4ad9f5253c43a876d97cc2508730f63f1e7f994e807f4f90e953  /root/s16/native/transformer-ftzoff.so
+bafd2555e188c6209e53c9b2921105c421764ffdb3fde73b1a748bb9be553166  /root/s16/native/byte_lm-ftzoff.so
+fa0a9e3e9c6713027b38032ca3cddc1a6fa44986f91eb391e9e39c190d7378e4  /root/s16/native/mamba.so
+c7b3c299855e2974555fcc84be81c4e1d77084b08dbabde8f93af1e2f06c2a38  /root/s16/native/transformer.so
+5548617174af92ba94eaf7bbb48b45dd3839d6b93072e298825d8034ddaa571b  /root/s16/native/byte_lm.so
+d3e419025b00ad3acab7f6086006a621c96987dc4aeb4b5dc7b0cf6b4139e3de  /root/s16/native/x_decomp.so
+ab54c155de48f95d4c6be763f8123a7bd6f1155a5dca49e8d7cdc6bbff2b834d  /root/s16/native/x_linear.so
+0069cc4f861225f6bab78874385a2f2e68f629df10e910ae1be196f860a6778d  /root/s16/native/ivf.so
+64e94e927f12ec0b1fc6989315bb32b54f43314f32d1b73bf909d472bfa3ad14  /root/s16/native/x_neighbors.so
+f692c883c9c96a534a5c3fa6e1913e7b4a81a4359adf47c0939094c642300e92  /root/s16/native/linalg.so

@@ -1,0 +1,13 @@
+### baseline  (defaults)
+    transformer-forward     6.538 ms  digest=d5a2b289afdb5709
+    mamba3-forward          5.276 ms  digest=481c50cae2dd749e
+    samba-forward          16.347 ms  digest=ddce61948b8456e0
+    samba-train-step      190.822 ms  digest=None
+    lm-forward             90.977 ms  digest=4a8e781b0739a038
+    lm-train-step         116.029 ms  digest=None
+
+| experiment | transformer-forward | mamba3-forward | samba-forward | samba-train-step | lm-forward | lm-train-step |
+|---|---:|---:|---:|---:|---:|---:|
+| baseline | 6.538 (1.00x) | 5.276 (1.00x) | 16.347 (1.00x) | 190.822 (1.00x) | 90.977 (1.00x) | 116.029 (1.00x) |
+
+ratio < 1 is faster than baseline; MOVED means the output bits differ from baseline: do not keep that toggle.
