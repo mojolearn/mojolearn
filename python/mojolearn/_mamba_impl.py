@@ -91,6 +91,8 @@ prefill backward. Current scope and packaging boundaries are documented in
 SUPPORT_MATRIX.md; older comments are not release certificates.
 """
 
+import os
+
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
@@ -1581,12 +1583,37 @@ class Mamba3Block(_MambaBase):
         addrs = ([_addr_ro(x)] + [_addr_ro(w) for w in self._w]
                  + [_addr(y), _addr(h_last), _addr(k_last), _addr(v_last),
                     _addr(theta_last)])
-        ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
+        # lane/neural-net-experiment (2026-09-30): the session keeps the
+        # weights on the device across calls (reused only when their bytes
+        # are unchanged; the binding compares them). Same entry arithmetic.
+        session_forward = None
+        try:
+            session_forward = getattr(ext, "mamba3_prefill_session_forward", None)
+        except ImportError:
+            session_forward = None
+        if session_forward is not None and os.environ.get("MOJOLEARN_MAMBA3_LEGACY_SETUP") != "1":
+            if getattr(self, "_prefill_session", None) is None or getattr(self, "_prefill_binding", None) is not ext:
+                self._prefill_session = ext.mamba3_prefill_session_create()
+                self._prefill_binding = ext
+            session_forward(self._prefill_session, addrs, [b, l, self.d_model])
+        else:
+            ext.mamba3_forward_fresh(addrs, [b, l, self.d_model])
         self.h_last_ = h_last
         self.k_last_ = k_last
         self.v_last_ = v_last
         self.theta_last_ = theta_last
         return y
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for name in ("_prefill_session", "_prefill_binding"):
+            state.pop(name, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._prefill_session = None
+        self._prefill_binding = None
 
     def _call(self, x, state, step):
         what = "Mamba3Block.step" if step else "Mamba3Block.forward"
