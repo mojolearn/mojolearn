@@ -1,0 +1,92 @@
+30510 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58b3c0000000, nodemask=2)
+shape m=4096 n=4096 k=4096; numpy 2.5.2; mojolearn 0.8.31
+--- call 0, the board's form: (codes, exponents) already made
+python  _int8_operand(a codes)               1246.68 ms
+python  _int8_operand(b codes)               1204.01 ms
+python  _out_or_new (64 MB output)             32.51 ms
+30510 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73d080000000, nodemask=1)
+timing int8.context 181.689251 ms
+timing int8.uploads_and_alloc 1.935113 ms
+timing int8.kernel 1.847893 ms
+timing int8.download 3.081953 ms
+timing int8.free_and_drain 0.027401 ms
+python  binding gemm_int8 (device phases above it)    188.65 ms
+timing int8.context 0.043605 ms
+timing int8.uploads_and_alloc 1.530226 ms
+timing int8.kernel 1.401352 ms
+timing int8.download 3.094533 ms
+timing int8.free_and_drain 0.036014 ms
+python  matmul_int8((codes,0),(codes,0)) whole   2665.58 ms
+--- call 1, the board's form: (codes, exponents) already made
+python  _int8_operand(a codes)               1247.94 ms
+python  _int8_operand(b codes)               1219.93 ms
+python  _out_or_new (64 MB output)             30.21 ms
+timing int8.context 0.029344 ms
+timing int8.uploads_and_alloc 1.560842 ms
+timing int8.kernel 1.391718 ms
+timing int8.download 3.047742 ms
+timing int8.free_and_drain 0.031517 ms
+python  binding gemm_int8 (device phases above it)      6.09 ms
+timing int8.context 0.03326 ms
+timing int8.uploads_and_alloc 1.529284 ms
+timing int8.kernel 1.399189 ms
+timing int8.download 3.070677 ms
+timing int8.free_and_drain 0.034682 ms
+python  matmul_int8((codes,0),(codes,0)) whole   2480.80 ms
+--- call 2, the board's form: (codes, exponents) already made
+python  _int8_operand(a codes)               1225.24 ms
+python  _int8_operand(b codes)               1261.03 ms
+python  _out_or_new (64 MB output)             29.66 ms
+timing int8.context 0.028593 ms
+timing int8.uploads_and_alloc 1.493541 ms
+timing int8.kernel 1.389073 ms
+timing int8.download 3.067202 ms
+timing int8.free_and_drain 0.030345 ms
+python  binding gemm_int8 (device phases above it)      6.03 ms
+timing int8.context 0.047841 ms
+timing int8.uploads_and_alloc 1.602915 ms
+timing int8.kernel 1.398248 ms
+timing int8.download 3.144276 ms
+timing int8.free_and_drain 0.036876 ms
+python  matmul_int8((codes,0),(codes,0)) whole   2423.49 ms
+--- call 3, the board's form: (codes, exponents) already made
+python  _int8_operand(a codes)               1227.95 ms
+python  _int8_operand(b codes)               1266.53 ms
+python  _out_or_new (64 MB output)             31.50 ms
+timing int8.context 0.030806 ms
+timing int8.uploads_and_alloc 1.604828 ms
+timing int8.kernel 1.391167 ms
+timing int8.download 3.152258 ms
+timing int8.free_and_drain 0.032579 ms
+python  binding gemm_int8 (device phases above it)      6.23 ms
+timing int8.context 0.030054 ms
+timing int8.uploads_and_alloc 1.510747 ms
+timing int8.kernel 1.402984 ms
+timing int8.download 3.044347 ms
+timing int8.free_and_drain 0.031938 ms
+python  matmul_int8((codes,0),(codes,0)) whole   2584.26 ms
+--- call 4, the board's form: (codes, exponents) already made
+python  _int8_operand(a codes)               1252.74 ms
+python  _int8_operand(b codes)               1212.13 ms
+python  _out_or_new (64 MB output)             35.57 ms
+timing int8.context 0.031868 ms
+timing int8.uploads_and_alloc 1.573761 ms
+timing int8.kernel 1.391297 ms
+timing int8.download 3.071768 ms
+timing int8.free_and_drain 0.03355 ms
+python  binding gemm_int8 (device phases above it)      6.12 ms
+timing int8.context 0.030115 ms
+timing int8.uploads_and_alloc 1.529575 ms
+timing int8.kernel 1.398868 ms
+timing int8.download 3.050126 ms
+timing int8.free_and_drain 0.038598 ms
+python  matmul_int8((codes,0),(codes,0)) whole   2494.32 ms
+--- the float32 form: quantize both operands on the device, then the product
+python  quantize_int8(A)                       22.68 ms
+python  quantize_int8(B)                        7.52 ms
+timing int8.context 0.012298 ms
+timing int8.uploads_and_alloc 1.518789 ms
+timing int8.kernel 1.389845 ms
+timing int8.download 3.06 ms
+timing int8.free_and_drain 0.030576 ms
+python  matmul_int8(A, B) whole                48.09 ms
