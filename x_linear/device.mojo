@@ -23,7 +23,10 @@ from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
-from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own
+from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own, ALGO_SGD, ALGO_LARS
+from x_linear.ops import ld, st, fd, i2f
+from x_linear.tops import upper_cell, fold_fa, chain_cfmad
+from std.os import getenv
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -89,10 +92,99 @@ def decision_kernel(x: FP, wb: FP, n: Int32, d: Int32, k: Int32, link: Int32, re
         res.unsafe_store(t, decision_one(x, i, Int(d), wb, c, Int(link)))
 
 
+comptime XG_TPB = 256
+
+
+def _xg_blocks(count: Int) -> Int:
+    return (count + XG_TPB - 1) // XG_TPB
+
+
+def xg_means_kernel(x: FP, n: Int32, d: Int32, fi: Int32, fw: FP):
+    """`t_col_means` as a grid: thread j folds column j ascending
+    (`fold_fa`) and divides by n, the same statements; zeros without an
+    intercept, as `lars_fit` fills them."""
+    var j = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if j < Int(d):
+        if fi != 0:
+            st(fw, j, fd(fold_fa(x, j, Int(d), Int(n)), i2f(Int(n))))
+        else:
+            st(fw, j, Float32(0))
+
+
+def xg_gram_kernel(x: FP, n: Int32, d: Int32, fw: FP):
+    """`t_centered_gram` as a grid (lane/neural-net-experiment, 2026-09-30,
+    the classical pass): one thread per upper-triangle cell, each the same
+    `chain_cfmad` over the rows ascending from the means in fw[0, d), into
+    G at fw[d, d + d*d). The team form ran the same chains on ONE block of
+    256 threads, 96 chains of a million rows per thread at 220 features:
+    15.4 s on an L40S for `lars` on istella (bench_board 0.8.25) against
+    cuML's 0.064. Per cell the chain is unchanged, so the bits are the
+    team form's; only the thread that runs it differs."""
+    var dd = Int(d)
+    var cells = dd * (dd + 1) // 2
+    var c = Int(block_idx.x) * XG_TPB + Int(thread_idx.x)
+    if c < cells:
+        var jk = upper_cell(c, dd)
+        var j = jk[0]
+        var k = jk[1]
+        var acc = chain_cfmad(x, j, dd, ld(fw, j), x, k, dd, ld(fw, k), Int(n))
+        st(fw, dd + j * dd + k, acc)
+        st(fw, dd + k * dd + j, acc)
+
+
+def _sgd_on_host() -> Bool:
+    """`MOJOLEARN_X_LINEAR_SGD_HOST=0` keeps SGD on its one device thread
+    (the A/B arm); default the host."""
+    return String(getenv("MOJOLEARN_X_LINEAR_SGD_HOST")) != "0"
+
+
+def _lars_grid_gram() -> Bool:
+    """`MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` keeps the Gram on the team
+    (the A/B arm); default the grid kernel."""
+    return String(getenv("MOJOLEARN_X_LINEAR_LARS_GRID_GRAM")) != "0"
+
+
+def _fit_on_host(
+    algo: Int, x: FP, y: FP, n: Int, d: Int,
+    ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
+) raises:
+    """The host form of a fit, from the device binding (lane/neural-net-
+    experiment, 2026-09-30, the classical pass): exactly what
+    bindings/_mojolearn_x_linear_host.mojo runs, a `solo` team on host
+    scratch. For SGD, whose program is one sample after the next (their
+    plain SGD, the order is the algorithm), the device ran that sequence on
+    ONE GPU THREAD: 630 s for a million rows of istella on an L40S against
+    sklearn's 55 s (bench_board 0.8.25, `sgd-reg`). The host form is the
+    same program, the identical tier's own reference, on a CPU thread; the
+    one-vs-rest problems of a classifier run as independent units."""
+    var hip = ip.copy()
+    var hfp = fp.copy()
+    var fw = List[Float32](length=max(n_fw, 1), fill=Float32(0))
+    var iw = List[Int32](length=max(n_iw, 1), fill=Int32(0))
+    var bufs = team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr())))
+    var own = team_own(algo, d)
+    var tw = List[Float32](length=team_work(n, bufs, own), fill=Float32(0))
+    for i in range(n_out):
+        res.unsafe_store(i, Float32(0))
+    fit_dispatch(
+        solo(FP(unsafe_from_address=Int(tw.unsafe_ptr())), n, bufs, own), algo, x, y, n, d,
+        IP(unsafe_from_address=Int(hip.unsafe_ptr())), FP(unsafe_from_address=Int(hfp.unsafe_ptr())),
+        res, FP(unsafe_from_address=Int(fw.unsafe_ptr())), IP(unsafe_from_address=Int(iw.unsafe_ptr())),
+    )
+    _ = hip^
+    _ = hfp^
+    _ = fw^
+    _ = iw^
+    _ = tw^
+
+
 def fit_device(
     algo: Int, x: FP, n_x: Int, y: FP, n_y: Int, n: Int, d: Int,
     ip: List[Int32], fp: List[Float32], n_out: Int, n_fw: Int, n_iw: Int, res: FP,
 ) raises:
+    if algo == ALGO_SGD and _sgd_on_host():
+        _fit_on_host(algo, x, y, n, d, ip, fp, n_out, n_fw, n_iw, res)
+        return
     var ctx = linear_ctx()
     comptime if X_LINEAR_BLOCKS:
         from x_linear.blocks import blocks_handles, blocks_fit
@@ -109,12 +201,19 @@ def fit_device(
             return
     var dx = ctx.enqueue_create_buffer[DType.float32](max(n_x, 1))
     var dy = ctx.enqueue_create_buffer[DType.float32](max(n_y, 1))
-    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(ip), 1))
     var dfp = ctx.enqueue_create_buffer[DType.float32](max(len(fp), 1))
     var dout = ctx.enqueue_create_buffer[DType.float32](max(n_out, 1))
     var dfw = ctx.enqueue_create_buffer[DType.float32](max(n_fw, 1))
     var diw = ctx.enqueue_create_buffer[DType.int32](max(n_iw, 1))
     var hip = ip.copy()
+    # LARS reads ip[4] on the device: 1 when the Gram is already in fw
+    # (`xg_gram_kernel` below), 0 when the team computes it.
+    var grid_gram = algo == ALGO_LARS and _lars_grid_gram() and d > 0
+    if algo == ALGO_LARS:
+        while len(hip) < 5:
+            hip.append(Int32(0))
+        hip[4] = Int32(1 if grid_gram else 0)
+    var dip = ctx.enqueue_create_buffer[DType.int32](max(len(hip), 1))
     var dtw = ctx.enqueue_create_buffer[DType.float32](
         team_work(n, team_rows(algo, IP(unsafe_from_address=Int(hip.unsafe_ptr()))), team_own(algo, d)))
     var hfp = fp.copy()
@@ -130,6 +229,18 @@ def fit_device(
     dfw.enqueue_fill(Float32(0))
     diw.enqueue_fill(Int32(0))
     dtw.enqueue_fill(Float32(0))
+    if grid_gram:
+        # The means then the centered Gram into fw[0, d + d*d), the layout
+        # `lars_fit` reads (xm at 0, G at d); the team recomputes the means
+        # itself (the same statements, the same values) and skips the Gram.
+        ctx.enqueue_function[xg_means_kernel](
+            dx.unsafe_ptr(), Int32(n), Int32(d), Int32(hip[1]), dfw.unsafe_ptr(),
+            grid_dim=_xg_blocks(d), block_dim=XG_TPB,
+        )
+        ctx.enqueue_function[xg_gram_kernel](
+            dx.unsafe_ptr(), Int32(n), Int32(d), dfw.unsafe_ptr(),
+            grid_dim=_xg_blocks(d * (d + 1) // 2), block_dim=XG_TPB,
+        )
     ctx.enqueue_function[fit_kernel](
         Int32(algo), dx.unsafe_ptr(), dy.unsafe_ptr(), Int32(n), Int32(d),
         dip.unsafe_ptr(), dfp.unsafe_ptr(), dout.unsafe_ptr(), dfw.unsafe_ptr(), diw.unsafe_ptr(),

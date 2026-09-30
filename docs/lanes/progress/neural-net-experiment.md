@@ -208,3 +208,19 @@ training step's forward share; lm-train-step and samba-train-step move
 little (their costs are in the backward and, for Samba, the recompute).
 If transformer-forward does NOT move on the MI325X, the remaining cost is
 in the kernels, and the GEMM tile sweep is the next lane.
+
+## The classical pass (same branch, 2026-09-30)
+
+Asked for after the L40S table: the board's worst GPU-versus-GPU cells.
+Read from the code, unmeasured: lu-factor's pivot search and lu-solve were
+one GPU thread each; sgd-* ran their sequential program on one GPU
+thread; lars ran its 24,531 Gram chains on one block; the batched IVF scan
+was gated to Apple. Four commits, each with an A/B env, each claiming the
+same bits by construction (compares only; independent columns; the same
+per-cell chain on another thread; the same kernel on another vendor). The
+table and the run recipe are in EXPERIMENTS.md, "The classical pass".
+
+Two things the identity gates must confirm before any of it ships: the
+host SGD form equals the device form bit for bit (the tier's own claim, but
+the route is new), and the IVF scan's results on a 64-lane AMD wavefront
+equal the per-query path's (the merge now folds all 64 lanes).
