@@ -111,7 +111,7 @@ def test_finite_inputs_with_overflow_are_refused(native, operation):
 
 
 def flatten(weights, names):
-    return np.concatenate([weights[name].ravel() for name in names]).astype(np.float64)
+    return np.concatenate([np.asarray(weights[name]).ravel() for name in names]).astype(np.float64)
 
 
 def adamw_reference(before, gradients, *, reset_moments=False, ascent=False):
@@ -120,8 +120,8 @@ def adamw_reference(before, gradients, *, reset_moments=False, ascent=False):
     parameters = flatten(before['weights'], names)
     gradient = flatten(gradients, names)
     state, config = before['optimizer'], before['config']
-    first = np.zeros_like(parameters) if reset_moments else state['m'].astype(np.float64)
-    second = np.zeros_like(parameters) if reset_moments else state['v'].astype(np.float64)
+    first = np.zeros_like(parameters) if reset_moments else np.asarray(state['m'], dtype=np.float64)
+    second = np.zeros_like(parameters) if reset_moments else np.asarray(state['v'], dtype=np.float64)
     beta1, beta2 = config['beta1'], config['beta2']
     t = state['step'] + 1
     first = beta1 * first + (1 - beta1) * gradient
@@ -144,8 +144,8 @@ def test_public_adamw_complete_state_matches_independent_equations(native):
     # Nonzero carried state and a noninitial step make dropped moments and
     # reset bias-correction counters observable. These are valid public state.
     planted['optimizer']['step'] = 4
-    planted['optimizer']['m'][:] = np.linspace(.01, .03, 195, dtype=np.float32)
-    planted['optimizer']['v'][:] = np.linspace(.02, .04, 195, dtype=np.float32)
+    planted['optimizer']['m'] = np.linspace(.01, .03, 195, dtype=np.float32)
+    planted['optimizer']['v'] = np.linspace(.02, .04, 195, dtype=np.float32)
     model.load_state_dict(planted)
     for batch_index in (0, 1):
         before = model.state_dict()

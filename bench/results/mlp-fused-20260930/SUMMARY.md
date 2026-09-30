@@ -13,3 +13,10 @@ row-sum launches pass a distinct unused buffer as `other` (operation 3 never rea
 | mlp-train-step board cell, `MOJOLEARN_MLP_FUSED=0` -> 1 | 2.149 ms -> 1.644 ms (1.31x), same losses |
 
 Apple (the target: M3 Ultra 18 ms vs M2 Pro 9 ms) and AMD: not run.
+
+## The 9 skipped tests (GPU numerical gate, opt-in `MOJOLEARN_RUN_SMALL_MLP_GPU=1`)
+Run on the L4 with the flag, `MOJOLEARN_MLP_FUSED=1` and `=0`: 26 passed each, after one test fix.
+`test_public_adamw_complete_state_matches_independent_equations` failed on main as well (main's linalg,
+per-operation path): it wrote into `state_dict()`'s optimizer `Array`s in place and did numpy math on them,
+which mojolearn's `Array` does not support. The test now assigns fresh arrays and converts to numpy in its
+FP64 reference; the assertions are unchanged.
