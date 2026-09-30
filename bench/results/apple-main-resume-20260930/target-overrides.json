@@ -1,0 +1,12 @@
+{
+  "m3ultra-b": {
+    "root": "/Users/ec2-user/board-resume-main-10523ede1",
+    "commit": "10523ede164135c2293d16f857b49c157eab71aa",
+    "command": "test -f /Users/ec2-user/board-resume-main-10523ede1/DATA_READY && \"$HOME/mojolearn/.pixi/envs/default/bin/python3.13\" /Users/ec2-user/board-resume-main-10523ede1/resume.py --root /Users/ec2-user/board-resume-main-10523ede1"
+  },
+  "m2pro": {
+    "root": "/Users/ec2-user/board-resume-main-10523ede1",
+    "commit": "10523ede164135c2293d16f857b49c157eab71aa",
+    "command": "test -f /Users/ec2-user/board-resume-main-10523ede1/DATA_READY && \"$HOME/mojolearn/.pixi/envs/default/bin/python3.13\" /Users/ec2-user/board-resume-main-10523ede1/resume.py --root /Users/ec2-user/board-resume-main-10523ede1"
+  }
+}

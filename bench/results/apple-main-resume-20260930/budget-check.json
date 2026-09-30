@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "fixture": "one hung race with a sleeping child, followed by a successful race",
+  "fixture_timeout_s": 1,
+  "production_race_timeout_s": 900,
+  "production_arm_budget_s": 300,
+  "assertions": [
+    "hung race and child killed",
+    "next race completed",
+    "timeout retained in exceptions",
+    "coverage did not report complete"
+  ]
+}
