@@ -1,0 +1,18 @@
+
+=== 2026-09-29T20:31:58Z /root/bench-board-cache/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane mamba3-forward --shape full --arms ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd/work --ours-python /root/bench-board-cache/venv/bin/python --theirs-python /root/bench-board-cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba3-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba3-forward arm=ours round=0 ms=329.340 digest=481c50cae2dd749e
+NEURAL-ROUND lane=mamba3-forward arm=torch-eager-fp32 round=0 ms=677.782 digest=014aa7c089edea44
+NEURAL-ROUND lane=mamba3-forward arm=torch-compile-fp32 round=0 ms=303340.581 digest=151c79c2dae40c1b
+NEURAL-ROUND lane=mamba3-forward arm=torch-eager-bf16 round=0 ms=1485.267 digest=75ceca552a4e35a4
+NEURAL-ROUND lane=mamba3-forward arm=torch-compile-bf16 round=0 ms=332507.845 digest=01bb2628dffc6052
+NEURAL-ROUND lane=mamba3-forward arm=torch-eager-fp32 round=1 ms=72.098 digest=014aa7c089edea44
+NEURAL-ROUND lane=mamba3-forward arm=torch-compile-fp32 round=1 ms=9.575 digest=151c79c2dae40c1b
+NEURAL-ROUND lane=mamba3-forward arm=torch-eager-bf16 round=1 ms=73.004 digest=75ceca552a4e35a4
+NEURAL-ROUND lane=mamba3-forward arm=torch-compile-bf16 round=1 ms=9.799 digest=01bb2628dffc6052
+NEURAL-ROUND lane=mamba3-forward arm=ours round=1 ms=10.840 digest=481c50cae2dd749e
+NEURAL lane=mamba3-forward arm=ours status=ok median_ms=10.839822003617883 quality={}
+NEURAL lane=mamba3-forward arm=torch-eager-fp32 status=ok median_ms=72.09822599543259 quality={"max_abs_diff_vs_ours": 5.364418029785156e-07, "max_rel_diff_vs_ours": 2.3468074500810588e-07}
+NEURAL lane=mamba3-forward arm=torch-compile-fp32 status=ok median_ms=9.57462500082329 quality={"max_abs_diff_vs_ours": 4.76837158203125e-07, "max_rel_diff_vs_ours": 2.0860510667387188e-07}
+NEURAL lane=mamba3-forward arm=torch-eager-bf16 status=ok median_ms=73.00424398272298 quality={"max_abs_diff_vs_ours": 0.0020689964294433594, "max_rel_diff_vs_ours": 0.0009051375578579301}
+NEURAL lane=mamba3-forward arm=torch-compile-bf16 status=ok median_ms=9.799263993045315 quality={"max_abs_diff_vs_ours": 0.0019822120666503906, "max_rel_diff_vs_ours": 0.0008671714284432854}

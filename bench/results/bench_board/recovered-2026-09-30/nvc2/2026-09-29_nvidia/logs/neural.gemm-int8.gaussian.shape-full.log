@@ -1,0 +1,12 @@
+
+=== 2026-09-29T18:55:22Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane gemm-int8 --shape full --arms ours,torch-eager-int8,torch-compile-int8 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-int8": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-int8": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-int8", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-int8 arm=ours round=0 ms=3049.317 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=torch-eager-int8 round=0 ms=82.772 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=torch-compile-int8 round=0 ms=1061.452 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=torch-eager-int8 round=1 ms=48.170 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=torch-compile-int8 round=1 ms=47.789 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=1 ms=2917.069 digest=9b16c7064e10cecd
+NEURAL lane=gemm-int8 arm=ours status=ok median_ms=2917.068953625858 quality={"max_rel_err_vs_fp64": 0.0}
+NEURAL lane=gemm-int8 arm=torch-eager-int8 status=ok median_ms=48.169925808906555 quality={"max_abs_diff_vs_ours": 0.0, "max_rel_diff_vs_ours": 0.0, "max_rel_err_vs_fp64": 0.0}
+NEURAL lane=gemm-int8 arm=torch-compile-int8 status=ok median_ms=47.78925236314535 quality={"max_abs_diff_vs_ours": 0.0, "max_rel_diff_vs_ours": 0.0, "max_rel_err_vs_fp64": 0.0}

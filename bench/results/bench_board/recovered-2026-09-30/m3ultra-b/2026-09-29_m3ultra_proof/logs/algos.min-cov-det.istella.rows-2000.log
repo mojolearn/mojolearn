@@ -1,0 +1,8 @@
+
+=== 2026-09-29T14:14:09Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane min-cov-det --dataset istella --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"seed": 7}, "source": "get_params"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/min-cov-det", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=min-cov-det dataset=istella arm=ours round=0 ms=219032.393 infer_ms=None digest=274cb8e4fb9e7b68
+ALGOS-ROUND lane=min-cov-det dataset=istella arm=ours-fast round=0 ms=39403.269 infer_ms=None digest=5a5aacf2eca1a137
+ALGOS-ROUND lane=min-cov-det dataset=istella arm=sklearn-cpu round=0 ms=2719.123 infer_ms=None digest=0befb00ef58f2291
+ALGOS-ROUND lane=min-cov-det dataset=istella arm=ours-fast round=1 ms=39440.138 infer_ms=None digest=5a5aacf2eca1a137
+ALGOS-ROUND lane=min-cov-det dataset=istella arm=sklearn-cpu round=1 ms=2718.417 infer_ms=None digest=0befb00ef58f2291

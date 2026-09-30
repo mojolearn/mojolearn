@@ -1,0 +1,287 @@
+{
+  "arms": {
+    "faiss-cpu": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "faiss-cpu",
+        "--lane",
+        "ivf",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "5d710be2a82d6f47",
+        "5d710be2a82d6f47"
+      ],
+      "info": {
+        "config": "IndexIVFFlat(IndexFlatL2(d), d, 1024, METRIC_L2); cp.niter=20, cp.seed=7; train + add + search, nprobe=32, k=10",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "faiss",
+        "numpy": "2.5.3",
+        "omp_threads": 20,
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "version": "1.15.1"
+      },
+      "median_ms": 142.95150100952014,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 102.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 139.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        142.95150100952014
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "faiss",
+        "params": {
+          "kmeans_n_iters": 20,
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "build + search of every query",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 150.59694900992326
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "ivf",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e00141a7605ff662",
+        "e00141a7605ff662"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "n_features": 11,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 20382.160328997998,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 678.6,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2111.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 678.6,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2141.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        20382.160328997998
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "kmeans_n_iters": 20,
+          "metric": "sqeuclidean",
+          "n_lists": 1024,
+          "n_neighbors": 10,
+          "n_probes": 32,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "build + search of every query",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 20678.687867010012
+    }
+  },
+  "block": {
+    "arrays": {
+      "index": {
+        "dtype": "float32",
+        "sha256": "ea3401a27dc7f29b9d2aeb073dab652d2529d5db7ae775f41abf11c243710416",
+        "shape": [
+          400000,
+          11
+        ]
+      },
+      "queries": {
+        "dtype": "float32",
+        "sha256": "f4ec2c83347e9943f0482ff63a0fd25323e082f99302241576a0b9b7c1c4894f",
+        "shape": [
+          4000,
+          11
+        ]
+      }
+    },
+    "block": "ivf",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "index_rows": [
+      0,
+      400000
+    ],
+    "loader": "knn_datasets.real_block('taxi')",
+    "query_rows": [
+      400000,
+      404000
+    ],
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "none",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "index": 0,
+      "queries": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T14:45:14Z"
+  },
+  "commit": "ba7803f217f47ae6227036e1f120170eafb8d263",
+  "dataset": "taxi",
+  "finished": "2026-09-29T20:18:58Z",
+  "lane": "ivf",
+  "lane_config": {
+    "mismatches": [
+      "quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)",
+      "seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none"
+    ],
+    "params": "IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7",
+    "quality": "recall@10 against a float64 NumPy brute force",
+    "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
+    "timed": "build + search of every query"
+  },
+  "params_check": {
+    "arms": {
+      "faiss-cpu": {
+        "library": "faiss",
+        "params": {
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "faiss-cpu",
+        "ours": "sqeuclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "sqeuclidean"
+      },
+      {
+        "arm": "faiss-cpu",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "faiss-cpu",
+        "ours": 1024,
+        "param": "nlist",
+        "same": true,
+        "theirs": 1024
+      },
+      {
+        "arm": "faiss-cpu",
+        "ours": 32,
+        "param": "nprobe",
+        "same": true,
+        "theirs": 32
+      }
+    ],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "ivf",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "error": "RuntimeError(\"the recall function is the knn lane's, at k=64\")"
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "index 400000x11; queries 4000x11",
+  "started": "2026-09-29T20:18:16Z"
+}

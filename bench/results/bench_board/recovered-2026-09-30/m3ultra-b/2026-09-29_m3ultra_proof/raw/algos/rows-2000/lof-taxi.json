@@ -1,0 +1,400 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lof",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; sklearn-cpu (sklearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.LocalOutlierFactor(algorithm='brute', contamination='auto', leaf_size=30, metric='minkowski', n_neighbors=20, novelty=False, p=2)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "metric_params": null,
+          "n_neighbors": 20,
+          "novelty": false,
+          "p": 2
+        },
+        "source": "get_params"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "lof",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; sklearn-cpu (sklearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.LocalOutlierFactor(algorithm='brute', contamination='auto', leaf_size=30, metric='minkowski', n_neighbors=20, novelty=False, p=2)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "metric_params": null,
+          "n_neighbors": 20,
+          "novelty": false,
+          "p": 2
+        },
+        "source": "get_params"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "lof",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; sklearn-cpu (sklearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "sklearn.neighbors:LocalOutlierFactor(algorithm='brute', contamination='auto', leaf_size=30, metric='minkowski', n_jobs=-1, n_neighbors=20, novelty=False, p=2)",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "metric_params": null,
+          "n_neighbors": 20,
+          "novelty": false,
+          "p": 2
+        },
+        "source": "get_params"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "5e2f325d6e0afa65d2e02cbdd89e129f37e58b7bf1cf602e53dbffe54ac88c04",
+        "shape": [
+          2000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "9a4af5f29f8d581843b9c01c0cc59148e72f2295f07cb2e1d918128dd5c3b909",
+        "shape": [
+          2000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "eb4b4a57068aedf142605a3bdb3f8b6c35f9940a8bbd57ad380e298d7d1343bd",
+        "shape": [
+          2000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "3c24b5ad610aaca1430f815de0a4eda92484299c0535ce8c727e6342d6fec80a",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "cls",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 2000 of 500000 test rows",
+    "fit_rows": "stride sample of 2000 of 4110786 train rows",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False), TAXI_NUMERIC columns",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": 2000,
+    "target": "binary",
+    "written": "2026-09-29T12:25:05Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "taxi",
+  "finished": "2026-09-29T12:43:06Z",
+  "lane": "lof",
+  "lane_config": {
+    "block": "cls",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.LocalOutlierFactor",
+    "params": {
+      "algorithm": "brute",
+      "contamination": "auto",
+      "leaf_size": 30,
+      "metric": "minkowski",
+      "n_neighbors": 20,
+      "novelty": false,
+      "p": 2
+    },
+    "quality": "fraction flagged on Xq; Jaccard of the flagged set against scikit-learn's",
+    "sklearn": "sklearn.neighbors:LocalOutlierFactor",
+    "stride_subsets": {
+      "X": 200000
+    },
+    "task": "outlier",
+    "timed_fit": "fit_predict(X)",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "n_neighbors": 20,
+          "p": 2
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "n_neighbors": 20,
+          "p": 2
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "brute",
+          "contamination": "auto",
+          "leaf_size": 30,
+          "metric": "minkowski",
+          "n_neighbors": 20,
+          "p": 2
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": "brute",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "brute"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "auto",
+        "param": "contamination",
+        "same": true,
+        "theirs": "auto"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 30,
+        "param": "leaf_size",
+        "same": true,
+        "theirs": 30
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "minkowski",
+        "param": "metric",
+        "same": true,
+        "theirs": "minkowski"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 20,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 20
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 2,
+        "param": "p",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "brute",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "brute"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "auto",
+        "param": "contamination",
+        "same": true,
+        "theirs": "auto"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 30,
+        "param": "leaf_size",
+        "same": true,
+        "theirs": 30
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "minkowski",
+        "param": "metric",
+        "same": true,
+        "theirs": "minkowski"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 20,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 20
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 2,
+        "param": "p",
+        "same": true,
+        "theirs": 2
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lof",
+    "problems": [
+      "ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "sklearn-cpu (sklearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none"
+    ],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "REFUSED"
+  },
+  "params_refused": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; sklearn-cpu (sklearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x11; Xq 2000x11; y 2000; yq 2000",
+  "started": "2026-09-29T12:43:05Z"
+}

@@ -1,0 +1,12 @@
+
+=== 2026-09-29T20:30:26Z /root/bench-board-cache/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane mamba1-infer --shape full --arms ours,torch-cpu-eager-fp32,torch-cpu-eager-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd/work --ours-python /root/bench-board-cache/venv/bin/python --theirs-python /root/bench-board-cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-infer arm=ours round=0 ms=52.722 digest=6caeee307295deeb
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=0 ms=430.366 digest=78ec5ac7343d1e02
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=0 ms=451.960 digest=8fc64ab7ded27a40
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=1 ms=25.002 digest=78ec5ac7343d1e02
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=1 ms=36.184 digest=8fc64ab7ded27a40
+NEURAL-ROUND lane=mamba1-infer arm=ours round=1 ms=48.368 digest=6caeee307295deeb
+NEURAL lane=mamba1-infer arm=ours status=ok median_ms=48.36770601104945 quality={}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-fp32 status=ok median_ms=25.002328009577468 quality={"max_abs_diff_vs_ours": 1.1920928955078125e-07, "max_rel_diff_vs_ours": 5.948106105171795e-08}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-bf16 status=ok median_ms=36.183742980938405 quality={"max_abs_diff_vs_ours": 5.14984130859375e-05, "max_rel_diff_vs_ours": 2.5695818374342154e-05}

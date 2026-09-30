@@ -1,0 +1,82 @@
+
+=== 2026-09-29T07:52:40Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane gbdt-rank-yetirank --dataset istellarank --devices cpu --arms catboost-cpu,xgboost-cpu,lightgbm-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=gbdt-rank-yetirank MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=1.000000 reason=grower: ours and CatBoost fit YetiRank on symmetric trees (ours has no other policy for a ranking loss); XGBoost depthwise at depth 6, LightGBM leaf-wise capped at depth 6 and 64 leaves, because neither has an oblivious grower
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=2.000000 reason=objective: XGBoost rank:ndcg and LightGBM lambdarank are LambdaMART (NDCG-weighted pairwise gradients), a different loss from YetiRank's sampled permutations; each is that library's closest listwise objective, labeled
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=3.000000 reason=l2 1.0 is pinned on every arm; the YetiRank default in CatBoost (and ours) is 0
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=4.000000 reason=YetiRank draws its permutations from each library's own seeded generator (seed 7); the streams are not shared, so the fits differ by construction
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=5.000000 reason=XGBoost pair construction (lambdarank_pair_method, lambdarank_num_pair_per_sample) and LightGBM's lambdarank_truncation_level (30) and label_gain (2^g - 1) are left at their defaults; no library exposes the others' pair sampling
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=6.000000 reason=XGBoost is handed each query renumbered by order of appearance (it refuses unsorted qids); the same partition of the same rows in the same order
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=mismatch delta=7.000000 reason=LightGBM min_child_samples 20 and min_child_weight 1e-3 stay at its defaults: at 0 (the gbdt lanes' value) LightGBM 4.7.0 aborts the first lambdarank tree
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=* metric=objectives delta=4.000000 reason=catboost YetiRank; lightgbm lambdarank; mojolearn YetiRank; xgboost rank:ndcg
+FSPEED-NOTE lane=gbdt-rank-yetirank arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-AB lane=gbdt-rank-yetirank arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours-ab 2550_borrow_x=1 2551_device_partition=0 2580_level_quant=0 2581_group_width=0
+FSPEED-SCALE stage=before rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-rank-yetirank arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-rank-yetirank arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-rank-yetirank arm=catboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-rank-yetirank arm=xgboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-rank-yetirank arm=lightgbm-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours round=0 host_mb=5470.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-rank-yetirank arm=ours shape=istellarank-2043304x220 ms=22664.010
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours-ab round=0 host_mb=5439.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-rank-yetirank arm=ours-ab shape=istellarank-2043304x220 ms=25752.824
+FSPEED-MEM lane=gbdt-rank-yetirank arm=catboost-cpu round=0 host_mb=5711.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-rank-yetirank arm=catboost-cpu shape=istellarank-2043304x220 ms=25570.258
+FSPEED-MEM lane=gbdt-rank-yetirank arm=xgboost-cpu round=0 host_mb=6804.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-rank-yetirank arm=xgboost-cpu shape=istellarank-2043304x220 ms=7639.774
+FSPEED-MEM lane=gbdt-rank-yetirank arm=lightgbm-cpu round=0 host_mb=6512.2 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-rank-yetirank arm=lightgbm-cpu shape=istellarank-2043304x220 ms=6804.359
+FSPEED-ORDER lane=gbdt-rank-yetirank round=1 arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours round=1 host_mb=8658.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours shape=istellarank-2043304x220 round=1 ms=22539.824 hash=d4f04391f2ad81dc
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours-ab round=1 host_mb=9885.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours-ab shape=istellarank-2043304x220 round=1 ms=25729.464 hash=59b3e7dfd2006c97
+FSPEED-MEM lane=gbdt-rank-yetirank arm=catboost-cpu round=1 host_mb=9480.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=catboost-cpu shape=istellarank-2043304x220 round=1 ms=25282.991 hash=74c1246468808a0a
+FSPEED-MEM lane=gbdt-rank-yetirank arm=xgboost-cpu round=1 host_mb=9424.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=xgboost-cpu shape=istellarank-2043304x220 round=1 ms=7652.686 hash=6e13e824af76c16c
+FSPEED-MEM lane=gbdt-rank-yetirank arm=lightgbm-cpu round=1 host_mb=9721.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=lightgbm-cpu shape=istellarank-2043304x220 round=1 ms=6808.032 hash=688c63b035821a9e
+FSPEED-ORDER lane=gbdt-rank-yetirank round=2 arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours round=2 host_mb=11987.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours shape=istellarank-2043304x220 round=2 ms=22504.472 hash=d4f04391f2ad81dc
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours-ab round=2 host_mb=11964.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours-ab shape=istellarank-2043304x220 round=2 ms=25719.041 hash=59b3e7dfd2006c97
+FSPEED-MEM lane=gbdt-rank-yetirank arm=catboost-cpu round=2 host_mb=10103.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=catboost-cpu shape=istellarank-2043304x220 round=2 ms=25245.348 hash=74c1246468808a0a
+FSPEED-MEM lane=gbdt-rank-yetirank arm=xgboost-cpu round=2 host_mb=9877.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=xgboost-cpu shape=istellarank-2043304x220 round=2 ms=7684.889 hash=6e13e824af76c16c
+FSPEED-MEM lane=gbdt-rank-yetirank arm=lightgbm-cpu round=2 host_mb=10181.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=lightgbm-cpu shape=istellarank-2043304x220 round=2 ms=6779.314 hash=688c63b035821a9e
+FSPEED-ORDER lane=gbdt-rank-yetirank round=3 arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours round=3 host_mb=12549.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours shape=istellarank-2043304x220 round=3 ms=22705.913 hash=d4f04391f2ad81dc
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours-ab round=3 host_mb=12526.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours-ab shape=istellarank-2043304x220 round=3 ms=25727.910 hash=59b3e7dfd2006c97
+FSPEED-MEM lane=gbdt-rank-yetirank arm=catboost-cpu round=3 host_mb=10435.0 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=catboost-cpu shape=istellarank-2043304x220 round=3 ms=25360.857 hash=74c1246468808a0a
+FSPEED-MEM lane=gbdt-rank-yetirank arm=xgboost-cpu round=3 host_mb=10164.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=xgboost-cpu shape=istellarank-2043304x220 round=3 ms=7697.679 hash=6e13e824af76c16c
+FSPEED-MEM lane=gbdt-rank-yetirank arm=lightgbm-cpu round=3 host_mb=10358.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-rank-yetirank arm=lightgbm-cpu shape=istellarank-2043304x220 round=3 ms=6774.850 hash=688c63b035821a9e
+FSPEED-ORDER lane=gbdt-rank-yetirank round=4 arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours round=4 host_mb=12829.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours shape=istellarank-2043304x220 round=4 ms=22581.998 hash=d4f04391f2ad81dc
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-rank-yetirank arm=ours-ab round=4 host_mb=12806.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-rank-yetirank arm=ours-ab shape=istellarank-2043304x220 round=4 ms=25680.083 hash=59b3e7dfd2006c97

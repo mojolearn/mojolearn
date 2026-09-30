@@ -1,0 +1,6 @@
+
+=== 2026-09-29T23:04:52Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py race --lane knn --dataset istella --data /root/bench-board-cache-t213/ctd-data/rows-full --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.knn.istella.rows=full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --root /root/mojolearn-wt/steward-do-amd --arms sklearn-cpu,torch-gpu --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --params-only
+CTD-SETTINGS lane=knn dataset=istella n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk
+CTD-MISMATCH lane=knn dataset=istella seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)
+CTD-MISMATCH lane=knn dataset=istella query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only
+PARAMS-ONLY /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.knn.istella.rows=full/knn-istella.params.json

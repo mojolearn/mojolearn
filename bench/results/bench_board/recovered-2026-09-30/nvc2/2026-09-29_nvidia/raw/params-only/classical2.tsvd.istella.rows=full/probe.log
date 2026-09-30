@@ -1,0 +1,3 @@
+
+=== 2026-09-29T19:21:24Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_more.py race --lane tsvd --dataset istella --data /root/bench-board-cache-clean/more-data/rows-full --arms cuml-gpu --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/params-only/classical2.tsvd.istella.rows=full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600 --params-only
+PARAMS-ONLY /root/bench-board/2026-09-29_nvidia/raw/params-only/classical2.tsvd.istella.rows=full/tsvd-istella.params.json

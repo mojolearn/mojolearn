@@ -1,0 +1,12 @@
+
+=== 2026-09-30T01:28:27Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lu-factor --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,scipy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "scipy-cpu": {"library": "scipy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lu-factor", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "scipy-cpu", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=ours round=0 ms=614429.108 infer_ms=None digest=43e06346de01739b
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=scipy-cpu round=0 ms=4633.051 infer_ms=None digest=595dcd116f08119a
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=torch-gpu round=0 ms=185.347 infer_ms=None digest=0bcc2572ab146ad5
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=scipy-cpu round=1 ms=4553.939 infer_ms=None digest=595dcd116f08119a
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=torch-gpu round=1 ms=85.031 infer_ms=None digest=0bcc2572ab146ad5
+ALGOS-ROUND lane=lu-factor dataset=synthetic arm=ours round=1 ms=596834.209 infer_ms=None digest=43e06346de01739b
+ALGOS lane=lu-factor dataset=synthetic arm=ours status=ok median_ms=596834.2092270032 quality={"relative_residual": 3.2485170230898993e-06}
+ALGOS lane=lu-factor dataset=synthetic arm=scipy-cpu status=ok median_ms=4553.939249017276 quality={"relative_residual": 3.4392127578820814e-07}
+ALGOS lane=lu-factor dataset=synthetic arm=torch-gpu status=ok median_ms=85.03125398419797 quality={"relative_residual": 4.003413492599298e-07}

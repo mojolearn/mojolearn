@@ -1,0 +1,9 @@
+
+=== 2026-09-30T06:23:35Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lr-step --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"gamma": 0.5, "seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu": {"library": "torch", "params": {"gamma": 0.5, "seed": "none (deterministic)"}, "source": "declared"}}, "compared": [{"arm": "torch-cpu", "ours": 0.5, "param": "gamma", "same": true, "theirs": 0.5}], "exceptions": [], "family": "algos", "lane": "algos/lr-step", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "torch-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lr-step dataset=synthetic arm=ours round=0 ms=12.181 infer_ms=None digest=e355f51072ce9068
+ALGOS-ROUND lane=lr-step dataset=synthetic arm=torch-cpu round=0 ms=684.773 infer_ms=None digest=582fd1bb0e0cff6d
+ALGOS-ROUND lane=lr-step dataset=synthetic arm=torch-cpu round=1 ms=103.371 infer_ms=None digest=582fd1bb0e0cff6d
+ALGOS-ROUND lane=lr-step dataset=synthetic arm=ours round=1 ms=11.917 infer_ms=None digest=e355f51072ce9068
+ALGOS lane=lr-step dataset=synthetic arm=ours status=ok median_ms=11.916530987946317 quality={"max_rel_diff_vs_ours": 0.0}
+ALGOS lane=lr-step dataset=synthetic arm=torch-cpu status=ok median_ms=103.37134898873046 quality={"max_rel_diff_vs_ours": 1.4901160916291903e-08}

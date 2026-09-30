@@ -1,0 +1,3 @@
+W0930 01:31:54.934000 30089 torch/_inductor/utils.py:1953] [0/0] Not enough SMs to use max_autotune_gemm mode
+/Users/ec2-user/mojolearn/.pixi/envs/default/lib/python3.13/multiprocessing/resource_tracker.py:479: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown: {'/mp-cufa9ln0'}
+  warnings.warn(

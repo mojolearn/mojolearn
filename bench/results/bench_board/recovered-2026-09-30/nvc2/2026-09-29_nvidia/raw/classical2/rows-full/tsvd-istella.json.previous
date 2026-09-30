@@ -1,0 +1,152 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "tsvd",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "17200d78b09c6420",
+        "17200d78b09c6420"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 126.77687406539917,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 2986.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2334.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.9,
+          "gpu_mb": 2986.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2335.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        126.77687406539917
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "covariance_eigh",
+          "n_components": 10,
+          "n_iter": 5,
+          "n_oversamples": 10,
+          "power_iteration_normalizer": "auto",
+          "random_state": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 972.7331316098571
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "4500d408cc724dce0ca8c17554e77859c4cee2cc75d4c55553e02e55547e5d0c",
+        "shape": [
+          1000000,
+          220
+        ]
+      }
+    },
+    "block": "tsvd",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rows": "stride sample of 1000000 of 2043304 train rows",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "none",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T15:37:05Z"
+  },
+  "commit": "0546764d25487515797db02bdc013fb89b7b1014",
+  "dataset": "istella",
+  "finished": "2026-09-29T19:21:50Z",
+  "lane": "tsvd",
+  "lane_config": {
+    "mismatches": [
+      "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+    ],
+    "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+    "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+    "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "covariance_eigh",
+          "n_components": 10,
+          "n_iter": 5,
+          "seed": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "tsvd",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "explained_variance_ratio_sum": 0.9999921076474112,
+      "relative_reconstruction_error": 0.0025539223380432992
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 1000000x220",
+  "started": "2026-09-29T19:21:33Z"
+}

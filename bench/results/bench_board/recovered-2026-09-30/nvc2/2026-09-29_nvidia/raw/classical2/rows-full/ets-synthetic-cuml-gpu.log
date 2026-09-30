@@ -1,0 +1,6 @@
+/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py:375: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  return cls(**kw), kw
+/root/mojolearn-bench-board-l40s/tools/bench_board_more.py:1313: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  return lambda: cls(**kept)  # noqa: E731
+/root/mojolearn-bench-board-l40s/tools/bench_board_more.py:1313: FutureWarning: `cuml.tsa.ExponentialSmoothing`, along with the entire `cuml.tsa` module, was deprecated in version 26.08 and will be removed in version 26.12.
+  return lambda: cls(**kept)  # noqa: E731

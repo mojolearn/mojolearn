@@ -1,0 +1,614 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "mb-sparse-pca",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d901d1e90a48e9d1",
+        "d901d1e90a48e9d1"
+      ],
+      "infer_ms": [
+        19.451041000138503
+      ],
+      "infer_warmup_ms": 17.83762499690056,
+      "info": {
+        "config": "mojolearn.MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 235.9699169974192,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 357.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 361.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        235.9699169974192
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "max_iter": 10,
+          "max_no_improvement": 10,
+          "method": "lars",
+          "n_components": 8,
+          "random_state": 7,
+          "ridge_alpha": 0.01,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 237.20662499545142
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "mb-sparse-pca",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d901d1e90a48e9d1",
+        "d901d1e90a48e9d1"
+      ],
+      "infer_ms": [
+        16.419667001173366
+      ],
+      "infer_warmup_ms": 16.542124998522922,
+      "info": {
+        "config": "mojolearn.MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 213.30858399596764,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 354.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 358.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        213.30858399596764
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "max_iter": 10,
+          "max_no_improvement": 10,
+          "method": "lars",
+          "n_components": 8,
+          "random_state": 7,
+          "ridge_alpha": 0.01,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 206.2354579975363
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "mb-sparse-pca",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "6a9ccf98f78d44e5",
+        "6a9ccf98f78d44e5"
+      ],
+      "infer_ms": [
+        0.7867079984862357
+      ],
+      "infer_warmup_ms": 0.9309579982073046,
+      "info": {
+        "config": "sklearn.decomposition:MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, n_jobs=-1, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 2253.4549580013845,
+      "mem": [
+        {
+          "children_mb": 3715.5,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 151.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 3983.5,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 155.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        2253.4549580013845
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "callback": null,
+          "max_iter": 10,
+          "max_no_improvement": 10,
+          "method": "lars",
+          "n_components": 8,
+          "random_state": 7,
+          "ridge_alpha": 0.01,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 4746.455125001376
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "5e2f325d6e0afa65d2e02cbdd89e129f37e58b7bf1cf602e53dbffe54ac88c04",
+        "shape": [
+          2000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "9a4af5f29f8d581843b9c01c0cc59148e72f2295f07cb2e1d918128dd5c3b909",
+        "shape": [
+          2000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "eb4b4a57068aedf142605a3bdb3f8b6c35f9940a8bbd57ad380e298d7d1343bd",
+        "shape": [
+          2000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "3c24b5ad610aaca1430f815de0a4eda92484299c0535ce8c727e6342d6fec80a",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "cls",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 2000 of 500000 test rows",
+    "fit_rows": "stride sample of 2000 of 4110786 train rows",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False), TAXI_NUMERIC columns",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": 2000,
+    "target": "binary",
+    "written": "2026-09-29T12:25:05Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "taxi",
+  "finished": "2026-09-29T12:59:28Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "d901d1e90a48e9d1",
+          "d901d1e90a48e9d1"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.25"
+        },
+        "ms": [
+          19.451041000138503
+        ],
+        "status": "ok",
+        "warmup_ms": 17.83762499690056
+      },
+      "ours-fast": {
+        "digest_stable": null,
+        "digests": [
+          "d901d1e90a48e9d1",
+          "d901d1e90a48e9d1"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.25"
+        },
+        "ms": [
+          16.419667001173366
+        ],
+        "status": "ok",
+        "warmup_ms": 16.542124998522922
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "6a9ccf98f78d44e5",
+          "6a9ccf98f78d44e5"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.decomposition:MiniBatchSparsePCA(alpha=1.0, batch_size=1024, max_iter=10, max_no_improvement=10, method='lars', n_components=8, n_jobs=-1, random_state=7, ridge_alpha=0.01, shuffle=True, tol=0.001)",
+          "cpu_model": "arm",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.5.3",
+          "os_cpu_count": 28,
+          "pre_clock_fit": false,
+          "python": "3.13.15",
+          "sched_affinity_cpus": null,
+          "scipy": "1.18.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": null,
+              "filepath": "libomp.dylib",
+              "internal_api": "openmp",
+              "num_threads": 28,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          0.7867079984862357
+        ],
+        "status": "ok",
+        "warmup_ms": 0.9309579982073046
+      }
+    },
+    "batch": "Xq",
+    "call": "transform(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "mb-sparse-pca",
+  "lane_config": {
+    "block": "cls",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "decomp",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.MiniBatchSparsePCA",
+    "params": {
+      "alpha": 1.0,
+      "batch_size": 1024,
+      "max_iter": 10,
+      "max_no_improvement": 10,
+      "method": "lars",
+      "n_components": 8,
+      "random_state": 7,
+      "ridge_alpha": 0.01,
+      "shuffle": true,
+      "tol": 0.001
+    },
+    "quality": "relative reconstruction error of Xq from the arm's code and dictionary",
+    "sklearn": "sklearn.decomposition:MiniBatchSparsePCA",
+    "stride_subsets": {
+      "X": 100000,
+      "Xq": 20000
+    },
+    "task": "transform",
+    "timed_fit": "fit(X)",
+    "timed_infer": "transform(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "max_iter": 10,
+          "n_components": 8,
+          "seed": 7,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "max_iter": 10,
+          "n_components": 8,
+          "seed": 7,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "alpha": 1.0,
+          "batch_size": 1024,
+          "max_iter": 10,
+          "n_components": 8,
+          "seed": 7,
+          "shuffle": true,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": 1.0,
+        "param": "alpha",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 1024,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 1024
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 10,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "ours-fast",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1.0,
+        "param": "alpha",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1024,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 1024
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.001
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/mb-sparse-pca",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "component_sparsity": 0.25,
+      "relative_reconstruction_error": 0.2799222309278768
+    },
+    "ours-fast": {
+      "component_sparsity": 0.25,
+      "relative_reconstruction_error": 0.2799222309278768
+    },
+    "sklearn-cpu": {
+      "component_sparsity": 0.25,
+      "relative_reconstruction_error": 0.2799221918655992
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x11; Xq 2000x11; y 2000; yq 2000",
+  "started": "2026-09-29T12:59:18Z"
+}

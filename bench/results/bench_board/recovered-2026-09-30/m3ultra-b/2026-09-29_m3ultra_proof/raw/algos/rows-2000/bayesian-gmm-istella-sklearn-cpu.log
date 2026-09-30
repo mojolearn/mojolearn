@@ -1,0 +1,49 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_gaussian_mixture.py", line 334, in _compute_precision_cholesky
+    cov_chol = linalg.cholesky(covariance, lower=True)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/scipy/linalg/_decomp_cholesky.py", line 120, in cholesky
+    c = _cholesky(a, lower=lower, overwrite_a=overwrite_a, clean=True,
+                check_finite=check_finite)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/scipy/linalg/_decomp_cholesky.py", line 53, in _cholesky
+    _check_format_errors_warnings("potrf", err_lst)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/scipy/linalg/_decomp_cholesky.py", line 23, in _check_format_errors_warnings
+    raise LinAlgError(msg)
+numpy.linalg.LinAlgError: Internal potrf return info = [143] for slices [0].
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 3743, in worker
+    runner.fit()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 1878, in fit
+    self._fit()
+    ~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2107, in fit
+    est.fit(X)
+    ~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_base.py", line 182, in fit
+    self.fit_predict(X, y)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/base.py", line 1365, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_base.py", line 237, in fit_predict
+    self._initialize_parameters(X, random_state)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_base.py", line 141, in _initialize_parameters
+    self._initialize(X, resp)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_bayesian_mixture.py", line 530, in _initialize
+    self._estimate_precisions(nk, xk, sk)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_bayesian_mixture.py", line 590, in _estimate_precisions
+    self.precisions_cholesky_ = _compute_precision_cholesky(
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.covariances_, self.covariance_type
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/mixture/_gaussian_mixture.py", line 336, in _compute_precision_cholesky
+    raise ValueError(estimate_precision_error_message)
+ValueError: Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data.

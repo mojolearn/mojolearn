@@ -1,0 +1,786 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-mlp-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "call": "mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mlp_impl.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 17.858582999906503,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 311.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 314.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        17.858582999906503
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "lr": 0.001,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 103.29170800105203
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-mlp-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "F.linear, ReLU, F.linear (mean CE, AdamW for the step)",
+        "version": "2.13.0"
+      },
+      "median_ms": 4.267290998541284,
+      "mem": [
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 16.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 619.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 16.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 619.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        4.267290998541284
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 988.1905829970492
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-mlp-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "F.linear, ReLU, F.linear (mean CE, AdamW for the step)",
+        "version": "2.13.0"
+      },
+      "median_ms": 7.449832999554928,
+      "mem": [
+        {
+          "children_mb": 15.6,
+          "gpu_mb": 16.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 619.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 15.6,
+          "gpu_mb": 16.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 619.2,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        7.449832999554928
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 1028.5570000050939
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-mlp-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "F.linear, ReLU, F.linear (mean CE, AdamW for the step)",
+        "version": "2.13.0"
+      },
+      "median_ms": 4.169957996055018,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 18.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 523.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 18.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 523.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        4.169957996055018
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 692.5497499978519
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "mlp-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-mlp-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "F.linear, ReLU, F.linear (mean CE, AdamW for the step)",
+        "version": "2.13.0"
+      },
+      "median_ms": 7.653874999959953,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 18.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 520.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 18.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 520.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        7.653874999959953
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 630.0422499989509
+    }
+  },
+  "commit": "f4e78b35406eda59f8417b3acaa27c2830dca16c",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T20:13:23Z",
+  "inputs": {
+    "inputs": "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2",
+    "lane": "mlp-train-step",
+    "seed": 7,
+    "sha256": {
+      "X": "262e29f919de82bb",
+      "w:bias1": "b48379c8c2c5ad9a",
+      "w:bias2": "be693e14a817fc9a",
+      "w:weight1": "4c28195b7722791d",
+      "w:weight2": "4338fa31b9b56adb",
+      "y": "e432edaa11fa4ef3"
+    },
+    "shape": {
+      "batch": 256,
+      "label": "rows256 8-16-3",
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "mlp-train-step",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": "none (deterministic)",
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-eager-fp32",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      }
+    ],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/mlp-train-step",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "loss_first_step": 1.1604011058807373,
+      "loss_last_step": 1.1233608722686768,
+      "steps": 2
+    },
+    "torch-compile-bf16": {
+      "loss_first_abs_diff_vs_ours": 9.655952453613281e-05,
+      "loss_first_step": 1.1604976654052734,
+      "loss_last_abs_diff_vs_ours": 0.00010061264038085938,
+      "loss_last_step": 1.1234614849090576,
+      "steps": 2
+    },
+    "torch-compile-fp32": {
+      "loss_first_abs_diff_vs_ours": 2.384185791015625e-07,
+      "loss_first_step": 1.1604008674621582,
+      "loss_last_abs_diff_vs_ours": 2.384185791015625e-07,
+      "loss_last_step": 1.1233611106872559,
+      "steps": 2
+    },
+    "torch-eager-bf16": {
+      "loss_first_abs_diff_vs_ours": 9.655952453613281e-05,
+      "loss_first_step": 1.1604976654052734,
+      "loss_last_abs_diff_vs_ours": 0.00010061264038085938,
+      "loss_last_step": 1.1234614849090576,
+      "steps": 2
+    },
+    "torch-eager-fp32": {
+      "loss_first_abs_diff_vs_ours": 3.5762786865234375e-07,
+      "loss_first_step": 1.1604007482528687,
+      "loss_last_abs_diff_vs_ours": 2.384185791015625e-07,
+      "loss_last_step": 1.1233611106872559,
+      "steps": 2
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "rows256 8-16-3",
+  "shape_record": {
+    "batch": 256,
+    "label": "rows256 8-16-3",
+    "name": "full"
+  },
+  "started": "2026-09-29T20:13:17Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-compile-fp32": "float32, TF32 off",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-fp32": "float32, TF32 off"
+  }
+}

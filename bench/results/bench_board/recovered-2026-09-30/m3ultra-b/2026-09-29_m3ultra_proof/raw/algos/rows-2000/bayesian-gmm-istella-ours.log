@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 3743, in worker
+    runner.fit()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 1878, in fit
+    self._fit()
+    ~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2107, in fit
+    est.fit(X)
+    ~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_expansion_cluster.py", line 630, in fit
+    self._fit(X)
+    ~~~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_expansion_cluster.py", line 690, in _fit
+    f, i, s = self._call(_E_BGMM, x, a, ip, fp)
+              ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_expansion_cluster.py", line 86, in _call
+    f, i, s = b.x_cluster_call(which, xa, xn, aa, an, [int(v) for v in ip], [float(v) for v in fp])
+              ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data.

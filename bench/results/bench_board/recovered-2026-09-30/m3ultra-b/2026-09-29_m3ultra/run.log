@@ -1,0 +1,82 @@
+2026-09-29T05:08:16Z run.sh start at 4aa3e28c02a197c9f2e4205fc275603af447576f args: 
+2026-09-29T05:08:16Z staging data
+staging gbm-bench/taxi/taxi_speed.npz
+ok /Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz 419757252 10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15
+staging gbm-bench/istella/istella_speed.npz
+ok /Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz 2248281826 31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef
+staging gbm-bench/istella/istella_rank.npz
+ok /Users/ec2-user/datasets/gbm-bench/istella/istella_rank.npz 624022440 7d2be6c13f3930a026561eea5fa629644bf52c2295d5a5f8c15ff84e3cec3fd4
+staging corpus/enwik8/input.txt
+ok /Users/ec2-user/mojolearn-wt/bench-board-m3ultra/training/corpus/enwik8/input.txt 100000000 2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
+staging corpus/pile_github/input.txt
+ok /Users/ec2-user/mojolearn-wt/bench-board-m3ultra/training/corpus/pile_github/input.txt 97124565 52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
+STAGED-ALL
+2026-09-29T05:09:17Z staged
+2026-09-29T05:09:17Z board runs until 2026-09-29T07:59:17Z at most
+bench_board: classical2 prep rows=full lanes=agglomerative,arima,elasticnet,ets,gmm,gpc,gpr,ivf,kernel-ridge,knn-clf,knn-reg,lasso,linearsvc,linearsvr,logreg,nystroem,rbf-sampler,ridge,spectral,spectral-embedding,svr,tsvd,umap datasets=istella,taxi
+bench_board: algos prep rows=full lanes=162 datasets=istella,taxi
+bench_board: classical prep rows=full lanes=dbscan,hdbscan,kde,kmeans,knn,ols,pca,svc datasets=istella,taxi
+bench_board: [1/396] trees/gbdt-symmetric/taxi/rows=full arms=ours,ours-ab,catboost-cpu
+bench_board:   done rc=0 80s
+bench_board: [2/396] trees/gbdt-symmetric/istella/rows=full arms=ours,ours-ab,catboost-cpu
+bench_board:   done rc=0 114s
+bench_board: [3/396] trees/gbdt-depthwise/taxi/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+bench_board:   done rc=0 124s
+bench_board: [4/396] trees/gbdt-depthwise/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+bench_board:   done rc=0 185s
+bench_board: [5/396] trees/gbdt-lossguide/taxi/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 183s
+bench_board: [6/396] trees/gbdt-lossguide/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 263s
+bench_board: [7/396] trees/rf/taxi/rows=full arms=ours,ours-ab,sklearn-rf-cpu,lightgbm-cpu
+bench_board:   done rc=0 2354s
+bench_board: [8/396] trees/rf/istella/rows=full arms=ours,ours-ab,sklearn-rf-cpu,lightgbm-cpu
+bench_board:   done rc=0 4836s
+bench_board: [9/396] trees/et/taxi/rows=full arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+bench_board:   done rc=0 208s
+bench_board: [10/396] trees/et/istella/rows=full arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+bench_board:   done rc=0 1024s
+bench_board: [11/396] trees/iforest/taxi/rows=full arms=ours,ours-ab,sklearn-iforest-cpu
+bench_board:   done rc=0 36s
+bench_board: [12/396] trees/iforest/istella/rows=full arms=ours,ours-ab,sklearn-iforest-cpu
+bench_board:   done rc=0 65s
+bench_board: [13/396] trees/gbdt-rank-yetirank/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+2026-09-29T07:59:32Z STOP: time limit reached; killing the board and its drivers
+2026-09-29T07:59:37Z board exit 137
+/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra/BOARD.md
+2026-09-29T07:59:37Z rendered: -rw-r--r--  1 ec2-user  staff  60083 Sep 29 07:59 /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra/BOARD.md
+2026-09-29T12:03:04Z run.sh start at 8a57e2f7e59f6f627b3d8e1b82ea9185ffdb55e0 args: --skip-failed
+2026-09-29T12:03:04Z board runs until 2026-09-29T14:53:04Z at most
+bench_board: skip trees/gbdt-symmetric/taxi/rows=full (done 2026-09-29T05:16:09Z)
+bench_board: skip trees/gbdt-symmetric/istella/rows=full (done 2026-09-29T05:18:03Z)
+bench_board: skip trees/gbdt-depthwise/taxi/rows=full (done 2026-09-29T05:20:07Z)
+bench_board: skip trees/gbdt-depthwise/istella/rows=full (done 2026-09-29T05:23:11Z)
+bench_board: skip trees/gbdt-lossguide/taxi/rows=full (done 2026-09-29T05:26:14Z)
+bench_board: skip trees/gbdt-lossguide/istella/rows=full (done 2026-09-29T05:30:37Z)
+bench_board: skip trees/rf/taxi/rows=full (done 2026-09-29T06:09:51Z)
+bench_board: skip trees/rf/istella/rows=full (done 2026-09-29T07:30:27Z)
+bench_board: skip trees/et/taxi/rows=full (done 2026-09-29T07:33:56Z)
+bench_board: skip trees/et/istella/rows=full (done 2026-09-29T07:51:00Z)
+bench_board: skip trees/iforest/taxi/rows=full (done 2026-09-29T07:51:35Z)
+bench_board: skip trees/iforest/istella/rows=full (done 2026-09-29T07:52:40Z)
+bench_board: algos prep rows=full lanes=162 datasets=istella,taxi
+bench_board: [1/384] trees/gbdt-rank-yetirank/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 543s
+bench_board: [2/384] trees/gbdt-rank-pairlogit/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+2026-09-29T12:18:08Z run.sh start at 4e238995073ab62bc58c47f97bce6f44816deefc args: --skip-failed
+2026-09-29T12:18:08Z board runs until 2026-09-29T15:08:08Z at most
+bench_board: skip trees/gbdt-symmetric/taxi/rows=full (done 2026-09-29T05:16:09Z)
+bench_board: skip trees/gbdt-symmetric/istella/rows=full (done 2026-09-29T05:18:03Z)
+bench_board: skip trees/gbdt-depthwise/taxi/rows=full (done 2026-09-29T05:20:07Z)
+bench_board: skip trees/gbdt-depthwise/istella/rows=full (done 2026-09-29T05:23:11Z)
+bench_board: skip trees/gbdt-lossguide/taxi/rows=full (done 2026-09-29T05:26:14Z)
+bench_board: skip trees/gbdt-lossguide/istella/rows=full (done 2026-09-29T05:30:37Z)
+bench_board: skip trees/rf/taxi/rows=full (done 2026-09-29T06:09:51Z)
+bench_board: skip trees/rf/istella/rows=full (done 2026-09-29T07:30:27Z)
+bench_board: skip trees/et/taxi/rows=full (done 2026-09-29T07:33:56Z)
+bench_board: skip trees/et/istella/rows=full (done 2026-09-29T07:51:00Z)
+bench_board: skip trees/iforest/taxi/rows=full (done 2026-09-29T07:51:35Z)
+bench_board: skip trees/iforest/istella/rows=full (done 2026-09-29T07:52:40Z)
+bench_board: skip trees/gbdt-rank-yetirank/istella/rows=full (done 2026-09-29T12:12:09Z)
+bench_board: algos prep rows=full lanes=162 datasets=istella,taxi
+bench_board: [1/383] trees/gbdt-rank-pairlogit/istella/rows=full arms=ours,ours-ab,catboost-cpu,xgboost-cpu

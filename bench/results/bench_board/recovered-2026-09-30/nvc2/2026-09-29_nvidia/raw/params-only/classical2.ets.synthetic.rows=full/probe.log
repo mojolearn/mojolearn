@@ -1,0 +1,3 @@
+
+=== 2026-09-29T19:21:50Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_more.py race --lane ets --dataset synthetic --data /root/bench-board-cache-clean/more-data/rows-full --arms cuml-gpu,statsmodels-cpu --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/params-only/classical2.ets.synthetic.rows=full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600 --params-only
+PARAMS-ONLY /root/bench-board/2026-09-29_nvidia/raw/params-only/classical2.ets.synthetic.rows=full/ets-synthetic.params.json

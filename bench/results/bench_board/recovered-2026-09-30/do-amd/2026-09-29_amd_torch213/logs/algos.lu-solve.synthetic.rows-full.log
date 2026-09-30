@@ -1,0 +1,12 @@
+
+=== 2026-09-30T01:06:03Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lu-solve --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lu-solve", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=0 ms=620495.889 infer_ms=None digest=43e06346de01739b
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=numpy-cpu round=0 ms=5382.433 infer_ms=None digest=04751cdbe9f664b3
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=torch-gpu round=0 ms=286.231 infer_ms=None digest=0bcc2572ab146ad5
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=numpy-cpu round=1 ms=5413.759 infer_ms=None digest=04751cdbe9f664b3
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=torch-gpu round=1 ms=82.718 infer_ms=None digest=0bcc2572ab146ad5
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=1 ms=615982.157 infer_ms=None digest=43e06346de01739b
+ALGOS lane=lu-solve dataset=synthetic arm=ours status=ok median_ms=615982.1568359912 quality={"relative_residual": 3.2485170230898993e-06}
+ALGOS lane=lu-solve dataset=synthetic arm=numpy-cpu status=ok median_ms=5413.759010989452 quality={"relative_residual": 3.259480483371157e-08}
+ALGOS lane=lu-solve dataset=synthetic arm=torch-gpu status=ok median_ms=82.71772999432869 quality={"relative_residual": 4.003413492599298e-07}

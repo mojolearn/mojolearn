@@ -1,0 +1,496 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "dbscan",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-2000"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "915f58065bd923ef",
+        "915f58065bd923ef"
+      ],
+      "info": {
+        "config": "mojolearn.DBSCAN(eps=0.177, min_samples=10, metric='euclidean', algorithm='rbc' (its default)); fit timed",
+        "device": "gpu",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "max_ms": 39.341333002084866,
+      "median_ms": 39.341333002084866,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 344.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 347.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "min_ms": 39.341333002084866,
+      "ms": [
+        39.341333002084866
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "rbc",
+          "eps": 0.177,
+          "max_iterations": null,
+          "max_mbytes_per_batch": null,
+          "metric": "euclidean",
+          "min_samples": 10,
+          "prediction_data": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 170.10129200207302
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "dbscan",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-2000"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "915f58065bd923ef",
+        "915f58065bd923ef"
+      ],
+      "info": {
+        "config": "mojolearn.DBSCAN(eps=0.177, min_samples=10, metric='euclidean', algorithm='rbc' (its default)); fit timed",
+        "device": "gpu",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "max_ms": 34.393207999528386,
+      "median_ms": 34.393207999528386,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 345.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 346.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "min_ms": 34.393207999528386,
+      "ms": [
+        34.393207999528386
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "rbc",
+          "eps": 0.177,
+          "max_iterations": null,
+          "max_mbytes_per_batch": null,
+          "metric": "euclidean",
+          "min_samples": 10,
+          "prediction_data": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 253.79687499662396
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "dbscan",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-2000"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "915f58065bd923ef",
+        "915f58065bd923ef"
+      ],
+      "info": {
+        "config": "sklearn.cluster.DBSCAN(eps=0.177, min_samples=10, metric='euclidean', algorithm='auto', n_jobs=-1); fit timed",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "max_ms": 92.96399999584537,
+      "median_ms": 92.96399999584537,
+      "mem": [
+        {
+          "children_mb": 16.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 143.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 16.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 145.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "min_ms": 92.96399999584537,
+      "ms": [
+        92.96399999584537
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "auto",
+          "eps": 0.177,
+          "leaf_size": 30,
+          "metric": "euclidean",
+          "metric_params": null,
+          "min_samples": 10,
+          "p": null
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "call",
+        "library": "scikit-learn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 86.02891599730356
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "860bbe5b67693694ea260b83a8d0105f1a4e15d28647d895086dca782620c830",
+        "shape": [
+          2000,
+          11
+        ]
+      }
+    },
+    "block": "dbscan",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "taxi",
+    "dbscan": {
+      "params_env": "MOJOLEARN_CTD_DBSCAN_TAXI",
+      "rows": 2000
+    },
+    "fit_rows": [
+      0,
+      2000
+    ],
+    "fit_rows_available": 5250086,
+    "hdbscan": {
+      "rows": 2000
+    },
+    "lanes": [
+      "dbscan",
+      "hdbscan"
+    ],
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+    "scaling": "standardized by these rows (float64 mean and std)",
+    "sentinel_cells_replaced": {
+      "X": 0
+    },
+    "smoke_max_rows": 2000,
+    "written": "2026-09-29T12:25:10Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "taxi",
+  "finished": "2026-09-29T12:31:53Z",
+  "finished_rounds": "2026-09-29T12:31:53Z",
+  "lane": "dbscan",
+  "lane_config": {
+    "mismatches": [
+      "seed: no arm has a seed argument (deterministic)",
+      "algorithm (an exact neighbor search on every arm, results unchanged): ours 'rbc' (its default), scikit-learn 'auto' (a tree on taxi, brute on Istella-S; it has no 'rbc'), cuml-gpu 'brute', cuml-gpu-rbc 'rbc'",
+      "leaf_size=30 and n_jobs=-1: scikit-learn only"
+    ],
+    "params": "eps and min_samples from MOJOLEARN_CTD_DBSCAN_<DATASET>, the same on every arm; metric='euclidean'",
+    "rows": "dbscan block: 1,000,000 rows, standardized",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "rbc",
+          "eps": 0.177,
+          "metric": "euclidean",
+          "min_samples": 10
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "rbc",
+          "eps": 0.177,
+          "metric": "euclidean",
+          "min_samples": 10
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "auto",
+          "eps": 0.177,
+          "leaf_size": 30,
+          "metric": "euclidean",
+          "min_samples": 10,
+          "p": null
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": "rbc",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "rbc"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.177,
+        "param": "eps",
+        "same": true,
+        "theirs": 0.177
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 10,
+        "param": "min_samples",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "rbc",
+        "param": "algorithm",
+        "same": false,
+        "theirs": "auto"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.177,
+        "param": "eps",
+        "same": true,
+        "theirs": 0.177
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "min_samples",
+        "same": true,
+        "theirs": 10
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "ours",
+        "param": "seed",
+        "reason": "mojolearn DBSCAN has no seed argument (deterministic)",
+        "value": null
+      },
+      {
+        "arm": "ours-fast",
+        "param": "seed",
+        "reason": "mojolearn DBSCAN has no seed argument (deterministic)",
+        "value": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "param": "seed",
+        "reason": "scikit-learn DBSCAN has no seed argument (deterministic)",
+        "value": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "rbc",
+        "param": "algorithm",
+        "reason": "an exact eps search on every arm: ours 'rbc' (its default), scikit-learn has no 'rbc' and runs 'auto' (a tree on taxi, brute on Istella-S)",
+        "theirs": "auto"
+      }
+    ],
+    "family": "classical",
+    "lane": "dbscan",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "n_clusters": 11,
+      "noise_fraction": 0.366,
+      "rows": 2000
+    },
+    "ours-fast": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 11,
+      "noise_agreement_vs_ours": 1.0,
+      "noise_fraction": 0.366,
+      "rows": 2000
+    },
+    "sklearn-cpu": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 11,
+      "noise_agreement_vs_ours": 1.0,
+      "noise_fraction": 0.366,
+      "rows": 2000
+    }
+  },
+  "ratios_ours_over": {
+    "ours-fast": 1.1438692489117133,
+    "sklearn-cpu": 0.4231889011213272
+  },
+  "rounds_requested": 1,
+  "script": "tools/classical_two_datasets.py",
+  "spans": {
+    "ours": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "ours-fast": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "sklearn-cpu": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "call",
+      "library": "scikit-learn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    }
+  },
+  "started": "2026-09-29T12:31:47Z"
+}

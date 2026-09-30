@@ -1,0 +1,11 @@
+
+=== 2026-09-30T05:03:16Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane eigh --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/eigh", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-REFUSED lane=eigh dataset=synthetic arm=ours stage=round0 detail=null
+ALGOS-ROUND lane=eigh dataset=synthetic arm=numpy-cpu round=0 ms=2458.302 infer_ms=None digest=e3c9c61702d4d8af
+ALGOS-ROUND lane=eigh dataset=synthetic arm=torch-gpu round=0 ms=231.010 infer_ms=None digest=dcbc4d451473bbb3
+ALGOS-ROUND lane=eigh dataset=synthetic arm=torch-gpu round=1 ms=117.479 infer_ms=None digest=dcbc4d451473bbb3
+ALGOS-ROUND lane=eigh dataset=synthetic arm=numpy-cpu round=1 ms=2356.540 infer_ms=None digest=e3c9c61702d4d8af
+ALGOS lane=eigh dataset=synthetic arm=ours status=timeout median_ms=None quality={}
+ALGOS lane=eigh dataset=synthetic arm=numpy-cpu status=ok median_ms=2356.5397879865486 quality={"max_eigenvalue_error": 3.49014511182305e-08, "relative_residual": 2.8236889953584005e-08}
+ALGOS lane=eigh dataset=synthetic arm=torch-gpu status=ok median_ms=117.47917500906624 quality={"max_eigenvalue_error": 1.0440680754790996e-06, "relative_residual": 9.613883338456243e-07}

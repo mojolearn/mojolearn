@@ -1,0 +1,81 @@
+Traceback (most recent call last):
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py", line 1748, in worker
+    runner.call()
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py", line 1387, in call
+    loss.backward()
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_tensor.py", line 623, in backward
+    torch.autograd.backward(
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/autograd/__init__.py", line 395, in backward
+    _engine_run_backward(
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/autograd/graph.py", line 979, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/autograd/function.py", line 333, in apply_boxed
+    return self._get_user_fn()(self, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 3473, in backward
+    return CompiledFunction._bwd_fn(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/subclass_codegen.py:codegen(compiled_function_backward)", line 21, in _compiled_backward
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/subclass_codegen.py:codegen(compiled_function_backward)", line 14, in impl_fn
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 3529, in _backward_impl
+    compiled_bw = backward_compiler.get_or_compile(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 2853, in get_or_compile
+    self.compiled_bw = self.bw_compiler(
+                       ^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/schemas.py", line 1472, in __call__
+    output_code = self.compiler_fn(gm, example_inputs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_dynamo/backends/common.py", line 83, in _wrapped_bw_compiler
+    disable(
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py", line 1446, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_utils_internal.py", line 96, in wrapper_function
+    return function(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 2962, in bw_compiler
+    return compile_fx_backward(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 2609, in compile_fx_backward
+    return inner_compile(
+           ^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 837, in compile_fx_inner
+    return wrap_compiler_debug(_compile_fx_inner, compiler_name="inductor")(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_dynamo/repro/after_aot.py", line 317, in debug_wrapper
+    inner_compiled_fn = compiler_fn(gm, example_inputs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 1079, in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 1059, in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 1847, in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py", line 1608, in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/graph.py", line 2669, in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/graph.py", line 2679, in _compile_to_module
+    mod = self._compile_to_module_lines(wrapper_code)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/graph.py", line 2754, in _compile_to_module_lines
+    mod = PyCodeCache.load_by_key_path(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/codecache.py", line 4622, in load_by_key_path
+    mod = _reload_python_module(key, path, set_sys_modules=set_sys_modules)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/runtime/compile_tasks.py", line 35, in _reload_python_module
+    exec(code, mod.__dict__, mod.__dict__)
+  File "/tmp/torchinductor_root/2s/c2s4mmqnyjb3x5f7yilhalpft66wxzfs5cpy52js74lr3n4yjfr7.py", line 25331, in <module>
+    async_compile.wait(globals())
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/async_compile.py", line 818, in wait
+    self._wait_futures(scope)
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/_inductor/async_compile.py", line 860, in _wait_futures
+    raise RuntimeError(
+torch._inductor.exc.InductorError: RuntimeError: A compilation subprocess exited unexpectedly. This is likely due to a crash. To facilitate debugging, you can re-run with TORCHINDUCTOR_COMPILE_THREADS=1 to cause compilation to occur in the main process.

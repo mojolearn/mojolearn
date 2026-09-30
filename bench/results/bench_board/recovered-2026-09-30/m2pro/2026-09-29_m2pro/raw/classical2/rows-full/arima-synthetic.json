@@ -1,0 +1,498 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "arima",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "0a59cfad9bd4d023",
+        "0a59cfad9bd4d023"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 131.72745899646543,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 79.2,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 87.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        131.72745899646543
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "maxiter": 1000,
+          "method": "ml",
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "trend": "c"
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 160.7209580251947
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "arima",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b91848f2251c6fbe",
+        "b91848f2251c6fbe"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 160.56429099990055,
+      "mem": [
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 82.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.5,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 85.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        160.56429099990055
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "maxiter": 1000,
+          "method": "ml",
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "trend": "c"
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 398.65370898041874
+    },
+    "statsmodels-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "statsmodels-cpu",
+        "--lane",
+        "arima",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b2708ff825af7610",
+        "b2708ff825af7610"
+      ],
+      "info": {
+        "config": "statsmodels.tsa.arima.model.ARIMA(order=(1,0,1), seasonal_order=(0,0,0,0), trend='c').fit(method_kwargs={'maxiter': 1000}); one series per fit, joblib Parallel(n_jobs=-1) over the 64 series",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "statsmodels",
+        "numpy": "2.5.3",
+        "os_cpu_count": 12,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 12,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "0.15.0"
+      },
+      "median_ms": 638.2327909814194,
+      "mem": [
+        {
+          "children_mb": 2410.4,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 136.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 2461.3,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 139.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        638.2327909814194
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "statsmodels",
+        "params": {
+          "maxiter": 1000,
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "trend": "c"
+        },
+        "source": "declared"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 7082.51116698375
+    }
+  },
+  "block": {
+    "arrays": {
+      "Y": {
+        "dtype": "float32",
+        "sha256": "2c50a8bd507b044fb1690ee6290b7caa9175cdc61813bd45b0202bbc293cad68",
+        "shape": [
+          64,
+          2100
+        ]
+      }
+    },
+    "block": "arma",
+    "dataset": "synthetic",
+    "generator": "ARMA(1,1) phi 0.6 theta 0.3, 200 burn-in, level U(-2,2), default_rng(7)",
+    "h": 100,
+    "n_obs": 2100,
+    "rule": "tools/bench_board_more.py prep",
+    "seed": 7,
+    "series": 64,
+    "smoke_max_rows": null,
+    "written": "2026-09-29T20:30:04Z"
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T01:26:24Z",
+  "lane": "arima",
+  "lane_config": {
+    "mismatches": [
+      "ours and cuML fit the whole batch in one call; statsmodels fits one series per call (the state-space model, L-BFGS), spread over every core with joblib",
+      "statsmodels enforce_stationarity and enforce_invertibility at its default (True); ours and cuML have no such parameter",
+      "seed: no arm has a seed argument (maximum likelihood)"
+    ],
+    "params": "order=(1,0,1), seasonal_order=(0,0,0,0), trend='c' (cuML fit_intercept=True), maxiter=1000, maximum likelihood",
+    "quality": "mean llf, mean AIC (2N - 2 llf, N=4 on every arm), forecast RMSE, in-sample RMSE",
+    "rows": "64 synthetic ARMA(1,1) series, 2000 fit points, 100 held out",
+    "timed": "fit of every series"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "max_iter": 1000,
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "seed": "none (deterministic)",
+          "trend": "c"
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "max_iter": 1000,
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "seed": "none (deterministic)",
+          "trend": "c"
+        },
+        "source": "get_params"
+      },
+      "statsmodels-cpu": {
+        "library": "statsmodels",
+        "params": {
+          "max_iter": 1000,
+          "order": [
+            1,
+            0,
+            1
+          ],
+          "seasonal_order": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "seed": "none (deterministic)",
+          "trend": "c"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": 1000,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 1000
+      },
+      {
+        "arm": "ours-fast",
+        "ours": [
+          1,
+          0,
+          1
+        ],
+        "param": "order",
+        "same": true,
+        "theirs": [
+          1,
+          0,
+          1
+        ]
+      },
+      {
+        "arm": "ours-fast",
+        "ours": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "param": "seasonal_order",
+        "same": true,
+        "theirs": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "c",
+        "param": "trend",
+        "same": true,
+        "theirs": "c"
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": 1000,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 1000
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": [
+          1,
+          0,
+          1
+        ],
+        "param": "order",
+        "same": true,
+        "theirs": [
+          1,
+          0,
+          1
+        ]
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "param": "seasonal_order",
+        "same": true,
+        "theirs": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": "c",
+        "param": "trend",
+        "same": true,
+        "theirs": "c"
+      }
+    ],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "arima",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "ours-fast",
+      "statsmodels-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "forecast_rmse": 1.5155179577999125,
+      "insample_rmse": 0.9993424389359997,
+      "mean_aic": 5680.97696685791,
+      "mean_llf": -2836.488483428955
+    },
+    "ours-fast": {
+      "forecast_rmse": 1.51553991179234,
+      "insample_rmse": 0.9993413659123215,
+      "mean_aic": 5680.9716873168945,
+      "mean_llf": -2836.4858436584473
+    },
+    "statsmodels-cpu": {
+      "forecast_rmse": 1.5154226008034013,
+      "insample_rmse": 0.9993380913769139,
+      "mean_aic": 5680.95716016041,
+      "mean_llf": -2836.478580080205
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "Yfit 64x2000; Yhold 64x100",
+  "started": "2026-09-30T01:26:13Z"
+}

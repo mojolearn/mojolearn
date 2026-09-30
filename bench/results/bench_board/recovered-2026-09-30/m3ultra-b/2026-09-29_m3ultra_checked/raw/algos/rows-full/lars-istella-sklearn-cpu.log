@@ -1,0 +1,48 @@
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py:781: RuntimeWarning: overflow encountered in add
+  L_.flat[:: n_active + 1] += (2**i) * eps
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py:781: RuntimeWarning: overflow encountered in cast
+  L_.flat[:: n_active + 1] += (2**i) * eps
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 4238, in worker
+    runner.fit()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2142, in fit
+    self._fit()
+    ~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2378, in fit
+    est.fit(X, y)
+    ~~~~~~~^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/base.py", line 1365, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py", line 1198, in fit
+    self._fit(
+    ~~~~~~~~~^
+        X,
+        ^^
+    ...<4 lines>...
+        Xy=Xy,
+        ^^^^^^
+    )
+    ^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py", line 1103, in _fit
+    alphas, active, coef_path, n_iter_ = lars_path(
+                                         ~~~~~~~~~^
+        X,
+        ^^
+    ...<12 lines>...
+        positive=self.positive,
+        ^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/utils/_param_validation.py", line 191, in wrapper
+    return func(*args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py", line 216, in lars_path
+    return _lars_path_solver(
+        X=X,
+    ...<13 lines>...
+        positive=positive,
+    )
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py", line 781, in _lars_path_solver
+    L_.flat[:: n_active + 1] += (2**i) * eps
+                                ~~~~~~~^~~~~
+OverflowError: int too large to convert to float

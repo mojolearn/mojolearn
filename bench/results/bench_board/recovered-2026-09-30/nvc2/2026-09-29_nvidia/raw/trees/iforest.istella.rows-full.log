@@ -1,0 +1,49 @@
+
+=== 2026-09-29T15:58:53Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/bench/speed/forest_speed_arm.py --lane iforest --dataset istella --devices gpu --arms cuml-iforest-gpu --mem --infer
+FSPEED-CTR-TRACE lane=iforest MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=iforest arms=* metric=auc delta=0.112894 reason=proxy AUC: anomaly score against the minority class (label 1) of istella, no planted anomalies
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+21733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724d00000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_svm.so
+FSPEED-LIBRARY {"arm": "ours", "device": "gpu", "device_name": "NVIDIA L40S", "lane": "iforest", "library": "mojolearn", "version": null}
+FSPEED-LIBRARY {"arm": "cuml-iforest-gpu", "device": "gpu", "device_name": "NVIDIA L40S", "lane": "iforest", "library": "cuml", "version": "26.08.00"}
+BOARD-PARAMS {"arms": {"cuml-iforest-gpu": {"library": "cuml", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}, "ours": {"library": "mojolearn", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "cuml-iforest-gpu", "ours": false, "param": "bootstrap", "same": true, "theirs": false}, {"arm": "cuml-iforest-gpu", "ours": "auto", "param": "contamination", "same": true, "theirs": "auto"}, {"arm": "cuml-iforest-gpu", "ours": null, "param": "max_depth", "same": false, "theirs": null}, {"arm": "cuml-iforest-gpu", "ours": 1.0, "param": "max_features", "same": true, "theirs": 1.0}, {"arm": "cuml-iforest-gpu", "ours": 256, "param": "max_samples", "same": true, "theirs": 256}, {"arm": "cuml-iforest-gpu", "ours": 100, "param": "n_estimators", "same": true, "theirs": 100}], "exceptions": [{"arm": "cuml-iforest-gpu", "ours": null, "param": "max_depth", "reason": "ours None is the auto depth ceil(log2(max_samples)) = 8; sklearn has no max_depth parameter and fixes the same value", "theirs": null}], "family": "trees", "lane": "iforest", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-NOTE lane=iforest arms=ours,cuml-iforest-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row subsamples, split features and thresholds
+BOARD-PARAMS {"arms": {"cuml-iforest-gpu": {"library": "cuml", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}, "ours": {"library": "mojolearn", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "cuml-iforest-gpu", "ours": false, "param": "bootstrap", "same": true, "theirs": false}, {"arm": "cuml-iforest-gpu", "ours": "auto", "param": "contamination", "same": true, "theirs": "auto"}, {"arm": "cuml-iforest-gpu", "ours": null, "param": "max_depth", "same": false, "theirs": null}, {"arm": "cuml-iforest-gpu", "ours": 1.0, "param": "max_features", "same": true, "theirs": 1.0}, {"arm": "cuml-iforest-gpu", "ours": 256, "param": "max_samples", "same": true, "theirs": 256}, {"arm": "cuml-iforest-gpu", "ours": 100, "param": "n_estimators", "same": true, "theirs": 100}], "exceptions": [{"arm": "cuml-iforest-gpu", "ours": null, "param": "max_depth", "reason": "ours None is the auto depth ceil(log2(max_samples)) = 8; sklearn has no max_depth parameter and fixes the same value", "theirs": null}], "family": "trees", "lane": "iforest", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-SCALE stage=before rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=cuml-iforest-gpu mode=IDENTICAL device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-MEM lane=iforest arm=ours round=0 host_mb=19277.1 gpu_mb=2218.0 children_mb=3.2 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED-WARMUP lane=iforest arm=ours shape=istella-2043304x220 ms=10067.643
+FSPEED-MEM lane=iforest arm=cuml-iforest-gpu round=0 host_mb=21350.4 gpu_mb=2222.0 children_mb=3.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED-WARMUP lane=iforest arm=cuml-iforest-gpu shape=istella-2043304x220 ms=5110.804
+FSPEED-ORDER lane=iforest round=1 arms=ours,cuml-iforest-gpu
+FSPEED-MEM lane=iforest arm=ours round=1 host_mb=21350.7 gpu_mb=2222.0 children_mb=3.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+21733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724d40000000, nodemask=1)
+FSPEED lane=iforest arm=ours shape=istella-2043304x220 round=1 ms=502.781 hash=1cf6af0c1d5ee0fa
+FSPEED-MEM lane=iforest arm=cuml-iforest-gpu round=1 host_mb=21422.4 gpu_mb=2222.0 children_mb=3.2 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED lane=iforest arm=cuml-iforest-gpu shape=istella-2043304x220 round=1 ms=2575.100 hash=3ff96e9ccdd645c5
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.830358
+FSPEED-ACC lane=iforest arm=cuml-iforest-gpu metric=auc value=0.830358
+FSPEED-FIT lane=iforest arm=ours library=mojolearn trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=iforest arm=ours note=this estimator exposes no fitted ensemble; IsolationForest rebuilds its forest per call (DEVIATION 874/1836) and keeps nothing to read
+FSPEED-FIT lane=iforest arm=cuml-iforest-gpu library=cuml trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=iforest arm=cuml-iforest-gpu note=this cuML build exposes neither get_json nor dump_as_json, so its fitted shape cannot be read
+FSPEED-FIT-VERDICT lane=iforest arms=cuml-iforest-gpu,ours leaves=- spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=iforest arm=ours call=mojolearn IsolationForest.score_samples(X) (the forest is rebuilt inside every scoring call, DEVIATION 874, so this clock includes a forest build)
+FSPEED-INFER-PATH lane=iforest arm=cuml-iforest-gpu call=cuml IsolationForest.score_samples(host X)
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=test rows=500000 ms=1168.053
+FSPEED-INFER-WARMUP lane=iforest arm=cuml-iforest-gpu batch=test rows=500000 ms=77.844
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=1 ms=947.718 hash=f0e8d2c79bac7396
+FSPEED-INFER lane=iforest arm=cuml-iforest-gpu batch=test rows=500000 round=1 ms=78.031 hash=02eb977aca954d88
+FSPEED-INFER-ACC lane=iforest arm=ours batch=test metric=auc value=0.830358
+FSPEED-INFER-ACC lane=iforest arm=cuml-iforest-gpu batch=test metric=auc value=0.830358
+21733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724d80000000, nodemask=1)
+21733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x724dc0000000, nodemask=1)
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=large rows=1000000 ms=1975.752
+FSPEED-INFER-WARMUP lane=iforest arm=cuml-iforest-gpu batch=large rows=1000000 ms=694.166
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=1 ms=2047.915 hash=d5bb77941e6ae64b
+FSPEED-INFER lane=iforest arm=cuml-iforest-gpu batch=large rows=1000000 round=1 ms=161.853 hash=b7641259d4273494

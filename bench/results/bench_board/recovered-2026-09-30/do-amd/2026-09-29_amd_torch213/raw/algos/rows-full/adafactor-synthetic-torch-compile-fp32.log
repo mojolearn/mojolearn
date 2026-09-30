@@ -1,0 +1,26 @@
+W0930 06:15:50.660000 911614 torch/_logging/_internal.py:1345] [0/0] Profiler record function <class 'torch.autograd.profiler.record_function'> will be ignored
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] Graph break from `Tensor.item()`, consider setting:
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     torch._dynamo.config.capture_scalar_outputs = True
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] or:
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     env TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] to include these operations in the captured graph.
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] 
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] Graph break: from user code at:
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/optim/optimizer.py", line 530, in wrapper
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     out = func(*args, **kwargs)
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]           ^^^^^^^^^^^^^^^^^^^^^
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     return func(*args, **kwargs)
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]            ^^^^^^^^^^^^^^^^^^^^^
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/optim/_adafactor.py", line 155, in step
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     adafactor(
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/optim/optimizer.py", line 148, in maybe_fallback
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     return func(*args, **kwargs)
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]            ^^^^^^^^^^^^^^^^^^^^^
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/optim/_adafactor.py", line 641, in adafactor
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     func(
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]   File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/optim/_adafactor.py", line 377, in _single_tensor_adafactor
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]     step_float = step_t.item()
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0]                  ^^^^^^^^^^^^^
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] 
+W0930 06:15:50.819000 911614 torch/_dynamo/variables/tensor.py:1759] [0/0] 

@@ -1,0 +1,12 @@
+
+=== 2026-09-29T14:14:06Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane min-cov-det --dataset taxi --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"seed": 7}, "source": "get_params"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/min-cov-det", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=ours round=0 ms=324.330 infer_ms=None digest=eaa8e91e02ba031a
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=ours-fast round=0 ms=240.449 infer_ms=None digest=214d596f28e7b1ab
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=sklearn-cpu round=0 ms=96.485 infer_ms=None digest=b5afa69f3db7ecd6
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=ours-fast round=1 ms=229.077 infer_ms=None digest=214d596f28e7b1ab
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=sklearn-cpu round=1 ms=95.462 infer_ms=None digest=b5afa69f3db7ecd6
+ALGOS-ROUND lane=min-cov-det dataset=taxi arm=ours round=1 ms=302.943 infer_ms=None digest=eaa8e91e02ba031a
+ALGOS lane=min-cov-det dataset=taxi arm=ours status=ok median_ms=302.9433749979944 quality={"n_features": 11, "rel_diff_vs_sklearn": 0.1339063868959785}
+ALGOS lane=min-cov-det dataset=taxi arm=ours-fast status=ok median_ms=229.0771250045509 quality={"n_features": 11, "rel_diff_vs_sklearn": 0.133906814896192}
+ALGOS lane=min-cov-det dataset=taxi arm=sklearn-cpu status=ok median_ms=95.46150000096532 quality={"n_features": 11}

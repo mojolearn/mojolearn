@@ -1,0 +1,232 @@
+{
+  "arms": {
+    "networkx-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "networkx-cpu",
+        "--lane",
+        "connected-components",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; networkx-cpu (networkx): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "nx.connected_components",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "networkx",
+        "pre_clock_fit": false,
+        "version": "3.6.1"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "networkx"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "connected-components",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; networkx-cpu (networkx): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.connected_components({}) on the dense adjacency (2000 x 2000)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "connected-components",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; networkx-cpu (networkx): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.connected_components({}) on the dense adjacency (2000 x 2000)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "0f589a2783ae5b536bbd76dbd44e132205b47efa6ea8048de53a8a2e6ebe7426",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "indices": {
+        "dtype": "int64",
+        "sha256": "354926f893e23fadccd343c804123a6472a48053b89db5e8585e5f371658e46b",
+        "shape": [
+          30756
+        ]
+      },
+      "indices2": {
+        "dtype": "int64",
+        "sha256": "f5acdff3cb53bb14b3b7b88ed4418439e9cf110e8058bd690f25302866df8158",
+        "shape": [
+          6214
+        ]
+      },
+      "indptr": {
+        "dtype": "int64",
+        "sha256": "b842399cbbe8fbec81e347554dc24a6ea4277197e59fb101d56afc8fdebba5cd",
+        "shape": [
+          2001
+        ]
+      },
+      "indptr2": {
+        "dtype": "int64",
+        "sha256": "9943ab2a49dd43d787a5bc5b5ec93ee383a21e18b4e3375640f1dc815cb699a5",
+        "shape": [
+          2001
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "8c134d2b8cdb51fcb03fa71d5028494ddf675ce31fed1c30350d4871b4f7dbfb",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "graph",
+    "dataset": "istella",
+    "k": 10,
+    "nodes": 2000,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": 2000,
+    "written": "2026-09-29T12:25:07Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "istella",
+  "finished": "2026-09-29T12:55:57Z",
+  "lane": "connected-components",
+  "lane_config": {
+    "block": "graphs",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "graph",
+    "mismatches": [
+      "ours takes a dense adjacency matrix (its class's contract), built from the CSR graph before the clock; networkx and cuGraph take the graph itself"
+    ],
+    "notes": [
+      "the kNN graph with k=2 (sparse enough to have more than one component)"
+    ],
+    "ours_class": "mojolearn.connected_components or mojolearn.ConnectedComponents",
+    "params": {},
+    "quality": "component count; ARI vs networkx's labels",
+    "task": "components",
+    "timed_fit": "the graph algorithm on the CSR graph",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "networkx-cpu": {
+        "library": "networkx",
+        "params": {},
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {},
+        "source": "declared"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {},
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/connected-components",
+    "problems": [
+      "ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "networkx-cpu (networkx): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none"
+    ],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "REFUSED"
+  },
+  "params_refused": "parameters do not match (3): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; networkx-cpu (networkx): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x220; indices 30756; indices2 6214; indptr 2001; indptr2 2001; y 2000",
+  "started": "2026-09-29T12:55:57Z"
+}

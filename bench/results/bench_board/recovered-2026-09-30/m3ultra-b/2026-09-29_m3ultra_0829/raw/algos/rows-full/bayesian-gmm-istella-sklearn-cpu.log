@@ -1,0 +1,4 @@
+/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/sklearn/mixture/_base.py:275: ConvergenceWarning: Best performing initialization did not converge. Try different init parameters, or increase max_iter, tol, or check for degenerate data.
+  warnings.warn(
+/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/sklearn/mixture/_base.py:275: ConvergenceWarning: Best performing initialization did not converge. Try different init parameters, or increase max_iter, tol, or check for degenerate data.
+  warnings.warn(

@@ -1,0 +1,19 @@
+
+=== 2026-09-30T01:26:59Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py race --lane ivf --dataset istella --data /Users/ec2-user/bench-board-cache/more-data/rows-full --arms ours,ours-fast,faiss-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/raw/classical2/rows-full --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"faiss-cpu": {"library": "faiss", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "ours-fast", "ours": "sqeuclidean", "param": "metric", "same": true, "theirs": "sqeuclidean"}, {"arm": "ours-fast", "ours": 10, "param": "n_neighbors", "same": true, "theirs": 10}, {"arm": "ours-fast", "ours": 1024, "param": "nlist", "same": true, "theirs": 1024}, {"arm": "ours-fast", "ours": 32, "param": "nprobe", "same": true, "theirs": 32}, {"arm": "faiss-cpu", "ours": "sqeuclidean", "param": "metric", "same": true, "theirs": "sqeuclidean"}, {"arm": "faiss-cpu", "ours": 10, "param": "n_neighbors", "same": true, "theirs": 10}, {"arm": "faiss-cpu", "ours": 1024, "param": "nlist", "same": true, "theirs": 1024}, {"arm": "faiss-cpu", "ours": 32, "param": "nprobe", "same": true, "theirs": 32}], "exceptions": [], "family": "classical2", "lane": "ivf", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+MORE-ROUND lane=ivf dataset=istella arm=ours round=0 ms=20591.984 digest=02e9d691d28f8953
+MORE-ROUND lane=ivf dataset=istella arm=ours-fast round=0 ms=18965.043 digest=e9da4792be81a494
+MORE-ROUND lane=ivf dataset=istella arm=faiss-cpu round=0 ms=14006.386 digest=a6fb07df8c7bef48
+MORE-ROUND lane=ivf dataset=istella arm=ours-fast round=1 ms=19500.251 digest=e9da4792be81a494
+MORE-ROUND lane=ivf dataset=istella arm=faiss-cpu round=1 ms=14258.996 digest=a6fb07df8c7bef48
+MORE-ROUND lane=ivf dataset=istella arm=ours round=1 ms=20884.456 digest=02e9d691d28f8953
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py", line 1834, in race
+    result["quality"] = quality(lane, D, outs)
+                        ~~~~~~~^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py", line 1709, in quality
+    raise RuntimeError("the recall function is the knn lane's, at k=%d" % ctd.KNN_K)
+RuntimeError: the recall function is the knn lane's, at k=64
+MORE lane=ivf dataset=istella arm=ours status=ok median_ms=20884.456416999456 quality={}
+MORE lane=ivf dataset=istella arm=ours-fast status=ok median_ms=19500.25124999229 quality={}
+MORE lane=ivf dataset=istella arm=faiss-cpu status=ok median_ms=14258.995958982268 quality={}

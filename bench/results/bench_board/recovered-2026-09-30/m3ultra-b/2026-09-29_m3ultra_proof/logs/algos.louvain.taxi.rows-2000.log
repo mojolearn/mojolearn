@@ -1,0 +1,12 @@
+
+=== 2026-09-29T12:55:57Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane louvain --dataset taxi --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,networkx-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"networkx-cpu": {"library": "networkx", "params": {"seed": 7}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}, "ours-fast": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/louvain", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=0 ms=463.553 infer_ms=None digest=3eee7b7337f3a70c
+ALGOS-ROUND lane=louvain dataset=taxi arm=ours-fast round=0 ms=280.731 infer_ms=None digest=3eee7b7337f3a70c
+ALGOS-ROUND lane=louvain dataset=taxi arm=networkx-cpu round=0 ms=76.463 infer_ms=None digest=782c76db106e60be
+ALGOS-ROUND lane=louvain dataset=taxi arm=ours-fast round=1 ms=255.139 infer_ms=None digest=3eee7b7337f3a70c
+ALGOS-ROUND lane=louvain dataset=taxi arm=networkx-cpu round=1 ms=73.441 infer_ms=None digest=782c76db106e60be
+ALGOS-ROUND lane=louvain dataset=taxi arm=ours round=1 ms=466.071 infer_ms=None digest=3eee7b7337f3a70c
+ALGOS lane=louvain dataset=taxi arm=ours status=ok median_ms=466.0705839996808 quality={"modularity": 0.7957661326040387, "n_communities": 19}
+ALGOS lane=louvain dataset=taxi arm=ours-fast status=ok median_ms=255.13937499636086 quality={"modularity": 0.7957661326040387, "n_communities": 19}
+ALGOS lane=louvain dataset=taxi arm=networkx-cpu status=ok median_ms=73.44100000045728 quality={"modularity": 0.8004024129293923, "n_communities": 17}

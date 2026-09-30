@@ -1,0 +1,284 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lu-factor",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "43e06346de01739b",
+        "43e06346de01739b"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.lu_factor()",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 596834.2092270032,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1192.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2014.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1194.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2274.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        596834.2092270032
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "lu_factor(A) then lu_solve(., B)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 614429.1076570225
+    },
+    "scipy-cpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "scipy-cpu",
+        "--lane",
+        "lu-factor",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "595dcd116f08119a",
+        "595dcd116f08119a"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "scipy",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "version": "1.18.1"
+      },
+      "median_ms": 4553.939249017276,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 617.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 628.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        4553.939249017276
+      ],
+      "params_record": {
+        "__library__": "scipy"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "lu_factor(A) then lu_solve(., B)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 4633.05109902285
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "lu-factor",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "0bcc2572ab146ad5",
+        "0bcc2572ab146ad5"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 85.03125398419797,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 646.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1890.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 710.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2080.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        85.03125398419797
+      ],
+      "params_record": {
+        "__library__": "torch"
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "lu_factor(A) then lu_solve(., B)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 185.3473219962325
+    }
+  },
+  "block": {
+    "block": "dense",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T01:48:54Z",
+  "lane": "lu-factor",
+  "lane_config": {
+    "block": "dense",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "decomp",
+    "kind": "linalg",
+    "mismatches": [],
+    "notes": [
+      "the lu-solve lane's system (A 8192 x 8192 + 2 sqrt(8192) I, B 8192 x 64, seed 7) through the two-call form: lu_solve(lu_factor(A), B) (scipy.linalg's; torch.linalg.lu_factor + lu_solve; cupyx.scipy.linalg's)"
+    ],
+    "ours_class": "mojolearn.lu_factor or mojolearn.linalg.lu_factor",
+    "params": {},
+    "quality": "relative residual ||A x - B|| / ||B||",
+    "task": "lufac",
+    "timed_fit": "lu_factor(A) then lu_solve(., B)",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "scipy-cpu": {
+        "library": "scipy",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-gpu": {
+        "library": "torch",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lu-factor",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "scipy-cpu",
+      "torch-gpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "relative_residual": 3.2485170230898993e-06
+    },
+    "scipy-cpu": {
+      "relative_residual": 3.4392127578820814e-07
+    },
+    "torch-gpu": {
+      "relative_residual": 4.003413492599298e-07
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T01:28:27Z"
+}

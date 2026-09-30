@@ -1,0 +1,22 @@
+74326 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x301180000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1449, in worker
+    runner.call()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 769, in call
+    self._call()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1015, in call
+    S["z"] = est.fit_transform(X)
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/kernel_methods.py", line 491, in fit_transform
+    return self.fit(X).transform(X)
+           ^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/kernel_methods.py", line 443, in fit
+    sweeps = self._extension().nystroem_fit(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: km_basis_indices: n_samples 100000 exceeds KM_MAX_BASIS_POOL = 4096. The rank pass counts a total order over every pair of rows, which is n_samples^2 host comparisons. To close this refusal, replace the counting rank with a pinned segmented sort over the 64-bit composite key -- the construction neighbors/checks/select_radix_identical.mojo uses for its (distance, index) key -- and re-gate check_nystroem_basis_prefix_stability at the larger size. DEVIATION 1672

@@ -1,0 +1,15 @@
+
+=== 2026-09-29T17:33:34Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane mamba1-forward --shape full --arms ours,torch-eager-fp32,torch-eager-tf32,torch-eager-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-forward arm=ours round=0 ms=225.944 digest=dfe79ab628aa17cf
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=0 ms=358.340 digest=d9622e66edc5be4a
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-tf32 round=0 ms=370.039 digest=ca255f71af0fbace
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=0 ms=269.680 digest=36d701a25d4442f5
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=1 ms=149.626 digest=d9622e66edc5be4a
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-tf32 round=1 ms=153.505 digest=ca255f71af0fbace
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=1 ms=195.866 digest=36d701a25d4442f5
+NEURAL-ROUND lane=mamba1-forward arm=ours round=1 ms=9.901 digest=dfe79ab628aa17cf
+NEURAL lane=mamba1-forward arm=ours status=ok median_ms=9.90055501461029 quality={}
+NEURAL lane=mamba1-forward arm=torch-eager-fp32 status=ok median_ms=149.62645899504423 quality={"max_abs_diff_vs_ours": 1.1920928955078125e-07, "max_rel_diff_vs_ours": 5.944827482889895e-08}
+NEURAL lane=mamba1-forward arm=torch-eager-tf32 status=ok median_ms=153.50455325096846 quality={"max_abs_diff_vs_ours": 3.814697265625e-06, "max_rel_diff_vs_ours": 1.9023447945247664e-06}
+NEURAL lane=mamba1-forward arm=torch-eager-bf16 status=ok median_ms=195.86618803441525 quality={"max_abs_diff_vs_ours": 5.14984130859375e-05, "max_rel_diff_vs_ours": 2.5681654726084346e-05}

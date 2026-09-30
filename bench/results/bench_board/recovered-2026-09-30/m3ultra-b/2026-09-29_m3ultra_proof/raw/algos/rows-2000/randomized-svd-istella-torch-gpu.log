@@ -1,0 +1,2 @@
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/torch/_lowrank.py:173: UserWarning: The operator 'aten::linalg_svd' is not currently supported on the MPS backend and will fall back to run on the CPU. This may have performance implications. (Triggered internally at /Users/runner/work/pytorch/pytorch/aten/src/ATen/mps/MPSFallback.mm:34.)
+  U, S, Vh = torch.linalg.svd(B, full_matrices=False)

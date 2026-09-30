@@ -1,0 +1,46 @@
+
+=== 2026-09-29T15:25:20Z /root/bench-board-cache/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/bench/speed/forest_speed_arm.py --lane iforest --dataset istella --devices cpu,gpu --arms sklearn-iforest-cpu --mem --infer
+FSPEED-NOTE lane=iforest arms=cpu,gpu metric=devices delta=2.000000 reason=AMD box: CPU arms run for libraries with no AMD GPU path, on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm name carries its device
+FSPEED-CTR-TRACE lane=iforest MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=iforest arms=* metric=auc delta=0.112894 reason=proxy AUC: anomaly score against the minority class (label 1) of istella, no planted anomalies
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=2.000000 reason=devices=cpu,gpu (explicit); AMD box: an opponent with an AMD GPU path runs on the GPU, one without runs on this box's CPU on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=hip path=/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_svm.so
+FSPEED-NOTE lane=iforest arms=sklearn-iforest-cpu,ours metric=mismatch delta=1.000000 reason=max_depth: sklearn has no parameter and fixes ceil(log2(max_samples)) = 8; ours max_depth None resolves to the same integer ceil(log2(max_samples)). Ours keeps no forest after fit (DEVIATION 1836), so its leaf count cannot be read and the f
+FSPEED-LIBRARY {"arm": "ours", "device": "gpu", "device_name": "AMD Instinct Mi325X VF", "lane": "iforest", "library": "mojolearn", "version": null}
+FSPEED-LIBRARY {"arm": "sklearn-iforest-cpu", "device": "cpu", "device_name": null, "lane": "iforest", "library": "sklearn", "version": "1.7.2"}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}, "sklearn-iforest-cpu": {"library": "sklearn", "params": {"bootstrap": false, "contamination": "auto", "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "sklearn-iforest-cpu", "ours": false, "param": "bootstrap", "same": true, "theirs": false}, {"arm": "sklearn-iforest-cpu", "ours": "auto", "param": "contamination", "same": true, "theirs": "auto"}, {"arm": "sklearn-iforest-cpu", "ours": 1.0, "param": "max_features", "same": true, "theirs": 1.0}, {"arm": "sklearn-iforest-cpu", "ours": 256, "param": "max_samples", "same": true, "theirs": 256}, {"arm": "sklearn-iforest-cpu", "ours": 100, "param": "n_estimators", "same": true, "theirs": 100}], "exceptions": [], "family": "trees", "lane": "iforest", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-NOTE lane=iforest arms=ours,sklearn-iforest-cpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row subsamples, split features and thresholds
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"bootstrap": false, "contamination": "auto", "max_depth": null, "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}, "sklearn-iforest-cpu": {"library": "sklearn", "params": {"bootstrap": false, "contamination": "auto", "max_features": 1.0, "max_samples": 256, "n_estimators": 100, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "sklearn-iforest-cpu", "ours": false, "param": "bootstrap", "same": true, "theirs": false}, {"arm": "sklearn-iforest-cpu", "ours": "auto", "param": "contamination", "same": true, "theirs": "auto"}, {"arm": "sklearn-iforest-cpu", "ours": 1.0, "param": "max_features", "same": true, "theirs": 1.0}, {"arm": "sklearn-iforest-cpu", "ours": 256, "param": "max_samples", "same": true, "theirs": 256}, {"arm": "sklearn-iforest-cpu", "ours": 100, "param": "n_estimators", "same": true, "theirs": 100}], "exceptions": [], "family": "trees", "lane": "iforest", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-SCALE stage=before rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=sklearn-iforest-cpu mode=IDENTICAL device=AMD_Instinct_Mi325X_VF rounds=1 size=shipped
+FSPEED-MEM lane=iforest arm=ours round=0 host_mb=21301.9 gpu_mb=0.0 children_mb=4.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+FSPEED-WARMUP lane=iforest arm=ours shape=istella-2043304x220 ms=1323.765
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=0 host_mb=22566.1 gpu_mb=- children_mb=4.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=iforest arm=sklearn-iforest-cpu shape=istella-2043304x220 ms=242.429
+FSPEED-ORDER lane=iforest round=1 arms=ours,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=1 host_mb=22566.1 gpu_mb=0.0 children_mb=4.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)
+FSPEED lane=iforest arm=ours shape=istella-2043304x220 round=1 ms=245.470 hash=1cf6af0c1d5ee0fa
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=1 host_mb=22740.9 gpu_mb=- children_mb=4.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=istella-2043304x220 round=1 ms=239.878 hash=293303280d295a2e
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.830358
+FSPEED-ACC lane=iforest arm=sklearn-iforest-cpu metric=auc value=0.827914
+FSPEED-FIT lane=iforest arm=ours library=mojolearn trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=iforest arm=ours note=this estimator exposes no fitted ensemble; IsolationForest rebuilds its forest per call (DEVIATION 874/1836) and keeps nothing to read
+FSPEED-FIT lane=iforest arm=sklearn-iforest-cpu library=sklearn trees=100 nodes=8968 leaves=4534 depth_max=8 source=estimators_[i].tree_
+FSPEED-FIT-VERDICT lane=iforest arms=ours,sklearn-iforest-cpu leaves=sklearn-iforest-cpu:4534 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=iforest arm=ours call=mojolearn IsolationForest.score_samples(X) (the forest is rebuilt inside every scoring call, DEVIATION 874, so this clock includes a forest build)
+FSPEED-INFER-PATH lane=iforest arm=sklearn-iforest-cpu call=sklearn IsolationForest.score_samples(X), n_jobs -1
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=test rows=500000 ms=574.419
+FSPEED-INFER-WARMUP lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 ms=2001.344
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=1 ms=571.496 hash=f0e8d2c79bac7396
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=1 ms=1997.816 hash=7b475857a3a93ff7
+FSPEED-INFER-ACC lane=iforest arm=ours batch=test metric=auc value=0.830358
+FSPEED-INFER-ACC lane=iforest arm=sklearn-iforest-cpu batch=test metric=auc value=0.827914
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=large rows=1000000 ms=995.215
+FSPEED-INFER-WARMUP lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 ms=4009.461
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=1 ms=1010.419 hash=d5bb77941e6ae64b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=1 ms=3985.782 hash=ba9b04e071608cd3

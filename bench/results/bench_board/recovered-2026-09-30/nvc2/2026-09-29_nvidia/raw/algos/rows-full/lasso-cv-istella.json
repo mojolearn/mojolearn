@@ -1,0 +1,517 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lasso-cv",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "8e27048f784efba9",
+        "8e27048f784efba9"
+      ],
+      "infer_ms": [
+        5.4274266585707664
+      ],
+      "infer_warmup_ms": 5.6388285011053085,
+      "info": {
+        "config": "mojolearn.LassoCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 72001.49625446647,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 1454.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1137.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 1454.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1234.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        72001.49625446647
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "alphas": [
+            0.001,
+            0.01,
+            0.1,
+            1.0
+          ],
+          "cv": 5,
+          "eps": 0.001,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "n_alphas": "deprecated",
+          "positive": false,
+          "precompute": "auto",
+          "random_state": 7,
+          "selection": "cyclic",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 72083.23799446225
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "lasso-cv",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e165dd9e9c564f66",
+        "e165dd9e9c564f66"
+      ],
+      "infer_ms": [
+        8.91339685767889
+      ],
+      "infer_warmup_ms": 19.79297026991844,
+      "info": {
+        "config": "sklearn.linear_model:LassoCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, max_iter=1000, n_jobs=-1, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 97412.03555651009,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 8750.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 8911.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        97412.03555651009
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "alphas": [
+            0.001,
+            0.01,
+            0.1,
+            1.0
+          ],
+          "cv": 5,
+          "eps": 0.001,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "n_alphas": "deprecated",
+          "positive": false,
+          "precompute": "auto",
+          "random_state": 7,
+          "selection": "cyclic",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 87183.45138337463
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+        "shape": [
+          1000000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+        "shape": [
+          100000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "22d8d7786822923f2f76455d8d9e0fede1f98f1555cd6a7697d4ccfb8fd632f2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34ff64a373b16b53c5b9199629e265b739d60ecbef7074f53bc8029133a2150c",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059,
+      "Xq": 66406
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T15:37:19Z"
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "istella",
+  "finished": "2026-09-30T02:54:09Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "8e27048f784efba9",
+          "8e27048f784efba9"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.LassoCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, max_iter=1000, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.25"
+        },
+        "ms": [
+          5.4274266585707664
+        ],
+        "status": "ok",
+        "warmup_ms": 5.6388285011053085
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "e165dd9e9c564f66",
+          "e165dd9e9c564f66"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.linear_model:LassoCV(alphas=[0.001, 0.01, 0.1, 1.0], cv=5, eps=0.001, fit_intercept=True, max_iter=1000, n_jobs=-1, positive=False, random_state=7, selection='cyclic', tol=0.0001)",
+          "cpu_model": "AMD EPYC 9554 64-Core Processor",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.4.6",
+          "os_cpu_count": 256,
+          "pre_clock_fit": false,
+          "python": "3.11.10",
+          "sched_affinity_cpus": 256,
+          "scipy": "1.17.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas-6cdc3b4a.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.30"
+            },
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas64_-32a4b2a6.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.31.188.0"
+            },
+            {
+              "architecture": null,
+              "filepath": "libgomp-a34b3233.so.1.0.0",
+              "internal_api": "openmp",
+              "num_threads": 256,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          8.91339685767889
+        ],
+        "status": "ok",
+        "warmup_ms": 19.79297026991844
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "lasso-cv",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.LassoCV",
+    "params": {
+      "alphas": [
+        0.001,
+        0.01,
+        0.1,
+        1.0
+      ],
+      "cv": 5,
+      "eps": 0.001,
+      "fit_intercept": true,
+      "max_iter": 1000,
+      "positive": false,
+      "random_state": 7,
+      "selection": "cyclic",
+      "tol": 0.0001
+    },
+    "quality": "held-out R2 and RMSE",
+    "sklearn": "sklearn.linear_model:LassoCV",
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "cv": 5,
+          "eps": 0.001,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "positive": false,
+          "precompute": "auto",
+          "seed": 7,
+          "selection": "cyclic",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "cv": 5,
+          "eps": 0.001,
+          "fit_intercept": true,
+          "max_iter": 1000,
+          "positive": false,
+          "precompute": "auto",
+          "seed": 7,
+          "selection": "cyclic",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 5,
+        "param": "cv",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.001,
+        "param": "eps",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1000,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 1000
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": false,
+        "param": "positive",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "auto",
+        "param": "precompute",
+        "same": true,
+        "theirs": "auto"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "cyclic",
+        "param": "selection",
+        "same": true,
+        "theirs": "cyclic"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.0001
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lasso-cv",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "finite": true,
+      "r2": 0.31032916732439575,
+      "rmse": 0.693715434673252
+    },
+    "sklearn-cpu": {
+      "finite": true,
+      "r2": 0.32550654654568745,
+      "rmse": 0.6860397769944239
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 1000000x220; Xq 100000x220; y 1000000; yq 100000",
+  "started": "2026-09-30T02:48:38Z"
+}

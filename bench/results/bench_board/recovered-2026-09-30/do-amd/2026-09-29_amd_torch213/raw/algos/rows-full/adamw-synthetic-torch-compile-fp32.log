@@ -1,0 +1,1 @@
+W0930 06:16:39.292000 912452 torch/_logging/_internal.py:1345] [0/0] Profiler record function <class 'torch.autograd.profiler.record_function'> will be ignored

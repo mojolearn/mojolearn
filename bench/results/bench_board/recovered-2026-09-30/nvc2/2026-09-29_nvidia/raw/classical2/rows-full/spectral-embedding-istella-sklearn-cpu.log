@@ -1,0 +1,4 @@
+/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/manifold/_spectral_embedding.py:328: UserWarning: Graph is not fully connected, spectral embedding may not work as expected.
+  warnings.warn(
+/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/manifold/_spectral_embedding.py:328: UserWarning: Graph is not fully connected, spectral embedding may not work as expected.
+  warnings.warn(

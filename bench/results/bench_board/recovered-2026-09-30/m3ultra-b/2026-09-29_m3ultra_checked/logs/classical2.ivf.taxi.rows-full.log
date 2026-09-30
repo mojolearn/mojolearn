@@ -1,0 +1,19 @@
+
+=== 2026-09-29T19:58:48Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py race --lane ivf --dataset taxi --data /Users/ec2-user/bench-board-cache/more-data/rows-full --arms ours,ours-fast,faiss-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/raw/classical2/rows-full --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"faiss-cpu": {"library": "faiss", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "ours-fast", "ours": "sqeuclidean", "param": "metric", "same": true, "theirs": "sqeuclidean"}, {"arm": "ours-fast", "ours": 10, "param": "n_neighbors", "same": true, "theirs": 10}, {"arm": "ours-fast", "ours": 1024, "param": "nlist", "same": true, "theirs": 1024}, {"arm": "ours-fast", "ours": 32, "param": "nprobe", "same": true, "theirs": 32}, {"arm": "faiss-cpu", "ours": "sqeuclidean", "param": "metric", "same": true, "theirs": "sqeuclidean"}, {"arm": "faiss-cpu", "ours": 10, "param": "n_neighbors", "same": true, "theirs": 10}, {"arm": "faiss-cpu", "ours": 1024, "param": "nlist", "same": true, "theirs": 1024}, {"arm": "faiss-cpu", "ours": 32, "param": "nprobe", "same": true, "theirs": 32}], "exceptions": [], "family": "classical2", "lane": "ivf", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+MORE-ROUND lane=ivf dataset=taxi arm=ours round=0 ms=609.957 digest=e00141a7605ff662
+MORE-ROUND lane=ivf dataset=taxi arm=ours-fast round=0 ms=479.138 digest=b549b68c3af34811
+MORE-ROUND lane=ivf dataset=taxi arm=faiss-cpu round=0 ms=3781.163 digest=1f13e9c0e1312474
+MORE-ROUND lane=ivf dataset=taxi arm=ours-fast round=1 ms=480.070 digest=b549b68c3af34811
+MORE-ROUND lane=ivf dataset=taxi arm=faiss-cpu round=1 ms=3754.816 digest=1f13e9c0e1312474
+MORE-ROUND lane=ivf dataset=taxi arm=ours round=1 ms=554.661 digest=e00141a7605ff662
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py", line 1834, in race
+    result["quality"] = quality(lane, D, outs)
+                        ~~~~~~~^^^^^^^^^^^^^^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py", line 1709, in quality
+    raise RuntimeError("the recall function is the knn lane's, at k=%d" % ctd.KNN_K)
+RuntimeError: the recall function is the knn lane's, at k=64
+MORE lane=ivf dataset=taxi arm=ours status=ok median_ms=554.6606249990873 quality={}
+MORE lane=ivf dataset=taxi arm=ours-fast status=ok median_ms=480.0702499996987 quality={}
+MORE lane=ivf dataset=taxi arm=faiss-cpu status=ok median_ms=3754.815874999622 quality={}

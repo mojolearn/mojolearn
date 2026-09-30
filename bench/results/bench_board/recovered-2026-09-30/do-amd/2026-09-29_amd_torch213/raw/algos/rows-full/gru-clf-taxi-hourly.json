@@ -1,0 +1,853 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gru-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "919aa3e985e21df5",
+        "919aa3e985e21df5"
+      ],
+      "infer_ms": [
+        12.898884015157819
+      ],
+      "infer_warmup_ms": 13.094594003632665,
+      "info": {
+        "config": "mojolearn.GRUClassifier(batch_size=256, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={'betas': (0.9, 0.999), 'eps': 1e-08, 'weight_decay': 0.0}, random_state=7, shuffle=True)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_sequence numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 919.2139460064936,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 678.5,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2056.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 678.5,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2056.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        919.2139460064936
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "batch_size": 256,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "lr_schedule": null,
+          "max_epochs": 2,
+          "nonlinearity": "tanh",
+          "num_layers": 1,
+          "optimizer": "adam",
+          "optimizer_options": "{'betas': (0.9, 0.999), 'eps': 1e-08, 'weight_decay': 0.0}",
+          "predict_chunk": 4096,
+          "random_state": 7,
+          "shuffle": true
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1233.5950220003724
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "gru-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b0bd901a00ec06e0",
+        "b0bd901a00ec06e0"
+      ],
+      "infer_ms": [
+        6.32220198167488
+      ],
+      "infer_warmup_ms": 10.622355999657884,
+      "info": {
+        "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, compile bf16 on cuda",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "compile-bf16",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1898.86651901179,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.6,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3238.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3266.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1898.86651901179
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "batch_size": 256,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "hidden_size": 64,
+        "learning_rate": 0.001,
+        "max_epochs": 2,
+        "num_layers": 1,
+        "optimizer": "adam",
+        "seed": 7,
+        "shuffle": true,
+        "weight_decay": 0.0
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 4853.774163988419
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "gru-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "4af99c995493e9de",
+        "4af99c995493e9de"
+      ],
+      "infer_ms": [
+        6.1895720136817545
+      ],
+      "infer_warmup_ms": 9.811828000238165,
+      "info": {
+        "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, compile fp32 on cuda",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "compile-fp32",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1798.4023310127668,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 476.6,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 5344.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 476.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 4887.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1798.4023310127668
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "batch_size": 256,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "hidden_size": 64,
+        "learning_rate": 0.001,
+        "max_epochs": 2,
+        "num_layers": 1,
+        "optimizer": "adam",
+        "seed": 7,
+        "shuffle": true,
+        "weight_decay": 0.0
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 7051.883876003558
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "gru-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b0bd901a00ec06e0",
+        "b0bd901a00ec06e0"
+      ],
+      "infer_ms": [
+        6.07444200431928
+      ],
+      "infer_warmup_ms": 10.328747011953965,
+      "info": {
+        "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, eager bf16 on cuda",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "eager-bf16",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1892.136259994004,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.6,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3538.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3667.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1892.136259994004
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "batch_size": 256,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "hidden_size": 64,
+        "learning_rate": 0.001,
+        "max_epochs": 2,
+        "num_layers": 1,
+        "optimizer": "adam",
+        "seed": 7,
+        "shuffle": true,
+        "weight_decay": 0.0
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 6441.691024025204
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "gru-clf",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "4af99c995493e9de",
+        "4af99c995493e9de"
+      ],
+      "infer_ms": [
+        6.012391997501254
+      ],
+      "infer_warmup_ms": 9.227637987351045,
+      "info": {
+        "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, eager fp32 on cuda",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "eager-fp32",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1692.4824969901238,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 476.6,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 5645.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 476.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 5229.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1692.4824969901238
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "batch_size": 256,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "hidden_size": 64,
+        "learning_rate": 0.001,
+        "max_epochs": 2,
+        "num_layers": 1,
+        "optimizer": "adam",
+        "seed": 7,
+        "shuffle": true,
+        "weight_decay": 0.0
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X (n, T, 1), y): 2 epochs",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 8682.261972979177
+    }
+  },
+  "block": {
+    "arrays": {
+      "Y": {
+        "dtype": "float32",
+        "sha256": "30f8e2a68212e11cf7daefc925fb19fe6a99567509905dabd71fbbe5202d3b63",
+        "shape": [
+          64,
+          1440
+        ]
+      }
+    },
+    "block": "ts",
+    "dataset": "taxi-hourly",
+    "h": 48,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": null,
+    "source": "taxi pickup counts per zone per hour, zones 4,13,24,41,42,43,45,48",
+    "written": "2026-09-29T23:01:57Z"
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "taxi-hourly",
+  "finished": "2026-09-30T06:10:16Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "919aa3e985e21df5",
+          "919aa3e985e21df5"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.GRUClassifier(batch_size=256, hidden_size=64, learning_rate=0.001, max_epochs=2, num_layers=1, optimizer='adam', optimizer_options={'betas': (0.9, 0.999), 'eps': 1e-08, 'weight_decay': 0.0}, random_state=7, shuffle=True)",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_sequence numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.25"
+        },
+        "ms": [
+          12.898884015157819
+        ],
+        "status": "ok",
+        "warmup_ms": 13.094594003632665
+      },
+      "torch-compile-bf16": {
+        "digest_stable": null,
+        "digests": [
+          "b0bd901a00ec06e0",
+          "b0bd901a00ec06e0"
+        ],
+        "error": null,
+        "info": {
+          "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, compile bf16 on cuda",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "compile-bf16",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          6.32220198167488
+        ],
+        "status": "ok",
+        "warmup_ms": 10.622355999657884
+      },
+      "torch-compile-fp32": {
+        "digest_stable": null,
+        "digests": [
+          "4af99c995493e9de",
+          "4af99c995493e9de"
+        ],
+        "error": null,
+        "info": {
+          "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, compile fp32 on cuda",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "compile-fp32",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          6.1895720136817545
+        ],
+        "status": "ok",
+        "warmup_ms": 9.811828000238165
+      },
+      "torch-eager-bf16": {
+        "digest_stable": null,
+        "digests": [
+          "b0bd901a00ec06e0",
+          "b0bd901a00ec06e0"
+        ],
+        "error": null,
+        "info": {
+          "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, eager bf16 on cuda",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "eager-bf16",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          6.07444200431928
+        ],
+        "status": "ok",
+        "warmup_ms": 10.328747011953965
+      },
+      "torch-eager-fp32": {
+        "digest_stable": null,
+        "digests": [
+          "4af99c995493e9de",
+          "4af99c995493e9de"
+        ],
+        "error": null,
+        "info": {
+          "config": "nn.GRU(1, 64, batch_first) + Linear, Adam lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0, batch 256, 2 epochs, ours' seed-7 init and row orders, eager fp32 on cuda",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "eager-fp32",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          6.012391997501254
+        ],
+        "status": "ok",
+        "warmup_ms": 9.227637987351045
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "gru-clf",
+  "lane_config": {
+    "block": "seqwin",
+    "datasets": [
+      "taxi-hourly",
+      "synthetic"
+    ],
+    "expansion_lane": "sequence",
+    "kind": "seqmodel",
+    "mismatches": [],
+    "notes": [
+      "windows of 24 steps of the time-series block (each series z-scored by its fit part), X (n, 24, 1); target: the next value (reg) or next value above the window mean (clf); windows ending in the first 80% of time fit, the rest held out",
+      "torch arm: nn.GRU(1, 64, batch_first) + Linear head on the last hidden state, Adam lr 1e-3 betas (0.9, 0.999) eps 1e-8 no weight decay, batch 256, 2 epochs; its weights and per-epoch row orders are ours' (numpy default_rng(7): uniform(+-1/sqrt(hidden)) per tensor in the torch layout, then one permutation per epoch), loaded into the torch module"
+    ],
+    "ours_class": "mojolearn.GRUClassifier",
+    "params": {
+      "batch_size": 256,
+      "hidden_size": 64,
+      "learning_rate": 0.001,
+      "max_epochs": 2,
+      "num_layers": 1,
+      "optimizer": "adam",
+      "optimizer_options": {
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "weight_decay": 0.0
+      },
+      "random_state": 7,
+      "shuffle": true
+    },
+    "quality": "held-out accuracy (and log loss when the arm has predict_proba)",
+    "task": "clf",
+    "timed_fit": "fit(X (n, T, 1), y): 2 epochs",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "batch_size": 256,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "num_layers": 1,
+          "seed": 7,
+          "shuffle": true
+        },
+        "source": "attributes"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "batch_size": 256,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "num_layers": 1,
+          "seed": 7,
+          "shuffle": true,
+          "weight_decay": 0.0
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "batch_size": 256,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "num_layers": 1,
+          "seed": 7,
+          "shuffle": true,
+          "weight_decay": 0.0
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "batch_size": 256,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "num_layers": 1,
+          "seed": 7,
+          "shuffle": true,
+          "weight_decay": 0.0
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "batch_size": 256,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "hidden_size": 64,
+          "learning_rate": 0.001,
+          "num_layers": 1,
+          "seed": 7,
+          "shuffle": true,
+          "weight_decay": 0.0
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 256,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 256
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 64,
+        "param": "hidden_size",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": 1,
+        "param": "num_layers",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "torch-eager-fp32",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 256,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 256
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 64,
+        "param": "hidden_size",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 1,
+        "param": "num_layers",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "torch-compile-fp32",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 256,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 256
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 64,
+        "param": "hidden_size",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 1,
+        "param": "num_layers",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 256,
+        "param": "batch_size",
+        "same": true,
+        "theirs": 256
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 64,
+        "param": "hidden_size",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 1,
+        "param": "num_layers",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/gru-clf",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "accuracy": 0.8656684027777778,
+      "logloss": 0.3058408783689682
+    },
+    "torch-compile-bf16": {
+      "accuracy": 0.8657769097222222
+    },
+    "torch-compile-fp32": {
+      "accuracy": 0.8656684027777778
+    },
+    "torch-eager-bf16": {
+      "accuracy": 0.8657769097222222
+    },
+    "torch-eager-fp32": {
+      "accuracy": 0.8656684027777778
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 72192x24x1; Xq 18432x24x1; y 72192; yq 18432",
+  "started": "2026-09-30T06:09:31Z"
+}

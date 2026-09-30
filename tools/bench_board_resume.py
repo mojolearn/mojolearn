@@ -13,6 +13,7 @@ def coverage(plan,records,exceptions):
  bad=[]
  for rid,r in records.items():
   if rid not in plan:continue
+  if not r.get('cells'):bad.append({'race':rid,'reason':'no measurement cells'})
   if r.get('status')!='done':bad.append({'race':rid,'reason':'race failed'})
   for c in r.get('cells',[])+r.get('infer_cells',[]):
    if c.get('status')!='ok' or c.get('median_ms') is None:bad.append({'race':rid,'arm':c.get('arm'),'reason':c.get('status')})
@@ -48,6 +49,9 @@ def main():
    try:rc=proc.wait(timeout=7200)
    except subprocess.TimeoutExpired:kill_owned(proc);rc=124
   records=json.loads((out/'board.json').read_text()).get('races',{})
+  if rid not in records and rc!=124:
+   write(root/'blocked.json',{'race':rid,'exit':rc,'reason':'No race result; setup or driver error must be investigated'})
+   return 1
   if rid not in records:
    exc[rid]={'exit':rc,'reason':'No race result; inspect measurements.log; never counted as complete'};write(failures,exc)
   print('RESULT',rid,'exit',rc,'recorded',rid in records,flush=True)

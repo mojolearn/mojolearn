@@ -1,0 +1,821 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "call": "mojolearn.LanguageModelHostTrainer(parameters, shape=cfg).train_step(ids) (CPU)",
+        "cls": "LanguageModelHostTrainer",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/_byte_lm_host.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 1549.7923670045566,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 2085.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 2134.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1549.7923670045566
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "lr": 0.001,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 1632.2031689924188
+    },
+    "torch-cpu-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-compile-bf16",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "cpu",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cpu', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "the same twin on the CPU; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "cpu",
+        "device_name": "AMD EPYC 9575F 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "openmp": "not macOS: inductor's own OpenMP choice",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "selection": "cpu: torch's own dispatch (no backend switches exist)"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "cpu",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "7.1.52802",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 48.84480100008659,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1617.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1641.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        48.84480100008659
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 18857.416461018147
+    },
+    "torch-cpu-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-compile-fp32",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "the same twin on the CPU; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "cpu",
+        "device_name": "AMD EPYC 9575F 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "openmp": "not macOS: inductor's own OpenMP choice",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "selection": "cpu: torch's own dispatch (no backend switches exist)"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "cpu",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "7.1.52802",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 75.58677799534053,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1589.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1636.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        75.58677799534053
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 18258.66886001313
+    },
+    "torch-cpu-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-eager-bf16",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "cpu",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cpu', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "the same twin on the CPU; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "cpu",
+        "device_name": "AMD EPYC 9575F 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "selection": "cpu: torch's own dispatch (no backend switches exist)"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "cpu",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "7.1.52802",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 68.51732300128788,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1502.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1538.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        68.51732300128788
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 115.32125700614415
+    },
+    "torch-cpu-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-eager-fp32",
+        "--lane",
+        "lm-host-train-step",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work/neural-lm-host-train-step-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        null,
+        null
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "the same twin on the CPU; zero_grad; forward + mean CE; backward; torch.optim.AdamW step; loss.item()",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "cpu",
+        "device_name": "AMD EPYC 9575F 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "optimizer": "torch.optim.AdamW lr 0.001 betas (0.9, 0.999) eps 1e-08 wd 0.01 (torch's default impl)",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "selection": "cpu: torch's own dispatch (no backend switches exist)"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "cpu",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "7.1.52802",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 86.92848001373932,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1490.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1593.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        86.92848001373932
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "amsgrad": false,
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "capturable": false,
+        "decoupled_weight_decay": true,
+        "differentiable": false,
+        "eps": 1e-08,
+        "foreach": null,
+        "fused": null,
+        "lr": 0.001,
+        "maximize": false,
+        "seed": 7,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 223.71906097396277
+    }
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "bytes",
+  "finished": "2026-09-30T01:05:15Z",
+  "inputs": {
+    "init": "default_rng(7).normal(0, .02) float32, +1 on norms",
+    "lane": "lm-host-train-step",
+    "parameters": 20453376,
+    "schedule": "step k row b: stream[(k*B*L + b*L) % (n - L - 1) : +L+1]; inputs [:, :L], targets [:, 1:]",
+    "seed": 7,
+    "sha256": {
+      "batches": "0c391a8a9a992609",
+      "init": "fd9399d4528edaa1"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+      "length": 512,
+      "n_heads": 6,
+      "n_kv": 6,
+      "n_layers": 8,
+      "name": "full",
+      "vocab_size": 8192
+    },
+    "steps": 2,
+    "stream": {
+      "bytes": 12377620,
+      "files": 169,
+      "package_dir": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn",
+      "sha256": "cd31155c8727dcea4c7252a1de1097c2ee5d49f545ddc4d199b1743b755a7119",
+      "source": "installed mojolearn package .py sources, sorted by path, concatenated"
+    }
+  },
+  "lane": "lm-host-train-step",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": "none (deterministic)",
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-cpu-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-cpu-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-cpu-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      },
+      "torch-cpu-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "amsgrad": false,
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": 7,
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-cpu-eager-fp32",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-cpu-eager-fp32",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-cpu-eager-fp32",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-cpu-eager-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-cpu-eager-fp32",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-cpu-compile-fp32",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-cpu-compile-fp32",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-cpu-compile-fp32",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-cpu-compile-fp32",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-cpu-compile-fp32",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-cpu-eager-bf16",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-cpu-eager-bf16",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-cpu-eager-bf16",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-cpu-eager-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-cpu-eager-bf16",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      },
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": false,
+        "param": "amsgrad",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": [
+          0.9,
+          0.999
+        ],
+        "param": "betas",
+        "same": true,
+        "theirs": [
+          0.9,
+          0.999
+        ]
+      },
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": 1e-08,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-08
+      },
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": 0.001,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": 0.01,
+        "param": "weight_decay",
+        "same": true,
+        "theirs": 0.01
+      }
+    ],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/lm-host-train-step",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "loss_first_step": 9.017857551574707,
+      "loss_last_step": 8.367768287658691,
+      "steps": 2
+    },
+    "torch-cpu-compile-bf16": {
+      "loss_first_abs_diff_vs_ours": 9.059906005859375e-05,
+      "loss_first_step": 9.017766952514648,
+      "loss_last_abs_diff_vs_ours": 1.239776611328125e-05,
+      "loss_last_step": 8.367755889892578,
+      "steps": 2
+    },
+    "torch-cpu-compile-fp32": {
+      "loss_first_abs_diff_vs_ours": 9.5367431640625e-07,
+      "loss_first_step": 9.01785659790039,
+      "loss_last_abs_diff_vs_ours": 1.9073486328125e-06,
+      "loss_last_step": 8.367766380310059,
+      "steps": 2
+    },
+    "torch-cpu-eager-bf16": {
+      "loss_first_abs_diff_vs_ours": 0.000110626220703125,
+      "loss_first_step": 9.017746925354004,
+      "loss_last_abs_diff_vs_ours": 0.000579833984375,
+      "loss_last_step": 8.368348121643066,
+      "steps": 2
+    },
+    "torch-cpu-eager-fp32": {
+      "loss_first_abs_diff_vs_ours": 9.5367431640625e-07,
+      "loss_first_step": 9.01785659790039,
+      "loss_last_abs_diff_vs_ours": 9.5367431640625e-07,
+      "loss_last_step": 8.367767333984375,
+      "steps": 2
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "head_dim": 64,
+    "intermediate": 1024,
+    "label": "B1 L512 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+    "length": 512,
+    "n_heads": 6,
+    "n_kv": 6,
+    "n_layers": 8,
+    "name": "full",
+    "vocab_size": 8192
+  },
+  "started": "2026-09-30T01:04:25Z",
+  "torch_settings": {
+    "torch-cpu-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-cpu-compile-fp32": "float32, TF32 off",
+    "torch-cpu-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-cpu-eager-fp32": "float32, TF32 off"
+  }
+}

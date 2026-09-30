@@ -1,0 +1,24 @@
+
+=== 2026-09-29T17:31:56Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane lm-forward --shape full --arms ours,torch-eager-fp32,torch-eager-tf32,torch-compile-fp32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/lm-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=lm-forward arm=ours round=0 ms=1788.278 digest=4a8e781b0739a038
+NEURAL-ROUND lane=lm-forward arm=torch-eager-fp32 round=0 ms=179.409 digest=778a030e30bcc489
+NEURAL-ROUND lane=lm-forward arm=torch-eager-tf32 round=0 ms=177.141 digest=6a799be02eab1249
+NEURAL-ROUND lane=lm-forward arm=torch-compile-fp32 round=0 ms=4736.422 digest=60f050971dc5c13c
+NEURAL-ROUND lane=lm-forward arm=torch-compile-tf32 round=0 ms=4320.650 digest=77bdda258fb53552
+NEURAL-ROUND lane=lm-forward arm=torch-eager-bf16 round=0 ms=118.815 digest=18d4655a6c999c0a
+NEURAL-ROUND lane=lm-forward arm=torch-compile-bf16 round=0 ms=6145.980 digest=ac3e433cb9a8c438
+NEURAL-ROUND lane=lm-forward arm=torch-eager-fp32 round=1 ms=49.826 digest=778a030e30bcc489
+NEURAL-ROUND lane=lm-forward arm=torch-eager-tf32 round=1 ms=46.492 digest=6a799be02eab1249
+NEURAL-ROUND lane=lm-forward arm=torch-compile-fp32 round=1 ms=48.501 digest=60f050971dc5c13c
+NEURAL-ROUND lane=lm-forward arm=torch-compile-tf32 round=1 ms=50.029 digest=77bdda258fb53552
+NEURAL-ROUND lane=lm-forward arm=torch-eager-bf16 round=1 ms=49.382 digest=18d4655a6c999c0a
+NEURAL-ROUND lane=lm-forward arm=torch-compile-bf16 round=1 ms=51.177 digest=ac3e433cb9a8c438
+NEURAL-ROUND lane=lm-forward arm=ours round=1 ms=147.355 digest=4a8e781b0739a038
+NEURAL lane=lm-forward arm=ours status=ok median_ms=147.3545292392373 quality={"mean_nll": 9.01873340416645}
+NEURAL lane=lm-forward arm=torch-eager-fp32 status=ok median_ms=49.826039001345634 quality={"max_abs_diff_vs_ours": 1.3709068298339844e-06, "max_rel_diff_vs_ours": 1.8819760453906437e-06, "mean_nll": 9.018733374242045}
+NEURAL lane=lm-forward arm=torch-eager-tf32 status=ok median_ms=46.49233166128397 quality={"max_abs_diff_vs_ours": 0.0007233032956719398, "max_rel_diff_vs_ours": 0.0009929482050735291, "mean_nll": 9.018732931864267}
+NEURAL lane=lm-forward arm=torch-compile-fp32 status=ok median_ms=48.500508069992065 quality={"max_abs_diff_vs_ours": 1.341104507446289e-06, "max_rel_diff_vs_ours": 1.8410635226647602e-06, "mean_nll": 9.018733375427612}
+NEURAL lane=lm-forward arm=torch-compile-tf32 status=ok median_ms=50.029330886900425 quality={"max_abs_diff_vs_ours": 0.0007183742709457874, "max_rel_diff_vs_ours": 0.0009861816573695685, "mean_nll": 9.018732321611843}
+NEURAL lane=lm-forward arm=torch-eager-bf16 status=ok median_ms=49.381835386157036 quality={"max_abs_diff_vs_ours": 0.006869867444038391, "max_rel_diff_vs_ours": 0.009430929719895686, "mean_nll": 9.01866352212987}
+NEURAL lane=lm-forward arm=torch-compile-bf16 status=ok median_ms=51.17667093873024 quality={"max_abs_diff_vs_ours": 0.006303519010543823, "max_rel_diff_vs_ours": 0.008653448594274358, "mean_nll": 9.018669105142353}

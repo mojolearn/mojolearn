@@ -1,0 +1,18 @@
+
+=== 2026-09-29T14:45:07Z /root/bench-board-cache/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py prep --data /root/bench-board-cache/more-data/rows-full --lanes agglomerative,arima,elasticnet,ets,gmm,gpc,gpr,ivf,kernel-ridge,knn-clf,knn-reg,lasso,linearsvc,linearsvr,logreg,nystroem,rbf-sampler,ridge,spectral,spectral-embedding,svr,tsvd,umap --datasets istella,taxi
+CTD-PREP block=arma-synthetic Y=64x2100
+CTD-PREP block=seasonal-synthetic Y=64x1488
+CTD-PREP block=cls-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+knn_datasets: read the 404000-row istella prefix (220 columns) from /root/datasets/gbm-bench/istella/istella_speed.npz in 0.30 s
+CTD-PREP block=ivf-istella index=400000x220 queries=4000x220
+CTD-PREP block=manifold-istella X=20000x220
+CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+CTD-PREP block=tsvd-istella X=1000000x220
+MORE-PREP dataset=istella seconds=7.0
+CTD-PREP block=cls-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+knn_datasets: read the 404000-row taxi prefix (11 columns) from /root/datasets/gbm-bench/taxi/taxi_speed.npz in 0.03 s
+CTD-PREP block=ivf-taxi index=400000x11 queries=4000x11
+CTD-PREP block=manifold-taxi X=20000x11
+CTD-PREP block=reg-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+CTD-PREP block=tsvd-taxi X=1000000x11
+MORE-PREP dataset=taxi seconds=0.9

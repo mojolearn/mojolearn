@@ -1,0 +1,4 @@
+/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/utils/_device.py:104: UserWarning: Using AOTriton backend for Efficient Attention forward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/attention.hip:1180.)
+  return func(*args, **kwargs)
+/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/autograd/graph.py:823: UserWarning: Using AOTriton backend for Efficient Attention backward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/attention_backward.hip:463.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass

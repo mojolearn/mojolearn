@@ -1,0 +1,7 @@
+
+=== 2026-09-29T23:03:54Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py race --lane ols --dataset istella --data /root/bench-board-cache-t213/ctd-data/rows-full --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.ols.istella.rows=full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --root /root/mojolearn-wt/steward-do-amd --arms sklearn-cpu,torch-gpu,torch-gpu-eigh --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --infer --params-only
+CTD-SETTINGS lane=ols dataset=istella fit_intercept=True
+CTD-MISMATCH lane=ols dataset=istella seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+CTD-MISMATCH lane=ols dataset=istella solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+CTD-MISMATCH lane=ols dataset=istella scikit-learn positive=False and copy_X=True: parameters ours does not have
+PARAMS-ONLY /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.ols.istella.rows=full/ols-istella.params.json

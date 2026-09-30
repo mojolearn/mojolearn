@@ -1,0 +1,12 @@
+
+=== 2026-09-30T01:27:03Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lstsq --dataset istella --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lstsq", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lstsq dataset=istella arm=ours round=0 ms=20940.552 infer_ms=None digest=d289a51780fe9c0a
+ALGOS-ROUND lane=lstsq dataset=istella arm=numpy-cpu round=0 ms=2489.865 infer_ms=None digest=15533c2e71f8abeb
+ALGOS-ROUND lane=lstsq dataset=istella arm=torch-gpu round=0 ms=3438.444 infer_ms=None digest=cd366afefbb3396e
+ALGOS-ROUND lane=lstsq dataset=istella arm=numpy-cpu round=1 ms=2526.758 infer_ms=None digest=15533c2e71f8abeb
+ALGOS-ROUND lane=lstsq dataset=istella arm=torch-gpu round=1 ms=3342.064 infer_ms=None digest=cd366afefbb3396e
+ALGOS-ROUND lane=lstsq dataset=istella arm=ours round=1 ms=20562.524 infer_ms=None digest=d289a51780fe9c0a
+ALGOS lane=lstsq dataset=istella arm=ours status=ok median_ms=20562.523636996048 quality={"relative_residual": 0.8499565470308287}
+ALGOS lane=lstsq dataset=istella arm=numpy-cpu status=ok median_ms=2526.758380001411 quality={"relative_residual": 0.8761060618911042}
+ALGOS lane=lstsq dataset=istella arm=torch-gpu status=ok median_ms=3342.063963995315 quality={"relative_residual": NaN}

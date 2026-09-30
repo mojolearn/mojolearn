@@ -1,0 +1,12 @@
+
+=== 2026-09-29T17:33:43Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane mamba1-infer --shape full --arms ours,torch-cpu-eager-fp32,torch-cpu-eager-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-infer arm=ours round=0 ms=102.480 digest=6caeee307295deeb
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=0 ms=108.536 digest=78ec5ac7343d1e02
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=0 ms=318.271 digest=8fc64ab7ded27a40
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=1 ms=121.766 digest=78ec5ac7343d1e02
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=1 ms=240.819 digest=8fc64ab7ded27a40
+NEURAL-ROUND lane=mamba1-infer arm=ours round=1 ms=80.931 digest=6caeee307295deeb
+NEURAL lane=mamba1-infer arm=ours status=ok median_ms=80.93130681663752 quality={}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-fp32 status=ok median_ms=121.76642008125782 quality={"max_abs_diff_vs_ours": 1.1920928955078125e-07, "max_rel_diff_vs_ours": 5.948106105171795e-08}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-bf16 status=ok median_ms=240.8188246190548 quality={"max_abs_diff_vs_ours": 5.14984130859375e-05, "max_rel_diff_vs_ours": 2.5695818374342154e-05}

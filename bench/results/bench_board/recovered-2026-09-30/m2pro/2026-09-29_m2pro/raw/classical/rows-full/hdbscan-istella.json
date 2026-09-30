@@ -1,0 +1,520 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "hdbscan",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "Exception(\"hdbscan.build_mr_linkage: n_rows=100000 > 46340; the dense mutual reachability graph is m * m cells and hierarchy's PAIRWISE connectivity refuses past that bound (their value_idx overflows). To close this refusal, implementation the SPARSE arm (DEVIATION 1600), which needs the cross-component fix-up in the hierarchy lane and a k-NN distance epilogue in the neighbors lane\")",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "config": "mojolearn.HDBSCAN(allow_single_cluster=False, alpha=1.0, cluster_selection_epsilon=0.0, cluster_selection_method='eom', metric='euclidean', min_cluster_size=100, min_samples=10, max_cluster_size=0) on the block's first 100000 rows; fit timed",
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "max_ms": null,
+      "median_ms": null,
+      "mem": [],
+      "min_ms": null,
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "max_cluster_size": 0,
+          "metric": "euclidean",
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "prediction_data": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "hdbscan",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "Exception(\"hdbscan.build_mr_linkage: n_rows=100000 > 46340; the dense mutual reachability graph is m * m cells and hierarchy's PAIRWISE connectivity refuses past that bound (their value_idx overflows). To close this refusal, implementation the SPARSE arm (DEVIATION 1600), which needs the cross-component fix-up in the hierarchy lane and a k-NN distance epilogue in the neighbors lane\")",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "config": "mojolearn.HDBSCAN(allow_single_cluster=False, alpha=1.0, cluster_selection_epsilon=0.0, cluster_selection_method='eom', metric='euclidean', min_cluster_size=100, min_samples=10, max_cluster_size=0) on the block's first 100000 rows; fit timed",
+        "device": "gpu",
+        "device_name": "Apple M2 Pro",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "max_ms": null,
+      "median_ms": null,
+      "mem": [],
+      "min_ms": null,
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "max_cluster_size": 0,
+          "metric": "euclidean",
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "prediction_data": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "hdbscan",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "1aac27853e487da2",
+        "1aac27853e487da2"
+      ],
+      "info": {
+        "config": "sklearn.cluster.HDBSCAN(allow_single_cluster=False, alpha=1.0, cluster_selection_epsilon=0.0, cluster_selection_method='eom', metric='euclidean', min_cluster_size=100, min_samples=10, max_cluster_size=None, n_jobs=-1) on the block's first 100000 rows; fit timed",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 12,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 12,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "max_ms": 852655.6830419868,
+      "median_ms": 852655.6830419868,
+      "mem": [
+        {
+          "children_mb": 16.6,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1197.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 16.6,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1368.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "min_ms": 852655.6830419868,
+      "ms": [
+        852655.6830419868
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "auto",
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "leaf_size": 40,
+          "max_cluster_size": null,
+          "metric": "euclidean",
+          "metric_params": null,
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "store_centers": null
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "call",
+        "library": "scikit-learn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 851762.5100419973
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "e4d391648642741b44c19d0b060f787cea3a27507614f9e16c73c93e7e90874a",
+        "shape": [
+          1000000,
+          220
+        ]
+      }
+    },
+    "block": "dbscan",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "dbscan": {
+      "params_env": "MOJOLEARN_CTD_DBSCAN_ISTELLA",
+      "rows": 1000000
+    },
+    "fit_rows": [
+      0,
+      1000000
+    ],
+    "fit_rows_available": 2043304,
+    "hdbscan": {
+      "rows": 100000
+    },
+    "lanes": [
+      "dbscan",
+      "hdbscan"
+    ],
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+    "scaling": "standardized by these rows (float64 mean and std)",
+    "sentinel_cells_replaced": {
+      "X": 655802
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T20:35:43Z"
+  },
+  "commit": "9cee9ef68a90029b6a158ba7da2fa1d4fa064ee5",
+  "dataset": "istella",
+  "finished": "2026-09-29T23:35:09Z",
+  "finished_rounds": "2026-09-29T23:35:09Z",
+  "lane": "hdbscan",
+  "lane_config": {
+    "mismatches": [
+      "seed: no arm has a seed argument (deterministic)",
+      "max_cluster_size: ours and cuML 0, scikit-learn None (both mean no limit)",
+      "scikit-learn algorithm='auto', leaf_size=40, n_jobs=-1: its own; cuML build_algo at its default"
+    ],
+    "params": "min_samples=10, min_cluster_size=100, metric='euclidean', cluster_selection_method='eom', cluster_selection_epsilon=0.0, alpha=1.0, allow_single_cluster=False",
+    "rows": "the dbscan block's first 100,000 rows",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "max_cluster_size": 0,
+          "metric": "euclidean",
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "max_cluster_size": 0,
+          "metric": "euclidean",
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "auto",
+          "allow_single_cluster": false,
+          "alpha": 1.0,
+          "cluster_selection_epsilon": 0.0,
+          "cluster_selection_method": "eom",
+          "leaf_size": 40,
+          "max_cluster_size": null,
+          "metric": "euclidean",
+          "min_cluster_size": 100,
+          "min_samples": 10,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": false,
+        "param": "allow_single_cluster",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 1.0,
+        "param": "alpha",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.0,
+        "param": "cluster_selection_epsilon",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "eom",
+        "param": "cluster_selection_method",
+        "same": true,
+        "theirs": "eom"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0,
+        "param": "max_cluster_size",
+        "same": true,
+        "theirs": 0
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 100,
+        "param": "min_cluster_size",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 10,
+        "param": "min_samples",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": false,
+        "param": "allow_single_cluster",
+        "same": true,
+        "theirs": false
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1.0,
+        "param": "alpha",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0,
+        "param": "cluster_selection_epsilon",
+        "same": true,
+        "theirs": 0.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "eom",
+        "param": "cluster_selection_method",
+        "same": true,
+        "theirs": "eom"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0,
+        "param": "max_cluster_size",
+        "same": false,
+        "theirs": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 100,
+        "param": "min_cluster_size",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "min_samples",
+        "same": true,
+        "theirs": 10
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0,
+        "param": "max_cluster_size",
+        "reason": "no limit on every arm: ours and cuML spell it 0, scikit-learn None",
+        "theirs": null
+      }
+    ],
+    "family": "classical",
+    "lane": "hdbscan",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "ours-fast",
+      "sklearn-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "sklearn-cpu": {
+      "n_clusters": 52,
+      "noise_fraction": 0.25257,
+      "rows": 100000
+    }
+  },
+  "ratios_ours_over": {},
+  "rounds_requested": 1,
+  "script": "tools/classical_two_datasets.py",
+  "spans": {
+    "ours": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "ours-fast": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "sklearn-cpu": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "call",
+      "library": "scikit-learn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    }
+  },
+  "started": "2026-09-29T23:06:42Z"
+}

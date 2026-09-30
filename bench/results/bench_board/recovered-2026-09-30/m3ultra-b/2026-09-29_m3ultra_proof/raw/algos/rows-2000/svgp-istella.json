@@ -1,0 +1,302 @@
+{
+  "arms": {
+    "gpytorch-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "gpytorch-cpu",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (2): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+        "device": "cpu",
+        "input_home": "device",
+        "library": "gpytorch",
+        "pre_clock_fit": false,
+        "version": "1.15.2"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "gpytorch",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0,
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "gpytorch-gpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "gpytorch-gpu",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (2): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+        "device": "gpu",
+        "input_home": "device",
+        "library": "gpytorch",
+        "pre_clock_fit": false,
+        "version": "1.15.2"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "gpytorch",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0,
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (2): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.SVGP(inducing_points=512 stride rows, {'kernel_variance': 1.0, 'lengthscale': 1.0, 'noise_variance': 1.0, 'jitter': 1e-06})",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digests": [],
+      "error": "parameters do not match (2): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.SVGP(inducing_points=512 stride rows, {'kernel_variance': 1.0, 'lengthscale': 1.0, 'noise_variance': 1.0, 'jitter': 1e-06})",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "0f589a2783ae5b536bbd76dbd44e132205b47efa6ea8048de53a8a2e6ebe7426",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "33d68ff78ffcb702fc849947b14195be0f0aff3946f0e1d95f321d6b415fc7b6",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "a2f19435f5d3d1a454da826b2aa89e8121501136f3578b02ee9bfed88adbbefe",
+        "shape": [
+          2000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "65fffafb7eadf7757ba70a8e7da4590dc3e0ec7fec74e1ac21e7ecdbe17602ca",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 2000 of 500000 test rows",
+    "fit_rows": "stride sample of 2000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 1303,
+      "Xq": 1331
+    },
+    "smoke_max_rows": 2000,
+    "target": "real",
+    "written": "2026-09-29T12:25:05Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "istella",
+  "finished": "2026-09-29T12:56:04Z",
+  "lane": "svgp",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "svgp",
+    "mismatches": [
+      "no seed on any arm: nothing is drawn (fixed inducing points, closed form)",
+      "jitter: ours 1e-6 on K_uu; gpytorch adds its own Cholesky jitter (1e-6 in float32) only when a factorization fails"
+    ],
+    "notes": [
+      "zero mean, RBF kernel (one lengthscale), Gaussian likelihood, inducing points = 512 stride rows (fixed), kernel variance, lengthscale and noise variance all 1.0 and NOT trained on any arm: ours sets q(u) to its optimum for the given hyperparameters (Titsias's collapsed bound, DEVIATION 5205); gpytorch is the same model through InducingPointKernel (SGPR, the collapsed bound) in an ExactGP with ZeroMean, the same fixed hyperparameters, its prediction cache built in the fit clock"
+    ],
+    "ours_class": "mojolearn.SVGP or mojolearn.SparseVariationalGP",
+    "params": {
+      "jitter": 1e-06,
+      "kernel_variance": 1.0,
+      "lengthscale": 1.0,
+      "n_inducing": 512,
+      "noise_variance": 1.0
+    },
+    "quality": "held-out R2 and RMSE",
+    "stride_subsets": {
+      "X": 100000,
+      "Xq": 20000
+    },
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "gpytorch-cpu": {
+        "library": "gpytorch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "gpytorch-gpu": {
+        "library": "gpytorch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {},
+        "source": "declared"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {},
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/svgp",
+    "problems": [
+      "ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none"
+    ],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "REFUSED"
+  },
+  "params_refused": "parameters do not match (2): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none; ours-fast (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x220; Xq 2000x220; y 2000; yq 2000",
+  "started": "2026-09-29T12:56:03Z"
+}

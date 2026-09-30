@@ -1,0 +1,270 @@
+{
+  "arms": {
+    "numpy-cpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "numpy-cpu",
+        "--lane",
+        "eigh",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e3c9c61702d4d8af",
+        "e3c9c61702d4d8af"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "numpy",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "version": "2.5.3"
+      },
+      "median_ms": 2356.5397879865486,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 777.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 970.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        2356.5397879865486
+      ],
+      "params_record": {
+        "UPLO": "L",
+        "__library__": "numpy"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "symmetric eigendecomposition",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 2458.3019059791695
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "eigh",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": null,
+      "failed_round": 0,
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.linalg.eigh(UPLO='L')",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "UPLO": "L",
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "symmetric eigendecomposition",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "timeout",
+      "warmup_ms": null
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "eigh",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "dcbc4d451473bbb3",
+        "dcbc4d451473bbb3"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 117.47917500906624,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 336.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1719.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 400.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2037.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        117.47917500906624
+      ],
+      "params_record": {
+        "UPLO": "L",
+        "__library__": "torch"
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "symmetric eigendecomposition",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 231.01012301049195
+    }
+  },
+  "block": {
+    "block": "sym",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T06:03:34Z",
+  "lane": "eigh",
+  "lane_config": {
+    "block": "sym",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "decomp",
+    "kind": "linalg",
+    "mismatches": [],
+    "notes": [
+      "eigh(A, UPLO='L') of the cholesky lane's symmetric matrix at n = 4096: every eigenvalue and eigenvector"
+    ],
+    "ours_class": "mojolearn.linalg.eigh",
+    "params": {
+      "UPLO": "L"
+    },
+    "quality": "relative residual ||A V - V diag(w)|| / ||A|| and max eigenvalue error vs float64",
+    "task": "eigh",
+    "timed_fit": "symmetric eigendecomposition",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "numpy-cpu": {
+        "library": "numpy",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-gpu": {
+        "library": "torch",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/eigh",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "numpy-cpu",
+      "ours",
+      "torch-gpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "numpy-cpu": {
+      "max_eigenvalue_error": 3.49014511182305e-08,
+      "relative_residual": 2.8236889953584005e-08
+    },
+    "torch-gpu": {
+      "max_eigenvalue_error": 1.0440680754790996e-06,
+      "relative_residual": 9.613883338456243e-07
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T05:03:16Z"
+}

@@ -1,0 +1,48 @@
+
+=== 2026-09-29T15:54:38Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/bench/speed/forest_speed_arm.py --lane rf --dataset taxi --devices gpu --arms cuml-rf-gpu --mem --infer
+FSPEED-CTR-TRACE lane=rf MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+17088 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x537740000000, nodemask=1)
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=cuda path=/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_rf.so
+FSPEED-LIBRARY {"arm": "ours", "device": "gpu", "device_name": "NVIDIA L40S", "lane": "rf", "library": "mojolearn", "version": null}
+FSPEED-LIBRARY {"arm": "cuml-rf-gpu", "device": "gpu", "device_name": "NVIDIA L40S", "lane": "rf", "library": "cuml", "version": "26.08.00"}
+BOARD-PARAMS {"arms": {"cuml-rf-gpu": {"library": "cuml", "params": {"bootstrap": true, "class_weight": null, "max_bin": 128, "max_depth": 8, "max_features": "sqrt", "max_leaves": -1, "max_samples": 1.0, "min_samples_leaf": 1, "min_split_gain": 0.0, "n_estimators": 500, "seed": 7}, "source": "get_params"}, "ours": {"library": "mojolearn", "params": {"bootstrap": true, "class_weight": null, "criterion": "gini", "max_bin": 128, "max_depth": 8, "max_features": "sqrt", "max_leaves": -1, "max_samples": 1.0, "min_samples_leaf": 1, "min_split_gain": 0.0, "n_estimators": 500, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "cuml-rf-gpu", "ours": true, "param": "bootstrap", "same": true, "theirs": true}, {"arm": "cuml-rf-gpu", "ours": null, "param": "class_weight", "same": false, "theirs": null}, {"arm": "cuml-rf-gpu", "ours": 128, "param": "max_bin", "same": true, "theirs": 128}, {"arm": "cuml-rf-gpu", "ours": 8, "param": "max_depth", "same": true, "theirs": 8}, {"arm": "cuml-rf-gpu", "ours": "sqrt", "param": "max_features", "same": true, "theirs": "sqrt"}, {"arm": "cuml-rf-gpu", "ours": -1, "param": "max_leaves", "same": true, "theirs": -1}, {"arm": "cuml-rf-gpu", "ours": 1.0, "param": "max_samples", "same": true, "theirs": 1.0}, {"arm": "cuml-rf-gpu", "ours": 1, "param": "min_samples_leaf", "same": true, "theirs": 1}, {"arm": "cuml-rf-gpu", "ours": 0.0, "param": "min_split_gain", "same": true, "theirs": 0.0}, {"arm": "cuml-rf-gpu", "ours": 500, "param": "n_estimators", "same": true, "theirs": 500}], "exceptions": [{"arm": "cuml-rf-gpu", "ours": null, "param": "class_weight", "reason": "None on every arm is unit class weights, the value each library defines for None", "theirs": null}], "family": "trees", "lane": "rf", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-NOTE lane=rf arms=ours,cuml-rf-gpu metric=mismatch delta=0.000000 reason=seed 7 on every arm through its own argument (random_state, random_seed, seed); each library draws from its own generator, so the streams are not shared: row bootstrap (rf), per-node feature draws, ET thresholds; LightGBM derives its baggin
+BOARD-PARAMS {"arms": {"cuml-rf-gpu": {"library": "cuml", "params": {"bootstrap": true, "class_weight": null, "max_bin": 128, "max_depth": 8, "max_features": "sqrt", "max_leaves": -1, "max_samples": 1.0, "min_samples_leaf": 1, "min_split_gain": 0.0, "n_estimators": 500, "seed": 7}, "source": "get_params"}, "ours": {"library": "mojolearn", "params": {"bootstrap": true, "class_weight": null, "criterion": "gini", "max_bin": 128, "max_depth": 8, "max_features": "sqrt", "max_leaves": -1, "max_samples": 1.0, "min_samples_leaf": 1, "min_split_gain": 0.0, "n_estimators": 500, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "cuml-rf-gpu", "ours": true, "param": "bootstrap", "same": true, "theirs": true}, {"arm": "cuml-rf-gpu", "ours": null, "param": "class_weight", "same": false, "theirs": null}, {"arm": "cuml-rf-gpu", "ours": 128, "param": "max_bin", "same": true, "theirs": 128}, {"arm": "cuml-rf-gpu", "ours": 8, "param": "max_depth", "same": true, "theirs": 8}, {"arm": "cuml-rf-gpu", "ours": "sqrt", "param": "max_features", "same": true, "theirs": "sqrt"}, {"arm": "cuml-rf-gpu", "ours": -1, "param": "max_leaves", "same": true, "theirs": -1}, {"arm": "cuml-rf-gpu", "ours": 1.0, "param": "max_samples", "same": true, "theirs": 1.0}, {"arm": "cuml-rf-gpu", "ours": 1, "param": "min_samples_leaf", "same": true, "theirs": 1}, {"arm": "cuml-rf-gpu", "ours": 0.0, "param": "min_split_gain", "same": true, "theirs": 0.0}, {"arm": "cuml-rf-gpu", "ours": 500, "param": "n_estimators", "same": true, "theirs": 500}], "exceptions": [{"arm": "cuml-rf-gpu", "ours": null, "param": "class_weight", "reason": "None on every arm is unit class weights, the value each library defines for None", "theirs": null}], "family": "trees", "lane": "rf", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+FSPEED-SCALE stage=before rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=IDENTICAL device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-HEADER family=forest lane=rf arm=cuml-rf-gpu mode=IDENTICAL device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-MEM lane=rf arm=ours round=0 host_mb=2395.1 gpu_mb=1706.0 children_mb=3.0 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-4110786x16 ms=6865.792
+FSPEED-MEM lane=rf arm=cuml-rf-gpu round=0 host_mb=2977.8 gpu_mb=1720.0 children_mb=3.1 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED-WARMUP lane=rf arm=cuml-rf-gpu shape=taxi-4110786x16 ms=22893.955
+FSPEED-ORDER lane=rf round=1 arms=ours,cuml-rf-gpu
+FSPEED-MEM lane=rf arm=ours round=1 host_mb=2993.5 gpu_mb=1720.0 children_mb=3.0 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED lane=rf arm=ours shape=taxi-4110786x16 round=1 ms=5798.199 hash=a660fbfbad84ade8
+FSPEED-MEM lane=rf arm=cuml-rf-gpu round=1 host_mb=3056.4 gpu_mb=1724.0 children_mb=3.2 host_method=Linux VmHWM after clear_refs 5 (peak RSS over the round) gpu_method=nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak) (the process total: every arm in this one process)
+FSPEED lane=rf arm=cuml-rf-gpu shape=taxi-4110786x16 round=1 ms=21000.258 hash=4a1cf6c5b4f507ec
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525953
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617838
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=logloss value=0.525954
+FSPEED-ACC lane=rf arm=cuml-rf-gpu metric=auc value=0.617836
+FSPEED-FIT lane=rf arm=ours library=mojolearn trees=500 nodes=245962 leaves=123231 depth_max=8 source=flat forest arrays
+FSPEED-FIT lane=rf arm=cuml-rf-gpu library=cuml trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=rf arm=cuml-rf-gpu note=this cuML build exposes neither get_json nor dump_as_json, so its fitted shape cannot be read
+FSPEED-FIT-VERDICT lane=rf arms=cuml-rf-gpu,ours leaves=ours:123231 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=rf arm=ours call=mojolearn RandomForestClassifier.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=rf arm=cuml-rf-gpu call=cuml RandomForest.predict_proba(host X) (FIL conversion refused: 'RandomForestClassifier' object has no attribute 'convert_to_fil_model')
+FSPEED-INFER-WARMUP lane=rf arm=ours batch=test rows=500000 ms=9.707
+FSPEED-INFER-WARMUP lane=rf arm=cuml-rf-gpu batch=test rows=500000 ms=9.256
+FSPEED-INFER lane=rf arm=ours batch=test rows=500000 round=1 ms=9.141 hash=a660fbfbad84ade8
+FSPEED-INFER lane=rf arm=cuml-rf-gpu batch=test rows=500000 round=1 ms=9.017 hash=4a1cf6c5b4f507ec
+FSPEED-INFER-ACC lane=rf arm=ours batch=test metric=logloss value=0.525953
+FSPEED-INFER-ACC lane=rf arm=ours batch=test metric=auc value=0.617838
+FSPEED-INFER-ACC lane=rf arm=cuml-rf-gpu batch=test metric=logloss value=0.525954
+FSPEED-INFER-ACC lane=rf arm=cuml-rf-gpu batch=test metric=auc value=0.617836
+FSPEED-INFER-WARMUP lane=rf arm=ours batch=large rows=1000000 ms=19.841
+FSPEED-INFER-WARMUP lane=rf arm=cuml-rf-gpu batch=large rows=1000000 ms=55.682
+FSPEED-INFER lane=rf arm=ours batch=large rows=1000000 round=1 ms=18.812 hash=87f284ccdaa1b2e8
+FSPEED-INFER lane=rf arm=cuml-rf-gpu batch=large rows=1000000 round=1 ms=19.231 hash=95940a60c3a677c5

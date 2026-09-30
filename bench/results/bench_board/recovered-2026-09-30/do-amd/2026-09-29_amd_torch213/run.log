@@ -1,0 +1,240 @@
+2026-09-29T22:58:57Z run.sh start at 4f3e685348ddc41ec22ce00c53187c3528d929b7 on mojolearn-steward-do-amd args: --families classical,neural,algos --lanes adafactor,adagrad,adam,adamax,adamw,avgpool1d,avgpool2d,batchnorm1d,batchnorm2d,cholesky,clip-grad-norm,cnn-clf,conv1d,conv2d,cross-entropy,dropout2d,eigh,embedding,gcn,gemm,gemm-bf16,gemm-int8,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,layernorm,lm-forward,lm-host-train-step,lm-infer,lm-train-step,lr-constant,lr-exponential,lr-onecycle,lr-step,lr-warmup-cosine,lr-warmup-linear,lstm-clf,lstm-reg,lstsq,lu-factor,lu-solve,mamba1-forward,mamba1-infer,mamba2-forward,mamba2-infer,mamba3-forward,mamba3-infer,maxpool1d,maxpool2d,mlp-infer,mlp-train-step,moe,nadam,qr,randomized-svd,resnet-block,rmsprop,rnn-clf,rnn-reg,samba-forward,samba-infer,samba-train-step,sgd,svd,svgp,transformer-forward,transformer-infer,kmeans,pca,ols,knn --torch-spec torch==2.13.0+rocm7.1 --torch-index-url https://download.pytorch.org/whl/rocm7.1 --skip-failed
+2026-09-29T22:58:57Z board runs until 2026-09-30T01:48:57Z at most
+bench_board: algos prep rows=full lanes=49 datasets=istella,taxi
+bench_board: classical prep rows=full lanes=kmeans,knn,ols,pca datasets=istella,taxi
+bench_board: [1/90] classical/kmeans/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:33:52Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 21s
+bench_board: [2/90] classical/kmeans/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:34:26Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 34s
+bench_board: [3/90] classical/pca/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:34:39Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 17s
+bench_board: [4/90] classical/pca/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:34:57Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 21s
+bench_board: [5/90] classical/ols/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu,torch-gpu-eigh
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:35:14Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 20s
+bench_board: [6/90] classical/ols/istella/rows=full arms=ours,sklearn-cpu,torch-gpu,torch-gpu-eigh
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:35:47Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 37s
+bench_board: [7/90] classical/knn/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:36:05Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 21s
+bench_board: [8/90] classical/knn/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T16:36:26Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 23s
+bench_board: [9/90] neural/lm-train-step/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 47s
+bench_board: [10/90] neural/lm-forward/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 34s
+bench_board: [11/90] neural/gemm/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 23s
+bench_board: [12/90] neural/transformer-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 25s
+bench_board: [13/90] neural/transformer-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 43s
+bench_board: [14/90] neural/mamba1-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-eager-bf16
+bench_board:   done rc=0 31s
+bench_board: [15/90] neural/mamba1-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-eager-bf16
+bench_board:   done rc=0 20s
+bench_board: [16/90] neural/mamba2-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 44s
+bench_board: [17/90] neural/mamba2-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 52s
+bench_board: [18/90] neural/mamba3-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 692s
+bench_board: [19/90] neural/mamba3-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 126s
+bench_board: [20/90] neural/samba-train-step/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 5172s
+bench_board: [21/90] neural/samba-forward/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 505s
+bench_board: [22/90] neural/samba-infer/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 236s
+bench_board: [23/90] neural/mlp-train-step/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 26s
+bench_board: [24/90] neural/mlp-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 32s
+bench_board: [25/90] neural/lm-infer/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 41s
+bench_board: [26/90] neural/lm-host-train-step/bytes/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 51s
+bench_board: [27/90] neural/gemm-bf16/gaussian/shape=full arms=ours,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [28/90] neural/gemm-int8/gaussian/shape=full arms=ours
+bench_board:   done rc=0 5s
+bench_board: [29/90] algos/svgp/taxi/rows=full arms=ours,gpytorch-gpu,gpytorch-cpu
+bench_board:   done rc=0 13s
+bench_board: [30/90] algos/svgp/istella/rows=full arms=ours,gpytorch-gpu,gpytorch-cpu
+bench_board:   done rc=0 16s
+bench_board: [31/90] algos/lu-solve/synthetic/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 1254s
+bench_board: [32/90] algos/lstsq/taxi/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 6s
+bench_board: [33/90] algos/lstsq/istella/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 59s
+bench_board: [34/90] algos/randomized-svd/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 10s
+bench_board: [35/90] algos/randomized-svd/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 14s
+bench_board: [36/90] algos/lu-factor/synthetic/rows=full arms=ours,scipy-cpu,torch-gpu
+bench_board:   done rc=0 1227s
+bench_board: [37/90] algos/cholesky/synthetic/rows=full arms=ours,numpy-cpu,torch-gpu
+2026-09-30T01:48:58Z STOP: time limit reached; killing the board and its drivers
+2026-09-30T01:49:03Z board exit 137
+/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/BOARD.md
+2026-09-30T01:49:03Z rendered: -rw-r--r-- 1 root root 123600 Sep 30 01:49 /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/BOARD.md
+2026-09-30T04:59:11Z run.sh start at 74ce083bc773b6cbb29d15b49d774f3fa79554af on mojolearn-steward-do-amd args: --families classical,neural,algos --lanes adafactor,adagrad,adam,adamax,adamw,avgpool1d,avgpool2d,batchnorm1d,batchnorm2d,cholesky,clip-grad-norm,cnn-clf,conv1d,conv2d,cross-entropy,dropout2d,eigh,embedding,gcn,gemm,gemm-bf16,gemm-int8,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,layernorm,lm-forward,lm-host-train-step,lm-infer,lm-train-step,lr-constant,lr-exponential,lr-onecycle,lr-step,lr-warmup-cosine,lr-warmup-linear,lstm-clf,lstm-reg,lstsq,lu-factor,lu-solve,mamba1-forward,mamba1-infer,mamba2-forward,mamba2-infer,mamba3-forward,mamba3-infer,maxpool1d,maxpool2d,mlp-infer,mlp-train-step,moe,nadam,qr,randomized-svd,resnet-block,rmsprop,rnn-clf,rnn-reg,samba-forward,samba-infer,samba-train-step,sgd,svd,svgp,transformer-forward,transformer-infer,kmeans,pca,ols,knn --torch-spec torch==2.13.0+rocm7.1 --torch-index-url https://download.pytorch.org/whl/rocm7.1 --skip-failed
+2026-09-30T04:59:11Z board runs until 2026-09-30T07:49:11Z at most
+bench_board: skip classical/kmeans/taxi/rows=full (done 2026-09-29T23:02:22Z)
+bench_board: skip classical/kmeans/istella/rows=full (done 2026-09-29T23:02:57Z)
+bench_board: skip classical/pca/taxi/rows=full (done 2026-09-29T23:03:14Z)
+bench_board: skip classical/pca/istella/rows=full (done 2026-09-29T23:03:34Z)
+bench_board: skip classical/ols/taxi/rows=full (done 2026-09-29T23:03:54Z)
+bench_board: skip classical/ols/istella/rows=full (done 2026-09-29T23:04:31Z)
+bench_board: skip classical/knn/taxi/rows=full (done 2026-09-29T23:04:52Z)
+bench_board: skip classical/knn/istella/rows=full (done 2026-09-29T23:05:15Z)
+bench_board: skip neural/lm-train-step/bytes/shape=full (done 2026-09-29T23:06:03Z)
+bench_board: skip neural/lm-forward/bytes/shape=full (done 2026-09-29T23:06:37Z)
+bench_board: skip neural/gemm/gaussian/shape=full (done 2026-09-29T23:07:00Z)
+bench_board: skip neural/transformer-forward/gaussian/shape=full (done 2026-09-29T23:07:25Z)
+bench_board: skip neural/transformer-infer/gaussian/shape=full (done 2026-09-29T23:08:08Z)
+bench_board: skip neural/mamba1-forward/gaussian/shape=full (done 2026-09-29T23:08:38Z)
+bench_board: skip neural/mamba1-infer/gaussian/shape=full (done 2026-09-29T23:08:58Z)
+bench_board: skip neural/mamba2-forward/gaussian/shape=full (done 2026-09-29T23:09:42Z)
+bench_board: skip neural/mamba2-infer/gaussian/shape=full (done 2026-09-29T23:10:34Z)
+bench_board: skip neural/mamba3-forward/gaussian/shape=full (done 2026-09-29T23:22:06Z)
+bench_board: skip neural/mamba3-infer/gaussian/shape=full (done 2026-09-29T23:24:13Z)
+bench_board: skip neural/samba-train-step/bytes/shape=full (done 2026-09-30T00:50:25Z)
+bench_board: skip neural/samba-forward/bytes/shape=full (done 2026-09-30T00:58:50Z)
+bench_board: skip neural/samba-infer/bytes/shape=full (done 2026-09-30T01:02:46Z)
+bench_board: skip neural/mlp-train-step/gaussian/shape=full (done 2026-09-30T01:03:12Z)
+bench_board: skip neural/mlp-infer/gaussian/shape=full (done 2026-09-30T01:03:43Z)
+bench_board: skip neural/lm-infer/bytes/shape=full (done 2026-09-30T01:04:24Z)
+bench_board: skip neural/lm-host-train-step/bytes/shape=full (done 2026-09-30T01:05:15Z)
+bench_board: skip neural/gemm-bf16/gaussian/shape=full (done 2026-09-30T01:05:29Z)
+bench_board: skip neural/gemm-int8/gaussian/shape=full (done 2026-09-30T01:05:34Z)
+bench_board: skip algos/svgp/taxi/rows=full (done 2026-09-30T01:05:47Z)
+bench_board: skip algos/svgp/istella/rows=full (done 2026-09-30T01:06:03Z)
+bench_board: skip algos/lu-solve/synthetic/rows=full (done 2026-09-30T01:26:57Z)
+bench_board: skip algos/lstsq/taxi/rows=full (done 2026-09-30T01:27:03Z)
+bench_board: skip algos/lstsq/istella/rows=full (done 2026-09-30T01:28:02Z)
+bench_board: skip algos/randomized-svd/taxi/rows=full (done 2026-09-30T01:28:13Z)
+bench_board: skip algos/randomized-svd/istella/rows=full (done 2026-09-30T01:28:27Z)
+bench_board: skip algos/lu-factor/synthetic/rows=full (done 2026-09-30T01:48:54Z)
+bench_board: algos prep rows=full lanes=44 datasets=istella,taxi
+bench_board: [1/54] algos/cholesky/synthetic/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 48s
+bench_board: [2/54] algos/qr/taxi/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 14s
+bench_board: [3/54] algos/qr/istella/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 177s
+bench_board: [4/54] algos/eigh/synthetic/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 3618s
+bench_board: [5/54] algos/svd/taxi/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 15s
+bench_board: [6/54] algos/svd/istella/rows=full arms=ours,numpy-cpu,torch-gpu
+bench_board:   done rc=0 215s
+bench_board: [7/54] algos/lstm-clf/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 40s
+bench_board: [8/54] algos/lstm-clf/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 34s
+bench_board: [9/54] algos/lstm-reg/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 26s
+bench_board: [10/54] algos/lstm-reg/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 26s
+bench_board: [11/54] algos/gru-clf/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 46s
+bench_board: [12/54] algos/gru-clf/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 41s
+bench_board: [13/54] algos/gru-reg/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 33s
+bench_board: [14/54] algos/gru-reg/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 33s
+bench_board: [15/54] algos/rnn-clf/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 34s
+bench_board: [16/54] algos/rnn-clf/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 33s
+bench_board: [17/54] algos/rnn-reg/taxi-hourly/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 25s
+bench_board: [18/54] algos/rnn-reg/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 25s
+bench_board: [19/54] algos/layernorm/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [20/54] algos/moe/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 21s
+bench_board: [21/54] algos/rmsprop/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [22/54] algos/adagrad/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [23/54] algos/adamax/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [24/54] algos/nadam/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [25/54] algos/adafactor/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 31s
+bench_board: [26/54] algos/sgd/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [27/54] algos/adam/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [28/54] algos/adamw/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 14s
+bench_board: [29/54] algos/conv1d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 22s
+bench_board: [30/54] algos/conv2d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 17s
+bench_board: [31/54] algos/maxpool2d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 16s
+bench_board: [32/54] algos/avgpool2d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [33/54] algos/maxpool1d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 15s
+bench_board: [34/54] algos/avgpool1d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [35/54] algos/batchnorm1d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 16s
+bench_board: [36/54] algos/cnn-clf/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 56s
+bench_board: [37/54] algos/batchnorm2d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 16s
+bench_board: [38/54] algos/dropout2d/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 12s
+bench_board: [39/54] algos/global-avgpool/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [40/54] algos/global-maxpool/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 15s
+bench_board: [41/54] algos/resnet-block/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 22s
+bench_board: [42/54] algos/gcn/taxi/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 34s
+bench_board: [43/54] algos/gcn/istella/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 33s
+bench_board: [44/54] algos/graphsage/taxi/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 29s
+bench_board: [45/54] algos/graphsage/istella/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 28s
+bench_board: [46/54] algos/embedding/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 13s
+bench_board: [47/54] algos/clip-grad-norm/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 9s
+bench_board: [48/54] algos/cross-entropy/synthetic/rows=full arms=ours,torch-eager-fp32,torch-compile-fp32
+bench_board:   done rc=0 16s
+bench_board: [49/54] algos/lr-step/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 6s
+bench_board: [50/54] algos/lr-exponential/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 7s
+bench_board: [51/54] algos/lr-onecycle/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 9s
+bench_board: [52/54] algos/lr-constant/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 7s
+bench_board: [53/54] algos/lr-warmup-linear/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 8s
+bench_board: [54/54] algos/lr-warmup-cosine/synthetic/rows=full arms=ours,torch-cpu
+bench_board:   done rc=0 671s
+bench_board: board /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/BOARD.md
+2026-09-30T06:35:32Z board exit 0
+/root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/BOARD.md
+2026-09-30T06:35:32Z rendered: -rw-r--r-- 1 root root 317176 Sep 30 06:35 /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/BOARD.md

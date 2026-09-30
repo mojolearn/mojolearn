@@ -1,0 +1,7 @@
+
+=== 2026-09-29T23:02:57Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py race --lane pca --dataset taxi --data /root/bench-board-cache-t213/ctd-data/rows-full --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.pca.taxi.rows=full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --root /root/mojolearn-wt/steward-do-amd --arms sklearn-cpu,torch-gpu --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --infer --params-only
+CTD-SETTINGS lane=pca dataset=taxi n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'
+CTD-MISMATCH lane=pca dataset=taxi svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+CTD-MISMATCH lane=pca dataset=taxi torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+CTD-MISMATCH lane=pca dataset=taxi random_state is read by none of the covariance solvers; set to 7 on every arm
+PARAMS-ONLY /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/params-only/classical.pca.taxi.rows=full/pca-taxi.params.json

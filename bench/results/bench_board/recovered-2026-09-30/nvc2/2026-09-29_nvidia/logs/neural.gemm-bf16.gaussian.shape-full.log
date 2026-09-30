@@ -1,0 +1,12 @@
+
+=== 2026-09-29T18:55:07Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane gemm-bf16 --shape full --arms ours,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-bf16", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-bf16 arm=ours round=0 ms=57.288 digest=61da6b4cbb8c0cad
+NEURAL-ROUND lane=gemm-bf16 arm=torch-eager-bf16 round=0 ms=46.722 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm-bf16 arm=torch-compile-bf16 round=0 ms=1009.508 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm-bf16 arm=torch-eager-bf16 round=1 ms=47.029 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm-bf16 arm=torch-compile-bf16 round=1 ms=46.646 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm-bf16 arm=ours round=1 ms=55.191 digest=61da6b4cbb8c0cad
+NEURAL lane=gemm-bf16 arm=ours status=ok median_ms=55.190916173160076 quality={"max_rel_err_vs_fp64": 1.1548914368712009e-07}
+NEURAL lane=gemm-bf16 arm=torch-eager-bf16 status=ok median_ms=47.02913574874401 quality={"max_abs_diff_vs_ours": 1.0009765625, "max_rel_diff_vs_ours": 0.0027642356450209037, "max_rel_err_vs_fp64": 0.0027642217455072535}
+NEURAL lane=gemm-bf16 arm=torch-compile-bf16 status=ok median_ms=46.64640314877033 quality={"max_abs_diff_vs_ours": 1.0009765625, "max_rel_diff_vs_ours": 0.0027642356450209037, "max_rel_err_vs_fp64": 0.0027642217455072535}

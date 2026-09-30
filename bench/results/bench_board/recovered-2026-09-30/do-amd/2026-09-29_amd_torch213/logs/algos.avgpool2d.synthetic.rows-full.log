@@ -1,0 +1,17 @@
+
+=== 2026-09-30T06:17:40Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane avgpool2d --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+ALGOS-REFUSED lane=avgpool2d dataset=synthetic arm=ours stage=ready detail={"error": "ImportError('libamdhip64.so.7: cannot open shared object file: No such file or directory')", "event": "error", "stage": "ready"}
+BOARD-PARAMS {"arms": {"torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/avgpool2d", "problems": [], "reference": "torch-eager-fp32", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-eager-fp32 round=0 ms=193.906 infer_ms=0.1964599941857159 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-compile-fp32 round=0 ms=1372.805 infer_ms=112.73479301598854 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-eager-bf16 round=0 ms=194.609 infer_ms=0.22945998352952302 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-compile-bf16 round=0 ms=750.054 infer_ms=33.995839999988675 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-compile-fp32 round=1 ms=1.286 infer_ms=0.16392001998610795 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-eager-bf16 round=1 ms=0.991 infer_ms=0.1273689849767834 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-compile-bf16 round=1 ms=1.295 infer_ms=0.16287999460473657 digest=50b3b720f2049060
+ALGOS-ROUND lane=avgpool2d dataset=synthetic arm=torch-eager-fp32 round=1 ms=0.887 infer_ms=0.12025999603793025 digest=50b3b720f2049060
+ALGOS lane=avgpool2d dataset=synthetic arm=ours status=not_ready median_ms=None quality={}
+ALGOS lane=avgpool2d dataset=synthetic arm=torch-eager-fp32 status=ok median_ms=0.8870389719959348 quality={}
+ALGOS lane=avgpool2d dataset=synthetic arm=torch-compile-fp32 status=ok median_ms=1.286458020331338 quality={"max_rel_diff_vs_torch_eager_fp32": 0.0, "rel_fro_vs_torch_eager_fp32": 0.0}
+ALGOS lane=avgpool2d dataset=synthetic arm=torch-eager-bf16 status=ok median_ms=0.9908989886753261 quality={"max_rel_diff_vs_torch_eager_fp32": 0.0, "rel_fro_vs_torch_eager_fp32": 0.0}
+ALGOS lane=avgpool2d dataset=synthetic arm=torch-compile-bf16 status=ok median_ms=1.2952880060765892 quality={"max_rel_diff_vs_torch_eager_fp32": 0.0, "rel_fro_vs_torch_eager_fp32": 0.0}

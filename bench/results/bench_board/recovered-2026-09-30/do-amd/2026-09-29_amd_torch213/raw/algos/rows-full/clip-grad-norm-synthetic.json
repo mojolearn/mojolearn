@@ -1,0 +1,377 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "clip-grad-norm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "bea62536a1718eb8",
+        "973aad3bdd470a4e"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.clip_grad_norm_(error_if_nonfinite=True, max_norm=1.0, norm_type=2.0)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_training'))",
+        "numeric_mode_used": "unknown",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 25.702849990921095,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.3,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2171.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.3,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2171.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        25.702849990921095
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "error_if_nonfinite": true,
+        "max_norm": 1.0,
+        "norm_type": 2.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 337.6331140170805
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "clip-grad-norm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "bea62536a1718eb8",
+        "973aad3bdd470a4e"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "torch.nn.utils.clip_grad_norm_(8 grads, 1.0, 2.0) on cuda, compile",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "setting": "compile-fp32",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 92.30595600092784,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 128.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2068.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 128.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2068.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        92.30595600092784
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "error_if_nonfinite": true,
+        "max_norm": 1.0,
+        "norm_type": 2.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 256.33786199614406
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "clip-grad-norm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "bea62536a1718eb8",
+        "973aad3bdd470a4e"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "torch.nn.utils.clip_grad_norm_(8 grads, 1.0, 2.0) on cuda, eager",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "setting": "eager-fp32",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          }
+        ],
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 0.633639981970191,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 128.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2047.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 128.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1884.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        0.633639981970191
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "error_if_nonfinite": true,
+        "max_norm": 1.0,
+        "norm_type": 2.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 185.93795099877752
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T06:23:20Z",
+  "lane": "clip-grad-norm",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "training",
+    "kind": "extra",
+    "mismatches": [],
+    "notes": [
+      "gradients default_rng(7) standard normal; every round clips the same arrays again, on every arm, so each arm walks the same sequence"
+    ],
+    "ours_class": "mojolearn.clip_grad_norm_ or mojolearn.training.clip_grad_norm_",
+    "params": {
+      "error_if_nonfinite": true,
+      "max_norm": 1.0,
+      "norm_type": 2.0
+    },
+    "quality": "relative difference of the returned total norm vs ours",
+    "task": "clip",
+    "timed_fit": "clip_grad_norm_ over 8 fp32 gradients of 2,097,152 values",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/clip-grad-norm",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "norm": 1.0,
+      "norm_rel_diff_vs_ours": 0.0
+    },
+    "torch-compile-fp32": {
+      "norm": 1.0,
+      "norm_rel_diff_vs_ours": 0.0
+    },
+    "torch-eager-fp32": {
+      "norm": 1.0,
+      "norm_rel_diff_vs_ours": 0.0
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T06:23:11Z"
+}

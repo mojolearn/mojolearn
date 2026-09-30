@@ -1,0 +1,339 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gpc",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "a5a89aec093e1577",
+        "a5a89aec093e1577"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 3108.11114218086,
+      "mem": [
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 908.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2541.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 908.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2586.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        3108.11114218086
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "copy_X_train": true,
+          "kernel": "(ConstantKernel(1.0) * RBF([14.832396974191326]))",
+          "max_iter_predict": 100,
+          "multi_class": "one_vs_rest",
+          "n_restarts_optimizer": 0,
+          "optimizer": null,
+          "random_state": null
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 4068.0240700021386
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "gpc",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "6eda26c042211737",
+        "6eda26c042211737"
+      ],
+      "info": {
+        "config": "GaussianProcessClassifier(kernel=1**2 * RBF(length_scale=14.8), optimizer=None,\n                          random_state=7)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 6759.02614928782,
+      "mem": [
+        {
+          "children_mb": 3.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1541.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1619.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        6759.02614928782
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "copy_X_train": true,
+          "kernel": "1**2 * RBF(length_scale=14.8)",
+          "max_iter_predict": 100,
+          "multi_class": "one_vs_rest",
+          "n_restarts_optimizer": 0,
+          "optimizer": null,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 7770.40737029165
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+        "shape": [
+          1000000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+        "shape": [
+          100000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "91a1a054e8f7e5919ad078de1b91ae4fa8ad77ed624bf9d9417fe21c75ac0796",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "7a6cb138b032416afd8d9b84e45f2285bae494393141d7219ea1548cd22bd4ba",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "cls",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059,
+      "Xq": 66406
+    },
+    "smoke_max_rows": null,
+    "target": "binary",
+    "written": "2026-09-29T15:36:55Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "istella",
+  "finished": "2026-09-29T17:10:55Z",
+  "lane": "gpc",
+  "lane_config": {
+    "mismatches": [
+      "seed: ours refuses random_state (optimizer=None draws nothing); scikit-learn random_state=7"
+    ],
+    "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)), optimizer=None, max_iter_predict=100, n_restarts_optimizer=0",
+    "quality": "held-out accuracy and log loss",
+    "rows": "3000 fit and 3000 held-out stride rows of the cls block (standardized by the fit rows); O(n^3)",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "kernel": "(ConstantKernel(1.0) * RBF([14.832396974191326]))",
+          "max_iter_predict": 100,
+          "n_restarts_optimizer": 0,
+          "seed": null
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "kernel": "1**2 * RBF(length_scale=14.8)",
+          "max_iter_predict": 100,
+          "n_restarts_optimizer": 0,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": "(ConstantKernel(1.0) * RBF([14.832396974191326]))",
+        "param": "kernel",
+        "same": false,
+        "theirs": "1**2 * RBF(length_scale=14.8)"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 100,
+        "param": "max_iter_predict",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0,
+        "param": "n_restarts_optimizer",
+        "same": true,
+        "theirs": 0
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "ours",
+        "param": "seed",
+        "reason": "mojolearn GaussianProcessClassifier refuses random_state (optimizer=None draws nothing); scikit-learn gets 7",
+        "value": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "(ConstantKernel(1.0) * RBF([14.832396974191326]))",
+        "param": "kernel",
+        "reason": "the same ConstantKernel(1.0) * RBF(sqrt(d)) (gpr: + WhiteKernel(1e-2)) built from each library's own kernel classes; their reprs differ",
+        "theirs": "1**2 * RBF(length_scale=14.8)"
+      }
+    ],
+    "family": "classical2",
+    "lane": "gpc",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "accuracy": 0.9013333333333333,
+      "logloss": 0.2325895501363198,
+      "nonfinite_proba_rows": 0
+    },
+    "sklearn-cpu": {
+      "accuracy": 0.9013333333333333,
+      "logloss": 0.23259660853842654,
+      "nonfinite_proba_rows": 0
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 3000x220; Xq 3000x220; y 3000; yq 3000",
+  "started": "2026-09-29T17:10:25Z"
+}

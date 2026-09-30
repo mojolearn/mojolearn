@@ -1,0 +1,550 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "layernorm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "ImportError('libamdhip64.so.7: cannot open shared object file: No such file or directory')",
+        "event": "error",
+        "stage": "ready"
+      },
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "span": {
+        "input_home": "host",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "not_ready",
+      "warmup_ms": null
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "layernorm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "10ca942bc42946c0",
+        "10ca942bc42946c0"
+      ],
+      "infer_ms": [
+        0.11720898328348994
+      ],
+      "infer_warmup_ms": 36.66114798397757,
+      "info": {
+        "config": "LayerNorm on cuda, compile, bf16",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "compile-bf16",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1.1865879932884127,
+      "mem": [
+        {
+          "children_mb": 1014.3,
+          "gpu_mb": 328.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1801.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 1704.6,
+          "gpu_mb": 392.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2011.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1.1865879932884127
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "bias": true,
+        "elementwise_affine": true,
+        "eps": 1e-05,
+        "normalized_shape": 1024,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 786.8414770055097
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "layernorm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "10ca942bc42946c0",
+        "10ca942bc42946c0"
+      ],
+      "infer_ms": [
+        0.139409996336326
+      ],
+      "infer_warmup_ms": 103.33636598079465,
+      "info": {
+        "config": "LayerNorm on cuda, compile, fp32",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "compile-fp32",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 1.4484169951174408,
+      "mem": [
+        {
+          "children_mb": 1320.3,
+          "gpu_mb": 328.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1869.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 1856.3,
+          "gpu_mb": 392.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2084.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1.4484169951174408
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "bias": true,
+        "elementwise_affine": true,
+        "eps": 1e-05,
+        "normalized_shape": 1024,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1010.8157630020287
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "layernorm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d1f9870fd0036133",
+        "d1f9870fd0036133"
+      ],
+      "infer_ms": [
+        0.07579100201837718
+      ],
+      "infer_warmup_ms": 0.20092999329790473,
+      "info": {
+        "config": "LayerNorm on cuda, eager, bf16",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "eager-bf16",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 0.8732890128158033,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 256.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1615.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1640.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        0.8732890128158033
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "bias": true,
+        "elementwise_affine": true,
+        "eps": 1e-05,
+        "normalized_shape": 1024,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 217.00441601569764
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "layernorm",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d1f9870fd0036133",
+        "d1f9870fd0036133"
+      ],
+      "infer_ms": [
+        0.07319997530430555
+      ],
+      "infer_warmup_ms": 0.12405100278556347,
+      "info": {
+        "config": "LayerNorm on cuda, eager, fp32",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "setting": "eager-fp32",
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 0.8812579908408225,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 256.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1617.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 320.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1640.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        0.8812579908408225
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "bias": true,
+        "elementwise_affine": true,
+        "eps": 1e-05,
+        "normalized_shape": 1024,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 227.73543201037683
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T06:14:16Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [],
+        "error": {
+          "error": "ImportError('libamdhip64.so.7: cannot open shared object file: No such file or directory')",
+          "event": "error",
+          "stage": "ready"
+        },
+        "info": {},
+        "ms": [],
+        "status": "not_ready",
+        "warmup_ms": null
+      },
+      "torch-compile-bf16": {
+        "digest_stable": null,
+        "digests": [
+          "10ca942bc42946c0",
+          "10ca942bc42946c0"
+        ],
+        "error": null,
+        "info": {
+          "config": "LayerNorm on cuda, compile, bf16",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "compile-bf16",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          0.11720898328348994
+        ],
+        "status": "ok",
+        "warmup_ms": 36.66114798397757
+      },
+      "torch-compile-fp32": {
+        "digest_stable": null,
+        "digests": [
+          "10ca942bc42946c0",
+          "10ca942bc42946c0"
+        ],
+        "error": null,
+        "info": {
+          "config": "LayerNorm on cuda, compile, fp32",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "compile-fp32",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          0.139409996336326
+        ],
+        "status": "ok",
+        "warmup_ms": 103.33636598079465
+      },
+      "torch-eager-bf16": {
+        "digest_stable": null,
+        "digests": [
+          "d1f9870fd0036133",
+          "d1f9870fd0036133"
+        ],
+        "error": null,
+        "info": {
+          "config": "LayerNorm on cuda, eager, bf16",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "eager-bf16",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          0.07579100201837718
+        ],
+        "status": "ok",
+        "warmup_ms": 0.20092999329790473
+      },
+      "torch-eager-fp32": {
+        "digest_stable": null,
+        "digests": [
+          "d1f9870fd0036133",
+          "d1f9870fd0036133"
+        ],
+        "error": null,
+        "info": {
+          "config": "LayerNorm on cuda, eager, fp32",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "torch",
+          "pre_clock_fit": false,
+          "setting": "eager-fp32",
+          "version": "2.13.0+rocm7.1"
+        },
+        "ms": [
+          0.07319997530430555
+        ],
+        "status": "ok",
+        "warmup_ms": 0.12405100278556347
+      }
+    },
+    "batch": "Xq",
+    "call": "forward(x) (no autograd)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "layernorm",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "sequence",
+    "kind": "layer",
+    "mismatches": [],
+    "notes": [
+      "x (16384, 1024) N(0,1) seed 7"
+    ],
+    "ours_class": "mojolearn.LayerNorm or mojolearn.layer_norm_forward",
+    "params": {
+      "bias": true,
+      "elementwise_affine": true,
+      "eps": 1e-05,
+      "normalized_shape": 1024
+    },
+    "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+    "task": "layernorm",
+    "timed_fit": "forward + backward(dy)",
+    "timed_infer": "forward(x) (no autograd)"
+  },
+  "params_check": {
+    "arms": {
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "eps": 1e-05,
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-compile-fp32",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      },
+      {
+        "arm": "torch-eager-bf16",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      },
+      {
+        "arm": "torch-compile-bf16",
+        "ours": 1e-05,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-05
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/layernorm",
+    "problems": [],
+    "reference": "torch-eager-fp32",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "torch-compile-bf16": {
+      "max_rel_diff_vs_torch_eager_fp32": 0.0075295361057214905,
+      "rel_fro_vs_torch_eager_fp32": 5.325980540190883e-08
+    },
+    "torch-compile-fp32": {
+      "max_rel_diff_vs_torch_eager_fp32": 0.0075295361057214905,
+      "rel_fro_vs_torch_eager_fp32": 5.325980540190883e-08
+    },
+    "torch-eager-bf16": {
+      "max_rel_diff_vs_torch_eager_fp32": 0.0,
+      "rel_fro_vs_torch_eager_fp32": 0.0
+    },
+    "torch-eager-fp32": {}
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T06:14:02Z"
+}

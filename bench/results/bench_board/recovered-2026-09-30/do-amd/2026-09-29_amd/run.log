@@ -1,0 +1,370 @@
+2026-09-29T14:42:19Z run.sh start at 745cd079a57239bacec1c4f3229bcd9ed1e7a72e on mojolearn-steward-do-amd args: 
+2026-09-29T14:42:19Z board runs until 2026-09-29T17:32:19Z at most
+bench_board: classical2 prep rows=full lanes=agglomerative,arima,elasticnet,ets,gmm,gpc,gpr,ivf,kernel-ridge,knn-clf,knn-reg,lasso,linearsvc,linearsvr,logreg,nystroem,rbf-sampler,ridge,spectral,spectral-embedding,svr,tsvd,umap datasets=istella,taxi
+bench_board: algos prep rows=full lanes=201 datasets=istella,taxi
+bench_board: classical prep rows=full lanes=dbscan,hdbscan,kde,kmeans,knn,ols,pca,svc datasets=istella,taxi
+bench_board: [1/464] trees/gbdt-symmetric/taxi/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 56s
+bench_board: [2/464] trees/gbdt-symmetric/istella/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 109s
+bench_board: [3/464] trees/gbdt-symmetric-1000/taxi/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 103s
+bench_board: [4/464] trees/gbdt-symmetric-1000/istella/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 200s
+bench_board: [5/464] trees/gbdt-depthwise/taxi/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu
+bench_board:   done rc=0 146s
+bench_board: [6/464] trees/gbdt-depthwise/istella/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu
+bench_board:   done rc=0 234s
+bench_board: [7/464] trees/gbdt-lossguide/taxi/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 262s
+bench_board: [8/464] trees/gbdt-lossguide/istella/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 414s
+bench_board: [9/464] trees/rf/taxi/rows=full arms=ours,sklearn-rf-cpu,lightgbm-cpu
+bench_board:   done rc=0 175s
+bench_board: [10/464] trees/rf/istella/rows=full arms=ours,sklearn-rf-cpu,lightgbm-cpu
+bench_board:   done rc=0 255s
+bench_board: [11/464] trees/et/taxi/rows=full arms=ours,sklearn-et-cpu,lightgbm-cpu
+bench_board:   done rc=0 51s
+bench_board: [12/464] trees/et/istella/rows=full arms=ours,sklearn-et-cpu,lightgbm-cpu
+bench_board:   done rc=0 213s
+bench_board: [13/464] trees/iforest/taxi/rows=full arms=ours,sklearn-iforest-cpu
+bench_board:   done rc=0 15s
+bench_board: [14/464] trees/iforest/istella/rows=full arms=ours,sklearn-iforest-cpu
+bench_board:   done rc=0 29s
+bench_board: [15/464] trees/gbdt-rank-yetirank/istella/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 144s
+bench_board: [16/464] trees/gbdt-rank-pairlogit/istella/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu
+bench_board:   done rc=0 102s
+bench_board: [17/464] trees/gbdt-multiclass/taxi/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 647s
+bench_board: [18/464] trees/gbdt-multiclass/istella/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 1636s
+bench_board: [19/464] trees/gbdt-categorical/taxi/rows=full arms=ours,catboost-cpu,xgboost-gpu,xgboost-cpu,lightgbm-cpu
+bench_board:   done rc=0 378s
+bench_board: [20/464] trees/gbdt-ordered/taxi/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 433s
+bench_board: [21/464] trees/gbdt-ordered/istella/rows=full arms=ours,catboost-cpu
+bench_board:   done rc=0 722s
+bench_board: [22/464] classical/kmeans/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 21s
+bench_board: [23/464] classical/kmeans/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 34s
+bench_board: [24/464] classical/pca/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 13s
+bench_board: [25/464] classical/pca/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 18s
+bench_board: [26/464] classical/ols/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu,torch-gpu-eigh
+bench_board:   done rc=0 17s
+bench_board: [27/464] classical/ols/istella/rows=full arms=ours,sklearn-cpu,torch-gpu,torch-gpu-eigh
+bench_board:   done rc=0 33s
+bench_board: [28/464] classical/knn/taxi/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 18s
+bench_board: [29/464] classical/knn/istella/rows=full arms=ours,sklearn-cpu,torch-gpu
+bench_board:   done rc=0 20s
+bench_board: [30/464] classical/kde/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 18s
+bench_board: [31/464] classical/kde/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 119s
+bench_board: [32/464] classical/svc/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 17s
+bench_board: [33/464] classical/svc/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 17s
+bench_board: [34/464] classical/dbscan/taxi/rows=full arms=ours,sklearn-cpu
+2026-09-29T17:55:39Z run.sh start at ba7803f217f47ae6227036e1f120170eafb8d263 on mojolearn-steward-do-amd args: --families classical,classical2,neural,algos --invalidate-arm xgboost-gpu --invalidate-arm-reason PyPI xgboost 3.2.0 is a CUDA build; on AMD device=cuda trained on the host CPU; refused by name since ca1f47506 --invalidate-memory all --invalidate-reason the probe read the torch allocator for a non-torch arm --invalidate-fixed-at 7c93f50b9
+2026-09-29T17:55:39Z board runs until 2026-09-29T20:45:39Z at most
+bench_board: --invalidate-memory all: withdrew 30 GPU memory figures on the board, corrected 9 opponent-store records
+bench_board: --invalidate-arm xgboost-gpu: refused 27 cells on the board, 9 opponent-store records
+bench_board: skip classical/kmeans/taxi/rows=full (done 2026-09-29T16:33:52Z)
+bench_board: skip classical/kmeans/istella/rows=full (done 2026-09-29T16:34:26Z)
+bench_board: skip classical/pca/taxi/rows=full (done 2026-09-29T16:34:39Z)
+bench_board: skip classical/pca/istella/rows=full (done 2026-09-29T16:34:57Z)
+bench_board: skip classical/ols/taxi/rows=full (done 2026-09-29T16:35:14Z)
+bench_board: skip classical/ols/istella/rows=full (done 2026-09-29T16:35:47Z)
+bench_board: skip classical/knn/taxi/rows=full (done 2026-09-29T16:36:05Z)
+bench_board: skip classical/knn/istella/rows=full (done 2026-09-29T16:36:26Z)
+bench_board: skip classical/kde/taxi/rows=full (done 2026-09-29T16:36:44Z)
+bench_board: skip classical/kde/istella/rows=full (done 2026-09-29T16:38:43Z)
+bench_board: skip classical/svc/taxi/rows=full (done 2026-09-29T16:39:00Z)
+bench_board: skip classical/svc/istella/rows=full (done 2026-09-29T16:39:17Z)
+bench_board: algos prep rows=full lanes=201 datasets=istella,taxi
+bench_board: [1/431] classical/dbscan/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   HOST MEMORY: the watchdog killed sklearn-cpu at 143.0 GB (the driver's process tree held 153.6 GB, over 90% of the box's 168.8 GB)
+bench_board:   failed rc=0 12s
+bench_board: [2/431] classical/dbscan/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2814s
+bench_board: [3/431] classical/hdbscan/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 85s
+bench_board: [4/431] classical/hdbscan/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 1670s
+bench_board: [5/431] classical2/umap/taxi/rows=full arms=ours,umap-learn-cpu,umap-learn-cpu-unseeded
+bench_board:   done rc=0 68s
+bench_board: [6/431] classical2/umap/istella/rows=full arms=ours,umap-learn-cpu,umap-learn-cpu-unseeded
+bench_board:   done rc=0 69s
+bench_board: [7/431] classical2/spectral-embedding/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 22s
+bench_board: [8/431] classical2/spectral-embedding/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 35s
+bench_board: [9/431] classical2/gmm/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: [10/431] classical2/gmm/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 48s
+bench_board: [11/431] classical2/logreg/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: [12/431] classical2/logreg/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 65s
+bench_board: [13/431] classical2/linearsvc/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: [14/431] classical2/linearsvc/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 1609s
+bench_board: [15/431] classical2/ridge/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [16/431] classical2/ridge/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 13s
+bench_board: [17/431] classical2/lasso/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [18/431] classical2/lasso/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 26s
+bench_board: [19/431] classical2/elasticnet/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [20/431] classical2/elasticnet/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 10s
+bench_board: [21/431] classical2/linearsvr/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 216s
+bench_board: [22/431] classical2/linearsvr/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 1576s
+bench_board: [23/431] classical2/tsvd/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [24/431] classical2/tsvd/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 5s
+bench_board: [25/431] classical2/knn-clf/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [26/431] classical2/knn-clf/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [27/431] classical2/knn-reg/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [28/431] classical2/knn-reg/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [29/431] classical2/spectral/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 4s
+bench_board: [30/431] classical2/spectral/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 6s
+bench_board: [31/431] classical2/agglomerative/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: [32/431] classical2/agglomerative/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 10s
+bench_board: [33/431] classical2/gpr/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 6s
+bench_board: [34/431] classical2/gpr/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 8s
+bench_board: [35/431] classical2/gpc/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 20s
+bench_board: [36/431] classical2/gpc/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 28s
+bench_board: [37/431] classical2/svr/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 7s
+bench_board: [38/431] classical2/svr/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 9s
+bench_board: [39/431] classical2/kernel-ridge/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 28s
+bench_board: [40/431] classical2/kernel-ridge/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 28s
+bench_board: [41/431] classical2/nystroem/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [42/431] classical2/nystroem/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3s
+bench_board: [43/431] classical2/rbf-sampler/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [44/431] classical2/rbf-sampler/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 2s
+bench_board: [45/431] classical2/arima/synthetic/rows=full arms=ours,statsmodels-cpu
+bench_board:   done rc=0 5s
+bench_board: [46/431] classical2/ets/synthetic/rows=full arms=ours,statsmodels-cpu
+bench_board:   done rc=0 4s
+bench_board: [47/431] classical2/ivf/taxi/rows=full arms=ours,faiss-cpu
+bench_board:   done rc=0 42s
+bench_board: [48/431] classical2/ivf/istella/rows=full arms=ours,faiss-cpu
+bench_board:   done rc=0 540s
+bench_board: [49/431] neural/lm-train-step/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 45s
+bench_board: [50/431] neural/lm-forward/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 14s
+bench_board: [51/431] neural/gemm/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 17s
+bench_board: [52/431] neural/transformer-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 18s
+bench_board: [53/431] neural/transformer-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 33s
+bench_board: [54/431] neural/mamba1-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-eager-bf16
+bench_board:   done rc=0 22s
+bench_board: [55/431] neural/mamba1-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-eager-bf16
+bench_board:   done rc=0 11s
+bench_board: [56/431] neural/mamba2-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 34s
+bench_board: [57/431] neural/mamba2-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 46s
+bench_board: [58/431] neural/mamba3-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   done rc=0 671s
+bench_board: [59/431] neural/mamba3-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+2026-09-29T20:45:41Z STOP: time limit reached; killing the board and its drivers
+2026-09-29T20:45:46Z board exit 137
+/root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md
+2026-09-29T20:45:46Z rendered: -rw-r--r-- 1 root root 340595 Sep 29 20:45 /root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md
+2026-09-29T21:12:50Z run.sh start at 014f22d4b6cff6f256f6cc8ad87ac03bf58479f0 on mojolearn-steward-do-amd args: --families classical,classical2,neural,algos --skip-failed --invalidate-arm sklearn-cpu --invalidate-arm-races classical2/gmm/taxi/ --invalidate-arm-reason scikit-learn 1.7.2 / OpenBLAS collapses a component at reg_covar 1e-6 on this box; it fits on the Macs --rerun neural/lm-forward/,neural/transformer-forward/,neural/transformer-infer/ --rerun-before 2026-09-29T20:45:00Z
+2026-09-29T21:12:50Z board runs until 2026-09-30T00:02:50Z at most
+bench_board: --invalidate-arm sklearn-cpu: refused 1 cells on the board, 0 opponent-store records
+bench_board: skip classical/kmeans/taxi/rows=full (done 2026-09-29T16:33:52Z)
+bench_board: skip classical/kmeans/istella/rows=full (done 2026-09-29T16:34:26Z)
+bench_board: skip classical/pca/taxi/rows=full (done 2026-09-29T16:34:39Z)
+bench_board: skip classical/pca/istella/rows=full (done 2026-09-29T16:34:57Z)
+bench_board: skip classical/ols/taxi/rows=full (done 2026-09-29T16:35:14Z)
+bench_board: skip classical/ols/istella/rows=full (done 2026-09-29T16:35:47Z)
+bench_board: skip classical/knn/taxi/rows=full (done 2026-09-29T16:36:05Z)
+bench_board: skip classical/knn/istella/rows=full (done 2026-09-29T16:36:26Z)
+bench_board: skip classical/kde/taxi/rows=full (done 2026-09-29T16:36:44Z)
+bench_board: skip classical/kde/istella/rows=full (done 2026-09-29T16:38:43Z)
+bench_board: skip classical/svc/taxi/rows=full (done 2026-09-29T16:39:00Z)
+bench_board: skip classical/svc/istella/rows=full (done 2026-09-29T16:39:17Z)
+bench_board: skip classical/dbscan/taxi/rows=full (failed earlier; --skip-failed)
+bench_board: skip classical/dbscan/istella/rows=full (done 2026-09-29T18:42:57Z)
+bench_board: skip classical/hdbscan/taxi/rows=full (done 2026-09-29T18:44:22Z)
+bench_board: skip classical/hdbscan/istella/rows=full (done 2026-09-29T19:12:12Z)
+bench_board: skip classical2/umap/taxi/rows=full (done 2026-09-29T19:13:21Z)
+bench_board: skip classical2/umap/istella/rows=full (done 2026-09-29T19:14:30Z)
+bench_board: skip classical2/spectral-embedding/taxi/rows=full (done 2026-09-29T19:14:52Z)
+bench_board: skip classical2/spectral-embedding/istella/rows=full (done 2026-09-29T19:15:27Z)
+bench_board: skip classical2/gmm/taxi/rows=full (done 2026-09-29T19:15:30Z)
+bench_board: skip classical2/gmm/istella/rows=full (done 2026-09-29T19:16:18Z)
+bench_board: skip classical2/logreg/taxi/rows=full (done 2026-09-29T19:16:20Z)
+bench_board: skip classical2/logreg/istella/rows=full (done 2026-09-29T19:17:26Z)
+bench_board: skip classical2/linearsvc/taxi/rows=full (done 2026-09-29T19:17:29Z)
+bench_board: skip classical2/linearsvc/istella/rows=full (done 2026-09-29T19:44:19Z)
+bench_board: skip classical2/ridge/taxi/rows=full (done 2026-09-29T19:44:20Z)
+bench_board: skip classical2/ridge/istella/rows=full (done 2026-09-29T19:44:33Z)
+bench_board: skip classical2/lasso/taxi/rows=full (done 2026-09-29T19:44:35Z)
+bench_board: skip classical2/lasso/istella/rows=full (done 2026-09-29T19:45:00Z)
+bench_board: skip classical2/elasticnet/taxi/rows=full (done 2026-09-29T19:45:02Z)
+bench_board: skip classical2/elasticnet/istella/rows=full (done 2026-09-29T19:45:12Z)
+bench_board: skip classical2/linearsvr/taxi/rows=full (done 2026-09-29T19:48:48Z)
+bench_board: skip classical2/linearsvr/istella/rows=full (done 2026-09-29T20:15:04Z)
+bench_board: skip classical2/tsvd/taxi/rows=full (done 2026-09-29T20:15:06Z)
+bench_board: skip classical2/tsvd/istella/rows=full (done 2026-09-29T20:15:12Z)
+bench_board: skip classical2/knn-clf/taxi/rows=full (done 2026-09-29T20:15:13Z)
+bench_board: skip classical2/knn-clf/istella/rows=full (done 2026-09-29T20:15:16Z)
+bench_board: skip classical2/knn-reg/taxi/rows=full (done 2026-09-29T20:15:17Z)
+bench_board: skip classical2/knn-reg/istella/rows=full (done 2026-09-29T20:15:20Z)
+bench_board: skip classical2/spectral/taxi/rows=full (done 2026-09-29T20:15:24Z)
+bench_board: skip classical2/spectral/istella/rows=full (done 2026-09-29T20:15:31Z)
+bench_board: skip classical2/agglomerative/taxi/rows=full (done 2026-09-29T20:15:33Z)
+bench_board: skip classical2/agglomerative/istella/rows=full (done 2026-09-29T20:15:43Z)
+bench_board: skip classical2/gpr/taxi/rows=full (done 2026-09-29T20:15:50Z)
+bench_board: skip classical2/gpr/istella/rows=full (done 2026-09-29T20:15:58Z)
+bench_board: skip classical2/gpc/taxi/rows=full (done 2026-09-29T20:16:18Z)
+bench_board: skip classical2/gpc/istella/rows=full (done 2026-09-29T20:16:47Z)
+bench_board: skip classical2/svr/taxi/rows=full (done 2026-09-29T20:16:54Z)
+bench_board: skip classical2/svr/istella/rows=full (done 2026-09-29T20:17:03Z)
+bench_board: skip classical2/kernel-ridge/taxi/rows=full (done 2026-09-29T20:17:31Z)
+bench_board: skip classical2/kernel-ridge/istella/rows=full (done 2026-09-29T20:17:59Z)
+bench_board: skip classical2/nystroem/taxi/rows=full (done 2026-09-29T20:18:00Z)
+bench_board: skip classical2/nystroem/istella/rows=full (done 2026-09-29T20:18:03Z)
+bench_board: skip classical2/rbf-sampler/taxi/rows=full (done 2026-09-29T20:18:05Z)
+bench_board: skip classical2/rbf-sampler/istella/rows=full (done 2026-09-29T20:18:07Z)
+bench_board: skip classical2/arima/synthetic/rows=full (done 2026-09-29T20:18:12Z)
+bench_board: skip classical2/ets/synthetic/rows=full (done 2026-09-29T20:18:16Z)
+bench_board: skip classical2/ivf/taxi/rows=full (done 2026-09-29T20:18:58Z)
+bench_board: skip classical2/ivf/istella/rows=full (done 2026-09-29T20:27:59Z)
+bench_board: skip neural/lm-train-step/bytes/shape=full (done 2026-09-29T20:28:43Z)
+bench_board: RERUN neural/lm-forward/bytes/shape=full (done 2026-09-29T20:28:57Z, before --rerun-before 2026-09-29T20:45:00Z)
+bench_board: skip neural/gemm/gaussian/shape=full (done 2026-09-29T20:29:14Z)
+bench_board: RERUN neural/transformer-forward/gaussian/shape=full (done 2026-09-29T20:29:32Z, before --rerun-before 2026-09-29T20:45:00Z)
+bench_board: RERUN neural/transformer-infer/gaussian/shape=full (done 2026-09-29T20:30:05Z, before --rerun-before 2026-09-29T20:45:00Z)
+bench_board: skip neural/mamba1-forward/gaussian/shape=full (done 2026-09-29T20:30:26Z)
+bench_board: skip neural/mamba1-infer/gaussian/shape=full (done 2026-09-29T20:30:38Z)
+bench_board: skip neural/mamba2-forward/gaussian/shape=full (done 2026-09-29T20:31:12Z)
+bench_board: skip neural/mamba2-infer/gaussian/shape=full (done 2026-09-29T20:31:58Z)
+bench_board: skip neural/mamba3-forward/gaussian/shape=full (done 2026-09-29T20:43:10Z)
+bench_board: algos prep rows=full lanes=201 datasets=istella,taxi
+bench_board: [1/376] neural/lm-forward/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   stored (not run): torch-eager-bf16 [stored (measured 2026-09-29T20:28:57Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))], torch-eager-fp32 [stored (measured 2026-09-29T20:28:57Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))]
+bench_board:   done rc=0 32s
+bench_board: [2/376] neural/transformer-forward/gaussian/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+bench_board:   stored (not run): torch-compile-fp32 [stored (measured 2026-09-29T20:29:32Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))], torch-eager-bf16 [stored (measured 2026-09-29T20:29:32Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))], torch-eager-fp32 [stored (measured 2026-09-29T20:29:32Z on mojolearn-steward-do-amd, gpu (AMD Instinct Mi325X VF))]
+bench_board:   done rc=0 18s
+bench_board: [3/376] neural/transformer-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   stored (not run): torch-cpu-compile-fp32 [stored (measured 2026-09-29T20:30:05Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))], torch-cpu-eager-bf16 [stored (measured 2026-09-29T20:30:05Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))], torch-cpu-eager-fp32 [stored (measured 2026-09-29T20:30:05Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))]
+bench_board:   done rc=0 21s
+bench_board: [4/376] neural/mamba3-infer/gaussian/shape=full arms=ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16
+bench_board:   done rc=0 124s
+bench_board: [5/376] neural/samba-train-step/bytes/shape=full arms=ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16
+2026-09-29T22:45:30Z board exit 137
+/root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md
+2026-09-29T22:45:30Z rendered: -rw-r--r-- 1 root root 344141 Sep 29 22:45 /root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md
+2026-09-30T02:09:03Z run.sh start at 4f3e685348ddc41ec22ce00c53187c3528d929b7 on mojolearn-steward-do-amd args: --families classical,classical2,algos --lanes adaboost-clf,adaboost-reg,additive-chi2,affinity-prop,agglomerative,als,ard,arima,auto-theta,autoarima,bagging-clf,bagging-reg,bayesian-gmm,bayesian-ridge,bernoulli-nb,binarizer,bisecting-kmeans,bootstrap,bpe-encode,bpe-train,cagra,calibrated,categorical-nb,cca,classical-mds,complement-nb,connected-components,cross-val-score,croston,croston-optimized,croston-sba,damped-ets,dart,dart-reg,dbscan,decision-tree-clf,decision-tree-reg,dict-learning,dynamic-optimized-theta,dynamic-theta,elasticnet,elliptic-envelope,enet-cv,ets,factor-analysis,fastica,gamma,garch,gaussian-nb,gaussian-rp,gmm,gpc,gpr,hdbscan,huber,incremental-pca,isomap,isotonic,iterative-imputer,ivf,ivf-filter,ivf-pq,ivf-rabitq,ivf-refine,ivf-sq,jl-min-dim,kbins,kde,kernel-pca,kernel-ridge,kernel-shap,knn-clf,knn-imputer,knn-reg,kpss,label-binarizer,label-encoder,label-propagation,label-spreading,lamb,lars,lasso,lasso-cv,lasso-lars,lda,lda-clf,linearsvc,linearsvr,lion,lle,lof,logreg,logreg-cv,louvain,maxabs-scaler,mb-dict-learning,mb-sparse-pca,mds,meanshift,min-cov-det,minibatch-kmeans,minmax-scaler,mlp-clf,mlp-reg,multilabel-binarizer,multinomial-nb,multioutput-clf,multioutput-reg,nearest-centroid,nmf,normalizer,nystroem,ocsvm,onehot,optics,optimized-theta,ordinal,ovr,pa-clf,pa-reg,pagerank,perceptron,permutation-shap,permutation-test,pls,pls-canonical,poisson,poly-count-sketch,poly-features,power-transformer,prophet,qda,qn-reg,quantile,quantile-transformer,radius-neighbors,random-trees-embedding,rbf-sampler,resample,rfe,ridge,ridge-clf,ridge-cv,robust-scaler,select-chi2,select-d,select-f-classif,select-f-regression,select-mutual-info,select-mutual-info-reg,select-r-regression,sgd-clf,sgd-ocsvm,sgd-reg,simple-imputer,skewed-chi2,sparse-coder,sparse-pca,sparse-rp,spectral,spectral-embedding,spline,stacking-clf,stacking-reg,standard-scaler,stl,svc,svr,target-encoder,theta,tree-shap,tsne,tsvd,tweedie,umap,var,variance-threshold,voting-clf,voting-reg --skip-failed
+2026-09-30T02:09:03Z board runs until 2026-09-30T04:59:03Z at most
+bench_board: skip classical/kde/taxi/rows=full (done 2026-09-29T16:36:44Z)
+bench_board: skip classical/kde/istella/rows=full (done 2026-09-29T16:38:43Z)
+bench_board: skip classical/svc/taxi/rows=full (done 2026-09-29T16:39:00Z)
+bench_board: skip classical/svc/istella/rows=full (done 2026-09-29T16:39:17Z)
+bench_board: skip classical/dbscan/taxi/rows=full (failed earlier; --skip-failed)
+bench_board: skip classical/dbscan/istella/rows=full (done 2026-09-29T18:42:57Z)
+bench_board: skip classical/hdbscan/taxi/rows=full (done 2026-09-29T18:44:22Z)
+bench_board: skip classical/hdbscan/istella/rows=full (done 2026-09-29T19:12:12Z)
+bench_board: skip classical2/umap/taxi/rows=full (done 2026-09-29T19:13:21Z)
+bench_board: skip classical2/umap/istella/rows=full (done 2026-09-29T19:14:30Z)
+bench_board: skip classical2/spectral-embedding/taxi/rows=full (done 2026-09-29T19:14:52Z)
+bench_board: skip classical2/spectral-embedding/istella/rows=full (done 2026-09-29T19:15:27Z)
+bench_board: skip classical2/gmm/taxi/rows=full (done 2026-09-29T19:15:30Z)
+bench_board: skip classical2/gmm/istella/rows=full (done 2026-09-29T19:16:18Z)
+bench_board: skip classical2/logreg/taxi/rows=full (done 2026-09-29T19:16:20Z)
+bench_board: skip classical2/logreg/istella/rows=full (done 2026-09-29T19:17:26Z)
+bench_board: skip classical2/linearsvc/taxi/rows=full (done 2026-09-29T19:17:29Z)
+bench_board: skip classical2/linearsvc/istella/rows=full (done 2026-09-29T19:44:19Z)
+bench_board: skip classical2/ridge/taxi/rows=full (done 2026-09-29T19:44:20Z)
+bench_board: skip classical2/ridge/istella/rows=full (done 2026-09-29T19:44:33Z)
+bench_board: skip classical2/lasso/taxi/rows=full (done 2026-09-29T19:44:35Z)
+bench_board: skip classical2/lasso/istella/rows=full (done 2026-09-29T19:45:00Z)
+bench_board: skip classical2/elasticnet/taxi/rows=full (done 2026-09-29T19:45:02Z)
+bench_board: skip classical2/elasticnet/istella/rows=full (done 2026-09-29T19:45:12Z)
+bench_board: skip classical2/linearsvr/taxi/rows=full (done 2026-09-29T19:48:48Z)
+bench_board: skip classical2/linearsvr/istella/rows=full (done 2026-09-29T20:15:04Z)
+bench_board: skip classical2/tsvd/taxi/rows=full (done 2026-09-29T20:15:06Z)
+bench_board: skip classical2/tsvd/istella/rows=full (done 2026-09-29T20:15:12Z)
+bench_board: skip classical2/knn-clf/taxi/rows=full (done 2026-09-29T20:15:13Z)
+bench_board: skip classical2/knn-clf/istella/rows=full (done 2026-09-29T20:15:16Z)
+bench_board: skip classical2/knn-reg/taxi/rows=full (done 2026-09-29T20:15:17Z)
+bench_board: skip classical2/knn-reg/istella/rows=full (done 2026-09-29T20:15:20Z)
+bench_board: skip classical2/spectral/taxi/rows=full (done 2026-09-29T20:15:24Z)
+bench_board: skip classical2/spectral/istella/rows=full (done 2026-09-29T20:15:31Z)
+bench_board: skip classical2/agglomerative/taxi/rows=full (done 2026-09-29T20:15:33Z)
+bench_board: skip classical2/agglomerative/istella/rows=full (done 2026-09-29T20:15:43Z)
+bench_board: skip classical2/gpr/taxi/rows=full (done 2026-09-29T20:15:50Z)
+bench_board: skip classical2/gpr/istella/rows=full (done 2026-09-29T20:15:58Z)
+bench_board: skip classical2/gpc/taxi/rows=full (done 2026-09-29T20:16:18Z)
+bench_board: skip classical2/gpc/istella/rows=full (done 2026-09-29T20:16:47Z)
+bench_board: skip classical2/svr/taxi/rows=full (done 2026-09-29T20:16:54Z)
+bench_board: skip classical2/svr/istella/rows=full (done 2026-09-29T20:17:03Z)
+bench_board: skip classical2/kernel-ridge/taxi/rows=full (done 2026-09-29T20:17:31Z)
+bench_board: skip classical2/kernel-ridge/istella/rows=full (done 2026-09-29T20:17:59Z)
+bench_board: skip classical2/nystroem/taxi/rows=full (done 2026-09-29T20:18:00Z)
+bench_board: skip classical2/nystroem/istella/rows=full (done 2026-09-29T20:18:03Z)
+bench_board: skip classical2/rbf-sampler/taxi/rows=full (done 2026-09-29T20:18:05Z)
+bench_board: skip classical2/rbf-sampler/istella/rows=full (done 2026-09-29T20:18:07Z)
+bench_board: skip classical2/arima/synthetic/rows=full (done 2026-09-29T20:18:12Z)
+bench_board: skip classical2/ets/synthetic/rows=full (done 2026-09-29T20:18:16Z)
+bench_board: skip classical2/ivf/taxi/rows=full (done 2026-09-29T20:18:58Z)
+bench_board: skip classical2/ivf/istella/rows=full (done 2026-09-29T20:27:59Z)
+bench_board: algos prep rows=full lanes=152 datasets=istella,taxi
+bench_board: [1/301] algos/sgd-clf/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 1242s
+bench_board: [2/301] algos/sgd-clf/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3418s
+bench_board: [3/301] algos/sgd-reg/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 1178s
+bench_board: [4/301] algos/sgd-reg/istella/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 3414s
+bench_board: [5/301] algos/poisson/taxi/rows=full arms=ours,sklearn-cpu
+bench_board:   done rc=0 161s
+bench_board: [6/301] algos/poisson/istella/rows=full arms=ours,sklearn-cpu
+2026-09-30T04:59:04Z STOP: time limit reached; killing the board and its drivers
+2026-09-30T04:59:09Z board exit 137
+/root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md
+2026-09-30T04:59:09Z rendered: -rw-r--r-- 1 root root 360327 Sep 30 04:59 /root/mojolearn-evidence/bench-board/2026-09-29_amd/BOARD.md

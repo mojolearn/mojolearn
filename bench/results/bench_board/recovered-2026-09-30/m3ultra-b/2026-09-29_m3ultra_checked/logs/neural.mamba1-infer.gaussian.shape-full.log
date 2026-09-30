@@ -1,0 +1,12 @@
+
+=== 2026-09-29T20:00:34Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py race --lane mamba1-infer --shape full --arms ours,torch-cpu-eager-fp32,torch-cpu-eager-bf16 --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/raw/neural/shape-full --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-infer arm=ours round=0 ms=107.403 digest=6caeee307295deeb
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=0 ms=98.713 digest=0115dfd39cbf61df
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=0 ms=242.131 digest=a777495e486780bf
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-fp32 round=1 ms=97.581 digest=0115dfd39cbf61df
+NEURAL-ROUND lane=mamba1-infer arm=torch-cpu-eager-bf16 round=1 ms=240.270 digest=a777495e486780bf
+NEURAL-ROUND lane=mamba1-infer arm=ours round=1 ms=78.715 digest=6caeee307295deeb
+NEURAL lane=mamba1-infer arm=ours status=ok median_ms=78.71533299476141 quality={}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-fp32 status=ok median_ms=97.5807499999064 quality={"max_abs_diff_vs_ours": 1.1920928955078125e-07, "max_rel_diff_vs_ours": 5.948106105171795e-08}
+NEURAL lane=mamba1-infer arm=torch-cpu-eager-bf16 status=ok median_ms=240.2699579979526 quality={"max_abs_diff_vs_ours": 5.14984130859375e-05, "max_rel_diff_vs_ours": 2.5695818374342154e-05}

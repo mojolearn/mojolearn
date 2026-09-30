@@ -1,0 +1,56 @@
+
+=== 2026-09-29T05:10:30Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py prep --data /Users/ec2-user/bench-board-cache/algos-data/rows-full --lanes adaboost-clf,adaboost-reg,adafactor,adagrad,adamax,additive-chi2,affinity-prop,als,ard,autoarima,avgpool1d,avgpool2d,bagging-clf,bagging-reg,batchnorm1d,batchnorm2d,bayesian-gmm,bayesian-ridge,bernoulli-nb,binarizer,bisecting-kmeans,cagra,calibrated,categorical-nb,cca,classical-mds,cnn-clf,complement-nb,connected-components,conv1d,conv2d,croston,damped-ets,dart,dart-reg,decision-tree-clf,decision-tree-reg,dict-learning,dropout2d,elliptic-envelope,enet-cv,factor-analysis,fastica,gamma,garch,gaussian-nb,gaussian-rp,gcn,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,huber,incremental-pca,isomap,isotonic,iterative-imputer,ivf-filter,ivf-pq,ivf-rabitq,ivf-refine,ivf-sq,kbins,kernel-pca,kernel-shap,knn-imputer,label-binarizer,label-encoder,label-propagation,label-spreading,lamb,lars,lasso-cv,lasso-lars,layernorm,lda,lda-clf,lion,lle,lof,logreg-cv,louvain,lstm-clf,lstm-reg,lstsq,lu-solve,maxabs-scaler,maxpool1d,maxpool2d,mb-dict-learning,mb-sparse-pca,mds,meanshift,min-cov-det,minibatch-kmeans,mlp-clf,mlp-reg,moe,multilabel-binarizer,multinomial-nb,multioutput-clf,multioutput-reg,nadam,nearest-centroid,nmf,normalizer,ocsvm,onehot,optics,ordinal,ovr,pa-clf,pa-reg,pagerank,perceptron,permutation-shap,pls,pls-canonical,poisson,poly-count-sketch,poly-features,power-transformer,prophet,qda,quantile,quantile-transformer,random-trees-embedding,randomized-svd,resnet-block,rfe,ridge-clf,ridge-cv,rmsprop,rnn-clf,rnn-reg,robust-scaler,select-chi2,select-f-classif,select-f-regression,select-mutual-info,sgd-clf,sgd-ocsvm,sgd-reg,simple-imputer,skewed-chi2,sparse-pca,sparse-rp,spline,stacking-clf,stacking-reg,stl,svgp,target-encoder,theta,tree-shap,tsne,tweedie,var,variance-threshold,voting-clf,voting-reg --datasets istella,taxi
+CTD-PREP block=cls-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+knn_datasets: read the 404000-row istella prefix (220 columns) from /Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz in 0.08 s
+CTD-PREP block=ivf-istella index=400000x220 queries=4000x220
+CTD-PREP block=manifold-istella X=20000x220
+CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+CTD-PREP block=tsvd-istella X=1000000x220
+MORE-PREP dataset=istella seconds=10.8
+CTD-PREP block=cls-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+knn_datasets: read the 404000-row taxi prefix (11 columns) from /Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz in 0.01 s
+CTD-PREP block=ivf-taxi index=400000x11 queries=4000x11
+CTD-PREP block=manifold-taxi X=20000x11
+CTD-PREP block=reg-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+CTD-PREP block=tsvd-taxi X=1000000x11
+MORE-PREP dataset=taxi seconds=1.0
+CTD-PREP block=cat-istella X=1000000x8 Xq=100000x8 y=1000000 yq=100000
+ALGOS-PREP block=cat dataset=istella seconds=1.2
+CTD-PREP block=cat-taxi X=1000000x5 Xq=100000x5 y=1000000 yq=100000
+ALGOS-PREP block=cat dataset=taxi seconds=1.1
+CTD-PREP block=text X=86626x4096 y=86626 Xq=9626x4096 yq=9626
+ALGOS-PREP block=countclf dataset=text seconds=4.8
+CTD-PREP block=zones X=129352x261 Xq=14373x261
+ALGOS-PREP block=counts dataset=taxi-zones seconds=1.1
+CTD-PREP block=graph-istella X=100000x220 y=100000 indptr=100001 indices=1521510 indptr2=100001 indices2=311818
+ALGOS-PREP block=graph dataset=istella seconds=114.9
+CTD-PREP block=graph-taxi X=100000x11 y=100000 indptr=100001 indices=1258298 indptr2=100001 indices2=271380
+ALGOS-PREP block=graph dataset=taxi seconds=95.8
+CTD-PREP block=graphs-istella X=20000x220 y=20000 indptr=20001 indices=304830 indptr2=20001 indices2=62848
+ALGOS-PREP block=graphs dataset=istella seconds=5.2
+CTD-PREP block=graphs-taxi X=20000x11 y=20000 indptr=20001 indices=253708 indptr2=20001 indices2=54528
+ALGOS-PREP block=graphs dataset=taxi seconds=3.7
+CTD-PREP block=mc-istella X=1000000x220 Xq=100000x220 y=1000000 yq=100000
+ALGOS-PREP block=mc dataset=istella seconds=3.6
+CTD-PREP block=mc-taxi X=1000000x11 Xq=100000x11 y=1000000 yq=100000
+ALGOS-PREP block=mc dataset=taxi seconds=0.4
+CTD-PREP block=raw-istella X=1000000x220 Xq=100000x220 y=1000000 yq=100000
+ALGOS-PREP block=raw dataset=istella seconds=2.8
+CTD-PREP block=raw-taxi X=1000000x11 Xq=100000x11 y=1000000 yq=100000
+ALGOS-PREP block=raw dataset=taxi seconds=0.4
+CTD-PREP block=ts-synthetic Y=64x1440
+ALGOS-PREP block=ts dataset=synthetic seconds=0.0
+CTD-PREP block=ts-taxi-hourly Y=64x1440
+ALGOS-PREP block=ts dataset=taxi-hourly seconds=0.2
+CTD-PREP block=tsi-synthetic Y=64x1440
+ALGOS-PREP block=tsi dataset=synthetic seconds=0.0
+CTD-PREP block=tsi-taxi-hourly Y=48x1440
+ALGOS-PREP block=tsi dataset=taxi-hourly seconds=0.2
+CTD-PREP block=tsr-synthetic Y=64x1440
+ALGOS-PREP block=tsr dataset=synthetic seconds=0.0
+CTD-PREP block=tsr-taxi-hourly Y=64x1439
+ALGOS-PREP block=tsr dataset=taxi-hourly seconds=0.2
+
+=== 2026-09-29T12:03:06Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py prep --data /Users/ec2-user/bench-board-cache/algos-data/rows-full --lanes adaboost-clf,adaboost-reg,adafactor,adagrad,adamax,additive-chi2,affinity-prop,als,ard,autoarima,avgpool1d,avgpool2d,bagging-clf,bagging-reg,batchnorm1d,batchnorm2d,bayesian-gmm,bayesian-ridge,bernoulli-nb,binarizer,bisecting-kmeans,cagra,calibrated,categorical-nb,cca,classical-mds,cnn-clf,complement-nb,connected-components,conv1d,conv2d,croston,damped-ets,dart,dart-reg,decision-tree-clf,decision-tree-reg,dict-learning,dropout2d,elliptic-envelope,enet-cv,factor-analysis,fastica,gamma,garch,gaussian-nb,gaussian-rp,gcn,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,huber,incremental-pca,isomap,isotonic,iterative-imputer,ivf-filter,ivf-pq,ivf-rabitq,ivf-refine,ivf-sq,kbins,kernel-pca,kernel-shap,knn-imputer,label-binarizer,label-encoder,label-propagation,label-spreading,lamb,lars,lasso-cv,lasso-lars,layernorm,lda,lda-clf,lion,lle,lof,logreg-cv,louvain,lstm-clf,lstm-reg,lstsq,lu-solve,maxabs-scaler,maxpool1d,maxpool2d,mb-dict-learning,mb-sparse-pca,mds,meanshift,min-cov-det,minibatch-kmeans,mlp-clf,mlp-reg,moe,multilabel-binarizer,multinomial-nb,multioutput-clf,multioutput-reg,nadam,nearest-centroid,nmf,normalizer,ocsvm,onehot,optics,ordinal,ovr,pa-clf,pa-reg,pagerank,perceptron,permutation-shap,pls,pls-canonical,poisson,poly-count-sketch,poly-features,power-transformer,prophet,qda,quantile,quantile-transformer,random-trees-embedding,randomized-svd,resnet-block,rfe,ridge-clf,ridge-cv,rmsprop,rnn-clf,rnn-reg,robust-scaler,select-chi2,select-f-classif,select-f-regression,select-mutual-info,sgd-clf,sgd-ocsvm,sgd-reg,simple-imputer,skewed-chi2,sparse-pca,sparse-rp,spline,stacking-clf,stacking-reg,stl,svgp,target-encoder,theta,tree-shap,tsne,tweedie,var,variance-threshold,voting-clf,voting-reg --datasets istella,taxi
+
+=== 2026-09-29T12:18:10Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py prep --data /Users/ec2-user/bench-board-cache/algos-data/rows-full --lanes adaboost-clf,adaboost-reg,adafactor,adagrad,adamax,additive-chi2,affinity-prop,als,ard,autoarima,avgpool1d,avgpool2d,bagging-clf,bagging-reg,batchnorm1d,batchnorm2d,bayesian-gmm,bayesian-ridge,bernoulli-nb,binarizer,bisecting-kmeans,cagra,calibrated,categorical-nb,cca,classical-mds,cnn-clf,complement-nb,connected-components,conv1d,conv2d,croston,damped-ets,dart,dart-reg,decision-tree-clf,decision-tree-reg,dict-learning,dropout2d,elliptic-envelope,enet-cv,factor-analysis,fastica,gamma,garch,gaussian-nb,gaussian-rp,gcn,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,huber,incremental-pca,isomap,isotonic,iterative-imputer,ivf-filter,ivf-pq,ivf-rabitq,ivf-refine,ivf-sq,kbins,kernel-pca,kernel-shap,knn-imputer,label-binarizer,label-encoder,label-propagation,label-spreading,lamb,lars,lasso-cv,lasso-lars,layernorm,lda,lda-clf,lion,lle,lof,logreg-cv,louvain,lstm-clf,lstm-reg,lstsq,lu-solve,maxabs-scaler,maxpool1d,maxpool2d,mb-dict-learning,mb-sparse-pca,mds,meanshift,min-cov-det,minibatch-kmeans,mlp-clf,mlp-reg,moe,multilabel-binarizer,multinomial-nb,multioutput-clf,multioutput-reg,nadam,nearest-centroid,nmf,normalizer,ocsvm,onehot,optics,ordinal,ovr,pa-clf,pa-reg,pagerank,perceptron,permutation-shap,pls,pls-canonical,poisson,poly-count-sketch,poly-features,power-transformer,prophet,qda,quantile,quantile-transformer,random-trees-embedding,randomized-svd,resnet-block,rfe,ridge-clf,ridge-cv,rmsprop,rnn-clf,rnn-reg,robust-scaler,select-chi2,select-f-classif,select-f-regression,select-mutual-info,sgd-clf,sgd-ocsvm,sgd-reg,simple-imputer,skewed-chi2,sparse-pca,sparse-rp,spline,stacking-clf,stacking-reg,stl,svgp,target-encoder,theta,tree-shap,tsne,tweedie,var,variance-threshold,voting-clf,voting-reg --datasets istella,taxi

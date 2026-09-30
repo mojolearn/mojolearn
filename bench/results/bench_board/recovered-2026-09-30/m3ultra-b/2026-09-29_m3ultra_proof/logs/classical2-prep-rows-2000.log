@@ -1,0 +1,18 @@
+
+=== 2026-09-29T12:25:02Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py prep --data /Users/ec2-user/bench-board-cache/more-data/rows-2000 --lanes agglomerative,arima,elasticnet,ets,gmm,gpc,gpr,ivf,kernel-ridge,knn-clf,knn-reg,lasso,linearsvc,linearsvr,logreg,nystroem,rbf-sampler,ridge,spectral,spectral-embedding,svr,tsvd,umap --datasets istella,taxi --max-rows 2000
+CTD-PREP block=arma-synthetic Y=64x2100
+CTD-PREP block=seasonal-synthetic Y=64x1488
+CTD-PREP block=cls-istella X=2000x220 y=2000 Xq=2000x220 yq=2000
+knn_datasets: read the 404000-row istella prefix (220 columns) from /Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz in 0.08 s
+CTD-PREP block=ivf-istella index=2048x220 queries=64x220
+CTD-PREP block=manifold-istella X=2000x220
+CTD-PREP block=reg-istella X=2000x220 y=2000 Xq=2000x220 yq=2000
+CTD-PREP block=tsvd-istella X=2000x220
+MORE-PREP dataset=istella seconds=0.9
+CTD-PREP block=cls-taxi X=2000x11 y=2000 Xq=2000x11 yq=2000
+knn_datasets: read the 404000-row taxi prefix (11 columns) from /Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz in 0.01 s
+CTD-PREP block=ivf-taxi index=2048x11 queries=64x11
+CTD-PREP block=manifold-taxi X=2000x11
+CTD-PREP block=reg-taxi X=2000x11 y=2000 Xq=2000x11 yq=2000
+CTD-PREP block=tsvd-taxi X=2000x11
+MORE-PREP dataset=taxi seconds=0.4

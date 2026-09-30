@@ -1,0 +1,4 @@
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/svm/_base.py:1250: ConvergenceWarning: Liblinear failed to converge, increase the number of iterations.
+  warnings.warn(

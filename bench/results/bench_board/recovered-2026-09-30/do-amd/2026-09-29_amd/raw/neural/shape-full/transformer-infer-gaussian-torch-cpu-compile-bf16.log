@@ -1,0 +1,47 @@
+Traceback (most recent call last):
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py", line 1718, in worker
+    runner.call()
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py", line 1392, in call
+    out = self.fn(*inputs)
+          ^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py", line 574, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py", line 1200, in forward
+    def forward(self, *inputs):
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py", line 745, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_functorch/aot_autograd.py", line 1184, in forward
+    return compiled_fn(full_args)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 323, in runtime_wrapper
+    all_outs = call_func_at_runtime_with_args(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/utils.py", line 126, in call_func_at_runtime_with_args
+    out = normalize_as_list(f(args))
+                            ^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 672, in inner_fn
+    outs = compiled_fn(args)
+           ^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_functorch/_aot_autograd/runtime_wrappers.py", line 490, in wrapper
+    return compiled_fn(runtime_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_inductor/output_code.py", line 466, in __call__
+    return self.current_callable(inputs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/tmp/torchinductor_root/24/c24nafilwn2qey4xmiljdosr3fnlvtq3cz5n4wwljbtkxfmpfxrl.py", line 640, in call
+    extern_kernels.addmm(reinterpret_tensor(arg9_1, (512, 384), (384, 1), 0), reinterpret_tensor(buf21, (512, 384), (384, 1), 0), reinterpret_tensor(buf23, (384, 384), (1, 384), 0), alpha=1, beta=1, out=buf24)
+RuntimeError: self and mat2 must have the same dtype, but got Float and BFloat16

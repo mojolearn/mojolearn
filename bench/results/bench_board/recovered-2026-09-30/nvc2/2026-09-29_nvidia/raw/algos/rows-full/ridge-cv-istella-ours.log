@@ -1,0 +1,14 @@
+393812 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a5e40000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py", line 4238, in worker
+    runner.fit()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py", line 2142, in fit
+    self._fit()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py", line 2378, in fit
+    est.fit(X, y)
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_expansion_linear.py", line 905, in fit
+    raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+ValueError: mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented

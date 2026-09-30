@@ -1,0 +1,9 @@
+
+=== 2026-09-30T06:23:57Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lr-constant --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lr-constant", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "torch-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lr-constant dataset=synthetic arm=ours round=0 ms=637.416 infer_ms=None digest=bbbae469214c95e5
+ALGOS-ROUND lane=lr-constant dataset=synthetic arm=torch-cpu round=0 ms=682.791 infer_ms=None digest=908538ed98f77095
+ALGOS-ROUND lane=lr-constant dataset=synthetic arm=torch-cpu round=1 ms=102.819 infer_ms=None digest=908538ed98f77095
+ALGOS-ROUND lane=lr-constant dataset=synthetic arm=ours round=1 ms=632.549 infer_ms=None digest=bbbae469214c95e5
+ALGOS lane=lr-constant dataset=synthetic arm=ours status=ok median_ms=632.5490720046218 quality={"max_rel_diff_vs_ours": 0.0}
+ALGOS lane=lr-constant dataset=synthetic arm=torch-cpu status=ok median_ms=102.81934900558554 quality={"max_rel_diff_vs_ours": 1.038274401602289e-07}

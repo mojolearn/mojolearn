@@ -1,0 +1,11 @@
+
+=== 2026-09-30T06:22:58Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane embedding --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-eager-fp32,torch-compile-fp32 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+ALGOS-REFUSED lane=embedding dataset=synthetic arm=ours stage=ready detail={"error": "ImportError('libamdhip64.so.7: cannot open shared object file: No such file or directory')", "event": "error", "stage": "ready"}
+BOARD-PARAMS {"arms": {"torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/embedding", "problems": [], "reference": "torch-eager-fp32", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS-ROUND lane=embedding dataset=synthetic arm=torch-eager-fp32 round=0 ms=1033.200 infer_ms=0.2441990072838962 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=torch-compile-fp32 round=0 ms=1552.193 infer_ms=102.7265599987004 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=torch-compile-fp32 round=1 ms=1.114 infer_ms=0.16074097948148847 digest=2753e61a6dde36e3
+ALGOS-ROUND lane=embedding dataset=synthetic arm=torch-eager-fp32 round=1 ms=1.129 infer_ms=0.1052799925673753 digest=2753e61a6dde36e3
+ALGOS lane=embedding dataset=synthetic arm=ours status=not_ready median_ms=None quality={}
+ALGOS lane=embedding dataset=synthetic arm=torch-eager-fp32 status=ok median_ms=1.129398006014526 quality={}
+ALGOS lane=embedding dataset=synthetic arm=torch-compile-fp32 status=ok median_ms=1.114416983909905 quality={"max_rel_diff_vs_torch_eager_fp32": 0.0, "rel_fro_vs_torch_eager_fp32": 0.0}

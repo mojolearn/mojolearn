@@ -1,0 +1,6 @@
+
+=== 2026-09-30T01:05:29Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane gemm-int8 --shape full --arms ours --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-int8", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-int8 arm=ours round=0 ms=2046.100 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=1 ms=1799.018 digest=9b16c7064e10cecd
+NEURAL lane=gemm-int8 arm=ours status=ok median_ms=1799.01770001743 quality={"max_rel_err_vs_fp64": 0.0}

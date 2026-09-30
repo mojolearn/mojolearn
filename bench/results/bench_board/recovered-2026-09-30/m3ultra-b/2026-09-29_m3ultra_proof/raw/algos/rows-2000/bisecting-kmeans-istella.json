@@ -1,0 +1,606 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "bisecting-kmeans",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "3833997daf9b3849",
+        "3833997daf9b3849"
+      ],
+      "infer_ms": [
+        2.278833999298513
+      ],
+      "infer_warmup_ms": 1.1003330000676215,
+      "info": {
+        "config": "mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 98.5045830020681,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 344.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 350.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        98.5045830020681
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "lloyd",
+          "bisecting_strategy": "biggest_inertia",
+          "copy_x": true,
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 190.75987500400515
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "bisecting-kmeans",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "3833997daf9b3849",
+        "3833997daf9b3849"
+      ],
+      "infer_ms": [
+        2.2363329990184866
+      ],
+      "infer_warmup_ms": 1.0637919986038469,
+      "info": {
+        "config": "mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 90.65154199925018,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 345.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 349.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        90.65154199925018
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "lloyd",
+          "bisecting_strategy": "biggest_inertia",
+          "copy_x": true,
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 190.86650000099326
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "bisecting-kmeans",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "44f0d26711f67831",
+        "44f0d26711f67831"
+      ],
+      "infer_ms": [
+        4.808292003872339
+      ],
+      "infer_warmup_ms": 2.9686669950024225,
+      "info": {
+        "config": "sklearn.cluster:BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 63.49429099645931,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 172.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 181.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        63.49429099645931
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "lloyd",
+          "bisecting_strategy": "biggest_inertia",
+          "copy_x": true,
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 41.218208003556356
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "0f589a2783ae5b536bbd76dbd44e132205b47efa6ea8048de53a8a2e6ebe7426",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "33d68ff78ffcb702fc849947b14195be0f0aff3946f0e1d95f321d6b415fc7b6",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "8c134d2b8cdb51fcb03fa71d5028494ddf675ce31fed1c30350d4871b4f7dbfb",
+        "shape": [
+          2000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34f297559344f6e256ec53a230155175c33e02c985ff5f8c38be659c5caabf50",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "cls",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 2000 of 500000 test rows",
+    "fit_rows": "stride sample of 2000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 1303,
+      "Xq": 1331
+    },
+    "smoke_max_rows": 2000,
+    "target": "binary",
+    "written": "2026-09-29T12:25:04Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "istella",
+  "finished": "2026-09-29T12:42:47Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "3833997daf9b3849",
+          "3833997daf9b3849"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.25"
+        },
+        "ms": [
+          2.278833999298513
+        ],
+        "status": "ok",
+        "warmup_ms": 1.1003330000676215
+      },
+      "ours-fast": {
+        "digest_stable": null,
+        "digests": [
+          "3833997daf9b3849",
+          "3833997daf9b3849"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+          "device": "gpu",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.25"
+        },
+        "ms": [
+          2.2363329990184866
+        ],
+        "status": "ok",
+        "warmup_ms": 1.0637919986038469
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "44f0d26711f67831",
+          "44f0d26711f67831"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.cluster:BisectingKMeans(algorithm='lloyd', bisecting_strategy='biggest_inertia', init='random', max_iter=300, n_clusters=8, n_init=1, random_state=7, tol=0.0001)",
+          "cpu_model": "arm",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.5.3",
+          "os_cpu_count": 28,
+          "pre_clock_fit": false,
+          "python": "3.13.15",
+          "sched_affinity_cpus": null,
+          "scipy": "1.18.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": null,
+              "filepath": "libomp.dylib",
+              "internal_api": "openmp",
+              "num_threads": 28,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          4.808292003872339
+        ],
+        "status": "ok",
+        "warmup_ms": 2.9686669950024225
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq) or fit labels",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "bisecting-kmeans",
+  "lane_config": {
+    "block": "cls",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "cluster",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.BisectingKMeans",
+    "params": {
+      "algorithm": "lloyd",
+      "bisecting_strategy": "biggest_inertia",
+      "init": "random",
+      "max_iter": 300,
+      "n_clusters": 8,
+      "n_init": 1,
+      "random_state": 7,
+      "tol": 0.0001
+    },
+    "quality": "cluster count, silhouette on up to 10,000 rows, ARI vs ours",
+    "sklearn": "sklearn.cluster:BisectingKMeans",
+    "task": "cluster",
+    "timed_fit": "fit(X)",
+    "timed_infer": "predict(Xq) or fit labels"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "lloyd",
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "seed": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "lloyd",
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "seed": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "lloyd",
+          "init": "random",
+          "max_iter": 300,
+          "n_clusters": 8,
+          "n_init": 1,
+          "seed": 7,
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": "lloyd",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "lloyd"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "random",
+        "param": "init",
+        "same": true,
+        "theirs": "random"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 300,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 300
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 8,
+        "param": "n_clusters",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 1,
+        "param": "n_init",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.0001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.0001
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "lloyd",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "lloyd"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "random",
+        "param": "init",
+        "same": true,
+        "theirs": "random"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 300,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 300
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 8,
+        "param": "n_clusters",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1,
+        "param": "n_init",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.0001
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/bisecting-kmeans",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "n_clusters": 8,
+      "silhouette": 0.1277960087797139
+    },
+    "ours-fast": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 8,
+      "silhouette": 0.1277960087797139
+    },
+    "sklearn-cpu": {
+      "ari_vs_ours": 0.8408822252436962,
+      "n_clusters": 8,
+      "silhouette": 0.12110185841963081
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x220; Xq 2000x220; y 2000; yq 2000",
+  "started": "2026-09-29T12:42:45Z"
+}

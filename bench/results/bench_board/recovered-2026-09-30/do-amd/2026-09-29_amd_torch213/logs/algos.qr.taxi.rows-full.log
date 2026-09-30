@@ -1,0 +1,12 @@
+
+=== 2026-09-30T05:00:05Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane qr --dataset taxi --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/qr", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=0 ms=4223.310 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS-ROUND lane=qr dataset=taxi arm=numpy-cpu round=0 ms=176.707 infer_ms=None digest=1007e9e0ff454de5
+ALGOS-ROUND lane=qr dataset=taxi arm=torch-gpu round=0 ms=68.125 infer_ms=None digest=6d571df12e36bb8a
+ALGOS-ROUND lane=qr dataset=taxi arm=numpy-cpu round=1 ms=177.305 infer_ms=None digest=1007e9e0ff454de5
+ALGOS-ROUND lane=qr dataset=taxi arm=torch-gpu round=1 ms=26.953 infer_ms=None digest=6d571df12e36bb8a
+ALGOS-ROUND lane=qr dataset=taxi arm=ours round=1 ms=3985.193 infer_ms=None digest=e54f8db0f5ca6525
+ALGOS lane=qr dataset=taxi arm=ours status=ok median_ms=3985.192616994027 quality={"relative_gram_difference": 0.001995900098513438}
+ALGOS lane=qr dataset=taxi arm=numpy-cpu status=ok median_ms=177.304640004877 quality={"relative_gram_difference": 3.023983999902309e-08}
+ALGOS lane=qr dataset=taxi arm=torch-gpu status=ok median_ms=26.95283098728396 quality={"relative_gram_difference": 9.539963857216174e-07}

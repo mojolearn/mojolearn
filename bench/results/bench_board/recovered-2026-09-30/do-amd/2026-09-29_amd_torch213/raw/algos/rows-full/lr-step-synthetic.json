@@ -1,0 +1,263 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lr-step",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e355f51072ce9068",
+        "e355f51072ce9068"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.StepLR(base_lr=0.1, gamma=0.5, step_size=1000)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_sequence numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 11.916530987946317,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "rocm-smi --showpids lists no VRAM for this pid",
+          "host_mb": 83.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "rocm-smi --showpids lists no VRAM for this pid",
+          "host_mb": 83.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        11.916530987946317
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "base_lr": 0.1,
+        "gamma": 0.5,
+        "step_size": 1000
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the learning rate of steps 1 .. 100000",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 12.181480997242033
+    },
+    "torch-cpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-cpu",
+        "--lane",
+        "lr-step",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "582fd1bb0e0cff6d",
+        "582fd1bb0e0cff6d"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "StepLR(SGD(lr=0.1), step_size=1000, gamma=0.5)",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 103.37134898873046,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1228.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1228.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        103.37134898873046
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "base_lr": 0.1,
+        "gamma": 0.5,
+        "step_size": 1000
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the learning rate of steps 1 .. 100000",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 684.7732330206782
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T06:23:41Z",
+  "lane": "lr-step",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "sequence",
+    "kind": "extra",
+    "mismatches": [],
+    "notes": [
+      "torch: StepLR(SGD(lr=0.1), step_size=1000, gamma=0.5)"
+    ],
+    "ours_class": "mojolearn.StepLR",
+    "params": {
+      "base_lr": 0.1,
+      "gamma": 0.5,
+      "step_size": 1000
+    },
+    "quality": "max relative difference of the learning rates vs ours",
+    "task": "sched",
+    "timed_fit": "the learning rate of steps 1 .. 100000",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "gamma": 0.5,
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-cpu": {
+        "library": "torch",
+        "params": {
+          "gamma": 0.5,
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-cpu",
+        "ours": 0.5,
+        "param": "gamma",
+        "same": true,
+        "theirs": 0.5
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lr-step",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "torch-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_diff_vs_ours": 0.0
+    },
+    "torch-cpu": {
+      "max_rel_diff_vs_ours": 1.4901160916291903e-08
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T06:23:35Z"
+}

@@ -1,0 +1,20 @@
+
+=== 2026-09-29T22:59:29Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py prep --data /root/bench-board-cache-t213/algos-data/rows-full --lanes adafactor,adagrad,adam,adamax,adamw,avgpool1d,avgpool2d,batchnorm1d,batchnorm2d,cholesky,clip-grad-norm,cnn-clf,conv1d,conv2d,cross-entropy,dropout2d,eigh,embedding,gcn,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,layernorm,lr-constant,lr-exponential,lr-onecycle,lr-step,lr-warmup-cosine,lr-warmup-linear,lstm-clf,lstm-reg,lstsq,lu-factor,lu-solve,maxpool1d,maxpool2d,moe,nadam,qr,randomized-svd,resnet-block,rmsprop,rnn-clf,rnn-reg,sgd,svd,svgp --datasets istella,taxi
+CTD-PREP block=cls-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+CTD-PREP block=tsvd-istella X=1000000x220
+MORE-PREP dataset=istella seconds=5.8
+CTD-PREP block=cls-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+CTD-PREP block=reg-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+CTD-PREP block=tsvd-taxi X=1000000x11
+MORE-PREP dataset=taxi seconds=0.8
+CTD-PREP block=graph-istella X=100000x220 y=100000 indptr=100001 indices=1521510 indptr2=100001 indices2=311818
+ALGOS-PREP block=graph dataset=istella seconds=71.9
+CTD-PREP block=graph-taxi X=100000x11 y=100000 indptr=100001 indices=1258298 indptr2=100001 indices2=271380
+ALGOS-PREP block=graph dataset=taxi seconds=69.5
+CTD-PREP block=ts-synthetic Y=64x1440
+ALGOS-PREP block=ts dataset=synthetic seconds=0.0
+CTD-PREP block=ts-taxi-hourly Y=64x1440
+ALGOS-PREP block=ts dataset=taxi-hourly seconds=0.2
+
+=== 2026-09-30T04:59:16Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py prep --data /root/bench-board-cache-t213/algos-data/rows-full --lanes adafactor,adagrad,adam,adamax,adamw,avgpool1d,avgpool2d,batchnorm1d,batchnorm2d,cholesky,clip-grad-norm,cnn-clf,conv1d,conv2d,cross-entropy,dropout2d,eigh,embedding,gcn,global-avgpool,global-maxpool,graphsage,gru-clf,gru-reg,layernorm,lr-constant,lr-exponential,lr-onecycle,lr-step,lr-warmup-cosine,lr-warmup-linear,lstm-clf,lstm-reg,maxpool1d,maxpool2d,moe,nadam,qr,resnet-block,rmsprop,rnn-clf,rnn-reg,sgd,svd --datasets istella,taxi

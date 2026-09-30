@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 4213, in worker
+    runner = build(args.lane, args.arm, D)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 2276, in build
+    return fn(lane, arm, D)
+           ^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 3369, in _build_layer
+    import torch
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/torch/__init__.py", line 445, in <module>
+    from torch._C import *  # noqa: F403
+    ^^^^^^^^^^^^^^^^^^^^^^
+ImportError: libamdhip64.so.7: cannot open shared object file: No such file or directory

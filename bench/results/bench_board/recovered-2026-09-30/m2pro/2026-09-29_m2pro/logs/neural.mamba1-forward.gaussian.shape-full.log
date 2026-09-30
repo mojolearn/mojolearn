@@ -1,0 +1,12 @@
+
+=== 2026-09-30T01:30:17Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py race --lane mamba1-forward --shape full --arms ours,torch-eager-fp32,torch-eager-bf16 --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/raw/neural/shape-full --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)", "ssm_d_conv": 4, "ssm_d_state": 16, "ssm_dt_rank": 24, "ssm_expand": 2}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-forward arm=ours round=0 ms=2905.130 digest=dfe79ab628aa17cf
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=0 ms=629.406 digest=f28517d5e7b60d39
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=0 ms=609.630 digest=52309d0f878615f9
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=1 ms=106.505 digest=f28517d5e7b60d39
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=1 ms=113.750 digest=52309d0f878615f9
+NEURAL-ROUND lane=mamba1-forward arm=ours round=1 ms=30.120 digest=dfe79ab628aa17cf
+NEURAL lane=mamba1-forward arm=ours status=ok median_ms=30.119750008452684 quality={}
+NEURAL lane=mamba1-forward arm=torch-eager-fp32 status=ok median_ms=106.50533300940879 quality={"max_abs_diff_vs_ours": 2.384185791015625e-07, "max_rel_diff_vs_ours": 1.188965496577979e-07}
+NEURAL lane=mamba1-forward arm=torch-eager-bf16 status=ok median_ms=113.75024999142624 quality={"max_abs_diff_vs_ours": 5.14984130859375e-05, "max_rel_diff_vs_ours": 2.5681654726084346e-05}

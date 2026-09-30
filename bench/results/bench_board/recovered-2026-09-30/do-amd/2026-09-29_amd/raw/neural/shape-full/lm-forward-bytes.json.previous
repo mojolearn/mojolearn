@@ -1,0 +1,552 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lm-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-lm-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "4a8e781b0739a038",
+        "4a8e781b0739a038"
+      ],
+      "info": {
+        "call": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+        "config": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_byte_lm.so",
+        "native_vendor": "hip",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "profile": "mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1",
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 86.61038399441168,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 7284.5,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2814.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 7284.5,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2400.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        86.61038399441168
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "config_readback": "{\"beta1\": 0.8999999761581421, \"beta2\": 0.9990000128746033, \"dampening\": 0.0, \"eps\": 9.99999993922529e-09, \"kind\": 2, \"lr\": 0.0010000000474974513, \"max_norm\": 0.0, \"momentum\": 0.0, \"nesterov\": false, \"weight_decay\": 0.009999999776482582}"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 756.1081829771865
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "lm-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-lm-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "REFUSED: torch-compile-bf16 on cuda failed in round 0 (compile happens here): InternalTorchDynamoError(\"ModuleNotFoundError: No module named 'bbn_torch_lm_step_opponent'\")",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "cuda_is_bf16_supported": true,
+          "cuda_is_bf16_supported_native": true,
+          "device_type": "cuda",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "no_grad forward of the same twin to logits; logits.cpu()",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "enabled": {
+            "cudnn": true,
+            "efficient": true,
+            "flash": true,
+            "math": true
+          },
+          "probe_shape": null,
+          "probes": [],
+          "requested": "auto",
+          "selection": "auto on an autocast bfloat16 column: no switch set, torch picks per call (switches read back below are torch defaults)"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "cuda",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "lm-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-lm-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "REFUSED: torch-compile-fp32 on cuda failed in round 0 (compile happens here): InternalTorchDynamoError(\"ModuleNotFoundError: No module named 'bbn_torch_lm_step_opponent'\")",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "autocast_probe": null,
+        "call": "no_grad forward of the same twin to logits; logits.cpu()",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "efficient",
+          "enabled": {
+            "cudnn": false,
+            "efficient": true,
+            "flash": false,
+            "math": false
+          },
+          "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+          "probes": [
+            {
+              "backend": "efficient",
+              "ok": true
+            }
+          ],
+          "requested": "auto",
+          "selection": "global switches: only efficient enabled"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "cuda",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "lm-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-lm-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "dcff5b4dbc5cfa77",
+        "dcff5b4dbc5cfa77"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "cuda_is_bf16_supported": true,
+          "cuda_is_bf16_supported_native": true,
+          "device_type": "cuda",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "no_grad forward of the same twin to logits; logits.cpu()",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "torch_default",
+          "enabled": {
+            "cudnn": true,
+            "efficient": true,
+            "flash": true,
+            "math": true
+          },
+          "probe_shape": null,
+          "probes": [],
+          "requested": "auto",
+          "selection": "auto on an autocast bfloat16 column: no switch set, torch picks per call (switches read back below are torch defaults)"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "cuda",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "median_ms": 16.430559975560755,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 240.5,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 4248.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 240.5,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 4312.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        16.430559975560755
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 103.65884299972095
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "lm-forward",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-lm-forward-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "f4a4afe7f557d708",
+        "f4a4afe7f557d708"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "no_grad forward of the same twin to logits; logits.cpu()",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "sdpa": {
+          "backend": "efficient",
+          "enabled": {
+            "cudnn": false,
+            "efficient": true,
+            "flash": false,
+            "math": false
+          },
+          "probe_shape": "[1, 2, 16, head_dim] float32, is_causal, forward and backward",
+          "probes": [
+            {
+              "backend": "efficient",
+              "ok": true
+            }
+          ],
+          "requested": "auto",
+          "selection": "global switches: only efficient enabled"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "cuda",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "median_ms": 19.551536010112613,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 241.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3040.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 241.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3104.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        19.551536010112613
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 345.96475600847043
+    }
+  },
+  "commit": "ba7803f217f47ae6227036e1f120170eafb8d263",
+  "dataset": "bytes",
+  "finished": "2026-09-29T20:28:57Z",
+  "inputs": {
+    "init": "default_rng(7).normal(0, .02) float32, +1 on norms",
+    "lane": "lm-forward",
+    "parameters": 20453376,
+    "schedule": "step k row b: stream[(k*B*L + b*L) % (n - L - 1) : +L+1]; inputs [:, :L], targets [:, 1:]",
+    "seed": 7,
+    "sha256": {
+      "batches": "56847dbbf2627f00",
+      "init": "fd9399d4528edaa1"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+      "length": 2048,
+      "n_heads": 6,
+      "n_kv": 6,
+      "n_layers": 8,
+      "name": "full",
+      "vocab_size": 8192
+    },
+    "steps": 2,
+    "stream": {
+      "bytes": 12377620,
+      "files": 169,
+      "package_dir": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn",
+      "sha256": "cd31155c8727dcea4c7252a1de1097c2ee5d49f545ddc4d199b1743b755a7119",
+      "source": "installed mojolearn package .py sources, sorted by path, concatenated"
+    }
+  },
+  "lane": "lm-forward",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/lm-forward",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "mean_nll": 9.01873340416645
+    },
+    "torch-eager-bf16": {
+      "max_abs_diff_vs_ours": 0.006042182445526123,
+      "max_rel_diff_vs_ours": 0.008294686682491085,
+      "mean_nll": 9.018647312363301
+    },
+    "torch-eager-fp32": {
+      "max_abs_diff_vs_ours": 1.3113021850585938e-06,
+      "max_rel_diff_vs_ours": 1.8001509999388767e-06,
+      "mean_nll": 9.0187333930559
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "head_dim": 64,
+    "intermediate": 1024,
+    "label": "B1 L2048 DM384 H6 KV6 HD64 FF1024 layers8 V8192",
+    "length": 2048,
+    "n_heads": 6,
+    "n_kv": 6,
+    "n_layers": 8,
+    "name": "full",
+    "vocab_size": 8192
+  },
+  "started": "2026-09-29T20:28:44Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-compile-fp32": "float32, TF32 off",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-fp32": "float32, TF32 off"
+  }
+}

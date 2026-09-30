@@ -1,0 +1,4 @@
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py:753: ConvergenceWarning: Early stopping the lars path, as the residues are small and the current value of alpha is no longer well controlled. 22 iterations, alpha=4.154e-02, previous alpha=4.071e-02, with an active set of 19 regressors.
+  warnings.warn(
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/sklearn/linear_model/_least_angle.py:753: ConvergenceWarning: Early stopping the lars path, as the residues are small and the current value of alpha is no longer well controlled. 22 iterations, alpha=4.154e-02, previous alpha=4.071e-02, with an active set of 19 regressors.
+  warnings.warn(

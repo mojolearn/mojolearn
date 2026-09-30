@@ -1,0 +1,13 @@
+55789 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x500200000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py", line 2229, in worker
+    runner.call()
+  File "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py", line 1907, in call
+    est.fit(self.X)
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/hdbscan.py", line 222, in fit
+    n_clusters = ext.hdbscan_fit(
+                 ^^^^^^^^^^^^^^^^
+Exception: hdbscan.build_mr_linkage: n_rows=100000 > 46340; the dense mutual reachability graph is m * m cells and hierarchy's PAIRWISE connectivity refuses past that bound (their value_idx overflows). To close this refusal, implementation the SPARSE arm (DEVIATION 1600), which needs the cross-component fix-up in the hierarchy lane and a k-NN distance epilogue in the neighbors lane

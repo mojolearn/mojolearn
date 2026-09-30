@@ -1,0 +1,9 @@
+
+=== 2026-09-30T06:23:48Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lr-onecycle --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lr-onecycle", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "torch-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lr-onecycle dataset=synthetic arm=ours round=0 ms=1308.066 infer_ms=None digest=31fa0061cc3fdf31
+ALGOS-ROUND lane=lr-onecycle dataset=synthetic arm=torch-cpu round=0 ms=718.898 infer_ms=None digest=9a8218303e1fda9d
+ALGOS-ROUND lane=lr-onecycle dataset=synthetic arm=torch-cpu round=1 ms=135.651 infer_ms=None digest=9a8218303e1fda9d
+ALGOS-ROUND lane=lr-onecycle dataset=synthetic arm=ours round=1 ms=1276.282 infer_ms=None digest=31fa0061cc3fdf31
+ALGOS lane=lr-onecycle dataset=synthetic arm=ours status=ok median_ms=1276.2821379874367 quality={"max_rel_diff_vs_ours": 0.0}
+ALGOS lane=lr-onecycle dataset=synthetic arm=torch-cpu status=ok median_ms=135.65144798485562 quality={"max_rel_diff_vs_ours": 5.950861762015348e-08}

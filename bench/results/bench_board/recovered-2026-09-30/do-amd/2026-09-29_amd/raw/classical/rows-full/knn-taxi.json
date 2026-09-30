@@ -1,0 +1,540 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "cd7ff95514f7e589",
+        "cd7ff95514f7e589"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": true,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "max_ms": 1282.6233119994868,
+      "median_ms": 1282.6233119994868,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1276.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2045.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1276.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2046.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 1282.6233119994868,
+      "ms": [
+        1282.6233119994868
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "metric": "euclidean",
+          "n_neighbors": 64,
+          "p": 2,
+          "query_tile": 0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": true,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1592.1179790166207
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "480618fae853c797",
+        "480618fae853c797"
+      ],
+      "info": {
+        "config": "NearestNeighbors(n_neighbors=64, algorithm='brute', metric='euclidean', p=2, n_jobs=-1); fit before the clock, kneighbors timed",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": true,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "max_ms": 381.06442999560386,
+      "median_ms": 381.06442999560386,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 234.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 238.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 381.06442999560386,
+      "ms": [
+        381.06442999560386
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "brute",
+          "leaf_size": 30,
+          "metric": "euclidean",
+          "metric_params": null,
+          "n_neighbors": 64,
+          "p": 2,
+          "radius": 1.0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "call",
+        "library": "scikit-learn",
+        "pre_clock_fit": true,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 390.65934097743593
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "knn",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "e05f9e516ffe1ba4",
+        "e05f9e516ffe1ba4"
+      ],
+      "info": {
+        "config": "brute force: per 1024-query chunk torch.cdist(q, index) (default compute_mode) then topk(10, largest=False)",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "seed": 7,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_backend": "cuda",
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "upload_ms_untimed": 137.57610000902787,
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "max_ms": 26.855492003960535,
+      "median_ms": 26.855492003960535,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 3240.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2864.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 3242.7,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2865.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 26.855492003960535,
+      "ms": [
+        26.855492003960535
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "torch",
+        "params": {
+          "algorithm": "brute",
+          "metric": "euclidean",
+          "n_neighbors": 64,
+          "p": 2,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "device",
+        "inside_clock": "call",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": 137.57610000902787
+      },
+      "status": "ok",
+      "warmup_ms": 298.73267601942644
+    }
+  },
+  "block": {
+    "arrays": {
+      "index": {
+        "dtype": "float32",
+        "sha256": "ea3401a27dc7f29b9d2aeb073dab652d2529d5db7ae775f41abf11c243710416",
+        "shape": [
+          400000,
+          11
+        ]
+      },
+      "queries": {
+        "dtype": "float32",
+        "sha256": "f4ec2c83347e9943f0482ff63a0fd25323e082f99302241576a0b9b7c1c4894f",
+        "shape": [
+          4000,
+          11
+        ]
+      }
+    },
+    "block": "knn",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "index_rows": [
+      0,
+      400000
+    ],
+    "knn": {
+      "k": 64
+    },
+    "lanes": [
+      "knn"
+    ],
+    "loader": "knn_datasets.real_block('taxi') (DEVIATION 2524)",
+    "query_rows": [
+      400000,
+      404000
+    ],
+    "real_block_sha256": {
+      "block": "7314025a013db35d24485bab8e29c2b8f519e4717bc3a7ee128db6b87d4c6a6e",
+      "index": "4ca62139aeebf81cbcacc26117d2d0d7ccd2d67372a70ae25fd81595c363d64e",
+      "queries": "14a4fb483304ed7b9d46730fd6b74ca14850c412ed98001906035fd1d7ae16de"
+    },
+    "real_block_source": {
+      "built_by": "python tools/speed_gbdt_arm.py --download taxi",
+      "cache_bytes": 419757252,
+      "cache_hit": true,
+      "cache_path": "/root/datasets/gbm-bench/taxi/taxi_speed.npz",
+      "cache_total_rows": 5750086,
+      "columns": [
+        "passengers",
+        "distance_mi",
+        "pickup_hour",
+        "pickup_weekday",
+        "pickup_day",
+        "duration_min",
+        "extra",
+        "mta_tax",
+        "tolls",
+        "congestion",
+        "airport_fee"
+      ],
+      "data_root": "/root/datasets/gbm-bench",
+      "download": null,
+      "features": 11,
+      "npz_key": "x",
+      "parse": "leading 404000 rows of the trees harness's NumPy cache, TAXI_NUMERIC columns; float32, C contiguous; no shuffle, no scaling, no deduplication",
+      "parse_seconds": null,
+      "prefix_rows": 404000,
+      "read_seconds": 0.025210997002432123,
+      "sha256_block": "7314025a013db35d24485bab8e29c2b8f519e4717bc3a7ee128db6b87d4c6a6e"
+    },
+    "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+    "scaling": "none",
+    "sentinel_cells_replaced": {
+      "index": 0,
+      "queries": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T14:48:09Z"
+  },
+  "commit": "745cd079a57239bacec1c4f3229bcd9ed1e7a72e",
+  "dataset": "taxi",
+  "finished": "2026-09-29T16:36:05Z",
+  "finished_rounds": "2026-09-29T16:36:00Z",
+  "lane": "knn",
+  "lane_config": {
+    "mismatches": [
+      "seed: no arm has a seed argument (exact search); torch-gpu torch.manual_seed(7)",
+      "query_tile: ours only (tiling, results unchanged); n_jobs=-1: scikit-learn only"
+    ],
+    "params": "n_neighbors=64 (the cuML benchmark's NearestNeighbors), metric='euclidean', algorithm='brute' (ours, scikit-learn, cuML); torch cdist p=2 plus topk",
+    "rows": "knn block: 400,000 index rows, 4,000 queries, raw",
+    "timed": "kneighbors; the fit (index) is before the clock on every arm"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "brute",
+          "metric": "euclidean",
+          "n_neighbors": 64,
+          "p": 2,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "brute",
+          "leaf_size": 30,
+          "metric": "euclidean",
+          "n_neighbors": 64,
+          "p": 2,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "torch-gpu": {
+        "library": "torch",
+        "params": {
+          "algorithm": "brute",
+          "metric": "euclidean",
+          "n_neighbors": 64,
+          "p": 2,
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": "brute",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "brute"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 64,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 2,
+        "param": "p",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "torch-gpu",
+        "ours": "brute",
+        "param": "algorithm",
+        "same": true,
+        "theirs": "brute"
+      },
+      {
+        "arm": "torch-gpu",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "torch-gpu",
+        "ours": 64,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 64
+      },
+      {
+        "arm": "torch-gpu",
+        "ours": 2,
+        "param": "p",
+        "same": true,
+        "theirs": 2
+      }
+    ],
+    "exceptions": [],
+    "family": "classical",
+    "lane": "knn",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "sklearn-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "recall_at_k": 0.99975390625,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    },
+    "sklearn-cpu": {
+      "recall_at_k": 1.0,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    },
+    "torch-gpu": {
+      "recall_at_k": 0.99973046875,
+      "reference": "float64 NumPy brute force (shortlist 40 plus every arm's ids, exact differences)",
+      "rows_with_repeated_ids": 0
+    }
+  },
+  "ratios_ours_over": {
+    "sklearn-cpu": 3.365896187199324,
+    "torch-gpu": 47.76018669888196
+  },
+  "rounds_requested": 1,
+  "script": "tools/classical_two_datasets.py",
+  "spans": {
+    "ours": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": true,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "sklearn-cpu": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "call",
+      "library": "scikit-learn",
+      "pre_clock_fit": true,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "torch-gpu": {
+      "fit_ms_untimed": null,
+      "input_home": "device",
+      "inside_clock": "call",
+      "library": "torch",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": 137.57610000902787
+    }
+  },
+  "started": "2026-09-29T16:35:48Z"
+}

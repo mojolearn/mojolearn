@@ -1,0 +1,416 @@
+{
+  "arms": {
+    "gpytorch-cpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "gpytorch-cpu",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "46bbde45456cf97f",
+        "46bbde45456cf97f"
+      ],
+      "infer_ms": [
+        144.92132898885757
+      ],
+      "infer_warmup_ms": 141.87068201135844,
+      "info": {
+        "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+        "device": "cpu",
+        "input_home": "device",
+        "library": "gpytorch",
+        "pre_clock_fit": false,
+        "version": "1.15.2"
+      },
+      "median_ms": 504.6224019897636,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 2193.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 2461.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        504.6224019897636
+      ],
+      "params_record": {
+        "__library__": "gpytorch",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 657.1826860017609
+    },
+    "gpytorch-gpu": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "gpytorch-gpu",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "1a10cba00faccb41",
+        "1a10cba00faccb41"
+      ],
+      "infer_ms": [
+        2.6231170049868524
+      ],
+      "infer_warmup_ms": 2.981836994877085,
+      "info": {
+        "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "gpytorch",
+        "pre_clock_fit": false,
+        "version": "1.15.2"
+      },
+      "median_ms": 15.406346996314824,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1391.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 5226.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1590.9,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 4970.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        15.406346996314824
+      ],
+      "params_record": {
+        "__library__": "gpytorch",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 5075.010494008893
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "svgp",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "ValueError('SVGP: the inducing system is not positive definite; raise jitter or noise_variance')",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.SVGP(inducing_points=512 stride rows, {'kernel_variance': 1.0, 'lengthscale': 1.0, 'noise_variance': 1.0, 'jitter': 1e-06})",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn",
+        "jitter": 1e-06,
+        "kernel_variance": 1.0,
+        "lengthscale": 1.0,
+        "n_inducing": 512,
+        "noise_variance": 1.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "error",
+      "warmup_ms": null
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "d60aff554f2b3c15798291cde2e1105b75cdab97ccb9f6548a89ecc9ea660da3",
+        "shape": [
+          1000000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3d38829177891df39d8ee10103067bc2e1d9fb94bbfd4dc57e367768739c0c44",
+        "shape": [
+          100000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "69c03b299f12319107f0c41e33a358dc27b94c80fb2a6096e5ce0eff7f9e6fe2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "5f22ef8351272e9cab4cf4b3c17503f166732c8feaa85912f2f577ed84a9fd74",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 5250086 train rows",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T22:59:35Z"
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "taxi",
+  "finished": "2026-09-30T01:05:47Z",
+  "infer": {
+    "arms": {
+      "gpytorch-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "46bbde45456cf97f",
+          "46bbde45456cf97f"
+        ],
+        "error": null,
+        "info": {
+          "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+          "device": "cpu",
+          "input_home": "device",
+          "library": "gpytorch",
+          "pre_clock_fit": false,
+          "version": "1.15.2"
+        },
+        "ms": [
+          144.92132898885757
+        ],
+        "status": "ok",
+        "warmup_ms": 141.87068201135844
+      },
+      "gpytorch-gpu": {
+        "digest_stable": null,
+        "digests": [
+          "1a10cba00faccb41",
+          "1a10cba00faccb41"
+        ],
+        "error": null,
+        "info": {
+          "config": "gpytorch ExactGP(ZeroMean, InducingPointKernel(ScaleKernel(RBFKernel), Z=512 stride rows, fixed)), GaussianLikelihood; outputscale 1, lengthscale 1, noise 1, none trained (SGPR, the collapsed bound); the fit clock builds the prediction cache",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "device",
+          "library": "gpytorch",
+          "pre_clock_fit": false,
+          "version": "1.15.2"
+        },
+        "ms": [
+          2.6231170049868524
+        ],
+        "status": "ok",
+        "warmup_ms": 2.981836994877085
+      },
+      "ours": {
+        "digest_stable": null,
+        "digests": [],
+        "error": {
+          "error": "ValueError('SVGP: the inducing system is not positive definite; raise jitter or noise_variance')",
+          "event": "error",
+          "stage": "round 0"
+        },
+        "info": {
+          "config": "mojolearn.SVGP(inducing_points=512 stride rows, {'kernel_variance': 1.0, 'lengthscale': 1.0, 'noise_variance': 1.0, 'jitter': 1e-06})",
+          "device": "gpu",
+          "device_name": "AMD Instinct Mi325X VF",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "hip",
+          "version": "0.8.25"
+        },
+        "ms": [],
+        "status": "error",
+        "warmup_ms": null
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "svgp",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "svgp",
+    "mismatches": [
+      "no seed on any arm: nothing is drawn (fixed inducing points, closed form)",
+      "jitter: ours 1e-6 on K_uu; gpytorch adds its own Cholesky jitter (1e-6 in float32) only when a factorization fails"
+    ],
+    "notes": [
+      "zero mean, RBF kernel (one lengthscale), Gaussian likelihood, inducing points = 512 stride rows (fixed), kernel variance, lengthscale and noise variance all 1.0 and NOT trained on any arm: ours sets q(u) to its optimum for the given hyperparameters (Titsias's collapsed bound, DEVIATION 5205); gpytorch is the same model through InducingPointKernel (SGPR, the collapsed bound) in an ExactGP with ZeroMean, the same fixed hyperparameters, its prediction cache built in the fit clock"
+    ],
+    "ours_class": "mojolearn.SVGP or mojolearn.SparseVariationalGP",
+    "params": {
+      "jitter": 1e-06,
+      "kernel_variance": 1.0,
+      "lengthscale": 1.0,
+      "n_inducing": 512,
+      "noise_variance": 1.0
+    },
+    "quality": "held-out R2 and RMSE",
+    "stride_subsets": {
+      "X": 100000,
+      "Xq": 20000
+    },
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "gpytorch-cpu": {
+        "library": "gpytorch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "gpytorch-gpu": {
+        "library": "gpytorch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/svgp",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "gpytorch-cpu": {
+      "finite": true,
+      "r2": -0.20953208138182777,
+      "rmse": 17.831056704699233
+    },
+    "gpytorch-gpu": {
+      "finite": true,
+      "r2": -0.20952626553636056,
+      "rmse": 17.831013835726772
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 100000x11; Xq 20000x11; y 100000; yq 20000",
+  "started": "2026-09-30T01:05:34Z"
+}

@@ -1,0 +1,12 @@
+
+=== 2026-09-29T23:08:18Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane mamba1-forward --shape full --arms ours,torch-eager-fp32,torch-eager-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)", "ssm_d_conv": 4, "ssm_d_state": 16, "ssm_dt_rank": 24, "ssm_expand": 2}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba1-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba1-forward arm=ours round=0 ms=263.102 digest=dfe79ab628aa17cf
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=0 ms=4729.665 digest=d84c219600f91959
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=0 ms=2728.841 digest=07be397499994b58
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-fp32 round=1 ms=87.672 digest=d84c219600f91959
+NEURAL-ROUND lane=mamba1-forward arm=torch-eager-bf16 round=1 ms=110.944 digest=07be397499994b58
+NEURAL-ROUND lane=mamba1-forward arm=ours round=1 ms=18.922 digest=dfe79ab628aa17cf
+NEURAL lane=mamba1-forward arm=ours status=ok median_ms=18.921746988780797 quality={}
+NEURAL lane=mamba1-forward arm=torch-eager-fp32 status=ok median_ms=87.67223701579496 quality={"max_abs_diff_vs_ours": 2.384185791015625e-07, "max_rel_diff_vs_ours": 1.188965496577979e-07}
+NEURAL lane=mamba1-forward arm=torch-eager-bf16 status=ok median_ms=110.94409300130792 quality={"max_abs_diff_vs_ours": 5.435943603515625e-05, "max_rel_diff_vs_ours": 2.710841332197792e-05}

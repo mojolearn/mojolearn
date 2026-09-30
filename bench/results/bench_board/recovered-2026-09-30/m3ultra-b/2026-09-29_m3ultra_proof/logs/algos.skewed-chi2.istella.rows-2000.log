@@ -1,0 +1,12 @@
+
+=== 2026-09-29T12:55:44Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane skewed-chi2 --dataset istella --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "ours-fast", "ours": 256, "param": "n_components", "same": true, "theirs": 256}, {"arm": "sklearn-cpu", "ours": 256, "param": "n_components", "same": true, "theirs": 256}], "exceptions": [], "family": "algos", "lane": "algos/skewed-chi2", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=ours round=0 ms=25.496 infer_ms=2.5796249974519014 digest=107cc5a8af748eea
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=ours-fast round=0 ms=24.440 infer_ms=42.89737500221236 digest=874d5fbb11f8a404
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=sklearn-cpu round=0 ms=1.395 infer_ms=1.1476250001578592 digest=2ad6c4069e843975
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=ours-fast round=1 ms=7.394 infer_ms=2.2893330024089664 digest=874d5fbb11f8a404
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=sklearn-cpu round=1 ms=1.118 infer_ms=1.0657499951776117 digest=2ad6c4069e843975
+ALGOS-ROUND lane=skewed-chi2 dataset=istella arm=ours round=1 ms=7.138 infer_ms=3.242457998567261 digest=107cc5a8af748eea
+ALGOS lane=skewed-chi2 dataset=istella arm=ours status=ok median_ms=7.1380000008502975 quality={"kernel_rel_error": 0.7405240923847188}
+ALGOS lane=skewed-chi2 dataset=istella arm=ours-fast status=ok median_ms=7.393624997348525 quality={"kernel_rel_error": 0.7405240958223378}
+ALGOS lane=skewed-chi2 dataset=istella arm=sklearn-cpu status=ok median_ms=1.11750000360189 quality={"kernel_rel_error": 0.740524291129811}

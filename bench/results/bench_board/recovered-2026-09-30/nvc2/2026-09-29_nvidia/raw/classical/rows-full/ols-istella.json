@@ -1,0 +1,747 @@
+{
+  "arms": {
+    "cuml-gpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "cuml-gpu",
+        "--lane",
+        "ols",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "097ffd4570d75f3a",
+        "097ffd4570d75f3a"
+      ],
+      "info": {
+        "config": "cuml.linear_model.LinearRegression(algorithm='eig', copy_X=True, fit_intercept=True, output_type='cupy'); fit timed",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "cuda_driver_api": 13000,
+        "cuda_runtime": 12090,
+        "cupy": "14.2.0",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "cuml",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "upload_ms_untimed": 1291.6188705712557,
+        "version": "26.08.00"
+      },
+      "max_ms": 79.4342141598463,
+      "median_ms": 79.4342141598463,
+      "mem": [
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 2154.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 5076.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 2154.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 5076.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 79.4342141598463,
+      "ms": [
+        79.4342141598463
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "cuml",
+        "params": {
+          "algorithm": "eig",
+          "fit_intercept": true
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "device",
+        "inside_clock": "call",
+        "library": "cuml",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": 1291.6188705712557
+      },
+      "status": "ok",
+      "warmup_ms": 263.1082087755203
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "ols",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "6f12cfc209ecd1f9",
+        "6f12cfc209ecd1f9"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "max_ms": 910.8497174456716,
+      "median_ms": 910.8497174456716,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 5802.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 5295.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 5802.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 5261.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 910.8497174456716,
+      "ms": [
+        910.8497174456716
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "fit_intercept": true
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "host",
+        "inside_clock": "host_to_device_upload,host_validation,call",
+        "library": "mojolearn",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1859.3958830460906
+    },
+    "torch-gpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu",
+        "--lane",
+        "ols",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "95475401c8288a95",
+        "95475401c8288a95"
+      ],
+      "info": {
+        "config": "xc = x - mean, yc = y - mean; torch.linalg.lstsq(xc, yc[:, None]) (default driver; gels on CUDA); intercept = ymean - xmean @ coef",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "torch",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "seed": 7,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_backend": "cuda",
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "upload_ms_untimed": 146.66523411870003,
+        "version": "2.13.0+cu129"
+      },
+      "max_ms": 581.989424303174,
+      "median_ms": 581.989424303174,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 8878.5,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3012.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 8894.4,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3013.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 581.989424303174,
+      "ms": [
+        581.989424303174
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "torch",
+        "params": {
+          "fit_intercept": true,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "device",
+        "inside_clock": "call",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": 146.66523411870003
+      },
+      "status": "ok",
+      "warmup_ms": 733.6783418431878
+    },
+    "torch-gpu-eigh": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py",
+        "worker",
+        "--arm",
+        "torch-gpu-eigh",
+        "--lane",
+        "ols",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/ctd-data/rows-full"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "c69fa2b49f2f44a6",
+        "c69fa2b49f2f44a6"
+      ],
+      "info": {
+        "config": "centered normal equations: G = xc.T @ xc, b = xc.T @ yc, torch.linalg.eigh(G), pseudo-inverse cutoff d * eps32 * max|eig|",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "torch",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "seed": 7,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "torch_backend": "cuda",
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "upload_ms_untimed": 146.7810943722725,
+        "version": "2.13.0+cu129"
+      },
+      "max_ms": 19.936220720410347,
+      "median_ms": 19.936220720410347,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 3455.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3044.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 3455.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 3044.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "min_ms": 19.936220720410347,
+      "ms": [
+        19.936220720410347
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "torch",
+        "params": {
+          "fit_intercept": true,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "span": {
+        "fit_ms_untimed": null,
+        "input_home": "device",
+        "inside_clock": "call",
+        "library": "torch",
+        "pre_clock_fit": false,
+        "pre_clock_fit_source": "declared",
+        "upload_ms_untimed": 146.7810943722725
+      },
+      "status": "ok",
+      "warmup_ms": 214.25916720181704
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "4c25bd496cda0e88aefdd56e964a3cb050068bd5cbfe2ad26adb0d64c4484ea8",
+        "shape": [
+          2043304,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3e691df6be4f97e311a21b1a155a4aba0b3d0cc50948d452442904615832d2dc",
+        "shape": [
+          500000,
+          220
+        ]
+      },
+      "init": {
+        "dtype": "float32",
+        "sha256": "25f1f3356ecdd0f603573741ce2e6d11dcf02ee96ff168cce2d04b8be7b94d28",
+        "shape": [
+          8,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "25e6e0e797c2d45c74ad1e254e81f27fc953425c1fb6da38ea3329efa4254381",
+        "shape": [
+          2043304
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "a52392bd2069a76aafba8188e8aaf90666b446741363b333d0f2e4f01d46f596",
+        "shape": [
+          500000
+        ]
+      }
+    },
+    "block": "big",
+    "capped_below_4M": true,
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "the loader's test split, all 500000 rows",
+    "fit_rows": [
+      0,
+      2043304
+    ],
+    "fit_rows_available": 2043304,
+    "kmeans": {
+      "init_rows": [
+        0,
+        255413,
+        510826,
+        766239,
+        1021652,
+        1277065,
+        1532478,
+        1787891
+      ],
+      "k": 8,
+      "max_iter": 300
+    },
+    "lanes": [
+      "kmeans",
+      "pca",
+      "ols"
+    ],
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "pca": {
+      "n_components": 10
+    },
+    "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
+    "scaling": "none",
+    "sentinel_cells_replaced": {
+      "X": 1326565,
+      "Xq": 330995
+    },
+    "smoke_max_rows": null,
+    "target": "relevance grade 0..4",
+    "written": "2026-09-29T15:47:04Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "istella",
+  "finished": "2026-09-29T16:22:59Z",
+  "finished_rounds": "2026-09-29T16:22:57Z",
+  "infer": {
+    "arms": {
+      "cuml-gpu": {
+        "call_text": "cuml LinearRegression.predict(Xq on the device, output_type cupy); Xq uploaded before the clock, which ends at the device synchronize",
+        "digest_stable": true,
+        "digests": [
+          "e070e0075c5ba0ad",
+          "e070e0075c5ba0ad"
+        ],
+        "info": {
+          "upload_ms_untimed": 300.29614828526974
+        },
+        "max_ms": 3.9413832128047943,
+        "median_ms": 3.9413832128047943,
+        "mem": [
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 2584.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_mb": 5589.1,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          },
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 2586.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_mb": 5590.7,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          }
+        ],
+        "min_ms": 3.9413832128047943,
+        "ms": [
+          3.9413832128047943
+        ],
+        "status": "ok",
+        "warmup_ms": 3.18914745002985
+      },
+      "ours": {
+        "call_text": "mojolearn LinearRegression.predict(Xq), host rows in, host result out",
+        "digest_stable": true,
+        "digests": [
+          "89843bf5ffd23e57",
+          "89843bf5ffd23e57"
+        ],
+        "info": {},
+        "max_ms": 29.472103342413902,
+        "median_ms": 29.472103342413902,
+        "mem": [
+          {
+            "children_mb": 3.0,
+            "gpu_mb": 5802.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_mb": 3649.2,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          },
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 5802.0,
+            "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+            "host_mb": 3649.2,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          }
+        ],
+        "min_ms": 29.472103342413902,
+        "ms": [
+          29.472103342413902
+        ],
+        "status": "ok",
+        "warmup_ms": 28.277884237468243
+      },
+      "torch-gpu": {
+        "call_text": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+        "digest_stable": true,
+        "digests": [
+          "8fa7707f55fc9663",
+          "8fa7707f55fc9663"
+        ],
+        "info": {
+          "upload_ms_untimed": 20.26339527219534
+        },
+        "max_ms": 0.9506093338131905,
+        "median_ms": 0.9506093338131905,
+        "mem": [
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 2162.0,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_mb": 3013.8,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          },
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 2163.9,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_mb": 3015.7,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          }
+        ],
+        "min_ms": 0.9506093338131905,
+        "ms": [
+          0.9506093338131905
+        ],
+        "status": "ok",
+        "warmup_ms": 1.1792704463005066
+      },
+      "torch-gpu-eigh": {
+        "call_text": "torch Xq @ coef + intercept; Xq uploaded before the clock, which ends at the device synchronize",
+        "digest_stable": true,
+        "digests": [
+          "ed1df4e225101922",
+          "ed1df4e225101922"
+        ],
+        "info": {
+          "upload_ms_untimed": 26.370476931333542
+        },
+        "max_ms": 0.9660087525844574,
+        "median_ms": 0.9660087525844574,
+        "mem": [
+          {
+            "children_mb": 3.2,
+            "gpu_mb": 2154.2,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_mb": 3044.7,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          },
+          {
+            "children_mb": 3.1,
+            "gpu_mb": 2156.1,
+            "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+            "host_mb": 3046.6,
+            "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+          }
+        ],
+        "min_ms": 0.9660087525844574,
+        "ms": [
+          0.9660087525844574
+        ],
+        "status": "ok",
+        "warmup_ms": 0.9039575234055519
+      }
+    },
+    "batch": "Xq",
+    "call": "predict",
+    "quality": {
+      "cuml-gpu": {
+        "bits_equal_vs_ours": false,
+        "max_abs_diff_vs_ours": 5603.25932431221,
+        "predict_max_rel_err_own_fp64": 0.001280916224812198,
+        "r2_eval": -11032.159107362168,
+        "rmse_eval": 87.64863620738817
+      },
+      "ours": {
+        "predict_max_rel_err_own_fp64": 9.58131393081632e-07,
+        "r2_eval": 0.3319443958891074,
+        "rmse_eval": 0.6820269377562338
+      },
+      "torch-gpu": {
+        "bits_equal_vs_ours": false,
+        "max_abs_diff_vs_ours": NaN,
+        "predict_max_rel_err_own_fp64": NaN,
+        "r2_eval": NaN,
+        "rmse_eval": NaN
+      },
+      "torch-gpu-eigh": {
+        "bits_equal_vs_ours": false,
+        "max_abs_diff_vs_ours": 6.699504375457764,
+        "predict_max_rel_err_own_fp64": 7.287741895858824e-07,
+        "r2_eval": 0.15160403808489598,
+        "rmse_eval": 0.7685896268485353
+      }
+    },
+    "rows": 500000
+  },
+  "lane": "ols",
+  "lane_config": {
+    "mismatches": [
+      "seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)",
+      "solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff",
+      "scikit-learn positive=False and copy_X=True: parameters ours does not have"
+    ],
+    "params": "fit_intercept=True",
+    "rows": "big block, raw; R2 and RMSE on the 500,000 eval rows",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "cuml-gpu": {
+        "library": "cuml",
+        "params": {
+          "algorithm": "eig",
+          "fit_intercept": true,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "fit_intercept": true,
+          "seed": "none (deterministic)"
+        },
+        "source": "get_params"
+      },
+      "torch-gpu": {
+        "library": "torch",
+        "params": {
+          "fit_intercept": true,
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-gpu-eigh": {
+        "library": "torch",
+        "params": {
+          "fit_intercept": true,
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "cuml-gpu",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "torch-gpu",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "torch-gpu-eigh",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      }
+    ],
+    "exceptions": [],
+    "family": "classical",
+    "lane": "ols",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "cuml-gpu",
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "cuml-gpu": {
+      "finite": true,
+      "r2": -11031.855104629021,
+      "rmse": 87.64742868340292
+    },
+    "ours": {
+      "finite": true,
+      "r2": 0.3319443836684286,
+      "rmse": 0.6820269439943614
+    },
+    "torch-gpu": {
+      "finite": false,
+      "r2": NaN,
+      "rmse": NaN
+    },
+    "torch-gpu-eigh": {
+      "finite": true,
+      "r2": 0.1516040301195245,
+      "rmse": 0.7685896304565804
+    }
+  },
+  "ratios_ours_over": {
+    "cuml-gpu": 11.46671780012526,
+    "torch-gpu": 1.5650623179901382,
+    "torch-gpu-eigh": 45.688183844852794
+  },
+  "rounds_requested": 1,
+  "script": "tools/classical_two_datasets.py",
+  "spans": {
+    "cuml-gpu": {
+      "fit_ms_untimed": null,
+      "input_home": "device",
+      "inside_clock": "call",
+      "library": "cuml",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": 1291.6188705712557
+    },
+    "ours": {
+      "fit_ms_untimed": null,
+      "input_home": "host",
+      "inside_clock": "host_to_device_upload,host_validation,call",
+      "library": "mojolearn",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": null
+    },
+    "torch-gpu": {
+      "fit_ms_untimed": null,
+      "input_home": "device",
+      "inside_clock": "call",
+      "library": "torch",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": 146.66523411870003
+    },
+    "torch-gpu-eigh": {
+      "fit_ms_untimed": null,
+      "input_home": "device",
+      "inside_clock": "call",
+      "library": "torch",
+      "pre_clock_fit": false,
+      "pre_clock_fit_source": "declared",
+      "upload_ms_untimed": 146.7810943722725
+    }
+  },
+  "started": "2026-09-29T16:22:35Z"
+}

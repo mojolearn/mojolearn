@@ -1,0 +1,559 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "1b972178883b8734",
+        "1b972178883b8734"
+      ],
+      "info": {
+        "call": "mojolearn.Mamba3BlockInference(weights).forward(x) (CPU host binding)",
+        "cls": "Mamba3BlockInference",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/neural_inference.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 73.85968696326017,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 128.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 134.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        73.85968696326017
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 89.76984396576881
+    },
+    "torch-cpu-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-compile-bf16",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "bcfb3c03e1963243",
+        "bcfb3c03e1963243"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "cpu",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cpu', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "gen_corpus.py m3_forward on the CPU",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 128
+        },
+        "device": "cpu",
+        "device_name": "AMD EPYC 9554 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "cpu",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 66.29222258925438,
+      "mem": [
+        {
+          "children_mb": 3.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1144.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1151.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        66.29222258925438
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 67635.08573547006
+    },
+    "torch-cpu-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-compile-fp32",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "92da9b3c3f1c9dcf",
+        "92da9b3c3f1c9dcf"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "gen_corpus.py m3_forward on the CPU",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 128
+        },
+        "device": "cpu",
+        "device_name": "AMD EPYC 9554 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "cpu",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 66.5326938033104,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1145.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1151.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        66.5326938033104
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 66067.80268531293
+    },
+    "torch-cpu-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-eager-bf16",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "a991fd8cf4abc426",
+        "a991fd8cf4abc426"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "cpu",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cpu', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "gen_corpus.py m3_forward on the CPU",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 128
+        },
+        "device": "cpu",
+        "device_name": "AMD EPYC 9554 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "cpu",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 30.543582513928413,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 749.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 764.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        30.543582513928413
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 727.9200237244368
+    },
+    "torch-cpu-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-eager-fp32",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b18fd27f8eb52171",
+        "b18fd27f8eb52171"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "gen_corpus.py m3_forward on the CPU",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 128
+        },
+        "device": "cpu",
+        "device_name": "AMD EPYC 9554 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "cpu",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 127.41320766508579,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 746.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 766.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        127.41320766508579
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 634.9529335275292
+    }
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T17:53:34Z",
+  "inputs": {
+    "inputs": "every tensor default_rng(7).uniform over mamba/corpus/gen_corpus.py's default range for it",
+    "lane": "mamba3-infer",
+    "ranges": {
+      "B_bias": [
+        0.5,
+        1.5
+      ],
+      "B_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "C_bias": [
+        0.5,
+        1.5
+      ],
+      "C_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "D": [
+        0.5,
+        1.5
+      ],
+      "block_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "dt_bias": [
+        -7.0,
+        -2.0
+      ],
+      "in_proj.weight": [
+        -0.015625,
+        0.015625
+      ],
+      "out_proj.weight": [
+        -0.015625,
+        0.015625
+      ]
+    },
+    "seed": 7,
+    "sha256": {
+      "w:B_bias": "a9a8b062450ae62b",
+      "w:B_norm.weight": "55dfd3959b1522d0",
+      "w:C_bias": "0ca29b45b693f9ff",
+      "w:C_norm.weight": "63ee77435d78b3ce",
+      "w:D": "9109c3392c57e588",
+      "w:block_norm.weight": "cb75423c968fcd4f",
+      "w:dt_bias": "503ad1ebfc1aea36",
+      "w:in_proj.weight": "0bd52bf63f4c3018",
+      "w:out_proj.weight": "7806c30fb277c3d2",
+      "x": "8c25b3ca135c317e"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "label": "B1 L512 DM384",
+      "length": 512,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "mamba3-infer",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-cpu-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-cpu-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-cpu-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-cpu-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/mamba3-infer",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {},
+    "torch-cpu-compile-bf16": {
+      "max_abs_diff_vs_ours": 0.0020397305488586426,
+      "max_rel_diff_vs_ours": 0.0009065038772437832
+    },
+    "torch-cpu-compile-fp32": {
+      "max_abs_diff_vs_ours": 2.980232238769531e-07,
+      "max_rel_diff_vs_ours": 1.3244847860141188e-07
+    },
+    "torch-cpu-eager-bf16": {
+      "max_abs_diff_vs_ours": 0.002148151397705078,
+      "max_rel_diff_vs_ours": 0.0009546886337589768
+    },
+    "torch-cpu-eager-fp32": {
+      "max_abs_diff_vs_ours": 2.384185791015625e-07,
+      "max_rel_diff_vs_ours": 1.0595878288112951e-07
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L512 DM384",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "label": "B1 L512 DM384",
+    "length": 512,
+    "name": "full"
+  },
+  "started": "2026-09-29T17:51:11Z",
+  "torch_settings": {
+    "torch-cpu-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-cpu-compile-fp32": "float32, TF32 off",
+    "torch-cpu-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-cpu-eager-fp32": "float32, TF32 off"
+  }
+}

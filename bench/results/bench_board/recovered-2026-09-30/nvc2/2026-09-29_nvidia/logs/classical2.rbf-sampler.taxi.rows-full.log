@@ -1,0 +1,9 @@
+
+=== 2026-09-29T17:11:50Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_more.py race --lane rbf-sampler --dataset taxi --data /root/bench-board-cache-clean/more-data/rows-full --arms ours,sklearn-cpu --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/classical2/rows-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"gamma": 0.09090909090909091, "n_components": 256, "seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"gamma": 0.09090909090909091, "n_components": 256, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "sklearn-cpu", "ours": 0.09090909090909091, "param": "gamma", "same": true, "theirs": 0.09090909090909091}, {"arm": "sklearn-cpu", "ours": 256, "param": "n_components", "same": true, "theirs": 256}], "exceptions": [], "family": "classical2", "lane": "rbf-sampler", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+MORE-ROUND lane=rbf-sampler dataset=taxi arm=ours round=0 ms=986.970 digest=1236a080ff16b362
+MORE-ROUND lane=rbf-sampler dataset=taxi arm=sklearn-cpu round=0 ms=42.484 digest=b71903683961f92d
+MORE-ROUND lane=rbf-sampler dataset=taxi arm=sklearn-cpu round=1 ms=38.932 digest=b71903683961f92d
+MORE-ROUND lane=rbf-sampler dataset=taxi arm=ours round=1 ms=83.687 digest=1236a080ff16b362
+MORE lane=rbf-sampler dataset=taxi arm=ours status=ok median_ms=83.68740044534206 quality={"kernel_rel_error": 0.10854922362456007}
+MORE lane=rbf-sampler dataset=taxi arm=sklearn-cpu status=ok median_ms=38.931865245103836 quality={"kernel_rel_error": 0.08377530461949176}

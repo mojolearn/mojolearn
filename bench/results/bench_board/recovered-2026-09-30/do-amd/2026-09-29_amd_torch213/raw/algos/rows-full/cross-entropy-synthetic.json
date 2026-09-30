@@ -1,0 +1,376 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "cross-entropy",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "91289b0ef1dddcac",
+        "91289b0ef1dddcac"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.cross_entropy(ignore_index=-100, label_smoothing=0.0, reduction='mean')",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_training'))",
+        "numeric_mode_used": "unknown",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 216.69769298750907,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2888.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2897.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        216.69769298750907
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "ignore_index": -100,
+        "label_smoothing": 0.0,
+        "reduction": "mean"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 541.8928569997661
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "cross-entropy",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "6bc20d399e100f6a",
+        "6bc20d399e100f6a"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "F.cross_entropy(logits, targets).backward() on cuda, compile",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "setting": "compile-fp32",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 84.41316901007667,
+      "mem": [
+        {
+          "children_mb": 890.7,
+          "gpu_mb": 512.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2218.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 1372.6,
+          "gpu_mb": 512.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2403.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        84.41316901007667
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "ignore_index": -100,
+        "label_smoothing": 0.0,
+        "reduction": "mean",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 922.6432339928579
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/root/bench-board-cache-t213/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "cross-entropy",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-t213/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "db1512c20fb986a9",
+        "db1512c20fb986a9"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "F.cross_entropy(logits, targets).backward() on cuda, eager",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "device",
+        "library": "torch",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "setting": "eager-fp32",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "2.13.0+rocm7.1"
+      },
+      "median_ms": 8.366107009351254,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1024.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2010.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 1024.1,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 2195.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        8.366107009351254
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "ignore_index": -100,
+        "label_smoothing": 0.0,
+        "reduction": "mean",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 40.977516007842496
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "74ce083bc773b6cbb29d15b49d774f3fa79554af",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T06:23:35Z",
+  "lane": "cross-entropy",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "training",
+    "kind": "extra",
+    "mismatches": [],
+    "notes": [
+      "logits default_rng(7) standard normal, targets integers in [0, 8192)"
+    ],
+    "ours_class": "mojolearn.cross_entropy or mojolearn.training.cross_entropy",
+    "params": {
+      "ignore_index": -100,
+      "label_smoothing": 0.0,
+      "reduction": "mean"
+    },
+    "quality": "loss relative difference vs float64; max relative difference of dlogits (first 256 rows) vs ours",
+    "task": "xent",
+    "timed_fit": "cross_entropy(logits (8192 x 8192), targets) forward and dlogits",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/cross-entropy",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "loss_rel_err_vs_fp64": 4.5643472537888876e-08
+    },
+    "torch-compile-fp32": {
+      "grad_max_rel_diff_vs_ours": 7.450612127391162e-09,
+      "loss_rel_err_vs_fp64": 4.5643472537888876e-08
+    },
+    "torch-eager-fp32": {
+      "grad_max_rel_diff_vs_ours": 4.1909693216575284e-09,
+      "loss_rel_err_vs_fp64": 4.5643472537888876e-08
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T06:23:20Z"
+}

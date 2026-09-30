@@ -1,0 +1,306 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gemm-int8",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-int8-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9b16c7064e10cecd",
+        "9b16c7064e10cecd"
+      ],
+      "info": {
+        "call": "mojolearn.linalg.matmul_int8((a_codes, 0), (b_codes, 0)) = a @ b.T exactly",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/linalg.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "profile": "mojolearn.identical.gemm.fp32.v1",
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 2917.068953625858,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 309.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 385.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        2917.068953625858
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 3049.317065626383
+    },
+    "torch-compile-int8": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-int8",
+        "--lane",
+        "gemm-int8",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-int8-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9b16c7064e10cecd",
+        "9b16c7064e10cecd"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()",
+        "column": "compile_int8 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, int8 operands, int32 accumulate (torch._int_mm)",
+        "pre_clock_fit": false,
+        "precision": "int8 operands, int32 accumulate (torch._int_mm)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-int8",
+        "torch_backend": "cuda",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 47.78925236314535,
+      "mem": [
+        {
+          "children_mb": 485.6,
+          "gpu_mb": 160.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 963.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 499.6,
+          "gpu_mb": 160.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1010.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        47.78925236314535
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 1061.4520721137524
+    },
+    "torch-eager-int8": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-int8",
+        "--lane",
+        "gemm-int8",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-int8-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9b16c7064e10cecd",
+        "9b16c7064e10cecd"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "torch._int_mm(a.to(dev), b.to(dev).t()), .float().cpu()",
+        "column": "eager_int8 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, int8 operands, int32 accumulate (torch._int_mm)",
+        "pre_clock_fit": false,
+        "precision": "int8 operands, int32 accumulate (torch._int_mm)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-int8",
+        "torch_backend": "cuda",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 48.169925808906555,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 160.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 751.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 160.0,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 803.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        48.169925808906555
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 82.7724039554596
+    }
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T18:55:39Z",
+  "inputs": {
+    "inputs": "A [m,k], B [n,k] = default_rng(7).integers(-127, 128) int8; C = A B^T",
+    "lane": "gemm-int8",
+    "seed": 7,
+    "sha256": {
+      "a": "4157ef2ec27e9864",
+      "b": "43e1e9a5539cbe4b"
+    },
+    "shape": {
+      "k": 4096,
+      "label": "4096x4096x4096",
+      "m": 4096,
+      "n": 4096,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "gemm-int8",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-int8": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-int8": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/gemm-int8",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_err_vs_fp64": 0.0
+    },
+    "torch-compile-int8": {
+      "max_abs_diff_vs_ours": 0.0,
+      "max_rel_diff_vs_ours": 0.0,
+      "max_rel_err_vs_fp64": 0.0
+    },
+    "torch-eager-int8": {
+      "max_abs_diff_vs_ours": 0.0,
+      "max_rel_diff_vs_ours": 0.0,
+      "max_rel_err_vs_fp64": 0.0
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "4096x4096x4096",
+  "shape_record": {
+    "k": 4096,
+    "label": "4096x4096x4096",
+    "m": 4096,
+    "n": 4096,
+    "name": "full"
+  },
+  "started": "2026-09-29T18:55:23Z",
+  "torch_settings": {
+    "torch-compile-int8": "int8 operands, int32 accumulate (torch._int_mm)",
+    "torch-eager-int8": "int8 operands, int32 accumulate (torch._int_mm)"
+  }
+}

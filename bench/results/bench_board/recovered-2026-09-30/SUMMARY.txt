@@ -1,0 +1,27 @@
+Saved board coverage audit
+Uses primary full-data runs plus targeted full-data supplements. Small proof/smoke runs do not substitute for full-data measurements. A recorded race is not necessarily a successful measurement: arm status/timing and parameter checks are separately listed in coverage.json.
+
+nvidia: 464 planned; 325 without a record; 0 failed race records; 61 fit/inference cells without status=ok and a timing.
+  algos: 325 missing of 363; 0 failed
+  classical: 0 missing of 16; 0 failed
+  classical2: 0 missing of 44; 0 failed
+  neural: 0 missing of 20; 0 failed
+  trees: 0 missing of 21; 0 failed
+amd: 443 planned; 296 without a record; 1 failed race records; 57 fit/inference cells without status=ok and a timing.
+  algos: 296 missing of 363; 0 failed
+  classical: 0 missing of 16; 1 failed
+  classical2: 0 missing of 44; 0 failed
+  neural: 0 missing of 20; 0 failed
+m2pro: 431 planned; 364 without a record; 0 failed race records; 17 fit/inference cells without status=ok and a timing.
+  algos: 353 missing of 353; 0 failed
+  classical: 0 missing of 14; 0 failed
+  classical2: 0 missing of 44; 0 failed
+  neural: 11 missing of 20; 0 failed
+m3ultra: 431 planned; 323 without a record; 0 failed race records; 33 fit/inference cells without status=ok and a timing.
+  algos: 323 missing of 353; 0 failed
+  classical: 0 missing of 14; 0 failed
+  classical2: 0 missing of 44; 0 failed
+  neural: 0 missing of 20; 0 failed
+
+Main runs ended at wrapper time limits (board exit137); queue success was not coverage completion.
+Exact race IDs and arm statuses: missing-and-failed.csv and coverage.json.

@@ -1,0 +1,654 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv-0829/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "bayesian-gmm",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "9bc3904ec9889845",
+        "9bc3904ec9889845"
+      ],
+      "infer_ms": [
+        55.92870799591765
+      ],
+      "infer_warmup_ms": 71.9846249994589,
+      "info": {
+        "config": "mojolearn.BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.29"
+      },
+      "median_ms": 39953.45333300065,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2040.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2168.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        39953.45333300065
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "covariance_prior": null,
+          "covariance_type": "full",
+          "degrees_of_freedom_prior": null,
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "mean_precision_prior": null,
+          "mean_prior": null,
+          "n_components": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "reg_covar": 0.003,
+          "tol": 0.001,
+          "verbose_interval": 10,
+          "weight_concentration_prior": null,
+          "weight_concentration_prior_type": "dirichlet_process"
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 47642.6891250012
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv-0829/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "bayesian-gmm",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "1eff503fc8b0035a",
+        "1eff503fc8b0035a"
+      ],
+      "infer_ms": [
+        55.23283399816137
+      ],
+      "infer_warmup_ms": 75.71004200144671,
+      "info": {
+        "config": "mojolearn.BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.29"
+      },
+      "median_ms": 70783.47370801202,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1871.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1917.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        70783.47370801202
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "covariance_prior": null,
+          "covariance_type": "full",
+          "degrees_of_freedom_prior": null,
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "mean_precision_prior": null,
+          "mean_prior": null,
+          "n_components": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "reg_covar": 0.003,
+          "tol": 0.001,
+          "verbose_interval": 10,
+          "weight_concentration_prior": null,
+          "weight_concentration_prior_type": "dirichlet_process"
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 74542.32033299922
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv-0829/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "bayesian-gmm",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e956db86de5e7d78",
+        "e956db86de5e7d78"
+      ],
+      "infer_ms": [
+        89.64695899339858
+      ],
+      "infer_warmup_ms": 90.47816599195357,
+      "info": {
+        "config": "sklearn.mixture:BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 82775.65008400416,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1616.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1441.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        82775.65008400416
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "covariance_prior": null,
+          "covariance_type": "full",
+          "degrees_of_freedom_prior": null,
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "mean_precision_prior": null,
+          "mean_prior": null,
+          "n_components": 8,
+          "n_init": 1,
+          "random_state": 7,
+          "reg_covar": 0.003,
+          "tol": 0.001,
+          "verbose_interval": 10,
+          "weight_concentration_prior": null,
+          "weight_concentration_prior_type": "dirichlet_process"
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 83307.1984170092
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+        "shape": [
+          1000000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+        "shape": [
+          100000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "22d8d7786822923f2f76455d8d9e0fede1f98f1555cd6a7697d4ccfb8fd632f2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34ff64a373b16b53c5b9199629e265b739d60ecbef7074f53bc8029133a2150c",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059,
+      "Xq": 66406
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T05:10:39Z"
+  },
+  "commit": "9cee9ef68a90029b6a158ba7da2fa1d4fa064ee5",
+  "dataset": "istella",
+  "finished": "2026-09-30T00:44:46Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "9bc3904ec9889845",
+          "9bc3904ec9889845"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+          "device": "gpu",
+          "device_name": "Apple M3 Ultra",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.29"
+        },
+        "ms": [
+          55.92870799591765
+        ],
+        "status": "ok",
+        "warmup_ms": 71.9846249994589
+      },
+      "ours-fast": {
+        "digest_stable": null,
+        "digests": [
+          "1eff503fc8b0035a",
+          "1eff503fc8b0035a"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+          "device": "gpu",
+          "device_name": "Apple M3 Ultra",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/bench-board-cache/venv-0829/lib/python3.13/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "fast",
+          "numeric_mode_how": "_mojolearn_x_cluster numeric_mode constant",
+          "numeric_mode_used": "fast",
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.29"
+        },
+        "ms": [
+          55.23283399816137
+        ],
+        "status": "ok",
+        "warmup_ms": 75.71004200144671
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "e956db86de5e7d78",
+          "e956db86de5e7d78"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.mixture:BayesianGaussianMixture(covariance_type='full', init_params='kmeans', max_iter=100, n_components=8, n_init=1, random_state=7, reg_covar=0.003, tol=0.001, weight_concentration_prior_type='dirichlet_process')",
+          "cpu_model": "arm",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.5.3",
+          "os_cpu_count": 28,
+          "pre_clock_fit": false,
+          "python": "3.13.15",
+          "sched_affinity_cpus": null,
+          "scipy": "1.18.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": null,
+              "filepath": "libomp.dylib",
+              "internal_api": "openmp",
+              "num_threads": 28,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          89.64695899339858
+        ],
+        "status": "ok",
+        "warmup_ms": 90.47816599195357
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "bayesian-gmm",
+  "lane_config": {
+    "block": "reg",
+    "dataset_params": {
+      "istella": {
+        "reg_covar": 0.003
+      }
+    },
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "cluster",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [
+      "reg_covar 3e-3 on Istella-S (taxi keeps 1e-6), for every arm on every vendor: at 1e-6 every arm refused on the constant-dropped Istella rows (ours and ours-fast on 0.8.29 with the GEMM moments, and scikit-learn: ill-defined empirical covariance, m3ultra-b 2026-09-29), and 3e-3 is the smallest value at which the arms fitted (tools/gmm_istella_probe.py), the value classical2/gmm uses on Istella-S (GMM_REG_COVAR)",
+      "constant columns dropped: the columns constant on the fit rows (Istella-S: 20 of 220 on the 100,000 fit rows) are removed from X and Xq before the clock, the same for every arm; a full covariance over them is singular, and on the raw float32 rows ours, scikit-learn float32 and both Bayesian mixtures refused (ill-defined empirical covariance) where only scikit-learn float64 fitted (m3ultra-b, 2026-09-29, tools/gmm_istella_probe.py)"
+    ],
+    "ours_class": "mojolearn.BayesianGaussianMixture",
+    "params": {
+      "covariance_type": "full",
+      "init_params": "kmeans",
+      "max_iter": 100,
+      "n_components": 8,
+      "n_init": 1,
+      "random_state": 7,
+      "reg_covar": 1e-06,
+      "tol": 0.001,
+      "weight_concentration_prior_type": "dirichlet_process"
+    },
+    "quality": "held-out mean log-likelihood from each arm's weights, means and covariances",
+    "sklearn": "sklearn.mixture:BayesianGaussianMixture",
+    "stride_subsets": {
+      "X": 100000,
+      "Xq": 20000
+    },
+    "task": "gmm",
+    "timed_fit": "fit(X)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "covariance_type": "full",
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "n_components": 8,
+          "n_init": 1,
+          "reg_covar": 0.003,
+          "seed": 7,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "covariance_type": "full",
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "n_components": 8,
+          "n_init": 1,
+          "reg_covar": 0.003,
+          "seed": 7,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "covariance_type": "full",
+          "init_params": "kmeans",
+          "max_iter": 100,
+          "n_components": 8,
+          "n_init": 1,
+          "reg_covar": 0.003,
+          "seed": 7,
+          "tol": 0.001
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": "full",
+        "param": "covariance_type",
+        "same": true,
+        "theirs": "full"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "kmeans",
+        "param": "init_params",
+        "same": true,
+        "theirs": "kmeans"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 100,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 1,
+        "param": "n_init",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.003,
+        "param": "reg_covar",
+        "same": true,
+        "theirs": 0.003
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 0.001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.001
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "full",
+        "param": "covariance_type",
+        "same": true,
+        "theirs": "full"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "kmeans",
+        "param": "init_params",
+        "same": true,
+        "theirs": "kmeans"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 100,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1,
+        "param": "n_init",
+        "same": true,
+        "theirs": 1
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.003,
+        "param": "reg_covar",
+        "same": true,
+        "theirs": 0.003
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.001
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/bayesian-gmm",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "mean_log_likelihood": 175.3220289210466
+    },
+    "ours-fast": {
+      "mean_log_likelihood": 175.56176202983414
+    },
+    "sklearn-cpu": {
+      "mean_log_likelihood": 201.77071583709954
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 100000x200; Xq 20000x200; y 100000; yq 20000",
+  "started": "2026-09-30T00:38:05Z"
+}

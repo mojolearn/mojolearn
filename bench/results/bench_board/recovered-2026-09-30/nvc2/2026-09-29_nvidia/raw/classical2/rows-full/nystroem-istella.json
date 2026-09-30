@@ -1,0 +1,322 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "nystroem",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "Exception('km_basis_indices: n_samples 100000 exceeds KM_MAX_BASIS_POOL = 4096. The rank pass counts a total order over every pair of rows, which is n_samples^2 host comparisons. To close this refusal, replace the counting rank with a pinned segmented sort over the 64-bit composite key -- the construction neighbors/checks/select_radix_identical.mojo uses for its (distance, index) key -- and re-gate check_nystroem_basis_prefix_stability at the larger size. DEVIATION 1672')",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "coef0": 1.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "n_components": 256,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit_transform of every row",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "error",
+      "warmup_ms": null
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "nystroem",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "6e92e12f7cd1fc1d",
+        "6e92e12f7cd1fc1d"
+      ],
+      "info": {
+        "config": "Nystroem(coef0=1.0, degree=3, gamma=0.004545454545454545, n_components=256,\n         n_jobs=-1, random_state=7)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 1477.05830167979,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1603.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1731.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1477.05830167979
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "coef0": 1.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "kernel_params": null,
+          "n_components": 256,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit_transform of every row",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1382.0997150614858
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+        "shape": [
+          1000000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+        "shape": [
+          100000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "22d8d7786822923f2f76455d8d9e0fede1f98f1555cd6a7697d4ccfb8fd632f2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34ff64a373b16b53c5b9199629e265b739d60ecbef7074f53bc8029133a2150c",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059,
+      "Xq": 66406
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T15:37:03Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "istella",
+  "finished": "2026-09-29T17:11:50Z",
+  "lane": "nystroem",
+  "lane_config": {
+    "mismatches": [
+      "the landmark rows are each library's own random draw from seed 7",
+      "degree=3, coef0=1.0 on every arm; the rbf kernel reads neither"
+    ],
+    "params": "kernel='rbf', gamma=1/d, n_components=256, random_state=7",
+    "quality": "relative Frobenius error of Z Z^T against the exact kernel on the check rows",
+    "rows": "100000 stride rows of the reg block (standardized by the fit rows); kernel check on the first 1000",
+    "timed": "fit_transform of every row"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "coef0": 1.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "n_components": 256,
+          "seed": 7
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "coef0": 1.0,
+          "degree": 3,
+          "gamma": 0.004545454545454545,
+          "kernel": "rbf",
+          "n_components": 256,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1.0,
+        "param": "coef0",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 3,
+        "param": "degree",
+        "same": true,
+        "theirs": 3
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.004545454545454545,
+        "param": "gamma",
+        "same": true,
+        "theirs": 0.004545454545454545
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "rbf",
+        "param": "kernel",
+        "same": true,
+        "theirs": "rbf"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 256,
+        "param": "n_components",
+        "same": true,
+        "theirs": 256
+      }
+    ],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "nystroem",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "sklearn-cpu": {
+      "kernel_rel_error": 0.03895801522477504
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 100000x220; Xcheck 1000x220",
+  "started": "2026-09-29T17:11:44Z"
+}

@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py", line 2234, in worker
+    runner.call()
+    ~~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py", line 1911, in call
+    est.fit(self.X)
+    ~~~~~~~^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/hdbscan.py", line 222, in fit
+    n_clusters = ext.hdbscan_fit(
+        addrs,
+    ...<3 lines>...
+         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],
+    )
+Exception: hdbscan.build_mr_linkage: n_rows=100000 > 46340; the dense mutual reachability graph is m * m cells and hierarchy's PAIRWISE connectivity refuses past that bound (their value_idx overflows). To close this refusal, implementation the SPARSE arm (DEVIATION 1600), which needs the cross-component fix-up in the hierarchy lane and a k-NN distance epilogue in the neighbors lane

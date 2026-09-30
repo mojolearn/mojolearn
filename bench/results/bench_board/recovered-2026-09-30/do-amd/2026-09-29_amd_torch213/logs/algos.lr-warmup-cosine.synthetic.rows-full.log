@@ -1,0 +1,9 @@
+
+=== 2026-09-30T06:24:13Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane lr-warmup-cosine --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lr-warmup-cosine", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours", "torch-cpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=0 ms=332426.789 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=torch-cpu round=0 ms=707.182 infer_ms=None digest=fdc9a3e97c5b319f
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=torch-cpu round=1 ms=127.310 infer_ms=None digest=fdc9a3e97c5b319f
+ALGOS-ROUND lane=lr-warmup-cosine dataset=synthetic arm=ours round=1 ms=332516.921 infer_ms=None digest=61e4ce1e09ca405e
+ALGOS lane=lr-warmup-cosine dataset=synthetic arm=ours status=ok median_ms=332516.9214710186 quality={"max_rel_diff_vs_ours": 0.0}
+ALGOS lane=lr-warmup-cosine dataset=synthetic arm=torch-cpu status=ok median_ms=127.31027798145078 quality={"max_rel_diff_vs_ours": 0.00015712519462659228}

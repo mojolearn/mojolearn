@@ -1,0 +1,2 @@
+/root/mojolearn-wt/steward-do-amd/tools/speed_torch_seq.py:595: UserWarning: Using AOTriton backend for Efficient Attention forward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/attention.hip:1180.)
+  o = self.t.nn.functional.scaled_dot_product_attention(

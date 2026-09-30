@@ -1,0 +1,513 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "spectral",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "cb84426111d204ef",
+        "cb84426111d204ef"
+      ],
+      "info": {
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_metrics numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 177.5465839964454,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 350.9,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 360.9,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        177.5465839964454
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "eigen_tol": 1e-05,
+          "gamma": null,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "prediction_data": false,
+          "random_state": 7
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 154.46245800558245
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "spectral",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "cb84426111d204ef",
+        "cb84426111d204ef"
+      ],
+      "info": {
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_metrics numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 177.14995900314534,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 350.5,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 362.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        177.14995900314534
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "eigen_tol": 1e-05,
+          "gamma": null,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "prediction_data": false,
+          "random_state": 7
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 172.84545900474768
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "spectral",
+        "--dataset",
+        "istella",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/more-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "086d2b5a56cbf0d9",
+        "086d2b5a56cbf0d9"
+      ],
+      "info": {
+        "config": "SpectralClustering(affinity='nearest_neighbors', n_components=8, n_jobs=-1,\n                   random_state=7)",
+        "cpu_model": "arm",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 28,
+        "pre_clock_fit": false,
+        "python": "3.13.15",
+        "sched_affinity_cpus": null,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libomp.dylib",
+            "internal_api": "openmp",
+            "num_threads": 28,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 167.88379199715564,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 167.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 172.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        167.88379199715564
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "coef0": 1,
+          "degree": 3,
+          "eigen_solver": null,
+          "eigen_tol": "auto",
+          "gamma": 1.0,
+          "kernel_params": null,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 180.1991249958519
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "0f589a2783ae5b536bbd76dbd44e132205b47efa6ea8048de53a8a2e6ebe7426",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "33d68ff78ffcb702fc849947b14195be0f0aff3946f0e1d95f321d6b415fc7b6",
+        "shape": [
+          2000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "8c134d2b8cdb51fcb03fa71d5028494ddf675ce31fed1c30350d4871b4f7dbfb",
+        "shape": [
+          2000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34f297559344f6e256ec53a230155175c33e02c985ff5f8c38be659c5caabf50",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "cls",
+    "data_root": "/Users/ec2-user/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 2000 of 500000 test rows",
+    "fit_rows": "stride sample of 2000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 1303,
+      "Xq": 1331
+    },
+    "smoke_max_rows": 2000,
+    "target": "binary",
+    "written": "2026-09-29T12:25:03Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "istella",
+  "finished": "2026-09-29T12:34:02Z",
+  "lane": "spectral",
+  "lane_config": {
+    "mismatches": [
+      "eigensolver: ours Lanczos eigen_tol 1e-5 (its default); scikit-learn arpack eigen_tol='auto'; each library's own k-means on the embedding",
+      "gamma, degree, coef0: not read by the nearest_neighbors affinity; ours refuses any value (None), scikit-learn holds 1.0, 3, 1"
+    ],
+    "params": "n_clusters=8, affinity='nearest_neighbors', n_neighbors=10, assign_labels='kmeans', n_init=10, n_components=8, random_state=7",
+    "quality": "cluster count, silhouette, ARI vs ours",
+    "rows": "10000 stride rows of the cls block (standardized by the fit rows); O(n^2) affinity",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "gamma": null,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "attributes"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "gamma": null,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "attributes"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "assign_labels": "kmeans",
+          "coef0": 1,
+          "degree": 3,
+          "gamma": 1.0,
+          "n_clusters": 8,
+          "n_components": 8,
+          "n_init": 10,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "ours-fast",
+        "ours": "nearest_neighbors",
+        "param": "affinity",
+        "same": true,
+        "theirs": "nearest_neighbors"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": "kmeans",
+        "param": "assign_labels",
+        "same": true,
+        "theirs": "kmeans"
+      },
+      {
+        "arm": "ours-fast",
+        "ours": null,
+        "param": "gamma",
+        "same": false,
+        "theirs": null
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 8,
+        "param": "n_clusters",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 10,
+        "param": "n_init",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "ours-fast",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "nearest_neighbors",
+        "param": "affinity",
+        "same": true,
+        "theirs": "nearest_neighbors"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "kmeans",
+        "param": "assign_labels",
+        "same": true,
+        "theirs": "kmeans"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "gamma",
+        "same": false,
+        "theirs": 1.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 8,
+        "param": "n_clusters",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 8,
+        "param": "n_components",
+        "same": true,
+        "theirs": 8
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "n_init",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "ours-fast",
+        "ours": null,
+        "param": "gamma",
+        "reason": "affinity='nearest_neighbors' reads no gamma: ours refuses any value (None), scikit-learn holds its default (1.0 clustering, None embedding)",
+        "theirs": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "gamma",
+        "reason": "affinity='nearest_neighbors' reads no gamma: ours refuses any value (None), scikit-learn holds its default (1.0 clustering, None embedding)",
+        "theirs": 1.0
+      }
+    ],
+    "family": "classical2",
+    "lane": "spectral",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "n_clusters": 8,
+      "silhouette": 0.05862550134469927
+    },
+    "ours-fast": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 8,
+      "silhouette": 0.05862550134469927
+    },
+    "sklearn-cpu": {
+      "ari_vs_ours": 1.0,
+      "n_clusters": 8,
+      "silhouette": 0.05862550134469927
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 2000x220",
+  "started": "2026-09-29T12:34:00Z"
+}

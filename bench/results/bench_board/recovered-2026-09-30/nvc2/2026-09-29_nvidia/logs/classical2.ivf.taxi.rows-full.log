@@ -1,0 +1,16 @@
+
+=== 2026-09-29T17:12:10Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_more.py race --lane ivf --dataset taxi --data /root/bench-board-cache-clean/more-data/rows-full --arms ours,cuvs-gpu --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/classical2/rows-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"cuvs-gpu": {"library": "cuvs", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": "none (no argument; draws random numbers, see exceptions)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"metric": "sqeuclidean", "n_neighbors": 10, "nlist": 1024, "nprobe": 32, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "cuvs-gpu", "ours": "sqeuclidean", "param": "metric", "same": true, "theirs": "sqeuclidean"}, {"arm": "cuvs-gpu", "ours": 10, "param": "n_neighbors", "same": true, "theirs": 10}, {"arm": "cuvs-gpu", "ours": 1024, "param": "nlist", "same": true, "theirs": 1024}, {"arm": "cuvs-gpu", "ours": 32, "param": "nprobe", "same": true, "theirs": 32}], "exceptions": [{"arm": "cuvs-gpu", "param": "seed", "reason": "cuVS ivf_flat IndexParams takes no seed and its k-means training samples rows; ours and faiss get 7", "value": null}], "family": "classical2", "lane": "ivf", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+MORE-ROUND lane=ivf dataset=taxi arm=ours round=0 ms=35883.209 digest=e00141a7605ff662
+MORE-ROUND lane=ivf dataset=taxi arm=cuvs-gpu round=0 ms=655.579 digest=b36b80d1a99822a5
+MORE-ROUND lane=ivf dataset=taxi arm=cuvs-gpu round=1 ms=219.459 digest=2939e44f3704b9ba
+MORE-ROUND lane=ivf dataset=taxi arm=ours round=1 ms=34850.657 digest=e00141a7605ff662
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1826, in race
+    result["quality"] = quality(lane, D, outs)
+                        ^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1701, in quality
+    raise RuntimeError("the recall function is the knn lane's, at k=%d" % ctd.KNN_K)
+RuntimeError: the recall function is the knn lane's, at k=64
+MORE lane=ivf dataset=taxi arm=ours status=ok median_ms=34850.656839087605 quality={}
+MORE lane=ivf dataset=taxi arm=cuvs-gpu status=ok median_ms=219.4591797888279 quality={}

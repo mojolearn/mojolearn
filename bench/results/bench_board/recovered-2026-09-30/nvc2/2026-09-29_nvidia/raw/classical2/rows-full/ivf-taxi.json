@@ -1,0 +1,296 @@
+{
+  "arms": {
+    "cuvs-gpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "cuvs-gpu",
+        "--lane",
+        "ivf",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b36b80d1a99822a5",
+        "2939e44f3704b9ba"
+      ],
+      "info": {
+        "config": "cuvs.neighbors.ivf_flat build(IndexParams(n_lists=1024, metric='sqeuclidean', kmeans_n_iters=20)) + search(SearchParams(n_probes=32), k=10)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "cuda_driver_api": 13000,
+        "cuda_runtime": 12090,
+        "cupy": "14.2.0",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "cuvs",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "upload_ms_untimed": 27.75377966463566,
+        "version": "26.08.01"
+      },
+      "median_ms": 219.4591797888279,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 448.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 935.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 450.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 931.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        219.4591797888279
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "cuvs",
+        "params": {
+          "kmeans_n_iters": 20,
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32
+        },
+        "source": "declared"
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "build + search of every query",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": 27.75377966463566
+      },
+      "status": "ok",
+      "warmup_ms": 655.5790370330215
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "ivf",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e00141a7605ff662",
+        "e00141a7605ff662"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 11,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 34850.656839087605,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1581.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1610.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        34850.656839087605
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "kmeans_n_iters": 20,
+          "metric": "sqeuclidean",
+          "n_lists": 1024,
+          "n_neighbors": 10,
+          "n_probes": 32,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "build + search of every query",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 35883.20886250585
+    }
+  },
+  "block": {
+    "arrays": {
+      "index": {
+        "dtype": "float32",
+        "sha256": "ea3401a27dc7f29b9d2aeb073dab652d2529d5db7ae775f41abf11c243710416",
+        "shape": [
+          400000,
+          11
+        ]
+      },
+      "queries": {
+        "dtype": "float32",
+        "sha256": "f4ec2c83347e9943f0482ff63a0fd25323e082f99302241576a0b9b7c1c4894f",
+        "shape": [
+          4000,
+          11
+        ]
+      }
+    },
+    "block": "ivf",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "index_rows": [
+      0,
+      400000
+    ],
+    "loader": "knn_datasets.real_block('taxi')",
+    "query_rows": [
+      400000,
+      404000
+    ],
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "none",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "index": 0,
+      "queries": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T15:37:06Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "taxi",
+  "finished": "2026-09-29T17:13:25Z",
+  "lane": "ivf",
+  "lane_config": {
+    "mismatches": [
+      "quantizer training set: each library's own (FAISS subsamples to 256 rows per list; cuVS kmeans_trainset_fraction 0.5; ours its own)",
+      "seed: ours random_state=7, faiss cp.seed=7; cuVS IndexParams takes none"
+    ],
+    "params": "IVF-Flat, n_lists=1024, n_probes=32, k=10, squared L2, k-means 20 iterations, seed 7",
+    "quality": "recall@10 against a float64 NumPy brute force",
+    "rows": "the classical knn lane's block (tools/knn_datasets.real_block): 400000 index rows, 4000 queries, raw",
+    "timed": "build + search of every query"
+  },
+  "params_check": {
+    "arms": {
+      "cuvs-gpu": {
+        "library": "cuvs",
+        "params": {
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32,
+          "seed": "none (no argument; draws random numbers, see exceptions)"
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "metric": "sqeuclidean",
+          "n_neighbors": 10,
+          "nlist": 1024,
+          "nprobe": 32,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "cuvs-gpu",
+        "ours": "sqeuclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "sqeuclidean"
+      },
+      {
+        "arm": "cuvs-gpu",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "cuvs-gpu",
+        "ours": 1024,
+        "param": "nlist",
+        "same": true,
+        "theirs": 1024
+      },
+      {
+        "arm": "cuvs-gpu",
+        "ours": 32,
+        "param": "nprobe",
+        "same": true,
+        "theirs": 32
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "cuvs-gpu",
+        "param": "seed",
+        "reason": "cuVS ivf_flat IndexParams takes no seed and its k-means training samples rows; ours and faiss get 7",
+        "value": null
+      }
+    ],
+    "family": "classical2",
+    "lane": "ivf",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "error": "RuntimeError(\"the recall function is the knn lane's, at k=64\")"
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "index 400000x11; queries 4000x11",
+  "started": "2026-09-29T17:12:10Z"
+}

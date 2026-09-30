@@ -1,0 +1,12 @@
+
+=== 2026-09-30T05:00:19Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane qr --dataset istella --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/qr", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=qr dataset=istella arm=ours round=0 ms=77121.831 infer_ms=None digest=76e60d3379a2735a
+ALGOS-ROUND lane=qr dataset=istella arm=numpy-cpu round=0 ms=4714.958 infer_ms=None digest=09f203958414a5cb
+ALGOS-ROUND lane=qr dataset=istella arm=torch-gpu round=0 ms=2711.513 infer_ms=None digest=ca30bba2dda343a5
+ALGOS-ROUND lane=qr dataset=istella arm=numpy-cpu round=1 ms=4646.609 infer_ms=None digest=09f203958414a5cb
+ALGOS-ROUND lane=qr dataset=istella arm=torch-gpu round=1 ms=2664.912 infer_ms=None digest=ca30bba2dda343a5
+ALGOS-ROUND lane=qr dataset=istella arm=ours round=1 ms=76870.304 infer_ms=None digest=76e60d3379a2735a
+ALGOS lane=qr dataset=istella arm=ours status=ok median_ms=76870.30359302298 quality={"relative_gram_difference": 0.0009027179930048397}
+ALGOS lane=qr dataset=istella arm=numpy-cpu status=ok median_ms=4646.608679991914 quality={"relative_gram_difference": 2.4620343691165053e-08}
+ALGOS lane=qr dataset=istella arm=torch-gpu status=ok median_ms=2664.9122859817 quality={"relative_gram_difference": 0.00016951756559835233}

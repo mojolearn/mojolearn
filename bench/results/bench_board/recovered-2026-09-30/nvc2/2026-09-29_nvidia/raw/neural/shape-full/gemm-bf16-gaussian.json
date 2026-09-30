@@ -1,0 +1,328 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gemm-bf16",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-bf16-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "61da6b4cbb8c0cad",
+        "61da6b4cbb8c0cad"
+      ],
+      "info": {
+        "call": "mojolearn.linalg.matmul_bf16(a_bf16, b_bf16) (bf16 bits made before the clock)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/linalg.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "profile": "mojolearn.identical.gemm.fp32.v1",
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 55.190916173160076,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 1164.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 437.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 1164.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 495.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        55.190916173160076
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 57.28845577687025
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "gemm-bf16",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-bf16-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "f4350d40f5687013",
+        "f4350d40f5687013"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "cuda_is_bf16_supported": true,
+          "cuda_is_bf16_supported_native": true,
+          "device_type": "cuda",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "a_bf16.to(dev) @ b_bf16.to(dev) under the setting, .float().cpu()",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "cuda",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 46.64640314877033,
+      "mem": [
+        {
+          "children_mb": 482.0,
+          "gpu_mb": 176.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1400.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 495.3,
+          "gpu_mb": 176.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1400.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        46.64640314877033
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 1009.5084747299552
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "gemm-bf16",
+        "--shape",
+        "full",
+        "--data",
+        "/root/bench-board/2026-09-29_nvidia/work/neural-gemm-bf16-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "f4350d40f5687013",
+        "f4350d40f5687013"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "cuda_is_bf16_supported": true,
+          "cuda_is_bf16_supported_native": true,
+          "device_type": "cuda",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cuda', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "a_bf16.to(dev) @ b_bf16.to(dev) under the setting, .float().cpu()",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "cuda",
+        "torch_threads": 128,
+        "torch_version_cuda": "12.9",
+        "torch_version_hip": null,
+        "version": "2.13.0+cu129"
+      },
+      "median_ms": 47.02913574874401,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 176.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1190.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 176.2,
+          "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
+          "host_mb": 1190.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        47.02913574874401
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 46.7219827696681
+    }
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T18:55:22Z",
+  "inputs": {
+    "inputs": "A [m,k], B [k,n] = default_rng(7).standard_normal float32",
+    "lane": "gemm-bf16",
+    "seed": 7,
+    "sha256": {
+      "a": "485a7287793a9d7d",
+      "b": "3f38db408e287e78"
+    },
+    "shape": {
+      "k": 4096,
+      "label": "4096x4096x4096",
+      "m": 4096,
+      "n": 4096,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "gemm-bf16",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/gemm-bf16",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_err_vs_fp64": 1.1548914368712009e-07
+    },
+    "torch-compile-bf16": {
+      "max_abs_diff_vs_ours": 1.0009765625,
+      "max_rel_diff_vs_ours": 0.0027642356450209037,
+      "max_rel_err_vs_fp64": 0.0027642217455072535
+    },
+    "torch-eager-bf16": {
+      "max_abs_diff_vs_ours": 1.0009765625,
+      "max_rel_diff_vs_ours": 0.0027642356450209037,
+      "max_rel_err_vs_fp64": 0.0027642217455072535
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "4096x4096x4096",
+  "shape_record": {
+    "k": 4096,
+    "label": "4096x4096x4096",
+    "m": 4096,
+    "n": 4096,
+    "name": "full"
+  },
+  "started": "2026-09-29T18:55:08Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)"
+  }
+}

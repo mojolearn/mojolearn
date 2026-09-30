@@ -1,0 +1,500 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-gemm-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "535b4c27bd9313d1",
+        "535b4c27bd9313d1"
+      ],
+      "info": {
+        "call": "mojolearn.linalg.matmul(a, b)",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/linalg.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "profile": "mojolearn.identical.gemm.fp32.v1",
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 72.13191699702293,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 740.9,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 805.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        72.13191699702293
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 484.18962499999907
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-gemm-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b1aa04b9610bb7b7",
+        "b1aa04b9610bb7b7"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "a.to(dev) @ b.to(dev), .cpu()",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "version": "2.13.0"
+      },
+      "median_ms": 11.411915998905897,
+      "mem": [
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 1032.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1744.9,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 1032.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1809.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        11.411915998905897
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 385.3004159973352
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-gemm-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b3058a00cb3fc693",
+        "b3058a00cb3fc693"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "a.to(dev) @ b.to(dev), .cpu()",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "version": "2.13.0"
+      },
+      "median_ms": 11.757917003706098,
+      "mem": [
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 1024.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1730.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 16.0,
+          "gpu_mb": 1024.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1795.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        11.757917003706098
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 372.09354100195924
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-gemm-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b1aa04b9610bb7b7",
+        "b1aa04b9610bb7b7"
+      ],
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "a.to(dev) @ b.to(dev), .cpu()",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "version": "2.13.0"
+      },
+      "median_ms": 10.797209004522301,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 1032.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1579.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 1032.7,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1643.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        10.797209004522301
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 110.78766599530354
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "gemm",
+        "--shape",
+        "full",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_checked/work/neural-gemm-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b3058a00cb3fc693",
+        "b3058a00cb3fc693"
+      ],
+      "info": {
+        "autocast_probe": null,
+        "call": "a.to(dev) @ b.to(dev), .cpu()",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "version": "2.13.0"
+      },
+      "median_ms": 11.504207999678329,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 1024.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1565.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": 1024.5,
+          "gpu_method": "torch.mps.driver_allocated_memory at the round's end (not a peak; unified memory, also inside peak_host_mb)",
+          "host_mb": 1629.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        11.504207999678329
+      ],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 109.16049999650568
+    }
+  },
+  "commit": "f4e78b35406eda59f8417b3acaa27c2830dca16c",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T20:00:07Z",
+  "inputs": {
+    "inputs": "A [m,k], B [k,n] = default_rng(7).standard_normal float32",
+    "lane": "gemm",
+    "seed": 7,
+    "sha256": {
+      "a": "485a7287793a9d7d",
+      "b": "3f38db408e287e78"
+    },
+    "shape": {
+      "k": 4096,
+      "label": "4096x4096x4096",
+      "m": 4096,
+      "n": 4096,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "gemm",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/gemm",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_err_vs_fp64": 2.39871698830206e-07
+    },
+    "torch-compile-bf16": {
+      "max_abs_diff_vs_ours": 1.35833740234375,
+      "max_rel_diff_vs_ours": 0.0037514546263206472,
+      "max_rel_err_vs_fp64": 0.0037515023103723635
+    },
+    "torch-compile-fp32": {
+      "max_abs_diff_vs_ours": 0.00103759765625,
+      "max_rel_diff_vs_ours": 2.865635976070591e-06,
+      "max_rel_err_vs_fp64": 2.842717704773494e-06
+    },
+    "torch-eager-bf16": {
+      "max_abs_diff_vs_ours": 1.35833740234375,
+      "max_rel_diff_vs_ours": 0.0037514546263206472,
+      "max_rel_err_vs_fp64": 0.0037515023103723635
+    },
+    "torch-eager-fp32": {
+      "max_abs_diff_vs_ours": 0.00103759765625,
+      "max_rel_diff_vs_ours": 2.865635976070591e-06,
+      "max_rel_err_vs_fp64": 2.842717704773494e-06
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "4096x4096x4096",
+  "shape_record": {
+    "k": 4096,
+    "label": "4096x4096x4096",
+    "m": 4096,
+    "n": 4096,
+    "name": "full"
+  },
+  "started": "2026-09-29T20:00:02Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-compile-fp32": "float32, TF32 off",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-fp32": "float32, TF32 off"
+  }
+}

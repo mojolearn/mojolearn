@@ -1,0 +1,24 @@
+
+=== 2026-09-29T17:32:34Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane gemm --shape full --arms ours,torch-eager-fp32,torch-eager-tf32,torch-compile-fp32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm arm=ours round=0 ms=326.729 digest=535b4c27bd9313d1
+NEURAL-ROUND lane=gemm arm=torch-eager-fp32 round=0 ms=110.018 digest=293088b0416a0c8a
+NEURAL-ROUND lane=gemm arm=torch-eager-tf32 round=0 ms=107.551 digest=bedae007881e1974
+NEURAL-ROUND lane=gemm arm=torch-compile-fp32 round=0 ms=1094.755 digest=293088b0416a0c8a
+NEURAL-ROUND lane=gemm arm=torch-compile-tf32 round=0 ms=1068.468 digest=bedae007881e1974
+NEURAL-ROUND lane=gemm arm=torch-eager-bf16 round=0 ms=44.835 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm arm=torch-compile-bf16 round=0 ms=1276.635 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm arm=torch-eager-fp32 round=1 ms=50.969 digest=293088b0416a0c8a
+NEURAL-ROUND lane=gemm arm=torch-eager-tf32 round=1 ms=49.396 digest=bedae007881e1974
+NEURAL-ROUND lane=gemm arm=torch-compile-fp32 round=1 ms=52.279 digest=293088b0416a0c8a
+NEURAL-ROUND lane=gemm arm=torch-compile-tf32 round=1 ms=50.286 digest=bedae007881e1974
+NEURAL-ROUND lane=gemm arm=torch-eager-bf16 round=1 ms=46.984 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm arm=torch-compile-bf16 round=1 ms=49.669 digest=f4350d40f5687013
+NEURAL-ROUND lane=gemm arm=ours round=1 ms=56.375 digest=535b4c27bd9313d1
+NEURAL lane=gemm arm=ours status=ok median_ms=56.374515406787395 quality={"max_rel_err_vs_fp64": 2.398716979667606e-07}
+NEURAL lane=gemm arm=torch-eager-fp32 status=ok median_ms=50.969100557267666 quality={"max_abs_diff_vs_ours": 0.0005340576171875, "max_rel_diff_vs_ours": 1.4749596935657454e-06, "max_rel_err_vs_fp64": 1.4014786296173645e-06}
+NEURAL lane=gemm arm=torch-eager-tf32 status=ok median_ms=49.39602594822645 quality={"max_abs_diff_vs_ours": 0.10082244873046875, "max_rel_diff_vs_ours": 0.0002784513192924475, "max_rel_err_vs_fp64": 0.0002784057221444868}
+NEURAL lane=gemm arm=torch-compile-fp32 status=ok median_ms=52.2785410284996 quality={"max_abs_diff_vs_ours": 0.0005340576171875, "max_rel_diff_vs_ours": 1.4749596935657454e-06, "max_rel_err_vs_fp64": 1.4014786296173645e-06}
+NEURAL lane=gemm arm=torch-compile-tf32 status=ok median_ms=50.28624273836613 quality={"max_abs_diff_vs_ours": 0.10082244873046875, "max_rel_diff_vs_ours": 0.0002784513192924475, "max_rel_err_vs_fp64": 0.0002784057221444868}
+NEURAL lane=gemm arm=torch-eager-bf16 status=ok median_ms=46.984005719423294 quality={"max_abs_diff_vs_ours": 1.35833740234375, "max_rel_diff_vs_ours": 0.0037514546263206472, "max_rel_err_vs_fp64": 0.0037515023103755034}
+NEURAL lane=gemm arm=torch-compile-bf16 status=ok median_ms=49.669367261230946 quality={"max_abs_diff_vs_ours": 1.35833740234375, "max_rel_diff_vs_ours": 0.0037514546263206472, "max_rel_err_vs_fp64": 0.0037515023103755034}

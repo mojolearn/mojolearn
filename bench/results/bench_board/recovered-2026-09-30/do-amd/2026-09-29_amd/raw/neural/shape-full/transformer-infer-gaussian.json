@@ -1,0 +1,240 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "transformer-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-transformer-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d2e67d7563b0edb2",
+        "d2e67d7563b0edb2"
+      ],
+      "info": {
+        "call": "mojolearn.TransformerBlockInference(...).forward(x) (CPU host binding)",
+        "cls": "TransformerBlockInference",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/neural_inference.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 27.612683014012873,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 138.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 142.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        27.612683014012873
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "eps": 1e-06,
+        "rope_theta": 10000.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 34.63706298498437
+    },
+    "torch-cpu-compile-bf16": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-cpu-compile-bf16",
+        "--lane",
+        "transformer-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/mojolearn-evidence/bench-board/2026-09-29_amd/work/neural-transformer-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "REFUSED: torch-cpu-compile-bf16 on cpu failed in round 0 (compile happens here): RuntimeError('self and mat2 must have the same dtype, but got Float and BFloat16')",
+        "event": "error",
+        "stage": "round 0"
+      },
+      "failed_round": 0,
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "cpu",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('cpu', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "LlamaEager.block(sdpa=True) on the CPU",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 20
+        },
+        "device": "cpu",
+        "device_name": "AMD EPYC 9575F 64-Core Processor",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "cpu",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": "6.4.43483-a187df25c",
+        "twin": "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)",
+        "version": "2.6.0+rocm6.4.1.git1ded221d"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "eps": 1e-06,
+        "rope_theta": 10000.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "error",
+      "warmup_ms": null
+    }
+  },
+  "commit": "014f22d4b6cff6f256f6cc8ad87ac03bf58479f0",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T21:14:11Z",
+  "inputs": {
+    "inputs": "weights default_rng(7).normal(0, .02) (+1 on norms), x standard normal",
+    "lane": "transformer-infer",
+    "seed": 7,
+    "sha256": {
+      "w:down_proj.weight": "4f541cdd26763c05",
+      "w:gate_proj.weight": "e3c09f35b4fb8470",
+      "w:input_layernorm.weight": "d7e392be7606b1d7",
+      "w:k_proj.weight": "903ecc205be58476",
+      "w:o_proj.weight": "2f850b14052e2c41",
+      "w:post_attention_layernorm.weight": "66f46b8645ad41c7",
+      "w:q_proj.weight": "e7091836478d511d",
+      "w:up_proj.weight": "d88c8dfb67cb29eb",
+      "w:v_proj.weight": "1add771b75ce477e",
+      "x": "bb97123bb5b7adc4"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "head_dim": 64,
+      "intermediate": 1024,
+      "label": "B1 L512 DM384 H6 KV6 HD64 FF1024",
+      "length": 512,
+      "n_heads": 6,
+      "n_kv": 6,
+      "name": "full"
+    },
+    "steps": 2
+  },
+  "lane": "transformer-infer",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "eps": 1e-06,
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      },
+      "torch-cpu-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "eps": 1e-06,
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "torch-cpu-compile-bf16",
+        "ours": 1e-06,
+        "param": "eps",
+        "same": true,
+        "theirs": 1e-06
+      }
+    ],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/transformer-infer",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {}
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L512 DM384 H6 KV6 HD64 FF1024",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "head_dim": 64,
+    "intermediate": 1024,
+    "label": "B1 L512 DM384 H6 KV6 HD64 FF1024",
+    "length": 512,
+    "n_heads": 6,
+    "n_kv": 6,
+    "name": "full"
+  },
+  "started": "2026-09-29T21:13:56Z",
+  "torch_settings": {
+    "torch-cpu-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)"
+  }
+}

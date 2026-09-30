@@ -1,0 +1,18 @@
+
+=== 2026-09-30T01:29:52Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_neural.py race --lane transformer-forward --shape full --arms ours,torch-eager-fp32,torch-compile-fp32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/raw/neural/shape-full --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m2pro/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"eps": 1e-06, "seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"eps": 1e-06, "seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"eps": 1e-06, "seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"eps": 1e-06, "seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"eps": 1e-06, "seed": 7}, "source": "declared"}}, "compared": [{"arm": "torch-eager-fp32", "ours": 1e-06, "param": "eps", "same": true, "theirs": 1e-06}, {"arm": "torch-compile-fp32", "ours": 1e-06, "param": "eps", "same": true, "theirs": 1e-06}, {"arm": "torch-eager-bf16", "ours": 1e-06, "param": "eps", "same": true, "theirs": 1e-06}, {"arm": "torch-compile-bf16", "ours": 1e-06, "param": "eps", "same": true, "theirs": 1e-06}], "exceptions": [], "family": "neural", "lane": "neural/transformer-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=transformer-forward arm=ours round=0 ms=99.074 digest=d5a2b289afdb5709
+NEURAL-ROUND lane=transformer-forward arm=torch-eager-fp32 round=0 ms=370.129 digest=00e96e6ce4d0dd23
+NEURAL-ROUND lane=transformer-forward arm=torch-compile-fp32 round=0 ms=948.996 digest=66c057933750ab61
+NEURAL-ROUND lane=transformer-forward arm=torch-eager-bf16 round=0 ms=424.628 digest=ccb3d96053c1be31
+NEURAL-ROUND lane=transformer-forward arm=torch-compile-bf16 round=0 ms=847.547 digest=4c7adc4c6a92d3fb
+NEURAL-ROUND lane=transformer-forward arm=torch-eager-fp32 round=1 ms=13.965 digest=00e96e6ce4d0dd23
+NEURAL-ROUND lane=transformer-forward arm=torch-compile-fp32 round=1 ms=15.252 digest=66c057933750ab61
+NEURAL-ROUND lane=transformer-forward arm=torch-eager-bf16 round=1 ms=13.479 digest=ccb3d96053c1be31
+NEURAL-ROUND lane=transformer-forward arm=torch-compile-bf16 round=1 ms=6.867 digest=4c7adc4c6a92d3fb
+NEURAL-ROUND lane=transformer-forward arm=ours round=1 ms=55.652 digest=d5a2b289afdb5709
+NEURAL lane=transformer-forward arm=ours status=ok median_ms=55.65208298503421 quality={}
+NEURAL lane=transformer-forward arm=torch-eager-fp32 status=ok median_ms=13.964999991003424 quality={"max_abs_diff_vs_ours": 4.76837158203125e-07, "max_rel_diff_vs_ours": 1.0202790667303321e-07}
+NEURAL lane=transformer-forward arm=torch-compile-fp32 status=ok median_ms=15.25224998476915 quality={"max_abs_diff_vs_ours": 4.76837158203125e-07, "max_rel_diff_vs_ours": 1.0202790667303321e-07}
+NEURAL lane=transformer-forward arm=torch-eager-bf16 status=ok median_ms=13.47879201057367 quality={"max_abs_diff_vs_ours": 0.0018194019794464111, "max_rel_diff_vs_ours": 0.0003892938546551253}
+NEURAL lane=transformer-forward arm=torch-compile-bf16 status=ok median_ms=6.866583978990093 quality={"max_abs_diff_vs_ours": 0.0018194019794464111, "max_rel_diff_vs_ours": 0.0003892938546551253}

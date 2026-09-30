@@ -1,0 +1,26 @@
+2026-09-29T20:56:14Z run.sh start at b08c08c524ac20ca24cd7cf5f5548e73c4db07cf args: --no-smoke-gate
+2026-09-29T20:56:14Z board runs until 2026-09-29T23:46:14Z at most
+bench_board: algos prep rows=full lanes=1 datasets=istella,taxi
+bench_board: [1/4] classical/dbscan/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   HOST MEMORY: the watchdog killed sklearn-cpu at 230.2 GB (the driver's process tree held 247.5 GB, over 90% of the box's 274.9 GB)
+bench_board:   failed rc=0 3466s
+bench_board: [2/4] classical/dbscan/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   stored (not run): sklearn-cpu [stored (measured 2026-09-29T18:37:38Z on ip-172-31-37-211.ec2.internal, cpu (Apple M3 Ultra))]
+bench_board:   done rc=0 1013s
+bench_board: [3/4] algos/bayesian-gmm/taxi/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 16s
+bench_board: [4/4] algos/bayesian-gmm/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   failed rc=1 21s
+bench_board: board /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md
+2026-09-29T22:12:42Z board exit 1
+/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md
+2026-09-29T22:12:42Z rendered: -rw-r--r--  1 ec2-user  staff  22230 Sep 29 22:12 /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md
+2026-09-30T00:38:01Z run.sh start at 9cee9ef68a90029b6a158ba7da2fa1d4fa064ee5 args: --no-smoke-gate --lanes bayesian-gmm --datasets istella
+2026-09-30T00:38:01Z board runs until 2026-09-30T03:28:01Z at most
+bench_board: algos prep rows=full lanes=1 datasets=istella
+bench_board: [1/1] algos/bayesian-gmm/istella/rows=full arms=ours,ours-fast,sklearn-cpu
+bench_board:   done rc=0 403s
+bench_board: board /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md
+2026-09-30T00:45:04Z board exit 0
+/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md
+2026-09-30T00:45:04Z rendered: -rw-r--r--  1 ec2-user  staff  22392 Sep 30 00:45 /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_0829/BOARD.md

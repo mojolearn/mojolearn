@@ -1,0 +1,315 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "tsvd",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "0c5f9d0c5bd9b300",
+        "0c5f9d0c5bd9b300"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "n_features": 11,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 14.170108013786376,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2066.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 674.4,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2066.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        14.170108013786376
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "covariance_eigh",
+          "n_components": 10,
+          "n_iter": 5,
+          "n_oversamples": 10,
+          "power_iteration_normalizer": "auto",
+          "random_state": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 326.94447998073883
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "tsvd",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "1cc486759c99f55b",
+        "1cc486759c99f55b"
+      ],
+      "info": {
+        "config": "TruncatedSVD(algorithm='arpack', n_components=10, random_state=7)",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 205.58072201674804,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 454.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 460.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        205.58072201674804
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "algorithm": "arpack",
+          "n_components": 10,
+          "n_iter": 5,
+          "n_oversamples": 10,
+          "power_iteration_normalizer": "auto",
+          "random_state": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 193.40438599465415
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "a48c9289c80c882cfc48f5b1f523adc6cfc7ec040a13ae3cb66995da8630a98b",
+        "shape": [
+          1000000,
+          11
+        ]
+      }
+    },
+    "block": "tsvd",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rows": "stride sample of 1000000 of 5250086 train rows",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "none",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T14:45:15Z"
+  },
+  "commit": "ba7803f217f47ae6227036e1f120170eafb8d263",
+  "dataset": "taxi",
+  "finished": "2026-09-29T20:15:06Z",
+  "lane": "tsvd",
+  "lane_config": {
+    "mismatches": [
+      "algorithm: ours 'covariance_eigh' (eigh of X^T X), scikit-learn 'arpack' (tol=0, exact to ARPACK's tolerance), cuML 'full'"
+    ],
+    "params": "n_components=10 (the cuML benchmark's tSVD), tol=0.0, n_iter=5, n_oversamples=10, random_state=7",
+    "quality": "explained-variance ratio sum (TruncatedSVD's definition), relative reconstruction error",
+    "rows": "1000000 stride rows of the train split, raw (sentinel cleaned, not scaled)",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "algorithm": "covariance_eigh",
+          "n_components": 10,
+          "n_iter": 5,
+          "seed": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "algorithm": "arpack",
+          "n_components": 10,
+          "n_iter": 5,
+          "seed": 7,
+          "tol": 0.0
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": "covariance_eigh",
+        "param": "algorithm",
+        "same": false,
+        "theirs": "arpack"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "n_components",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 5,
+        "param": "n_iter",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.0
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": "covariance_eigh",
+        "param": "algorithm",
+        "reason": "scikit-learn TruncatedSVD has no 'covariance_eigh'; it runs 'arpack' at tol=0",
+        "theirs": "arpack"
+      }
+    ],
+    "family": "classical2",
+    "lane": "tsvd",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "explained_variance_ratio_sum": 0.9999651766479792,
+      "relative_reconstruction_error": 0.0032570735189924997
+    },
+    "sklearn-cpu": {
+      "explained_variance_ratio_sum": 0.9999647287951866,
+      "relative_reconstruction_error": 0.003257073483809866
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 1000000x11",
+  "started": "2026-09-29T20:15:04Z"
+}

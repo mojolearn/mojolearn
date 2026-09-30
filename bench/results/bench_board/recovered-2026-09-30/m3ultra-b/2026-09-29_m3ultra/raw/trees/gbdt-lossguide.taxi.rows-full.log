@@ -1,0 +1,164 @@
+
+=== 2026-09-29T05:23:11Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane gbdt-lossguide --dataset taxi --devices cpu --arms catboost-cpu,xgboost-cpu,lightgbm-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=gbdt-lossguide MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-lossguide arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-AB lane=gbdt-lossguide arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours-ab 2550_borrow_x=1 2551_device_partition=0 2580_level_quant=0 2581_group_width=0
+FSPEED-SCALE stage=before rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=catboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=xgboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-lossguide arm=lightgbm-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=0 host_mb=1399.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 ms=6640.528
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=0 host_mb=1416.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 ms=6337.745
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=0 host_mb=2125.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 ms=12462.685
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=0 host_mb=2212.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 ms=3240.305
+[LightGBM] [Fatal] Check failed: (best_split_info.left_count) > (0) at /Users/runner/work/LightGBM/LightGBM/lightgbm-python/src/treelearner/serial_tree_learner.cpp, line 860 .
+
+FSPEED-REFUSED lane=gbdt-lossguide arm=lightgbm-cpu reason=LightGBMError during warm-up: Check failed: (best_split_info.left_count) > (0) at /Users/runner/work/LightGBM/LightGBM/lightgbm-python/src/treelearner/serial_tree_learner.cpp, line 860 .
+FSPEED-ORDER lane=gbdt-lossguide round=1 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=1 host_mb=2912.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 round=1 ms=6545.717 hash=db30470a7ded964a
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=1 host_mb=2998.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 round=1 ms=6341.207 hash=0663468f61bd59fc
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=1 host_mb=3175.9 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 round=1 ms=12109.034 hash=bd2ec99898ff8945
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=1 host_mb=2943.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 round=1 ms=3244.117 hash=300cd78331721c10
+FSPEED-ORDER lane=gbdt-lossguide round=2 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=2 host_mb=3600.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 round=2 ms=6582.218 hash=db30470a7ded964a
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=2 host_mb=3577.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 round=2 ms=6309.242 hash=78da92f69829d4f5
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=2 host_mb=3552.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 round=2 ms=12081.685 hash=bd2ec99898ff8945
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=2 host_mb=3334.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 round=2 ms=3238.336 hash=300cd78331721c10
+FSPEED-ORDER lane=gbdt-lossguide round=3 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=3 host_mb=4088.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 round=3 ms=6595.918 hash=db30470a7ded964a
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=3 host_mb=4081.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 round=3 ms=6329.940 hash=aaf53ded6be38c4f
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=3 host_mb=3774.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 round=3 ms=12084.767 hash=bd2ec99898ff8945
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=3 host_mb=3542.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 round=3 ms=3243.857 hash=300cd78331721c10
+FSPEED-ORDER lane=gbdt-lossguide round=4 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=4 host_mb=4304.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 round=4 ms=6586.239 hash=db30470a7ded964a
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=4 host_mb=4282.2 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 round=4 ms=6315.494 hash=30a2858303bb9687
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=4 host_mb=3989.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 round=4 ms=12051.664 hash=bd2ec99898ff8945
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=4 host_mb=3719.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 round=4 ms=3241.443 hash=300cd78331721c10
+FSPEED-ORDER lane=gbdt-lossguide round=5 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours round=5 host_mb=4493.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours shape=taxi-4110786x16 round=5 ms=6600.759 hash=db30470a7ded964a
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-lossguide arm=ours-ab round=5 host_mb=4486.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-lossguide arm=ours-ab shape=taxi-4110786x16 round=5 ms=6338.772 hash=a5a984ae6796bd6f
+FSPEED-MEM lane=gbdt-lossguide arm=catboost-cpu round=5 host_mb=4015.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=catboost-cpu shape=taxi-4110786x16 round=5 ms=12105.394 hash=bd2ec99898ff8945
+FSPEED-MEM lane=gbdt-lossguide arm=xgboost-cpu round=5 host_mb=3752.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-lossguide arm=xgboost-cpu shape=taxi-4110786x16 round=5 ms=3237.066 hash=300cd78331721c10
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=logloss value=0.522759
+FSPEED-ACC lane=gbdt-lossguide arm=ours metric=auc value=0.627224
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=logloss value=0.522782
+FSPEED-ACC lane=gbdt-lossguide arm=ours-ab metric=auc value=0.627156
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=logloss value=0.523499
+FSPEED-ACC lane=gbdt-lossguide arm=catboost-cpu metric=auc value=0.624829
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=logloss value=0.523404
+FSPEED-ACC lane=gbdt-lossguide arm=xgboost-cpu metric=auc value=0.625131
+FSPEED-FIT lane=gbdt-lossguide arm=ours library=mojolearn trees=100 nodes=12378 leaves=6239 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT-NOTE lane=gbdt-lossguide arm=ours depth_note=non-symmetric model text carries nodes, not depth
+FSPEED-FIT lane=gbdt-lossguide arm=ours-ab library=mojolearn trees=100 nodes=12348 leaves=6224 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT-NOTE lane=gbdt-lossguide arm=ours-ab depth_note=non-symmetric model text carries nodes, not depth
+FSPEED-FIT lane=gbdt-lossguide arm=catboost-cpu library=catboost trees=100 nodes=- leaves=5743 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT lane=gbdt-lossguide arm=xgboost-cpu library=xgboost trees=100 nodes=7722 leaves=3911 depth_max=6 source=booster.get_dump
+FSPEED-FIT-VERDICT lane=gbdt-lossguide arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:5743,ours:6239,ours-ab:6224,xgboost-cpu:3911 spread=0.3731 verdict=NOT-COMPARABLE
+FSPEED-NOTE lane=gbdt-lossguide arms=catboost-cpu,ours,ours-ab,xgboost-cpu metric=leaves delta=0.373137 reason=FIT-EQUIVALENCE: the arms of this cell built ensembles differing by 37.3% in TOTAL LEAVES (catboost-cpu:5743,ours:6239,ours-ab:6224,xgboost-cpu:3911), above the 10% tripwire. The configs were held equal, so the growers disagree about what t
+FSPEED-SCALE stage=after rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=gbdt-lossguide arm=ours call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-lossguide arm=ours-ab call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-lossguide arm=catboost-cpu call=catboost predict_proba(X, task_type CPU, thread_count -1), column 1
+FSPEED-INFER-PATH lane=gbdt-lossguide arm=xgboost-cpu call=xgboost Booster.inplace_predict(X) (no DMatrix; XGBoost's documented fastest path), probability
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=ours batch=test rows=500000 ms=84.845
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 ms=67.176
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 ms=30.314
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 ms=16.512
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=test rows=500000 round=1 ms=74.759 hash=db30470a7ded964a
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 round=1 ms=68.747 hash=a5a984ae6796bd6f
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 round=1 ms=30.205 hash=bd2ec99898ff8945
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 round=1 ms=16.836 hash=300cd78331721c10
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=test rows=500000 round=2 ms=72.490 hash=db30470a7ded964a
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 round=2 ms=68.243 hash=a5a984ae6796bd6f
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 round=2 ms=30.715 hash=bd2ec99898ff8945
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 round=2 ms=15.607 hash=300cd78331721c10
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=test rows=500000 round=3 ms=73.602 hash=db30470a7ded964a
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 round=3 ms=69.497 hash=a5a984ae6796bd6f
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 round=3 ms=29.758 hash=bd2ec99898ff8945
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 round=3 ms=17.379 hash=300cd78331721c10
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=test rows=500000 round=4 ms=71.139 hash=db30470a7ded964a
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 round=4 ms=67.980 hash=a5a984ae6796bd6f
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 round=4 ms=28.400 hash=bd2ec99898ff8945
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 round=4 ms=16.854 hash=300cd78331721c10
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=test rows=500000 round=5 ms=71.985 hash=db30470a7ded964a
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=test rows=500000 round=5 ms=68.304 hash=a5a984ae6796bd6f
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=test rows=500000 round=5 ms=30.326 hash=bd2ec99898ff8945
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=test rows=500000 round=5 ms=15.956 hash=300cd78331721c10
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=ours batch=test metric=logloss value=0.522759
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=ours batch=test metric=auc value=0.627224
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=ours-ab batch=test metric=logloss value=0.522782
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=ours-ab batch=test metric=auc value=0.627156
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=catboost-cpu batch=test metric=logloss value=0.523499
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=catboost-cpu batch=test metric=auc value=0.624829
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=xgboost-cpu batch=test metric=logloss value=0.523404
+FSPEED-INFER-ACC lane=gbdt-lossguide arm=xgboost-cpu batch=test metric=auc value=0.625131
+FSPEED-INFER-AGREE lane=gbdt-lossguide batch=test arms=ours,ours-ab rows=500000 bits_equal=no max_abs_diff=0.24751
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=ours batch=large rows=1000000 ms=105.331
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 ms=86.762
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 ms=55.431
+FSPEED-INFER-WARMUP lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 ms=29.960
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=large rows=1000000 round=1 ms=86.036 hash=f803871056725be4
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 round=1 ms=78.364 hash=6406d0b1d8349eb5
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 round=1 ms=55.237 hash=36b55366b6cc7a1a
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 round=1 ms=29.524 hash=2c660ed601a5cd94
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=large rows=1000000 round=2 ms=85.204 hash=f803871056725be4
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 round=2 ms=78.952 hash=6406d0b1d8349eb5
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 round=2 ms=54.878 hash=36b55366b6cc7a1a
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 round=2 ms=32.413 hash=2c660ed601a5cd94
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=large rows=1000000 round=3 ms=87.154 hash=f803871056725be4
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 round=3 ms=77.644 hash=6406d0b1d8349eb5
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 round=3 ms=54.727 hash=36b55366b6cc7a1a
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 round=3 ms=31.687 hash=2c660ed601a5cd94
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=large rows=1000000 round=4 ms=84.667 hash=f803871056725be4
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 round=4 ms=77.309 hash=6406d0b1d8349eb5
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 round=4 ms=53.839 hash=36b55366b6cc7a1a
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 round=4 ms=29.714 hash=2c660ed601a5cd94
+FSPEED-INFER lane=gbdt-lossguide arm=ours batch=large rows=1000000 round=5 ms=85.096 hash=f803871056725be4
+FSPEED-INFER lane=gbdt-lossguide arm=ours-ab batch=large rows=1000000 round=5 ms=77.503 hash=6406d0b1d8349eb5
+FSPEED-INFER lane=gbdt-lossguide arm=catboost-cpu batch=large rows=1000000 round=5 ms=53.672 hash=36b55366b6cc7a1a
+FSPEED-INFER lane=gbdt-lossguide arm=xgboost-cpu batch=large rows=1000000 round=5 ms=29.680 hash=2c660ed601a5cd94
+FSPEED-INFER-AGREE lane=gbdt-lossguide batch=large arms=ours,ours-ab rows=1000000 bits_equal=no max_abs_diff=0.242997

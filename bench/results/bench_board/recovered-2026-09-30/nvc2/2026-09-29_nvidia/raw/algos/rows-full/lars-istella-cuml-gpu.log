@@ -1,0 +1,34 @@
+/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/cuml/experimental/linear_model/__init__.py:14: FutureWarning: `cuml.experimental.linear_model.Lars` was deprecated in 26.08 and will be removed in 26.10. Please use `cuml.linear_model.Lars` instead.
+  warnings.warn(
+[2026-09-30 01:26:05.247] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.263] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.265] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.265] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.265] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.266] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.266] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.266] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.266] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.267] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.267] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.267] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.268] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.269] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.269] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:05.269] [CUML] [warning] Reached tolarence limit with 0.000000e+00
+[2026-09-30 01:26:06.284] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.305] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.306] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.307] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.307] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.307] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.308] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.308] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.308] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.309] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.309] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.310] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.311] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.311] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.311] [CUML] [warning] Vanising diagonal in Cholesky factorization (2.220446e-16). This indicates collinear features. Dropping current regressor.
+[2026-09-30 01:26:06.311] [CUML] [warning] Reached tolarence limit with 0.000000e+00

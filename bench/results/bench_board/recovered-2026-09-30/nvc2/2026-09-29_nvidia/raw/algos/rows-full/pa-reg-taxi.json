@@ -1,0 +1,506 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "pa-reg",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "dedc472fbb5945d9",
+        "dedc472fbb5945d9"
+      ],
+      "infer_ms": [
+        1.6273539513349533
+      ],
+      "infer_warmup_ms": 1.9428059458732605,
+      "info": {
+        "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 26018.774712458253,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 686.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 249.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 686.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 251.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        26018.774712458253
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "average": false,
+          "early_stopping": false,
+          "epsilon": 0.1,
+          "fit_intercept": true,
+          "loss": "epsilon_insensitive",
+          "max_iter": 20,
+          "n_iter_no_change": 5,
+          "random_state": 7,
+          "shuffle": true,
+          "tol": null,
+          "validation_fraction": 0.1
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 26151.60649921745
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "pa-reg",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "21d446b005272685",
+        "21d446b005272685"
+      ],
+      "infer_ms": [
+        2.1947985514998436
+      ],
+      "infer_warmup_ms": 1.6694944351911545,
+      "info": {
+        "config": "sklearn.linear_model:PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 2979.4540787115693,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 255.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 258.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        2979.4540787115693
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "C": 1.0,
+          "average": false,
+          "early_stopping": false,
+          "epsilon": 0.1,
+          "fit_intercept": true,
+          "loss": "epsilon_insensitive",
+          "max_iter": 20,
+          "n_iter_no_change": 5,
+          "random_state": 7,
+          "shuffle": true,
+          "tol": null,
+          "validation_fraction": 0.1
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 2918.0697202682495
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "d60aff554f2b3c15798291cde2e1105b75cdab97ccb9f6548a89ecc9ea660da3",
+        "shape": [
+          1000000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3d38829177891df39d8ee10103067bc2e1d9fb94bbfd4dc57e367768739c0c44",
+        "shape": [
+          100000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "69c03b299f12319107f0c41e33a358dc27b94c80fb2a6096e5ce0eff7f9e6fe2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "5f22ef8351272e9cab4cf4b3c17503f166732c8feaa85912f2f577ed84a9fd74",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 5250086 train rows",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T15:37:23Z"
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "taxi",
+  "finished": "2026-09-30T02:30:48Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "dedc472fbb5945d9",
+          "dedc472fbb5945d9"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.25"
+        },
+        "ms": [
+          1.6273539513349533
+        ],
+        "status": "ok",
+        "warmup_ms": 1.9428059458732605
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "21d446b005272685",
+          "21d446b005272685"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.linear_model:PassiveAggressiveRegressor(C=1.0, average=False, early_stopping=False, epsilon=0.1, fit_intercept=True, loss='epsilon_insensitive', max_iter=20, n_iter_no_change=5, random_state=7, shuffle=True, tol=None, validation_fraction=0.1)",
+          "cpu_model": "AMD EPYC 9554 64-Core Processor",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.4.6",
+          "os_cpu_count": 256,
+          "pre_clock_fit": false,
+          "python": "3.11.10",
+          "sched_affinity_cpus": 256,
+          "scipy": "1.17.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas-6cdc3b4a.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.30"
+            },
+            {
+              "architecture": null,
+              "filepath": "libgomp-a34b3233.so.1.0.0",
+              "internal_api": "openmp",
+              "num_threads": 256,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            },
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas64_-32a4b2a6.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.31.188.0"
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          2.1947985514998436
+        ],
+        "status": "ok",
+        "warmup_ms": 1.6694944351911545
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "pa-reg",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [],
+    "ours_class": "mojolearn.PassiveAggressiveRegressor",
+    "params": {
+      "C": 1.0,
+      "average": false,
+      "early_stopping": false,
+      "epsilon": 0.1,
+      "fit_intercept": true,
+      "loss": "epsilon_insensitive",
+      "max_iter": 20,
+      "n_iter_no_change": 5,
+      "random_state": 7,
+      "shuffle": true,
+      "tol": null,
+      "validation_fraction": 0.1
+    },
+    "quality": "held-out R2 and RMSE",
+    "sklearn": "sklearn.linear_model:PassiveAggressiveRegressor",
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "C": 1.0,
+          "epsilon": 0.1,
+          "fit_intercept": true,
+          "loss": "epsilon_insensitive",
+          "max_iter": 20,
+          "seed": 7,
+          "shuffle": true,
+          "tol": null
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "C": 1.0,
+          "epsilon": 0.1,
+          "fit_intercept": true,
+          "loss": "epsilon_insensitive",
+          "max_iter": 20,
+          "seed": 7,
+          "shuffle": true,
+          "tol": null
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 1.0,
+        "param": "C",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.1,
+        "param": "epsilon",
+        "same": true,
+        "theirs": 0.1
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "epsilon_insensitive",
+        "param": "loss",
+        "same": true,
+        "theirs": "epsilon_insensitive"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 20,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 20
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": true,
+        "param": "shuffle",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "tol",
+        "same": false,
+        "theirs": null
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "tol",
+        "reason": "None on both ours and sklearn-cpu: the same documented setting in both signatures",
+        "theirs": null
+      }
+    ],
+    "family": "algos",
+    "lane": "algos/pa-reg",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "finite": true,
+      "r2": 0.8539199322727802,
+      "rmse": 6.087406051423754
+    },
+    "sklearn-cpu": {
+      "finite": true,
+      "r2": 0.7951069779624125,
+      "rmse": 7.209420795866035
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+  "started": "2026-09-30T02:29:48Z"
+}

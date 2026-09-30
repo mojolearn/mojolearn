@@ -1,0 +1,110 @@
+
+=== 2026-09-29T07:51:00Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane iforest --dataset taxi --devices cpu --arms sklearn-iforest-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=iforest MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=iforest arms=* metric=auc delta=0.763285 reason=proxy AUC: anomaly score against the minority class (label 0) of taxi, no planted anomalies
+FSPEED-NOTE lane=iforest arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_svm.so
+FSPEED-AB lane=iforest arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_svm.so
+FSPEED-REFUSED lane=iforest arm=cuml-iforest-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-SCALE stage=before rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=iforest arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=iforest arm=sklearn-iforest-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-MEM lane=iforest arm=ours round=0 host_mb=1319.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=iforest arm=ours shape=taxi-4110786x16 ms=236.936
+FSPEED-MEM lane=iforest arm=ours-ab round=0 host_mb=1324.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=iforest arm=ours-ab shape=taxi-4110786x16 ms=176.866
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=0 host_mb=2695.5 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 ms=456.823
+FSPEED-ORDER lane=iforest round=1 arms=ours,ours-ab,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=1 host_mb=1413.3 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours shape=taxi-4110786x16 round=1 ms=120.140 hash=0f75e4476502aa46
+FSPEED-MEM lane=iforest arm=ours-ab round=1 host_mb=1477.7 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours-ab shape=taxi-4110786x16 round=1 ms=120.816 hash=45bc3cb4957e1618
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=1 host_mb=1279.8 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 round=1 ms=469.697 hash=9b014e2b3e46ff8e
+FSPEED-ORDER lane=iforest round=2 arms=ours,ours-ab,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=2 host_mb=1319.5 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours shape=taxi-4110786x16 round=2 ms=120.522 hash=0f75e4476502aa46
+FSPEED-MEM lane=iforest arm=ours-ab round=2 host_mb=1319.3 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours-ab shape=taxi-4110786x16 round=2 ms=120.042 hash=45bc3cb4957e1618
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=2 host_mb=869.6 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 round=2 ms=464.941 hash=9b014e2b3e46ff8e
+FSPEED-ORDER lane=iforest round=3 arms=ours,ours-ab,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=3 host_mb=1320.2 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours shape=taxi-4110786x16 round=3 ms=121.593 hash=0f75e4476502aa46
+FSPEED-MEM lane=iforest arm=ours-ab round=3 host_mb=1320.3 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours-ab shape=taxi-4110786x16 round=3 ms=120.357 hash=45bc3cb4957e1618
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=3 host_mb=1005.3 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 round=3 ms=513.400 hash=9b014e2b3e46ff8e
+FSPEED-ORDER lane=iforest round=4 arms=ours,ours-ab,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=4 host_mb=1322.5 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours shape=taxi-4110786x16 round=4 ms=121.856 hash=0f75e4476502aa46
+FSPEED-MEM lane=iforest arm=ours-ab round=4 host_mb=1322.6 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours-ab shape=taxi-4110786x16 round=4 ms=118.976 hash=45bc3cb4957e1618
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=4 host_mb=845.3 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 round=4 ms=502.766 hash=9b014e2b3e46ff8e
+FSPEED-ORDER lane=iforest round=5 arms=ours,ours-ab,sklearn-iforest-cpu
+FSPEED-MEM lane=iforest arm=ours round=5 host_mb=1323.8 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours shape=taxi-4110786x16 round=5 ms=122.250 hash=0f75e4476502aa46
+FSPEED-MEM lane=iforest arm=ours-ab round=5 host_mb=1323.8 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=iforest arm=ours-ab shape=taxi-4110786x16 round=5 ms=120.731 hash=45bc3cb4957e1618
+FSPEED-MEM lane=iforest arm=sklearn-iforest-cpu round=5 host_mb=893.0 gpu_mb=- children_mb=15.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=iforest arm=sklearn-iforest-cpu shape=taxi-4110786x16 round=5 ms=466.669 hash=9b014e2b3e46ff8e
+FSPEED-ACC lane=iforest arm=ours metric=auc value=0.551846
+FSPEED-ACC lane=iforest arm=ours-ab metric=auc value=0.551846
+FSPEED-ACC lane=iforest arm=sklearn-iforest-cpu metric=auc value=0.552849
+FSPEED-FIT lane=iforest arm=ours library=mojolearn trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=iforest arm=ours note=this estimator exposes no fitted ensemble; IsolationForest rebuilds its forest per call (DEVIATION 874/1836) and keeps nothing to read
+FSPEED-FIT lane=iforest arm=ours-ab library=mojolearn trees=- nodes=- leaves=- depth_max=- source=none
+FSPEED-FIT-NOTE lane=iforest arm=ours-ab note=this estimator exposes no fitted ensemble; IsolationForest rebuilds its forest per call (DEVIATION 874/1836) and keeps nothing to read
+FSPEED-FIT lane=iforest arm=sklearn-iforest-cpu library=sklearn trees=100 nodes=12162 leaves=6131 depth_max=8 source=estimators_[i].tree_
+FSPEED-FIT-VERDICT lane=iforest arms=ours,ours-ab,sklearn-iforest-cpu leaves=sklearn-iforest-cpu:6131 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=iforest arm=ours call=mojolearn IsolationForest.score_samples(X) (the forest is rebuilt inside every scoring call, DEVIATION 874, so this clock includes a forest build)
+FSPEED-INFER-PATH lane=iforest arm=ours-ab call=mojolearn IsolationForest.score_samples(X) (the forest is rebuilt inside every scoring call, DEVIATION 874, so this clock includes a forest build)
+FSPEED-INFER-PATH lane=iforest arm=sklearn-iforest-cpu call=sklearn IsolationForest.score_samples(X), n_jobs -1
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=test rows=500000 ms=138.468
+FSPEED-INFER-WARMUP lane=iforest arm=ours-ab batch=test rows=500000 ms=132.069
+FSPEED-INFER-WARMUP lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 ms=852.397
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=1 ms=132.553 hash=6cf90c973472d9ec
+FSPEED-INFER lane=iforest arm=ours-ab batch=test rows=500000 round=1 ms=132.036 hash=89e0c9afdda8b868
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=1 ms=836.381 hash=cda2cbb68e48c1d0
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=2 ms=136.720 hash=6cf90c973472d9ec
+FSPEED-INFER lane=iforest arm=ours-ab batch=test rows=500000 round=2 ms=134.072 hash=89e0c9afdda8b868
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=2 ms=835.997 hash=cda2cbb68e48c1d0
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=3 ms=139.368 hash=6cf90c973472d9ec
+FSPEED-INFER lane=iforest arm=ours-ab batch=test rows=500000 round=3 ms=137.273 hash=89e0c9afdda8b868
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=3 ms=835.230 hash=cda2cbb68e48c1d0
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=4 ms=135.265 hash=6cf90c973472d9ec
+FSPEED-INFER lane=iforest arm=ours-ab batch=test rows=500000 round=4 ms=135.203 hash=89e0c9afdda8b868
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=4 ms=838.382 hash=cda2cbb68e48c1d0
+FSPEED-INFER lane=iforest arm=ours batch=test rows=500000 round=5 ms=138.085 hash=6cf90c973472d9ec
+FSPEED-INFER lane=iforest arm=ours-ab batch=test rows=500000 round=5 ms=135.881 hash=89e0c9afdda8b868
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=test rows=500000 round=5 ms=839.893 hash=cda2cbb68e48c1d0
+FSPEED-INFER-ACC lane=iforest arm=ours batch=test metric=auc value=0.551846
+FSPEED-INFER-ACC lane=iforest arm=ours-ab batch=test metric=auc value=0.551846
+FSPEED-INFER-ACC lane=iforest arm=sklearn-iforest-cpu batch=test metric=auc value=0.552849
+FSPEED-INFER-AGREE lane=iforest batch=test arms=ours,ours-ab rows=500000 bits_equal=no max_abs_diff=5.96046e-08
+FSPEED-INFER-WARMUP lane=iforest arm=ours batch=large rows=1000000 ms=177.951
+FSPEED-INFER-WARMUP lane=iforest arm=ours-ab batch=large rows=1000000 ms=172.324
+FSPEED-INFER-WARMUP lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 ms=1653.742
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=1 ms=175.226 hash=98f7d0c72938d8fa
+FSPEED-INFER lane=iforest arm=ours-ab batch=large rows=1000000 round=1 ms=172.476 hash=9158e9b137cd652b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=1 ms=1687.262 hash=c4e220f6f8dc7215
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=2 ms=173.994 hash=98f7d0c72938d8fa
+FSPEED-INFER lane=iforest arm=ours-ab batch=large rows=1000000 round=2 ms=173.470 hash=9158e9b137cd652b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=2 ms=1655.711 hash=c4e220f6f8dc7215
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=3 ms=174.106 hash=98f7d0c72938d8fa
+FSPEED-INFER lane=iforest arm=ours-ab batch=large rows=1000000 round=3 ms=173.036 hash=9158e9b137cd652b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=3 ms=1655.602 hash=c4e220f6f8dc7215
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=4 ms=175.458 hash=98f7d0c72938d8fa
+FSPEED-INFER lane=iforest arm=ours-ab batch=large rows=1000000 round=4 ms=173.663 hash=9158e9b137cd652b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=4 ms=1659.141 hash=c4e220f6f8dc7215
+FSPEED-INFER lane=iforest arm=ours batch=large rows=1000000 round=5 ms=177.790 hash=98f7d0c72938d8fa
+FSPEED-INFER lane=iforest arm=ours-ab batch=large rows=1000000 round=5 ms=173.676 hash=9158e9b137cd652b
+FSPEED-INFER lane=iforest arm=sklearn-iforest-cpu batch=large rows=1000000 round=5 ms=1657.449 hash=c4e220f6f8dc7215
+FSPEED-INFER-AGREE lane=iforest batch=large arms=ours,ours-ab rows=1000000 bits_equal=no max_abs_diff=5.96046e-08

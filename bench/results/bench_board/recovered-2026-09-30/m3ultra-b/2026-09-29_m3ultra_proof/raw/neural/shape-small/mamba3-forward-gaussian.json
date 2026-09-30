@@ -1,0 +1,408 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "small",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work/neural-mamba3-forward-small.npz"
+      ],
+      "digests": [],
+      "error": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "info": {
+        "call": "mojolearn.Mamba3Block(weights).forward(x)",
+        "cls": "Mamba3Block",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mamba_impl.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "torch-compile-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-bf16",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "small",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work/neural-mamba3-forward-small.npz"
+      ],
+      "digests": [],
+      "error": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+        "column": "compile_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 20
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "torch-compile-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-compile-fp32",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "small",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work/neural-mamba3-forward-small.npz"
+      ],
+      "digests": [],
+      "error": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "info": {
+        "autocast_probe": null,
+        "call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+        "column": "compile_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "torch.compile (inductor, default mode)",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 20
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch compile, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "compile-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "torch-eager-bf16": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-bf16",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "small",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work/neural-mamba3-forward-small.npz"
+      ],
+      "digests": [],
+      "error": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "info": {
+        "autocast_probe": {
+          "amp_is_autocast_available": true,
+          "applicable": true,
+          "device_type": "mps",
+          "dtype": "bfloat16",
+          "probe": "F.linear float32 [2, 8] x [8, 8] under torch.autocast('mps', bfloat16), then backward",
+          "probe_grad_dtype": "float32",
+          "probe_ok": true,
+          "probe_output_dtype": "bfloat16"
+        },
+        "call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+        "column": "eager_bf16 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 20
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "pre_clock_fit": false,
+        "precision": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-bf16",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    },
+    "torch-eager-fp32": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "torch-eager-fp32",
+        "--lane",
+        "mamba3-forward",
+        "--shape",
+        "small",
+        "--data",
+        "/Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work/neural-mamba3-forward-small.npz"
+      ],
+      "digests": [],
+      "error": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+      "info": {
+        "autocast_probe": null,
+        "call": "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)",
+        "column": "eager_fp32 (tools/torch_lm_step_opponent.py COLUMNS)",
+        "compile": "eager",
+        "corpus_import_switches_restored": {
+          "deterministic_algorithms": false,
+          "num_threads": 20
+        },
+        "device": "gpu",
+        "device_name": "Apple MPS",
+        "input_home": "host",
+        "library": "torch",
+        "mode": "torch eager, float32, TF32 off",
+        "pre_clock_fit": false,
+        "precision": "float32, TF32 off",
+        "precision_readback": {
+          "cuda_matmul_allow_tf32": false,
+          "cudnn_allow_tf32": false,
+          "float32_matmul_precision": "highest"
+        },
+        "setting": "eager-fp32",
+        "torch_backend": "mps",
+        "torch_threads": 20,
+        "torch_version_cuda": null,
+        "torch_version_hip": null,
+        "twin": "mamba/corpus/gen_corpus.py m3_forward",
+        "version": "2.13.0"
+      },
+      "mem": [],
+      "ms": [],
+      "params_record": {
+        "__library__": "torch",
+        "seed": 7
+      },
+      "status": "params_refused",
+      "warmup_ms": null
+    }
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "gaussian",
+  "finished": "2026-09-29T12:35:30Z",
+  "inputs": {
+    "inputs": "every tensor default_rng(7).uniform over mamba/corpus/gen_corpus.py's default range for it",
+    "lane": "mamba3-forward",
+    "ranges": {
+      "B_bias": [
+        0.5,
+        1.5
+      ],
+      "B_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "C_bias": [
+        0.5,
+        1.5
+      ],
+      "C_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "D": [
+        0.5,
+        1.5
+      ],
+      "block_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "dt_bias": [
+        -7.0,
+        -2.0
+      ],
+      "in_proj.weight": [
+        -0.0625,
+        0.0625
+      ],
+      "out_proj.weight": [
+        -0.03125,
+        0.03125
+      ]
+    },
+    "seed": 7,
+    "sha256": {
+      "w:B_bias": "23425072ab651938",
+      "w:B_norm.weight": "39563b6b589ef718",
+      "w:C_bias": "b2fddaa4aba1a2a9",
+      "w:C_norm.weight": "a4403ab3137413d8",
+      "w:D": "0f1fb78e326a01c7",
+      "w:block_norm.weight": "537f7913fdbce35c",
+      "w:dt_bias": "3380327df8552254",
+      "w:in_proj.weight": "cd4b96ad1707f116",
+      "w:out_proj.weight": "fc4ec242ff3eed5f",
+      "x": "5a02a31dcf17b0c2"
+    },
+    "shape": {
+      "batch": 2,
+      "d_model": 64,
+      "label": "B2 L64 DM64",
+      "length": 64,
+      "name": "small"
+    },
+    "steps": 2
+  },
+  "lane": "mamba3-forward",
+  "ours_device": "gpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {},
+        "source": "declared"
+      },
+      "torch-compile-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-compile-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-bf16": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "torch-eager-fp32": {
+        "library": "torch",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/mamba3-forward",
+    "problems": [
+      "ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none"
+    ],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "REFUSED"
+  },
+  "params_refused": "parameters do not match (1): ours (mojolearn): no seed parameter read back; list it in EXCEPTIONS with the reason if the library has none",
+  "rounds_requested": 1,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B2 L64 DM64",
+  "shape_record": {
+    "batch": 2,
+    "d_model": 64,
+    "label": "B2 L64 DM64",
+    "length": 64,
+    "name": "small"
+  },
+  "started": "2026-09-29T12:35:29Z",
+  "torch_settings": {
+    "torch-compile-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-compile-fp32": "float32, TF32 off",
+    "torch-eager-bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer state float32)",
+    "torch-eager-fp32": "float32, TF32 off"
+  }
+}

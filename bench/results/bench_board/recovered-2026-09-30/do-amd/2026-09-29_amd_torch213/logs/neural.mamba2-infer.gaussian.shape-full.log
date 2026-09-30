@@ -1,0 +1,18 @@
+
+=== 2026-09-29T23:09:52Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane mamba2-infer --shape full --arms ours,torch-cpu-eager-fp32,torch-cpu-compile-fp32,torch-cpu-eager-bf16,torch-cpu-compile-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-cpu-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-cpu-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba2-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba2-infer arm=ours round=0 ms=40.034 digest=1d02529bb82b373d
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-eager-fp32 round=0 ms=113.199 digest=e33d50a12b397609
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-compile-fp32 round=0 ms=14958.247 digest=e33d50a12b397609
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-eager-bf16 round=0 ms=100.260 digest=cc768bca4683a7f0
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-compile-bf16 round=0 ms=13546.227 digest=cc768bca4683a7f0
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-eager-fp32 round=1 ms=121.341 digest=e33d50a12b397609
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-compile-fp32 round=1 ms=118.747 digest=e33d50a12b397609
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-eager-bf16 round=1 ms=96.681 digest=cc768bca4683a7f0
+NEURAL-ROUND lane=mamba2-infer arm=torch-cpu-compile-bf16 round=1 ms=94.762 digest=cc768bca4683a7f0
+NEURAL-ROUND lane=mamba2-infer arm=ours round=1 ms=37.679 digest=1d02529bb82b373d
+NEURAL lane=mamba2-infer arm=ours status=ok median_ms=37.67877398058772 quality={}
+NEURAL lane=mamba2-infer arm=torch-cpu-eager-fp32 status=ok median_ms=121.34099000832066 quality={"max_abs_diff_vs_ours": 7.748603820800781e-07, "max_rel_diff_vs_ours": 2.751383776723767e-07}
+NEURAL lane=mamba2-infer arm=torch-cpu-compile-fp32 status=ok median_ms=118.74723600340076 quality={"max_abs_diff_vs_ours": 7.748603820800781e-07, "max_rel_diff_vs_ours": 2.751383776723767e-07}
+NEURAL lane=mamba2-infer arm=torch-cpu-eager-bf16 status=ok median_ms=96.68069300823845 quality={"max_abs_diff_vs_ours": 0.00592041015625, "max_rel_diff_vs_ours": 0.00210222652134168}
+NEURAL lane=mamba2-infer arm=torch-cpu-compile-bf16 status=ok median_ms=94.76186701795086 quality={"max_abs_diff_vs_ours": 0.00592041015625, "max_rel_diff_vs_ours": 0.00210222652134168}

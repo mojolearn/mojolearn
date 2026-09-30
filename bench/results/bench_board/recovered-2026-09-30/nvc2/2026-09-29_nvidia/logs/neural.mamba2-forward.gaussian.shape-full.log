@@ -1,0 +1,24 @@
+
+=== 2026-09-29T17:33:50Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/bench_board_neural.py race --lane mamba2-forward --shape full --arms ours,torch-eager-fp32,torch-eager-tf32,torch-compile-fp32,torch-compile-tf32,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/bench-board/2026-09-29_nvidia/raw/neural/shape-full --work /root/bench-board/2026-09-29_nvidia/work --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --ready-seconds 1800 --warmup-seconds 1800 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-compile-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-tf32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba2-forward", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba2-forward arm=ours round=0 ms=156.271 digest=00da58895303c580
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-fp32 round=0 ms=315.798 digest=36d95a7acf9d34c4
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-tf32 round=0 ms=308.222 digest=c6447f94bc46fb3d
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-fp32 round=0 ms=6283.065 digest=27a3ab9eda12981e
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-tf32 round=0 ms=4399.175 digest=a4f69a94d2fa9e39
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-bf16 round=0 ms=172.106 digest=945142a9f61d8989
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-bf16 round=0 ms=4355.387 digest=945142a9f61d8989
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-fp32 round=1 ms=25.814 digest=36d95a7acf9d34c4
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-tf32 round=1 ms=25.702 digest=c6447f94bc46fb3d
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-fp32 round=1 ms=26.104 digest=27a3ab9eda12981e
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-tf32 round=1 ms=26.457 digest=a4f69a94d2fa9e39
+NEURAL-ROUND lane=mamba2-forward arm=torch-eager-bf16 round=1 ms=21.684 digest=945142a9f61d8989
+NEURAL-ROUND lane=mamba2-forward arm=torch-compile-bf16 round=1 ms=21.726 digest=945142a9f61d8989
+NEURAL-ROUND lane=mamba2-forward arm=ours round=1 ms=12.372 digest=00da58895303c580
+NEURAL lane=mamba2-forward arm=ours status=ok median_ms=12.37217616289854 quality={}
+NEURAL lane=mamba2-forward arm=torch-eager-fp32 status=ok median_ms=25.814383290708065 quality={"max_abs_diff_vs_ours": 2.1457672119140625e-06, "max_rel_diff_vs_ours": 7.295107187820478e-07}
+NEURAL lane=mamba2-forward arm=torch-eager-tf32 status=ok median_ms=25.70210210978985 quality={"max_abs_diff_vs_ours": 0.0005090236663818359, "max_rel_diff_vs_ours": 0.00017305615384440802}
+NEURAL lane=mamba2-forward arm=torch-compile-fp32 status=ok median_ms=26.10443439334631 quality={"max_abs_diff_vs_ours": 2.1457672119140625e-06, "max_rel_diff_vs_ours": 7.295107187820478e-07}
+NEURAL lane=mamba2-forward arm=torch-compile-tf32 status=ok median_ms=26.456987485289574 quality={"max_abs_diff_vs_ours": 0.0005090236663818359, "max_rel_diff_vs_ours": 0.00017305615384440802}
+NEURAL lane=mamba2-forward arm=torch-eager-bf16 status=ok median_ms=21.68426662683487 quality={"max_abs_diff_vs_ours": 0.007543683052062988, "max_rel_diff_vs_ours": 0.0025646759886248202}
+NEURAL lane=mamba2-forward arm=torch-compile-bf16 status=ok median_ms=21.725687198340893 quality={"max_abs_diff_vs_ours": 0.007543683052062988, "max_rel_diff_vs_ours": 0.0025646759886248202}

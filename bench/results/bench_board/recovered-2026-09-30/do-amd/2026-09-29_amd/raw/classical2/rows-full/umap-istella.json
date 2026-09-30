@@ -1,0 +1,685 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "umap",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "b2a4464028d8158a",
+        "b2a4464028d8158a"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.25"
+      },
+      "median_ms": 498.52851999457926,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 858.7,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2084.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": 858.7,
+          "gpu_method": "rocm-smi --showpids VRAM USED for this pid at the round's end (not a peak)",
+          "host_mb": 2086.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        498.52851999457926
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "a": null,
+          "b": null,
+          "densmap": false,
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "metric_kwds": null,
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "output_metric": "euclidean",
+          "random_state": 7,
+          "repulsion_strength": 1.0,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0,
+          "target_metric": "categorical",
+          "target_n_neighbors": -1,
+          "target_weight": 0.5
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit (ours fit_transform) from host rows to the embedding",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 813.6469899909571
+    },
+    "umap-learn-cpu": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "umap-learn-cpu",
+        "--lane",
+        "umap",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "58570e19d331c7f4",
+        "58570e19d331c7f4"
+      ],
+      "info": {
+        "config": "umap.UMAP(init='spectral', learning_rate=1.0, local_connectivity=1.0, metric='euclidean', min_dist=0.1, n_components=2, n_epochs=500, n_jobs=-1, n_neighbors=5, negative_sample_rate=5, random_state=7, repulsion_strength=1.0, set_op_mix_ratio=1.0, spread=1.0)",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "library": "umap-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          }
+        ],
+        "threads_note": "random_state set: umap-learn runs one thread (its rule)",
+        "version": "0.5.12"
+      },
+      "median_ms": 7336.510115972487,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 676.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 670.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        7336.510115972487
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "umap-learn",
+        "params": {
+          "a": null,
+          "angular_rp_forest": false,
+          "b": null,
+          "dens_frac": 0.3,
+          "dens_lambda": 2.0,
+          "dens_var_shift": 0.1,
+          "densmap": false,
+          "disconnection_distance": null,
+          "force_approximation_algorithm": false,
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "metric_kwds": null,
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "output_dens": false,
+          "output_metric": "euclidean",
+          "output_metric_kwds": null,
+          "precomputed_knn": [
+            null,
+            null,
+            null
+          ],
+          "random_state": 7,
+          "repulsion_strength": 1.0,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0,
+          "target_metric": "categorical",
+          "target_metric_kwds": null,
+          "target_n_neighbors": -1,
+          "target_weight": 0.5,
+          "tqdm_kwds": null,
+          "transform_mode": "embedding",
+          "transform_queue_size": 4.0,
+          "transform_seed": 42,
+          "unique": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit (ours fit_transform) from host rows to the embedding",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 17430.476508016
+    },
+    "umap-learn-cpu-unseeded": {
+      "command": [
+        "/root/bench-board-cache/venv/bin/python",
+        "/root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "umap-learn-cpu-unseeded",
+        "--lane",
+        "umap",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e19ecd3fc6348718",
+        "6f257b20c8730ace"
+      ],
+      "info": {
+        "config": "umap.UMAP(init='spectral', learning_rate=1.0, local_connectivity=1.0, metric='euclidean', min_dist=0.1, n_components=2, n_epochs=500, n_jobs=-1, n_neighbors=5, negative_sample_rate=5, random_state=None, repulsion_strength=1.0, set_op_mix_ratio=1.0, spread=1.0)",
+        "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+        "device": "cpu",
+        "library": "umap-learn",
+        "numpy": "2.5.3",
+        "os_cpu_count": 20,
+        "pre_clock_fit": false,
+        "python": "3.12.3",
+        "sched_affinity_cpus": 20,
+        "scipy": "1.18.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-f48b354e.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.34.106.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-5f890258.so",
+            "internal_api": "openblas",
+            "num_threads": 20,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.dev"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 20,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "0.5.12"
+      },
+      "median_ms": 1326.847985998029,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 685.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 701.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1326.847985998029
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "umap-learn",
+        "params": {
+          "a": null,
+          "angular_rp_forest": false,
+          "b": null,
+          "dens_frac": 0.3,
+          "dens_lambda": 2.0,
+          "dens_var_shift": 0.1,
+          "densmap": false,
+          "disconnection_distance": null,
+          "force_approximation_algorithm": false,
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "metric_kwds": null,
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "output_dens": false,
+          "output_metric": "euclidean",
+          "output_metric_kwds": null,
+          "precomputed_knn": [
+            null,
+            null,
+            null
+          ],
+          "random_state": null,
+          "repulsion_strength": 1.0,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0,
+          "target_metric": "categorical",
+          "target_metric_kwds": null,
+          "target_n_neighbors": -1,
+          "target_weight": 0.5,
+          "tqdm_kwds": null,
+          "transform_mode": "embedding",
+          "transform_queue_size": 4.0,
+          "transform_seed": 42,
+          "unique": false
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit (ours fit_transform) from host rows to the embedding",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 11951.953860989306
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "91813e6eb5822ffb9e27c5896cfcb95b6a16994094f7fe1ec630c00e40dfbdf4",
+        "shape": [
+          20000,
+          220
+        ]
+      }
+    },
+    "block": "manifold",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rows": "stride sample of 20000 of 2043304 train rows",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by these rows",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 12929
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T14:45:11Z"
+  },
+  "commit": "ba7803f217f47ae6227036e1f120170eafb8d263",
+  "dataset": "istella",
+  "finished": "2026-09-29T19:14:30Z",
+  "lane": "umap",
+  "lane_config": {
+    "mismatches": [
+      "neighbors: ours exact brute force; umap-learn NN-descent (its choice above 4,096 rows); cuML build_algo='brute_force_knn' (exact)",
+      "umap-learn-cpu: random_state=7 makes umap-learn run one thread (its rule)",
+      "umap-learn-cpu-unseeded: random_state=None and n_jobs=-1, the every-core setting; the seed is the one parameter that differs",
+      "spectral init: each library's own eigensolver and tolerance (ours: Lanczos, at most 20 basis vectors)"
+    ],
+    "params": "n_neighbors=5, n_epochs=500 (the cuML benchmark's UMAP), n_components=2, min_dist=0.1, spread=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, set_op_mix_ratio=1.0, local_connectivity=1.0, random_state=7",
+    "quality": "trustworthiness k=15 over every row (sklearn's formula, chunked)",
+    "rows": "20000 stride rows of the train split, standardized by the fit rows",
+    "timed": "fit (ours fit_transform) from host rows to the embedding"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "repulsion_strength": 1.0,
+          "seed": 7,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0
+        },
+        "source": "get_params"
+      },
+      "umap-learn-cpu": {
+        "library": "umap-learn",
+        "params": {
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "repulsion_strength": 1.0,
+          "seed": 7,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0
+        },
+        "source": "get_params"
+      },
+      "umap-learn-cpu-unseeded": {
+        "library": "umap-learn",
+        "params": {
+          "init": "spectral",
+          "learning_rate": 1.0,
+          "local_connectivity": 1.0,
+          "metric": "euclidean",
+          "min_dist": 0.1,
+          "n_components": 2,
+          "n_epochs": 500,
+          "n_neighbors": 5,
+          "negative_sample_rate": 5,
+          "repulsion_strength": 1.0,
+          "seed": null,
+          "set_op_mix_ratio": 1.0,
+          "spread": 1.0
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "umap-learn-cpu",
+        "ours": "spectral",
+        "param": "init",
+        "same": true,
+        "theirs": "spectral"
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 1.0,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 1.0,
+        "param": "local_connectivity",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 0.1,
+        "param": "min_dist",
+        "same": true,
+        "theirs": 0.1
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 2,
+        "param": "n_components",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 500,
+        "param": "n_epochs",
+        "same": true,
+        "theirs": 500
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 5,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 5,
+        "param": "negative_sample_rate",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 1.0,
+        "param": "repulsion_strength",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 1.0,
+        "param": "set_op_mix_ratio",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu",
+        "ours": 1.0,
+        "param": "spread",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": "spectral",
+        "param": "init",
+        "same": true,
+        "theirs": "spectral"
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 1.0,
+        "param": "learning_rate",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 1.0,
+        "param": "local_connectivity",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": "euclidean",
+        "param": "metric",
+        "same": true,
+        "theirs": "euclidean"
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 0.1,
+        "param": "min_dist",
+        "same": true,
+        "theirs": 0.1
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 2,
+        "param": "n_components",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 500,
+        "param": "n_epochs",
+        "same": true,
+        "theirs": 500
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 5,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 5,
+        "param": "negative_sample_rate",
+        "same": true,
+        "theirs": 5
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 1.0,
+        "param": "repulsion_strength",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 1.0,
+        "param": "set_op_mix_ratio",
+        "same": true,
+        "theirs": 1.0
+      },
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "ours": 1.0,
+        "param": "spread",
+        "same": true,
+        "theirs": 1.0
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "umap-learn-cpu-unseeded",
+        "param": "seed",
+        "reason": "raced unseeded on purpose: seeded umap-learn runs one thread (its rule); this arm is random_state=None, n_jobs=-1 (umap-learn-cpu has 7)",
+        "value": null
+      }
+    ],
+    "family": "classical2",
+    "lane": "umap",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "trustworthiness_k15": 0.9799058423854099
+    },
+    "umap-learn-cpu": {
+      "trustworthiness_k15": 0.9774393350686623
+    },
+    "umap-learn-cpu-unseeded": {
+      "trustworthiness_k15": 0.9774740059401645
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 20000x220",
+  "started": "2026-09-29T19:13:21Z"
+}

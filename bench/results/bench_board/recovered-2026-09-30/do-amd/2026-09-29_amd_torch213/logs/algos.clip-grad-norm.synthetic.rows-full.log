@@ -1,0 +1,12 @@
+
+=== 2026-09-30T06:23:11Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane clip-grad-norm --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-eager-fp32,torch-compile-fp32 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/clip-grad-norm", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=0 ms=337.633 infer_ms=None digest=bea62536a1718eb8
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=torch-eager-fp32 round=0 ms=185.938 infer_ms=None digest=bea62536a1718eb8
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=torch-compile-fp32 round=0 ms=256.338 infer_ms=None digest=bea62536a1718eb8
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=torch-eager-fp32 round=1 ms=0.634 infer_ms=None digest=973aad3bdd470a4e
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=torch-compile-fp32 round=1 ms=92.306 infer_ms=None digest=973aad3bdd470a4e
+ALGOS-ROUND lane=clip-grad-norm dataset=synthetic arm=ours round=1 ms=25.703 infer_ms=None digest=973aad3bdd470a4e
+ALGOS lane=clip-grad-norm dataset=synthetic arm=ours status=ok median_ms=25.702849990921095 quality={"norm": 1.0, "norm_rel_diff_vs_ours": 0.0}
+ALGOS lane=clip-grad-norm dataset=synthetic arm=torch-eager-fp32 status=ok median_ms=0.633639981970191 quality={"norm": 1.0, "norm_rel_diff_vs_ours": 0.0}
+ALGOS lane=clip-grad-norm dataset=synthetic arm=torch-compile-fp32 status=ok median_ms=92.30595600092784 quality={"norm": 1.0, "norm_rel_diff_vs_ours": 0.0}

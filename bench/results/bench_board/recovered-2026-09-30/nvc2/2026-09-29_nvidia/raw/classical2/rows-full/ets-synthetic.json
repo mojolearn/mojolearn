@@ -1,0 +1,431 @@
+{
+  "arms": {
+    "cuml-gpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "cuml-gpu",
+        "--lane",
+        "ets",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "ef05c70eb0b69cc1",
+        "ef05c70eb0b69cc1"
+      ],
+      "info": {
+        "config": "ExponentialSmoothing(endog=array([[115.7083  , 116.29269 , 116.68947 , ..., 111.74497 , 114.34837 ,\n        116.58549 ],\n       [133.40991 , 131.49425 , 130.39645 , ..., 138.48512 , 135.7623  ,\n        132.38063 ],\n       [144.34476 , 145.16495 , 148.06584 , ..., 134.19348 , 141.59294 ,\n        145.14005 ],\n       ...,\n       [122.77746 , 123.3331  , 121.81123 , ..., 112.9988  , 116.55185 ,\n        115.498405],\n       [125.38286 , 124.78188 , 122.03531 , ..., 118.29976 , 118.9935  ,\n        117.993454],\n       [ 68.514084,  64.631386,  61.934273, ...,  76.90912 ,  76.304016,\n         73.89967 ]], shape=(64, 1440), dtype=float32), seasonal='add', seasonal_periods=24, ts_num=64)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "cuda_driver_api": 13000,
+        "cuda_runtime": 12090,
+        "cupy": "14.2.0",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "cuml",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "upload_ms_untimed": 4.267986863851547,
+        "version": "26.08.00"
+      },
+      "median_ms": 489.47184439748526,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 476.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 817.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 480.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 924.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        489.47184439748526
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "cuml",
+        "params": {
+          "endog": "array sha256:fb48f601e1efde9f",
+          "eps": 0.00224,
+          "seasonal": "add",
+          "seasonal_periods": 24,
+          "start_periods": 2,
+          "ts_num": 64
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "construct + fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": 4.267986863851547
+      },
+      "status": "ok",
+      "warmup_ms": 583.490221761167
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "ets",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "ad3814b361b6e9d6",
+        "ad3814b361b6e9d6"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_tsa has no numeric-mode constant; tier from its directory /root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 157.1580758318305,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1498.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.1,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1501.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        157.1580758318305
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "endog": "array sha256:fb48f601e1efde9f",
+          "eps": 0.00224,
+          "initialization_method": "estimated",
+          "seasonal": "additive",
+          "seasonal_periods": 24,
+          "start_periods": 2,
+          "ts_num": 64
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "construct + fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1060.6086095795035
+    },
+    "statsmodels-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "statsmodels-cpu",
+        "--lane",
+        "ets",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "91bb9c78b4e890b8",
+        "91bb9c78b4e890b8"
+      ],
+      "info": {
+        "config": "statsmodels.tsa.holtwinters.ExponentialSmoothing(trend='additive', seasonal='additive', seasonal_periods=24, damped_trend=False, use_boxcox=False, initialization_method='estimated').fit(); one series per fit, joblib Parallel(n_jobs=-1) over the 64 series",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "statsmodels",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "version": "0.15.0"
+      },
+      "median_ms": 459.84007604420185,
+      "mem": [
+        {
+          "children_mb": 10438.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 194.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 10442.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 195.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        459.84007604420185
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "statsmodels",
+        "params": {
+          "damped_trend": false,
+          "initialization_method": "estimated",
+          "seasonal": "additive",
+          "seasonal_periods": 24,
+          "trend": "additive"
+        },
+        "source": "declared"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "construct + fit of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1552.1314311772585
+    }
+  },
+  "block": {
+    "arrays": {
+      "Y": {
+        "dtype": "float32",
+        "sha256": "c073d12f47c1bd5c6718c785336cf2c520b12149e91dd8693b75a8fc0985844b",
+        "shape": [
+          64,
+          1488
+        ]
+      }
+    },
+    "block": "seasonal",
+    "dataset": "synthetic",
+    "generator": "level U(50,150) + slope U(-.01,.02) t + amp U(5,20) sin(2 pi t/24 + phase) + N(0,1), default_rng(7)",
+    "h": 48,
+    "n_obs": 1488,
+    "period": 24,
+    "rule": "tools/bench_board_more.py prep",
+    "seed": 7,
+    "series": 64,
+    "smoke_max_rows": null,
+    "written": "2026-09-29T15:36:49Z"
+  },
+  "commit": "4f3e685348ddc41ec22ce00c53187c3528d929b7",
+  "dataset": "synthetic",
+  "finished": "2026-09-29T23:25:29Z",
+  "lane": "ets",
+  "lane_config": {
+    "mismatches": [
+      "initialization: ours 'estimated' (its default, statsmodels' definition), statsmodels 'estimated'; cuML has only its heuristic start (start_periods=2), so its row fits the older initialization",
+      "cuML returns no in-sample predictions; that quality cell is empty",
+      "trend: ours and cuML are additive-trend with no parameter; statsmodels trend='additive'. eps is ours' and cuML's only; statsmodels fit() uses its own optimizer",
+      "seed: no arm has a seed argument"
+    ],
+    "params": "trend additive, seasonal additive, seasonal_periods=24, initialization_method='estimated'; ours and cuML start_periods=2, eps=2.24e-3; statsmodels damped_trend=False, use_boxcox=False",
+    "quality": "forecast RMSE, in-sample one-step RMSE (t >= 48)",
+    "rows": "64 synthetic hourly series, period 24, 1440 fit points, 48 held out",
+    "timed": "construct + fit of every series"
+  },
+  "params_check": {
+    "arms": {
+      "cuml-gpu": {
+        "library": "cuml",
+        "params": {
+          "eps": 0.00224,
+          "seasonal": "additive",
+          "seasonal_periods": 24,
+          "seed": "none (deterministic)",
+          "start_periods": 2
+        },
+        "source": "get_params"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "eps": 0.00224,
+          "initialization_method": "estimated",
+          "seasonal": "additive",
+          "seasonal_periods": 24,
+          "seed": "none (deterministic)",
+          "start_periods": 2
+        },
+        "source": "attributes"
+      },
+      "statsmodels-cpu": {
+        "library": "statsmodels",
+        "params": {
+          "damped_trend": false,
+          "initialization_method": "estimated",
+          "seasonal": "additive",
+          "seasonal_periods": 24,
+          "seed": "none (deterministic)",
+          "trend": "additive"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [
+      {
+        "arm": "cuml-gpu",
+        "ours": 0.00224,
+        "param": "eps",
+        "same": true,
+        "theirs": 0.00224
+      },
+      {
+        "arm": "cuml-gpu",
+        "ours": "additive",
+        "param": "seasonal",
+        "same": true,
+        "theirs": "additive"
+      },
+      {
+        "arm": "cuml-gpu",
+        "ours": 24,
+        "param": "seasonal_periods",
+        "same": true,
+        "theirs": 24
+      },
+      {
+        "arm": "cuml-gpu",
+        "ours": 2,
+        "param": "start_periods",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": "estimated",
+        "param": "initialization_method",
+        "same": true,
+        "theirs": "estimated"
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": "additive",
+        "param": "seasonal",
+        "same": true,
+        "theirs": "additive"
+      },
+      {
+        "arm": "statsmodels-cpu",
+        "ours": 24,
+        "param": "seasonal_periods",
+        "same": true,
+        "theirs": 24
+      }
+    ],
+    "exceptions": [],
+    "family": "classical2",
+    "lane": "ets",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "cuml-gpu",
+      "ours",
+      "statsmodels-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "cuml-gpu": {
+      "forecast_rmse": 1.0738144686414044
+    },
+    "ours": {
+      "forecast_rmse": 0.9843924315379182,
+      "insample_rmse": 0.9909714021119975
+    },
+    "statsmodels-cpu": {
+      "forecast_rmse": 0.9846639528664181,
+      "insample_rmse": 0.9920560696283929
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "Yfit 64x1440; Yhold 64x48",
+  "started": "2026-09-29T23:25:21Z"
+}

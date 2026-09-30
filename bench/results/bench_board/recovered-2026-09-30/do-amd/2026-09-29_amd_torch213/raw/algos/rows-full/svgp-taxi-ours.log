@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 4238, in worker
+    runner.fit()
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 2142, in fit
+    self._fit()
+  File "/root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py", line 4115, in fit
+    S["e"] = cls(inducing_points=Z0, **hyp).fit(X, y)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-t213/venv/lib/python3.12/site-packages/mojolearn/_expansion_neighbors.py", line 1526, in fit
+    raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
+ValueError: SVGP: the inducing system is not positive definite; raise jitter or noise_variance

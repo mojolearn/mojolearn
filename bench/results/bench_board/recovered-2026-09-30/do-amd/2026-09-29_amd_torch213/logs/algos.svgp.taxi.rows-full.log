@@ -1,0 +1,11 @@
+
+=== 2026-09-30T01:05:34Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane svgp --dataset taxi --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,gpytorch-gpu,gpytorch-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"gpytorch-cpu": {"library": "gpytorch", "params": {"seed": 7}, "source": "declared"}, "gpytorch-gpu": {"library": "gpytorch", "params": {"seed": 7}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/svgp", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-REFUSED lane=svgp dataset=taxi arm=ours stage=round0 detail={"error": "ValueError('SVGP: the inducing system is not positive definite; raise jitter or noise_variance')", "event": "error", "stage": "round 0"}
+ALGOS-ROUND lane=svgp dataset=taxi arm=gpytorch-gpu round=0 ms=5075.010 infer_ms=2.981836994877085 digest=1a10cba00faccb41
+ALGOS-ROUND lane=svgp dataset=taxi arm=gpytorch-cpu round=0 ms=657.183 infer_ms=141.87068201135844 digest=46bbde45456cf97f
+ALGOS-ROUND lane=svgp dataset=taxi arm=gpytorch-cpu round=1 ms=504.622 infer_ms=144.92132898885757 digest=46bbde45456cf97f
+ALGOS-ROUND lane=svgp dataset=taxi arm=gpytorch-gpu round=1 ms=15.406 infer_ms=2.6231170049868524 digest=1a10cba00faccb41
+ALGOS lane=svgp dataset=taxi arm=ours status=error median_ms=None quality={}
+ALGOS lane=svgp dataset=taxi arm=gpytorch-gpu status=ok median_ms=15.406346996314824 quality={"finite": true, "r2": -0.20952626553636056, "rmse": 17.831013835726772}
+ALGOS lane=svgp dataset=taxi arm=gpytorch-cpu status=ok median_ms=504.6224019897636 quality={"finite": true, "r2": -0.20953208138182777, "rmse": 17.831056704699233}

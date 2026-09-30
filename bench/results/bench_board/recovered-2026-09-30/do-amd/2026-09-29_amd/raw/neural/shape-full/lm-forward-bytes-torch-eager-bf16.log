@@ -1,0 +1,2 @@
+/root/mojolearn-wt/steward-do-amd/tools/torch_lm_step_opponent.py:335: UserWarning: Using AOTriton backend for Flash Attention forward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/flash_attn/flash_api.h:267.)
+  a = F.scaled_dot_product_attention(q, k, v, is_causal=True, scale=self.scale)

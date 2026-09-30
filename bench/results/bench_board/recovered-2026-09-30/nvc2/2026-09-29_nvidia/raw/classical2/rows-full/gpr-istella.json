@@ -1,0 +1,337 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "gpr",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "0a6d4a6e89c46341",
+        "0a6d4a6e89c46341"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 220,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "numeric_mode_used()",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 583.0932324752212,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 908.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2588.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 908.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 2623.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        583.0932324752212
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "alpha": 9.5367431640625e-07,
+          "copy_X_train": true,
+          "kernel": "((ConstantKernel(1.0) * RBF([14.832396974191326])) + WhiteKernel(0.01))",
+          "n_restarts_optimizer": 0,
+          "n_targets": null,
+          "normalize_y": false,
+          "optimizer": null,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1561.2699780613184
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "gpr",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "58d9073603265a88",
+        "58d9073603265a88"
+      ],
+      "info": {
+        "config": "GaussianProcessRegressor(alpha=9.5367431640625e-07,\n                         kernel=1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01),\n                         optimizer=None, random_state=7)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 1486.525785177946,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1339.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 1412.4,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1486.525785177946
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "alpha": 9.5367431640625e-07,
+          "copy_X_train": true,
+          "kernel": "1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01)",
+          "n_restarts_optimizer": 0,
+          "n_targets": null,
+          "normalize_y": false,
+          "optimizer": null,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1152.191624045372
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+        "shape": [
+          1000000,
+          220
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+        "shape": [
+          100000,
+          220
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "22d8d7786822923f2f76455d8d9e0fede1f98f1555cd6a7697d4ccfb8fd632f2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "34ff64a373b16b53c5b9199629e265b739d60ecbef7074f53bc8029133a2150c",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059,
+      "Xq": 66406
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T15:37:03Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "istella",
+  "finished": "2026-09-29T17:10:10Z",
+  "lane": "gpr",
+  "lane_config": {
+    "mismatches": [
+      "kernel: the same kernel built from each library's own classes"
+    ],
+    "params": "kernel=ConstantKernel(1.0) * RBF(length_scale=sqrt(d)) + WhiteKernel(noise_level=0.01), alpha=2**-20 (the one ridge IDENTICAL accepts beside 0; the noise lives in the WhiteKernel so the float32 factor of K exists on taxi's near-duplicate rows), optimizer=None, normalize_y=False, n_restarts_optimizer=0, random_state=7",
+    "quality": "held-out RMSE, R2, mean log predictive density (variance std^2 + alpha)",
+    "rows": "3000 fit and 3000 held-out stride rows of the reg block (standardized by the fit rows); O(n^3)",
+    "timed": "fit"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "alpha": 9.5367431640625e-07,
+          "kernel": "((ConstantKernel(1.0) * RBF([14.832396974191326])) + WhiteKernel(0.01))",
+          "n_restarts_optimizer": 0,
+          "seed": 7
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "alpha": 9.5367431640625e-07,
+          "kernel": "1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01)",
+          "n_restarts_optimizer": 0,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 9.5367431640625e-07,
+        "param": "alpha",
+        "same": true,
+        "theirs": 9.5367431640625e-07
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "((ConstantKernel(1.0) * RBF([14.832396974191326])) + WhiteKernel(0.01))",
+        "param": "kernel",
+        "same": false,
+        "theirs": "1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01)"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0,
+        "param": "n_restarts_optimizer",
+        "same": true,
+        "theirs": 0
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": "((ConstantKernel(1.0) * RBF([14.832396974191326])) + WhiteKernel(0.01))",
+        "param": "kernel",
+        "reason": "the same ConstantKernel(1.0) * RBF(sqrt(d)) (gpr: + WhiteKernel(1e-2)) built from each library's own kernel classes; their reprs differ",
+        "theirs": "1**2 * RBF(length_scale=14.8) + WhiteKernel(noise_level=0.01)"
+      }
+    ],
+    "family": "classical2",
+    "lane": "gpr",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "finite": true,
+      "mean_log_predictive_density": -9.285753999098805,
+      "r2": 0.2353459478280211,
+      "rmse": 0.7604393550345704
+    },
+    "sklearn-cpu": {
+      "finite": true,
+      "mean_log_predictive_density": -9.287148097534498,
+      "r2": 0.2353682174820637,
+      "rmse": 0.7604282815009824
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 3000x220; Xq 3000x220; y 3000; yq 3000",
+  "started": "2026-09-29T17:10:00Z"
+}

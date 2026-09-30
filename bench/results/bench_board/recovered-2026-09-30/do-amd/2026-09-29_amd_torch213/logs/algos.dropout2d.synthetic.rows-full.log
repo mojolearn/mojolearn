@@ -1,0 +1,11 @@
+
+=== 2026-09-30T06:19:52Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane dropout2d --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-eager-fp32,torch-compile-fp32 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+ALGOS-REFUSED lane=dropout2d dataset=synthetic arm=ours stage=ready detail={"error": "ImportError('libamdhip64.so.7: cannot open shared object file: No such file or directory')", "event": "error", "stage": "ready"}
+BOARD-PARAMS {"arms": {"torch-compile-fp32": {"library": "torch", "params": {"p": 0.1, "seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"p": 0.1, "seed": 7}, "source": "declared"}}, "compared": [{"arm": "torch-compile-fp32", "ours": 0.1, "param": "p", "same": true, "theirs": 0.1}], "exceptions": [], "family": "algos", "lane": "algos/dropout2d", "problems": [], "reference": "torch-eager-fp32", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS-ROUND lane=dropout2d dataset=synthetic arm=torch-eager-fp32 round=0 ms=230.419 infer_ms=0.2316799946129322 digest=e3b0c44298fc1c14
+ALGOS-ROUND lane=dropout2d dataset=synthetic arm=torch-compile-fp32 round=0 ms=1543.626 infer_ms=669.3595450196881 digest=e3b0c44298fc1c14
+ALGOS-ROUND lane=dropout2d dataset=synthetic arm=torch-compile-fp32 round=1 ms=97.194 infer_ms=0.1680599816609174 digest=e3b0c44298fc1c14
+ALGOS-ROUND lane=dropout2d dataset=synthetic arm=torch-eager-fp32 round=1 ms=0.859 infer_ms=0.08030000026337802 digest=e3b0c44298fc1c14
+ALGOS lane=dropout2d dataset=synthetic arm=ours status=not_ready median_ms=None quality={}
+ALGOS lane=dropout2d dataset=synthetic arm=torch-eager-fp32 status=ok median_ms=0.8594889950472862 quality={}
+ALGOS lane=dropout2d dataset=synthetic arm=torch-compile-fp32 status=ok median_ms=97.19449299154803 quality={}

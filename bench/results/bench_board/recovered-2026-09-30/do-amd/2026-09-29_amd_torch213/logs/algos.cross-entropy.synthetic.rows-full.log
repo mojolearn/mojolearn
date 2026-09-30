@@ -1,0 +1,12 @@
+
+=== 2026-09-30T06:23:20Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane cross-entropy --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,torch-eager-fp32,torch-compile-fp32 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-fp32": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/cross-entropy", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=ours round=0 ms=541.893 infer_ms=None digest=91289b0ef1dddcac
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=torch-eager-fp32 round=0 ms=40.978 infer_ms=None digest=db1512c20fb986a9
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=torch-compile-fp32 round=0 ms=922.643 infer_ms=None digest=6bc20d399e100f6a
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=torch-eager-fp32 round=1 ms=8.366 infer_ms=None digest=db1512c20fb986a9
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=torch-compile-fp32 round=1 ms=84.413 infer_ms=None digest=6bc20d399e100f6a
+ALGOS-ROUND lane=cross-entropy dataset=synthetic arm=ours round=1 ms=216.698 infer_ms=None digest=91289b0ef1dddcac
+ALGOS lane=cross-entropy dataset=synthetic arm=ours status=ok median_ms=216.69769298750907 quality={"loss_rel_err_vs_fp64": 4.5643472537888876e-08}
+ALGOS lane=cross-entropy dataset=synthetic arm=torch-eager-fp32 status=ok median_ms=8.366107009351254 quality={"grad_max_rel_diff_vs_ours": 4.1909693216575284e-09, "loss_rel_err_vs_fp64": 4.5643472537888876e-08}
+ALGOS lane=cross-entropy dataset=synthetic arm=torch-compile-fp32 status=ok median_ms=84.41316901007667 quality={"grad_max_rel_diff_vs_ours": 7.450612127391162e-09, "loss_rel_err_vs_fp64": 4.5643472537888876e-08}

@@ -1,0 +1,12 @@
+
+=== 2026-09-30T06:03:34Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane svd --dataset taxi --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/svd", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=0 ms=4507.508 infer_ms=None digest=f07891b9aaf42a98
+ALGOS-ROUND lane=svd dataset=taxi arm=numpy-cpu round=0 ms=130.542 infer_ms=None digest=e272d387e774795e
+ALGOS-ROUND lane=svd dataset=taxi arm=torch-gpu round=0 ms=318.100 infer_ms=None digest=4abb3ac261fb6b2e
+ALGOS-ROUND lane=svd dataset=taxi arm=numpy-cpu round=1 ms=130.521 infer_ms=None digest=e272d387e774795e
+ALGOS-ROUND lane=svd dataset=taxi arm=torch-gpu round=1 ms=272.130 infer_ms=None digest=4abb3ac261fb6b2e
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=1 ms=4142.637 infer_ms=None digest=f07891b9aaf42a98
+ALGOS lane=svd dataset=taxi arm=ours status=ok median_ms=4142.637350014411 quality={"max_rel_singular_value_error": 6.33228931077733e-07, "relative_reconstruction_error_100k_rows": 0.0003330177321485153}
+ALGOS lane=svd dataset=taxi arm=numpy-cpu status=ok median_ms=130.52077000611462 quality={"max_rel_singular_value_error": 4.307764492587405e-08, "relative_reconstruction_error_100k_rows": 4.3141029223910104e-08}
+ALGOS lane=svd dataset=taxi arm=torch-gpu status=ok median_ms=272.13011001003906 quality={"max_rel_singular_value_error": 4.408768861444997e-05, "relative_reconstruction_error_100k_rows": 0.003043110838778584}

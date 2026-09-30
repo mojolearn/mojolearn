@@ -1,0 +1,12 @@
+
+=== 2026-09-29T12:56:00Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane louvain --dataset istella --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,networkx-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"networkx-cpu": {"library": "networkx", "params": {"seed": 7}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}, "ours-fast": {"library": "mojolearn", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/louvain", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=louvain dataset=istella arm=ours round=0 ms=467.123 infer_ms=None digest=f4f5c5fd428ecd9f
+ALGOS-ROUND lane=louvain dataset=istella arm=ours-fast round=0 ms=276.732 infer_ms=None digest=f4f5c5fd428ecd9f
+ALGOS-ROUND lane=louvain dataset=istella arm=networkx-cpu round=0 ms=82.360 infer_ms=None digest=bb6663bcee7fa1e4
+ALGOS-ROUND lane=louvain dataset=istella arm=ours-fast round=1 ms=233.476 infer_ms=None digest=f4f5c5fd428ecd9f
+ALGOS-ROUND lane=louvain dataset=istella arm=networkx-cpu round=1 ms=82.305 infer_ms=None digest=bb6663bcee7fa1e4
+ALGOS-ROUND lane=louvain dataset=istella arm=ours round=1 ms=466.756 infer_ms=None digest=f4f5c5fd428ecd9f
+ALGOS lane=louvain dataset=istella arm=ours status=ok median_ms=466.7555420019198 quality={"modularity": 0.8135465038560676, "n_communities": 14}
+ALGOS lane=louvain dataset=istella arm=ours-fast status=ok median_ms=233.4762500031502 quality={"modularity": 0.8135465038560676, "n_communities": 14}
+ALGOS lane=louvain dataset=istella arm=networkx-cpu status=ok median_ms=82.30533400637796 quality={"modularity": 0.8139892716294851, "n_communities": 14}

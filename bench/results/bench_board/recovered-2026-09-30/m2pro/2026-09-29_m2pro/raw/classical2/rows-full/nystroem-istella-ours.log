@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py", line 1457, in worker
+    runner.call()
+    ~~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py", line 776, in call
+    self._call()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/bench_board_more.py", line 1022, in call
+    S["z"] = est.fit_transform(X)
+             ~~~~~~~~~~~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/kernel_methods.py", line 491, in fit_transform
+    return self.fit(X).transform(X)
+           ~~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/kernel_methods.py", line 443, in fit
+    sweeps = self._extension().nystroem_fit(
+        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding.
+    ...<5 lines>...
+        [n, d, kernel, int(self.degree), gamma, coef0, q, seed],
+    )
+Exception: km_basis_indices: n_samples 100000 exceeds KM_MAX_BASIS_POOL = 4096. The rank pass counts a total order over every pair of rows, which is n_samples^2 host comparisons. To close this refusal, replace the counting rank with a pinned segmented sort over the 64-bit composite key -- the construction neighbors/checks/select_radix_identical.mojo uses for its (distance, index) key -- and re-gate check_nystroem_basis_prefix_stability at the larger size. DEVIATION 1672

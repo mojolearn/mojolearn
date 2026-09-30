@@ -1,0 +1,3 @@
+/root/bench-board-cache/venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:194: UserWarning: TensorFloat32 tensor cores for float32 matrix multiplication available but not enabled. Consider setting `torch.set_float32_matmul_precision('high')` for better performance.
+  warnings.warn(
+[W929 20:29:25.910187221 attention.hip:1180] Warning: Using AOTriton backend for Efficient Attention forward... (function operator())

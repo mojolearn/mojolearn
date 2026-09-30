@@ -1,0 +1,470 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "tweedie",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "d7a20d7a88f529a5",
+        "d7a20d7a88f529a5"
+      ],
+      "infer_ms": [
+        0.4828134551644325
+      ],
+      "infer_warmup_ms": 1.0663289576768875,
+      "info": {
+        "config": "mojolearn.TweedieRegressor(alpha=0.0001, fit_intercept=True, link='log', max_iter=100, power=1.5, solver='lbfgs', tol=0.0001)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 630.6081302464008,
+      "mem": [
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 686.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 254.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.2,
+          "gpu_mb": 686.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 293.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        630.6081302464008
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "link": "log",
+          "max_iter": 100,
+          "power": 1.5,
+          "solver": "lbfgs",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 741.7101301252842
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "tweedie",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/algos-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "de3ca1fb2f093ae1",
+        "de3ca1fb2f093ae1"
+      ],
+      "infer_ms": [
+        3.327499143779278
+      ],
+      "infer_warmup_ms": 22.358812391757965,
+      "info": {
+        "config": "sklearn.linear_model:TweedieRegressor(alpha=0.0001, fit_intercept=True, link='log', max_iter=100, power=1.5, solver='lbfgs', tol=0.0001)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 1608.0913348123431,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 361.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 355.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        1608.0913348123431
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "link": "log",
+          "max_iter": 100,
+          "power": 1.5,
+          "solver": "lbfgs",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X, y)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1556.6028915345669
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "d60aff554f2b3c15798291cde2e1105b75cdab97ccb9f6548a89ecc9ea660da3",
+        "shape": [
+          1000000,
+          11
+        ]
+      },
+      "Xq": {
+        "dtype": "float32",
+        "sha256": "3d38829177891df39d8ee10103067bc2e1d9fb94bbfd4dc57e367768739c0c44",
+        "shape": [
+          100000,
+          11
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "69c03b299f12319107f0c41e33a358dc27b94c80fb2a6096e5ce0eff7f9e6fe2",
+        "shape": [
+          1000000
+        ]
+      },
+      "yq": {
+        "dtype": "float32",
+        "sha256": "5f22ef8351272e9cab4cf4b3c17503f166732c8feaa85912f2f577ed84a9fd74",
+        "shape": [
+          100000
+        ]
+      }
+    },
+    "block": "reg",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "eval_rows": "stride sample of 100000 of 500000 test rows",
+    "fit_rows": "stride sample of 1000000 of 5250086 train rows",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by the fit rows (float64 mean and std)",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0,
+      "Xq": 0
+    },
+    "smoke_max_rows": null,
+    "target": "real",
+    "written": "2026-09-29T15:37:23Z"
+  },
+  "commit": "0546764d25487515797db02bdc013fb89b7b1014",
+  "dataset": "taxi",
+  "finished": "2026-09-29T21:29:44Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": null,
+        "digests": [
+          "d7a20d7a88f529a5",
+          "d7a20d7a88f529a5"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.TweedieRegressor(alpha=0.0001, fit_intercept=True, link='log', max_iter=100, power=1.5, solver='lbfgs', tol=0.0001)",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_linear numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.25"
+        },
+        "ms": [
+          0.4828134551644325
+        ],
+        "status": "ok",
+        "warmup_ms": 1.0663289576768875
+      },
+      "sklearn-cpu": {
+        "digest_stable": null,
+        "digests": [
+          "de3ca1fb2f093ae1",
+          "de3ca1fb2f093ae1"
+        ],
+        "error": null,
+        "info": {
+          "config": "sklearn.linear_model:TweedieRegressor(alpha=0.0001, fit_intercept=True, link='log', max_iter=100, power=1.5, solver='lbfgs', tol=0.0001)",
+          "cpu_model": "AMD EPYC 9554 64-Core Processor",
+          "device": "cpu",
+          "library": "scikit-learn",
+          "numpy": "2.4.6",
+          "os_cpu_count": 256,
+          "pre_clock_fit": false,
+          "python": "3.11.10",
+          "sched_affinity_cpus": 256,
+          "scipy": "1.17.1",
+          "thread_env": {
+            "MKL_NUM_THREADS": null,
+            "NUMEXPR_NUM_THREADS": null,
+            "OMP_NUM_THREADS": null,
+            "OPENBLAS_NUM_THREADS": null,
+            "VECLIB_MAXIMUM_THREADS": null
+          },
+          "threadpools": [
+            {
+              "architecture": null,
+              "filepath": "libgomp-a34b3233.so.1.0.0",
+              "internal_api": "openmp",
+              "num_threads": 256,
+              "threading_layer": null,
+              "user_api": "openmp",
+              "version": null
+            },
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas64_-32a4b2a6.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.31.188.0"
+            },
+            {
+              "architecture": "SkylakeX",
+              "filepath": "libscipy_openblas-6cdc3b4a.so",
+              "internal_api": "openblas",
+              "num_threads": 64,
+              "threading_layer": "pthreads",
+              "user_api": "blas",
+              "version": "0.3.30"
+            }
+          ],
+          "version": "1.7.2"
+        },
+        "ms": [
+          3.327499143779278
+        ],
+        "status": "ok",
+        "warmup_ms": 22.358812391757965
+      }
+    },
+    "batch": "Xq",
+    "call": "predict(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "tweedie",
+  "lane_config": {
+    "block": "reg",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "linear",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [
+      "y = the reg target (>= 0)"
+    ],
+    "ours_class": "mojolearn.TweedieRegressor",
+    "params": {
+      "alpha": 0.0001,
+      "fit_intercept": true,
+      "link": "log",
+      "max_iter": 100,
+      "power": 1.5,
+      "solver": "lbfgs",
+      "tol": 0.0001
+    },
+    "quality": "held-out R2 and RMSE",
+    "sklearn": "sklearn.linear_model:TweedieRegressor",
+    "task": "reg",
+    "timed_fit": "fit(X, y)",
+    "timed_infer": "predict(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "max_iter": 100,
+          "seed": "none (deterministic)",
+          "solver": "lbfgs",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "alpha": 0.0001,
+          "fit_intercept": true,
+          "max_iter": 100,
+          "seed": "none (deterministic)",
+          "solver": "lbfgs",
+          "tol": 0.0001
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0001,
+        "param": "alpha",
+        "same": true,
+        "theirs": 0.0001
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": true,
+        "param": "fit_intercept",
+        "same": true,
+        "theirs": true
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 100,
+        "param": "max_iter",
+        "same": true,
+        "theirs": 100
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "lbfgs",
+        "param": "solver",
+        "same": true,
+        "theirs": "lbfgs"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 0.0001,
+        "param": "tol",
+        "same": true,
+        "theirs": 0.0001
+      }
+    ],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/tweedie",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours",
+      "sklearn-cpu"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "finite": true,
+      "r2": -10.070851417670527,
+      "rmse": 52.994073284316954
+    },
+    "sklearn-cpu": {
+      "finite": true,
+      "r2": -10.073629273171369,
+      "rmse": 53.00072140193932
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 1000000x11; Xq 100000x11; y 1000000; yq 100000",
+  "started": "2026-09-29T21:29:38Z"
+}

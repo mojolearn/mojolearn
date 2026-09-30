@@ -1,0 +1,159 @@
+
+=== 2026-09-29T05:20:07Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane gbdt-depthwise --dataset istella --devices cpu --arms catboost-cpu,xgboost-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=gbdt-depthwise MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-depthwise arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-AB lane=gbdt-depthwise arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours-ab 2550_borrow_x=1 2551_device_partition=0 2580_level_quant=0 2581_group_width=0
+FSPEED-SCALE stage=before rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=catboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-depthwise arm=xgboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=0 host_mb=5105.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours shape=istella-2043304x220 ms=4278.719
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=0 host_mb=5099.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 ms=3773.872
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=0 host_mb=5744.9 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 ms=15830.014
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=0 host_mb=6843.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 ms=4927.455
+FSPEED-ORDER lane=gbdt-depthwise round=1 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=1 host_mb=8491.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-2043304x220 round=1 ms=4160.838 hash=b567b41f7afb936f
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=1 host_mb=9399.0 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 round=1 ms=3789.601 hash=b9ae6e7b99fa7d39
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=1 host_mb=8561.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 round=1 ms=15484.309 hash=f2dbf55344bc20e1
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=1 host_mb=8670.9 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 round=1 ms=4985.978 hash=78ddcb1119bb6e12
+FSPEED-ORDER lane=gbdt-depthwise round=2 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=2 host_mb=11183.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-2043304x220 round=2 ms=4164.610 hash=b567b41f7afb936f
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=2 host_mb=11161.9 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 round=2 ms=3752.907 hash=b9ae6e7b99fa7d39
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=2 host_mb=9119.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 round=2 ms=15430.942 hash=f2dbf55344bc20e1
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=2 host_mb=8937.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 round=2 ms=4979.483 hash=78ddcb1119bb6e12
+FSPEED-ORDER lane=gbdt-depthwise round=3 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=3 host_mb=11461.2 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-2043304x220 round=3 ms=4169.249 hash=b567b41f7afb936f
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=3 host_mb=11448.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 round=3 ms=3776.699 hash=b9ae6e7b99fa7d39
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=3 host_mb=9347.0 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 round=3 ms=15483.680 hash=f2dbf55344bc20e1
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=3 host_mb=9109.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 round=3 ms=4934.209 hash=78ddcb1119bb6e12
+FSPEED-ORDER lane=gbdt-depthwise round=4 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=4 host_mb=11651.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-2043304x220 round=4 ms=4165.312 hash=b567b41f7afb936f
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=4 host_mb=11637.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 round=4 ms=3763.054 hash=b9ae6e7b99fa7d39
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=4 host_mb=9380.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 round=4 ms=15492.394 hash=f2dbf55344bc20e1
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=4 host_mb=9140.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 round=4 ms=4944.985 hash=78ddcb1119bb6e12
+FSPEED-ORDER lane=gbdt-depthwise round=5 arms=ours,ours-ab,catboost-cpu,xgboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours round=5 host_mb=11683.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours shape=istella-2043304x220 round=5 ms=4167.545 hash=b567b41f7afb936f
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-depthwise arm=ours-ab round=5 host_mb=11670.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-depthwise arm=ours-ab shape=istella-2043304x220 round=5 ms=3764.713 hash=b9ae6e7b99fa7d39
+FSPEED-MEM lane=gbdt-depthwise arm=catboost-cpu round=5 host_mb=9419.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=catboost-cpu shape=istella-2043304x220 round=5 ms=15503.556 hash=f2dbf55344bc20e1
+FSPEED-MEM lane=gbdt-depthwise arm=xgboost-cpu round=5 host_mb=9171.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-depthwise arm=xgboost-cpu shape=istella-2043304x220 round=5 ms=4995.392 hash=78ddcb1119bb6e12
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=logloss value=0.126973
+FSPEED-ACC lane=gbdt-depthwise arm=ours metric=auc value=0.972354
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=logloss value=0.127070
+FSPEED-ACC lane=gbdt-depthwise arm=ours-ab metric=auc value=0.972339
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=logloss value=0.128459
+FSPEED-ACC lane=gbdt-depthwise arm=catboost-cpu metric=auc value=0.971850
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=logloss value=0.125560
+FSPEED-ACC lane=gbdt-depthwise arm=xgboost-cpu metric=auc value=0.973663
+FSPEED-FIT lane=gbdt-depthwise arm=ours library=mojolearn trees=100 nodes=12590 leaves=6345 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT-NOTE lane=gbdt-depthwise arm=ours depth_note=non-symmetric model text carries nodes, not depth
+FSPEED-FIT lane=gbdt-depthwise arm=ours-ab library=mojolearn trees=100 nodes=12410 leaves=6255 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT-NOTE lane=gbdt-depthwise arm=ours-ab depth_note=non-symmetric model text carries nodes, not depth
+FSPEED-FIT lane=gbdt-depthwise arm=catboost-cpu library=catboost trees=100 nodes=- leaves=6351 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT lane=gbdt-depthwise arm=xgboost-cpu library=xgboost trees=100 nodes=12492 leaves=6296 depth_max=6 source=booster.get_dump
+FSPEED-FIT-VERDICT lane=gbdt-depthwise arms=catboost-cpu,ours,ours-ab,xgboost-cpu leaves=catboost-cpu:6351,ours:6345,ours-ab:6255,xgboost-cpu:6296 spread=0.0151 verdict=COMPARABLE
+FSPEED-SCALE stage=after rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=gbdt-depthwise arm=ours call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-depthwise arm=ours-ab call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-depthwise arm=catboost-cpu call=catboost predict_proba(X, task_type CPU, thread_count -1), column 1
+FSPEED-INFER-PATH lane=gbdt-depthwise arm=xgboost-cpu call=xgboost Booster.inplace_predict(X) (no DMatrix; XGBoost's documented fastest path), probability
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=ours batch=test rows=500000 ms=134.872
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 ms=115.880
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 ms=67.100
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 ms=21.702
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=test rows=500000 round=1 ms=115.545 hash=b567b41f7afb936f
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 round=1 ms=116.896 hash=b9ae6e7b99fa7d39
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 round=1 ms=67.167 hash=f2dbf55344bc20e1
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 round=1 ms=22.459 hash=78ddcb1119bb6e12
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=test rows=500000 round=2 ms=120.031 hash=b567b41f7afb936f
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 round=2 ms=116.395 hash=b9ae6e7b99fa7d39
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 round=2 ms=67.839 hash=f2dbf55344bc20e1
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 round=2 ms=21.915 hash=78ddcb1119bb6e12
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=test rows=500000 round=3 ms=121.310 hash=b567b41f7afb936f
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 round=3 ms=112.378 hash=b9ae6e7b99fa7d39
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 round=3 ms=67.286 hash=f2dbf55344bc20e1
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 round=3 ms=22.952 hash=78ddcb1119bb6e12
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=test rows=500000 round=4 ms=115.549 hash=b567b41f7afb936f
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 round=4 ms=118.254 hash=b9ae6e7b99fa7d39
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 round=4 ms=68.407 hash=f2dbf55344bc20e1
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 round=4 ms=24.761 hash=78ddcb1119bb6e12
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=test rows=500000 round=5 ms=115.092 hash=b567b41f7afb936f
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=test rows=500000 round=5 ms=116.528 hash=b9ae6e7b99fa7d39
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=test rows=500000 round=5 ms=66.493 hash=f2dbf55344bc20e1
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=test rows=500000 round=5 ms=21.294 hash=78ddcb1119bb6e12
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=ours batch=test metric=logloss value=0.126973
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=ours batch=test metric=auc value=0.972354
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=ours-ab batch=test metric=logloss value=0.127070
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=ours-ab batch=test metric=auc value=0.972339
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=catboost-cpu batch=test metric=logloss value=0.128459
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=catboost-cpu batch=test metric=auc value=0.971850
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=xgboost-cpu batch=test metric=logloss value=0.125560
+FSPEED-INFER-ACC lane=gbdt-depthwise arm=xgboost-cpu batch=test metric=auc value=0.973663
+FSPEED-INFER-AGREE lane=gbdt-depthwise batch=test arms=ours,ours-ab rows=500000 bits_equal=no max_abs_diff=0.577393
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=ours batch=large rows=1000000 ms=233.538
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 ms=230.567
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 ms=147.216
+FSPEED-INFER-WARMUP lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 ms=43.251
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=large rows=1000000 round=1 ms=176.331 hash=3a03542f9d2ac5e1
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 round=1 ms=174.835 hash=5c49e0488c99baa3
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 round=1 ms=127.482 hash=0ca35a0d3b6e27dc
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 round=1 ms=39.116 hash=8179ba2b340db6f4
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=large rows=1000000 round=2 ms=179.361 hash=3a03542f9d2ac5e1
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 round=2 ms=170.887 hash=5c49e0488c99baa3
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 round=2 ms=129.562 hash=0ca35a0d3b6e27dc
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 round=2 ms=43.411 hash=8179ba2b340db6f4
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=large rows=1000000 round=3 ms=176.210 hash=3a03542f9d2ac5e1
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 round=3 ms=176.891 hash=5c49e0488c99baa3
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 round=3 ms=129.314 hash=0ca35a0d3b6e27dc
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 round=3 ms=39.710 hash=8179ba2b340db6f4
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=large rows=1000000 round=4 ms=179.597 hash=3a03542f9d2ac5e1
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 round=4 ms=170.472 hash=5c49e0488c99baa3
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 round=4 ms=129.232 hash=0ca35a0d3b6e27dc
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 round=4 ms=41.694 hash=8179ba2b340db6f4
+FSPEED-INFER lane=gbdt-depthwise arm=ours batch=large rows=1000000 round=5 ms=174.876 hash=3a03542f9d2ac5e1
+FSPEED-INFER lane=gbdt-depthwise arm=ours-ab batch=large rows=1000000 round=5 ms=167.731 hash=5c49e0488c99baa3
+FSPEED-INFER lane=gbdt-depthwise arm=catboost-cpu batch=large rows=1000000 round=5 ms=129.203 hash=0ca35a0d3b6e27dc
+FSPEED-INFER lane=gbdt-depthwise arm=xgboost-cpu batch=large rows=1000000 round=5 ms=47.868 hash=8179ba2b340db6f4
+FSPEED-INFER-AGREE lane=gbdt-depthwise batch=large arms=ours,ours-ab rows=1000000 bits_equal=no max_abs_diff=0.454613

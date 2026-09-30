@@ -1,0 +1,446 @@
+
+=== 2026-09-29T23:00:41Z /usr/bin/python3 -m venv /root/bench-board-cache-mamba-ssm/venv
+
+=== 2026-09-29T23:00:44Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip download --no-input --no-deps --disable-pip-version-check -d /root/bench-board-cache-mamba-ssm/wheels mojolearn==0.8.25
+Collecting mojolearn==0.8.25
+  Using cached mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (12 kB)
+Using cached mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl (12.1 MB)
+Saved /root/bench-board-cache-mamba-ssm/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn
+
+=== 2026-09-29T23:00:44Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check /root/bench-board-cache-mamba-ssm/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Processing /root/bench-board-cache-mamba-ssm/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Collecting mojolearn-nvidia==0.8.25 (from mojolearn==0.8.25)
+  Using cached mojolearn_nvidia-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Collecting mojolearn-amd==0.8.25 (from mojolearn==0.8.25)
+  Using cached mojolearn_amd-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Using cached mojolearn_amd-0.8.25-py3-none-manylinux_2_35_x86_64.whl (33.4 MB)
+Using cached mojolearn_nvidia-0.8.25-py3-none-manylinux_2_35_x86_64.whl (86.7 MB)
+Installing collected packages: mojolearn-nvidia, mojolearn-amd, mojolearn
+Successfully installed mojolearn-0.8.25 mojolearn-amd-0.8.25 mojolearn-nvidia-0.8.25
+
+=== 2026-09-29T23:00:48Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check --extra-index-url https://download.pytorch.org/whl/cu129 torch==2.13.0+cu129
+Looking in indexes: https://pypi.org/simple, https://download.pytorch.org/whl/cu129
+Collecting torch==2.13.0+cu129
+  Using cached https://download-r2.pytorch.org/whl/cu129/torch-2.13.0%2Bcu129-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (38 kB)
+Collecting filelock (from torch==2.13.0+cu129)
+  Using cached filelock-4.0.6-py3-none-any.whl.metadata (2.0 kB)
+Collecting typing-extensions>=4.10.0 (from torch==2.13.0+cu129)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting setuptools>=77.0.3 (from torch==2.13.0+cu129)
+  Using cached setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting sympy>=1.13.3 (from torch==2.13.0+cu129)
+  Using cached sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+Collecting networkx>=2.5.1 (from torch==2.13.0+cu129)
+  Using cached networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting jinja2 (from torch==2.13.0+cu129)
+  Using cached https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting fsspec>=0.8.5 (from torch==2.13.0+cu129)
+  Using cached fsspec-2026.9.0-py3-none-any.whl.metadata (10 kB)
+Collecting cuda-toolkit==12.9.1 (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/cuda-toolkit/cuda_toolkit-12.9.1-py2.py3-none-any.whl (2.3 kB)
+Collecting cuda-bindings<13,>=12.9.4 (from torch==2.13.0+cu129)
+  Using cached cuda_bindings-12.9.9-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (2.6 kB)
+Collecting nvidia-cudnn-cu12==9.20.0.48 (from torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cudnn-cu12/nvidia_cudnn_cu12-9.20.0.48-py3-none-manylinux_2_27_x86_64.whl (657.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 657.9/657.9 MB 60.0 MB/s eta 0:00:00
+Collecting nvidia-cusparselt-cu12==0.8.1 (from torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cusparselt-cu12/nvidia_cusparselt_cu12-0.8.1-py3-none-manylinux2014_x86_64.whl (239.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 239.3/239.3 MB 112.5 MB/s eta 0:00:00
+Collecting nvidia-nccl-cu12==2.29.7 (from torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-nccl-cu12/nvidia_nccl_cu12-2.29.7-py3-none-manylinux_2_18_x86_64.whl (293.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 293.6/293.6 MB 87.6 MB/s eta 0:00:00
+Collecting nvidia-nvshmem-cu12==3.4.5 (from torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-nvshmem-cu12/nvidia_nvshmem_cu12-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (139.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 139.1/139.1 MB 128.8 MB/s eta 0:00:00
+Collecting triton==3.7.1 (from torch==2.13.0+cu129)
+  Using cached https://download-r2.pytorch.org/whl/triton-3.7.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cublas-cu12==12.9.1.4.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cublas-cu12/nvidia_cublas_cu12-12.9.1.4-py3-none-manylinux_2_27_x86_64.whl (581.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 581.2/581.2 MB 71.6 MB/s eta 0:00:00
+Collecting nvidia-cuda-runtime-cu12==12.9.79.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cuda-runtime-cu12/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.5/3.5 MB 154.4 MB/s eta 0:00:00
+Collecting nvidia-cufft-cu12==11.4.1.4.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cufft-cu12/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (200.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 200.9/200.9 MB 89.7 MB/s eta 0:00:00
+Collecting nvidia-cufile-cu12==1.14.1.1.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cufile-cu12/nvidia_cufile_cu12-1.14.1.1-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 256.4 MB/s eta 0:00:00
+Collecting nvidia-cuda-cupti-cu12==12.9.79.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cuda-cupti-cu12/nvidia_cuda_cupti_cu12-12.9.79-py3-none-manylinux_2_25_x86_64.whl (10.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.8/10.8 MB 145.2 MB/s eta 0:00:00
+Collecting nvidia-curand-cu12==10.3.10.19.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-curand-cu12/nvidia_curand_cu12-10.3.10.19-py3-none-manylinux_2_27_x86_64.whl (68.3 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 68.3/68.3 MB 111.7 MB/s eta 0:00:00
+Collecting nvidia-cusolver-cu12==11.7.5.82.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cusolver-cu12/nvidia_cusolver_cu12-11.7.5.82-py3-none-manylinux_2_27_x86_64.whl (338.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 338.1/338.1 MB 35.0 MB/s eta 0:00:00
+Collecting nvidia-cusparse-cu12==12.5.10.65.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cusparse-cu12/nvidia_cusparse_cu12-12.5.10.65-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (366.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 366.5/366.5 MB 85.8 MB/s eta 0:00:00
+Collecting nvidia-nvjitlink-cu12==12.9.86.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-nvjitlink-cu12/nvidia_nvjitlink_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (39.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 39.7/39.7 MB 151.9 MB/s eta 0:00:00
+Collecting nvidia-cuda-nvrtc-cu12==12.9.86.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-cuda-nvrtc-cu12/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (89.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 89.6/89.6 MB 123.9 MB/s eta 0:00:00
+Collecting nvidia-nvtx-cu12==12.9.79.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==12.9.1; platform_system == "Linux"->torch==2.13.0+cu129)
+  Downloading https://pypi.nvidia.com/nvidia-nvtx-cu12/nvidia_nvtx_cu12-12.9.79-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl (85 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 85.5/85.5 kB 143.2 MB/s eta 0:00:00
+Collecting cuda-pathfinder~=1.1 (from cuda-bindings<13,>=12.9.4->torch==2.13.0+cu129)
+  Using cached cuda_pathfinder-1.8.2-py3-none-any.whl.metadata (1.9 kB)
+Collecting mpmath<1.4,>=1.1.0 (from sympy>=1.13.3->torch==2.13.0+cu129)
+  Using cached mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Collecting MarkupSafe>=2.0 (from jinja2->torch==2.13.0+cu129)
+  Using cached https://download.pytorch.org/whl/markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+Using cached https://download-r2.pytorch.org/whl/cu129/torch-2.13.0%2Bcu129-cp311-cp311-manylinux_2_28_x86_64.whl (929.6 MB)
+Using cached https://download-r2.pytorch.org/whl/triton-3.7.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (197.1 MB)
+Using cached cuda_bindings-12.9.9-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (7.6 MB)
+Using cached fsspec-2026.9.0-py3-none-any.whl (221 kB)
+Using cached networkx-3.6.1-py3-none-any.whl (2.1 MB)
+Using cached setuptools-84.0.0-py3-none-any.whl (818 kB)
+Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached filelock-4.0.6-py3-none-any.whl (109 kB)
+Using cached https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl (134 kB)
+Using cached cuda_pathfinder-1.8.2-py3-none-any.whl (62 kB)
+Using cached https://download.pytorch.org/whl/markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Installing collected packages: nvidia-cusparselt-cu12, mpmath, cuda-toolkit, typing-extensions, triton, sympy, setuptools, nvidia-nvtx-cu12, nvidia-nvshmem-cu12, nvidia-nvjitlink-cu12, nvidia-nccl-cu12, nvidia-curand-cu12, nvidia-cufile-cu12, nvidia-cuda-runtime-cu12, nvidia-cuda-nvrtc-cu12, nvidia-cuda-cupti-cu12, nvidia-cublas-cu12, networkx, MarkupSafe, fsspec, filelock, cuda-pathfinder, nvidia-cusparse-cu12, nvidia-cufft-cu12, nvidia-cudnn-cu12, jinja2, cuda-bindings, nvidia-cusolver-cu12, torch
+  Attempting uninstall: setuptools
+    Found existing installation: setuptools 65.5.0
+    Uninstalling setuptools-65.5.0:
+      Successfully uninstalled setuptools-65.5.0
+Successfully installed MarkupSafe-3.0.3 cuda-bindings-12.9.9 cuda-pathfinder-1.8.2 cuda-toolkit-12.9.1 filelock-4.0.6 fsspec-2026.9.0 jinja2-3.1.6 mpmath-1.3.0 networkx-3.6.1 nvidia-cublas-cu12-12.9.1.4 nvidia-cuda-cupti-cu12-12.9.79 nvidia-cuda-nvrtc-cu12-12.9.86 nvidia-cuda-runtime-cu12-12.9.79 nvidia-cudnn-cu12-9.20.0.48 nvidia-cufft-cu12-11.4.1.4 nvidia-cufile-cu12-1.14.1.1 nvidia-curand-cu12-10.3.10.19 nvidia-cusolver-cu12-11.7.5.82 nvidia-cusparse-cu12-12.5.10.65 nvidia-cusparselt-cu12-0.8.1 nvidia-nccl-cu12-2.29.7 nvidia-nvjitlink-cu12-12.9.86 nvidia-nvshmem-cu12-3.4.5 nvidia-nvtx-cu12-12.9.79 setuptools-84.0.0 sympy-1.14.0 torch-2.13.0+cu129 triton-3.7.1 typing-extensions-4.16.0
+
+=== 2026-09-29T23:02:06Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+Collecting catboost==1.2.10
+  Using cached catboost-1.2.10-cp311-cp311-manylinux2014_x86_64.whl.metadata (1.2 kB)
+Collecting xgboost==3.2.0
+  Using cached xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl.metadata (2.1 kB)
+Collecting lightgbm==4.7.0
+  Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+Collecting scikit-learn==1.7.2
+  Using cached scikit_learn-1.7.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (11 kB)
+Collecting graphviz (from catboost==1.2.10)
+  Using cached graphviz-0.21-py3-none-any.whl.metadata (12 kB)
+Collecting matplotlib (from catboost==1.2.10)
+  Using cached matplotlib-3.11.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (80 kB)
+Collecting numpy<3.0,>=1.16.0 (from catboost==1.2.10)
+  Using cached numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting pandas<4.0,>=0.24 (from catboost==1.2.10)
+  Using cached pandas-3.0.6-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+Collecting scipy (from catboost==1.2.10)
+  Using cached scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting plotly (from catboost==1.2.10)
+  Using cached plotly-7.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting six (from catboost==1.2.10)
+  Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Requirement already satisfied: nvidia-nccl-cu12 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from xgboost==3.2.0) (2.29.7)
+Collecting narwhals>=1.15 (from lightgbm==4.7.0)
+  Using cached narwhals-2.26.0-py3-none-any.whl.metadata (15 kB)
+Collecting joblib>=1.2.0 (from scikit-learn==1.7.2)
+  Using cached joblib-1.6.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting threadpoolctl>=3.1.0 (from scikit-learn==1.7.2)
+  Using cached threadpoolctl-3.7.0-py3-none-any.whl.metadata (24 kB)
+Collecting cloudpickle>=3.0 (from joblib>=1.2.0->scikit-learn==1.7.2)
+  Using cached cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+Collecting python-dateutil>=2.8.2 (from pandas<4.0,>=0.24->catboost==1.2.10)
+  Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting contourpy>=1.0.1 (from matplotlib->catboost==1.2.10)
+  Using cached contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+Collecting cycler>=0.10 (from matplotlib->catboost==1.2.10)
+  Using cached cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.28.2 (from matplotlib->catboost==1.2.10)
+  Downloading fonttools-4.66.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (130 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 130.1/130.1 kB 7.3 MB/s eta 0:00:00
+Collecting kiwisolver>=1.3.1 (from matplotlib->catboost==1.2.10)
+  Using cached kiwisolver-1.5.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.2 kB)
+Collecting packaging>=20.0 (from matplotlib->catboost==1.2.10)
+  Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting pillow>=9 (from matplotlib->catboost==1.2.10)
+  Using cached pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Collecting pyparsing>=3 (from matplotlib->catboost==1.2.10)
+  Using cached pyparsing-3.3.3-py3-none-any.whl.metadata (5.9 kB)
+Using cached catboost-1.2.10-cp311-cp311-manylinux2014_x86_64.whl (97.2 MB)
+Using cached xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl (131.7 MB)
+Using cached lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.5 MB)
+Using cached scikit_learn-1.7.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.7 MB)
+Using cached joblib-1.6.0-py3-none-any.whl (306 kB)
+Using cached narwhals-2.26.0-py3-none-any.whl (474 kB)
+Using cached numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+Using cached pandas-3.0.6-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (11.1 MB)
+Using cached scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+Using cached threadpoolctl-3.7.0-py3-none-any.whl (26 kB)
+Using cached graphviz-0.21-py3-none-any.whl (47 kB)
+Using cached matplotlib-3.11.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.9 MB)
+Using cached plotly-7.1.0-py3-none-any.whl (9.7 MB)
+Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+Using cached cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+Using cached contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (355 kB)
+Using cached cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Downloading fonttools-4.66.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 228.2 MB/s eta 0:00:00
+Using cached kiwisolver-1.5.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.4 MB)
+Using cached packaging-26.3-py3-none-any.whl (129 kB)
+Using cached pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+Using cached pyparsing-3.3.3-py3-none-any.whl (126 kB)
+Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+Installing collected packages: threadpoolctl, six, pyparsing, pillow, packaging, numpy, narwhals, kiwisolver, graphviz, fonttools, cycler, cloudpickle, scipy, python-dateutil, plotly, joblib, contourpy, xgboost, scikit-learn, pandas, matplotlib, lightgbm, catboost
+Successfully installed catboost-1.2.10 cloudpickle-3.1.2 contourpy-1.3.3 cycler-0.12.1 fonttools-4.66.1 graphviz-0.21 joblib-1.6.0 kiwisolver-1.5.1 lightgbm-4.7.0 matplotlib-3.11.2 narwhals-2.26.0 numpy-2.4.6 packaging-26.3 pandas-3.0.6 pillow-12.3.0 plotly-7.1.0 pyparsing-3.3.3 python-dateutil-2.9.0.post0 scikit-learn-1.7.2 scipy-1.17.1 six-1.17.0 threadpoolctl-3.7.0 xgboost-3.2.0
+
+=== 2026-09-29T23:02:24Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check --extra-index-url https://pypi.nvidia.com cuml-cu12==26.8.0 cuvs-cu12==26.8.1
+Looking in indexes: https://pypi.org/simple, https://pypi.nvidia.com
+Collecting cuml-cu12==26.8.0
+  Downloading https://pypi.nvidia.com/cuml-cu12/cuml_cu12-26.8.0-cp311-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.6 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.6/6.6 MB 61.9 MB/s eta 0:00:00
+Collecting cuvs-cu12==26.8.1
+  Downloading https://pypi.nvidia.com/cuvs-cu12/cuvs_cu12-26.8.1-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (1.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 122.9 MB/s eta 0:00:00
+Requirement already satisfied: cuda-bindings<13.0,>=12.9.2 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (12.9.9)
+Requirement already satisfied: cuda-toolkit==12.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (12.9.1)
+Collecting cudf-cu12==26.8.* (from cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/cudf-cu12/cudf_cu12-26.8.1-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (2.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.8/2.8 MB 107.0 MB/s eta 0:00:00
+Collecting cupy-cuda12x!=14.1.0,>=14.0.1 (from cupy-cuda12x[ctk]!=14.1.0,>=14.0.1->cuml-cu12==26.8.0)
+  Using cached cupy_cuda12x-14.2.0-cp311-cp311-manylinux2014_x86_64.whl.metadata (2.8 kB)
+Requirement already satisfied: joblib>=0.11 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (1.6.0)
+Collecting libcuml-cu12==26.8.* (from cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/libcuml-cu12/libcuml_cu12-26.8.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (99.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 99.5/99.5 MB 138.2 MB/s eta 0:00:00
+Collecting numba-cuda>=0.22.2 (from numba-cuda[cu12]>=0.22.2->cuml-cu12==26.8.0)
+  Using cached numba_cuda-0.30.4-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+Collecting numba<0.65.0,>=0.60.0 (from cuml-cu12==26.8.0)
+  Using cached numba-0.64.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.9 kB)
+Requirement already satisfied: numpy<3.0,>=2.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (2.4.6)
+Collecting nvforest-cu12==26.8.* (from cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/nvforest-cu12/nvforest_cu12-26.8.0-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (921 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 921.3/921.3 kB 165.7 MB/s eta 0:00:00
+Requirement already satisfied: nvidia-nvjitlink-cu12<13,>=12.9 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (12.9.86)
+Requirement already satisfied: packaging in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (26.3)
+Collecting pylibraft-cu12==26.8.* (from cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/pylibraft-cu12/pylibraft_cu12-26.8.0-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (939 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 940.0/940.0 kB 119.8 MB/s eta 0:00:00
+Collecting rich (from cuml-cu12==26.8.0)
+  Using cached rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting rmm-cu12==26.8.* (from cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/rmm-cu12/rmm_cu12-26.8.0-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (725 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 725.2/725.2 kB 159.8 MB/s eta 0:00:00
+Requirement already satisfied: scikit-learn>=1.6 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (1.7.2)
+Requirement already satisfied: scipy>=1.14.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuml-cu12==26.8.0) (1.17.1)
+Collecting treelite<5.0.0,>=4.7.0 (from cuml-cu12==26.8.0)
+  Using cached treelite-4.7.2-py3-none-manylinux_2_28_x86_64.whl.metadata (1.7 kB)
+Collecting libcuvs-cu12==26.8.* (from cuvs-cu12==26.8.1)
+  Downloading https://pypi.nvidia.com/libcuvs-cu12/libcuvs_cu12-26.8.1-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (368.7 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 368.7/368.7 MB 56.1 MB/s eta 0:00:00
+Requirement already satisfied: nvidia-cublas-cu12==12.9.1.4.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (12.9.1.4)
+Requirement already satisfied: nvidia-cufft-cu12==11.4.1.4.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (11.4.1.4)
+Requirement already satisfied: nvidia-curand-cu12==10.3.10.19.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (10.3.10.19)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.5.82.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (11.7.5.82)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.10.65.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (12.5.10.65)
+Collecting cachetools (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Using cached cachetools-7.2.0-py3-none-any.whl.metadata (5.5 kB)
+Requirement already satisfied: fsspec>=0.6.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cudf-cu12==26.8.*->cuml-cu12==26.8.0) (2026.9.0)
+Collecting libcudf-cu12==26.8.* (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/libcudf-cu12/libcudf_cu12-26.8.1-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (715.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 715.8/715.8 MB 40.7 MB/s eta 0:00:00
+Collecting numba-cuda-mlir>=0.3.0 (from numba-cuda-mlir[cu12]>=0.3.0->cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading numba_cuda_mlir-0.5.4-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (4.8 kB)
+Requirement already satisfied: nvidia-cufile-cu12 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cudf-cu12==26.8.*->cuml-cu12==26.8.0) (1.14.1.1)
+Collecting nvtx>=0.2.1 (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/nvtx/nvtx-0.2.16-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (2.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.9/2.9 MB 182.6 MB/s eta 0:00:00
+Collecting pandas<3.0.4a0,>=3.0.0 (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Using cached pandas-3.0.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+Collecting pyarrow<24,>=19.0.0 (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Using cached pyarrow-23.0.1-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (3.1 kB)
+Collecting pylibcudf-cu12==26.8.* (from cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/pylibcudf-cu12/pylibcudf_cu12-26.8.1-cp311-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (7.8 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.8/7.8 MB 107.8 MB/s eta 0:00:00
+Collecting libnvforest-cu12==26.8.* (from libcuml-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/libnvforest-cu12/libnvforest_cu12-26.8.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (81.4 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 81.4/81.4 MB 155.6 MB/s eta 0:00:00
+Collecting libraft-cu12==26.8.* (from libcuml-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/libraft-cu12/libraft_cu12-26.8.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (22.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 22.9/22.9 MB 88.7 MB/s eta 0:00:00
+Collecting librmm-cu12==26.8.* (from libcuml-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/librmm-cu12/librmm_cu12-26.8.0-py3-none-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (4.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 192.5 MB/s eta 0:00:00
+Collecting rapids-logger==0.2.* (from libcuml-cu12==26.8.*->cuml-cu12==26.8.0)
+  Using cached rapids_logger-0.2.3-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.1 kB)
+Requirement already satisfied: nvidia-nccl-cu12>=2.19 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from libcuvs-cu12==26.8.*->cuvs-cu12==26.8.1) (2.29.7)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.9.86.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit==12.*->cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (12.9.86)
+Collecting nvidia-cuda-nvcc-cu12==12.9.86.* (from cuda-toolkit==12.*->cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/nvidia-cuda-nvcc-cu12/nvidia_cuda_nvcc_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (40.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40.5/40.5 MB 108.5 MB/s eta 0:00:00
+Collecting libkvikio-cu12==26.8.* (from libcudf-cu12==26.8.*->cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/libkvikio-cu12/libkvikio_cu12-26.8.0-py3-none-manylinux_2_28_x86_64.whl (2.9 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.9/2.9 MB 231.4 MB/s eta 0:00:00
+Collecting nvidia-libnvcomp-cu12==5.3.0.16 (from libcudf-cu12==26.8.*->cudf-cu12==26.8.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/nvidia-libnvcomp-cu12/nvidia_libnvcomp_cu12-5.3.0.16-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (41.5 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 41.5/41.5 MB 116.9 MB/s eta 0:00:00
+Requirement already satisfied: cuda-pathfinder in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from libkvikio-cu12==26.8.*->libcudf-cu12==26.8.*->cudf-cu12==26.8.*->cuml-cu12==26.8.0) (1.8.2)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.9.79.* in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from cuda-toolkit==12.*->cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0) (12.9.79)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from joblib>=0.11->cuml-cu12==26.8.0) (3.1.2)
+Collecting llvmlite<0.47,>=0.46.0dev0 (from numba<0.65.0,>=0.60.0->cuml-cu12==26.8.0)
+  Using cached llvmlite-0.46.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.0 kB)
+Collecting cuda-core<2.0.0,>=0.5.1 (from numba-cuda>=0.22.2->numba-cuda[cu12]>=0.22.2->cuml-cu12==26.8.0)
+  Using cached cuda_core-1.2.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.3 kB)
+Collecting nvidia-cuda-cccl-cu12==12.9.27.* (from cuda-toolkit==12.*->cuda-toolkit[cublas,cufft,curand,cusolver,cusparse]==12.*->cuml-cu12==26.8.0)
+  Downloading https://pypi.nvidia.com/nvidia-cuda-cccl-cu12/nvidia_cuda_cccl_cu12-12.9.27-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.2 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.2/3.2 MB 226.0 MB/s eta 0:00:00
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from scikit-learn>=1.6->cuml-cu12==26.8.0) (3.7.0)
+Collecting markdown-it-py>=2.2.0 (from rich->cuml-cu12==26.8.0)
+  Using cached markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting pygments<3.0.0,>=2.13.0 (from rich->cuml-cu12==26.8.0)
+  Using cached pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich->cuml-cu12==26.8.0)
+  Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Requirement already satisfied: typing-extensions in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from numba-cuda-mlir>=0.3.0->numba-cuda-mlir[cu12]>=0.3.0->cudf-cu12==26.8.*->cuml-cu12==26.8.0) (4.16.0)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from pandas<3.0.4a0,>=3.0.0->cudf-cu12==26.8.*->cuml-cu12==26.8.0) (2.9.0.post0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from python-dateutil>=2.8.2->pandas<3.0.4a0,>=3.0.0->cudf-cu12==26.8.*->cuml-cu12==26.8.0) (1.17.0)
+Using cached rapids_logger-0.2.3-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (202 kB)
+Using cached cupy_cuda12x-14.2.0-cp311-cp311-manylinux2014_x86_64.whl (136.6 MB)
+Using cached numba-0.64.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.7 MB)
+Using cached numba_cuda-0.30.4-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (1.9 MB)
+Using cached treelite-4.7.2-py3-none-manylinux_2_28_x86_64.whl (921 kB)
+Using cached rich-15.0.0-py3-none-any.whl (310 kB)
+Using cached cuda_core-1.2.1-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (6.5 MB)
+Using cached llvmlite-0.46.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (56.3 MB)
+Using cached markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Downloading numba_cuda_mlir-0.5.4-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (71.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 71.1/71.1 MB 22.9 MB/s eta 0:00:00
+Using cached pandas-3.0.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (11.3 MB)
+Using cached pyarrow-23.0.1-cp311-cp311-manylinux_2_28_x86_64.whl (47.6 MB)
+Using cached pygments-2.21.0-py3-none-any.whl (1.3 MB)
+Using cached cachetools-7.2.0-py3-none-any.whl (16 kB)
+Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Installing collected packages: nvidia-libnvcomp-cu12, rapids-logger, pygments, pyarrow, nvtx, nvidia-cuda-nvcc-cu12, nvidia-cuda-cccl-cu12, mdurl, llvmlite, cupy-cuda12x, cuda-core, cachetools, treelite, pandas, numba-cuda-mlir, numba, markdown-it-py, librmm-cu12, libkvikio-cu12, rmm-cu12, rich, numba-cuda, libcudf-cu12, pylibcudf-cu12, libraft-cu12, pylibraft-cu12, libnvforest-cu12, libcuvs-cu12, cudf-cu12, nvforest-cu12, libcuml-cu12, cuvs-cu12, cuml-cu12
+  Attempting uninstall: pandas
+    Found existing installation: pandas 3.0.6
+    Uninstalling pandas-3.0.6:
+      Successfully uninstalled pandas-3.0.6
+Successfully installed cachetools-7.2.0 cuda-core-1.2.1 cudf-cu12-26.8.1 cuml-cu12-26.8.0 cupy-cuda12x-14.2.0 cuvs-cu12-26.8.1 libcudf-cu12-26.8.1 libcuml-cu12-26.8.0 libcuvs-cu12-26.8.1 libkvikio-cu12-26.8.0 libnvforest-cu12-26.8.0 libraft-cu12-26.8.0 librmm-cu12-26.8.0 llvmlite-0.46.0 markdown-it-py-4.2.0 mdurl-0.1.2 numba-0.64.0 numba-cuda-0.30.4 numba-cuda-mlir-0.5.4 nvforest-cu12-26.8.0 nvidia-cuda-cccl-cu12-12.9.27 nvidia-cuda-nvcc-cu12-12.9.86 nvidia-libnvcomp-cu12-5.3.0.16 nvtx-0.2.16 pandas-3.0.3 pyarrow-23.0.1 pygments-2.21.0 pylibcudf-cu12-26.8.1 pylibraft-cu12-26.8.0 rapids-logger-0.2.3 rich-15.0.0 rmm-cu12-26.8.0 treelite-4.7.2
+
+=== 2026-09-29T23:03:22Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check einops==0.8.1
+Collecting einops==0.8.1
+  Using cached einops-0.8.1-py3-none-any.whl.metadata (13 kB)
+Using cached einops-0.8.1-py3-none-any.whl (64 kB)
+Installing collected packages: einops
+Successfully installed einops-0.8.1
+
+=== 2026-09-29T23:03:23Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check transformers==5.17.0 ninja==1.13.2 wheel==0.48.0 packaging==26.3 setuptools==84.0.0
+Collecting transformers==5.17.0
+  Downloading transformers-5.17.0-py3-none-any.whl.metadata (32 kB)
+Collecting ninja==1.13.2
+  Downloading ninja-1.13.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.4 kB)
+Collecting wheel==0.48.0
+  Downloading wheel-0.48.0-py3-none-any.whl.metadata (2.3 kB)
+Requirement already satisfied: packaging==26.3 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (26.3)
+Requirement already satisfied: setuptools==84.0.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (84.0.0)
+Collecting huggingface-hub<2.0,>=1.5.0 (from transformers==5.17.0)
+  Using cached huggingface_hub-1.33.0-py3-none-any.whl.metadata (16 kB)
+Requirement already satisfied: numpy>=1.17 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from transformers==5.17.0) (2.4.6)
+Collecting pyyaml>=5.1 (from transformers==5.17.0)
+  Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting regex>=2025.10.22 (from transformers==5.17.0)
+  Downloading regex-2026.9.29-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40.6/40.6 kB 13.1 MB/s eta 0:00:00
+Collecting tokenizers<0.24.0,>=0.23.1 (from transformers==5.17.0)
+  Using cached tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+Collecting typer (from transformers==5.17.0)
+  Downloading typer-0.27.2-py3-none-any.whl.metadata (16 kB)
+Collecting safetensors>=0.8.0 (from transformers==5.17.0)
+  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+Collecting tqdm>=4.60 (from transformers==5.17.0)
+  Using cached tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+Requirement already satisfied: filelock>=3.10.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0) (4.0.6)
+Requirement already satisfied: fsspec>=2023.5.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0) (2026.9.0)
+Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Collecting httpx<1,>=0.23.0 (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Requirement already satisfied: typing-extensions>=4.1.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.17.0) (4.16.0)
+Collecting shellingham>=1.3.0 (from typer->transformers==5.17.0)
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Requirement already satisfied: rich>=13.8.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from typer->transformers==5.17.0) (15.0.0)
+Collecting annotated-doc>=0.0.2 (from typer->transformers==5.17.0)
+  Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+Collecting anyio (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+Collecting certifi (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Collecting httpcore==1.* (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting idna (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.17.0)
+  Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from rich>=13.8.0->typer->transformers==5.17.0) (4.2.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from rich>=13.8.0->typer->transformers==5.17.0) (2.21.0)
+Requirement already satisfied: mdurl~=0.1 in /root/bench-board-cache-mamba-ssm/venv/lib/python3.11/site-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers==5.17.0) (0.1.2)
+Downloading transformers-5.17.0-py3-none-any.whl (12.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.3/12.3 MB 121.7 MB/s eta 0:00:00
+Downloading ninja-1.13.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (183 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 183.4/183.4 kB 77.5 MB/s eta 0:00:00
+Downloading wheel-0.48.0-py3-none-any.whl (33 kB)
+Using cached huggingface_hub-1.33.0-py3-none-any.whl (846 kB)
+Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+Downloading regex-2026.9.29-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (804 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 805.0/805.0 kB 172.4 MB/s eta 0:00:00
+Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 516.0/516.0 kB 140.6 MB/s eta 0:00:00
+Using cached tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+Using cached tqdm-4.70.1-py3-none-any.whl (80 kB)
+Downloading typer-0.27.2-py3-none-any.whl (123 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 123.1/123.1 kB 54.7 MB/s eta 0:00:00
+Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Using cached click-8.5.0-py3-none-any.whl (125 kB)
+Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Using cached anyio-4.15.1-py3-none-any.whl (132 kB)
+Using cached idna-3.20-py3-none-any.whl (69 kB)
+Using cached certifi-2026.7.22-py3-none-any.whl (136 kB)
+Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+Installing collected packages: wheel, tqdm, shellingham, safetensors, regex, pyyaml, ninja, idna, hf-xet, h11, click, certifi, annotated-doc, httpcore, anyio, typer, httpx, huggingface-hub, tokenizers, transformers
+Successfully installed annotated-doc-0.0.5 anyio-4.15.1 certifi-2026.7.22 click-8.5.0 h11-0.16.0 hf-xet-1.6.0 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-1.33.0 idna-3.20 ninja-1.13.2 pyyaml-6.0.3 regex-2026.9.29 safetensors-0.8.0 shellingham-1.5.4 tokenizers-0.23.2 tqdm-4.70.1 transformers-5.17.0 typer-0.27.2 wheel-0.48.0
+
+=== 2026-09-29T23:03:31Z /root/bench-board-cache-mamba-ssm/venv/bin/python -m pip install --no-input --disable-pip-version-check --no-build-isolation --no-deps causal-conv1d==1.7.0 'mamba-ssm @ git+https://github.com/state-spaces/mamba@e9594ce1c732d97440f0332fdc43170a2294dbfa'
+Collecting mamba-ssm@ git+https://github.com/state-spaces/mamba@e9594ce1c732d97440f0332fdc43170a2294dbfa
+  Cloning https://github.com/state-spaces/mamba (to revision e9594ce1c732d97440f0332fdc43170a2294dbfa) to /tmp/pip-install-4s86mi1e/mamba-ssm_42c33760eb114d4d8d54a783667b47d6
+  Running command git clone --filter=blob:none --quiet https://github.com/state-spaces/mamba /tmp/pip-install-4s86mi1e/mamba-ssm_42c33760eb114d4d8d54a783667b47d6
+  Running command git rev-parse -q --verify 'sha^e9594ce1c732d97440f0332fdc43170a2294dbfa'
+  Running command git fetch -q https://github.com/state-spaces/mamba e9594ce1c732d97440f0332fdc43170a2294dbfa
+  Resolved https://github.com/state-spaces/mamba to commit e9594ce1c732d97440f0332fdc43170a2294dbfa
+  Running command git submodule update --init --recursive -q
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting causal-conv1d==1.7.0
+  Downloading causal_conv1d-1.7.0.tar.gz (30 kB)
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: causal-conv1d, mamba-ssm
+  Building wheel for causal-conv1d (pyproject.toml): started
+  Building wheel for causal-conv1d (pyproject.toml): still running...
+  Building wheel for causal-conv1d (pyproject.toml): still running...
+  Building wheel for causal-conv1d (pyproject.toml): finished with status 'done'
+  Created wheel for causal-conv1d: filename=causal_conv1d-1.7.0-cp311-cp311-linux_x86_64.whl size=112580651 sha256=481eca3bf90da0c9a9dbae98380874356df716d6ce11b9d19665621ac249afbd
+  Stored in directory: /root/.cache/pip/wheels/13/0b/cd/063a5c88ddcd601a18932927306c2a8528a1719523dcc55a3f
+  Building wheel for mamba-ssm (pyproject.toml): started
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): still running...
+  Building wheel for mamba-ssm (pyproject.toml): finished with status 'done'
+  Created wheel for mamba-ssm: filename=mamba_ssm-2.3.2.post1-cp311-cp311-linux_x86_64.whl size=184565457 sha256=82b7a4ac1fe70ef657f7cda5c5185186edc1a669e615e2fc601311a461e479fe
+  Stored in directory: /root/.cache/pip/wheels/15/3f/9b/a467813f2e56af4b2f8dfaeeb7ef9cc7d8e3909f7662673717
+Successfully built causal-conv1d mamba-ssm
+Installing collected packages: mamba-ssm, causal-conv1d
+Successfully installed causal-conv1d-1.7.0 mamba-ssm-2.3.2.post1

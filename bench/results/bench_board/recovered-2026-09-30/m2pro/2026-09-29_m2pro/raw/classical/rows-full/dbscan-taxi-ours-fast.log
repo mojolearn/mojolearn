@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py", line 2230, in worker
+    runner.call()
+    ~~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py", line 1773, in call
+    est.fit(self.X)
+    ~~~~~~~^^^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/density.py", line 371, in fit
+    self.n_iter_ = binding.dbscan_fit_core(
+                   ~~~~~~~~~~~~~~~~~~~~~~~^
+        addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        addr(core, name="core"), params,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+Exception: dbscan: the ball-cover neighbourhood has -2138378046 edges in one batch, which does not fit the int32 CSR this implementation uses. cuML requires int64 labels for RBC (runner.cuh:143-150) for exactly this reason. Use a smaller eps, a smaller batch, or the BRUTE_FORCE arm.

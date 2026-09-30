@@ -1,0 +1,10 @@
+
+=== 2026-09-29T23:01:57Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py prep --data /root/bench-board-cache-t213/ctd-data/rows-full --lanes kmeans,knn,ols,pca --datasets istella,taxi
+CTD-PREP block=big-istella X=2043304x220 y=2043304 Xq=500000x220 yq=500000 init=8x220
+knn_datasets: read the 404000-row istella prefix (220 columns) from /root/datasets/gbm-bench/istella/istella_speed.npz in 0.27 s
+CTD-PREP block=knn-istella index=400000x220 queries=4000x220
+CTD-PREP dataset=istella seconds=3.8
+CTD-PREP block=big-taxi X=4000000x11 y=4000000 Xq=500000x11 yq=500000 init=8x11
+knn_datasets: read the 404000-row taxi prefix (11 columns) from /root/datasets/gbm-bench/taxi/taxi_speed.npz in 0.03 s
+CTD-PREP block=knn-taxi index=400000x11 queries=4000x11
+CTD-PREP dataset=taxi seconds=0.5

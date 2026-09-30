@@ -1,0 +1,14 @@
+
+=== 2026-09-29T19:18:46Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py race --lane pca --dataset taxi --data /root/bench-board-cache-clean/ctd-data/rows-full --out /root/bench-board/2026-09-29_nvidia/raw/params-only/classical.pca.taxi.rows=full --work /root/bench-board/2026-09-29_nvidia/work --root /root/mojolearn-bench-board-l40s --arms cuml-gpu,torch-gpu --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --infer --params-only
+CTD-SETTINGS lane=pca dataset=taxi n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'
+CTD-MISMATCH lane=pca dataset=taxi svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+CTD-MISMATCH lane=pca dataset=taxi torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+CTD-MISMATCH lane=pca dataset=taxi random_state is read by none of the covariance solvers; set to 7 on every arm
+PARAMS-ONLY /root/bench-board/2026-09-29_nvidia/raw/params-only/classical.pca.taxi.rows=full/pca-taxi.params.json
+
+=== 2026-09-29T23:24:33Z /root/bench-board-cache-clean/venv/bin/python -u /root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py race --lane pca --dataset taxi --data /root/bench-board-cache-clean/ctd-data/rows-full --out /root/bench-board/2026-09-29_nvidia/raw/params-only/classical.pca.taxi.rows=full --work /root/bench-board/2026-09-29_nvidia/work --root /root/mojolearn-bench-board-l40s --arms cuml-gpu --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-clean/venv/bin/python --theirs-python /root/bench-board-cache-clean/venv/bin/python --infer --params-only
+CTD-SETTINGS lane=pca dataset=taxi n_components=10 (the cuML benchmark's PCA), whiten=False, random_state=7; ours and scikit-learn svd_solver='covariance_eigh'
+CTD-MISMATCH lane=pca dataset=taxi svd_solver: cuML has no 'covariance_eigh'; cuml-gpu runs svd_solver='full'
+CTD-MISMATCH lane=pca dataset=taxi torch-gpu: no estimator; covariance eigh written out, torch.manual_seed(7) (it draws nothing)
+CTD-MISMATCH lane=pca dataset=taxi random_state is read by none of the covariance solvers; set to 7 on every arm
+PARAMS-ONLY /root/bench-board/2026-09-29_nvidia/raw/params-only/classical.pca.taxi.rows=full/pca-taxi.params.json

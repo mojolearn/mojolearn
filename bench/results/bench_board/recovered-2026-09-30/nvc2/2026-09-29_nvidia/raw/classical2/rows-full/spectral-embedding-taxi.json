@@ -1,0 +1,430 @@
+{
+  "arms": {
+    "cuml-gpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "cuml-gpu",
+        "--lane",
+        "spectral-embedding",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "e291001aae3bf432",
+        "e291001aae3bf432"
+      ],
+      "info": {
+        "config": "SpectralEmbedding(n_neighbors=10, random_state=7)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "cuda_driver_api": 13000,
+        "cuda_runtime": 12090,
+        "cupy": "14.2.0",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "library": "cuml",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "upload_ms_untimed": 4.314636811614037,
+        "version": "26.08.00"
+      },
+      "median_ms": 73.20836000144482,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 478.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 960.3,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 478.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 995.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        73.20836000144482
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "cuml",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "n_components": 2,
+          "n_neighbors": 10,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "device",
+        "inside_clock": "fit_transform",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": 4.314636811614037
+      },
+      "status": "ok",
+      "warmup_ms": 289.2885720357299
+    },
+    "ours": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "spectral-embedding",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "90fdb23d2d7f5bbd",
+        "90fdb23d2d7f5bbd"
+      ],
+      "info": {
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+        "n_features": 11,
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_metrics numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.25"
+      },
+      "median_ms": 70.68698853254318,
+      "mem": [
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1511.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": 682.0,
+          "gpu_method": "nvidia-smi --query-compute-apps used_memory for this pid at the round's end (context and pools; not a peak)",
+          "host_mb": 1511.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        70.68698853254318
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "eigen_solver": null,
+          "eigen_tol": null,
+          "gamma": null,
+          "n_components": 2,
+          "n_neighbors": 10,
+          "random_state": 7
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit_transform",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 999.291967600584
+    },
+    "sklearn-cpu": {
+      "command": [
+        "/root/bench-board-cache-clean/venv/bin/python",
+        "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py",
+        "worker",
+        "--arm",
+        "sklearn-cpu",
+        "--lane",
+        "spectral-embedding",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/bench-board-cache-clean/more-data/rows-full"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "0d2fad4ef4fbd60d",
+        "0d2fad4ef4fbd60d"
+      ],
+      "info": {
+        "config": "SpectralEmbedding(n_jobs=-1, n_neighbors=10, random_state=7)",
+        "cpu_model": "AMD EPYC 9554 64-Core Processor",
+        "device": "cpu",
+        "library": "scikit-learn",
+        "numpy": "2.4.6",
+        "os_cpu_count": 256,
+        "pre_clock_fit": false,
+        "python": "3.11.10",
+        "sched_affinity_cpus": 256,
+        "scipy": "1.17.1",
+        "thread_env": {
+          "MKL_NUM_THREADS": null,
+          "NUMEXPR_NUM_THREADS": null,
+          "OMP_NUM_THREADS": null,
+          "OPENBLAS_NUM_THREADS": null,
+          "VECLIB_MAXIMUM_THREADS": null
+        },
+        "threadpools": [
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas64_-32a4b2a6.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.31.188.0"
+          },
+          {
+            "architecture": null,
+            "filepath": "libgomp-a34b3233.so.1.0.0",
+            "internal_api": "openmp",
+            "num_threads": 256,
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          },
+          {
+            "architecture": "SkylakeX",
+            "filepath": "libscipy_openblas-6cdc3b4a.so",
+            "internal_api": "openblas",
+            "num_threads": 64,
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.30"
+          }
+        ],
+        "version": "1.7.2"
+      },
+      "median_ms": 5264.234243892133,
+      "mem": [
+        {
+          "children_mb": 3.1,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 239.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 3.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 244.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        5264.234243892133
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "sklearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "eigen_solver": null,
+          "eigen_tol": "auto",
+          "gamma": null,
+          "n_components": 2,
+          "n_neighbors": 10,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit_transform",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 5443.516078405082
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "b3fa76519e07c49c31efc5828e410712639a764cec345617fbd4dcbbf06fb43e",
+        "shape": [
+          20000,
+          11
+        ]
+      }
+    },
+    "block": "manifold",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "taxi",
+    "loader": "speed_gbdt_arm.load_taxi('shipped', regression=True), TAXI_NUMERIC columns",
+    "rows": "stride sample of 20000 of 5250086 train rows",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "standardized by these rows",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 0
+    },
+    "smoke_max_rows": null,
+    "written": "2026-09-29T15:37:06Z"
+  },
+  "commit": "b3d991c362a6031c0d8e4ca7a9d215138d32d14a",
+  "dataset": "taxi",
+  "finished": "2026-09-29T17:03:51Z",
+  "lane": "spectral-embedding",
+  "lane_config": {
+    "mismatches": [
+      "eigensolver: ours Lanczos (default tolerance); scikit-learn arpack (its default); cuML its own"
+    ],
+    "params": "n_components=2, affinity='nearest_neighbors', n_neighbors=10, random_state=7",
+    "quality": "trustworthiness k=15 over every row",
+    "rows": "the umap block (20000 stride rows, standardized by the fit rows)",
+    "timed": "fit_transform"
+  },
+  "params_check": {
+    "arms": {
+      "cuml-gpu": {
+        "library": "cuml",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "n_components": 2,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "get_params"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "gamma": null,
+          "n_components": 2,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "attributes"
+      },
+      "sklearn-cpu": {
+        "library": "sklearn",
+        "params": {
+          "affinity": "nearest_neighbors",
+          "gamma": null,
+          "n_components": 2,
+          "n_neighbors": 10,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [
+      {
+        "arm": "cuml-gpu",
+        "ours": "nearest_neighbors",
+        "param": "affinity",
+        "same": true,
+        "theirs": "nearest_neighbors"
+      },
+      {
+        "arm": "cuml-gpu",
+        "ours": 2,
+        "param": "n_components",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "cuml-gpu",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": "nearest_neighbors",
+        "param": "affinity",
+        "same": true,
+        "theirs": "nearest_neighbors"
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "gamma",
+        "same": false,
+        "theirs": null
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 2,
+        "param": "n_components",
+        "same": true,
+        "theirs": 2
+      },
+      {
+        "arm": "sklearn-cpu",
+        "ours": 10,
+        "param": "n_neighbors",
+        "same": true,
+        "theirs": 10
+      }
+    ],
+    "exceptions": [
+      {
+        "arm": "sklearn-cpu",
+        "ours": null,
+        "param": "gamma",
+        "reason": "affinity='nearest_neighbors' reads no gamma: ours refuses any value (None), scikit-learn holds its default (1.0 clustering, None embedding)",
+        "theirs": null
+      }
+    ],
+    "family": "classical2",
+    "lane": "spectral-embedding",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "cuml-gpu": {
+      "trustworthiness_k15": 0.891594818374464
+    },
+    "ours": {
+      "trustworthiness_k15": 0.8848890569154528
+    },
+    "sklearn-cpu": {
+      "trustworthiness_k15": 0.8980115304266574
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_more.py",
+  "shape": "X 20000x11",
+  "started": "2026-09-29T17:02:16Z"
+}

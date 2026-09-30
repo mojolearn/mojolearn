@@ -1,0 +1,12 @@
+
+=== 2026-09-30T01:05:15Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_neural.py race --lane gemm-bf16 --shape full --arms ours,torch-eager-bf16,torch-compile-bf16 --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/neural/shape-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 1800 --warmup-seconds 7200 --round-seconds 1800
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-compile-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}, "torch-eager-bf16": {"library": "torch", "params": {"seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-bf16", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-bf16 arm=ours round=0 ms=28.932 digest=61da6b4cbb8c0cad
+NEURAL-ROUND lane=gemm-bf16 arm=torch-eager-bf16 round=0 ms=47.568 digest=c6f7d46a96ecbd4f
+NEURAL-ROUND lane=gemm-bf16 arm=torch-compile-bf16 round=0 ms=737.587 digest=c6f7d46a96ecbd4f
+NEURAL-ROUND lane=gemm-bf16 arm=torch-eager-bf16 round=1 ms=13.582 digest=c6f7d46a96ecbd4f
+NEURAL-ROUND lane=gemm-bf16 arm=torch-compile-bf16 round=1 ms=39.154 digest=c6f7d46a96ecbd4f
+NEURAL-ROUND lane=gemm-bf16 arm=ours round=1 ms=30.572 digest=61da6b4cbb8c0cad
+NEURAL lane=gemm-bf16 arm=ours status=ok median_ms=30.57189501123503 quality={"max_rel_err_vs_fp64": 1.1548914368712009e-07}
+NEURAL lane=gemm-bf16 arm=torch-eager-bf16 status=ok median_ms=13.582298997789621 quality={"max_abs_diff_vs_ours": 0.9990234375, "max_rel_diff_vs_ours": 0.0027588420144940336, "max_rel_err_vs_fp64": 0.002758856066062028}
+NEURAL lane=gemm-bf16 arm=torch-compile-bf16 status=ok median_ms=39.15369798778556 quality={"max_abs_diff_vs_ours": 0.9990234375, "max_rel_diff_vs_ours": 0.0027588420144940336, "max_rel_err_vs_fp64": 0.002758856066062028}

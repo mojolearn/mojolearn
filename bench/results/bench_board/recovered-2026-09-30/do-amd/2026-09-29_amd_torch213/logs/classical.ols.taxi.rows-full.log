@@ -1,0 +1,30 @@
+
+=== 2026-09-29T23:03:39Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py race --lane ols --dataset taxi --data /root/bench-board-cache-t213/ctd-data/rows-full --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/classical/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --root /root/mojolearn-wt/steward-do-amd --arms ours,torch-gpu,torch-gpu-eigh --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --infer
+CTD-SETTINGS lane=ols dataset=taxi fit_intercept=True
+CTD-MISMATCH lane=ols dataset=taxi seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+CTD-MISMATCH lane=ols dataset=taxi solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+CTD-MISMATCH lane=ols dataset=taxi scikit-learn positive=False and copy_X=True: parameters ours does not have
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"fit_intercept": true, "seed": "none (deterministic)"}, "source": "get_params"}, "torch-gpu": {"library": "torch", "params": {"fit_intercept": true, "seed": 7}, "source": "declared"}, "torch-gpu-eigh": {"library": "torch", "params": {"fit_intercept": true, "seed": 7}, "source": "declared"}}, "compared": [{"arm": "torch-gpu", "ours": true, "param": "fit_intercept", "same": true, "theirs": true}, {"arm": "torch-gpu-eigh", "ours": true, "param": "fit_intercept", "same": true, "theirs": true}], "exceptions": [], "family": "classical", "lane": "ols", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+CTD-ROUND lane=ols dataset=taxi arm=ours round=0 ms=475.511 digest=fb86358654367fa0
+CTD-ROUND lane=ols dataset=taxi arm=torch-gpu round=0 ms=314.009 digest=9fb03afa3437e5a6
+CTD-ROUND lane=ols dataset=taxi arm=torch-gpu-eigh round=0 ms=1735.489 digest=814744c9badcaa82
+CTD-ROUND lane=ols dataset=taxi arm=torch-gpu round=1 ms=113.337 digest=9fb03afa3437e5a6
+CTD-ROUND lane=ols dataset=taxi arm=torch-gpu-eigh round=1 ms=24.330 digest=814744c9badcaa82
+CTD-ROUND lane=ols dataset=taxi arm=ours round=1 ms=170.603 digest=fb86358654367fa0
+CTD-INFER-ROUND lane=ols dataset=taxi arm=ours round=0 ms=2.870 digest=d7aea16b0ea97433
+CTD-INFER-ROUND lane=ols dataset=taxi arm=torch-gpu round=0 ms=0.181 digest=314c85a8b28b608b
+CTD-INFER-ROUND lane=ols dataset=taxi arm=torch-gpu-eigh round=0 ms=0.156 digest=fe6bf62a60b4747b
+CTD-INFER-ROUND lane=ols dataset=taxi arm=torch-gpu round=1 ms=0.104 digest=314c85a8b28b608b
+CTD-INFER-ROUND lane=ols dataset=taxi arm=torch-gpu-eigh round=1 ms=0.092 digest=fe6bf62a60b4747b
+CTD-INFER-ROUND lane=ols dataset=taxi arm=ours round=1 ms=1.507 digest=d7aea16b0ea97433
+CTD-INFER lane=ols dataset=taxi arm=ours call=predict rows=500000 status=ok median_ms=1.5072480018716305 digest_stable=True quality={"predict_max_rel_err_own_fp64": 8.387224810034562e-08, "r2_eval": 0.9088369826304911, "rmse_eval": 4.69646574065947}
+CTD-INFER lane=ols dataset=taxi arm=torch-gpu call=predict rows=500000 status=ok median_ms=0.1037800102494657 digest_stable=True quality={"bits_equal_vs_ours": false, "max_abs_diff_vs_ours": 0.058048248291015625, "predict_max_rel_err_own_fp64": 9.855064699837384e-08, "r2_eval": 0.908836733472252, "rmse_eval": 4.696472158625702}
+CTD-INFER lane=ols dataset=taxi arm=torch-gpu-eigh call=predict rows=500000 status=ok median_ms=0.09230998693965375 digest_stable=True quality={"bits_equal_vs_ours": false, "max_abs_diff_vs_ours": 0.5332832336425781, "predict_max_rel_err_own_fp64": 7.819562693183413e-08, "r2_eval": 0.908827319622609, "rmse_eval": 4.6967146397429715}
+CTD lane=ols dataset=taxi arm=ours device=gpu status=ok median_ms=170.60330699314363 min_ms=170.60330699314363 max_ms=170.60330699314363 digest_stable=True quality={"finite": true, "r2": 0.9088369847359253, "rmse": 4.696465686426404}
+CTD-SPAN lane=ols dataset=taxi arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD lane=ols dataset=taxi arm=torch-gpu device=gpu status=ok median_ms=113.3369539747946 min_ms=113.3369539747946 max_ms=113.3369539747946 digest_stable=True quality={"finite": true, "r2": 0.9088367340260959, "rmse": 4.69647214435947}
+CTD-SPAN lane=ols dataset=taxi arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=81.673 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD lane=ols dataset=taxi arm=torch-gpu-eigh device=gpu status=ok median_ms=24.330022977665067 min_ms=24.330022977665067 max_ms=24.330022977665067 digest_stable=True quality={"finite": true, "r2": 0.9088273166995217, "rmse": 4.696714715033656}
+CTD-SPAN lane=ols dataset=taxi arm=torch-gpu-eigh input_home=device inside_clock=call upload_ms_untimed=82.567 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=ols dataset=taxi ours/torch-gpu=1.5053 ours/torch-gpu-eigh=7.0120 span_asymmetry=torch-gpu:upload_outside_its_clock(81.673_ms),torch-gpu-eigh:upload_outside_its_clock(82.567_ms)
+CTD-SPAN-NOTE lane=ols dataset=taxi the ratios above are NOT like-for-like spans: ours uploads (and validates) inside its clock while these arms do not. The asymmetry is named, not corrected; no work was moved into or out of any clock.

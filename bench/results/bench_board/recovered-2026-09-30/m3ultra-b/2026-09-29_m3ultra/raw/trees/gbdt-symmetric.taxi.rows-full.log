@@ -1,0 +1,126 @@
+
+=== 2026-09-29T05:14:49Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane gbdt-symmetric --dataset taxi --devices cpu --arms catboost-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=gbdt-symmetric MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=gbdt-symmetric arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours 2550_borrow_x=1 2551_device_partition=1 2580_level_quant=0 2581_group_width=1
+FSPEED-AB lane=gbdt-symmetric arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_gbdt.so
+BENCH_PATHS arm=ours-ab 2550_borrow_x=1 2551_device_partition=0 2580_level_quant=0 2581_group_width=0
+FSPEED-SCALE stage=before rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=gbdt-symmetric arm=catboost-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=0 host_mb=1309.0 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 ms=2487.555
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=0 host_mb=1381.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 ms=1865.286
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=0 host_mb=2005.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 ms=5279.776
+FSPEED-ORDER lane=gbdt-symmetric round=1 arms=ours,ours-ab,catboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=1 host_mb=2435.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 round=1 ms=1718.737 hash=a26cc437e467e30b
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=1 host_mb=2472.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 round=1 ms=1472.824 hash=a2acaee0ca3b9ce6
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=1 host_mb=2714.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 round=1 ms=4913.358 hash=78b2041074421a9d
+FSPEED-ORDER lane=gbdt-symmetric round=2 arms=ours,ours-ab,catboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=2 host_mb=3152.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 round=2 ms=1720.222 hash=a26cc437e467e30b
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=2 host_mb=3124.4 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 round=2 ms=1473.678 hash=a2acaee0ca3b9ce6
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=2 host_mb=3134.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 round=2 ms=4927.243 hash=78b2041074421a9d
+FSPEED-ORDER lane=gbdt-symmetric round=3 arms=ours,ours-ab,catboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=3 host_mb=3557.0 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 round=3 ms=1717.055 hash=a26cc437e467e30b
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=3 host_mb=3518.3 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 round=3 ms=1473.468 hash=a2acaee0ca3b9ce6
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=3 host_mb=3514.2 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 round=3 ms=4953.469 hash=78b2041074421a9d
+FSPEED-ORDER lane=gbdt-symmetric round=4 arms=ours,ours-ab,catboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=4 host_mb=3932.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 round=4 ms=1717.383 hash=a26cc437e467e30b
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=4 host_mb=3910.1 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 round=4 ms=1478.623 hash=a2acaee0ca3b9ce6
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=4 host_mb=3755.7 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 round=4 ms=4923.816 hash=78b2041074421a9d
+FSPEED-ORDER lane=gbdt-symmetric round=5 arms=ours,ours-ab,catboost-cpu
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours round=5 host_mb=4164.6 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours shape=taxi-4110786x16 round=5 ms=1724.737 hash=a26cc437e467e30b
+[ctr-2634] simple_ctr_configs=4 independent=1 dependent=3 cat_columns=0 ctr_prep_wanted=False prep=skipped gate_2634=on permutations=1 target_classes=0 binarized_target_rows=0 ctr_orders=0
+FSPEED-MEM lane=gbdt-symmetric arm=ours-ab round=5 host_mb=4133.5 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=gbdt-symmetric arm=ours-ab shape=taxi-4110786x16 round=5 ms=1473.356 hash=a2acaee0ca3b9ce6
+FSPEED-MEM lane=gbdt-symmetric arm=catboost-cpu round=5 host_mb=3822.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=gbdt-symmetric arm=catboost-cpu shape=taxi-4110786x16 round=5 ms=5001.629 hash=78b2041074421a9d
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=logloss value=0.524402
+FSPEED-ACC lane=gbdt-symmetric arm=ours metric=auc value=0.621613
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=logloss value=0.524425
+FSPEED-ACC lane=gbdt-symmetric arm=ours-ab metric=auc value=0.621522
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=logloss value=0.524599
+FSPEED-ACC lane=gbdt-symmetric arm=catboost-cpu metric=auc value=0.620716
+FSPEED-FIT lane=gbdt-symmetric arm=ours library=mojolearn trees=100 nodes=12700 leaves=6400 depth_max=6 source=get_tree_leaf_counts
+FSPEED-FIT lane=gbdt-symmetric arm=ours-ab library=mojolearn trees=100 nodes=12700 leaves=6400 depth_max=6 source=get_tree_leaf_counts
+FSPEED-FIT lane=gbdt-symmetric arm=catboost-cpu library=catboost trees=100 nodes=- leaves=6352 depth_max=- source=get_tree_leaf_counts
+FSPEED-FIT-VERDICT lane=gbdt-symmetric arms=catboost-cpu,ours,ours-ab leaves=catboost-cpu:6352,ours:6400,ours-ab:6400 spread=0.0075 verdict=COMPARABLE
+FSPEED-SCALE stage=after rows=4110786 features=16 input_mib=250.9 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=gbdt-symmetric arm=ours call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-symmetric arm=ours-ab call=mojolearn GradientBoosting.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=gbdt-symmetric arm=catboost-cpu call=catboost predict_proba(X, task_type CPU, thread_count -1), column 1
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=ours batch=test rows=500000 ms=8.378
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 ms=10.972
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 ms=10.455
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=test rows=500000 round=1 ms=6.022 hash=a26cc437e467e30b
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 round=1 ms=7.670 hash=a2acaee0ca3b9ce6
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 round=1 ms=10.692 hash=78b2041074421a9d
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=test rows=500000 round=2 ms=5.995 hash=a26cc437e467e30b
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 round=2 ms=8.017 hash=a2acaee0ca3b9ce6
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 round=2 ms=9.861 hash=78b2041074421a9d
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=test rows=500000 round=3 ms=6.057 hash=a26cc437e467e30b
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 round=3 ms=7.700 hash=a2acaee0ca3b9ce6
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 round=3 ms=10.420 hash=78b2041074421a9d
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=test rows=500000 round=4 ms=6.156 hash=a26cc437e467e30b
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 round=4 ms=7.582 hash=a2acaee0ca3b9ce6
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 round=4 ms=9.151 hash=78b2041074421a9d
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=test rows=500000 round=5 ms=6.071 hash=a26cc437e467e30b
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=test rows=500000 round=5 ms=8.010 hash=a2acaee0ca3b9ce6
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=test rows=500000 round=5 ms=10.485 hash=78b2041074421a9d
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=ours batch=test metric=logloss value=0.524402
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=ours batch=test metric=auc value=0.621613
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=ours-ab batch=test metric=logloss value=0.524425
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=ours-ab batch=test metric=auc value=0.621522
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=catboost-cpu batch=test metric=logloss value=0.524599
+FSPEED-INFER-ACC lane=gbdt-symmetric arm=catboost-cpu batch=test metric=auc value=0.620716
+FSPEED-INFER-AGREE lane=gbdt-symmetric batch=test arms=ours,ours-ab rows=500000 bits_equal=no max_abs_diff=0.0618846
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=ours batch=large rows=1000000 ms=24.979
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 ms=24.895
+FSPEED-INFER-WARMUP lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 ms=17.748
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=large rows=1000000 round=1 ms=9.637 hash=428b98e626d4f483
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 round=1 ms=16.831 hash=4f9bf67260aa6d1d
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 round=1 ms=15.196 hash=f2b84880ab2448ed
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=large rows=1000000 round=2 ms=9.996 hash=428b98e626d4f483
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 round=2 ms=15.702 hash=4f9bf67260aa6d1d
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 round=2 ms=16.285 hash=f2b84880ab2448ed
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=large rows=1000000 round=3 ms=11.122 hash=428b98e626d4f483
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 round=3 ms=13.932 hash=4f9bf67260aa6d1d
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 round=3 ms=16.222 hash=f2b84880ab2448ed
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=large rows=1000000 round=4 ms=12.385 hash=428b98e626d4f483
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 round=4 ms=12.820 hash=4f9bf67260aa6d1d
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 round=4 ms=16.386 hash=f2b84880ab2448ed
+FSPEED-INFER lane=gbdt-symmetric arm=ours batch=large rows=1000000 round=5 ms=13.748 hash=428b98e626d4f483
+FSPEED-INFER lane=gbdt-symmetric arm=ours-ab batch=large rows=1000000 round=5 ms=11.703 hash=4f9bf67260aa6d1d
+FSPEED-INFER lane=gbdt-symmetric arm=catboost-cpu batch=large rows=1000000 round=5 ms=16.024 hash=f2b84880ab2448ed
+FSPEED-INFER-AGREE lane=gbdt-symmetric batch=large arms=ours,ours-ab rows=1000000 bits_equal=no max_abs_diff=0.0594559

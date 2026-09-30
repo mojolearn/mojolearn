@@ -1,0 +1,13 @@
+41690 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7243c0000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py", line 2229, in worker
+    runner.call()
+  File "/root/mojolearn-bench-board-l40s/tools/classical_two_datasets.py", line 1773, in call
+    est.fit(self.X)
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/mojolearn/density.py", line 371, in fit
+    self.n_iter_ = binding.dbscan_fit_core(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^
+Exception: dbscan: the ball-cover neighbourhood has -1799116104 edges in one batch, which does not fit the int32 CSR this implementation uses. cuML requires int64 labels for RBC (runner.cuh:143-150) for exactly this reason. Use a smaller eps, a smaller batch, or the BRUTE_FORCE arm.

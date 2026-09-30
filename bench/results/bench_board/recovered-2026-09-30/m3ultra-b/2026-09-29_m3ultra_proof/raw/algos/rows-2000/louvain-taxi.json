@@ -1,0 +1,336 @@
+{
+  "arms": {
+    "networkx-cpu": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "networkx-cpu",
+        "--lane",
+        "louvain",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "782c76db106e60be",
+        "782c76db106e60be"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "nx.community.louvain_communities(resolution=1.0, seed=7)",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "networkx",
+        "pre_clock_fit": false,
+        "version": "3.6.1"
+      },
+      "median_ms": 73.44100000045728,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 75.3,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 81.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        73.44100000045728
+      ],
+      "params_record": {
+        "__library__": "networkx",
+        "resolution": 1.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the graph algorithm on the CSR graph",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 76.46337500045775
+    },
+    "ours": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "louvain",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "3eee7b7337f3a70c",
+        "3eee7b7337f3a70c"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.Louvain({'resolution': 1.0, 'seed': 7}) on the dense adjacency (2000 x 2000)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 466.0705839996808,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 287.6,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 275.0,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        466.0705839996808
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "resolution": 1.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the graph algorithm on the CSR graph",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 463.552624998556
+    },
+    "ours-fast": {
+      "command": [
+        "/Users/ec2-user/bench-board-cache/venv/bin/python",
+        "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours-fast",
+        "--lane",
+        "louvain",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/Users/ec2-user/bench-board-cache/algos-data/rows-2000"
+      ],
+      "digest_stable": null,
+      "digests": [
+        "3eee7b7337f3a70c",
+        "3eee7b7337f3a70c"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.Louvain({'resolution': 1.0, 'seed': 7}) on the dense adjacency (2000 x 2000)",
+        "device": "gpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "fast",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "fast",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.25"
+      },
+      "median_ms": 255.13937499636086,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 289.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 277.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        255.13937499636086
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "resolution": 1.0,
+        "seed": 7
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the graph algorithm on the CSR graph",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 280.73120799672324
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "5e2f325d6e0afa65d2e02cbdd89e129f37e58b7bf1cf602e53dbffe54ac88c04",
+        "shape": [
+          2000,
+          11
+        ]
+      },
+      "indices": {
+        "dtype": "int64",
+        "sha256": "62028ac7ec868ff93e0acb188ecfbd2db6241b00ac0246e04fb32e89052786d3",
+        "shape": [
+          26186
+        ]
+      },
+      "indices2": {
+        "dtype": "int64",
+        "sha256": "505cf351fa3f1c8566bfa1add126e336b583c7cd4e3026a4a8ba4196679f8a67",
+        "shape": [
+          5530
+        ]
+      },
+      "indptr": {
+        "dtype": "int64",
+        "sha256": "28a969ed15460cec47890a5516e377f586dd10c220b3a2a780be608cef6f574f",
+        "shape": [
+          2001
+        ]
+      },
+      "indptr2": {
+        "dtype": "int64",
+        "sha256": "13e16b0db4bb7c6bb7906ee8f9a5f567c2d3e7d61bb8a3991a2107aa9f318bba",
+        "shape": [
+          2001
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "eb4b4a57068aedf142605a3bdb3f8b6c35f9940a8bbd57ad380e298d7d1343bd",
+        "shape": [
+          2000
+        ]
+      }
+    },
+    "block": "graph",
+    "dataset": "taxi",
+    "k": 10,
+    "nodes": 2000,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": 2000,
+    "written": "2026-09-29T12:25:07Z"
+  },
+  "commit": "7c264878053f0da621c3397b42c7309067382550",
+  "dataset": "taxi",
+  "finished": "2026-09-29T12:56:00Z",
+  "lane": "louvain",
+  "lane_config": {
+    "block": "graphs",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "graph",
+    "mismatches": [
+      "networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are order-dependent; ours pins the vertex sweep (lowest id first)",
+      "ours takes a dense adjacency matrix (its class's contract), built from the CSR graph before the clock; networkx and cuGraph take the graph itself"
+    ],
+    "notes": [],
+    "ours_class": "mojolearn.Louvain",
+    "params": {
+      "resolution": 1.0,
+      "seed": 7
+    },
+    "quality": "modularity of the partition (conductor, float64)",
+    "task": "louvain",
+    "timed_fit": "the graph algorithm on the CSR graph",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "networkx-cpu": {
+        "library": "networkx",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      },
+      "ours-fast": {
+        "library": "mojolearn",
+        "params": {
+          "seed": 7
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/louvain",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "networkx-cpu": {
+      "modularity": 0.8004024129293923,
+      "n_communities": 17
+    },
+    "ours": {
+      "modularity": 0.7957661326040387,
+      "n_communities": 19
+    },
+    "ours-fast": {
+      "modularity": 0.7957661326040387,
+      "n_communities": 19
+    }
+  },
+  "rounds_requested": 1,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 2000x11; indices 26186; indices2 5530; indptr 2001; indptr2 2001; y 2000",
+  "started": "2026-09-29T12:55:58Z"
+}

@@ -1,0 +1,30 @@
+
+=== 2026-09-29T23:03:59Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/classical_two_datasets.py race --lane ols --dataset istella --data /root/bench-board-cache-t213/ctd-data/rows-full --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/classical/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --root /root/mojolearn-wt/steward-do-amd --arms ours,torch-gpu,torch-gpu-eigh --rounds 1 --round-seconds 900 --warmup-seconds 900 --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --infer
+CTD-SETTINGS lane=ols dataset=istella fit_intercept=True
+CTD-MISMATCH lane=ols dataset=istella seed: no arm has a seed argument (closed-form fit); torch-gpu torch.manual_seed(7)
+CTD-MISMATCH lane=ols dataset=istella solver: ours eig of the normal equations (no parameter), scikit-learn scipy lstsq gelsd (no parameter), cuML algorithm='eig', torch-gpu torch.linalg.lstsq (gels on CUDA), torch-gpu-eigh eigh with a pseudo-inverse cutoff
+CTD-MISMATCH lane=ols dataset=istella scikit-learn positive=False and copy_X=True: parameters ours does not have
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"fit_intercept": true, "seed": "none (deterministic)"}, "source": "get_params"}, "torch-gpu": {"library": "torch", "params": {"fit_intercept": true, "seed": 7}, "source": "declared"}, "torch-gpu-eigh": {"library": "torch", "params": {"fit_intercept": true, "seed": 7}, "source": "declared"}}, "compared": [{"arm": "torch-gpu", "ours": true, "param": "fit_intercept", "same": true, "theirs": true}, {"arm": "torch-gpu-eigh", "ours": true, "param": "fit_intercept", "same": true, "theirs": true}], "exceptions": [], "family": "classical", "lane": "ols", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+CTD-ROUND lane=ols dataset=istella arm=ours round=0 ms=1593.521 digest=6f12cfc209ecd1f9
+CTD-ROUND lane=ols dataset=istella arm=torch-gpu round=0 ms=7068.876 digest=c644852bf49d35ca
+CTD-ROUND lane=ols dataset=istella arm=torch-gpu-eigh round=0 ms=1662.300 digest=a80290e5e671544a
+CTD-ROUND lane=ols dataset=istella arm=torch-gpu round=1 ms=6950.696 digest=c644852bf49d35ca
+CTD-ROUND lane=ols dataset=istella arm=torch-gpu-eigh round=1 ms=31.071 digest=a80290e5e671544a
+CTD-ROUND lane=ols dataset=istella arm=ours round=1 ms=1246.204 digest=6f12cfc209ecd1f9
+CTD-INFER-ROUND lane=ols dataset=istella arm=ours round=0 ms=18.133 digest=89843bf5ffd23e57
+CTD-INFER-ROUND lane=ols dataset=istella arm=torch-gpu round=0 ms=0.216 digest=a4c648eff760579a
+CTD-INFER-ROUND lane=ols dataset=istella arm=torch-gpu-eigh round=0 ms=0.189 digest=99f4879940d2cc60
+CTD-INFER-ROUND lane=ols dataset=istella arm=torch-gpu round=1 ms=0.205 digest=a4c648eff760579a
+CTD-INFER-ROUND lane=ols dataset=istella arm=torch-gpu-eigh round=1 ms=0.271 digest=99f4879940d2cc60
+CTD-INFER-ROUND lane=ols dataset=istella arm=ours round=1 ms=12.317 digest=89843bf5ffd23e57
+CTD-INFER lane=ols dataset=istella arm=ours call=predict rows=500000 status=ok median_ms=12.316690001171082 digest_stable=True quality={"predict_max_rel_err_own_fp64": 9.58131393081632e-07, "r2_eval": 0.3319443958891074, "rmse_eval": 0.6820269377562338}
+CTD-INFER lane=ols dataset=istella arm=torch-gpu call=predict rows=500000 status=ok median_ms=0.20501000108197331 digest_stable=True quality={"bits_equal_vs_ours": false, "max_abs_diff_vs_ours": NaN, "predict_max_rel_err_own_fp64": NaN, "r2_eval": NaN, "rmse_eval": NaN}
+CTD-INFER lane=ols dataset=istella arm=torch-gpu-eigh call=predict rows=500000 status=ok median_ms=0.2712590212468058 digest_stable=True quality={"bits_equal_vs_ours": false, "max_abs_diff_vs_ours": 6.699506521224976, "predict_max_rel_err_own_fp64": 3.5786441794790894e-07, "r2_eval": 0.15160378052515877, "rmse_eval": 0.7685897435144178}
+CTD lane=ols dataset=istella arm=ours device=gpu status=ok median_ms=1246.204035996925 min_ms=1246.204035996925 max_ms=1246.204035996925 digest_stable=True quality={"finite": true, "r2": 0.3319443836684286, "rmse": 0.6820269439943614}
+CTD-SPAN lane=ols dataset=istella arm=ours input_home=host inside_clock=host_to_device_upload,host_validation,call upload_ms_untimed=- fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD lane=ols dataset=istella arm=torch-gpu device=gpu status=ok median_ms=6950.6955679971725 min_ms=6950.6955679971725 max_ms=6950.6955679971725 digest_stable=True quality={"finite": false, "r2": NaN, "rmse": NaN}
+CTD-SPAN lane=ols dataset=istella arm=torch-gpu input_home=device inside_clock=call upload_ms_untimed=147.158 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD lane=ols dataset=istella arm=torch-gpu-eigh device=gpu status=ok median_ms=31.07096199528314 min_ms=31.07096199528314 max_ms=31.07096199528314 digest_stable=True quality={"finite": true, "r2": 0.15160378065155355, "rmse": 0.7685897434571651}
+CTD-SPAN lane=ols dataset=istella arm=torch-gpu-eigh input_home=device inside_clock=call upload_ms_untimed=152.323 fit_ms_untimed=- pre_clock_fit=false pre_clock_fit_source=declared
+CTD-RATIO lane=ols dataset=istella ours/torch-gpu=0.1793 ours/torch-gpu-eigh=40.1083 span_asymmetry=torch-gpu:upload_outside_its_clock(147.158_ms),torch-gpu-eigh:upload_outside_its_clock(152.323_ms)
+CTD-SPAN-NOTE lane=ols dataset=istella the ratios above are NOT like-for-like spans: ours uploads (and validates) inside its clock while these arms do not. The asymmetry is named, not corrected; no work was moved into or out of any clock.

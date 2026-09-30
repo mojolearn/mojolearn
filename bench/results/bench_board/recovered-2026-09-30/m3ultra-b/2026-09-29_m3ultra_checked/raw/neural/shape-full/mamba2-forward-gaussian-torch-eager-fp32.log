@@ -1,0 +1,2 @@
+/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/torch/nn/functional.py:5823: UserWarning: MPS: The constant padding of more than 3 dimensions is not currently supported natively. It uses View Ops default implementation to run. This may have performance implications. (Triggered internally at /Users/runner/work/pytorch/pytorch/aten/src/ATen/native/mps/operations/Pad.mm:567.)
+  return torch._C._nn.pad(input, pad, mode, value)

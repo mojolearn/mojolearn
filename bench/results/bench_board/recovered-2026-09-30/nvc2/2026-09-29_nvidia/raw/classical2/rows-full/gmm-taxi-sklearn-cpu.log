@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/mixture/_gaussian_mixture.py", line 334, in _compute_precision_cholesky
+    cov_chol = linalg.cholesky(covariance, lower=True)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/scipy/_lib/_util.py", line 1181, in wrapper
+    return f(*arrays, *other_args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/scipy/linalg/_decomp_cholesky.py", line 106, in cholesky
+    c, lower = _cholesky(a, lower=lower, overwrite_a=overwrite_a, clean=True,
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/scipy/linalg/_decomp_cholesky.py", line 39, in _cholesky
+    raise LinAlgError(
+numpy.linalg.LinAlgError: 11-th leading minor of the array is not positive definite
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1449, in worker
+    runner.call()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 769, in call
+    self._call()
+  File "/root/mojolearn-bench-board-l40s/tools/bench_board_more.py", line 1117, in <lambda>
+    call = lambda: S.update(est=make().fit(X))  # noqa: E731
+                                ^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/mixture/_base.py", line 182, in fit
+    self.fit_predict(X, y)
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/base.py", line 1365, in wrapper
+    return fit_method(estimator, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/mixture/_base.py", line 251, in fit_predict
+    self._m_step(X, log_resp)
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/mixture/_gaussian_mixture.py", line 834, in _m_step
+    self.precisions_cholesky_ = _compute_precision_cholesky(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/bench-board-cache-clean/venv/lib/python3.11/site-packages/sklearn/mixture/_gaussian_mixture.py", line 336, in _compute_precision_cholesky
+    raise ValueError(estimate_precision_error_message)
+ValueError: Fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. The numerical accuracy can also be improved by passing float64 data instead of float32.

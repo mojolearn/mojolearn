@@ -1,0 +1,9 @@
+
+=== 2026-09-29T20:18:05Z /root/bench-board-cache/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_more.py race --lane rbf-sampler --dataset istella --data /root/bench-board-cache/more-data/rows-full --arms ours,sklearn-cpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd/raw/classical2/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd/work --ours-python /root/bench-board-cache/venv/bin/python --theirs-python /root/bench-board-cache/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"gamma": 0.004545454545454545, "n_components": 256, "seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"gamma": 0.004545454545454545, "n_components": 256, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "sklearn-cpu", "ours": 0.004545454545454545, "param": "gamma", "same": true, "theirs": 0.004545454545454545}, {"arm": "sklearn-cpu", "ours": 256, "param": "n_components", "same": true, "theirs": 256}], "exceptions": [], "family": "classical2", "lane": "rbf-sampler", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+MORE-ROUND lane=rbf-sampler dataset=istella arm=ours round=0 ms=367.896 digest=72c9d1d677d83a46
+MORE-ROUND lane=rbf-sampler dataset=istella arm=sklearn-cpu round=0 ms=27.391 digest=396e606a49f1e65d
+MORE-ROUND lane=rbf-sampler dataset=istella arm=sklearn-cpu round=1 ms=25.530 digest=396e606a49f1e65d
+MORE-ROUND lane=rbf-sampler dataset=istella arm=ours round=1 ms=69.855 digest=72c9d1d677d83a46
+MORE lane=rbf-sampler dataset=istella arm=ours status=ok median_ms=69.85489200451411 quality={"kernel_rel_error": 0.14197976520989541}
+MORE lane=rbf-sampler dataset=istella arm=sklearn-cpu status=ok median_ms=25.52984800422564 quality={"kernel_rel_error": 0.13740523636724947}

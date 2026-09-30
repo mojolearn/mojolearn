@@ -1,0 +1,12 @@
+
+=== 2026-09-29T12:55:42Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py race --lane skewed-chi2 --dataset taxi --data /Users/ec2-user/bench-board-cache/algos-data/rows-2000 --arms ours,ours-fast,sklearn-cpu --rounds 1 --out /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/raw/algos/rows-2000 --work /Users/ec2-user/mojolearn-evidence/bench-board/2026-09-29_m3ultra_proof/work --ours-python /Users/ec2-user/bench-board-cache/venv/bin/python --theirs-python /Users/ec2-user/bench-board-cache/venv/bin/python --ready-seconds 600 --warmup-seconds 600 --round-seconds 600 --smoke-rows 2000
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}, "ours-fast": {"library": "mojolearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}, "sklearn-cpu": {"library": "sklearn", "params": {"n_components": 256, "seed": 7}, "source": "get_params"}}, "compared": [{"arm": "ours-fast", "ours": 256, "param": "n_components", "same": true, "theirs": 256}, {"arm": "sklearn-cpu", "ours": 256, "param": "n_components", "same": true, "theirs": 256}], "exceptions": [], "family": "algos", "lane": "algos/skewed-chi2", "problems": [], "reference": "ours", "seed": 7, "verdict": "MATCHED"}
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=ours round=0 ms=54.879 infer_ms=24.7940839981311 digest=48309e2e941e4abc
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=ours-fast round=0 ms=51.525 infer_ms=62.30587500613183 digest=42ca8144f51a47b1
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=sklearn-cpu round=0 ms=0.581 infer_ms=0.6661670049652457 digest=768a1d62ad883dcc
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=ours-fast round=1 ms=1.959 infer_ms=2.1842499991180375 digest=42ca8144f51a47b1
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=sklearn-cpu round=1 ms=0.393 infer_ms=0.6084170017857105 digest=768a1d62ad883dcc
+ALGOS-ROUND lane=skewed-chi2 dataset=taxi arm=ours round=1 ms=1.608 infer_ms=2.2634159977314994 digest=48309e2e941e4abc
+ALGOS lane=skewed-chi2 dataset=taxi arm=ours status=ok median_ms=1.6078749977168627 quality={"kernel_rel_error": 0.037983096206063556}
+ALGOS lane=skewed-chi2 dataset=taxi arm=ours-fast status=ok median_ms=1.958583998202812 quality={"kernel_rel_error": 0.03798310264082206}
+ALGOS lane=skewed-chi2 dataset=taxi arm=sklearn-cpu status=ok median_ms=0.39274999289773405 quality={"kernel_rel_error": 0.03798301775285102}

@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 4238, in worker
+    runner.fit()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2142, in fit
+    self._fit()
+    ~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py", line 2378, in fit
+    est.fit(X, y)
+    ~~~~~~~^^^^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_expansion_linear.py", line 905, in fit
+    raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+ValueError: mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented

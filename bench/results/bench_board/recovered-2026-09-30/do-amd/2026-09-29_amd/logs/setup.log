@@ -1,0 +1,1046 @@
+
+=== 2026-09-29T14:42:19Z /usr/bin/python3 -m venv /root/bench-board-cache/venv
+
+=== 2026-09-29T14:42:20Z /root/bench-board-cache/venv/bin/python -m pip download --no-input --no-deps --disable-pip-version-check -d /root/bench-board-cache/wheels mojolearn==0.8.25
+Collecting mojolearn==0.8.25
+  Downloading mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (12 kB)
+Downloading mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl (12.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.1/12.1 MB 248.2 MB/s eta 0:00:00
+Saved /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn
+
+=== 2026-09-29T14:42:20Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Processing /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Collecting mojolearn-nvidia==0.8.25 (from mojolearn==0.8.25)
+  Downloading mojolearn_nvidia-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Collecting mojolearn-amd==0.8.25 (from mojolearn==0.8.25)
+  Downloading mojolearn_amd-0.8.25-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Downloading mojolearn_amd-0.8.25-py3-none-manylinux_2_35_x86_64.whl (33.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 33.4/33.4 MB 184.3 MB/s eta 0:00:00
+Downloading mojolearn_nvidia-0.8.25-py3-none-manylinux_2_35_x86_64.whl (86.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 86.7/86.7 MB 124.2 MB/s eta 0:00:00
+Installing collected packages: mojolearn-nvidia, mojolearn-amd, mojolearn
+Successfully installed mojolearn-0.8.25 mojolearn-amd-0.8.25 mojolearn-nvidia-0.8.25
+
+=== 2026-09-29T14:42:23Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+Collecting catboost==1.2.10
+  Downloading catboost-1.2.10-cp312-cp312-manylinux2014_x86_64.whl.metadata (1.2 kB)
+Collecting xgboost==3.2.0
+  Downloading xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl.metadata (2.1 kB)
+Collecting lightgbm==4.7.0
+  Downloading lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (18 kB)
+Collecting scikit-learn==1.7.2
+  Downloading scikit_learn-1.7.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (11 kB)
+Collecting graphviz (from catboost==1.2.10)
+  Downloading graphviz-0.21-py3-none-any.whl.metadata (12 kB)
+Collecting matplotlib (from catboost==1.2.10)
+  Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (80 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.3/80.3 kB 17.2 MB/s eta 0:00:00
+Collecting numpy<3.0,>=1.16.0 (from catboost==1.2.10)
+  Downloading numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting pandas<4.0,>=0.24 (from catboost==1.2.10)
+  Downloading pandas-3.0.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (79 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.5/79.5 kB 42.8 MB/s eta 0:00:00
+Collecting scipy (from catboost==1.2.10)
+  Downloading scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 62.4/62.4 kB 40.2 MB/s eta 0:00:00
+Collecting plotly (from catboost==1.2.10)
+  Downloading plotly-7.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting six (from catboost==1.2.10)
+  Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting nvidia-nccl-cu12 (from xgboost==3.2.0)
+  Downloading nvidia_nccl_cu12-2.32.3-py3-none-manylinux_2_27_x86_64.whl.metadata (2.1 kB)
+Collecting narwhals>=1.15 (from lightgbm==4.7.0)
+  Downloading narwhals-2.26.0-py3-none-any.whl.metadata (15 kB)
+Collecting joblib>=1.2.0 (from scikit-learn==1.7.2)
+  Downloading joblib-1.6.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting threadpoolctl>=3.1.0 (from scikit-learn==1.7.2)
+  Downloading threadpoolctl-3.7.0-py3-none-any.whl.metadata (24 kB)
+Collecting cloudpickle>=3.0 (from joblib>=1.2.0->scikit-learn==1.7.2)
+  Downloading cloudpickle-3.1.2-py3-none-any.whl.metadata (7.1 kB)
+Collecting python-dateutil>=2.8.2 (from pandas<4.0,>=0.24->catboost==1.2.10)
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting contourpy>=1.0.1 (from matplotlib->catboost==1.2.10)
+  Downloading contourpy-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+Collecting cycler>=0.10 (from matplotlib->catboost==1.2.10)
+  Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.28.2 (from matplotlib->catboost==1.2.10)
+  Downloading fonttools-4.66.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (129 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 129.2/129.2 kB 84.4 MB/s eta 0:00:00
+Collecting kiwisolver>=1.3.1 (from matplotlib->catboost==1.2.10)
+  Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.2 kB)
+Collecting packaging>=20.0 (from matplotlib->catboost==1.2.10)
+  Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting pillow>=9 (from matplotlib->catboost==1.2.10)
+  Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Collecting pyparsing>=3 (from matplotlib->catboost==1.2.10)
+  Downloading pyparsing-3.3.3-py3-none-any.whl.metadata (5.9 kB)
+Downloading catboost-1.2.10-cp312-cp312-manylinux2014_x86_64.whl (97.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 97.1/97.1 MB 143.1 MB/s eta 0:00:00
+Downloading xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl (131.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 131.7/131.7 MB 131.4 MB/s eta 0:00:00
+Downloading lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.5/3.5 MB 449.8 MB/s eta 0:00:00
+Downloading scikit_learn-1.7.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.5/9.5 MB 389.2 MB/s eta 0:00:00
+Downloading joblib-1.6.0-py3-none-any.whl (306 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 306.1/306.1 kB 198.3 MB/s eta 0:00:00
+Downloading narwhals-2.26.0-py3-none-any.whl (474 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 474.0/474.0 kB 278.9 MB/s eta 0:00:00
+Downloading numpy-2.5.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.7/16.7 MB 475.2 MB/s eta 0:00:00
+Downloading pandas-3.0.6-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (10.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.8/10.8 MB 555.3 MB/s eta 0:00:00
+Downloading scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 331.4 MB/s eta 0:00:00
+Downloading threadpoolctl-3.7.0-py3-none-any.whl (26 kB)
+Downloading graphviz-0.21-py3-none-any.whl (47 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.3/47.3 kB 35.6 MB/s eta 0:00:00
+Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.9/9.9 MB 540.0 MB/s eta 0:00:00
+Downloading nvidia_nccl_cu12-2.32.3-py3-none-manylinux_2_27_x86_64.whl (351.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 351.5/351.5 MB 57.1 MB/s eta 0:00:00
+Downloading plotly-7.1.0-py3-none-any.whl (9.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.7/9.7 MB 521.4 MB/s eta 0:00:00
+Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Downloading cloudpickle-3.1.2-py3-none-any.whl (22 kB)
+Downloading contourpy-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (383 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 383.2/383.2 kB 240.9 MB/s eta 0:00:00
+Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Downloading fonttools-4.66.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 535.0 MB/s eta 0:00:00
+Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 441.4 MB/s eta 0:00:00
+Downloading packaging-26.3-py3-none-any.whl (129 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 130.0/130.0 kB 109.3 MB/s eta 0:00:00
+Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 543.7 MB/s eta 0:00:00
+Downloading pyparsing-3.3.3-py3-none-any.whl (126 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 126.4/126.4 kB 98.0 MB/s eta 0:00:00
+Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 229.9/229.9 kB 175.0 MB/s eta 0:00:00
+Installing collected packages: threadpoolctl, six, pyparsing, pillow, packaging, nvidia-nccl-cu12, numpy, narwhals, kiwisolver, graphviz, fonttools, cycler, cloudpickle, scipy, python-dateutil, plotly, joblib, contourpy, xgboost, scikit-learn, pandas, matplotlib, lightgbm, catboost
+Successfully installed catboost-1.2.10 cloudpickle-3.1.2 contourpy-1.4.0 cycler-0.12.1 fonttools-4.66.0 graphviz-0.21 joblib-1.6.0 kiwisolver-1.5.1 lightgbm-4.7.0 matplotlib-3.11.2 narwhals-2.26.0 numpy-2.5.3 nvidia-nccl-cu12-2.32.3 packaging-26.3 pandas-3.0.6 pillow-12.3.0 plotly-7.1.0 pyparsing-3.3.3 python-dateutil-2.9.0.post0 scikit-learn-1.7.2 scipy-1.18.1 six-1.17.0 threadpoolctl-3.7.0 xgboost-3.2.0
+
+=== 2026-09-29T14:42:38Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check umap-learn==0.5.12 pynndescent==0.6.0 numba==0.67.0 statsmodels==0.15.0 faiss-cpu==1.15.1
+Collecting umap-learn==0.5.12
+  Downloading umap_learn-0.5.12-py3-none-any.whl.metadata (24 kB)
+Collecting pynndescent==0.6.0
+  Downloading pynndescent-0.6.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting numba==0.67.0
+  Downloading numba-0.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.7 kB)
+Collecting statsmodels==0.15.0
+  Downloading statsmodels-0.15.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.6 kB)
+Collecting faiss-cpu==1.15.1
+  Downloading faiss_cpu-1.15.1-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (7.8 kB)
+Requirement already satisfied: numpy>=1.23 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (2.5.3)
+Requirement already satisfied: scipy>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.18.1)
+Requirement already satisfied: scikit-learn>=1.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.7.2)
+Collecting tqdm (from umap-learn==0.5.12)
+  Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 57.4/57.4 kB 33.0 MB/s eta 0:00:00
+Collecting llvmlite>=0.38 (from pynndescent==0.6.0)
+  Downloading llvmlite-0.49.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.0 kB)
+Requirement already satisfied: joblib>=0.11 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (1.6.0)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (3.0.6)
+Collecting patsy>=0.5.6 (from statsmodels==0.15.0)
+  Downloading patsy-1.0.3-py2.py3-none-any.whl.metadata (3.7 kB)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Collecting formulaic>=1.1.0 (from statsmodels==0.15.0)
+  Downloading formulaic-1.2.2-py3-none-any.whl.metadata (7.0 kB)
+Collecting interface-meta>=1.2.0 (from formulaic>=1.1.0->statsmodels==0.15.0)
+  Downloading interface_meta-2.0.1-py3-none-any.whl.metadata (6.4 kB)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Collecting typing-extensions>=4.2.0 (from formulaic>=1.1.0->statsmodels==0.15.0)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting wrapt>=1.0 (from formulaic>=1.1.0->statsmodels==0.15.0)
+  Downloading wrapt-2.5.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (7.6 kB)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=0.11->pynndescent==0.6.0) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2.9.0.post0)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn>=1.6->umap-learn==0.5.12) (3.7.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (1.17.0)
+Downloading umap_learn-0.5.12-py3-none-any.whl (91 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.8/91.8 kB 60.9 MB/s eta 0:00:00
+Downloading pynndescent-0.6.0-py3-none-any.whl (73 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.5/73.5 kB 56.3 MB/s eta 0:00:00
+Downloading numba-0.67.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.9/3.9 MB 447.0 MB/s eta 0:00:00
+Downloading statsmodels-0.15.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (12.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.0/12.0 MB 485.4 MB/s eta 0:00:00
+Downloading faiss_cpu-1.15.1-cp310-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (18.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.8/18.8 MB 370.2 MB/s eta 0:00:00
+Downloading formulaic-1.2.2-py3-none-any.whl (118 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 118.9/118.9 kB 85.2 MB/s eta 0:00:00
+Downloading llvmlite-0.49.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (59.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.9/59.9 MB 226.1 MB/s eta 0:00:00
+Downloading patsy-1.0.3-py2.py3-none-any.whl (233 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 233.3/233.3 kB 141.0 MB/s eta 0:00:00
+Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 kB 58.8 MB/s eta 0:00:00
+Downloading interface_meta-2.0.1-py3-none-any.whl (15 kB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Downloading wrapt-2.5.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (250 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 250.2/250.2 kB 173.3 MB/s eta 0:00:00
+Installing collected packages: wrapt, typing-extensions, tqdm, patsy, llvmlite, interface-meta, faiss-cpu, numba, pynndescent, formulaic, umap-learn, statsmodels
+Successfully installed faiss-cpu-1.15.1 formulaic-1.2.2 interface-meta-2.0.1 llvmlite-0.49.0 numba-0.67.0 patsy-1.0.3 pynndescent-0.6.0 statsmodels-0.15.0 tqdm-4.70.1 typing-extensions-4.16.0 umap-learn-0.5.12 wrapt-2.5.0
+
+=== 2026-09-29T14:42:43Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check statsmodels==0.15.0 statsforecast==2.1.1 arch==8.0.0 prophet==1.4.0 networkx==3.6.1 shap==0.51.0 implicit==0.7.3 torch-geometric==2.8.0.post1 gpytorch==1.15.2 faiss-cpu==1.15.1 tokenizers==0.23.2
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Collecting statsforecast==2.1.1
+  Downloading statsforecast-2.1.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (26 kB)
+Collecting arch==8.0.0
+  Downloading arch-8.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (13 kB)
+Collecting prophet==1.4.0
+  Downloading prophet-1.4.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (3.6 kB)
+Collecting networkx==3.6.1
+  Using cached networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting shap==0.51.0
+  Downloading shap-0.51.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (25 kB)
+Collecting implicit==0.7.3
+  Downloading implicit-0.7.3-cp312-cp312-manylinux2014_x86_64.whl.metadata (6.0 kB)
+Collecting torch-geometric==2.8.0.post1
+  Downloading torch_geometric-2.8.0.post1-py3-none-any.whl.metadata (64 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.4/64.4 kB 25.7 MB/s eta 0:00:00
+Collecting gpytorch==1.15.2
+  Downloading gpytorch-1.15.2-py3-none-any.whl.metadata (8.2 kB)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Collecting tokenizers==0.23.2
+  Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+Requirement already satisfied: numpy<3,>=1.23.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.5.3)
+Requirement already satisfied: scipy!=1.9.2,>=1.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.18.1)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (3.0.6)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: cloudpickle in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.1.2)
+Collecting coreforecast>=0.0.17 (from statsforecast==2.1.1)
+  Downloading coreforecast-0.0.18-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (3.6 kB)
+Collecting pandas!=2.1.0,>=1.4 (from statsmodels==0.15.0)
+  Downloading pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (91 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 91.2/91.2 kB 64.1 MB/s eta 0:00:00
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (4.70.1)
+Collecting fugue>=0.9.4 (from statsforecast==2.1.1)
+  Downloading fugue-0.9.7-py3-none-any.whl.metadata (18 kB)
+Collecting utilsforecast>=0.1.4 (from statsforecast==2.1.1)
+  Downloading utilsforecast-0.2.16-py3-none-any.whl.metadata (4.7 kB)
+Requirement already satisfied: threadpoolctl>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.7.0)
+Collecting cmdstanpy>=1.0.4 (from prophet==1.4.0)
+  Downloading cmdstanpy-1.3.0-py3-none-any.whl.metadata (4.2 kB)
+Requirement already satisfied: matplotlib>=3.5.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (3.11.2)
+Collecting holidays<1,>=0.25 (from prophet==1.4.0)
+  Downloading holidays-0.105-py3-none-any.whl.metadata (55 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 55.9/55.9 kB 40.1 MB/s eta 0:00:00
+Requirement already satisfied: scikit-learn in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (1.7.2)
+Collecting slicer==0.0.8 (from shap==0.51.0)
+  Downloading slicer-0.0.8-py3-none-any.whl.metadata (4.0 kB)
+Requirement already satisfied: numba in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.67.0)
+Requirement already satisfied: llvmlite in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.49.0)
+Requirement already satisfied: typing-extensions in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (4.16.0)
+Collecting aiohttp (from torch-geometric==2.8.0.post1)
+  Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (8.3 kB)
+Collecting fsspec (from torch-geometric==2.8.0.post1)
+  Downloading fsspec-2026.9.0-py3-none-any.whl.metadata (10 kB)
+Collecting jinja2 (from torch-geometric==2.8.0.post1)
+  Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting psutil>=5.8.0 (from torch-geometric==2.8.0.post1)
+  Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl.metadata (22 kB)
+Requirement already satisfied: pyparsing in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.3.3)
+Collecting requests (from torch-geometric==2.8.0.post1)
+  Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting xxhash (from torch-geometric==2.8.0.post1)
+  Downloading xxhash-4.0.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (17 kB)
+Collecting mpmath<=1.3,>=0.19 (from gpytorch==1.15.2)
+  Using cached mpmath-1.3.0-py3-none-any.whl.metadata (8.6 kB)
+Collecting linear_operator>=0.6.1 (from gpytorch==1.15.2)
+  Downloading linear_operator-0.6.1-py3-none-any.whl.metadata (15 kB)
+Collecting huggingface-hub<2.0,>=0.16.4 (from tokenizers==0.23.2)
+  Downloading huggingface_hub-1.33.0-py3-none-any.whl.metadata (16 kB)
+Collecting stanio<2.0.0,>=0.4.0 (from cmdstanpy>=1.0.4->prophet==1.4.0)
+  Downloading stanio-0.5.1-py3-none-any.whl.metadata (1.6 kB)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Collecting triad>=1.0.1 (from fugue>=0.9.4->statsforecast==2.1.1)
+  Downloading triad-1.0.2-py3-none-any.whl.metadata (6.6 kB)
+Collecting adagio>=0.2.6 (from fugue>=0.9.4->statsforecast==2.1.1)
+  Downloading adagio-0.2.6-py3-none-any.whl.metadata (1.8 kB)
+Requirement already satisfied: python-dateutil<3,>=2.9.0.post0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from holidays<1,>=0.25->prophet==1.4.0) (2.9.0.post0)
+Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+Collecting filelock>=3.10.0 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading filelock-4.0.6-py3-none-any.whl.metadata (2.0 kB)
+Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Collecting httpx<1,>=0.23.0 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting pyyaml>=5.1 (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting torch>=2.0 (from linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading torch-2.14.0-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (37 kB)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.5.1)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (12.3.0)
+Collecting pytz>=2020.1 (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0)
+  Downloading pytz-2026.4-py2.py3-none-any.whl.metadata (22 kB)
+Collecting tzdata>=2022.7 (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0)
+  Downloading tzdata-2026.4-py2.py3-none-any.whl.metadata (1.4 kB)
+Collecting aiohappyeyeballs>=2.5.0 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl.metadata (5.9 kB)
+Collecting aiosignal>=1.4.0 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+Collecting attrs>=17.3.0 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting frozenlist>=1.1.1 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (20 kB)
+Collecting multidict<7.0,>=4.5 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading multidict-6.9.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+Collecting propcache>=0.2.0 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading propcache-0.5.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (25 kB)
+Collecting yarl<2.0,>=1.17.0 (from aiohttp->torch-geometric==2.8.0.post1)
+  Downloading yarl-1.25.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (111 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 111.6/111.6 kB 74.5 MB/s eta 0:00:00
+Collecting MarkupSafe>=2.0 (from jinja2->torch-geometric==2.8.0.post1)
+  Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+Collecting charset_normalizer<4,>=2 (from requests->torch-geometric==2.8.0.post1)
+  Downloading charset_normalizer-3.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (45 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 45.9/45.9 kB 33.1 MB/s eta 0:00:00
+Collecting idna<4,>=2.5 (from requests->torch-geometric==2.8.0.post1)
+  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting urllib3<3,>=1.26 (from requests->torch-geometric==2.8.0.post1)
+  Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting certifi>=2023.5.7 (from requests->torch-geometric==2.8.0.post1)
+  Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn->shap==0.51.0) (1.6.0)
+Collecting anyio (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+Collecting httpcore==1.* (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2)
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil<3,>=2.9.0.post0->holidays<1,>=0.25->prophet==1.4.0) (1.17.0)
+Collecting setuptools>=77.0.3 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+Collecting sympy>=1.13.3 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Using cached sympy-1.14.0-py3-none-any.whl.metadata (12 kB)
+Collecting cuda-toolkit==13.0.3 (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading cuda_toolkit-13.0.3.0-py2.py3-none-any.whl.metadata (17 kB)
+Collecting cuda-bindings<14,>=13.0.3 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading cuda_bindings-13.4.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting nvidia-cudnn-cu13==9.24.0.43 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_x86_64.whl.metadata (1.9 kB)
+Collecting nvidia-cusparselt-cu13==0.8.1 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl.metadata (12 kB)
+Collecting nvidia-nccl-cu13==2.30.7 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl.metadata (2.1 kB)
+Collecting nvidia-nvshmem-cu13==3.4.5 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.1 kB)
+Collecting triton~=3.8.0 (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading triton-3.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (978 bytes)
+Collecting nvidia-cublas==13.1.1.3.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cuda-nvrtc==13.0.88.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cuda-runtime==13.0.96.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cufft==12.0.0.61.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-nvjitlink<14,>=13.0.88 (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_nvjitlink-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cufile==1.15.1.6.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cuda-cupti==13.0.85.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-curand==10.4.0.35.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl.metadata (1.7 kB)
+Collecting nvidia-cusolver==12.0.4.66.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-cusparse==12.6.3.3.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (1.8 kB)
+Collecting nvidia-nvtx==13.0.85.* (from cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3; platform_system == "Linux"->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl.metadata (1.8 kB)
+Collecting pyarrow>=6.0.1 (from triad>=1.0.1->fugue>=0.9.4->statsforecast==2.1.1)
+  Downloading pyarrow-25.0.1-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (3.0 kB)
+Collecting cuda-pathfinder>=1.4.2 (from cuda-bindings<14,>=13.0.3->torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2)
+  Downloading cuda_pathfinder-1.8.2-py3-none-any.whl.metadata (1.9 kB)
+Downloading statsforecast-2.1.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (500 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 501.0/501.0 kB 208.1 MB/s eta 0:00:00
+Downloading arch-8.0.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (981 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 981.3/981.3 kB 192.3 MB/s eta 0:00:00
+Downloading prophet-1.4.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (11.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.9/11.9 MB 221.4 MB/s eta 0:00:00
+Using cached networkx-3.6.1-py3-none-any.whl (2.1 MB)
+Downloading shap-0.51.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 402.2 MB/s eta 0:00:00
+Downloading implicit-0.7.3-cp312-cp312-manylinux2014_x86_64.whl (7.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.6/7.6 MB 84.7 MB/s eta 0:00:00
+Downloading torch_geometric-2.8.0.post1-py3-none-any.whl (1.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 351.9 MB/s eta 0:00:00
+Downloading gpytorch-1.15.2-py3-none-any.whl (291 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 291.2/291.2 kB 177.9 MB/s eta 0:00:00
+Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 563.8 MB/s eta 0:00:00
+Downloading slicer-0.0.8-py3-none-any.whl (15 kB)
+Downloading cmdstanpy-1.3.0-py3-none-any.whl (99 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 99.1/99.1 kB 87.5 MB/s eta 0:00:00
+Downloading coreforecast-0.0.18-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (348 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 348.6/348.6 kB 168.9 MB/s eta 0:00:00
+Downloading fugue-0.9.7-py3-none-any.whl (281 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 281.0/281.0 kB 129.4 MB/s eta 0:00:00
+Downloading holidays-0.105-py3-none-any.whl (1.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.6/1.6 MB 462.7 MB/s eta 0:00:00
+Downloading huggingface_hub-1.33.0-py3-none-any.whl (846 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 846.4/846.4 kB 395.3 MB/s eta 0:00:00
+Downloading fsspec-2026.9.0-py3-none-any.whl (221 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 221.7/221.7 kB 171.3 MB/s eta 0:00:00
+Downloading linear_operator-0.6.1-py3-none-any.whl (174 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 174.8/174.8 kB 111.0 MB/s eta 0:00:00
+Using cached mpmath-1.3.0-py3-none-any.whl (536 kB)
+Downloading pandas-2.3.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (12.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.4/12.4 MB 417.2 MB/s eta 0:00:00
+Downloading psutil-7.2.2-cp36-abi3-manylinux2010_x86_64.manylinux_2_12_x86_64.manylinux_2_28_x86_64.whl (155 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 155.6/155.6 kB 128.0 MB/s eta 0:00:00
+Downloading utilsforecast-0.2.16-py3-none-any.whl (46 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 46.6/46.6 kB 38.3 MB/s eta 0:00:00
+Downloading aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 501.9 MB/s eta 0:00:00
+Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 134.9/134.9 kB 117.2 MB/s eta 0:00:00
+Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.1/73.1 kB 67.7 MB/s eta 0:00:00
+Downloading xxhash-4.0.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (261 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 261.8/261.8 kB 220.5 MB/s eta 0:00:00
+Downloading adagio-0.2.6-py3-none-any.whl (19 kB)
+Downloading aiohappyeyeballs-2.7.1-py3-none-any.whl (15 kB)
+Downloading aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 67.5/67.5 kB 65.6 MB/s eta 0:00:00
+Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 137.0/137.0 kB 119.6 MB/s eta 0:00:00
+Downloading charset_normalizer-3.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (248 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 248.8/248.8 kB 205.6 MB/s eta 0:00:00
+Downloading click-8.5.0-py3-none-any.whl (125 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 125.3/125.3 kB 118.5 MB/s eta 0:00:00
+Downloading filelock-4.0.6-py3-none-any.whl (109 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 109.1/109.1 kB 88.2 MB/s eta 0:00:00
+Downloading frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (242 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 242.4/242.4 kB 209.7 MB/s eta 0:00:00
+Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 579.1 MB/s eta 0:00:00
+Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.5/73.5 kB 54.2 MB/s eta 0:00:00
+Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 78.8/78.8 kB 65.7 MB/s eta 0:00:00
+Downloading idna-3.20-py3-none-any.whl (69 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.6/69.6 kB 57.8 MB/s eta 0:00:00
+Downloading markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+Downloading multidict-6.9.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (336 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 336.9/336.9 kB 220.5 MB/s eta 0:00:00
+Downloading propcache-0.5.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (250 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 250.4/250.4 kB 183.3 MB/s eta 0:00:00
+Downloading pytz-2026.4-py2.py3-none-any.whl (506 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 506.7/506.7 kB 293.3 MB/s eta 0:00:00
+Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 391.7 MB/s eta 0:00:00
+Downloading stanio-0.5.1-py3-none-any.whl (8.1 kB)
+Downloading torch-2.14.0-cp312-cp312-manylinux_2_28_x86_64.whl (554.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 554.6/554.6 MB 36.7 MB/s eta 0:00:00
+Downloading cuda_toolkit-13.0.3.0-py2.py3-none-any.whl (2.5 kB)
+Downloading nvidia_cudnn_cu13-9.24.0.43-py3-none-manylinux_2_27_x86_64.whl (553.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 553.1/553.1 MB 34.7 MB/s eta 0:00:00
+Downloading nvidia_cusparselt_cu13-0.8.1-py3-none-manylinux2014_x86_64.whl (170.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 170.1/170.1 MB 89.7 MB/s eta 0:00:00
+Downloading nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl (216.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 216.0/216.0 MB 73.1 MB/s eta 0:00:00
+Downloading nvidia_nvshmem_cu13-3.4.5-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (60.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 60.4/60.4 MB 188.5 MB/s eta 0:00:00
+Downloading nvidia_cublas-13.1.1.3-py3-none-manylinux_2_27_x86_64.whl (423.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 423.1/423.1 MB 46.2 MB/s eta 0:00:00
+Downloading nvidia_cuda_cupti-13.0.85-py3-none-manylinux_2_25_x86_64.whl (10.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.7/10.7 MB 564.3 MB/s eta 0:00:00
+Downloading nvidia_cuda_nvrtc-13.0.88-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (90.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 90.2/90.2 MB 152.2 MB/s eta 0:00:00
+Downloading nvidia_cuda_runtime-13.0.96-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (2.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.2/2.2 MB 466.8 MB/s eta 0:00:00
+Downloading nvidia_cufft-12.0.0.61-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (214.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 214.1/214.1 MB 79.3 MB/s eta 0:00:00
+Downloading nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 385.1 MB/s eta 0:00:00
+Downloading nvidia_curand-10.4.0.35-py3-none-manylinux_2_27_x86_64.whl (59.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.5/59.5 MB 182.7 MB/s eta 0:00:00
+Downloading nvidia_cusolver-12.0.4.66-py3-none-manylinux_2_27_x86_64.whl (200.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 200.9/200.9 MB 83.8 MB/s eta 0:00:00
+Downloading nvidia_cusparse-12.6.3.3-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (145.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 145.9/145.9 MB 104.4 MB/s eta 0:00:00
+Downloading nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl (148 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 148.0/148.0 kB 97.9 MB/s eta 0:00:00
+Downloading triad-1.0.2-py3-none-any.whl (59 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 59.9/59.9 kB 43.4 MB/s eta 0:00:00
+Downloading tzdata-2026.4-py2.py3-none-any.whl (347 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 347.5/347.5 kB 212.3 MB/s eta 0:00:00
+Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 135.7/135.7 kB 107.3 MB/s eta 0:00:00
+Downloading yarl-1.25.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (117 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 117.0/117.0 kB 94.8 MB/s eta 0:00:00
+Downloading cuda_bindings-13.4.3-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (7.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.2/7.2 MB 456.8 MB/s eta 0:00:00
+Downloading pyarrow-25.0.1-cp312-cp312-manylinux_2_28_x86_64.whl (50.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.1/50.1 MB 245.9 MB/s eta 0:00:00
+Downloading setuptools-84.0.0-py3-none-any.whl (818 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 818.2/818.2 kB 326.5 MB/s eta 0:00:00
+Using cached sympy-1.14.0-py3-none-any.whl (6.3 MB)
+Downloading triton-3.8.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (248.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 248.0/248.0 MB 74.0 MB/s eta 0:00:00
+Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 132.1/132.1 kB 87.2 MB/s eta 0:00:00
+Downloading cuda_pathfinder-1.8.2-py3-none-any.whl (62 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 62.6/62.6 kB 46.7 MB/s eta 0:00:00
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Downloading nvidia_nvjitlink-13.4.92-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl (42.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 42.5/42.5 MB 253.1 MB/s eta 0:00:00
+Installing collected packages: pytz, nvidia-cusparselt-cu13, mpmath, cuda-toolkit, xxhash, urllib3, tzdata, triton, sympy, stanio, slicer, setuptools, pyyaml, pyarrow, psutil, propcache, nvidia-nvtx, nvidia-nvshmem-cu13, nvidia-nvjitlink, nvidia-nccl-cu13, nvidia-curand, nvidia-cufile, nvidia-cuda-runtime, nvidia-cuda-nvrtc, nvidia-cuda-cupti, networkx, multidict, MarkupSafe, idna, hf-xet, h11, fsspec, frozenlist, filelock, cuda-pathfinder, coreforecast, click, charset_normalizer, certifi, attrs, aiohappyeyeballs, yarl, requests, pandas, nvidia-cusparse, nvidia-cufft, nvidia-cublas, jinja2, implicit, httpcore, holidays, cuda-bindings, anyio, aiosignal, utilsforecast, triad, shap, nvidia-cusolver, nvidia-cudnn-cu13, httpx, cmdstanpy, aiohttp, torch-geometric, prophet, huggingface-hub, adagio, torch, tokenizers, fugue, arch, statsforecast, linear_operator, gpytorch
+  Attempting uninstall: pandas
+    Found existing installation: pandas 3.0.6
+    Uninstalling pandas-3.0.6:
+      Successfully uninstalled pandas-3.0.6
+Successfully installed MarkupSafe-3.0.3 adagio-0.2.6 aiohappyeyeballs-2.7.1 aiohttp-3.14.3 aiosignal-1.4.0 anyio-4.15.1 arch-8.0.0 attrs-26.1.0 certifi-2026.7.22 charset_normalizer-3.5.1 click-8.5.0 cmdstanpy-1.3.0 coreforecast-0.0.18 cuda-bindings-13.4.3 cuda-pathfinder-1.8.2 cuda-toolkit-13.0.3.0 filelock-4.0.6 frozenlist-1.8.0 fsspec-2026.9.0 fugue-0.9.7 gpytorch-1.15.2 h11-0.16.0 hf-xet-1.6.0 holidays-0.105 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-1.33.0 idna-3.20 implicit-0.7.3 jinja2-3.1.6 linear_operator-0.6.1 mpmath-1.3.0 multidict-6.9.1 networkx-3.6.1 nvidia-cublas-13.1.1.3 nvidia-cuda-cupti-13.0.85 nvidia-cuda-nvrtc-13.0.88 nvidia-cuda-runtime-13.0.96 nvidia-cudnn-cu13-9.24.0.43 nvidia-cufft-12.0.0.61 nvidia-cufile-1.15.1.6 nvidia-curand-10.4.0.35 nvidia-cusolver-12.0.4.66 nvidia-cusparse-12.6.3.3 nvidia-cusparselt-cu13-0.8.1 nvidia-nccl-cu13-2.30.7 nvidia-nvjitlink-13.4.92 nvidia-nvshmem-cu13-3.4.5 nvidia-nvtx-13.0.85 pandas-2.3.3 propcache-0.5.4 prophet-1.4.0 psutil-7.2.2 pyarrow-25.0.1 pytz-2026.4 pyyaml-6.0.3 requests-2.34.2 setuptools-84.0.0 shap-0.51.0 slicer-0.0.8 stanio-0.5.1 statsforecast-2.1.1 sympy-1.14.0 tokenizers-0.23.2 torch-2.14.0 torch-geometric-2.8.0.post1 triad-1.0.2 triton-3.8.0 tzdata-2026.4 urllib3-2.8.0 utilsforecast-0.2.16 xxhash-4.0.1 yarl-1.25.1
+
+=== 2026-09-29T14:43:19Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check einops==0.8.1
+Collecting einops==0.8.1
+  Downloading einops-0.8.1-py3-none-any.whl.metadata (13 kB)
+Downloading einops-0.8.1-py3-none-any.whl (64 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.4/64.4 kB 13.6 MB/s eta 0:00:00
+Installing collected packages: einops
+Successfully installed einops-0.8.1
+
+=== 2026-09-29T14:43:20Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e' 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d'
+Collecting pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660
+  Downloading https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl (399.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 399.1/399.1 MB 33.9 MB/s eta 0:00:00
+Collecting torch==2.6.0+rocm6.4.1.git1ded221d
+  Downloading https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl (3117.0 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 GB 5.6 MB/s eta 0:00:00
+Requirement already satisfied: filelock in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.0.6)
+Requirement already satisfied: typing-extensions>=4.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.16.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (84.0.0)
+Collecting sympy==1.13.1 (from torch==2.6.0+rocm6.4.1.git1ded221d)
+  Downloading sympy-1.13.1-py3-none-any.whl.metadata (12 kB)
+Requirement already satisfied: networkx in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.6.1)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.1.6)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (2026.9.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from sympy==1.13.1->torch==2.6.0+rocm6.4.1.git1ded221d) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch==2.6.0+rocm6.4.1.git1ded221d) (3.0.3)
+Downloading sympy-1.13.1-py3-none-any.whl (6.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.2/6.2 MB 222.4 MB/s eta 0:00:00
+Installing collected packages: pytorch-triton-rocm, sympy, torch
+  Attempting uninstall: sympy
+    Found existing installation: sympy 1.14.0
+    Uninstalling sympy-1.14.0:
+      Successfully uninstalled sympy-1.14.0
+  Attempting uninstall: torch
+    Found existing installation: torch 2.14.0
+    Uninstalling torch-2.14.0:
+      Successfully uninstalled torch-2.14.0
+Successfully installed pytorch-triton-rocm-3.2.0+rocm6.4.1.git6da9e660 sympy-1.13.1 torch-2.6.0+rocm6.4.1.git1ded221d
+
+=== 2026-09-29T17:55:40Z /root/bench-board-cache/venv/bin/python -m pip download --no-input --no-deps --disable-pip-version-check -d /root/bench-board-cache/wheels mojolearn==0.8.25
+Collecting mojolearn==0.8.25
+  File was already downloaded /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn
+
+=== 2026-09-29T17:55:40Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Processing /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Requirement already satisfied: mojolearn-nvidia==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+Requirement already satisfied: mojolearn-amd==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+mojolearn is already installed with the same version as the provided wheel. Use --force-reinstall to force an installation of the wheel.
+
+=== 2026-09-29T17:55:41Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e' 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d'
+Collecting pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl (399.1 MB)
+Collecting torch==2.6.0+rocm6.4.1.git1ded221d
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl (3117.0 MB)
+Requirement already satisfied: filelock in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.0.6)
+Requirement already satisfied: typing-extensions>=4.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.16.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (1.13.1)
+Requirement already satisfied: networkx in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.6.1)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.1.6)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (2026.9.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from sympy==1.13.1->torch==2.6.0+rocm6.4.1.git1ded221d) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch==2.6.0+rocm6.4.1.git1ded221d) (3.0.3)
+
+=== 2026-09-29T17:55:46Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+Requirement already satisfied: catboost==1.2.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.2.10)
+Requirement already satisfied: xgboost==3.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.2.0)
+Requirement already satisfied: lightgbm==4.7.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (4.7.0)
+Requirement already satisfied: scikit-learn==1.7.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.7.2)
+Requirement already satisfied: graphviz in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (0.21)
+Requirement already satisfied: matplotlib in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (3.11.2)
+Requirement already satisfied: numpy<3.0,>=1.16.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.5.3)
+Requirement already satisfied: pandas<4.0,>=0.24 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.3.3)
+Requirement already satisfied: scipy in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.18.1)
+Requirement already satisfied: plotly in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (7.1.0)
+Requirement already satisfied: six in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.17.0)
+Requirement already satisfied: nvidia-nccl-cu12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from xgboost==3.2.0) (2.32.3)
+Requirement already satisfied: narwhals>=1.15 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from lightgbm==4.7.0) (2.26.0)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (1.6.0)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (3.7.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=1.2.0->scikit-learn==1.7.2) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.5.1)
+Requirement already satisfied: packaging>=20.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (26.3)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (12.3.0)
+Requirement already satisfied: pyparsing>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (3.3.3)
+
+=== 2026-09-29T17:55:47Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check umap-learn==0.5.12 pynndescent==0.6.0 numba==0.67.0 statsmodels==0.15.0 faiss-cpu==1.15.1
+Requirement already satisfied: umap-learn==0.5.12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.5.12)
+Requirement already satisfied: pynndescent==0.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.6.0)
+Requirement already satisfied: numba==0.67.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.67.0)
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: numpy>=1.23 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (2.5.3)
+Requirement already satisfied: scipy>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.18.1)
+Requirement already satisfied: scikit-learn>=1.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.7.2)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (4.70.1)
+Requirement already satisfied: llvmlite>=0.38 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (0.49.0)
+Requirement already satisfied: joblib>=0.11 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (1.6.0)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: typing-extensions>=4.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (4.16.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=0.11->pynndescent==0.6.0) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn>=1.6->umap-learn==0.5.12) (3.7.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (1.17.0)
+
+=== 2026-09-29T17:55:48Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check statsmodels==0.15.0 statsforecast==2.1.1 arch==8.0.0 prophet==1.4.0 networkx==3.6.1 shap==0.51.0 implicit==0.7.3 torch-geometric==2.8.0.post1 gpytorch==1.15.2 faiss-cpu==1.15.1 tokenizers==0.23.2
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: statsforecast==2.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.1.1)
+Requirement already satisfied: arch==8.0.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (8.0.0)
+Requirement already satisfied: prophet==1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.4.0)
+Requirement already satisfied: networkx==3.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.6.1)
+Requirement already satisfied: shap==0.51.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.51.0)
+Requirement already satisfied: implicit==0.7.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.7.3)
+Requirement already satisfied: torch-geometric==2.8.0.post1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.8.0.post1)
+Requirement already satisfied: gpytorch==1.15.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.2)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: tokenizers==0.23.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.23.2)
+Requirement already satisfied: numpy<3,>=1.23.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.5.3)
+Requirement already satisfied: scipy!=1.9.2,>=1.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.18.1)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: cloudpickle in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.1.2)
+Requirement already satisfied: coreforecast>=0.0.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.0.18)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (4.70.1)
+Requirement already satisfied: fugue>=0.9.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.9.7)
+Requirement already satisfied: utilsforecast>=0.1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.2.16)
+Requirement already satisfied: threadpoolctl>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.7.0)
+Requirement already satisfied: cmdstanpy>=1.0.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (1.3.0)
+Requirement already satisfied: matplotlib>=3.5.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (3.11.2)
+Requirement already satisfied: holidays<1,>=0.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (0.105)
+Requirement already satisfied: scikit-learn in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (1.7.2)
+Requirement already satisfied: slicer==0.0.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.0.8)
+Requirement already satisfied: numba in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.67.0)
+Requirement already satisfied: llvmlite in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.49.0)
+Requirement already satisfied: typing-extensions in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (4.16.0)
+Requirement already satisfied: aiohttp in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.14.3)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2026.9.0)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.1.6)
+Requirement already satisfied: psutil>=5.8.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (7.2.2)
+Requirement already satisfied: pyparsing in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.3.3)
+Requirement already satisfied: requests in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2.34.2)
+Requirement already satisfied: xxhash in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (4.0.1)
+Requirement already satisfied: mpmath<=1.3,>=0.19 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (1.3.0)
+Requirement already satisfied: linear_operator>=0.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (0.6.1)
+Requirement already satisfied: huggingface-hub<2.0,>=0.16.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from tokenizers==0.23.2) (1.33.0)
+Requirement already satisfied: stanio<2.0.0,>=0.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from cmdstanpy>=1.0.4->prophet==1.4.0) (0.5.1)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: triad>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (1.0.2)
+Requirement already satisfied: adagio>=0.2.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (0.2.6)
+Requirement already satisfied: python-dateutil<3,>=2.9.0.post0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from holidays<1,>=0.25->prophet==1.4.0) (2.9.0.post0)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (8.5.0)
+Requirement already satisfied: filelock>=3.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.0.6)
+Requirement already satisfied: hf-xet<2.0.0,>=1.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.6.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.28.1)
+Requirement already satisfied: pyyaml>=5.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (6.0.3)
+Requirement already satisfied: torch>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from linear_operator>=0.6.1->gpytorch==1.15.2) (2.6.0+rocm6.4.1.git1ded221d)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.5.1)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (12.3.0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (2.7.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (6.9.1)
+Requirement already satisfied: propcache>=0.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (0.5.4)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.25.1)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch-geometric==2.8.0.post1) (3.0.3)
+Requirement already satisfied: charset_normalizer<4,>=2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.5.1)
+Requirement already satisfied: idna<4,>=2.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.20)
+Requirement already satisfied: urllib3<3,>=1.26 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2.8.0)
+Requirement already satisfied: certifi>=2023.5.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2026.7.22)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn->shap==0.51.0) (1.6.0)
+Requirement already satisfied: anyio in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.15.1)
+Requirement already satisfied: httpcore==1.* in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.16.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil<3,>=2.9.0.post0->holidays<1,>=0.25->prophet==1.4.0) (1.17.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (1.13.1)
+Requirement already satisfied: pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (3.2.0+rocm6.4.1.git6da9e660)
+Requirement already satisfied: pyarrow>=6.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from triad>=1.0.1->fugue>=0.9.4->statsforecast==2.1.1) (25.0.1)
+
+=== 2026-09-29T17:55:49Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check einops==0.8.1
+Requirement already satisfied: einops==0.8.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.8.1)
+
+=== 2026-09-29T21:12:50Z /root/bench-board-cache/venv/bin/python -m pip download --no-input --no-deps --disable-pip-version-check -d /root/bench-board-cache/wheels mojolearn==0.8.25
+Collecting mojolearn==0.8.25
+  File was already downloaded /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn
+
+=== 2026-09-29T21:12:50Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Processing /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Requirement already satisfied: mojolearn-nvidia==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+Requirement already satisfied: mojolearn-amd==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+mojolearn is already installed with the same version as the provided wheel. Use --force-reinstall to force an installation of the wheel.
+
+=== 2026-09-29T21:12:51Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e' 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d'
+Collecting pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl (399.1 MB)
+Collecting torch==2.6.0+rocm6.4.1.git1ded221d
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl (3117.0 MB)
+Requirement already satisfied: filelock in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.0.6)
+Requirement already satisfied: typing-extensions>=4.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.16.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (1.13.1)
+Requirement already satisfied: networkx in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.6.1)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.1.6)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (2026.9.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from sympy==1.13.1->torch==2.6.0+rocm6.4.1.git1ded221d) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch==2.6.0+rocm6.4.1.git1ded221d) (3.0.3)
+
+=== 2026-09-29T21:12:55Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+Requirement already satisfied: catboost==1.2.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.2.10)
+Requirement already satisfied: xgboost==3.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.2.0)
+Requirement already satisfied: lightgbm==4.7.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (4.7.0)
+Requirement already satisfied: scikit-learn==1.7.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.7.2)
+Requirement already satisfied: graphviz in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (0.21)
+Requirement already satisfied: matplotlib in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (3.11.2)
+Requirement already satisfied: numpy<3.0,>=1.16.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.5.3)
+Requirement already satisfied: pandas<4.0,>=0.24 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.3.3)
+Requirement already satisfied: scipy in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.18.1)
+Requirement already satisfied: plotly in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (7.1.0)
+Requirement already satisfied: six in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.17.0)
+Requirement already satisfied: nvidia-nccl-cu12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from xgboost==3.2.0) (2.32.3)
+Requirement already satisfied: narwhals>=1.15 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from lightgbm==4.7.0) (2.26.0)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (1.6.0)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (3.7.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=1.2.0->scikit-learn==1.7.2) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.5.1)
+Requirement already satisfied: packaging>=20.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (26.3)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (12.3.0)
+Requirement already satisfied: pyparsing>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (3.3.3)
+
+=== 2026-09-29T21:12:56Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check umap-learn==0.5.12 pynndescent==0.6.0 numba==0.67.0 statsmodels==0.15.0 faiss-cpu==1.15.1
+Requirement already satisfied: umap-learn==0.5.12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.5.12)
+Requirement already satisfied: pynndescent==0.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.6.0)
+Requirement already satisfied: numba==0.67.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.67.0)
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: numpy>=1.23 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (2.5.3)
+Requirement already satisfied: scipy>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.18.1)
+Requirement already satisfied: scikit-learn>=1.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.7.2)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (4.70.1)
+Requirement already satisfied: llvmlite>=0.38 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (0.49.0)
+Requirement already satisfied: joblib>=0.11 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (1.6.0)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: typing-extensions>=4.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (4.16.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=0.11->pynndescent==0.6.0) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn>=1.6->umap-learn==0.5.12) (3.7.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (1.17.0)
+
+=== 2026-09-29T21:12:57Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check statsmodels==0.15.0 statsforecast==2.1.1 arch==8.0.0 prophet==1.4.0 networkx==3.6.1 shap==0.51.0 implicit==0.7.3 torch-geometric==2.8.0.post1 gpytorch==1.15.2 faiss-cpu==1.15.1 tokenizers==0.23.2
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: statsforecast==2.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.1.1)
+Requirement already satisfied: arch==8.0.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (8.0.0)
+Requirement already satisfied: prophet==1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.4.0)
+Requirement already satisfied: networkx==3.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.6.1)
+Requirement already satisfied: shap==0.51.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.51.0)
+Requirement already satisfied: implicit==0.7.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.7.3)
+Requirement already satisfied: torch-geometric==2.8.0.post1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.8.0.post1)
+Requirement already satisfied: gpytorch==1.15.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.2)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: tokenizers==0.23.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.23.2)
+Requirement already satisfied: numpy<3,>=1.23.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.5.3)
+Requirement already satisfied: scipy!=1.9.2,>=1.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.18.1)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: cloudpickle in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.1.2)
+Requirement already satisfied: coreforecast>=0.0.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.0.18)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (4.70.1)
+Requirement already satisfied: fugue>=0.9.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.9.7)
+Requirement already satisfied: utilsforecast>=0.1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.2.16)
+Requirement already satisfied: threadpoolctl>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.7.0)
+Requirement already satisfied: cmdstanpy>=1.0.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (1.3.0)
+Requirement already satisfied: matplotlib>=3.5.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (3.11.2)
+Requirement already satisfied: holidays<1,>=0.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (0.105)
+Requirement already satisfied: scikit-learn in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (1.7.2)
+Requirement already satisfied: slicer==0.0.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.0.8)
+Requirement already satisfied: numba in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.67.0)
+Requirement already satisfied: llvmlite in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.49.0)
+Requirement already satisfied: typing-extensions in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (4.16.0)
+Requirement already satisfied: aiohttp in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.14.3)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2026.9.0)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.1.6)
+Requirement already satisfied: psutil>=5.8.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (7.2.2)
+Requirement already satisfied: pyparsing in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.3.3)
+Requirement already satisfied: requests in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2.34.2)
+Requirement already satisfied: xxhash in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (4.0.1)
+Requirement already satisfied: mpmath<=1.3,>=0.19 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (1.3.0)
+Requirement already satisfied: linear_operator>=0.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (0.6.1)
+Requirement already satisfied: huggingface-hub<2.0,>=0.16.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from tokenizers==0.23.2) (1.33.0)
+Requirement already satisfied: stanio<2.0.0,>=0.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from cmdstanpy>=1.0.4->prophet==1.4.0) (0.5.1)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: triad>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (1.0.2)
+Requirement already satisfied: adagio>=0.2.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (0.2.6)
+Requirement already satisfied: python-dateutil<3,>=2.9.0.post0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from holidays<1,>=0.25->prophet==1.4.0) (2.9.0.post0)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (8.5.0)
+Requirement already satisfied: filelock>=3.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.0.6)
+Requirement already satisfied: hf-xet<2.0.0,>=1.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.6.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.28.1)
+Requirement already satisfied: pyyaml>=5.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (6.0.3)
+Requirement already satisfied: torch>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from linear_operator>=0.6.1->gpytorch==1.15.2) (2.6.0+rocm6.4.1.git1ded221d)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.5.1)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (12.3.0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (2.7.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (6.9.1)
+Requirement already satisfied: propcache>=0.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (0.5.4)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.25.1)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch-geometric==2.8.0.post1) (3.0.3)
+Requirement already satisfied: charset_normalizer<4,>=2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.5.1)
+Requirement already satisfied: idna<4,>=2.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.20)
+Requirement already satisfied: urllib3<3,>=1.26 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2.8.0)
+Requirement already satisfied: certifi>=2023.5.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2026.7.22)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn->shap==0.51.0) (1.6.0)
+Requirement already satisfied: anyio in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.15.1)
+Requirement already satisfied: httpcore==1.* in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.16.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil<3,>=2.9.0.post0->holidays<1,>=0.25->prophet==1.4.0) (1.17.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (1.13.1)
+Requirement already satisfied: pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (3.2.0+rocm6.4.1.git6da9e660)
+Requirement already satisfied: pyarrow>=6.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from triad>=1.0.1->fugue>=0.9.4->statsforecast==2.1.1) (25.0.1)
+
+=== 2026-09-29T21:12:58Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check einops==0.8.1
+Requirement already satisfied: einops==0.8.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.8.1)
+
+=== 2026-09-30T02:09:03Z /root/bench-board-cache/venv/bin/python -m pip download --no-input --no-deps --disable-pip-version-check -d /root/bench-board-cache/wheels mojolearn==0.8.25
+Collecting mojolearn==0.8.25
+  File was already downloaded /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn
+
+=== 2026-09-30T02:09:04Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Processing /root/bench-board-cache/wheels/mojolearn-0.8.25-py3-none-manylinux_2_35_x86_64.whl
+Requirement already satisfied: mojolearn-nvidia==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+Requirement already satisfied: mojolearn-amd==0.8.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from mojolearn==0.8.25) (0.8.25)
+mojolearn is already installed with the same version as the provided wheel. Use --force-reinstall to force an installation of the wheel.
+
+=== 2026-09-30T02:09:04Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl#sha256=1d97c15798bf178299328032141a21d9777e7cdef59d5a7e3ac74e297c17198e' 'https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d'
+Collecting pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/pytorch_triton_rocm-3.2.0%2Brocm6.4.1.git6da9e660-cp312-cp312-linux_x86_64.whl (399.1 MB)
+Collecting torch==2.6.0+rocm6.4.1.git1ded221d
+  Using cached https://repo.radeon.com/rocm/manylinux/rocm-rel-6.4.1/torch-2.6.0%2Brocm6.4.1.git1ded221d-cp312-cp312-linux_x86_64.whl (3117.0 MB)
+Requirement already satisfied: filelock in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.0.6)
+Requirement already satisfied: typing-extensions>=4.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (4.16.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (1.13.1)
+Requirement already satisfied: networkx in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.6.1)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (3.1.6)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch==2.6.0+rocm6.4.1.git1ded221d) (2026.9.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from sympy==1.13.1->torch==2.6.0+rocm6.4.1.git1ded221d) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch==2.6.0+rocm6.4.1.git1ded221d) (3.0.3)
+
+=== 2026-09-30T02:09:10Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+Requirement already satisfied: catboost==1.2.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.2.10)
+Requirement already satisfied: xgboost==3.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.2.0)
+Requirement already satisfied: lightgbm==4.7.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (4.7.0)
+Requirement already satisfied: scikit-learn==1.7.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.7.2)
+Requirement already satisfied: graphviz in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (0.21)
+Requirement already satisfied: matplotlib in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (3.11.2)
+Requirement already satisfied: numpy<3.0,>=1.16.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.5.3)
+Requirement already satisfied: pandas<4.0,>=0.24 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (2.3.3)
+Requirement already satisfied: scipy in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.18.1)
+Requirement already satisfied: plotly in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (7.1.0)
+Requirement already satisfied: six in /root/bench-board-cache/venv/lib/python3.12/site-packages (from catboost==1.2.10) (1.17.0)
+Requirement already satisfied: nvidia-nccl-cu12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from xgboost==3.2.0) (2.32.3)
+Requirement already satisfied: narwhals>=1.15 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from lightgbm==4.7.0) (2.26.0)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (1.6.0)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn==1.7.2) (3.7.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=1.2.0->scikit-learn==1.7.2) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas<4.0,>=0.24->catboost==1.2.10) (2026.4)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (1.5.1)
+Requirement already satisfied: packaging>=20.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (26.3)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (12.3.0)
+Requirement already satisfied: pyparsing>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib->catboost==1.2.10) (3.3.3)
+
+=== 2026-09-30T02:09:11Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check umap-learn==0.5.12 pynndescent==0.6.0 numba==0.67.0 statsmodels==0.15.0 faiss-cpu==1.15.1
+Requirement already satisfied: umap-learn==0.5.12 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.5.12)
+Requirement already satisfied: pynndescent==0.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.6.0)
+Requirement already satisfied: numba==0.67.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.67.0)
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: numpy>=1.23 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (2.5.3)
+Requirement already satisfied: scipy>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.18.1)
+Requirement already satisfied: scikit-learn>=1.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (1.7.2)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from umap-learn==0.5.12) (4.70.1)
+Requirement already satisfied: llvmlite>=0.38 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (0.49.0)
+Requirement already satisfied: joblib>=0.11 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pynndescent==0.6.0) (1.6.0)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: typing-extensions>=4.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (4.16.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: cloudpickle>=3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from joblib>=0.11->pynndescent==0.6.0) (3.1.2)
+Requirement already satisfied: python-dateutil>=2.8.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: threadpoolctl>=3.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn>=1.6->umap-learn==0.5.12) (3.7.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (1.17.0)
+
+=== 2026-09-30T02:09:12Z /root/bench-board-cache/venv/bin/python -m pip install --no-input --disable-pip-version-check statsmodels==0.15.0 statsforecast==2.1.1 arch==8.0.0 prophet==1.4.0 networkx==3.6.1 shap==0.51.0 implicit==0.7.3 torch-geometric==2.8.0.post1 gpytorch==1.15.2 faiss-cpu==1.15.1 tokenizers==0.23.2
+Requirement already satisfied: statsmodels==0.15.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.15.0)
+Requirement already satisfied: statsforecast==2.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.1.1)
+Requirement already satisfied: arch==8.0.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (8.0.0)
+Requirement already satisfied: prophet==1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.4.0)
+Requirement already satisfied: networkx==3.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (3.6.1)
+Requirement already satisfied: shap==0.51.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.51.0)
+Requirement already satisfied: implicit==0.7.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.7.3)
+Requirement already satisfied: torch-geometric==2.8.0.post1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (2.8.0.post1)
+Requirement already satisfied: gpytorch==1.15.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.2)
+Requirement already satisfied: faiss-cpu==1.15.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (1.15.1)
+Requirement already satisfied: tokenizers==0.23.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (0.23.2)
+Requirement already satisfied: numpy<3,>=1.23.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.5.3)
+Requirement already satisfied: scipy!=1.9.2,>=1.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.18.1)
+Requirement already satisfied: pandas!=2.1.0,>=1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (2.3.3)
+Requirement already satisfied: patsy>=0.5.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.0.3)
+Requirement already satisfied: packaging>=21.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (26.3)
+Requirement already satisfied: formulaic>=1.1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsmodels==0.15.0) (1.2.2)
+Requirement already satisfied: cloudpickle in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.1.2)
+Requirement already satisfied: coreforecast>=0.0.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.0.18)
+Requirement already satisfied: tqdm in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (4.70.1)
+Requirement already satisfied: fugue>=0.9.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.9.7)
+Requirement already satisfied: utilsforecast>=0.1.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (0.2.16)
+Requirement already satisfied: threadpoolctl>=3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from statsforecast==2.1.1) (3.7.0)
+Requirement already satisfied: cmdstanpy>=1.0.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (1.3.0)
+Requirement already satisfied: matplotlib>=3.5.3 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (3.11.2)
+Requirement already satisfied: holidays<1,>=0.25 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from prophet==1.4.0) (0.105)
+Requirement already satisfied: scikit-learn in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (1.7.2)
+Requirement already satisfied: slicer==0.0.8 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.0.8)
+Requirement already satisfied: numba in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.67.0)
+Requirement already satisfied: llvmlite in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (0.49.0)
+Requirement already satisfied: typing-extensions in /root/bench-board-cache/venv/lib/python3.12/site-packages (from shap==0.51.0) (4.16.0)
+Requirement already satisfied: aiohttp in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.14.3)
+Requirement already satisfied: fsspec in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2026.9.0)
+Requirement already satisfied: jinja2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.1.6)
+Requirement already satisfied: psutil>=5.8.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (7.2.2)
+Requirement already satisfied: pyparsing in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (3.3.3)
+Requirement already satisfied: requests in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (2.34.2)
+Requirement already satisfied: xxhash in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch-geometric==2.8.0.post1) (4.0.1)
+Requirement already satisfied: mpmath<=1.3,>=0.19 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (1.3.0)
+Requirement already satisfied: linear_operator>=0.6.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from gpytorch==1.15.2) (0.6.1)
+Requirement already satisfied: huggingface-hub<2.0,>=0.16.4 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from tokenizers==0.23.2) (1.33.0)
+Requirement already satisfied: stanio<2.0.0,>=0.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from cmdstanpy>=1.0.4->prophet==1.4.0) (0.5.1)
+Requirement already satisfied: interface-meta>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.0.1)
+Requirement already satisfied: narwhals>=1.17 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.26.0)
+Requirement already satisfied: wrapt>=1.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from formulaic>=1.1.0->statsmodels==0.15.0) (2.5.0)
+Requirement already satisfied: triad>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (1.0.2)
+Requirement already satisfied: adagio>=0.2.6 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from fugue>=0.9.4->statsforecast==2.1.1) (0.2.6)
+Requirement already satisfied: python-dateutil<3,>=2.9.0.post0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from holidays<1,>=0.25->prophet==1.4.0) (2.9.0.post0)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (8.5.0)
+Requirement already satisfied: filelock>=3.10.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.0.6)
+Requirement already satisfied: hf-xet<2.0.0,>=1.6.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.6.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.28.1)
+Requirement already satisfied: pyyaml>=5.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (6.0.3)
+Requirement already satisfied: torch>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from linear_operator>=0.6.1->gpytorch==1.15.2) (2.6.0+rocm6.4.1.git1ded221d)
+Requirement already satisfied: contourpy>=1.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.4.0)
+Requirement already satisfied: cycler>=0.10 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (0.12.1)
+Requirement already satisfied: fonttools>=4.28.2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (4.66.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (1.5.1)
+Requirement already satisfied: pillow>=9 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from matplotlib>=3.5.3->prophet==1.4.0) (12.3.0)
+Requirement already satisfied: pytz>=2020.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: tzdata>=2022.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from pandas!=2.1.0,>=1.4->statsmodels==0.15.0) (2026.4)
+Requirement already satisfied: aiohappyeyeballs>=2.5.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (2.7.1)
+Requirement already satisfied: aiosignal>=1.4.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.4.0)
+Requirement already satisfied: attrs>=17.3.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (26.1.0)
+Requirement already satisfied: frozenlist>=1.1.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.8.0)
+Requirement already satisfied: multidict<7.0,>=4.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (6.9.1)
+Requirement already satisfied: propcache>=0.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (0.5.4)
+Requirement already satisfied: yarl<2.0,>=1.17.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from aiohttp->torch-geometric==2.8.0.post1) (1.25.1)
+Requirement already satisfied: MarkupSafe>=2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from jinja2->torch-geometric==2.8.0.post1) (3.0.3)
+Requirement already satisfied: charset_normalizer<4,>=2 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.5.1)
+Requirement already satisfied: idna<4,>=2.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (3.20)
+Requirement already satisfied: urllib3<3,>=1.26 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2.8.0)
+Requirement already satisfied: certifi>=2023.5.7 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from requests->torch-geometric==2.8.0.post1) (2026.7.22)
+Requirement already satisfied: joblib>=1.2.0 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from scikit-learn->shap==0.51.0) (1.6.0)
+Requirement already satisfied: anyio in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (4.15.1)
+Requirement already satisfied: httpcore==1.* in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (1.0.9)
+Requirement already satisfied: h11>=0.16 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=0.16.4->tokenizers==0.23.2) (0.16.0)
+Requirement already satisfied: six>=1.5 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from python-dateutil<3,>=2.9.0.post0->holidays<1,>=0.25->prophet==1.4.0) (1.17.0)
+Requirement already satisfied: setuptools in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (84.0.0)
+Requirement already satisfied: sympy==1.13.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (1.13.1)
+Requirement already satisfied: pytorch-triton-rocm==3.2.0+rocm6.4.1.git6da9e660 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from torch>=2.0->linear_operator>=0.6.1->gpytorch==1.15.2) (3.2.0+rocm6.4.1.git6da9e660)
+Requirement already satisfied: pyarrow>=6.0.1 in /root/bench-board-cache/venv/lib/python3.12/site-packages (from triad>=1.0.1->fugue>=0.9.4->statsforecast==2.1.1) (25.0.1)

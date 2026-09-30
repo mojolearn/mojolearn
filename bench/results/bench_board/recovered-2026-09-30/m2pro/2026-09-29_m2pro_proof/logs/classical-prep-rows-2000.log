@@ -1,0 +1,16 @@
+
+=== 2026-09-29T14:02:08Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m2pro/tools/classical_two_datasets.py prep --data /Users/ec2-user/bench-board-cache/ctd-data/rows-2000 --lanes dbscan,hdbscan,kde,kmeans,knn,ols,pca,svc --datasets istella,taxi --max-rows 2000
+CTD-PREP block=big-istella X=2000x220 y=2000 Xq=2000x220 yq=2000 init=8x220
+CTD-PREP block=dbscan-istella X=2000x220
+CTD-PREP block=kde-istella X=2000x220 Xq=64x220
+CTD-PREP block=svc-istella X=256x220 y=256 Xq=256x220 yq=256
+knn_datasets: read the 404000-row istella prefix (220 columns) from /Users/ec2-user/datasets/gbm-bench/istella/istella_speed.npz in 0.10 s
+CTD-PREP block=knn-istella index=2000x220 queries=64x220
+CTD-PREP dataset=istella seconds=0.7
+CTD-PREP block=big-taxi X=2000x11 y=2000 Xq=2000x11 yq=2000 init=8x11
+CTD-PREP block=dbscan-taxi X=2000x11
+CTD-PREP block=kde-taxi X=2000x11 Xq=64x11
+CTD-PREP block=svc-taxi X=256x11 y=256 Xq=256x11 yq=256
+knn_datasets: read the 404000-row taxi prefix (11 columns) from /Users/ec2-user/datasets/gbm-bench/taxi/taxi_speed.npz in 0.02 s
+CTD-PREP block=knn-taxi index=2000x11 queries=64x11
+CTD-PREP dataset=taxi seconds=0.7

@@ -1,0 +1,145 @@
+
+=== 2026-09-29T07:33:56Z /Users/ec2-user/bench-board-cache/venv/bin/python -u /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/bench/speed/forest_speed_arm.py --lane et --dataset istella --devices cpu --arms sklearn-et-cpu,lightgbm-cpu --ours-ab 'numeric_mode='"'"'fast'"'"'' --mem --infer
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=cpu (explicit); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+BENCH_BINDING arm=ours requested=identical resolved=identical compiled=identical vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/identical/_mojolearn_trees.so
+FSPEED-AB lane=et arm=ours-ab numeric_mode='fast' (arm ours keeps the estimator default)
+BENCH_BINDING arm=ours-ab requested=fast resolved=fast compiled=fast vendor=metal path=/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mojolearn_trees.so
+FSPEED-REFUSED lane=et arm=cuml-et-gpu reason=ModuleNotFoundError: No module named 'cuml'
+FSPEED-SCALE stage=before rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=ours-ab mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=sklearn-et-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-HEADER family=forest lane=et arm=lightgbm-cpu mode=IDENTICAL device=Darwin_arm64 rounds=5 size=shipped
+FSPEED-MEM lane=et arm=ours round=0 host_mb=6306.9 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=et arm=ours shape=istella-2043304x220 ms=4461.306
+FSPEED-MEM lane=et arm=ours-ab round=0 host_mb=6487.8 gpu_mb=- children_mb=1.7 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED-WARMUP lane=et arm=ours-ab shape=istella-2043304x220 ms=4400.223
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=0 host_mb=5161.1 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=et arm=sklearn-et-cpu shape=istella-2043304x220 ms=30467.966
+FSPEED-MEM lane=et arm=lightgbm-cpu round=0 host_mb=15660.9 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED-WARMUP lane=et arm=lightgbm-cpu shape=istella-2043304x220 ms=127179.824
+FSPEED-ORDER lane=et round=1 arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+FSPEED-MEM lane=et arm=ours round=1 host_mb=6821.5 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours shape=istella-2043304x220 round=1 ms=4403.115 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=ours-ab round=1 host_mb=7377.4 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours-ab shape=istella-2043304x220 round=1 ms=4389.438 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=1 host_mb=5511.7 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-2043304x220 round=1 ms=30294.349 hash=4ce9046c291187d1
+FSPEED-MEM lane=et arm=lightgbm-cpu round=1 host_mb=13652.8 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=lightgbm-cpu shape=istella-2043304x220 round=1 ms=127009.516 hash=5a89b22f142ae4e1
+FSPEED-ORDER lane=et round=2 arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+FSPEED-MEM lane=et arm=ours round=2 host_mb=7678.1 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours shape=istella-2043304x220 round=2 ms=4383.802 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=ours-ab round=2 host_mb=8953.8 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours-ab shape=istella-2043304x220 round=2 ms=4361.573 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=2 host_mb=5218.5 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-2043304x220 round=2 ms=30429.615 hash=5b1a507ddc04d30a
+FSPEED-MEM lane=et arm=lightgbm-cpu round=2 host_mb=11869.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=lightgbm-cpu shape=istella-2043304x220 round=2 ms=127169.439 hash=5a89b22f142ae4e1
+FSPEED-ORDER lane=et round=3 arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+FSPEED-MEM lane=et arm=ours round=3 host_mb=7683.7 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours shape=istella-2043304x220 round=3 ms=4394.179 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=ours-ab round=3 host_mb=8438.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours-ab shape=istella-2043304x220 round=3 ms=4363.806 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=3 host_mb=5500.1 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-2043304x220 round=3 ms=30457.517 hash=309694e197fa5532
+FSPEED-MEM lane=et arm=lightgbm-cpu round=3 host_mb=9963.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=lightgbm-cpu shape=istella-2043304x220 round=3 ms=127105.783 hash=5a89b22f142ae4e1
+FSPEED-ORDER lane=et round=4 arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+FSPEED-MEM lane=et arm=ours round=4 host_mb=7615.5 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours shape=istella-2043304x220 round=4 ms=4389.261 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=ours-ab round=4 host_mb=8903.7 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours-ab shape=istella-2043304x220 round=4 ms=4360.199 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=4 host_mb=5245.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-2043304x220 round=4 ms=30325.474 hash=077879cc8b445cf2
+FSPEED-MEM lane=et arm=lightgbm-cpu round=4 host_mb=8245.5 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=lightgbm-cpu shape=istella-2043304x220 round=4 ms=127244.311 hash=5a89b22f142ae4e1
+FSPEED-ORDER lane=et round=5 arms=ours,ours-ab,sklearn-et-cpu,lightgbm-cpu
+FSPEED-MEM lane=et arm=ours round=5 host_mb=7595.5 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours shape=istella-2043304x220 round=5 ms=4413.003 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=ours-ab round=5 host_mb=8460.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)
+FSPEED lane=et arm=ours-ab shape=istella-2043304x220 round=5 ms=4367.567 hash=40a6bd5b6b694e15
+FSPEED-MEM lane=et arm=sklearn-et-cpu round=5 host_mb=5137.3 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=sklearn-et-cpu shape=istella-2043304x220 round=5 ms=30523.623 hash=d0d05d254eff331b
+FSPEED-MEM lane=et arm=lightgbm-cpu round=5 host_mb=6998.0 gpu_mb=- children_mb=16.0 host_method=macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it) gpu_method=cpu arm: no device memory
+FSPEED lane=et arm=lightgbm-cpu shape=istella-2043304x220 round=5 ms=127140.534 hash=5a89b22f142ae4e1
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.189989
+FSPEED-ACC lane=et arm=ours metric=auc value=0.937987
+FSPEED-ACC lane=et arm=ours-ab metric=logloss value=0.189989
+FSPEED-ACC lane=et arm=ours-ab metric=auc value=0.937987
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=logloss value=0.190078
+FSPEED-ACC lane=et arm=sklearn-et-cpu metric=auc value=0.937904
+FSPEED-ACC lane=et arm=lightgbm-cpu metric=logloss value=0.224411
+FSPEED-ACC lane=et arm=lightgbm-cpu metric=auc value=0.923891
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=2058372 leaves=1029236 depth_max=16 source=flat forest arrays
+FSPEED-FIT lane=et arm=ours-ab library=mojolearn trees=100 nodes=2058372 leaves=1029236 depth_max=16 source=flat forest arrays
+FSPEED-FIT lane=et arm=sklearn-et-cpu library=sklearn trees=100 nodes=1999838 leaves=999969 depth_max=16 source=estimators_[i].tree_
+FSPEED-FIT lane=et arm=lightgbm-cpu library=lightgbm trees=100 nodes=292424 leaves=146262 depth_max=16 source=booster_.dump_model
+FSPEED-FIT-VERDICT lane=et arms=lightgbm-cpu,ours,ours-ab,sklearn-et-cpu leaves=lightgbm-cpu:146262,ours:1029236,ours-ab:1029236,sklearn-et-cpu:999969 spread=0.8579 verdict=NOT-COMPARABLE
+FSPEED-NOTE lane=et arms=lightgbm-cpu,ours,ours-ab,sklearn-et-cpu metric=leaves delta=0.857893 reason=FIT-EQUIVALENCE: the arms of this cell built ensembles differing by 85.8% in TOTAL LEAVES (lightgbm-cpu:146262,ours:1029236,ours-ab:1029236,sklearn-et-cpu:999969), above the 10% tripwire. The configs were held equal, so the growers disagree
+FSPEED-SCALE stage=after rows=2043304 features=220 input_mib=1714.8 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-INFER-PATH lane=et arm=ours call=mojolearn ExtraTreesClassifier.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=et arm=ours-ab call=mojolearn ExtraTreesClassifier.predict_proba(X), column 1
+FSPEED-INFER-PATH lane=et arm=sklearn-et-cpu call=sklearn ExtraTreesClassifier.predict_proba(X), n_jobs -1, column 1
+FSPEED-INFER-PATH lane=et arm=lightgbm-cpu call=lightgbm Booster.predict(X) (probability; LightGBM predicts on the CPU whatever device trained it)
+FSPEED-INFER-WARMUP lane=et arm=ours batch=test rows=500000 ms=57.484
+FSPEED-INFER-WARMUP lane=et arm=ours-ab batch=test rows=500000 ms=43.010
+FSPEED-INFER-WARMUP lane=et arm=sklearn-et-cpu batch=test rows=500000 ms=265.177
+FSPEED-INFER-WARMUP lane=et arm=lightgbm-cpu batch=test rows=500000 ms=323.280
+FSPEED-INFER lane=et arm=ours batch=test rows=500000 round=1 ms=46.188 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=ours-ab batch=test rows=500000 round=1 ms=41.942 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=test rows=500000 round=1 ms=246.328 hash=e378dde1bf700768
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=test rows=500000 round=1 ms=321.453 hash=5a89b22f142ae4e1
+FSPEED-INFER lane=et arm=ours batch=test rows=500000 round=2 ms=48.233 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=ours-ab batch=test rows=500000 round=2 ms=44.164 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=test rows=500000 round=2 ms=246.181 hash=8b28fea16beae79a
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=test rows=500000 round=2 ms=324.340 hash=5a89b22f142ae4e1
+FSPEED-INFER lane=et arm=ours batch=test rows=500000 round=3 ms=48.237 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=ours-ab batch=test rows=500000 round=3 ms=43.433 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=test rows=500000 round=3 ms=241.786 hash=1620f1760776e208
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=test rows=500000 round=3 ms=324.786 hash=5a89b22f142ae4e1
+FSPEED-INFER lane=et arm=ours batch=test rows=500000 round=4 ms=46.293 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=ours-ab batch=test rows=500000 round=4 ms=42.345 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=test rows=500000 round=4 ms=242.770 hash=a11e84a803913e46
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=test rows=500000 round=4 ms=323.000 hash=5a89b22f142ae4e1
+FSPEED-INFER lane=et arm=ours batch=test rows=500000 round=5 ms=45.862 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=ours-ab batch=test rows=500000 round=5 ms=42.071 hash=40a6bd5b6b694e15
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=test rows=500000 round=5 ms=246.723 hash=9a6bea21b04cad31
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=test rows=500000 round=5 ms=326.662 hash=5a89b22f142ae4e1
+FSPEED-INFER-ACC lane=et arm=ours batch=test metric=logloss value=0.189989
+FSPEED-INFER-ACC lane=et arm=ours batch=test metric=auc value=0.937987
+FSPEED-INFER-ACC lane=et arm=ours-ab batch=test metric=logloss value=0.189989
+FSPEED-INFER-ACC lane=et arm=ours-ab batch=test metric=auc value=0.937987
+FSPEED-INFER-ACC lane=et arm=sklearn-et-cpu batch=test metric=logloss value=0.190078
+FSPEED-INFER-ACC lane=et arm=sklearn-et-cpu batch=test metric=auc value=0.937904
+FSPEED-INFER-ACC lane=et arm=lightgbm-cpu batch=test metric=logloss value=0.224411
+FSPEED-INFER-ACC lane=et arm=lightgbm-cpu batch=test metric=auc value=0.923891
+FSPEED-INFER-AGREE lane=et batch=test arms=ours,ours-ab rows=500000 bits_equal=yes max_abs_diff=0
+FSPEED-INFER-WARMUP lane=et arm=ours batch=large rows=1000000 ms=145.575
+FSPEED-INFER-WARMUP lane=et arm=ours-ab batch=large rows=1000000 ms=135.195
+FSPEED-INFER-WARMUP lane=et arm=sklearn-et-cpu batch=large rows=1000000 ms=487.551
+FSPEED-INFER-WARMUP lane=et arm=lightgbm-cpu batch=large rows=1000000 ms=641.145
+FSPEED-INFER lane=et arm=ours batch=large rows=1000000 round=1 ms=102.416 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=ours-ab batch=large rows=1000000 round=1 ms=84.771 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=large rows=1000000 round=1 ms=476.415 hash=c78d1cde64cc9df9
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=large rows=1000000 round=1 ms=647.122 hash=a94a0ce461429531
+FSPEED-INFER lane=et arm=ours batch=large rows=1000000 round=2 ms=89.449 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=ours-ab batch=large rows=1000000 round=2 ms=84.788 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=large rows=1000000 round=2 ms=544.882 hash=4f6e2007fe24015c
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=large rows=1000000 round=2 ms=641.319 hash=a94a0ce461429531
+FSPEED-INFER lane=et arm=ours batch=large rows=1000000 round=3 ms=100.613 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=ours-ab batch=large rows=1000000 round=3 ms=84.323 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=large rows=1000000 round=3 ms=536.392 hash=469617c14f3bed88
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=large rows=1000000 round=3 ms=646.213 hash=a94a0ce461429531
+FSPEED-INFER lane=et arm=ours batch=large rows=1000000 round=4 ms=102.590 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=ours-ab batch=large rows=1000000 round=4 ms=84.420 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=large rows=1000000 round=4 ms=457.804 hash=f49b5c1f2554dbd9
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=large rows=1000000 round=4 ms=650.141 hash=a94a0ce461429531
+FSPEED-INFER lane=et arm=ours batch=large rows=1000000 round=5 ms=88.136 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=ours-ab batch=large rows=1000000 round=5 ms=84.552 hash=30d90050f0401468
+FSPEED-INFER lane=et arm=sklearn-et-cpu batch=large rows=1000000 round=5 ms=469.928 hash=1c2bfd030dda8ac4
+FSPEED-INFER lane=et arm=lightgbm-cpu batch=large rows=1000000 round=5 ms=644.153 hash=a94a0ce461429531
+FSPEED-INFER-AGREE lane=et batch=large arms=ours,ours-ab rows=1000000 bits_equal=yes max_abs_diff=0

@@ -1,0 +1,14 @@
+
+=== 2026-09-30T01:48:54Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane cholesky --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+
+=== 2026-09-30T04:59:16Z /root/bench-board-cache-t213/venv/bin/python -u /root/mojolearn-wt/steward-do-amd/tools/bench_board_algos.py race --lane cholesky --dataset synthetic --data /root/bench-board-cache-t213/algos-data/rows-full --arms ours,numpy-cpu,torch-gpu --rounds 1 --out /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/raw/algos/rows-full --work /root/mojolearn-evidence/bench-board/2026-09-29_amd_torch213/work --ours-python /root/bench-board-cache-t213/venv/bin/python --theirs-python /root/bench-board-cache-t213/venv/bin/python --ready-seconds 3600 --warmup-seconds 3600 --round-seconds 3600
+BOARD-PARAMS {"arms": {"numpy-cpu": {"library": "numpy", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}, "torch-gpu": {"library": "torch", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/cholesky", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["numpy-cpu", "ours", "torch-gpu"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=0 ms=875.394 infer_ms=None digest=c5127aab3d327628
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=numpy-cpu round=0 ms=9240.293 infer_ms=None digest=0680a45f762fc6b6
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=torch-gpu round=0 ms=173.142 infer_ms=None digest=7d74cd39327b489e
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=numpy-cpu round=1 ms=7138.882 infer_ms=None digest=0680a45f762fc6b6
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=torch-gpu round=1 ms=31.975 infer_ms=None digest=7d74cd39327b489e
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=1 ms=557.401 infer_ms=None digest=c5127aab3d327628
+ALGOS lane=cholesky dataset=synthetic arm=ours status=ok median_ms=557.4014239828102 quality={"relative_residual": 2.9000699916434393e-07}
+ALGOS lane=cholesky dataset=synthetic arm=numpy-cpu status=ok median_ms=7138.882439990994 quality={"relative_residual": 3.9281354968579786e-08}
+ALGOS lane=cholesky dataset=synthetic arm=torch-gpu status=ok median_ms=31.975249003153294 quality={"relative_residual": 2.51863168732312e-07}

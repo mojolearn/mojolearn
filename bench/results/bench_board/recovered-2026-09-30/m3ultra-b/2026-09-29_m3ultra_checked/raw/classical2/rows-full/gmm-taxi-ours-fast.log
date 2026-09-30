@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py", line 1457, in worker
+    runner.call()
+    ~~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py", line 776, in call
+    self._call()
+    ~~~~~~~~~~^^
+  File "/Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_more.py", line 978, in <lambda>
+    call = lambda: S.update(est=make().fit(X))  # noqa: E731
+                                ~~~~~~~~~~^^^
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/_mode.py", line 52, in guarded
+    return method(self, *args, **kwargs)
+  File "/Users/ec2-user/bench-board-cache/venv/lib/python3.13/site-packages/mojolearn/mixture.py", line 193, in fit
+    n_iter = self._extension().gmm_fit(
+        # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_fit_binding.
+    ...<5 lines>...
+        [n, d, k, self.covariance_type, tol, reg_covar, max_iter, self.init_params, int(self.random_state)],
+    )
+Exception: GaussianMixture: fitting the mixture model failed because some components have ill-defined empirical covariance (for instance caused by singleton or collapsed samples). Try to decrease the number of components, increase reg_covar, or scale the input data. FAILED AT EM iteration 20, COMPONENT 7, LAPACK info=11 (the leading minor of order 11 of that component's covariance is not positive definite). reg_covar was 0x358637bd. THE COMPONENT IS NOT RESET AND THE FIT IS NOT CONTINUED (DEVIATION 1723): the pivot decision is pinned in both halves by cholesky/checks/potrf.mojo's DEVIATION 1634, so this refusal is identical on every vendor -- and a silent reset would turn a decision that is identical into a value that is not, which is the worst outcome this lane can produce
