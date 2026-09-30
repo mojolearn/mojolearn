@@ -667,13 +667,13 @@ def lp_knn_product_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject)
     var v_cols = _a(a_, 0)
     var v_vals = _a(a_, 1)
     var v_x = _a(a_, 2)
-    var v_out = _a(a_, 3)
+    var v_res = _a(a_, 3)
     var v_n = _n(i_, 0)
     var v_m = _n(i_, 1)
     var v_k = _n(i_, 2)
     var v_c = _n(i_, 3)
     with GILReleased(Python()):
-        op_lp_knn_product(v_cols, v_vals, v_x, v_out, v_n, v_m, v_k, v_c)
+        op_lp_knn_product(v_cols, v_vals, v_x, v_res, v_n, v_m, v_k, v_c)
     return PythonObject(None)
 
 

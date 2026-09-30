@@ -1056,13 +1056,13 @@ def op_svgp_predict(
 from x_neighbors.lp_knn import op_lp_knn_graph, lp_knn_product_item, lp_knn_finite
 
 
-def lp_knn_product_kernel(cols: IP, vals: FP, x: FP, out: FP, n_: Int64, m_: Int64, k_: Int64, c_: Int64, finite: Bool):
+def lp_knn_product_kernel(cols: IP, vals: FP, x: FP, res: FP, n_: Int64, m_: Int64, k_: Int64, c_: Int64, finite: Bool):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(n_) * Int(c_):
-        lp_knn_product_item(t, cols, vals, x, out, Int(n_), Int(m_), Int(k_), Int(c_), finite)
+        lp_knn_product_item(t, cols, vals, x, res, Int(n_), Int(m_), Int(k_), Int(c_), finite)
 
 
-def op_lp_knn_product(cols: Int, vals: Int, x: Int, out: Int, n: Int, m: Int, k: Int, c: Int) raises:
+def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k: Int, c: Int) raises:
     var finite = lp_knn_finite(FP(unsafe_from_address=x), m * c)
     var ctx = xn_ctx()
     var dc = _buf_i(ctx, cols, n * k, True)
@@ -1073,5 +1073,5 @@ def op_lp_knn_product(cols: Int, vals: Int, x: Int, out: Int, n: Int, m: Int, k:
         ctx.enqueue_function[lp_knn_product_kernel](dc.unsafe_ptr(), dv.unsafe_ptr(), dx.unsafe_ptr(), dr.unsafe_ptr(),
             Int64(n), Int64(m), Int64(k), Int64(c), finite,
             grid_dim=_grid(n * c), block_dim=(BLOCK if n * c > 1 else 1))
-    _down(ctx, dr, out, n * c)
+    _down(ctx, dr, res, n * c)
     ctx.synchronize()

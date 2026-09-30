@@ -1005,8 +1005,8 @@ class SkewedChi2Sampler(_XNeighbors):
 # ====================================================================== LabelPropagation
 class _LabelPropagationBase(_XNeighbors):
     """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
-    graph (rbf, or the knn connectivity graph with each row's own point as
-    its first neighbor), the product / clamp iteration with their stopping
+    RBF graph or compact kNN connectivity graph (including each row's own
+    point as its first neighbor), the product / clamp iteration with their stopping
     rule (sum |L - L_prev| < tol, checked before each step), the final row
     normalization and `transduction_`. Callable kernels are refused. Float32
     where theirs is float64; the neighbor ties go to the lower index."""

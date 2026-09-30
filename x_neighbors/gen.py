@@ -158,7 +158,7 @@ OPS = [
 CUSTOM_OPS = [
     ("lp_knn_graph", [("idx", "iin", "n * k"), ("cols", "iout", "n * k"), ("vals", "fout", "n * k"),
      ("n", "int"), ("m", "int"), ("k", "int"), ("variant", "int")]),
-    ("lp_knn_product", [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("x", "fin", "m * c"), ("out", "fout", "n * c"),
+    ("lp_knn_product", [("cols", "iin", "n * k"), ("vals", "fin", "n * k"), ("x", "fin", "m * c"), ("res", "fout", "n * c"),
      ("n", "int"), ("m", "int"), ("k", "int"), ("c", "int")]),
     ("lp_iterate",
      [("g", "fin", "n * n"), ("ld", "finout", "n * c"), ("ystatic", "fin", "n * c"), ("unlabeled", "iin", "n"),

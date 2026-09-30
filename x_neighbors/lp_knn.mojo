@@ -74,7 +74,7 @@ def lp_knn_finite(x: FP, count: Int) -> Bool:
     return True
 
 
-def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, out: FP,
+def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, res: FP,
                         n: Int, m: Int, k: Int, c: Int, finite: Bool):
     var i = t // c
     var j = t % c
@@ -96,4 +96,4 @@ def lp_knn_product_item(t: Int, cols: IP, vals: FP, x: FP, out: FP,
                 a = ftz(vals.unsafe_load(i * k + e))
                 e += 1
             acc = ftz(identical_mul_add(a, ftz(x.unsafe_load(p * c + j)), acc))
-    out.unsafe_store(t, acc)
+    res.unsafe_store(t, acc)

@@ -374,9 +374,9 @@ def op_svgp_predict(
 from x_neighbors.lp_knn import op_lp_knn_graph, lp_knn_product_item, lp_knn_finite
 
 
-def op_lp_knn_product(cols: Int, vals: Int, x: Int, out: Int, n: Int, m: Int, k: Int, c: Int) raises:
+def op_lp_knn_product(cols: Int, vals: Int, x: Int, res: Int, n: Int, m: Int, k: Int, c: Int) raises:
     var px = FP(unsafe_from_address=x)
     var finite = lp_knn_finite(px, m * c)
     for t in range(n * c):
         lp_knn_product_item(t, IP(unsafe_from_address=cols), FP(unsafe_from_address=vals),
-                            px, FP(unsafe_from_address=out), n, m, k, c, finite)
+                            px, FP(unsafe_from_address=res), n, m, k, c, finite)
