@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "X": {
+      "dtype": "float32",
+      "sha256": "a504bc86fe9482004c4ba80c690b5622121f75fefdc42c8337ba040739cefebe",
+      "shape": [
+        1000000,
+        11
+      ]
+    },
+    "Xq": {
+      "dtype": "float32",
+      "sha256": "75648a1fad7e086a81fda381e141f33d9b0cba3b892c146ef750bc26a041024c",
+      "shape": [
+        100000,
+        11
+      ]
+    },
+    "y": {
+      "dtype": "float32",
+      "sha256": "458f393bc06c963d22e4aa0ce72f9f307ed3afbe2e7df2a7ed614752f8ed7c44",
+      "shape": [
+        1000000
+      ]
+    },
+    "yq": {
+      "dtype": "float32",
+      "sha256": "902e22033a7ce961769e3931538178234ea0dc8c73e7d7f3dd0d7b2811b233f4",
+      "shape": [
+        100000
+      ]
+    }
+  },
+  "block": "cls",
+  "data_root": "/Users/ec2-user/datasets/gbm-bench",
+  "dataset": "taxi",
+  "eval_rows": "stride sample of 100000 of 500000 test rows",
+  "fit_rows": "stride sample of 1000000 of 4110786 train rows",
+  "loader": "speed_gbdt_arm.load_taxi('shipped', regression=False), TAXI_NUMERIC columns",
+  "rule": "tools/bench_board_more.py prep",
+  "scaling": "standardized by the fit rows (float64 mean and std)",
+  "seed": 7,
+  "sentinel_cells_replaced": {
+    "X": 0,
+    "Xq": 0
+  },
+  "smoke_max_rows": null,
+  "target": "binary",
+  "written": "2026-09-30T10:28:54Z"
+}

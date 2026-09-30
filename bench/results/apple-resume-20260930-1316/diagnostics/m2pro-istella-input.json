@@ -1,0 +1,50 @@
+{
+  "arrays": {
+    "X": {
+      "dtype": "float32",
+      "sha256": "9063cbf54a6e027bc5105ac69167d015d77e6c97ec7bebff3180531a38267d9b",
+      "shape": [
+        1000000,
+        220
+      ]
+    },
+    "Xq": {
+      "dtype": "float32",
+      "sha256": "815df4e44bedd7bf398db2e1c269c1c3344be940680635607d7990df9c6c8869",
+      "shape": [
+        100000,
+        220
+      ]
+    },
+    "y": {
+      "dtype": "float32",
+      "sha256": "91a1a054e8f7e5919ad078de1b91ae4fa8ad77ed624bf9d9417fe21c75ac0796",
+      "shape": [
+        1000000
+      ]
+    },
+    "yq": {
+      "dtype": "float32",
+      "sha256": "7a6cb138b032416afd8d9b84e45f2285bae494393141d7219ea1548cd22bd4ba",
+      "shape": [
+        100000
+      ]
+    }
+  },
+  "block": "cls",
+  "data_root": "/Users/ec2-user/datasets/gbm-bench",
+  "dataset": "istella",
+  "eval_rows": "stride sample of 100000 of 500000 test rows",
+  "fit_rows": "stride sample of 1000000 of 2043304 train rows",
+  "loader": "speed_gbdt_arm.load_istella('shipped', regression=True), label relevance > 0",
+  "rule": "tools/bench_board_more.py prep",
+  "scaling": "standardized by the fit rows (float64 mean and std)",
+  "seed": 7,
+  "sentinel_cells_replaced": {
+    "X": 649059,
+    "Xq": 66406
+  },
+  "smoke_max_rows": null,
+  "target": "binary",
+  "written": "2026-09-30T10:32:23Z"
+}
