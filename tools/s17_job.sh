@@ -14,7 +14,8 @@ SITE=$($PY -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')/mojole
 st build-mamba; rm -f python/mojolearn/identical/_mojolearn_mamba.so python/mojolearn/_mojolearn_mamba.so
 bash bindings/build_mamba.sh > $O/build-mamba.log 2>&1; rc build-mamba $?
 so=$(ls -t python/mojolearn/identical/_mojolearn_mamba.so python/mojolearn/_mojolearn_mamba.so 2>/dev/null | head -1); cp $so $T/_mojolearn_mamba.so
-cp -r python/mojolearn/*.py $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
+cp $SITE/_version.py /tmp/_version.site.py; cp -r python/mojolearn/*.py $SITE/; cp /tmp/_version.site.py $SITE/_version.py   # the overlay keeps the installed version (main says 0.8.32)
+find $SITE -name __pycache__ -exec rm -rf {} +
 export MOJOLEARN_REPO_COMMIT=$(cat $O/head.txt)
 for arm in pipe shared; do st m3-$arm
   if [ $arm = pipe ]; then unset MOJOLEARN_MAMBA3_S17_TAIL_ARM; else export MOJOLEARN_MAMBA3_S17_TAIL_ARM=shared; fi
