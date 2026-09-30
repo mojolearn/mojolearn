@@ -85,7 +85,7 @@ from training.estimator import (
 )
 from training.mlp_ops import (
     mlp_bias_activation_host, mlp_relu_backward_host, mlp_sum_rows_host,
-    mlp_validate_shape,
+    mlp_train_step_host, mlp_validate_shape,
 )
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
@@ -528,6 +528,80 @@ def mlp_sum_rows_binding(
     return PythonObject(count)
 
 
+def mlp_train_step_binding(
+    addresses: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """The small MLP's whole step as ONE call (lane/apple-mlp-fused,
+    2026-09-30): the same GEMMs, bias/ReLU/row-sum launches, cross-entropy
+    and AdamW step `SmallMLPTrainer` made through twelve binding calls, the
+    intermediates kept on the device. Returns `rows * 3`, the logits written.
+
+    addresses, in this exact order (mirrored word for word in
+    `python/mojolearn/_mlp_impl.py::_fused`):
+
+        0  x        rows x 8 f32, read
+        1  y        rows i32 classes 0..2, read (unread under mode 0)
+        2  w1       16 x 8 f32   read; WRITTEN IN PLACE under mode 2
+        3  b1       16 f32       "
+        4  w2       3 x 16 f32   "
+        5  b2       3 f32        "
+        6  m        195 f32      read and written under mode 2 (any one
+                                 float otherwise, never 0)
+        7  v        195 f32      "
+        8  flags    4 i32        read and written back under mode 2
+        9  loss     1 f32        written (modes 1 and 2)
+        10 logits   rows x 3 f32 written
+        11 dw1      16 x 8 f32   written (modes 1 and 2)
+        12 db1      16 f32       "
+        13 dw2      3 x 16 f32   "
+        14 db2      3 f32        "
+        15 dx       rows x 8 f32 written when want_input_grad (else any
+                                 one float, never 0)
+        16 info     3 f32        the optimizer's info, +0.0 (no clip)
+
+    params, in this exact order:
+
+        0  rows              1..256
+        1  mode              0 forward only, 1 forward and backward,
+                             2 the whole step
+        2  t                 the optimizer's ONE-BASED step (mode 2)
+        3  lr                (float)
+        4  beta1             (float)
+        5  beta2             (float)
+        6  eps               (float)
+        7  weight_decay      (float)
+        8  want_input_grad   0 or 1
+
+    A silent reorder here is a WRONG ANSWER and not a crash. If you change
+    either list, change `_fused` in the same edit.
+    """
+    var a = _addrs(addresses, 17, "mlp_train_step")
+    _params(params, 9, "mlp_train_step")
+    var rows = Int(py=params[0])
+    var mode = Int(py=params[1])
+    var t = Int(py=params[2])
+    var lr = Float32(Float64(py=params[3]))
+    var beta1 = Float32(Float64(py=params[4]))
+    var beta2 = Float32(Float64(py=params[5]))
+    var eps = Float32(Float64(py=params[6]))
+    var weight_decay = Float32(Float64(py=params[7]))
+    var want_input_grad = Int(py=params[8])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        count = mlp_train_step_host(
+            ctx,
+            _f32_ptr(a[0]), _i32_ptr(a[1]),
+            _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[5]),
+            _f32_ptr(a[6]), _f32_ptr(a[7]), _i32_ptr(a[8]),
+            _f32_ptr(a[9]), _f32_ptr(a[10]),
+            _f32_ptr(a[11]), _f32_ptr(a[12]), _f32_ptr(a[13]), _f32_ptr(a[14]),
+            _f32_ptr(a[15]), _f32_ptr(a[16]),
+            rows, mode, t, lr, beta1, beta2, eps, weight_decay, want_input_grad,
+        )
+    return PythonObject(count)
+
+
 # ===========================================================================
 # THE SAMBA STACK'S OPS: embedding, RMSNorm, LM head, accumulate, RNG.
 # Every one takes (addresses, params) as two Python lists, the byte-LM
@@ -840,6 +914,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
         m.def_function[mlp_sum_rows_binding]("mlp_sum_rows")
+        m.def_function[mlp_train_step_binding]("mlp_train_step")
         m.def_function[embedding_forward_binding]("embedding_forward")
         m.def_function[embedding_backward_binding]("embedding_backward")
         m.def_function[rms_norm_forward_binding]("rms_norm_forward")
