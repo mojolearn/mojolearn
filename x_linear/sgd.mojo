@@ -25,7 +25,7 @@ from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from std.sys.compile import is_defined
 from std.sys.info import is_apple_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from x_linear.team import Team
+from x_linear.team import Team, TP
 from std.memory import bitcast
 from checks.numerics import identical_pow
 
@@ -169,15 +169,40 @@ struct SgdSpan(ImplicitlyCopyable, Movable):
     var epoch: Int
     var r0: Int
     var r1: Int
-    var w_in: FP
-    var q_in: FP
-    var st_in: FP
-    var st_out: FP
+    # untracked pointers (a struct field cannot expose AnyOrigin; team.mojo's TP)
+    var w_in_at: TP
+    var q_in_at: TP
+    var st_in_at: TP
+    var st_out_at: TP
+
+    @staticmethod
+    def make(bounded: Bool, epoch: Int, r0: Int, r1: Int, w_in: FP, q_in: FP, st_in: FP, st_out: FP) -> SgdSpan:
+        return SgdSpan(
+            bounded, epoch, r0, r1, w_in.unsafe_origin_cast[MutUntrackedOrigin](),
+            q_in.unsafe_origin_cast[MutUntrackedOrigin](), st_in.unsafe_origin_cast[MutUntrackedOrigin](),
+            st_out.unsafe_origin_cast[MutUntrackedOrigin](),
+        )
 
     @staticmethod
     def whole(any: FP) -> SgdSpan:
         """The one-launch fit (the pointers are never read)."""
-        return SgdSpan(False, 0, 0, 0, any, any, any, any)
+        return SgdSpan.make(False, 0, 0, 0, any, any, any, any)
+
+    @always_inline
+    def w_in(self) -> FP:
+        return self.w_in_at.unsafe_origin_cast[MutAnyOrigin]()
+
+    @always_inline
+    def q_in(self) -> FP:
+        return self.q_in_at.unsafe_origin_cast[MutAnyOrigin]()
+
+    @always_inline
+    def st_in(self) -> FP:
+        return self.st_in_at.unsafe_origin_cast[MutAnyOrigin]()
+
+    @always_inline
+    def st_out(self) -> FP:
+        return self.st_out_at.unsafe_origin_cast[MutAnyOrigin]()
 
     def resume(self) -> Bool:
         return self.bounded and (self.epoch > 0 or self.r0 > 0)
@@ -235,8 +260,8 @@ def sgd_one(
     var intercept = Float32(1) if one_class else Float32(0)
     if span.resume():
         for j in range(d):
-            st(w, woff + j, ld(span.w_in, j))
-            st(q, j, ld(span.q_in, j))
+            st(w, woff + j, ld(span.w_in(), j))
+            st(q, j, ld(span.q_in(), j))
     else:
         fill(w, woff, d, Float32(0))
         fill(q, 0, d, Float32(0))
@@ -269,18 +294,18 @@ def sgd_one(
         r_lo = span.r0
         r_hi = span.r1
         if span.resume():
-            intercept = ld(span.st_in, ST_INTERCEPT)
-            u = ld(span.st_in, ST_U)
-            eta = ld(span.st_in, ST_ETA)
-            best = ld(span.st_in, ST_BEST)
-            obj0 = ld(span.st_in, ST_OBJ) if span.r0 > 0 else Float32(0)
-            t = _w2i(ld(span.st_in, ST_T_LO)) | (_w2i(ld(span.st_in, ST_T_HI)) << 31)
-            no_improve = _w2i(ld(span.st_in, ST_NOIMP))
-            epochs = _w2i(ld(span.st_in, ST_EPOCHS))
-            stop = _w2i(ld(span.st_in, ST_STOP))
+            intercept = ld(span.st_in(), ST_INTERCEPT)
+            u = ld(span.st_in(), ST_U)
+            eta = ld(span.st_in(), ST_ETA)
+            best = ld(span.st_in(), ST_BEST)
+            obj0 = ld(span.st_in(), ST_OBJ) if span.r0 > 0 else Float32(0)
+            t = _w2i(ld(span.st_in(), ST_T_LO)) | (_w2i(ld(span.st_in(), ST_T_HI)) << 31)
+            no_improve = _w2i(ld(span.st_in(), ST_NOIMP))
+            epochs = _w2i(ld(span.st_in(), ST_EPOCHS))
+            stop = _w2i(ld(span.st_in(), ST_STOP))
         if stop != 0:
             # the fit ended in an earlier launch: carry the words through
-            _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+            _sgd_save(span.st_out(), intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
             return -1 if stop == 2 else epochs
     for epoch in range(e_lo, e_hi):
         epochs = epoch + 1
@@ -369,7 +394,7 @@ def sgd_one(
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
             if span.bounded:
-                _sgd_save(span.st_out, intercept, u, eta, best, Float32(0), t, no_improve, epochs, 2)
+                _sgd_save(span.st_out(), intercept, u, eta, best, Float32(0), t, no_improve, epochs, 2)
             return -1
         var mean_obj = fd(objective, i2f(n))
         if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
@@ -386,7 +411,7 @@ def sgd_one(
                 stop = 1
                 break
     if span.bounded:
-        _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+        _sgd_save(span.st_out(), intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
     else:
         st(b, boff, intercept)
     return epochs
@@ -682,17 +707,17 @@ def sgd_one_warp[K: Int](
             comptime for kk in range(K):
                 var j = lane + kk * W
                 if j < d:
-                    wr[kk] = ld(span.w_in, j)
-                    qr[kk] = ld(span.q_in, j)
-            intercept = ld(span.st_in, ST_INTERCEPT)
-            u = ld(span.st_in, ST_U)
-            eta = ld(span.st_in, ST_ETA)
-            best = ld(span.st_in, ST_BEST)
-            obj0 = ld(span.st_in, ST_OBJ) if span.r0 > 0 else Float32(0)
-            t = _w2i(ld(span.st_in, ST_T_LO)) | (_w2i(ld(span.st_in, ST_T_HI)) << 31)
-            no_improve = _w2i(ld(span.st_in, ST_NOIMP))
-            epochs = _w2i(ld(span.st_in, ST_EPOCHS))
-            stop = _w2i(ld(span.st_in, ST_STOP))
+                    wr[kk] = ld(span.w_in(), j)
+                    qr[kk] = ld(span.q_in(), j)
+            intercept = ld(span.st_in(), ST_INTERCEPT)
+            u = ld(span.st_in(), ST_U)
+            eta = ld(span.st_in(), ST_ETA)
+            best = ld(span.st_in(), ST_BEST)
+            obj0 = ld(span.st_in(), ST_OBJ) if span.r0 > 0 else Float32(0)
+            t = _w2i(ld(span.st_in(), ST_T_LO)) | (_w2i(ld(span.st_in(), ST_T_HI)) << 31)
+            no_improve = _w2i(ld(span.st_in(), ST_NOIMP))
+            epochs = _w2i(ld(span.st_in(), ST_EPOCHS))
+            stop = _w2i(ld(span.st_in(), ST_STOP))
         if stop != 0:
             # the fit ended in an earlier launch: carry the words through
             comptime for kk in range(K):
@@ -701,7 +726,7 @@ def sgd_one_warp[K: Int](
                     st(w, woff + j, wr[kk])
                     st(q_out, j, qr[kk])
             if lane == 0:
-                _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+                _sgd_save(span.st_out(), intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
             return -1 if stop == 2 else epochs
     for epoch in range(e_lo, e_hi):
         var order = idx
@@ -882,7 +907,7 @@ def sgd_one_warp[K: Int](
                     st(w, woff + j, wr[kk])
                 st(q_out, j, qr[kk])
         if lane == 0:
-            _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+            _sgd_save(span.st_out(), intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
         return -1 if stop == 2 else epochs
     if stop == 2:
         return -1

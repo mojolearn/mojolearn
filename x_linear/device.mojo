@@ -25,6 +25,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, NUMERIC_FAST
 from x_linear.ops import FP, IP
 from x_linear.dispatch import fit_dispatch, decision_one, team_fit, team_rows, team_own
 from x_linear.sgd import sgd_fit
+from x_linear.sgd_bounded import sgd_fit_bounded, use_sgd_bounded
 from x_linear.team import LINEAR_TPB, team_work, device_team, solo
 
 
@@ -125,8 +126,6 @@ def fit_device(
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
     # lane/linfit-speed: SGD in bounded launches on Apple (x_linear/sgd_bounded.mojo)
-    from x_linear.sgd_bounded import sgd_fit_bounded, use_sgd_bounded
-
     if algo == 1 and use_sgd_bounded():
         sgd_fit_bounded(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
         return

@@ -165,7 +165,7 @@ def sb_rows_kernel(
     var problems = k if k > 2 else 1
     var cw_pos = ld(fp, 6 + c) if has_cw else Float32(1)
     var cw_neg = ld(fp, 6 + problems + c) if has_cw else Float32(1)
-    var span = SgdSpan(
+    var span = SgdSpan.make(
         True, Int(epoch), Int(r0), Int(r1), w_in + c * d, q_in + c * d, s_in + c * SGD_ST, s_out + c * SGD_ST,
     )
     var pseed = seed + UInt64(1000003) * UInt64(c)
