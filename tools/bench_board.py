@@ -707,11 +707,7 @@ def run_logged(cmd, env, log_path, timeout, cwd=REPO, nice=0):
         try:
             return proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except OSError:
-                pass
-            proc.wait()
+            WATCHDOG.kill_process_tree(proc)
             log.write("\n=== bench_board: KILLED at the %d s race ceiling\n" % timeout)
             return 124
         finally:

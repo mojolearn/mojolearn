@@ -30,6 +30,35 @@ LIMIT_ENV = "MOJOLEARN_BOARD_MEM_LIMIT"
 _MB = 1024.0 * 1024.0
 
 
+def kill_process_tree(proc):
+    """Kill the owned descendants, including workers in their own sessions."""
+    try:
+        os.kill(proc.pid, signal.SIGSTOP)
+    except ProcessLookupError:
+        pass
+    ps = processes()
+    owned = {proc.pid}
+    while True:
+        new = {pid for pid, (parent, *_) in ps.items() if parent in owned} - owned
+        if not new:
+            break
+        owned |= new
+    for pid in owned - {proc.pid}:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        os.kill(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()
+
+
 def total_ram_bytes():
     if sys.platform == "darwin":
         out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True).stdout

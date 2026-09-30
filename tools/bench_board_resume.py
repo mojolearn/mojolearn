@@ -19,16 +19,6 @@ def coverage(plan,records,exceptions):
    if c.get('status')!='ok' or c.get('median_ms') is None:bad.append({'race':rid,'arm':c.get('arm'),'reason':c.get('status')})
  return {'expected':len(plan),'recorded':len(set(plan)&records.keys()),'missing':missing,'pending':pending,'exceptions':exceptions,'unusable_cells':bad,'complete':not missing and not bad}
 
-def kill_owned(proc):
- ps=watch.processes();owned={proc.pid}
- while True:
-  new={pid for pid,(parent,*_) in ps.items() if parent in owned}-owned
-  if not new:break
-  owned|=new
- for pid in sorted(owned,reverse=True):
-  try:os.kill(pid,signal.SIGKILL)
-  except ProcessLookupError:pass
- proc.wait()
 
 def run_selected_race():
  # The adapter lives here so old pinned boards need no second runner script.
@@ -68,7 +58,7 @@ def main():
   with (root/'measurements.log').open('a') as log:
    proc=subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
    try:rc=proc.wait(timeout=min(900,max(1,int(cfg.get('race_timeout_s',900)))))
-   except subprocess.TimeoutExpired:kill_owned(proc);rc=124
+   except subprocess.TimeoutExpired:watch.kill_process_tree(proc);rc=124
   records=json.loads((out/'board.json').read_text()).get('races',{}) if (out/'board.json').exists() else {}
   if rid not in records and rc!=124:
    write(root/'blocked.json',{'race':rid,'exit':rc,'reason':'No race result; setup or driver error must be investigated'})

@@ -15,6 +15,7 @@ p = argparse.ArgumentParser()
 p.add_argument('--out', required=True)
 p.add_argument('--large-data')
 a = p.parse_args()
+Path(a.out).parent.mkdir(parents=True, exist_ok=True)
 path = Path(__file__).resolve().parents[1] / 'python/mojolearn/_expansion_decomp.py'
 spec = importlib.util.spec_from_file_location('mojolearn._mds_candidate', path)
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
@@ -39,6 +40,14 @@ def check(X, metric, cpu=True, reference=True):
   np.testing.assert_array_equal(outputs[0][1].view('u4'),w.view('u4'))
  r={'rows':len(X),'metric':metric,'seconds':timings,'embedding_sha256':digest(outputs[0][0]),
     'eigenvalues_sha256':digest(outputs[0][1]),'input_sha256':digest(X),'cpu_gpu_identical':cpu,'repeat_identical':True}
+ if not reference and min(outputs[0][1])>0:
+  Y,w=outputs[0];V=np.ascontiguousarray(Y/np.sqrt(w),dtype='f4')
+  D=m._M.from_input(est.dissimilarity_matrix_)
+  B,_,_=m._center_kernel(gpu,gpu.ew('scale',gpu.ew('sq',D),s=-.5))
+  AV=np.asarray(gpu.mm(B,m._M.from_input(V)).out())
+  res=float(np.linalg.norm(AV-V*w)/max(abs(w)))
+  r['relative_residual']=res
+  assert res<5e-5,r
  if reference:
   from scipy.linalg import eigh
   D=np.asarray(est.dissimilarity_matrix_,dtype=np.float64)
@@ -53,7 +62,7 @@ def check(X, metric, cpu=True, reference=True):
    r.update(relative_residual=res,subspace_cosines=cos.tolist())
    assert res<5e-5 and min(cos)>.9999,r
  records.append(r);print(json.dumps(r),flush=True)
- Path(a.out).write_text(json.dumps({'vendor':m._kit_vendor(gpu),'records':records,'passed':True},indent=2)+'\n')
+ Path(a.out).write_text(json.dumps({'vendor':m._kit_vendor(gpu),'records':records,'passed':False},indent=2)+'\n')
 # Exact dyadic inputs, reproducible on every machine, with separated eigenvalues.
 def data(n,d):
  z=np.arange(n*d,dtype=np.int64).reshape(n,d)
@@ -67,3 +76,5 @@ check(np.zeros((17,3),'f4'),'euclidean')
 X=np.load(a.large_data) if a.large_data else data(5000,14)
 X=np.ascontiguousarray(X[np.arange(min(len(X),5000))*len(X)//min(len(X),5000)],dtype='f4')
 check(X,'euclidean',cpu=False,reference=False)
+
+Path(a.out).write_text(json.dumps({'vendor':m._kit_vendor(gpu),'records':records,'passed':True},indent=2)+'\n')
