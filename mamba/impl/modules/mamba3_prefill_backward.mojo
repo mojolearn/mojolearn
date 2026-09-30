@@ -10,7 +10,7 @@ from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns
 
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from core.neural_context import process_ctx
 from checks.numerics import GLOBAL_NUMERIC_MODE as _DEVCTX_MODE, NUMERIC_IDENTICAL as _DEVCTX_IDENTICAL
 
@@ -71,7 +71,7 @@ from mamba.impl.modeling.modeling_mamba import (
     mamba_upload,
     mamba_zeros,
 )
-from mamba.checks.mamba3_fixture import Mamba3Weights
+from mamba.checks.mamba3_fixture import Mamba3Weights, Mamba3Dims
 
 
 struct Mamba3PrefillGradients(Movable):
@@ -159,6 +159,97 @@ def mamba3_prefill_backward(
     var d_output = mamba_upload(
         ctx, grad_output
     )
+    var gradients = mamba3_prefill_backward_on(
+        ctx, device_weights, stages, x, d_output, b, l, dims, ton, tk
+    )
+
+    var result = Mamba3PrefillGradients()
+    result.x = mamba_download(ctx, gradients.x, m*dims.d_model)
+    result.block_norm_weight = mamba_download(ctx, gradients.block_norm_weight, dims.d_model)
+    result.in_proj_weight = mamba_download(ctx, gradients.in_proj_weight, dims.d_in_proj()*dims.d_model)
+    result.dt_bias = mamba_download(ctx, gradients.dt_bias, dims.nheads)
+    result.B_norm_weight = mamba_download(ctx, gradients.B_norm_weight, M3_D_STATE)
+    result.C_norm_weight = mamba_download(ctx, gradients.C_norm_weight, M3_D_STATE)
+    result.B_bias = mamba_download(ctx, gradients.B_bias, dims.nheads*M3_D_STATE)
+    result.C_bias = mamba_download(ctx, gradients.C_bias, dims.nheads*M3_D_STATE)
+    result.D = mamba_download(ctx, gradients.D, dims.nheads)
+    result.out_proj_weight = mamba_download(ctx, gradients.out_proj_weight, dims.d_model*dims.d_inner)
+    _mtick(ctx, ton, tk, "downloads")
+
+    # Explicit ownership extends all GPU buffers through synchronization.
+    _ = gradients^
+    _ = d_output^
+    _ = x^
+    _ = stages^
+    _ = state^
+    _ = device_weights^
+    _ = ctx^
+    return result^
+
+
+struct Mamba3DeviceGradients(Movable):
+    """The ten gradients of one zero-state prefill VJP, on the device, in
+    the public order (x, then the nine weights in forward order). The
+    session binding downloads them straight to the caller's arrays;
+    `mamba3_prefill_backward` downloads them into lists as before."""
+    var x: DeviceBuffer[DType.float32]
+    var block_norm_weight: DeviceBuffer[DType.float32]
+    var in_proj_weight: DeviceBuffer[DType.float32]
+    var dt_bias: DeviceBuffer[DType.float32]
+    var B_norm_weight: DeviceBuffer[DType.float32]
+    var C_norm_weight: DeviceBuffer[DType.float32]
+    var B_bias: DeviceBuffer[DType.float32]
+    var C_bias: DeviceBuffer[DType.float32]
+    var D: DeviceBuffer[DType.float32]
+    var out_proj_weight: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        var x: DeviceBuffer[DType.float32],
+        var block_norm_weight: DeviceBuffer[DType.float32],
+        var in_proj_weight: DeviceBuffer[DType.float32],
+        var dt_bias: DeviceBuffer[DType.float32],
+        var B_norm_weight: DeviceBuffer[DType.float32],
+        var C_norm_weight: DeviceBuffer[DType.float32],
+        var B_bias: DeviceBuffer[DType.float32],
+        var C_bias: DeviceBuffer[DType.float32],
+        var D: DeviceBuffer[DType.float32],
+        var out_proj_weight: DeviceBuffer[DType.float32],
+    ):
+        self.x = x^
+        self.block_norm_weight = block_norm_weight^
+        self.in_proj_weight = in_proj_weight^
+        self.dt_bias = dt_bias^
+        self.B_norm_weight = B_norm_weight^
+        self.C_norm_weight = C_norm_weight^
+        self.B_bias = B_bias^
+        self.C_bias = C_bias^
+        self.D = D^
+        self.out_proj_weight = out_proj_weight^
+
+
+def mamba3_prefill_backward_on(
+    ctx: DeviceContext,
+    device_weights: Mamba3DeviceWeights,
+    stages: Mamba3DeviceStages,
+    x: DeviceBuffer[DType.float32],
+    d_output: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    dims: Mamba3Dims,
+    ton: Bool,
+    mut tk: Int,
+) raises -> Mamba3DeviceGradients:
+    """The VJP's launches on device-resident operands: `stages` and `x` are
+    the forward's (recorded by `mamba3_block_forward` on `device_weights`
+    from the zero state), `d_output` the objective cotangent. Every
+    launch and its order are `mamba3_prefill_backward`'s, which now calls
+    this; the session binding (lane/neural-net-experiment) calls it with
+    the stages its last forward recorded, so a training step's backward
+    skips the forward recompute when x and the weights are byte for byte
+    the forward's. Synchronized on return; the gradients stay on the
+    device."""
+    var m = b * l
     # lane/neural-apple2: every scratch below is filled and used on the one
     # in-order `ctx` and kept alive to the final synchronize (the explicit
     # last uses at the end), so its allocation needs no wait of its own.
@@ -326,36 +417,18 @@ def mamba3_prefill_backward(
     mamba3_backward_reduce_into(ctx,d_norm_w,d_norm_w_rows,ones,workspace,RED3_NORM_W,dims,m)
     _mtick(ctx, ton, tk, "reduce")
     ctx.synchronize()
-
-    var result = Mamba3PrefillGradients()
-    result.x = mamba_download(ctx, d_x, m*dims.d_model)
-    result.block_norm_weight = mamba_download(ctx, d_norm_w, dims.d_model)
-    result.in_proj_weight = mamba_download(ctx, d_w_in, dims.d_in_proj()*dims.d_model)
-    result.dt_bias = mamba_download(ctx, d_dt_bias_join, dims.nheads)
-    result.B_norm_weight = mamba_download(ctx, d_bw, M3_D_STATE)
-    result.C_norm_weight = mamba_download(ctx, d_cw, M3_D_STATE)
-    result.B_bias = mamba_download(ctx, d_bb, dims.nheads*M3_D_STATE)
-    result.C_bias = mamba_download(ctx, d_cb, dims.nheads*M3_D_STATE)
-    result.D = mamba_download(ctx, d_d, dims.nheads)
-    result.out_proj_weight = mamba_download(ctx, d_weight, dims.d_model*dims.d_inner)
-    _mtick(ctx, ton, tk, "downloads")
-
+    var gradients = Mamba3DeviceGradients(
+        d_x^, d_norm_w^, d_w_in^, d_dt_bias_join^, d_bw^, d_cw^, d_bb^, d_cb^,
+        d_d^, d_weight^,
+    )
     # Explicit ownership extends all GPU buffers through synchronization.
-    _ = d_norm_w^
     _ = d_norm_w_rows^
-    _ = d_x^
-    _ = d_w_in^
     _ = d_norm^
     _ = d_in_proj^
-    _ = d_cb^
-    _ = d_bb^
-    _ = d_cw^
-    _ = d_bw^
     _ = d_cw_rows^
     _ = d_bw_rows^
     _ = d_c_raw^
     _ = d_b_raw^
-    _ = d_dt_bias_join^
     _ = d_dt_bias_rows_join^
     _ = d_dt_raw_join^
     _ = d_dt_join_available^
@@ -429,19 +502,11 @@ def mamba3_prefill_backward(
     _ = d_c_qk^
     _ = d_b_qk^
     _ = ones^
-    _ = d_d^
     _ = d_d_product^
     _ = d_qkdot^
     _ = d_v^
     _ = d_z^
     _ = d_skip^
     _ = workspace^
-    _ = d_weight^
     _ = d_gate^
-    _ = d_output^
-    _ = x^
-    _ = stages^
-    _ = state^
-    _ = device_weights^
-    _ = ctx^
-    return result^
+    return gradients^

@@ -207,7 +207,7 @@ from mamba.impl.modules.mamba3 import (
 
 from mamba.impl.modules.mamba2_prefill_backward import mamba2_prefill_backward
 from mamba.checks.mamba2_backward import ANY_BWD2_SABOTAGE
-from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward
+from mamba.impl.modules.mamba3_prefill_backward import mamba3_prefill_backward, mamba3_prefill_backward_on
 from mamba.checks.mamba3_backward import ANY_BWD3_SABOTAGE
 from mamba.impl.modeling.modeling_mamba_prefill_backward import mamba1_prefill_backward
 from mamba.checks.mamba_backward import ANY_BWD_SABOTAGE as M1_ANY_BWD_SABOTAGE
@@ -1789,6 +1789,20 @@ struct Mamba3PrefillSession(Movable, Writable):
     var weight_uploads: Int
     var weight_recopies: Int
     var weight_reuses: Int
+    # lane/neural-net-experiment (backward session): the last forward's
+    # recorded stages and zero state, kept for the backward that follows it
+    # in a training step. `stages_valid` is cleared whenever the retained
+    # weights change (recopy or upload), since the stages were computed on
+    # the old bytes. `x_stage` is the host staging list the backward
+    # downloads `dx` into to compare against the caller's x.
+    var stages: Optional[Mamba3DeviceStages]
+    var state: Optional[Mamba3DeviceState]
+    var stages_b: Int
+    var stages_l: Int
+    var stages_valid: Bool
+    var x_stage: List[Float32]
+    var backward_reuses: Int
+    var backward_recomputes: Int
 
     def __init__(out self):
         self.ctx = None
@@ -1801,11 +1815,21 @@ struct Mamba3PrefillSession(Movable, Writable):
         self.weight_uploads = 0
         self.weight_recopies = 0
         self.weight_reuses = 0
+        self.stages = None
+        self.state = None
+        self.stages_b = 0
+        self.stages_l = 0
+        self.stages_valid = False
+        self.x_stage = List[Float32]()
+        self.backward_reuses = 0
+        self.backward_recomputes = 0
 
     def write_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
     def write_repr_to(self, mut writer: Some[Writer]): writer.write("Mamba3PrefillSession")
 
     def release(mut self):
+        self.drop_stages()
+        self.x_stage = List[Float32]()
         self.dx = None
         self.w = None
         self.w_host = List[Float32]()
@@ -1815,7 +1839,22 @@ struct Mamba3PrefillSession(Movable, Writable):
             except: pass
         self.ctx = None
 
+    def drop_stages(mut self):
+        self.stages_valid = False
+        self.stages = None
+        self.state = None
+        self.stages_b = 0
+        self.stages_l = 0
+
     def __deinit__(deinit self): self.release()
+
+
+def _m3_retain_stages() -> Bool:
+    """MOJOLEARN_MAMBA3_RETAIN_STAGES=0 drops the forward's stages at the
+    end of the forward (the pre-session behaviour: every backward recomputes
+    the forward). Default on: the stages stay on the device for the
+    backward of the same training step."""
+    return String(getenv("MOJOLEARN_MAMBA3_RETAIN_STAGES")) != "0"
 
 
 def _m3_weight_lens(dims: Mamba3Dims) -> List[Int]:
@@ -1894,6 +1933,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
     # MOJOLEARN_MAMBA3_RETAIN_WEIGHTS=0: the per-call upload (the A/B
     # against the byte compare).
     if String(getenv("MOJOLEARN_MAMBA3_RETAIN_WEIGHTS")) == "0":
+        s.stages_valid = False
         s.w = None
         s.w_host = List[Float32]()
         s.dm = 0
@@ -1904,6 +1944,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
         if _m3_weights_same_bits(a, s.w_host, lens):
             s.weight_reuses += 1
             return
+        s.stages_valid = False
         var fresh = _m3_weights_host_copy(a, lens)
         try:
             ref retained = s.w.value()
@@ -1916,6 +1957,7 @@ def _m3_prefill_weights(mut s: Mamba3PrefillSession, a: List[Int], dims: Mamba3D
         s.w_host = fresh^
         s.weight_recopies += 1
         return
+    s.stages_valid = False
     s.w = None
     s.w_host = List[Float32]()
     s.dm = 0
@@ -1941,6 +1983,8 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
         phase_tick = Int(perf_counter_ns())
     _m3_prefill_weights(s, a, dims)
+    # The previous forward's stages go before this call's are built.
+    s.drop_stages()
     ref ctx = s.ctx.value()
     ref dw = s.w.value()
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
@@ -1972,62 +2016,191 @@ def _m3_prefill_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, d
     ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
-    _ = dstate^
-    _ = dstages^
     ctx.synchronize()
+    if _m3_retain_stages():
+        s.stages = dstages^
+        s.state = dstate^
+        s.stages_b = b
+        s.stages_l = l
+        s.stages_valid = True
+    else:
+        _ = dstate^
+        _ = dstages^
     return out_len
 
 
-def mamba3_prefill_session_create_binding() raises -> PythonObject:
-    return PythonObject(alloc=Mamba3PrefillSession())
+def _m3_x_same_bits(mut s: Mamba3PrefillSession, addr: Int, n: Int) raises -> Bool:
+    """Whether the caller's x (`n` floats at `addr`) holds exactly the
+    bytes of the retained device `s.dx`: `dx` comes down into `s.x_stage`
+    (one wait) and the two are compared as integers, eight lanes at a
+    time. Paid only by a backward, never by a forward-only workload."""
+    if len(s.x_stage) != n:
+        s.x_stage = List[Float32](length=n, fill=Float32(0))
+    if n == 0:
+        return True
+    ref ctx = s.ctx.value()
+    ref dx = s.dx.value()
+    if n == len(dx):
+        ctx.enqueue_copy(dst_ptr=s.x_stage.unsafe_ptr(), src_buf=dx)
+    else:
+        var view = dx.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=s.x_stage.unsafe_ptr(), src_buf=view)
+    ctx.synchronize()
+    comptime W = 8
+    var p = _f32_ptr(addr)
+    var hp = s.x_stage.unsafe_ptr()
+    var i = 0
+    var body = n - n % W
+    while i < body:
+        var x = bitcast[DType.uint32, W](p.unsafe_load[width=W](i))
+        var y = bitcast[DType.uint32, W](hp.unsafe_load[width=W](i))
+        if (x ^ y).reduce_or() != UInt32(0):
+            return False
+        i += W
+    while i < n:
+        if bitcast[DType.uint32](p.unsafe_load(i)) != bitcast[DType.uint32](hp.unsafe_load(i)):
+            return False
+        i += 1
+    return True
 
 
-def mamba3_prefill_session_close_binding(session: PythonObject) raises -> PythonObject:
+def _m3_prefill_backward_forward(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
+                                 dims: Mamba3Dims) raises:
+    """The forward `mamba3_prefill_backward` runs before its VJP, on the
+    session: x uploaded into the retained `dx`, a fresh zero state and
+    fresh stages (the same constructions as the entry's), the block
+    forward on the retained weights; the stages then held for the VJP."""
+    s.drop_stages()
+    var n_x = b * l * dims.d_model
+    var have_dx = False
+    if s.dx:
+        have_dx = len(s.dx.value()) == n_x
+    if not have_dx:
+        s.dx = None
+        s.dx = mamba_device_alloc(s.ctx.value(), max(n_x, 1))
+    ref ctx = s.ctx.value()
+    ref dw = s.w.value()
+    ref dx = s.dx.value()
+    ctx.enqueue_copy(dst_buf=dx, src_ptr=_f32_ptr(a[0]))
+    ctx.synchronize()
+    var dstate = Mamba3DeviceState(ctx, b, dims)
+    var dstages = Mamba3DeviceStages(ctx, b, l, 0, dims)
+    var trace = IdentityTrace.disabled()
+    mamba3_block_forward(
+        ctx, dstages, dstate, dw, dx, b, l, trace, String("m3.backward.tail")
+    )
+    ctx.synchronize()
+    s.stages = dstages^
+    s.state = dstate^
+    s.stages_b = b
+    s.stages_l = l
+    s.stages_valid = True
+
+
+def _m3_prefill_backward_run(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int) raises:
+    """`mamba3_backward` on the session: `a` is the entry's 21-slot list
+    (x, nine weights, grad_output, grad_x, nine weight gradients).
+
+    The weights are the session's (reused when their bytes are unchanged,
+    as the forward does). The forward is recomputed only when it has to
+    be: when the session holds no stages, when they were recorded on
+    other weights, at another (B, L), or on an x whose bytes differ from
+    this call's. Otherwise the VJP runs on the stages the last forward
+    recorded -- the same buffers the entry's own recompute would fill
+    with the same bits, since the same kernels run on the same inputs.
+    The ten gradients come down straight into the caller's arrays."""
+    var dims = Mamba3Dims.of(dm)
+    var n_x = b * l * dm
+    if not s.ctx:
+        s.ctx = neural_ctx[_NEURAL_CTX]()
+    _m3_prefill_weights(s, a, dims)
+    var reuse = False
+    if s.stages_valid and s.stages and s.stages_b == b and s.stages_l == l and s.dx:
+        if len(s.dx.value()) == n_x:
+            reuse = _m3_x_same_bits(s, a[0], n_x)
+    if reuse:
+        s.backward_reuses += 1
+    else:
+        s.backward_recomputes += 1
+        _m3_prefill_backward_forward(s, a, b, l, dims)
+    ref ctx = s.ctx.value()
+    ref dw = s.w.value()
+    ref stages = s.stages.value()
+    ref dx = s.dx.value()
+    var d_output = _m3_upload_addr(ctx, a[10], n_x)
+    var ton = String(getenv("MOJOLEARN_MAMBA_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
+    var g = mamba3_prefill_backward_on(ctx, dw, stages, dx, d_output, b, l, dims, ton, tk)
+    _m3_download_addr[False](ctx, g.x, n_x, a[11])
+    _m3_download_addr[False](ctx, g.block_norm_weight, dm, a[12])
+    _m3_download_addr[False](ctx, g.in_proj_weight, dims.d_in_proj() * dm, a[13])
+    _m3_download_addr[False](ctx, g.dt_bias, dims.nheads, a[14])
+    _m3_download_addr[False](ctx, g.B_norm_weight, M3_D_STATE, a[15])
+    _m3_download_addr[False](ctx, g.C_norm_weight, M3_D_STATE, a[16])
+    _m3_download_addr[False](ctx, g.B_bias, dims.nheads * M3_D_STATE, a[17])
+    _m3_download_addr[False](ctx, g.C_bias, dims.nheads * M3_D_STATE, a[18])
+    _m3_download_addr[False](ctx, g.D, dims.nheads, a[19])
+    _m3_download_addr[False](ctx, g.out_proj_weight, dm * dims.d_inner, a[20])
+    ctx.synchronize()
+    _ = g^
+    _ = d_output^
+
+
+def mamba3_prefill_session_backward_binding(session: PythonObject, addrs: PythonObject,
+                                            params: PythonObject) raises -> PythonObject:
+    """`mamba3_backward` on a session: the same 21 pointers and 3
+    parameters (B, L, d_model); the weights and the last forward's stages
+    retained across calls (see `_m3_prefill_backward_run`)."""
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error("mamba3 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
     var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if owner[].busy: raise Error("mamba3 prefill session: busy")
-    owner[].usable = False
-    owner[].release()
-    return PythonObject(0)
-
-
-def mamba3_prefill_session_forward_binding(session: PythonObject, addrs: PythonObject,
-                                           params: PythonObject) raises -> PythonObject:
-    """`mamba3_forward_fresh` on a session: the same 15 pointers (x, nine
-    weights, y, and the four public reports) and 3 parameters (B, L,
-    d_model); the weights retained across calls."""
-    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
-    if len(addrs) != 15 or len(params) != 3:
-        raise Error("mamba3_prefill_session_forward: expected 15 addresses and 3 parameters (B, L, d_model)")
+    if len(addrs) != 21 or len(params) != 3:
+        raise Error("mamba3_prefill_session_backward: expected 21 addresses and 3 scalars")
     if owner[].busy: raise Error("mamba3 prefill session: busy")
     if not owner[].usable: raise Error("mamba3 prefill session: lost after a failed call")
-    var a = List[Int]()
-    for i in range(10):
-        var p = Int(py=addrs[i])
-        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
-        a.append(p)
-    for i in range(10):
-        a.append(0)
-    for i in range(10, 15):
-        var p = Int(py=addrs[i])
-        if p == 0: raise Error("mamba3_prefill_session_forward: null buffer address")
-        a.append(p)
     var b = Int(py=params[0])
     var l = Int(py=params[1])
     var dm = Int(py=params[2])
-    if b < 1 or l < 1:
-        raise Error("mamba3_prefill_session_forward: B and L must be positive")
+    if b <= 0 or l <= 0 or dm <= 0:
+        raise Error("mamba3_prefill_session_backward: B, L and d_model must be positive")
+    var a = List[Int]()
+    for i in range(21):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba3_prefill_session_backward: null buffer address at slot " + String(i))
+        a.append(address)
+    # The entry's own refusal of a non-finite grad_output, before any work.
+    var dy = _f32_ptr(a[10])
+    for i in range(b * l * dm):
+        var bits = bitcast[DType.uint32](dy.unsafe_load(i))
+        if (bits & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            raise Error("mamba3 backward: non-finite grad_output at flat index " + String(i))
     owner[].busy = True
-    var out_len = 0
     try:
         with GILReleased(Python()):
-            out_len = _m3_prefill_run(owner[], a, b, l, dm)
+            _m3_prefill_backward_run(owner[], a, b, l, dm)
     except error:
         owner[].busy = False
         owner[].usable = False
         owner[].release()
         raise error
     owner[].busy = False
-    return PythonObject(out_len)
+    return PythonObject(0)
+
+
+def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonObject:
+    """[weight_uploads, weight_recopies, weight_reuses, backward_reuses,
+    backward_recomputes, stages_held] as ints: the A/B evidence for the
+    byte compares (how often the weights and the forward were reused)."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    var out = Python.list()
+    out.append(PythonObject(owner[].weight_uploads))
+    out.append(PythonObject(owner[].weight_recopies))
+    out.append(PythonObject(owner[].weight_reuses))
+    out.append(PythonObject(owner[].backward_reuses))
+    out.append(PythonObject(owner[].backward_recomputes))
+    out.append(PythonObject(1 if owner[].stages_valid else 0))
+    return out
 
 
 def mamba3_session_create_binding() raises -> PythonObject:
@@ -2309,6 +2482,8 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
             m.def_function[mamba3_prefill_session_create_binding]("mamba3_prefill_session_create")
             m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
+            m.def_function[mamba3_prefill_session_backward_binding]("mamba3_prefill_session_backward")
+            m.def_function[mamba3_prefill_session_info_binding]("mamba3_prefill_session_info")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")
         m.def_function[mamba3_session_create_binding]("mamba3_session_create")
