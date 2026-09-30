@@ -1210,6 +1210,53 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 lu_update_elem(a, sp, k, i, j, n)
 
 
+def lu_solve_col(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int, c: Int):
+    """`lu_solve_serial` for ONE right-hand side column `c` (lane/neural-net-
+    experiment, 2026-09-30, the classical pass): the columns of B are
+    independent in every statement of the serial solve (each swap, each
+    substitution sum reads and writes column c alone), so a thread per
+    column runs the same cells in the same order and writes the same bits.
+    The device launches one thread per column; the host keeps
+    `lu_solve_serial`, whose column loop is this function called c ascending."""
+    if trans != 0:
+        for i in range(n):
+            var acc = ftz(b.unsafe_load(i * nrhs + c))
+            for j in range(i):
+                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+            b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+        for ii in range(n):
+            var i = n - 1 - ii
+            var acc = ftz(b.unsafe_load(i * nrhs + c))
+            for j in range(i + 1, n):
+                acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+            b.unsafe_store(i * nrhs + c, acc)
+        for kk in range(n):
+            var k = n - 1 - kk
+            var p = Int(piv.unsafe_load(k))
+            if p != k:
+                var t = b.unsafe_load(k * nrhs + c)
+                b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
+                b.unsafe_store(p * nrhs + c, t)
+        return
+    for k in range(n):
+        var p = Int(piv.unsafe_load(k))
+        if p != k:
+            var t = b.unsafe_load(k * nrhs + c)
+            b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
+            b.unsafe_store(p * nrhs + c, t)
+    for i in range(n):
+        var acc = ftz(b.unsafe_load(i * nrhs + c))
+        for j in range(i):
+            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+        b.unsafe_store(i * nrhs + c, acc)
+    for ii in range(n):
+        var i = n - 1 - ii
+        var acc = ftz(b.unsafe_load(i * nrhs + c))
+        for j in range(i + 1, n):
+            acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(i * n + j)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+        b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+
+
 def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
     """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
     forward substitution with unit L and back substitution with U, each
