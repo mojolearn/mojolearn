@@ -64,6 +64,8 @@ from gemm.checks.gemm_int15 import INT15_TPB, identical_gemm_int15_mma_into
 from gemm.checks.gemm_int15_epilogue import int15_epilogue_sabotage_name, int15_store_cell
 from gemm.checks.gemm_int8_mma_amd import identical_gemm_int8_pieces_amd_fused_into
 from gemm.checks.gemm_int8_mma_tuned import (
+    int15_box_low_bandwidth,
+    int8_pieces_dispatch_for,
     INT8_PIECES_MAX_K,
     int8_pieces_dispatch,
     identical_gemm_int8_pieces_tuned_fused_with_plan,
@@ -280,7 +282,10 @@ def identical_gemm_int15_tuned_into(
             # plan's fused form against the host's seam).
             identical_gemm_int8_pieces_amd_fused_into(ctx, c, ah, al, ea, bh, bl, eb, m, n, k)
         else:
-            identical_gemm_int15_tuned_with_plan(ctx, c, ah, al, ea, bh, bl, eb, work, m, n, k, int8_pieces_dispatch(m, n, k))
+            identical_gemm_int15_tuned_with_plan(
+                ctx, c, ah, al, ea, bh, bl, eb, work, m, n, k,
+                int8_pieces_dispatch_for(int15_box_low_bandwidth(String(ctx.name())), m, n, k),
+            )
 
 
 def identical_gemm_int15_tuned_two_launch_into(
