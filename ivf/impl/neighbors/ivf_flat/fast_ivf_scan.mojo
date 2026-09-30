@@ -93,12 +93,14 @@ def fast_ivf_scan_kernel[KM: Int](
     for r in range(k):
         var bd = td[0]
         var bi = ti[0]
-        comptime for sh in [16, 8, 4, 2, 1]:
-            var od = shuffle_xor(bd, UInt32(sh))
-            var oi = shuffle_xor(bi, UInt32(sh))
-            if _less(od, oi, bd, bi):
-                bd = od
-                bi = oi
+        # Every lane of the warp, 64 on AMD (lane/neural-net-experiment).
+        comptime for sh in [32, 16, 8, 4, 2, 1]:
+            comptime if sh < WARP_SIZE:
+                var od = shuffle_xor(bd, UInt32(sh))
+                var oi = shuffle_xor(bi, UInt32(sh))
+                if _less(od, oi, bd, bi):
+                    bd = od
+                    bi = oi
         if td[0] == bd and ti[0] == bi:
             comptime for j in range(KM - 1):
                 td[j] = td[j + 1]
