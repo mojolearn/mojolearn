@@ -101,3 +101,41 @@ toggles matter less.
 
 Record the tables in `docs/lanes/progress/neural-net-experiment.md` with
 the vendor, wheel and date; that file is the lane's memory.
+
+## The classical pass (same branch, 2026-09-30)
+
+The worst GPU-versus-GPU cells of the 0.8.25 board were not tuning problems;
+each was a serial program on one GPU thread or a per-query host loop. Four
+fixes, all "same cells, same order, same bits" by construction, each with an
+env that restores the old path for the A/B and the digest check:
+
+| cell (0.8.25) | was | cause | fix | A/B env |
+|---|---:|---|---|---|
+| AMD lu-factor 8192x8192 | 597 s (torch 0.085) | pivot search: one thread walking a strided column per step | `lu_pivot_block_kernel`: one block, compares only, ties to the lowest row | `MOJOLEARN_XD_LU_PIVOT_SERIAL=1` |
+| AMD lu-solve 8192x64 | 616 s (torch 0.083) | one thread for n^2 x nrhs dependent FMAs | `lu_solve_cols_kernel`: one thread per right-hand side | `MOJOLEARN_XD_LU_SOLVE_SERIAL=1` |
+| NVIDIA sgd-reg / sgd-clf / sgd-ocsvm istella | 630 / 615 / 124 s (sklearn 55 / 36 / 7) | sequential SGD on ONE GPU thread | the same program on the host (the identical tier's reference) | `MOJOLEARN_X_LINEAR_SGD_HOST=0` |
+| NVIDIA lars istella | 15.4 s (cuML 0.064) | the Gram's 24,531 chains on one block | `xg_gram_kernel`: one thread per cell over a grid, same chain per cell | `MOJOLEARN_X_LINEAR_LARS_GRID_GRAM=0` |
+| NVIDIA / AMD classical2/ivf istella | 526 / 265 s (Apple 4.9) | the batched scan was Apple-only; a host round trip per query elsewhere | the scan on every vendor, launched and merged on WARP_SIZE | `-D MOJOLEARN_IVF_IDENTICAL_SCAN_OFF` (compile time) |
+
+Build the three bindings (`bindings/build_x_decomp.sh`, `build_x_linear.sh`,
+`build_ivf.sh` or the repo's equivalent) and run each lane's identity check
+before the board:
+
+```
+python tools/bench_board.py --lanes lu-factor,lu-solve,sgd-reg,sgd-clf,lars,ivf ...   # the board's usual form
+```
+
+Expected: lu-factor and lu-solve in seconds, not minutes (the trailing
+update was already parallel; only the pivot and the solve were serial);
+sgd-* near sklearn's time (the same sequential algorithm on a comparable
+CPU thread; cuML's 5 s is a different, mini-batch algorithm); lars under a
+second; ivf on NVIDIA and AMD near Apple's 5 s. A digest that differs from
+the old path on any lane is a bug in that fix, not a speed result.
+
+What this pass does NOT fix: the other one-thread programs in x_linear
+(`team_fit` lists the team ones; everything else runs on thread 0 alone),
+which the same `_fit_on_host` route can take once measured; and the
+neural training step's 162 synchronizes, whose largest sites are the
+per-layer waits (16), the attention regime reads (16 + 16 backward) and
+the norm gradient GEMMs (16), the first two of which the toggles above
+already address.
