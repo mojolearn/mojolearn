@@ -187,6 +187,7 @@ from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE,
     LlamaBackwardStages,
     llama_decoder_layer_backward,
+    llama_decoder_layer_backward_device,
 )
 # lane/block-options (2026-09-17): the block options record and the two
 # tails. `transformer/block_options.mojo` is the order's authority; the
@@ -656,6 +657,31 @@ struct TransformerWorkspace(Movable):
         return True
 
 
+struct TransformerBackwardWorkspace(Movable):
+    """The retained half of `transformer_session_backward`: the backward
+    stages for one shape and the device copy of grad_output. The forward
+    half is the session's `TransformerWorkspace` (stages, cache, rope, x)
+    at `smax = L`."""
+    var key: List[Int]
+    var bst: LlamaBackwardStages
+    var d_out: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext, dims: LlamaDims, b: Int, l: Int,
+                 window: Int, lean: Bool) raises:
+        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv, dims.head_dim,
+                    dims.intermediate, window, Int(lean)]
+        self.bst = LlamaBackwardStages(ctx, b, l, l, dims, lean=lean)
+        self.d_out = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
+
+    def matches(self, key: List[Int]) -> Bool:
+        if len(key) != len(self.key):
+            return False
+        for i in range(len(key)):
+            if key[i] != self.key[i]:
+                return False
+        return True
+
+
 struct TransformerSession(Movable, Writable):
     """One Python-owned context/workspace; no retained host pointers or
     float32 weights. Under `numeric_profile="fixed15_v1"` it RETAINS the
@@ -682,6 +708,13 @@ struct TransformerSession(Movable, Writable):
     var weight_uploads: Int
     var weight_recopies: Int
     var weight_reuses: Int
+    var backward: Optional[TransformerBackwardWorkspace]
+    """lane/neural-net-experiment: the zero-state prefill backward's stages
+    and its grad_output buffer, retained across `transformer_session_backward`
+    calls the way the byte trainer retains `tr.backward[layer]` across steps
+    (no reset exists or is needed: every cell the backward reads it wrote
+    this call). Dropped with the forward workspace under the same budget."""
+    var backward_workspaces: Int
     var busy: Bool
     var closed: Bool
     var contexts: Int
@@ -698,6 +731,8 @@ struct TransformerSession(Movable, Writable):
         self.weight_uploads = 0
         self.weight_recopies = 0
         self.weight_reuses = 0
+        self.backward = Optional[TransformerBackwardWorkspace]()
+        self.backward_workspaces = 0
         self.busy = False
         self.closed = False
         self.contexts = 0
@@ -712,6 +747,7 @@ struct TransformerSession(Movable, Writable):
     def __deinit__(deinit self):
         # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
         # destruction enqueues frees, which must drain before context death.
+        _ = self.backward^
         _ = self.workspace^
         _ = self.planes^
         _ = self.weights^
@@ -725,6 +761,7 @@ struct TransformerSession(Movable, Writable):
     def clear(mut self) raises:
         if self.ctx:
             self.ctx.value().synchronize()
+        self.backward = None
         self.workspace = None
         self.planes = None
         self.planes_key = List[Int]()
@@ -1005,6 +1042,154 @@ def transformer_session_forward_fresh_binding(
         raise error
     owner[].busy = False
     return PythonObject(result)
+
+
+def _transformer_run_session_backward(
+    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, window: Int,
+) raises:
+    """`_transformer_backward_run` on the session (lane/neural-net-experiment,
+    2026-09-30): the same forward from a zero cache at positions [0, L) and
+    the same backward on its stages, with the weights retained
+    (`_session_weights`), the forward workspace retained at `smax = L`, the
+    backward stages and the grad_output buffer retained, and the cache
+    zero-filled on the device. Same kernels, same launches, same order;
+    the ten gradients are written into the caller's buffers as before."""
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    if window < 0:
+        raise Error("transformer backward: window must be >= 0")
+    var opts = BlockOptions()
+    var qw = dims.q_width()
+    var kw = dims.kv_width()
+    var m = b * l
+    if not session.ctx:
+        session.ctx = neural_ctx[_NEURAL_CTX]()
+        session.contexts += 1
+    ref ctx = session.ctx.value()
+    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
+    var lean = transformer_lean_stages(hd)
+    # Weights: reused when the bytes are the same, recopied when they moved.
+    _session_weights(session, ctx, dims, a, opts, List[Int]())
+    ref w = session.weights.value()
+    _btick(ton, tk, "surface.weights_up")
+    # The forward half at smax = L (the fresh-prefill shape).
+    var key = _workspace_key(b, l, dims, l, window, lean, opts)
+    var reused = False
+    if session.workspace:
+        reused = session.workspace.value().matches(key)
+    if not reused:
+        ctx.synchronize()
+        session.workspace = None
+        ctx.synchronize()
+        session.workspace = TransformerWorkspace(ctx, dims, b, l, l, window, lean, opts)
+        session.workspaces += 1
+    ref ws = session.workspace.value()
+    if reused:
+        ws.stages.reset(ctx)
+    # The backward half.
+    var bkey: List[Int] = [b, l, dm, nh, nkv, hd, it, window, Int(lean)]
+    var breused = False
+    if session.backward:
+        breused = session.backward.value().matches(bkey)
+    if not breused:
+        ctx.synchronize()
+        session.backward = None
+        ctx.synchronize()
+        session.backward = TransformerBackwardWorkspace(ctx, dims, b, l, window, lean)
+        session.backward_workspaces += 1
+    ref bw = session.backward.value()
+    # Inputs: x and grad_output into retained buffers; the cache is the
+    # fresh zeros a `LlamaKVCache` holds.
+    ws.kv.k.enqueue_fill(Float32(0.0))
+    ws.kv.v.enqueue_fill(Float32(0.0))
+    ws.kv.s = 0
+    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+    ctx.enqueue_copy(dst_buf=bw.d_out, src_ptr=_f32_ptr(a[10]))
+    ctx.synchronize()
+    _btick(ton, tk, "surface.inputs_up")
+    var off = IdentityTrace.disabled()
+    llama_decoder_layer_forward(
+        ctx, ws.stages, ws.kv, ws.rope, w, ws.x, b, l, 0, off, String("pyf")
+    )
+    _btick(ton, tk, "surface.forward")
+    var offb = IdentityTrace.disabled()
+    llama_decoder_layer_backward_device(
+        ctx, bw.bst, ws.stages, w, ws.rope.cos, ws.rope.sin, ws.x, bw.d_out,
+        b, l, 0, offb, String("pyb"),
+    )
+    _btick(ton, tk, "surface.backward")
+    _download_addr[False](ctx, bw.bst.d_x, m * dm, a[11])
+    _download_addr[False](ctx, bw.bst.dw_norm1, dm, a[12])
+    _download_addr[False](ctx, bw.bst.dw_norm2, dm, a[13])
+    _download_addr[False](ctx, bw.bst.dw_q, qw * dm, a[14])
+    _download_addr[False](ctx, bw.bst.dw_k, kw * dm, a[15])
+    _download_addr[False](ctx, bw.bst.dw_v, kw * dm, a[16])
+    _download_addr[False](ctx, bw.bst.dw_o, dm * qw, a[17])
+    _download_addr[False](ctx, bw.bst.dw_gate, it * dm, a[18])
+    _download_addr[False](ctx, bw.bst.dw_up, it * dm, a[19])
+    _download_addr[False](ctx, bw.bst.dw_down, dm * it, a[20])
+    ctx.synchronize()
+    _btick(ton, tk, "surface.outputs_down")
+    # The same budget as the forward path, on the forward half's count
+    # (the backward half is of the same order); both go together.
+    if ws.retained_bytes() > _session_retain_cap_bytes():
+        session.backward = None
+        session.workspace = None
+        ctx.synchronize()
+
+
+def transformer_session_backward_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`transformer_backward` on a session (lane/neural-net-experiment):
+    the same twenty-one addresses and eight scalars, word for word, the
+    weights, workspace and backward stages retained across calls."""
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error(
+            "transformer backward: no DETERMINISTIC tier (FAST or IDENTICAL"
+            " zero-state prefill backward)"
+        )
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer: session is busy or closed")
+    if len(addrs) != 21 or len(params) != 8:
+        raise Error(
+            "transformer backward: expected 21 addresses and 8 scalars (B,"
+            " L, d_model, n_heads, n_kv_heads, head_dim, intermediate,"
+            " window)"
+        )
+    var a = List[Int]()
+    for i in range(21):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error(
+                "transformer backward: null buffer address at slot "
+                + String(i)
+            )
+        a.append(address)
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    var nh = Int(py=params[3])
+    var nkv = Int(py=params[4])
+    var hd = Int(py=params[5])
+    var it = Int(py=params[6])
+    var window = Int(py=params[7])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            try:
+                _transformer_run_session_backward(owner[], a, b, l, dm, nh, nkv, hd, it, window)
+            except error:
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
 
 
 def transformer_session_create_binding() raises -> PythonObject:
@@ -2776,6 +2961,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         # lane/neural-net-experiment: the stateless prefill on a session.
         m.def_function[transformer_session_forward_fresh_binding]("transformer_session_forward_fresh")
+        m.def_function[transformer_session_backward_binding]("transformer_session_backward")
         # lane/lowbit-blocks: numeric_profile="fixed15_v1".
         m.def_function[transformer_session_forward_int15_binding]("transformer_session_forward_int15")
         # NVIDIA's full public A/B gate admits discarded-cache prefill.
