@@ -854,10 +854,12 @@ def _weights_recopy(ctx: DeviceContext, mut w: LlamaDeviceWeights, a: List[Int],
 
 
 def _stage_reset_on() -> Bool:
-    """`MOJOLEARN_TRANSFORMER_STAGE_RESET=0` skips the thirty zero-fills a
-    reused workspace gets before each call. Bit-safe only if every cell a
-    call reads it also wrote this call; the identity gate decides."""
-    return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) != "0"
+    """The thirty zero-fills a reused workspace got before each call are OFF
+    by default (2026-09-30): L40S transformer-forward 0.89x over three
+    sweep passes, every lane's digest and loss series unchanged, session
+    checks passing with them off. `MOJOLEARN_TRANSFORMER_STAGE_RESET=1`
+    restores them for the A/B."""
+    return String(getenv("MOJOLEARN_TRANSFORMER_STAGE_RESET")) == "1"
 
 
 def _session_retain_cap_bytes() -> Int:

@@ -46,19 +46,19 @@ EXPERIMENTS = {
     "legacy_fresh_entry": {"MOJOLEARN_TRANSFORMER_SESSION_FRESH": "0"},
     "legacy_everything": {"MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1",
                           "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"},
-    "no_stage_reset": {"MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
+    "stage_reset": {"MOJOLEARN_TRANSFORMER_STAGE_RESET": "1"},
     "speculative_attn": {"MOJOLEARN_ATTN_SPECULATIVE": "1"},
     "swiglu_fused": {"MOJOLEARN_SWIGLU_FUSED": "1"},
     "no_layer_sync": {"MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
     "all_on": {"MOJOLEARN_ATTN_SPECULATIVE": "1", "MOJOLEARN_SWIGLU_FUSED": "1",
-               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0", "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"},
+               "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"},
 }
 SETS = {
-    "default": ["baseline", "no_retain_weights", "no_stage_reset", "speculative_attn",
+    "default": ["baseline", "no_retain_weights", "stage_reset", "speculative_attn",
                 "swiglu_fused", "no_layer_sync", "all_on"],
-    "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "no_stage_reset",
+    "nvidia": ["baseline", "no_retain_weights", "legacy_fresh_entry", "stage_reset",
                "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
-    "amd": ["baseline", "legacy_everything", "no_retain_weights", "no_stage_reset",
+    "amd": ["baseline", "legacy_everything", "no_retain_weights", "stage_reset",
             "speculative_attn", "swiglu_fused", "no_layer_sync", "all_on"],
 }
 
