@@ -3026,6 +3026,8 @@ def build_parser():
     p.add_argument("--round-seconds", type=int, default=0,
                    help="classical per-round ceiling (0: per lane default)")
     p.add_argument("--nice", type=int, default=0)
+    p.add_argument("--race-id", action="append", default=[],
+                   help="run only these exact planned race IDs (repeatable; unknown IDs refuse)")
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
     p.add_argument("--no-infer", action="store_true",
@@ -3309,6 +3311,12 @@ def main(argv=None):
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape,
                        cpu_arm=not args.no_cpu_arm)
+    if args.race_id:
+        requested = set(args.race_id)
+        unknown = requested - {r["id"] for r in races}
+        if unknown:
+            raise SystemExit("Unknown race IDs: " + ", ".join(sorted(unknown)))
+        races = [r for r in races if r["id"] in requested]
     if args.shard:
         races = shard_races(races, args.shard)
     # taxi and Istella-S are read by trees and classical only; a neural-only
