@@ -202,11 +202,13 @@ def mlp_sum_rows_host(
     return _mlp_host(ctx, input_ptr, input_ptr, out_ptr, rows, cols, 3)
 
 
-def _launch_mlp(
+def _launch_mlp[
+    source_origin: MutOrigin, other_origin: MutOrigin, output_origin: MutOrigin
+](
     ctx: DeviceContext,
-    source: MutPointer[Float32, MutAnyOrigin],
-    other: MutPointer[Float32, MutAnyOrigin],
-    output: MutPointer[Float32, MutAnyOrigin],
+    source: MutPointer[Float32, source_origin],
+    other: MutPointer[Float32, other_origin],
+    output: MutPointer[Float32, output_origin],
     rows: Int, cols: Int, operation: Int,
 ) raises:
     """`_mlp_kernel` at the geometry every caller uses: 128 threads a block,

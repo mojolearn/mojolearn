@@ -2,7 +2,7 @@
 # PR #7 (fused small-MLP step, one wait fewer per matmul) on one NVIDIA or AMD box.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-V=${1:-nvidia}; O=/root/mlp-fused; mkdir -p $O
+V=${1:-nvidia}; O=/root/mlp-fused; rm -rf $O/native $O/rc.txt; mkdir -p $O
 if [ $V = nvidia ]; then BK=cuda; AR=sm_89; else BK=hip; AR=gfx942; fi
 export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_TARGET_COLUMN=$V MOJOLEARN_GPU_ARCHS=$AR \
   MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS=2 MOJOLEARN_BENCH_INSTALLED=1 PYTHONUNBUFFERED=1
@@ -25,9 +25,7 @@ build() {  # module tag
   [ -n "$so" ] && cp $so $N/$2.so && sha256sum $N/$2.so >> $O/bindings.sha256
 }
 # main's linalg first (the matmul A/B), then the PR's
-git stash list >/dev/null
-MB=$(git merge-base HEAD origin/main 2>/dev/null || git rev-parse HEAD~1)
-git show $MB:gemm/host_entry.mojo > /tmp/host_entry.main.mojo
+cp tools/host_entry.main.mojo /tmp/host_entry.main.mojo   # main's file at 9a9437e2e, shipped with the job
 cp gemm/host_entry.mojo /tmp/host_entry.pr.mojo
 cp /tmp/host_entry.main.mojo gemm/host_entry.mojo; build linalg linalg-main
 cp /tmp/host_entry.pr.mojo gemm/host_entry.mojo; build linalg linalg-pr
@@ -38,7 +36,8 @@ for arm in main pr; do cp $N/linalg-$arm.so $T/_mojolearn_linalg.so; st matmul-$
   timeout 900 $PY tools/matmul_digest.py > $O/matmul-$arm.json 2>$O/matmul-$arm.err; rc matmul-$arm $?; done
 st mlp-check-256; timeout 1800 $PY tools/mlp_step_check.py --json $O/mlp-check-256.json > $O/mlp-check-256.log 2>&1; rc mlp-check-256 $?
 st mlp-check-32; timeout 1800 $PY tools/mlp_step_check.py --rows 32 --json $O/mlp-check-32.json > $O/mlp-check-32.log 2>&1; rc mlp-check-32 $?
-st pytest; (cd python && timeout 1800 $PY -m pytest -q mojolearn/tests/test_small_mlp_surface.py mojolearn/tests/test_small_mlp_numerical_edges.py) > $O/pytest.log 2>&1; rc pytest $?
+cp -r python/mojolearn/tests $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
+st pytest; (cd /tmp && timeout 1800 $PY -m pytest -q -p no:cacheprovider $SITE/tests/test_small_mlp_surface.py $SITE/tests/test_small_mlp_numerical_edges.py) > $O/pytest.log 2>&1; rc pytest $?
 export MOJOLEARN_REPO_COMMIT=$(cat $O/head.txt)
 for f in 1 0; do st race-mlp-fused$f
   MOJOLEARN_MLP_FUSED=$f timeout 1800 $PY tools/bench_board_neural.py race --lane mlp-train-step --shape full --arms ours --rounds 5 \
