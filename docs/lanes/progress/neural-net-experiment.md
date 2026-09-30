@@ -78,6 +78,57 @@ churn hands it.
   over that memory; same first offending index in the message, same
   sabotage bit. The List-returning functions stay for any other caller.
 
+## Second pass (same day): the rest, still unmeasured
+
+Each is its own commit, so a build failure reverts one at a time.
+
+- **Transformer backward on the session** (`transformer_session_backward`):
+  the twenty-one addresses and eight scalars of `transformer_backward` word
+  for word; weights reused by exact bytes, the forward workspace retained at
+  `smax = L`, the backward stages and grad_output buffer retained across
+  calls (as the byte trainer retains `tr.backward[layer]` across steps).
+  `TransformerBlock.backward` takes it when exported; Samba training calls
+  it four times a step.
+- **Mamba-3 prefill session** (`mamba3_prefill_session_*`): the fresh
+  entry's 15 pointers on a session that retains the nine weights (exact
+  compare, recopy in place with the block's non-finite refusal re-armed) and
+  the x buffer. The zero state and the stages are still built per call:
+  nothing resets them and a fresh construction is the certified zero state.
+  So this removes the weight uploads, not the stage allocations; the rest
+  needs a stage reset that has not been written or certified.
+- **`MOJOLEARN_BYTE_LM_LAYER_SYNC=0`**: skips the sixteen per-layer host
+  waits in the byte-LM step. Default unchanged. Try it on each vendor; if a
+  Metal build misbehaves with it off, the enqueued-free assumption
+  (DEVIATION 2520) does not hold there and the toggle stays off.
+- **`tools/neural_stage_timing.py`**: the measurement the first pass asked
+  for. Runs the board's shapes for transformer-forward, mamba3-forward,
+  samba-forward, samba-train-step, lm-forward and lm-train-step through the
+  same runners the board uses, N calls each, with the bindings' stage ticks
+  on, and prints the LM session's `attention_stage_report` (which layers
+  grew the quadratic stages, the answer to the 3.7 GB question).
+
+Already true, so not written: the Samba optimizer is one flat binding call
+over the packed registry (`_Optimizer.step`), not per tensor.
+
+Not written, on purpose:
+
+- **A Samba stack session.** The transformer and Mamba blocks live in two
+  bindings with two contexts; a stack that keeps activations on the device
+  across them needs the bindings merged or a shared-context protocol. With
+  the two block sessions above, what remains per Samba forward is the
+  embedding, the final norm and the head, three small round trips.
+- **AMD GEMM tiles.** Blind edits are pointless: `gemm/checks/gemm_identical.mojo`
+  already carries twenty plans and a runtime arm override,
+  `MOJOLEARN_GEMM_ARM` (`shipped`, `lfold`, `half`, `quarter`, `head`,
+  `ksplit`, `tuned128`, `kpack`, `kfoldv`, ... see `gemm_step_arm_parse`),
+  and AMD-specific defaults already exist. The sweep is
+  `for a in ...; do MOJOLEARN_GEMM_ARM=$a python tools/neural_stage_timing.py --lane lm-train-step; done`
+  on the MI325X, and the identity gate on the winner. Every arm keeps the
+  fixed fold tree, so the bits are the same by construction; the gate is
+  the proof.
+- **The 3.7 GB training-step peak**: diagnosed by the tool's report, not
+  guessed at.
+
 ## What it does NOT change (next, and why not here)
 
 - `TransformerBlock.backward` still recomputes the forward and re-uploads

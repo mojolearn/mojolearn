@@ -1225,8 +1225,9 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready)
-        step_count_sync()
-        ctx.synchronize()
+        if _byte_layer_sync():
+            step_count_sync()
+            ctx.synchronize()
         comptime if BYTE_LM_RELEASE_EAGER:
             tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
         tr.forward.insert(layer, stages^)
@@ -1281,6 +1282,20 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     var loss = byte_gradient_device(ctx, tr, ids)
     byte_update_device(ctx, tr)
     return loss
+
+
+def _byte_layer_sync() -> Bool:
+    """lane/neural-net-experiment (2026-09-30): whether the step waits on
+    the host after EVERY layer's forward and backward (sixteen waits a step
+    at the board's depth, before the fused attention's own regime reads).
+    `MOJOLEARN_BYTE_LM_LAYER_SYNC=0` skips them: every launch sits on the
+    one in-order context, the next layer's kernels are enqueued behind this
+    layer's, and the eager-scratch release only drops buffer handles whose
+    frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
+    moves is the host idling per layer. Default ON (the measured behaviour)
+    until a box has run both; the step's `step.*` timing ticks read the
+    same either way."""
+    return String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC")) != "0"
 
 
 def _byte_release_forward_scratch(ctx: DeviceContext,
@@ -1426,8 +1441,9 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
             llama_decoder_layer_backward_device(ctx, backward, stages, tr.weights[layer],
                 tr.rope.cos, tr.rope.sin, tr.forward[layer - 1].residual2, tr.backward[layer].d_x,
                 config.batch, config.length, 0, trace, prefix)
-        step_count_sync()
-        ctx.synchronize()
+        if _byte_layer_sync():
+            step_count_sync()
+            ctx.synchronize()
         comptime if BYTE_LM_STICKY_EAGER:
             # A policy decision from an observed refusal, not a prediction of
             # a numerical corner. Both directions use the existing eager
