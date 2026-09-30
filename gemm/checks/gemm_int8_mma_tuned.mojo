@@ -115,6 +115,7 @@ from std.sys import is_defined, llvm_intrinsic
 from std.sys._assembly import inlined_assembly
 from std.sys.info import is_amd_gpu, is_nvidia_gpu
 from std.sys.intrinsics import _RegisterPackType
+from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -389,6 +390,25 @@ def int8_pieces_dispatch(m: Int, n: Int, k: Int) -> Int:
     decode kernel of eight warps (run 11, job nvc3-0039: 0.20 to 0.40 of
     fp32.v1 where the two-page plan read 0.27 to 1.22; four warps took more
     time at every row, 1% more at the head's)."""
+    # lane/neural-net-experiment (2026-09-30): MOJOLEARN_INT15_PLAN=<n>
+    # names the plan outright (0..INT8_PIECES_PLAN_ALL_COUNT-1, admitted
+    # by `int8_pieces_plan_admits`), so one build sweeps every plan at one
+    # shape. The L40S GEMM ceiling run (bench/results/gemm-ceiling-20260930)
+    # read the tuned product at 67 TFLOPS on qkv (512x4096x4096) and 18 on
+    # mlp_up (512x14336x4096): the dispatched two-page 64 x 128 block reads
+    # the 117 MB of weight planes m / 64 = 8 times over, about 940 MB a
+    # product, which on an 864 GB/s box is most of the 3.3 ms measured. The
+    # tall plans below read them twice (TALL256) or once (the H100's
+    # dispatch was measured on 3.35 TB/s and never saw this). SCHEDULING:
+    # every plan returns the same three integers.
+    var forced = String(getenv("MOJOLEARN_INT15_PLAN"))
+    if forced != "":
+        try:
+            var plan = Int(forced)
+            if plan >= 0 and plan < INT8_PIECES_PLAN_ALL_COUNT and int8_pieces_plan_admits(plan, m, n, k):
+                return plan
+        except:
+            pass
     if m <= INT8_TUNED_ROW_MAX_M:
         comptime if TARGET_COLUMN == COLUMN_AMD:
             # THE AMD COLUMN: on the MI325X the two-page plans took more
