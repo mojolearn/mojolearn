@@ -1,0 +1,10 @@
+32332 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bf400000000, nodemask=2)
+32332 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x322c80000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn-neural-experiment/tools/transformer_fresh_prefill_check.py", line 67, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn-neural-experiment/tools/transformer_fresh_prefill_check.py", line 40, in main
+    assert np.array_equal(actual.view(np.uint32), expected.view(np.uint32)), (hd, window, length)
+                          ^^^^^^^^^^^
+AttributeError: 'Array' object has no attribute 'view'

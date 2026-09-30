@@ -1,0 +1,33 @@
+{
+  "backend": "cuda",
+  "group": "lifetime",
+  "reverse_order": false,
+  "arrays": 9,
+  "ownership": [
+    0,
+    0,
+    false,
+    0
+  ],
+  "samples": [
+    {
+      "case": "lifetime.0",
+      "baseline_ms": 918.5297731310129,
+      "retained_ms": 0.461602583527565
+    },
+    {
+      "case": "lifetime.1",
+      "baseline_ms": 0.38565509021282196,
+      "retained_ms": 0.35972893238067627
+    },
+    {
+      "case": "lifetime.2",
+      "baseline_ms": 0.3804285079240799,
+      "retained_ms": 0.367017462849617
+    }
+  ],
+  "refusals": {},
+  "warm_baseline_median_ms": null,
+  "warm_retained_median_ms": null,
+  "binding_sha256": "cde041873e11a4be6caa4ab5c4f87a45d7a122e486de8bbfe62d642df6e2ff38"
+}

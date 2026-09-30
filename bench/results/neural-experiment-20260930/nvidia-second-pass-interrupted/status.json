@@ -1,0 +1,9 @@
+{
+  "state": "failed",
+  "phase": "candidate-fresh-prefill",
+  "utc": "2026-09-30T09:24:10.958167+00:00",
+  "vendor": "nvidia",
+  "parent": "f89f43b85",
+  "candidate": "a84aadf2e",
+  "error": "Command '['/root/neural-experiment-results-v2/venv/bin/python', '/root/mojolearn-neural-experiment/tools/transformer_fresh_prefill_check.py']' returned non-zero exit status 1."
+}

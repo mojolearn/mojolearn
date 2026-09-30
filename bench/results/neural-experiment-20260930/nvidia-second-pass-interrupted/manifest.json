@@ -1,0 +1,31 @@
+{
+  "parent": "f89f43b85",
+  "candidate": "a84aadf2e",
+  "source_patch_sha256": "2741061b7b97a69aee60c4056a896c7ccd2eb5cdcd17415a1e7f4668376e4ccb",
+  "base_distribution": "mojolearn 0.8.31; Python sources and three IDENTICAL bindings replaced from the named revision",
+  "vendor": "nvidia",
+  "backend": "cuda",
+  "arch": "sm_89",
+  "lanes": [
+    "transformer-forward",
+    "mamba3-forward",
+    "lm-forward",
+    "samba-forward",
+    "lm-train-step",
+    "samba-train-step"
+  ],
+  "rounds": 5,
+  "reused_parent_results_from": "/root/neural-experiment-results",
+  "artifacts": {
+    "parent": {
+      "_mojolearn_transformer.so": "20925b854ce696179db9b4bec57bf381a3f12f1731939b15c6538f25787e5677",
+      "_mojolearn_mamba.so": "a6195c5c45e9e03ba30c5320cce6a66a94f095fe99f721c5be9355a7c1ce37ab",
+      "_mojolearn_byte_lm.so": "c7442b4e223047fc36d89581b0bfc747b3f151a2c9a7fc984df43604429afd30"
+    },
+    "candidate": {
+      "_mojolearn_transformer.so": "cde041873e11a4be6caa4ab5c4f87a45d7a122e486de8bbfe62d642df6e2ff38",
+      "_mojolearn_mamba.so": "45ceb8c7cb4175b0d933286eebf147c5504eaa2a1a86026c07736e02ee004f02",
+      "_mojolearn_byte_lm.so": "0e560ccc000b8e93e3b537fe9ec2101d74d71129e0cd86a4d16fea7b6b879e7a"
+    }
+  }
+}
