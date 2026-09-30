@@ -124,6 +124,12 @@ def fit_device(
         if n >= XB_MIN_ROWS and gram_handles(algo):
             gram_fit(ctx, algo, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
             return
+    # lane/linfit-speed: SGD in bounded launches on Apple (x_linear/sgd_bounded.mojo)
+    from x_linear.sgd_bounded import sgd_fit_bounded, use_sgd_bounded
+
+    if algo == 1 and use_sgd_bounded():
+        sgd_fit_bounded(ctx, x, n_x, y, n_y, n, d, ip, fp, n_out, res)
+        return
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # lane/linfit-speed: the GLM's row passes over the whole GPU, its
         # control on the host, the one-block fit's bits (x_linear/glm_wide.mojo)

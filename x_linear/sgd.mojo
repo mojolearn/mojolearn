@@ -135,6 +135,84 @@ def sgd_dloss(kind: Int, y: Float32, p: Float32, eps: Float32) -> Float32:
     return Float32(0)
 
 
+# ------------------------------------------------ bounded spans (lane/linfit-speed)
+# A fit that one launch runs whole (every column but Apple) takes SgdSpan.whole.
+# On Apple (x_linear/sgd_bounded.mojo) the fit is cut into bounded launches:
+# each runs ONE epoch's rows [r0, r1) of every problem, starting from the
+# state the previous launch stored (weights, L1 history and the scalars
+# below, float32 words, integers bit-cast) and storing its own into the other
+# buffer of a ping-pong pair. Storing and reloading a word is exact, the rows
+# run in the same order and every operation is the same, so the words are
+# the one-launch fit's. The epoch's order comes from the shuffle launches of
+# sgd_bounded.mojo (the same swaps), never from the span's own launch.
+
+comptime SGD_ST = 16
+comptime ST_INTERCEPT = 0
+comptime ST_U = 1
+comptime ST_ETA = 2
+comptime ST_BEST = 3
+comptime ST_OBJ = 4
+comptime ST_T_LO = 5
+comptime ST_T_HI = 6
+comptime ST_NOIMP = 7
+comptime ST_EPOCHS = 8
+comptime ST_STOP = 9
+#: A word no state slot holds after a finished launch: slot ST_DONE of a
+#: problem's state is this exactly when its launch ran to the end.
+comptime ST_DONE = 10
+comptime SGD_DONE_WORD = Float32(12345.0)
+
+
+@fieldwise_init
+struct SgdSpan(ImplicitlyCopyable, Movable):
+    var bounded: Bool
+    var epoch: Int
+    var r0: Int
+    var r1: Int
+    var w_in: FP
+    var q_in: FP
+    var st_in: FP
+    var st_out: FP
+
+    @staticmethod
+    def whole(any: FP) -> SgdSpan:
+        """The one-launch fit (the pointers are never read)."""
+        return SgdSpan(False, 0, 0, 0, any, any, any, any)
+
+    def resume(self) -> Bool:
+        return self.bounded and (self.epoch > 0 or self.r0 > 0)
+
+
+@always_inline
+def _i2w(v: Int) -> Float32:
+    return bitcast[DType.float32](Int32(v))
+
+
+@always_inline
+def _w2i(v: Float32) -> Int:
+    return Int(bitcast[DType.int32](v))
+
+
+def _sgd_save(
+    sp: FP, intercept: Float32, u: Float32, eta: Float32, best: Float32, objective: Float32,
+    t: Int, no_improve: Int, epochs: Int, stop: Int,
+):
+    st(sp, ST_INTERCEPT, Float32(0) if stop == 2 else intercept)
+    st(sp, ST_U, u)
+    st(sp, ST_ETA, eta)
+    st(sp, ST_BEST, best)
+    st(sp, ST_OBJ, objective)
+    st(sp, ST_T_LO, _i2w(t & 0x7FFFFFFF))
+    st(sp, ST_T_HI, _i2w(t >> 31))
+    st(sp, ST_NOIMP, _i2w(no_improve))
+    st(sp, ST_EPOCHS, _i2w(epochs))
+    st(sp, ST_STOP, _i2w(stop))
+    for s in range(ST_DONE + 1, SGD_ST):
+        st(sp, s, Float32(0))
+    # last: the launch reached its end for this problem
+    st(sp, ST_DONE, SGD_DONE_WORD)
+
+
 def sgd_one(
     x: FP, ys: FP, n: Int, d: Int,
     loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
@@ -143,19 +221,28 @@ def sgd_one(
     do_shuffle: Bool, seed: UInt64, one_class: Bool,
     w: FP, woff: Int, b: FP, boff: Int, q: FP, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
+    span: SgdSpan,
 ) -> Int:
     """One binary/regression problem on targets `ys`. Returns epochs run,
-    or -1 on a non-finite weight (their ValueError)."""
+    or -1 on a non-finite weight (their ValueError). `span`: the whole fit,
+    or one bounded launch's rows (see SgdSpan); then w and q are this
+    launch's output buffers and b is its state output."""
     var l1_ratio = l1_ratio_in
     if penalty == P_L2:
         l1_ratio = Float32(0)
     elif penalty == P_L1:
         l1_ratio = Float32(1)
-    fill(w, woff, d, Float32(0))
-    fill(q, 0, d, Float32(0))
     var intercept = Float32(1) if one_class else Float32(0)
-    for i in range(n):
-        sti(idx, i, i)
+    if span.resume():
+        for j in range(d):
+            st(w, woff + j, ld(span.w_in, j))
+            st(q, j, ld(span.q_in, j))
+    else:
+        fill(w, woff, d, Float32(0))
+        fill(q, 0, d, Float32(0))
+    if not span.bounded:
+        for i in range(n):
+            sti(idx, i, i)
     var rng = seed
     var eta = eta0
     var optimal_init = Float32(0)
@@ -170,12 +257,37 @@ def sgd_one(
     var no_improve = 0
     var decay_factor = fm(fs(Float32(1), l1_ratio), alpha)
     var epochs = 0
-    for epoch in range(max_iter):
+    var stop = 0
+    var e_lo = 0
+    var e_hi = max_iter
+    var r_lo = 0
+    var r_hi = n
+    var obj0 = Float32(0)
+    if span.bounded:
+        e_lo = span.epoch
+        e_hi = span.epoch + 1
+        r_lo = span.r0
+        r_hi = span.r1
+        if span.resume():
+            intercept = ld(span.st_in, ST_INTERCEPT)
+            u = ld(span.st_in, ST_U)
+            eta = ld(span.st_in, ST_ETA)
+            best = ld(span.st_in, ST_BEST)
+            obj0 = ld(span.st_in, ST_OBJ) if span.r0 > 0 else Float32(0)
+            t = _w2i(ld(span.st_in, ST_T_LO)) | (_w2i(ld(span.st_in, ST_T_HI)) << 31)
+            no_improve = _w2i(ld(span.st_in, ST_NOIMP))
+            epochs = _w2i(ld(span.st_in, ST_EPOCHS))
+            stop = _w2i(ld(span.st_in, ST_STOP))
+        if stop != 0:
+            # the fit ended in an earlier launch: carry the words through
+            _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+            return -1 if stop == 2 else epochs
+    for epoch in range(e_lo, e_hi):
         epochs = epoch + 1
-        var objective = Float32(0)
-        if do_shuffle:
+        var objective = obj0 if epoch == e_lo else Float32(0)
+        if do_shuffle and not span.bounded:
             shuffle(idx, n, rng)
-        for r in range(n):
+        for r in range(r_lo, r_hi):
             var i = ldi(idx, r)
             var y = ld(ys, i)
             var p = fa(row_dot(x, i, d, w, woff), intercept)
@@ -242,6 +354,11 @@ def sgd_one(
                 u = fa(u, fm(fm(l1_ratio, eta), alpha))
                 _l1_clip(w, woff, q, u, d)
             t += 1
+        if r_hi < n:
+            # a bounded launch that stops inside the epoch
+            obj0 = objective
+            break
+        obj0 = Float32(0)
         # their floating-point under-/overflow check
         var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
         for j in range(d):
@@ -251,6 +368,8 @@ def sgd_one(
         if not finite:
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
+            if span.bounded:
+                _sgd_save(span.st_out, intercept, u, eta, best, Float32(0), t, no_improve, epochs, 2)
             return -1
         var mean_obj = fd(objective, i2f(n))
         if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
@@ -264,8 +383,12 @@ def sgd_one(
                 eta = fd(eta, Float32(5))
                 no_improve = 0
             else:
+                stop = 1
                 break
-    st(b, boff, intercept)
+    if span.bounded:
+        _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+    else:
+        st(b, boff, intercept)
     return epochs
 
 
@@ -478,8 +601,12 @@ def sgd_one_warp[K: Int](
     w: FP, woff: Int, b: FP, boff: Int, idx: IP,
     swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
     pipe: Bool, t_team: Team, warp: Int, idx_b: IP, draws0: IP, draws1: IP,
+    span: SgdSpan, q_out: FP,
 ) -> Int:
     """`sgd_one` on the warp of `lane` (see above). d <= K * WARP_SIZE.
+    `span`: the whole fit, or one bounded launch's rows (see SgdSpan; never
+    with `pipe`): then w is this launch's weight output, q_out its L1
+    history output and the state goes to span.st_out.
 
     `pipe` (lane/linear-apple2; one problem, shuffle on, every thread of the
     block calls this): warp 0 computes, warp 1's lane 0 shuffles the NEXT
@@ -503,7 +630,7 @@ def sgd_one_warp[K: Int](
     var is_shuf = pipe and warp == 1
     var is_draw = pipe and warp == 2
     if not pipe:
-        if lane == 0:
+        if lane == 0 and not span.bounded:
             for i in range(n):
                 sti(idx, i, i)
     else:
@@ -541,7 +668,42 @@ def sgd_one_warp[K: Int](
     var pa = lr == LR_PA1 or lr == LR_PA2
     var fold_norms = need_obj and not pa and penalty != P_NONE
     var stop = 0
-    for epoch in range(max_iter):
+    var e_lo = 0
+    var e_hi = max_iter
+    var r_lo = 0
+    var r_hi = n
+    var obj0 = Float32(0)
+    if span.bounded:
+        e_lo = span.epoch
+        e_hi = span.epoch + 1
+        r_lo = span.r0
+        r_hi = span.r1
+        if span.resume():
+            comptime for kk in range(K):
+                var j = lane + kk * W
+                if j < d:
+                    wr[kk] = ld(span.w_in, j)
+                    qr[kk] = ld(span.q_in, j)
+            intercept = ld(span.st_in, ST_INTERCEPT)
+            u = ld(span.st_in, ST_U)
+            eta = ld(span.st_in, ST_ETA)
+            best = ld(span.st_in, ST_BEST)
+            obj0 = ld(span.st_in, ST_OBJ) if span.r0 > 0 else Float32(0)
+            t = _w2i(ld(span.st_in, ST_T_LO)) | (_w2i(ld(span.st_in, ST_T_HI)) << 31)
+            no_improve = _w2i(ld(span.st_in, ST_NOIMP))
+            epochs = _w2i(ld(span.st_in, ST_EPOCHS))
+            stop = _w2i(ld(span.st_in, ST_STOP))
+        if stop != 0:
+            # the fit ended in an earlier launch: carry the words through
+            comptime for kk in range(K):
+                var j = lane + kk * W
+                if j < d:
+                    st(w, woff + j, wr[kk])
+                    st(q_out, j, qr[kk])
+            if lane == 0:
+                _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+            return -1 if stop == 2 else epochs
+    for epoch in range(e_lo, e_hi):
         var order = idx
         if pipe:
             if epoch % 2 == 1:
@@ -565,8 +727,8 @@ def sgd_one_warp[K: Int](
                 _warp_draws(lane, seed, n, epoch + 2, draws0 if epoch % 2 == 0 else draws1)
         if is_comp:
             epochs = epoch + 1
-            var objective = Float32(0)
-            if do_shuffle and lane == 0 and not pipe:
+            var objective = obj0 if epoch == e_lo else Float32(0)
+            if do_shuffle and lane == 0 and not pipe and not span.bounded:
                 shuffle(idx, n, rng)
             # lane/linear-apple2: row r + 1's index, target and x are loaded while
             # row r is computed (row r + 2's index one step earlier still), so a
@@ -574,16 +736,16 @@ def sgd_one_warp[K: Int](
             # starts (not at the load, which would wait for it).
             var raw_next = Int32(0)
             if lane == 0:
-                raw_next = order.unsafe_load(0)
+                raw_next = order.unsafe_load(r_lo)
             var ci = Int(shuffle_idx(raw_next, UInt32(0)))
             var cx = InlineArray[Float32, K](fill=Float32(0))
             comptime for kk in range(K):
                 var j = lane + kk * W
                 cx[kk] = ld(x, ci * d + j) if j < d else Float32(0)
             var cy = ld(y, ci)
-            if lane == 0 and n > 1:
-                raw_next = order.unsafe_load(1)
-            for r in range(n):
+            if lane == 0 and r_lo + 1 < n:
+                raw_next = order.unsafe_load(r_lo + 1)
+            for r in range(r_lo, r_hi):
                 var i = ci
                 comptime for kk in range(K):
                     xr[kk] = fz(cx[kk])
@@ -672,6 +834,11 @@ def sgd_one_warp[K: Int](
                             wr[kk] = nz
                             qr[kk] = fa(qr[kk], fs(nz, z))
                 t += 1
+            if r_hi < n:
+                # a bounded launch that stops inside the epoch
+                obj0 = objective
+                break
+            obj0 = Float32(0)
             var finite = intercept == intercept and fabs(intercept) < Float32(3.0e38)
             for j in range(d):
                 var src = UInt32(j % W)
@@ -707,6 +874,16 @@ def sgd_one_warp[K: Int](
             break
     if not is_comp:
         return 0
+    if span.bounded:
+        comptime for kk in range(K):
+            var j = lane + kk * W
+            if j < d:
+                if stop != 2:
+                    st(w, woff + j, wr[kk])
+                st(q_out, j, qr[kk])
+        if lane == 0:
+            _sgd_save(span.st_out, intercept, u, eta, best, obj0, t, no_improve, epochs, stop)
+        return -1 if stop == 2 else epochs
     if stop == 2:
         return -1
     comptime for kk in range(K):
@@ -782,7 +959,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b, draws0, draws1,
+                        pipe, t, warp, idx_b, draws0, draws1, SgdSpan.whole(res), res,
                     )
                 elif chunks <= 2:
                     ep = sgd_one_warp[2](
@@ -790,7 +967,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b, draws0, draws1,
+                        pipe, t, warp, idx_b, draws0, draws1, SgdSpan.whole(res), res,
                     )
                 elif chunks <= 4:
                     ep = sgd_one_warp[4](
@@ -798,7 +975,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b, draws0, draws1,
+                        pipe, t, warp, idx_b, draws0, draws1, SgdSpan.whole(res), res,
                     )
                 else:
                     ep = sgd_one_warp[SGD_WARP_MAX_CHUNKS](
@@ -806,7 +983,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                         fit_intercept, max_iter, tol, nic, do_shuffle,
                         seed + UInt64(1000003) * UInt64(c), k == 1,
                         res, c * d, res, problems * d + c, order, swp, has_sw, cw_pos, cw_neg, has_cw,
-                        pipe, t, warp, idx_b, draws0, draws1,
+                        pipe, t, warp, idx_b, draws0, draws1, SgdSpan.whole(res), res,
                     )
                 if lane == 0 and (not pipe or warp == 0):
                     st(epr, c, i2f(ep))
@@ -831,7 +1008,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     seed + UInt64(1000003) * UInt64(c), k == 1,
                     res, c * d, res, problems * d + c, q, order,
                     swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
-                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, SgdSpan.whole(res),
                 )
                 st(epr, c, i2f(ep))
             t.sync()
@@ -863,7 +1040,7 @@ def sgd_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     seed + UInt64(1000003) * UInt64(c), k == 1,
                     res, c * d, res, problems * d + c, q, idx,
                     swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
-                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
+                    ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw, SgdSpan.whole(res),
                 )
                 st(epr, c, i2f(ep))
 
