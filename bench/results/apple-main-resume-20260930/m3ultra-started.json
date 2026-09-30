@@ -1,0 +1,21 @@
+{
+  "checked_utc": "2026-09-30T18:00:35.684066+00:00",
+  "source_commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+  "wheel": {
+    "requested": "0.8.31",
+    "version": "0.8.31",
+    "wheel": {
+      "bytes": 68915638,
+      "file": "mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "7f69892187dd96abb816d4b1835565b434a88f9f0fff403078811256d3c2879b"
+    }
+  },
+  "workers": [
+    "4003    00:34 1633152 /Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py worker --arm ours --lane label-propagation --dataset istella --data /Users/ec2-user/board-resume-main-3d0da1acf/cache/algos-data/rows-full",
+    "4004    00:34 1225648 /Users/ec2-user/board-resume-main-3d0da1acf/cache/venv/bin/python /Users/ec2-user/mojolearn-wt/steward-m3ultra-b/tools/bench_board_algos.py worker --arm ours-fast --lane label-propagation --dataset istella --data /Users/ec2-user/board-resume-main-3d0da1acf/cache/algos-data/rows-full"
+  ],
+  "race_timeout_s": 900,
+  "round_timeout_s": 300,
+  "recorded_races": 1,
+  "blocked": false
+}
