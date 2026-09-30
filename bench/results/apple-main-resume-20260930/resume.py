@@ -48,7 +48,7 @@ def main():
   if not status['pending']:return 0 if status['complete'] else 2
   if time.monotonic()>=stop:return 75
   rid=status['pending'][0]
-  cmd=[sys.executable,'tools/bench_board.py','--vendor',cfg['vendor'],'--mojolearn-version',cfg['version'],'--base-python',sys.executable,'--out',str(out),'--cache',str(root/'cache'),'--data-root',str(Path.home()/'datasets/gbm-bench'),'--no-cpu-arm','--no-smoke-gate','--rounds','1','--race-id',rid]
+  cmd=[sys.executable,str(root/'run-race.py'),'--vendor',cfg['vendor'],'--mojolearn-version',cfg['version'],'--base-python',sys.executable,'--out',str(out),'--cache',str(root/'cache'),'--data-root',str(Path.home()/'datasets/gbm-bench'),'--no-cpu-arm','--no-smoke-gate','--rounds','1','--race-id',rid]
   cmd+=cfg.get('extra_args',[])
   print('RESUME',rid,flush=True)
   with (root/'measurements.log').open('a') as log:

@@ -8,9 +8,9 @@ except BlockingIOError:
     raise SystemExit(0)
 if (B / 'apple-main-activated.json').exists():
     raise SystemExit(0)
-commit = '3d0da1acf5303ebe7463222544b5791d78c93c09'
+commit = '26cdf0767744c104ac7486f650bd2774e2c90cfc'
 root = '/Users/ec2-user/board-resume-main-3d0da1acf'
-job = '1790790532709-speed-apple-main-wheel-3d0da1acf5'
+job = '1790790830020-speed-apple-main-wheel-26cdf07677'
 hosts = {'m3ultra-b': '54.157.1.251', 'm2pro': '54.237.205.45'}
 key = str(pathlib.Path.home() / '.ssh/mambik-l8.pem')
 ssh_opts = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',

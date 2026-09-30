@@ -1,0 +1,20 @@
+{
+  "commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+  "wheel_sha256": "7f69892187dd96abb816d4b1835565b434a88f9f0fff403078811256d3c2879b",
+  "wheel": "/Users/andrewhendel/mojolearn-evidence/cloud-retirement-20260930/apple-main-3d0da1acf/mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+  "hosts": {
+    "m3ultra-b": {
+      "source_commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+      "sha256": "7f69892187dd96abb816d4b1835565b434a88f9f0fff403078811256d3c2879b",
+      "wheel": "/Users/ec2-user/board-resume-main-3d0da1acf/wheel/mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+      "published_to_pypi": false
+    },
+    "m2pro": {
+      "source_commit": "26cdf0767744c104ac7486f650bd2774e2c90cfc",
+      "sha256": "7f69892187dd96abb816d4b1835565b434a88f9f0fff403078811256d3c2879b",
+      "wheel": "/Users/ec2-user/board-resume-main-3d0da1acf/wheel/mojolearn-0.8.31-py3-none-macosx_11_0_arm64.whl",
+      "published_to_pypi": false
+    }
+  },
+  "activated_utc": "2026-09-30T17:56:49Z"
+}
