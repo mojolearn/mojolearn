@@ -247,6 +247,11 @@ one build, plus a wall per S16 kernel under `MOJOLEARN_MAMBA_TIMING=1`:
 | shared | `shared` | the strides pass's staged kernel (local `kl` / `ql`) |
 | regs (default) | unset or `regs` | the j and i loops unrolled at compile time so `kl` / `ql` are registers and the bounds are predicates |
 | smem48 | `smem48` | `kl` for the block's whole row in threadgroup memory beside the staged page, 48 KB; the dq chain then the dk chain, each over its own page (NVIDIA and AMD only) |
+| regs2 (default, second batch) | unset or `regs2` | the regs kernel with ONE register array (`kl` and `ql` never overlap: 64 registers, not 128), the v and d_y pages transposed so a p row's j steps are consecutive words (one 4-wide shared load per four steps), and the dq chain's always-true `tj < l` test dropped |
+
+The staged arms claim 33 to 36 KB of threadgroup memory; where the column's
+page does not fit (Apple, 32 KB) the driver runs the naive kernel whatever
+the arm asks (`qk_naive_nofit` in the timing rows).
 
 Run: `python tools/mamba3_backward_timing.py --batch 2 --length 512 --d-model 384`
 under each arm (the `m3bwd.s16.qk_*` rows), then
@@ -267,3 +272,20 @@ Python around the step:
 Run: `python tools/samba_step_profile.py --calls 5` for the Python
 breakdown; `python tools/mamba3_backward_timing.py ...` for the angle and
 S17 rows against the two restores.
+
+### The hardware flush on NVIDIA (every IDENTICAL kernel on the column)
+
+`checks.numerics.ftz`, in code compiled for an NVIDIA GPU, is now
+`mul.rn.ftz.f32 x, 1.0`: one instruction where the integer test was six.
+The GEMM seam has used this spelling since DEVIATION 2706 (measured equal on
+the 262,144-word boundary gate); every other IDENTICAL kernel still paid the
+integer spelling, twice a chain step in the Mamba-3 backward, once or twice
+a step in the attention kernels. A binary32 times one is exact, so the
+instruction's only effect is the `.ftz` flush of a subnormal result to its
+signed zero, which is `ftz`'s definition. The one word class the hardware
+may not return unchanged is a NaN with a payload (the contract refuses NaN
+payloads at every seam that could see one). Restore:
+`-D MOJOLEARN_FTZ_HW_OFF=1` (a build define; A/B the whole neural board).
+Proof on the box: `mojo run tools/probe_ftz_hw.mojo` compares the two
+spellings over ALL 2^32 words on the device and prints PASS, the NaN count
+reported apart. Run the probe first; if it fails, build with the restore.
