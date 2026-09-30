@@ -55,6 +55,13 @@ cp $N/mamba-new.so $T/_mojolearn_mamba.so
 for lane in samba-train-step gemm-int8; do st race-$lane
   timeout 3600 $PY tools/bench_board_neural.py race --lane $lane --shape full --arms ours --rounds 5 \
     --out $O/race-$lane --work $O/work --ours-python $PY > $O/race-$lane.log 2>&1; rc race-$lane $?; done
+# 1c2. fused small-MLP step (PR #7): both paths byte for byte; matmul digests (compare with NVIDIA)
+build training training
+cp $N/training.so $T/_mojolearn_training.so
+cp -r python/mojolearn/*.py $SITE/; find $SITE -name __pycache__ -exec rm -rf {} +
+st mlp-check; timeout 1800 $PY tools/mlp_step_check.py --json $O/mlp-check-256.json > $O/mlp-check-256.log 2>&1; rc mlp-check-256 $?
+timeout 1800 $PY tools/mlp_step_check.py --rows 32 --json $O/mlp-check-32.json > $O/mlp-check-32.log 2>&1; rc mlp-check-32 $?
+timeout 900 $PY tools/matmul_digest.py > $O/matmul.json 2>$O/matmul.err; rc matmul $?
 # 1d. fixed15 price harness (exact integer sums: digests must equal the L40S's)
 st build-int15
 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 --target-accelerator gfx942 -I . bench/gemm_int15_price_main.mojo -o $O/int15_price > $O/build-int15.log 2>&1; rc build-int15 $?
