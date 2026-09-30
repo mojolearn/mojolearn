@@ -696,6 +696,37 @@ class KernelPCA(_XNeighbors):
         all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
         Kc = _empty_out((n, n), "<f4")
         self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
+        # Experimental, opt-in only until the changed numerical plan has
+        # Apple/NVIDIA/AMD identity and quality evidence. Avoid computing all
+        # n eigenvectors on the host when auto requests just a few of them.
+        if os.environ.get("MOJOLEARN_XN_KPCA_LANCZOS") == "1":
+            if self.eigen_solver != "auto" or self.n_components is None:
+                raise ValueError("KernelPCA Lanczos trial requires auto and explicit n_components")
+            c = int(self.n_components)
+            if not (n > 200 and 0 < c < 10):
+                raise ValueError("KernelPCA Lanczos trial requires n > 200 and 1..9 components")
+            import array
+            from ._expansion_decomp import _Kit, _M, _lanczos_top, _kit_vendor
+            kit = _Kit(self.numeric_mode_used())
+            if _kit_vendor(kit) not in ("cuda", "hip", "metal"):
+                raise ValueError("KernelPCA Lanczos trial requires a GPU binding")
+            # Array's buffer is float32 in row order; no Python float list of
+            # n*n cells. The kit uploads it once and retains the device store.
+            store = array.array("f")
+            store.frombytes(Kc.tobytes())
+            result = _lanczos_top(kit, _M(store, n, n), c)
+            if result is None:
+                raise RuntimeError("KernelPCA GPU Lanczos trial did not converge; no dense fallback")
+            values, vectors = result
+            vectors = vectors.neg_cols(kit.absmax_flags(vectors, True))
+            vals = [max(float(v), 0.0) for v in values.s]
+            keep = [i for i, v in enumerate(vals) if not self.remove_zero_eig or v > 0]
+            vectors = vectors.take_cols(keep)
+            self.eigenvalues_ = Array._from_flat([vals[i] for i in keep], (len(keep),), "<f4")
+            self.eigenvectors_ = Array._from_flat(vectors.s, (n, len(keep)), "<f4")
+            self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
+            self.n_features_in_ = d
+            return self
         w = _empty_out((n,), "<f4")
         V = _empty_out((n, n), "<f4")
         self._op("eigh", [(Kc, 0), (w, 1), (V, 1)], (n,))
