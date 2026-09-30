@@ -227,9 +227,14 @@ def _fused_enabled(binding):
 
 
 def _optimizer(parameters, config, state=None):
+    # `resident=False`: this trainer builds an optimizer object per step
+    # (transactional publication), so device-resident moments would be
+    # opened and closed every step; the fused step keeps them on the device
+    # for the length of the call instead.
     opt = _training_impl.AdamW(
         parameters, lr=config['lr'], betas=(config['beta1'], config['beta2']),
-        eps=config['eps'], weight_decay=config['weight_decay'], numeric_mode=_require_mode())
+        eps=config['eps'], weight_decay=config['weight_decay'], numeric_mode=_require_mode(),
+        resident=False)
     if state is not None:
         opt.load_state_dict({'t': state['step'], 'exp_avg': state['m'].copy(),
                              'exp_avg_sq': state['v'].copy(),

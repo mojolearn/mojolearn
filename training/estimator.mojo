@@ -341,6 +341,81 @@ def identical_optimizer_step_host(
     var offsets = _offsets_from_ptr(offsets_ptr, n_tensors)
     var n_total = offsets[n_tensors]
 
+    # ---- The moments' transport, the one thing this wrapper does that the
+    # resident form does not: up before the step, down after it.
+    var m_state = ctx.enqueue_create_buffer[DType.float32](n_total)
+    var v_state = ctx.enqueue_create_buffer[DType.float32](n_total)
+    ctx.enqueue_copy(dst_buf=m_state, src_ptr=m_ptr)
+    ctx.enqueue_copy(dst_buf=v_state, src_ptr=v_ptr)
+    var n_done = identical_optimizer_step_resident_host(
+        ctx, param_ptr, grad_ptr, m_state, v_state, offsets_ptr, init_ptr,
+        info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
+        weight_decay, momentum, dampening, max_norm,
+    )
+    ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_state)
+    ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_state)
+    ctx.synchronize()
+    _ = m_state
+    _ = v_state
+    return n_done
+
+
+def identical_optimizer_step_resident_host(
+    ctx: DeviceContext,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    grad_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    init_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_tensors: Int,
+    kind: Int,
+    t: Int,
+    nesterov: Int,
+    lr: Float32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    momentum: Float32,
+    dampening: Float32,
+    max_norm: Float32,
+) raises -> Int:
+    """`identical_optimizer_step_host` with the moments ALREADY ON THE
+    DEVICE (lane/neural-pass4, 2026-09-30): `m_state` and `v_state` are the
+    caller's buffers of `offsets[J]` floats, read and written in place and
+    left there. Everything else is that wrapper's, in its order: the
+    refusals, the parameter and gradient uploads, the workspace, the ONE
+    call, the parameter (and clipped gradient) download, the flags and the
+    info. Same call on the same buffers, so the same bits; what a caller
+    that keeps its moments resident saves is four of the seven `N`-float
+    transfers a step (`m` and `v` up, `m` and `v` down), which at a few
+    million parameters over PCIe is most of a step's optimizer time.
+    Returns `offsets[J]`."""
+    if kind != OPT_SGD and kind != OPT_ADAM and kind != OPT_ADAMW:
+        raise Error(
+            String("mojolearn training: kind must be 0 (SGD), 1 (Adam) or 2")
+            + String(" (AdamW), got ")
+            + String(kind)
+        )
+    if t < 1:
+        raise Error(
+            String("mojolearn training: t is ONE-BASED and the first step of")
+            + String(" a run is t = 1, got ")
+            + String(t)
+            + String(" (at t = 0 the bias correction 1 - beta^0 is exactly 0")
+            + String(" and step_scalars divides by it)")
+        )
+    var offsets = _offsets_from_ptr(offsets_ptr, n_tensors)
+    var n_total = offsets[n_tensors]
+    if len(m_state) < n_total or len(v_state) < n_total:
+        raise Error(
+            String("mojolearn training: the resident moments hold ")
+            + String(len(m_state)) + String(" and ") + String(len(v_state))
+            + String(" floats, the registry is ") + String(n_total)
+        )
+
     var cfg = OptimizerConfig(
         kind,
         lr,
@@ -358,12 +433,8 @@ def identical_optimizer_step_host(
     # ---- Transport in. Nothing above this line touched the device.
     var param = ctx.enqueue_create_buffer[DType.float32](n_total)
     var grad = ctx.enqueue_create_buffer[DType.float32](n_total)
-    var m_state = ctx.enqueue_create_buffer[DType.float32](n_total)
-    var v_state = ctx.enqueue_create_buffer[DType.float32](n_total)
     ctx.enqueue_copy(dst_buf=param, src_ptr=param_ptr)
     ctx.enqueue_copy(dst_buf=grad, src_ptr=grad_ptr)
-    ctx.enqueue_copy(dst_buf=m_state, src_ptr=m_ptr)
-    ctx.enqueue_copy(dst_buf=v_state, src_ptr=v_ptr)
     ctx.synchronize()
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
@@ -412,10 +483,8 @@ def identical_optimizer_step_host(
         t,
     )
 
-    # ---- Transport out.
+    # ---- Transport out (the moments stay where the caller keeps them).
     ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=param)
-    ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_state)
-    ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_state)
     if max_norm > Float32(0.0):
         # The gradient is scaled IN PLACE by the clip, so a caller who
         # inspects its own gradient array after the step sees the CLIPPED
@@ -444,8 +513,6 @@ def identical_optimizer_step_host(
 
     _ = param
     _ = grad
-    _ = m_state
-    _ = v_state
     _ = denom_out
     _ = q_out
     _ = sumsq

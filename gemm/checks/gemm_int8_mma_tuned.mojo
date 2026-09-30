@@ -469,7 +469,11 @@ def int8_pieces_dispatch_for(low_bandwidth: Bool, m: Int, n: Int, k: Int) -> Int
         return int8_pieces_dispatch(m, n, k)
     comptime if TARGET_COLUMN == COLUMN_NVIDIA:
         if low_bandwidth and m > INT8_TUNED_ROW_MAX_M:
-            if n > 8192 and k <= 8192:
+            # `k > 1024`: the wide dW row (mlp_down's 4096 x 14336 x 512)
+            # read 5.100 ms on the SQUARE plan against 4.384 on the H100
+            # choice (the S16-pass L4 evidence, bench/results/s16-pass-20260930),
+            # so a short contraction keeps the H100 choice whatever `n`
+            if n > 8192 and k <= 8192 and k > 1024:
                 return INT8_PIECES_PLAN_SQUARE
             if k > 8192:
                 return INT8_PIECES_PLAN_SMALL
