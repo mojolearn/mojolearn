@@ -34,3 +34,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T14:06:14Z	measurements/2026-10-01/neural-pass-amd.tar.gz	57f60ee84b2d02ec30e044083f76d607ebee64c55250c7ee66cf5b2bb7c760a3	8602097	mojolearn-steward-do-amd	/root/neural-pass-amd
 2026-10-01T14:06:16Z	measurements/2026-10-01/pr56-amd.tar.gz	259f3b62219ee859191e076c0270f7f2f799ad170eb7f766e3ef9c5602b8b0b5	6166423	mojolearn-steward-do-amd	/root/pr56-amd
 2026-10-01T14:12:02Z	measurements/2026-10-01/nv-extra.tar.gz	e7cfef658101bcbad5e7e9c9ddeee3b83c62e92ceb81f8f258b03a1b086bfe2c	46516	97c359a1d3ef	/root/nv-extra
+2026-10-01T14:20:08Z	measurements/2026-10-01/pr57-amd.tar.gz	ef31bf7a6b9eaaa06fa5c655e22683b94686989c530a84040a5788f080282cc2	4767388	mojolearn-steward-do-amd	/root/pr57-amd
+2026-10-01T14:20:11Z	measurements/2026-10-01/pr58-amd.tar.gz	af378a2f436d9de1f00e3a91c66da21a877063a426d51acbc8065c78042aeefe	11622614	mojolearn-steward-do-amd	/root/pr58-amd
+2026-10-01T14:20:45Z	measurements/2026-10-01/pr57-nvidia.tar.gz	f2e3d2cda55d63c993f8bc4ad39d9ca8fda2f14799a237e79931d8fb63178ad6	5643260	97c359a1d3ef	/root/pr57-nvidia
+2026-10-01T14:21:46Z	measurements/2026-10-01/pr58-nvidia.tar.gz	1d4e35d70a2f7fbb607da38d38179751f299e28a668399614599440dd4a05fbc	14259483	97c359a1d3ef	/root/pr58-nvidia
