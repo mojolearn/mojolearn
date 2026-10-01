@@ -1050,10 +1050,30 @@ class _RandomProjection(_Base):
 
     def transform(self, X):
         self._check()
+        k = self._kit()
+        if k.b is _rp_host_binding() and k.b is not None and not _is_sparse(X) and self.components_m_._d is None:
+            # the host route reads X's own buffer: `_M.from_input` copied all of
+            # X into an array first (792 MB at the board's 900K x 220). The
+            # same refusals, the same x_decomp_gemm call, the same bits.
+            a = as_f32_c(X, ndim=2, name="X")[0]
+            if a.ndim != 2 or min(a.shape) == 0:
+                raise ValueError("X: a nonempty two-dimensional input is required")
+            if a.shape[1] != self.n_features_in_:
+                raise ValueError(f"X has {a.shape[1]} features, but {type(self).__name__} is expecting {self.n_features_in_}")
+            fin = _host_all_finite(a)
+            if fin is not None:
+                if fin is False:
+                    raise ValueError("X: input must be finite; NaN/inf are unsupported")
+                from ._buffer import addr_ro
+                n, d = a.shape
+                out = _M.zeros(n, self.n_components_)
+                k.b.x_decomp_gemm(addr_ro(a, name="X"), self.components_m_.addr, out.addr, [n, d, self.n_components_, 0, 1])
+                del a
+                return out.out()
         M = _M.from_input(X)
         if M.c != self.n_features_in_:
             raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        return self._kit().mm(M, self.components_m_, tb=True).out()
+        return k.mm(M, self.components_m_, tb=True).out()
 
     def inverse_transform(self, X):
         self._check()
