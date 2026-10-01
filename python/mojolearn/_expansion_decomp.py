@@ -631,6 +631,19 @@ class _Kit:
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
         return Q
 
+    def orth_diag(self, A):
+        """`orth`, and the list of the two passes' R-diagonal products (A.c
+        floats): the sign of entry j orients Q's column j along A's, 0 marks
+        a dependent column (`orth_diag_cell`, lane neural-pass17)."""
+        diag = _M.zeros(1, A.c)
+        if A.r * A.c and self._use(A):
+            Q = self._dout(A.r, A.c)
+            self.b.x_decomp_dev_orth_diag(self._did(A), Q._d.id, diag.addr, [A.r, A.c])
+            return Q, list(diag.s)
+        Q = A.copy()
+        self.b.x_decomp_orth_diag(Q.addr, diag.addr, [A.r, A.c])
+        return Q, list(diag.s)
+
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
         W (n x k) the warm start, updated in place."""

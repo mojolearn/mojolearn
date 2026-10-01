@@ -1345,6 +1345,13 @@ def orth_rank_guard(R: F32Ptr, l: Int):
             R.unsafe_store(j * l + j, Float32(0))
 
 
+def orth_diag_cell(R: F32Ptr, diag: F32Ptr, j: Int, l: Int):
+    """diag[j] = diag[j] * R[j, j] (flushed): the orth passes' diagonal
+    product, whose sign orients an orthonormalized column along its input
+    (lane neural-pass17); 0 once the rank guard zeroed the pivot."""
+    diag.unsafe_store(j, ftz(identical_mul(ftz(diag.unsafe_load(j)), ftz(R.unsafe_load(j * l + j)))))
+
+
 def trsm_row(A: F32Ptr, R: F32Ptr, Q: F32Ptr, i: Int, l: Int):
     """Row i of Q = A R^-1 (R upper l x l): q_j = (a_j - sum_{t<j} q_t R[t, j])
     / R[j, j], j ascending, t ascending; a zero diagonal gives 0."""

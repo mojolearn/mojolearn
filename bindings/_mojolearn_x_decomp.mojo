@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py,
     geqrf_py, orgqr_py, als_cg_rows_py, mcd_py, lda_online_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py,
     rowsum_py, sqdist_py, vendor_py,
 )
@@ -17,7 +17,7 @@ from x_decomp.device import DevExec
 from x_decomp.host import HostExec
 from x_decomp.resident import (
     dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_rowsum_py,
-    dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_lda_rows_py,
+    dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py,
 )
 
 
@@ -37,6 +37,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[eigh_py[DevExec]]("x_decomp_eigh")
         m.def_function[cd_rows_py[DevExec]]("x_decomp_cd_rows")
         m.def_function[orth_py[DevExec]]("x_decomp_orth")
+        m.def_function[orth_diag_py[DevExec]]("x_decomp_orth_diag")
         m.def_function[svd_py[DevExec]]("x_decomp_svd")
         m.def_function[lasso_rows_py[DevExec]]("x_decomp_lasso_rows")
         m.def_function[omp_rows_py[DevExec]]("x_decomp_omp_rows")
@@ -71,6 +72,7 @@ def PyInit__mojolearn_x_decomp() abi("C") -> PythonObject:
         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
         m.def_function[dev_absmax_py]("x_decomp_dev_absmax")
         m.def_function[dev_orth_py]("x_decomp_dev_orth")
+        m.def_function[dev_orth_diag_py]("x_decomp_dev_orth_diag")
         m.def_function[dev_lda_rows_py]("x_decomp_dev_lda_rows")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[DevExec]]("x_decomp_vendor")
