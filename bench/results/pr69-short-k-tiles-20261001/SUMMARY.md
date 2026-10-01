@@ -11,3 +11,8 @@ ab_job2 pr69 (main 3befccd28 incl. #65, pre-#67, merged into each arm) + ATTN+ST
 Forward is noisy on this base (the fresh 64 MiB logits output, removed by #67). Train step: #69 -4%, pair -6%.
 Ticks ms/layer main / #69 / pair: q_proj 0.090/0.053/0.052, k 0.061/0.049/0.049, v 0.061/0.049/0.049, o 0.068/0.051/0.051,
 gate 0.118/0.100/0.100, up 0.119/0.103/0.102, down 0.120/0.149/0.141 (slower), bwd.mlp_through_oproj 1.304/1.194/1.160, bwd.after_attention 0.705/0.596/0.580.
+
+## AMD MI325X (DO pass11, main incl. #65 + #67)
+
+Same bits. lm-forward 23.1 / 23.1 vs 23.4 / 23.3; train 58.3 / 58.5 vs 58.5 / 58.4. Neutral (NVIDIA-only rule).
+MERGED after #68. R2 ab-pr69-amd.
