@@ -90,3 +90,6 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T22:14:42Z	measurements/2026-10-01/pr77-cpu-m2pro.tar.gz	4fe99a74808d4a71f7c30e35b1251cf300c86418594e513bd0a3ded3d028b9e9	5179	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr77-cpu
 2026-10-01T22:14:43Z	measurements/2026-10-01/pr78-cpu-m2pro.tar.gz	a557033d5668561235e5dbbc484374e0f8eb4fe01761b1bf1dee7ced4bd5b98f	13908	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr78-cpu
 2026-10-01T22:14:44Z	measurements/2026-10-01/pr79-cpu-m2pro.tar.gz	d82d1bd4238e090307b28618c0e9a80800c6cb9778d9f2fd0eefda893cc354b3	10587	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr79-cpu
+2026-10-01T22:27:53Z	measurements/2026-10-01/board-0834-nvc1-l40s.tar.gz	c0a568f65e659e54b358b0eb76e7f6626dc8962d477239d9bcb39b463b619b5d	21294759	b07640402f07	/root/board-0834
+2026-10-01T22:58:56Z	measurements/2026-10-01/board-0834-nvc1-l40s.tar.gz	d2489ab11d07d5fd5ccb611e3e71d220246d59cbef375a27ef44a4b5ad79a809	21379927	b07640402f07	/root/board-0834
+2026-10-01T22:58:59Z	measurements/2026-10-01/board-0834-hotaisle-mi300x.tar.gz	891d6cf87acbbb825b344f81639551b411d485eebeb9e7672b121fe085f3ecb7	245704	enc1-gpuvm005	/root/board-0834
