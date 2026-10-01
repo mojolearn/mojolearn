@@ -44,6 +44,7 @@ from . import _portable_math as math
 from . import _numeric_profile
 import operator
 import os
+import time as _time
 from pathlib import Path
 import struct
 import tempfile
@@ -1119,11 +1120,18 @@ class SmallByteLanguageModelTrainer:
         if not self._session_open:
             # Admission: `_validate_state` once, one upload (3n floats).
             self._open_session(binding, shape)
+        timing = bool(os.environ.get('MOJOLEARN_TRANSFORMER_TIMING'))
+        t0 = _time.perf_counter() if timing else 0.0
         out = zeros((batch, length, shape.vocab_size), '<f4')
+        if timing:
+            t1 = _time.perf_counter()
+            print('timing python.logits_zeros %.3f ms' % ((t1 - t0) * 1000.0), flush=True)
         try:
             written = binding.byte_lm_session_logits(
                 self._native_session, [addr_ro(tokens, name='ids'), addr(out, name='logits')],
                 [batch, length], list(shape.native_shape), self._state['completed_steps'])
+            if timing:
+                print('timing python.logits_binding %.3f ms' % ((_time.perf_counter() - t1) * 1000.0), flush=True)
             _require_written(written, batch * length * shape.vocab_size)
         except BaseException:
             try:
