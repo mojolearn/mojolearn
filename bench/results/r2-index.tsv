@@ -30,3 +30,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T12:52:04Z	measurements/2026-10-01/amd-toggle-sweep.tar.gz	b785f915c9ff8f366431fc98402be8f80c99244191814a1d05ebc3d1334e8d5c	37232	mojolearn-steward-do-amd	/root/amd-toggle-sweep
 2026-10-01T13:26:06Z	measurements/2026-10-01/neural-pass-nvidia.tar.gz	62aebdc2b5777c45bcd3267050451bc1b82e07cd199e0a17969ac514a134e05a	8377705	97c359a1d3ef	/root/neural-pass-nvidia
 2026-10-01T13:26:26Z	measurements/2026-10-01/pr56-nvidia.tar.gz	de4d05ba56c99f5f91f1f900df672c1c9a85e513f0888e0b1a4cf1498dec6e29	7426493	97c359a1d3ef	/root/pr56-nvidia
+2026-10-01T13:57:18Z	measurements/2026-10-01/pr54b-metal.tar.gz	546bad6174ab2c13cfb68d2e8731c88482f4e42621c02f880f1d8f7c34c11b25	380495	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr54b-metal
