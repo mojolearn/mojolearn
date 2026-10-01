@@ -11,7 +11,7 @@ from x_linear.ops import FP, IP, fa, fmad, fexp, ld, st, row_dot
 from checks.numerics import identical_sigmoid, ftz
 from x_linear.team import Team, TEAM_ROW_BUFS
 from x_linear.sgd import sgd_fit, sgd_team_rows
-from x_linear.glm import glm_fit
+from x_linear.glm import glm_fit, GLM_LS_BATCH
 from x_linear.huber import huber_fit
 from x_linear.bayes import bayes_ridge_fit, ard_fit
 from x_linear.lars import lars_fit
@@ -55,6 +55,8 @@ def team_rows(algo: Int, ip: IP) -> Int:
         return logcv_team_rows(ip)
     if algo == ALGO_SGD:
         return sgd_team_rows(ip)
+    if algo == ALGO_GLM:
+        return TEAM_ROW_BUFS + GLM_LS_BATCH  # the batched line search's loss rows (lane/neural-pass88)
     return TEAM_ROW_BUFS
 
 
