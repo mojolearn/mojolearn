@@ -1376,16 +1376,16 @@ def _svgp_cq_par(kuu: FP, cmat: FP, qsqrt: FP, luu: FP, ls: FP, m: Int, jitter: 
     host_parallelize(task, 2 * m)
 
 
-def _svgp_trace_par(bmat: FP, luu: FP, m: Int, out: FP):
-    """out[j] = ((L L^T)^-1 B[:, j])[j] for every j, as host tasks (host only)."""
-    def task(j: Int) {imm bmat, imm luu, imm m, imm out}:
+def _svgp_trace_par(bmat: FP, luu: FP, m: Int, dst: FP):
+    """dst[j] = ((L L^T)^-1 B[:, j])[j] for every j, as host tasks (host only)."""
+    def task(j: Int) {imm bmat, imm luu, imm m, imm dst}:
         var sc = List[Float32](length=2 * m, fill=Float32(0))
         var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
         var col = e.unsafe_offset(m)
         for i in range(m):
             e.unsafe_store(i, bmat.unsafe_load(i * m + j))
         _chol_solve(luu, m, e, col)
-        out.unsafe_store(j, col.unsafe_load(j))
+        dst.unsafe_store(j, col.unsafe_load(j))
         _ = sc^
 
     host_parallelize(task, m)
