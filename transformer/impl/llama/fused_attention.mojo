@@ -7774,6 +7774,10 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         stats.unsafe_store(tid, m)
         amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
     barrier()
+    comptime if is_defined["MOJOLEARN_ATTN_AMMA_PROBE_P1"]():
+        # PROBE (bench/attention_fwd_price_main.mojo only, never a shipped
+        # build): the kernel ends after pass 1, so its wall is pass 1's.
+        return
 
     # Pass 2: exp, the stash, the serial denominator (the original's lines).
     # lane/neural-apple2 (2026-09-28): the exp tile alternates between `tile`
@@ -7816,6 +7820,9 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         stats.unsafe_store(TQ + tid, ftz(dacc))
         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
     barrier()
+    comptime if is_defined["MOJOLEARN_ATTN_AMMA_PROBE_P12"]():
+        # PROBE: the kernel ends after pass 2 (passes 1 and 2's wall).
+        return
 
     # Pass 3: the context chain.
     var cacc = InlineArray[_AMMA_M64, CPS](fill=_AMMA_M64(0))
