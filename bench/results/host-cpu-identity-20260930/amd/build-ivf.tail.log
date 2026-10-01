@@ -1,0 +1,5 @@
+/root/hcid/src/./cluster/impl/detail/min_cluster_distance_compute.mojo:205:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_ivf.so (kernel-launch smoke skipped; binary checks ran)
+BUILD_DONE 0

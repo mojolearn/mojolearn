@@ -75,11 +75,13 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            width, 32 on Apple and NVIDIA and 64 on AMD's
                            CDNA3; `host_block_prefix_sum` replays the
                            32-wide shape. The scan feeds `binary_search_
-                           kernel` alone, and the three 2026-09-14 GPU
-                           columns agree on every k-means cell, so the
-                           64-wide AMD scan differs from the 32-wide one in
-                           no bit that reaches a draw on those fixtures;
-                           this file claims the 32-wide bits and says so.
+                           kernel` alone. The 64-wide AMD scan DID reach a
+                           draw (IVF at 40000 rows on the MI325X, pick 890,
+                           2026-09-30), so the device now calls
+                           `core/pinned_reduce.mojo::pinned_block_prefix_
+                           sum`, the 32-wide shape on every vendor under
+                           IDENTICAL (`cluster/checks/pinned_scan_check.
+                           mojo` gates replay == this oracle == library).
   `host_binary_search`     `binary_search_kernel`, `plus_plus.mojo:266`:
                            `target = u * csum[n - 1]`, the lower bound
                            under a strict `<`, clamped to `n - 1`.
