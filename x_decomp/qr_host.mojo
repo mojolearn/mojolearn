@@ -184,7 +184,7 @@ def _step_block(blk: _FP, colk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
 def _lane_mask(b: Int, k: Int, cols: Int) -> _B32:
     """The lanes of block b that are trailing columns of step k: k < j < cols."""
     var lane = iota[DType.int32, _W]() + Int32(b * _W)
-    return (lane > Int32(k)) & (lane < Int32(cols))
+    return lane.gt(Int32(k)) & lane.lt(Int32(cols))
 
 
 def _trailing_blocks(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
@@ -269,7 +269,7 @@ def _trailing_blocks_all(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols:
         var b1 = min(b0 + chunk, nb)
         for b in range(b0, b1):
             var lane = iota[DType.int32, _W]() + Int32(b * _W)
-            _step_block(base + b * m * _W, colk, t, k, m, lane < Int32(cols))
+            _step_block(base + b * m * _W, colk, t, k, m, lane.lt(Int32(cols)))
     if tasks <= 1:
         _run(0)
     else:
