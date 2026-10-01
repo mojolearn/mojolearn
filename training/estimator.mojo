@@ -379,6 +379,20 @@ def identical_optimizer_step_host(
 
 
 
+
+def opt_pool_buffers() -> Bool:
+    """Whether the resident step keeps per-handle parameter/gradient device
+    buffers (lane neural-pass34): the Apple column by default, a fresh pair
+    per step elsewhere; MOJOLEARN_OPT_POOL=0/1 forces either. On the L40S
+    the pooled pair read Adam's step 21 -> 25-31 ms (sgd/adamw even) while
+    the M3 Ultra's gain came from the pool and the staged download together.
+    A transport choice: no bit moves."""
+    var v = String(getenv("MOJOLEARN_OPT_POOL"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
+
+
 def opt_download_staged() -> Bool:
     """Whether the resident step downloads through its pinned stage (lane
     neural-pass26): the Apple column by default, the raw copy elsewhere;
