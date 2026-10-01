@@ -1114,9 +1114,11 @@ comptime _LU_KINDS = 10
 
 
 def _lu_tick(ctx: DeviceContext, mut lut: List[Int], mut luk: List[Int], slot: Int) raises:
-    """MOJOLEARN_XD_LU_TIMING=1: a sync before and after each launch kind
-    of the blocked LU, the wall accumulated per kind (slot -1 starts a
-    span). Off by default: no sync, no bit."""
+    """MOJOLEARN_XD_LU_TIMING=1: a sync at each panel's boundaries and
+    around its three trailing kernels, the wall accumulated per kind (slot
+    -1 starts a span): the panel's per-step launches as one span (a sync
+    per launch would cost more than those kernels on Metal). Off by
+    default: no sync, no bit."""
     if luk[0] != 1:
         return
     ctx.synchronize()
@@ -1128,16 +1130,16 @@ def _lu_tick(ctx: DeviceContext, mut lut: List[Int], mut luk: List[Int], slot: I
 
 def _lu_timing_print(lut: List[Int], n: Int):
     var names = List[String]()
-    names.append("pivot")
-    names.append("swap_cols")
-    names.append("diag")
-    names.append("act")
-    names.append("l")
-    names.append("update_panel")
+    names.append("panel_steps (pivot+swap+diag+act+l+update, or the fused panel)")
+    names.append("-")
+    names.append("-")
+    names.append("-")
+    names.append("-")
+    names.append("-")
     names.append("apply_swaps")
     names.append("trsm")
     names.append("trail_tiled")
-    names.append("panel_fused")
+    names.append("-")
     print("lu timing n =", n)
     for i in range(_LU_KINDS):
         print("  lu", names[i], lut[i] // 1000000, "ms")
@@ -1735,65 +1737,50 @@ struct DevExec(Exec):
             var fused = lu_panel_fused()
             while k0 < n:
                 var k1 = min(k0 + nb, n)
+                _lu_tick(ctx, lut, luk, -1)
                 if fused:
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_panel_fused_kernel](
                         da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), dact.unsafe_ptr(),
                         Int32(k0), Int32(k1), Int32(n), grid_dim=1, block_dim=LU_PANEL_TPB,
                     )
-                    _lu_tick(ctx, lut, luk, 9)
                 for k in range(k0 if not fused else k1, k1):
                     if pivot_block:
-                        _lu_tick(ctx, lut, luk, -1)
                         ctx.enqueue_function[lu_pivot_block_kernel](
                             da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
                         )
-                        _lu_tick(ctx, lut, luk, 0)
                     else:
                         ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_swap_cols_kernel](
                         da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), Int32(0), Int32(k1),
                         grid_dim=_blocks(k1), block_dim=TPB,
                     )
-                    _lu_tick(ctx, lut, luk, 1)
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_diag_kernel](
                         da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
                     )
-                    _lu_tick(ctx, lut, luk, 2)
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_act_kernel](ds.unsafe_ptr(), dact.unsafe_ptr(), Int32(k), grid_dim=1, block_dim=1)
-                    _lu_tick(ctx, lut, luk, 3)
                     if n - k - 1 > 0:
-                        _lu_tick(ctx, lut, luk, -1)
                         ctx.enqueue_function[lu_l_kernel](
                             da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
                         )
-                        _lu_tick(ctx, lut, luk, 4)
                     if k1 - k - 1 > 0 and n - k - 1 > 0:
-                        _lu_tick(ctx, lut, luk, -1)
                         ctx.enqueue_function[lu_update_panel_kernel](
                             da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), Int32(k1),
                             grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
                         )
-                        _lu_tick(ctx, lut, luk, 5)
+                _lu_tick(ctx, lut, luk, 0)
                 if k1 < n:
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_apply_swaps_kernel](
                         da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
                         grid_dim=_blocks(n - k1), block_dim=TPB,
                     )
                     _lu_tick(ctx, lut, luk, 6)
                     if k1 - k0 > 1:
-                        _lu_tick(ctx, lut, luk, -1)
                         ctx.enqueue_function[lu_trsm_kernel](
                             da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
                             grid_dim=_blocks(n - k1), block_dim=TPB,
                         )
                         _lu_tick(ctx, lut, luk, 7)
                     var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
-                    _lu_tick(ctx, lut, luk, -1)
                     ctx.enqueue_function[lu_trail_tiled_kernel](
                         da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
                         grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
