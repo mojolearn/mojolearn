@@ -22,7 +22,7 @@ the same order:
     which lane saw a candidate or in what probe order.
 """
 
-from std.gpu import WARP_SIZE, block_idx, thread_idx, lane_id
+from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
