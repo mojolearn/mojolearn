@@ -21,3 +21,17 @@ clipped step on, for adamw, adam and sgd alike. Each step now gets a copy. Not a
 | fixed15 table vs H100 choice | 0 of 422 digests differ; mlp_down bwd_dw now 0.99x (was 0.86x); lm_head 1.41x, mlp_up 1.51x, mlp_down bwd_dx 1.47x |
 
 AMD and Apple: not run.
+
+## AMD MI325X (tools/pass4_amd_job.sh on the DigitalOcean box)
+
+| check | result |
+|---|---|
+| optimizer_resident_check adamw / adam / sgd | PASS, every byte equal; resident 1.54x / 1.51x / 1.51x |
+| samba-train-step / lm-train-step, resident vs host optimizer | same; 205.7 vs 210.2 ms / 122.1 vs 124.7 ms |
+| Mamba-3 y + 10 gradients, regs and regs2, both shapes | = the NVIDIA digests |
+| S16 qk+s15 board shape: **regs 18.6 ms vs regs2 12.1 ms** | `regs` is 54% slower on AMD |
+| small-MLP GPU gate, mlp_step_check resident on/off | pass |
+
+**Follow-up merged (lane/s16-amd-default):** `m3_s16_qk_arm` defaults to `regs2` on the AMD column (compile time),
+`regs` elsewhere. Built and timed on the MI325X: default 12.07 ms (was 18.6 with `regs`), same digest (26abf7d3).
+The AMD samba-train-step regression (192.9 ms before PR #8 -> 205.7 ms) was this arm.
