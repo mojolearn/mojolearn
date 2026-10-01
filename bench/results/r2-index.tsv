@@ -75,3 +75,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T18:57:44Z	measurements/2026-10-01/ab-pr69-amd.tar.gz	df1db057f38c749a482745858275bc48dd38cbc599143909accaeb379efd6dc3	105770	mojolearn-steward-do-amd	/root/ab-pr69-amd
 2026-10-01T19:21:31Z	measurements/2026-10-01/ab-pr71-amd.tar.gz	0b5ebc26bfb6a867471a72cc9677bcc61c6c6429e05ddb4f281ad3917fdd1ddd	1382365719	mojolearn-steward-do-amd	/root/ab-pr71-amd
 2026-10-01T19:24:15Z	measurements/2026-10-01/ab-pr72-amd.tar.gz	52d01518505482f5716c50dc6faa6877f28d359456a26c61aeb6261ea0662db8	1382385982	mojolearn-steward-do-amd	/root/ab-pr72-amd
+2026-10-01T19:36:30Z	measurements/2026-10-01/glm73-nvidia.tar.gz	17cd3f390a1876389463de5649fff7fd86b0c8514094ab255c7cdacf161c64c1	3682	f003873fb257	/root/glm68-nvidia
+2026-10-01T19:48:52Z	measurements/2026-10-01/ab-pr57-amd.tar.gz	ca90d7bd943085ac277baf01704a68dcf006046bf761a2ae6be9934b4acdd1a3	1382315728	mojolearn-steward-do-amd	/root/ab-p57-amd
+2026-10-01T19:48:54Z	measurements/2026-10-01/glm73-amd.tar.gz	dd82598cc852f425afbcca0ccf0e8939d90bb0a994846c6aec129666fa45b23d	4084	mojolearn-steward-do-amd	/root/glm68-amd
+2026-10-01T19:48:56Z	measurements/2026-10-01/glm73-nvidia-final.tar.gz	ffbcaa15695401f1df79d93bc14057ff14da761e62a31584c110ac06179b5e63	4422	f003873fb257	/root/glm68-nvidia

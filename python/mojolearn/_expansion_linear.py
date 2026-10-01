@@ -20,7 +20,9 @@ binding and on the device); every score is `x_linear_decision`. Python only
 validates, encodes labels, assigns CV folds (integers) and unpacks the flat
 float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
+import os
 from . import _portable_math as _pm
+from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
@@ -62,13 +64,86 @@ def _vector(y, n, name="y"):
     return a
 
 
+#: lane/neural-pass68 (2026-10-01): the fits the device binding runs on ONE
+#: block (x_linear/dispatch.mojo team_fit: a Team of one threadgroup, every
+#: gradient and Hessian cell one thread's chain over all the rows, the
+#: objective's fold on the lead thread) and the host runs over its cores
+#: (par_rows): on the board's poisson taxi block (1,000,000 x 11) the device
+#: route costs 8 s a Newton iteration on the M4's GPU and 0.47 s on an L40S
+#: against 0.2 s on the M4's cores, the same bits either way (the host
+#: binding is the same IDENTICAL arithmetic). These take the host binding
+#: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
+_HOST_ALGOS = None
+
+
+def _host_algos():
+    global _HOST_ALGOS
+    if _HOST_ALGOS is None:
+        _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
+            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+    return _HOST_ALGOS
+
+
+_HOST_MODULE = []
+
+
+def _host_fit_module():
+    """`mojolearn.host._mojolearn_x_linear_host` when it is importable (every
+    install that ships the host set), else None; resolved once."""
+    if not _HOST_MODULE:
+        mod = None
+        try:
+            import importlib
+            pkg = __name__.rsplit(".", 1)[0]
+            cand = importlib.import_module(f"{pkg}.host.{_BINDING}_host")
+            if getattr(cand, "x_linear_fit", None) is not None:
+                mod = cand
+        except Exception:  # noqa: BLE001 - no host set: the device binding serves
+            mod = None
+        _HOST_MODULE.append(mod)
+    return _HOST_MODULE[0]
+
+
+def _glm_host(est):
+    """Whether this GLM fit takes the host route (peer measurement on the
+    #73 head, 2026-10-01, bits equal on both routes): on the MI325X the host
+    wins for every family (gamma 615 vs 1726 ms, tweedie 495 vs 1237), on
+    the L40S box the device is ahead for tweedie (631 vs 764 ms) and gamma
+    is a wash, and poisson's 11 Newton iterations take the host everywhere
+    (2.07 s vs 49 s). So NVIDIA keeps the device for every family but
+    poisson. MOJOLEARN_X_LINEAR_GLM_HOST=1 forces the host route and =0 the
+    device route on any vendor."""
+    forced = os.environ.get("MOJOLEARN_X_LINEAR_GLM_HOST", "").strip()
+    if forced == "1":
+        return True
+    if forced == "0":
+        return False
+    try:
+        vendor = str(_backend.vendor()).strip().lower()
+    except Exception:  # noqa: BLE001 - no vendor read-back: the host policy
+        vendor = ""
+    if vendor in ("cuda", "nvidia"):  # the read-back says "cuda" on an NVIDIA box
+        return type(est).__name__ == "PoissonRegressor"
+    return True
+
+
+def _fit_module(est, algo):
+    mode = getattr(est, "numeric_mode", None)
+    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
+            and (algo != ALGO_GLM or _glm_host(est)):
+        host = _host_fit_module()
+        if host is not None:
+            return host
+    return est._bind(_BINDING)
+
+
 def _run(est, algo, X, n, d, y, ip, fp, n_out, n_fw, n_iw):
     """One `x_linear_fit` call; the flat float32 result as a Python list."""
     out = empty((n_out,), "<f4")
     yy = y if y is not None else zeros((1,), "<f4")
     ip = [int(v) for v in ip]
     fp = [float(v) for v in fp]
-    est._bind(_BINDING).x_linear_fit(
+    _fit_module(est, algo).x_linear_fit(
         int(algo), addr_ro(X, name="X"), addr_ro(yy, name="y"),
         [n, d, X.size, 0 if y is None else yy.size, n_out, max(n_fw, 1), max(n_iw, 1), len(ip), len(fp)],
         ip, fp, addr(out, name="out"))
