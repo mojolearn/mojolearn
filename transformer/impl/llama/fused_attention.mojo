@@ -5663,10 +5663,15 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     comptime RPT = BJ // 16
     comptime CPT = HD // 16
     comptime TT = ATTN_KV_TT
-    var qs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var dcs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    #: lane/neural-pass52 (2026-10-01): the four tiles staged transposed,
+    #: `[col][tk]` at stride TT + 4, so the chain loop reads four consecutive
+    #: query rows of a column in one 16-byte shared load. The chain per cell
+    #: is still `tk` ascending: same bits.
+    comptime TSTR = TT + 4
+    var qs = stack_allocation[HD * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dcs = stack_allocation[HD * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[BJ * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[BJ * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
 
     var b = Int(b_in)
     var l = Int(l_in)
@@ -5736,8 +5741,8 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                     var off = (bb * l + t) * nh * HD + h * HD + c
                     qv = ftz(q_rope.unsafe_load(off))
                     dcv = ftz(dctx.unsafe_load(off))
-                qs.unsafe_store(i, qv)
-                dcs.unsafe_store(i, dcv)
+                qs.unsafe_store(c * TSTR + r, qv)
+                dcs.unsafe_store(c * TSTR + r, dcv)
             # y and dcell tiles [TT][BJ], coalesced along j.
             comptime for si in range(TT * BJ // 256):
                 var i = tid + si * 256
@@ -5754,26 +5759,40 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                         yv = y_st.unsafe_load(cell)
                         dsv = ds_st.unsafe_load(cell)
                 comptime if SAB:
-                    ys.unsafe_store(i, _flip_ulp(yv))
-                    dss.unsafe_store(i, _flip_ulp(dsv))
+                    ys.unsafe_store(c * TSTR + r, _flip_ulp(yv))
+                    dss.unsafe_store(c * TSTR + r, _flip_ulp(dsv))
                 else:
-                    ys.unsafe_store(i, yv)
-                    dss.unsafe_store(i, dsv)
+                    ys.unsafe_store(c * TSTR + r, yv)
+                    dss.unsafe_store(c * TSTR + r, dsv)
             barrier()
-            comptime for tk in range(TT):
-                var t = tq0 + tk
-                var qa = SIMD[DType.float32, CPT](0.0)
-                var da = SIMD[DType.float32, CPT](0.0)
+            comptime for t4 in range(TT // 4):
+                comptime tk0 = t4 * 4
+                var q4 = SIMD[DType.float32, CPT * 4](0.0)
+                var d4 = SIMD[DType.float32, CPT * 4](0.0)
+                var s4 = SIMD[DType.float32, RPT * 4](0.0)
+                var y4 = SIMD[DType.float32, RPT * 4](0.0)
                 comptime for v in range(CPT):
-                    qa[v] = qs.unsafe_load(tk * HD + tc + v * 16)
-                    da[v] = dcs.unsafe_load(tk * HD + tc + v * 16)
+                    var q4_ld = qs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        q4[v * 4 + qq] = q4_ld[qq]
+                    var d4_ld = dcs.unsafe_load[width=4, alignment=16]((tc + v * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        d4[v * 4 + qq] = d4_ld[qq]
                 comptime for u in range(RPT):
-                    if t < l and Int32(t) >= lo[u] and Int32(t) <= hi[u]:
-                        var dcell = dss.unsafe_load(tk * BJ + tr + u * 16)
-                        var yv = ys.unsafe_load(tk * BJ + tr + u * 16)
-                        comptime for v in range(CPT):
-                            dk_acc[u * CPT + v] = _step_preflushed(dcell, qa[v], dk_acc[u * CPT + v])
-                            dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
+                    var s4_ld = dss.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        s4[u * 4 + qq] = s4_ld[qq]
+                    var y4_ld = ys.unsafe_load[width=4, alignment=16]((tr + u * 16) * TSTR + tk0)
+                    comptime for qq in range(4):
+                        y4[u * 4 + qq] = y4_ld[qq]
+                comptime for q in range(4):
+                    comptime tk = tk0 + q
+                    var t = tq0 + tk
+                    comptime for u in range(RPT):
+                        if t < l and Int32(t) >= lo[u] and Int32(t) <= hi[u]:
+                            comptime for v in range(CPT):
+                                dk_acc[u * CPT + v] = _step_preflushed(s4[u * 4 + q], q4[v * 4 + q], dk_acc[u * CPT + v])
+                                dv_acc[u * CPT + v] = _step_preflushed(y4[u * 4 + q], d4[v * 4 + q], dv_acc[u * CPT + v])
             barrier()
         # The end of this head's visible run for every key this thread
         # holds: a `-0.0` here could be laundered by the masked tail --
@@ -6988,8 +7007,12 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     grid `B * nh * ceil(L / TQ)`.  TQ changes ownership only across query
     rows; every row still folds visible keys in ascending order."""
     comptime BK = FUSED_THREADS // TQ
-    comptime KSTRIDE = HD + 1
-    comptime ESTRIDE = BK + 1
+    #: lane/neural-pass52 (2026-10-01): strides padded to a multiple of 4
+    #: (same bank spread as + 1) so the dy chain reads four `p` of a V row
+    #: and of the dctx row, and the z chain four keys of y and dy, in one
+    #: 16-byte shared load each. Same chains, `p` and `j` ascending.
+    comptime KSTRIDE = HD + 4
+    comptime ESTRIDE = BK + 4
     comptime SLOTS = (BK * HD + FUSED_THREADS - 1) // FUSED_THREADS
     comptime DSLOTS = (TQ * HD + FUSED_THREADS - 1) // FUSED_THREADS
     comptime DPAGE = TQ * HD if DRES else 1
@@ -6998,21 +7021,25 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     var vs = stack_allocation[
         BK * KSTRIDE,
         Scalar[DType.float32],
+        alignment = 16,
         address_space = AddressSpace.SHARED,
     ]()
     var ys = stack_allocation[
         TQ * ESTRIDE,
         Scalar[DType.float32],
+        alignment = 16,
         address_space = AddressSpace.SHARED,
     ]()
     var dys = stack_allocation[
         TQ * ESTRIDE,
         Scalar[DType.float32],
+        alignment = 16,
         address_space = AddressSpace.SHARED,
     ]()
     var dsh = stack_allocation[
         DPAGE,
         Scalar[DType.float32],
+        alignment = 16,
         address_space = AddressSpace.SHARED,
     ]()
 
@@ -7064,7 +7091,7 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     var stbase = row * s
     var d_row = ftz(denom.unsafe_load(row))
 
-    var vec = stack_allocation[VLEN, Scalar[DType.float32]]()
+    var vec = stack_allocation[VLEN, Scalar[DType.float32], alignment = 16]()
     comptime if DRES:
         # DEVIATION 2651: the block's dctx rows, once, `[TQ][HD]`, through
         # `ftz` from the same index the register copy reads.
@@ -7100,12 +7127,16 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
             var j = kb * BK + kj
             if j >= j_lo and j <= j_hi:
                 var dy = Float32(0.0)
-                comptime if DRES:
-                    comptime for p in range(HD):
-                        dy = _step_preflushed(dsh.unsafe_load(tr * HD + p), vs.unsafe_load(kj * KSTRIDE + p), dy)
-                else:
-                    comptime for p in range(HD):
-                        dy = _step_preflushed(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                comptime for p4 in range(HD // 4):
+                    comptime p0 = p4 * 4
+                    var v4 = vs.unsafe_load[width=4, alignment=16](kj * KSTRIDE + p0)
+                    var a4: SIMD[DType.float32, 4]
+                    comptime if DRES:
+                        a4 = dsh.unsafe_load[width=4, alignment=16](tr * HD + p0)
+                    else:
+                        a4 = vec.unsafe_load[width=4, alignment=16](p0)
+                    comptime for q in range(4):
+                        dy = _step_preflushed(a4[q], v4[q], dy)
                 var dyv = ftz(dy)
                 var ecell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, tt, j, l, nh, s, pos0, key_lo, window)
                 var e = e_st.unsafe_load(ecell)
@@ -7119,14 +7150,14 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                 dy_st.unsafe_store(stbase + j, dyv)
         barrier()
         if valid and kj == 0:
-            for jj in range(BK):
-                var j = kb * BK + jj
-                if j >= j_lo and j <= j_hi:
-                    z = _step_preflushed(
-                        dys.unsafe_load(tr * ESTRIDE + jj),
-                        ys.unsafe_load(tr * ESTRIDE + jj),
-                        z,
-                    )
+            comptime for j4 in range(BK // 4):
+                comptime jj0 = j4 * 4
+                var dy4 = dys.unsafe_load[width=4, alignment=16](tr * ESTRIDE + jj0)
+                var y4 = ys.unsafe_load[width=4, alignment=16](tr * ESTRIDE + jj0)
+                comptime for q in range(4):
+                    var j = kb * BK + jj0 + q
+                    if j >= j_lo and j <= j_hi:
+                        z = _step_preflushed(dy4[q], y4[q], z)
         barrier()
     if valid and kj == 0:
         var zf = ftz(z)
