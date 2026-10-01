@@ -1,0 +1,4 @@
+main transformer-infer median_ms=37.97359764575958 
+main samba-infer median_ms=220.04053369164467 mean_nll": 5.635909657868805} 
+branch transformer-infer median_ms=25.797057896852493 
+branch samba-infer median_ms=202.05588825047016 mean_nll": 5.635909657868805} 

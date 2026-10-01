@@ -1,0 +1,16 @@
+stage walls of the last policy call (61.4 ms ticked):
+  hblk.fwd.softmax                16.41 ms   26.7%
+  hblk.fwd.scores                 13.79 ms   22.5%
+  hblk.fwd.value_sum               9.80 ms   16.0%
+  hblk.fwd.gate_up_proj            6.77 ms   11.0%
+  hblk.fwd.qkv_proj                4.73 ms    7.7%
+  hblk.fwd.down_proj_residual2     3.55 ms    5.8%
+  hblk.fwd.kv_gather               1.50 ms    2.4%
+  hblk.fwd.o_proj                  1.39 ms    2.3%
+  hblk.fwd.mask                    1.04 ms    1.7%
+  hblk.fwd.rope                    0.83 ms    1.4%
+  hblk.fwd.residual1_norm2         0.75 ms    1.2%
+  hblk.fwd.norm1                   0.53 ms    0.9%
+  hblk.fwd.silu                    0.29 ms    0.5%
+transformer: one thread 443.5 ms, policy 75.6 ms, ratio 5.87x, 786432 floats, sha256 one 93b0da9f81be0dc5 policy 93b0da9f81be0dc5
+HOST_THREADS_AB PASS transformer
