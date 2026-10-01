@@ -376,7 +376,16 @@ def t_fold_fa_staged(t: Team, v: FP, off: Int, n: Int, init: Float32 = Float32(0
                         buf[nxt + u] = ld(v, off + base + u)
             if t.lead():
                 var cnt_c = min(STAGE_CH, n - c * STAGE_CH)
-                for u in range(cnt_c):
+                var u = 0
+                while u + 32 <= cnt_c:
+                    var blk = SIMD[DType.float32, 32]()
+                    comptime for k in range(32):
+                        blk[k] = buf[cur + u + k]
+                    comptime for k in range(32):
+                        acc = _acc_fa(acc, blk[k])
+                    u += 32
+                while u < cnt_c:
                     acc = _acc_fa(acc, buf[cur + u])
+                    u += 1
             t.sync()
         return acc
