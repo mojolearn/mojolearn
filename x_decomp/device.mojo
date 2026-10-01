@@ -8,7 +8,11 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.ffi import _Global
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import memcpy
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
@@ -875,10 +879,84 @@ def _blocks(count: Int) -> Int:
     return (count + TPB - 1) // TPB if count > 0 else 1
 
 
-def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
-    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+# ---- host <-> device transfers through a pinned stage (lane neural-pass27, 2026-10-01)
+#
+# Measured on the Apple M4 through Mojo's Metal context, per 64 MB: a raw
+# host-pointer upload costs ~20 ms the first time a host region is used (every
+# fresh numpy array) and 1.5 ms warm; a device-to-host-pointer download ~21 ms
+# every time; a pinned host buffer DMAs both ways in 2-3 ms, the CPU writes it
+# at full speed, and the CPU reads it at ~3 GB/s on one thread (it is
+# write-combined) but at 10 GB/s and more on four or more threads; a raw
+# upload of a fresh array, on the other hand, is 1.6-2.4 ms, faster than a
+# staged one. So on the Apple column every DOWNLOAD of at least XD_STAGE_MIN
+# floats goes in chunks through ONE pinned stage of XD_STAGE_FLOATS: DMA out,
+# then a read over host tasks; uploads stay raw. Copies only: no bit moves.
+# MOJOLEARN_XD_STAGE=0 keeps the raw download on Apple; MOJOLEARN_XD_STAGE=1
+# turns the stage on elsewhere (NVIDIA and AMD copy pageable memory at tens
+# of GB/s and are not measured).
+comptime XD_STAGE_FLOATS = 1 << 24
+comptime XD_STAGE_MIN = 1 << 18
+
+
+struct _XdStage(Defaultable, Movable):
+    var buf: Optional[HostBuffer[DType.float32]]
+
+    def __init__(out self):
+        self.buf = Optional[HostBuffer[DType.float32]]()
+
+
+comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageIdentical", init_fn=_XdStage.__init__]
+
+
+def _xd_staged(n: Int) -> Bool:
+    if n < XD_STAGE_MIN:
+        return False
+    var v = String(getenv("MOJOLEARN_XD_STAGE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
+
+
+def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
+    """The process's pinned stage (XD_STAGE_FLOATS floats), created on first use."""
+    var slot = X_DECOMP_STAGE.get_or_create_ptr()
+    if not slot[].buf:
+        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
+        ctx.synchronize()
+    return F32Ptr(unsafe_from_address=Int(slot[].buf.value().unsafe_ptr()))
+
+
+def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
+    """`memcpy(dst, src, n)` over host tasks: the one read of pinned memory."""
+    var tasks = host_predict_task_count(1 << 30)
+    if tasks > 16:
+        tasks = 16
+    if n < XD_STAGE_MIN or tasks <= 1:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    var chunk = (n + tasks - 1) // tasks
+
+    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_piece, tasks)
+
+
+def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
+    """Host floats into `buf[0, n)`: the raw host-pointer copy. Measured on
+    the M4 a fresh 64 MB array uploads this way in 1.6-2.4 ms (only the
+    process's first upload pays ~9-20 ms); a memcpy-plus-DMA stage took
+    4.3 ms, so uploads are not staged."""
     if n > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=p)
+
+
+def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
+    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    _up_into(ctx, buf, p, n)
     return buf^
 
 
@@ -890,8 +968,19 @@ def _up_i(ctx: DeviceContext, p: I32Ptr, n: Int) raises -> DeviceBuffer[DType.in
 
 
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
-    if n > 0:
+    if n <= 0:
+        return
+    if not _xd_staged(n):
         ctx.enqueue_copy(dst_ptr=p, src_buf=buf.create_sub_buffer[DType.float32](0, n))
+        return
+    var stage = _xd_stage_ptr(ctx)
+    var off = 0
+    while off < n:
+        var cnt = min(XD_STAGE_FLOATS, n - off)
+        ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
+        ctx.synchronize()
+        _xd_read_out(p + off, stage, cnt)
+        off += cnt
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: Int) raises:
