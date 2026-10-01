@@ -1,0 +1,10 @@
+04:25:24 build-x_decomp rc=0
+04:25:32 build-linalg rc=0
+04:25:32 build-x_decomp_host rc=2
+04:25:56 prep rc=0
+04:26:00 race-gaussian-rp-before-istella rc=0
+04:26:03 race-gaussian-rp-after-istella rc=0
+04:26:08 race-sparse-rp-before-istella rc=0
+04:26:11 race-sparse-rp-after-istella rc=0
+04:29:06 race-svd-before-istella rc=0
+04:31:15 race-svd-after-istella rc=0

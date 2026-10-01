@@ -1,0 +1,230 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/decomp-nvidia/venv-after/bin/python",
+        "/root/mojolearn-pass27/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "sparse-rp",
+        "--dataset",
+        "istella",
+        "--data",
+        "/root/decomp-nvidia/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "d01cdcaa5dd4ef1c",
+        "d01cdcaa5dd4ef1c",
+        "d01cdcaa5dd4ef1c",
+        "d01cdcaa5dd4ef1c"
+      ],
+      "infer_ms": [
+        63.45544010400772,
+        69.58737410604954,
+        66.28686934709549
+      ],
+      "infer_warmup_ms": 73.87617230415344,
+      "info": {
+        "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
+        "device": "gpu",
+        "device_name": "NVIDIA L40S",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/decomp-nvidia/venv-after/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cuda",
+        "version": "0.8.32"
+      },
+      "median_ms": 104.19646836817265,
+      "mem": [
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1111.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1131.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1132.0,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1132.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        100.3693975508213,
+        104.4099759310484,
+        104.19646836817265
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "compute_inverse_components": false,
+          "dense_output": false,
+          "density": "auto",
+          "eps": 0.1,
+          "n_components": 10,
+          "random_state": 7
+        },
+        "source": "get_params"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit(X)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 253.98068688809872
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "4500d408cc724dce0ca8c17554e77859c4cee2cc75d4c55553e02e55547e5d0c",
+        "shape": [
+          1000000,
+          220
+        ]
+      }
+    },
+    "block": "tsvd",
+    "data_root": "/root/datasets/gbm-bench",
+    "dataset": "istella",
+    "loader": "speed_gbdt_arm.load_istella('shipped', regression=True)",
+    "rows": "stride sample of 1000000 of 2043304 train rows",
+    "rule": "tools/bench_board_more.py prep",
+    "scaling": "none",
+    "seed": 7,
+    "sentinel_cells_replaced": {
+      "X": 649059
+    },
+    "smoke_max_rows": null,
+    "written": "2026-10-01T04:25:56Z"
+  },
+  "commit": "unknown",
+  "dataset": "istella",
+  "finished": "2026-10-01T04:26:11Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": true,
+        "digests": [
+          "d01cdcaa5dd4ef1c",
+          "d01cdcaa5dd4ef1c",
+          "d01cdcaa5dd4ef1c",
+          "d01cdcaa5dd4ef1c"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.SparseRandomProjection(compute_inverse_components=False, dense_output=False, density='auto', eps=0.1, n_components=10, random_state=7)",
+          "device": "gpu",
+          "device_name": "NVIDIA L40S",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/root/decomp-nvidia/venv-after/lib/python3.14/site-packages/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+          "numeric_mode_used": "identical",
+          "pre_clock_fit": false,
+          "vendor_used": "cuda",
+          "version": "0.8.32"
+        },
+        "ms": [
+          63.45544010400772,
+          69.58737410604954,
+          66.28686934709549
+        ],
+        "status": "ok",
+        "warmup_ms": 73.87617230415344
+      }
+    },
+    "batch": "Xq",
+    "call": "transform(Xq)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "sparse-rp",
+  "lane_config": {
+    "block": "tsvd",
+    "cuml": "cuml.random_projection:SparseRandomProjection",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "decomp",
+    "kind": "est",
+    "mismatches": [],
+    "notes": [
+      "n_components = 10, the cuML benchmark's"
+    ],
+    "ours_class": "mojolearn.SparseRandomProjection",
+    "params": {
+      "compute_inverse_components": false,
+      "dense_output": false,
+      "density": "auto",
+      "eps": 0.1,
+      "n_components": 10,
+      "random_state": 7
+    },
+    "quality": "mean |projected / original squared distance - 1| over 2,000 row pairs",
+    "sklearn": "sklearn.random_projection:SparseRandomProjection",
+    "task": "transform",
+    "timed_fit": "fit(X)",
+    "timed_infer": "transform(Xq)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "eps": 0.1,
+          "n_components": 10,
+          "seed": 7
+        },
+        "source": "get_params"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/sparse-rp",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "mean_abs_distortion": 1.883381293298582
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 900000x220; Xq 100000x220",
+  "started": "2026-10-01T04:26:08Z"
+}
