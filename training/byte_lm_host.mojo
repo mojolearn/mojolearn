@@ -372,30 +372,57 @@ def block_par(
 
     # ---- region B: attention over all heads and the rest of the block per
     # query chunk. The mask table is the block's, read only.
-    var mfill = mask_fill()
-    var masks = List[Float32](length=l * s, fill=unmasked_fill())
-    for qi in range(l):
-        for j in range(qi + 1, s):
-            masks[qi * s + j] = mfill
-    var scale = attention_scale(hd)
-    var out = List[Float32](length=l * dm, fill=Float32(0.0))
-    var ms = List[List[Float32]]()
-    ms.append(masks^)
-    var mp = ms.unsafe_ptr()
     var qrs = List[List[Float32]]()
     qrs.append(qr^)
     var krs = List[List[Float32]]()
     krs.append(kr^)
     var vs = List[List[Float32]]()
     vs.append(v^)
+    # The causal mask is formed inside `_softmax_head` (q_first = lo), so
+    # no [l, s] mask is built or copied (lane neural-pass16).
+    var scale = attention_scale(hd)
+    var out = List[Float32](length=l * dm, fill=Float32(0.0))
+    var ms = List[List[Float32]]()
+    ms.append(List[Float32]())
+    var mp = ms.unsafe_ptr()
+    # EVERY HEAD'S KEYS AND VALUES PACKED ONCE (lane neural-pass16): each
+    # post task packed the full key span of every head itself, so the packs
+    # were written `tasks` times a layer (64 tasks x 6 heads x 2048 x 64 x 2
+    # floats on a 64-core host). Now `kpacks[h]` ([hd, s], flushed) and
+    # `vpacks[h]` ([s, hd], flushed) are built once, (head, key range) over
+    # tasks, and every post task reads them. A pack is a copy through `ftz`;
+    # the products read the same values.
+    var kpacks = List[Float32](length=nh * hd * s, fill=Float32(0.0))
+    var vpacks = List[Float32](length=nh * s * hd, fill=Float32(0.0))
+    var kpk = kpacks.unsafe_ptr()
+    var vpk = vpacks.unsafe_ptr()
+    var ksrc = krs.unsafe_ptr()
+    var vsrc = vs.unsafe_ptr()
+    var pack_rows = nh * tasks
+    def _pack_task(r: Int) {imm ksrc, imm vsrc, imm kpk, imm vpk, imm tasks, imm chunk, imm s, imm hd, imm kw, imm n_rep}:
+        var h = r // tasks
+        var c = r % tasks
+        var kvh = h // n_rep
+        var lo = c * chunk
+        var hi = lo + chunk
+        if hi > s:
+            hi = s
+        var ksp = ksrc[0].unsafe_ptr()
+        var vsp = vsrc[0].unsafe_ptr()
+        for j in range(lo, hi):
+            for d in range(hd):
+                kpk.unsafe_store(h * hd * s + d * s + j, ftz(ksp.unsafe_load(j * kw + kvh * hd + d)))
+                vpk.unsafe_store(h * s * hd + j * hd + d, ftz(vsp.unsafe_load(j * kw + kvh * hd + d)))
+    if pack_rows == 1:
+        _pack_task(0)
+    else:
+        host_parallelize(_pack_task, pack_rows)
     var qtp = qrs.unsafe_ptr()
-    var ktp = krs.unsafe_ptr()
-    var vtp = vs.unsafe_ptr()
     var op = out.unsafe_ptr()
     for c in range(tasks):
         failed[c] = 0
 
-    def _post_task(c: Int) {imm tp, imm xp, imm mp, imm qtp, imm ktp, imm vtp, imm op, imm fp, imm chunk,
+    def _post_task(c: Int) {imm tp, imm xp, imm mp, imm qtp, imm kpk, imm vpk, imm op, imm fp, imm chunk,
                             imm l, imm s, imm dm, imm nh, imm hd, imm qw, imm kw, imm inter, imm n_rep,
                             imm tb, imm scale}:
         try:
@@ -406,7 +433,7 @@ def block_par(
             if lo >= hi:
                 return  # a trailing chunk past the last token: nothing to do
             var rows = hi - lo
-            var mchunk = copy_rows(mp[0], lo, hi, s)
+            var mchunk = mp[0].copy()  # empty: the fill is formed in the kernel
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
             var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
             var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
@@ -414,23 +441,19 @@ def block_par(
             var cell = List[Float32](length=rows * s, fill=Float32(0.0))
             var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
             var qsp = qtp[0].unsafe_ptr()
-            var ksp = ktp[0].unsafe_ptr()
-            var vsp = vtp[0].unsafe_ptr()
             var qmp = qmat.unsafe_ptr()
             var kpp = kpack.unsafe_ptr()
             var vpp = vpack.unsafe_ptr()
             for h in range(nh):
-                var kvh = h // n_rep
                 for qi in range(rows):
                     for d in range(hd):
                         qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
-                for j in range(s):
-                    for d in range(hd):
-                        kpp.unsafe_store(d * s + j, ftz(ksp.unsafe_load(j * kw + kvh * hd + d)))
-                        vpp.unsafe_store(j * hd + d, ftz(vsp.unsafe_load(j * kw + kvh * hd + d)))
+                # this head's shared packs, a block copy each
+                unsafe_memcpy(dest=kpp, src=kpk.unsafe_offset(h * hd * s), count=hd * s)
+                unsafe_memcpy(dest=vpp, src=vpk.unsafe_offset(h * s * hd), count=s * hd)
                 gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
-                _softmax_head(cell, mchunk, rows, s, scale, aweights)
-                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx)
+                _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
+                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
@@ -458,6 +481,8 @@ def block_par(
     _ = qrs^
     _ = krs^
     _ = vs^
+    _ = kpacks^
+    _ = vpacks^
     for c in range(tasks):
         if failed[c] != 0:
             raise Error("byte LM host: token chunk " + String(c) + " raised in attention or the MLP")

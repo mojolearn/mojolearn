@@ -948,6 +948,8 @@ def softmax_backward_into(
     s: Int,
     mut zdot: List[Float32],
     mut ds: List[Float32],
+    own0: Int = -1,
+    window: Int = 0,
 ) raises:
     """The backward of seams S14 through S18, as ONE closed form.
     DEVIATIONS 1406 and 1407.
@@ -1033,11 +1035,17 @@ def softmax_backward_into(
     ds = host_f32_uninit(rows * s)
     var tasks = host_row_tasks(rows, 6 * s)
     var chunk = (rows + tasks - 1) // tasks
-    def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm chunk}:
+    # The `z` fold runs over the VISIBLE keys only when the caller names
+    # `own0` (lane neural-pass10): a masked key's `y` is exactly `+0.0`, so
+    # its fma term is inert in the `+0.0`-seeded chain, the theorem this
+    # docstring proves above. `dS` is still written for every key (a
+    # masked cell's `+0.0 * diff` keeps its own sign of zero).
+    def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm l, imm own0, imm window, imm chunk}:
         for r in range(task * chunk, min((task + 1) * chunk, rows)):
             var base = r * s
+            var vis = _visible_keys_bwd(own0, window, r % l, s)
             var z = Float32(0.0)
-            for j in range(s):
+            for j in range(vis[0], vis[1] + 1):
                 z = ftz(
                     identical_mul_add(
                         ftz(dy[base + j]), ftz(y[base + j]), z
@@ -1059,6 +1067,42 @@ def softmax_backward_into(
 # ===========================================================================
 
 
+@always_inline
+def _visible_keys_bwd(own0: Int, window: Int, qi: Int, s: Int) -> Tuple[Int, Int]:
+    """`transformer_oracle._visible_keys`: the keys query `qi` attends to,
+    `[jlo, jhi]` inclusive; `own0 < 0` means every key."""
+    if own0 < 0:
+        return (0, s - 1)
+    var jhi = own0 + qi
+    if jhi > s - 1:
+        jhi = s - 1
+    var jlo = 0
+    if window > 0:
+        jlo = own0 + qi - window + 1
+        if jlo < 0:
+            jlo = 0
+    return (jlo, jhi)
+
+
+@always_inline
+def _visible_queries_bwd(own0: Int, window: Int, j: Int, l: Int) -> Tuple[Int, Int]:
+    """The queries of this call that attend to key `j`, `[tlo, thi]`
+    inclusive, the same rule read the other way: `j <= own0 + tt` and, under
+    a window, `j > own0 + tt - window`. Empty (`tlo > thi`) for a key no
+    query sees; `own0 < 0` means every query."""
+    if own0 < 0:
+        return (0, l - 1)
+    var tlo = j - own0
+    if tlo < 0:
+        tlo = 0
+    var thi = l - 1
+    if window > 0:
+        var last = j - own0 + window - 1
+        if last < thi:
+            thi = last
+    return (tlo, thi)
+
+
 def _bwd_attention_chains(
     dqk: List[Float32],
     kcache: List[Float32],
@@ -1069,9 +1113,16 @@ def _bwd_attention_chains(
     mut d_k: List[Float32],
     mut d_v: List[Float32],
     b: Int, l: Int, s: Int, nh: Int, nkv: Int, n_rep: Int, hd: Int, qw: Int,
+    own0: Int = -1, window: Int = 0,
 ):
     """The d_q_rope, d_k_cache and d_v_cache chains (see the call site), as
-    `head_dim` SIMD lanes per row, rows over host tasks (lane neural-cpu)."""
+    `head_dim` SIMD lanes per row, rows over host tasks (lane neural-cpu).
+    With `own0` named, each chain runs over the VISIBLE (query, key) pairs
+    only (lane neural-pass10): a masked pair's `d_qk_cell` is a signed zero
+    and its `attn.weights` is `+0.0`, so its fma terms are inert in the
+    `+0.0`-seeded chains (the softmax backward's theorem). A key no query
+    of this call sees keeps the chain's seed, `+0.0`, which the full walk
+    also produced."""
     var dqkp = dqk.unsafe_ptr()
     var kp = kcache.unsafe_ptr()
     var qp = qrope.unsafe_ptr()
@@ -1095,7 +1146,8 @@ def _bwd_attention_chains(
     # fma latency of one chain overlaps three others. The `vec_hd` tail keeps
     # one vector, then one lane.
     comptime G4 = 4 * HOST_FW
-    def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm qrows, imm qchunk, imm vec_hd}:
+    comptime V64 = 64 // HOST_FW
+    def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm own0, imm window, imm qrows, imm qchunk, imm vec_hd}:
         for r in range(t * qchunk, min((t + 1) * qchunk, qrows)):
             var h = r % nh
             var qi = (r // nh) % l
@@ -1104,13 +1156,29 @@ def _bwd_attention_chains(
             var wbase = ((bb * nh + h) * l + qi) * s
             var vbase = (bb * nkv + kv) * s * hd
             var obase = (bb * l + qi) * qw + h * hd
+            var vis = _visible_keys_bwd(own0, window, qi, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
             var d = 0
+            # head_dim 64: every lane of the head in flight in one pass over
+            # the keys (lane neural-pass10); each lane's chain unchanged.
+            if vec_hd == 64:
+                var accs = InlineArray[F32V, V64](fill=F32V(0.0))
+                for j in range(jlo, jhi + 1):
+                    var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                    var row = vbase + j * hd
+                    comptime for v in range(V64):
+                        accs[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                            w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + v * HOST_FW)), accs[v]))
+                comptime for v in range(V64):
+                    dqp.unsafe_store(obase + v * HOST_FW, accs[v])
+                continue
             while d + G4 <= vec_hd:
                 var a0 = F32V(0.0)
                 var a1 = F32V(0.0)
                 var a2 = F32V(0.0)
                 var a3 = F32V(0.0)
-                for j in range(s):
+                for j in range(jlo, jhi + 1):
                     var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
                     var row = vbase + j * hd + d
                     a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row)), a0))
@@ -1124,7 +1192,7 @@ def _bwd_attention_chains(
                 d += G4
             while d < vec_hd:
                 var acc = F32V(0.0)
-                for j in range(s):
+                for j in range(jlo, jhi + 1):
                     acc = ftz_lanes(identical_mul_add_simd[HOST_FW](
                         F32V(ftz(dqkp.unsafe_load(wbase + j))),
                         ftz_lanes(kp.unsafe_load[width=HOST_FW](vbase + j * hd + d)), acc))
@@ -1132,7 +1200,7 @@ def _bwd_attention_chains(
                 d += HOST_FW
             while d < hd:
                 var acc_s = Float32(0.0)
-                for j in range(s):
+                for j in range(jlo, jhi + 1):
                     acc_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(kp.unsafe_load(vbase + j * hd + d)), acc_s))
                 dqp.unsafe_store(obase + d, acc_s)
                 d += 1
@@ -1146,12 +1214,15 @@ def _bwd_attention_chains(
     var ktasks = host_row_tasks(krows, 2 * n_rep * l * hd)
     var kchunk = (krows + ktasks - 1) // ktasks
 
-    def _kv_rows(t: Int) {imm dqkp, imm qp, imm awp, imm dcp, imm dkp, imm dvp, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm krows, imm kchunk, imm vec_hd}:
+    def _kv_rows(t: Int) {imm dqkp, imm qp, imm awp, imm dcp, imm dkp, imm dvp, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm own0, imm window, imm krows, imm kchunk, imm vec_hd}:
         for r in range(t * kchunk, min((t + 1) * kchunk, krows)):
             var j = r % s
             var kv = (r // s) % nkv
             var bb = r // (s * nkv)
             var obase = r * hd
+            var qvis = _visible_queries_bwd(own0, window, j, l)
+            var tlo = qvis[0]
+            var thi = qvis[1]
             var d = 0
             while d + G4 <= vec_hd:
                 var k0 = F32V(0.0)
@@ -1164,7 +1235,7 @@ def _bwd_attention_chains(
                 var v3 = F32V(0.0)
                 for hh in range(n_rep):
                     var h = kv * n_rep + hh
-                    for tt in range(l):
+                    for tt in range(tlo, thi + 1):
                         var wbase = ((bb * nh + h) * l + tt) * s
                         var rowq = (bb * l + tt) * qw + h * hd + d
                         var wq = F32V(ftz(dqkp.unsafe_load(wbase + j)))
@@ -1191,7 +1262,7 @@ def _bwd_attention_chains(
                 var av = F32V(0.0)
                 for hh in range(n_rep):
                     var h = kv * n_rep + hh
-                    for tt in range(l):
+                    for tt in range(tlo, thi + 1):
                         var wbase = ((bb * nh + h) * l + tt) * s
                         var rowq = (bb * l + tt) * qw + h * hd + d
                         ak = ftz_lanes(identical_mul_add_simd[HOST_FW](
@@ -1208,7 +1279,7 @@ def _bwd_attention_chains(
                 var av_s = Float32(0.0)
                 for hh in range(n_rep):
                     var h = kv * n_rep + hh
-                    for tt in range(l):
+                    for tt in range(tlo, thi + 1):
                         var wbase = ((bb * nh + h) * l + tt) * s
                         var rowq = (bb * l + tt) * qw + h * hd + d
                         ak_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(qp.unsafe_load(rowq)), ak_s))
@@ -1558,7 +1629,7 @@ def transformer_block_backward_oracle(
     var zdot = List[Float32]()
     var dsoft = List[Float32]()
     softmax_backward_into(
-        st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft
+        st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft, own0, window
     )
     st.attn_zdot = zdot^
     st.d_attn_masked = dsoft^
@@ -1714,7 +1785,7 @@ def transformer_block_backward_oracle(
     _bwd_attention_chains(
         st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
         st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
-        b, l, s, nh, nkv, n_rep, hd, qw,
+        b, l, s, nh, nkv, n_rep, hd, qw, own0, window,
     )
     host_tick(hton, htk, "bwd.attention_chains")
 

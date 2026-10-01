@@ -1322,6 +1322,48 @@ def apply_rope_into(
                 out.append(ftz(ftz(pa) + ftz(pb)))
 
 
+@always_inline
+def _visible_keys(own0: Int, window: Int, qi: Int, s: Int) -> Tuple[Int, Int]:
+    """The keys query `qi` attends to, `[jlo, jhi]` inclusive, the mask's
+    own rule read back: key `j` is visible when `key_lo + j <= p` and, under
+    a window, `key_lo + j > p - window`, with `p = pos0 + qi` and
+    `own0 = pos0 - key_lo`. `own0 < 0` means every key (the mask-free
+    callers). The range is never empty: key `own0 + qi` is always visible."""
+    if own0 < 0:
+        return (0, s - 1)
+    var jhi = own0 + qi
+    if jhi > s - 1:
+        jhi = s - 1
+    var jlo = 0
+    if window > 0:
+        jlo = own0 + qi - window + 1
+        if jlo < 0:
+            jlo = 0
+    return (jlo, jhi)
+
+
+@always_inline
+def span_add_scalar(src: List[Float32], sb: Int, n: Int, fill: Float32, mut dst: List[Float32], db: Int):
+    """`dst[db + j] = ftz(ftz(src[sb + j]) + fill)` for j < n, as lanes: one
+    plain add per cell, the same rounding on every lane as the scalar."""
+    if n <= 0:
+        return
+    var sp = src.unsafe_ptr()
+    var dp = dst.unsafe_ptr()
+    var fv = GhrF(fill)
+    var j = 0
+    while j + GHR_FW <= n:
+        dp.unsafe_store(db + j, ghr_ftz_lanes(ghr_ftz_lanes(sp.unsafe_load[width=GHR_FW](sb + j)) + fv))
+        j += GHR_FW
+    while j < n:
+        dp.unsafe_store(db + j, ftz(ftz(sp.unsafe_load(sb + j)) + fill))
+        j += 1
+
+
+#: Lanes of `head_dim` the 64-wide value-sum arm keeps in flight at once.
+comptime ATTN_VALUE_64 = 64 // GHR_FW
+
+
 def attn_value_sum_lanes(
     weights: List[Float32],
     wbase: Int,
@@ -1342,6 +1384,21 @@ def attn_value_sum_lanes(
     var op = out.unsafe_ptr()
     comptime G = 4 * GHR_FW
     var d = 0
+    # head_dim 64 (the byte LM's, the board's): every lane of the head in
+    # flight in ONE pass over the keys (lane neural-pass10) instead of four
+    # passes of four vectors; each lane's chain is the same statements in
+    # the same order.
+    if hd == 64:
+        var accs = InlineArray[GhrF, ATTN_VALUE_64](fill=GhrF(0.0))
+        for j in range(s):
+            var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
+            var row = vbase + j * hd
+            comptime for v in range(ATTN_VALUE_64):
+                accs[v] = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                    wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + v * GHR_FW)), accs[v]))
+        comptime for v in range(ATTN_VALUE_64):
+            op.unsafe_store(obase + v * GHR_FW, accs[v])
+        return
     while d + G <= hd:
         var a0 = GhrF(0.0)
         var a1 = GhrF(0.0)
@@ -1571,6 +1628,9 @@ def transformer_block_oracle(
     var key_lo = cache.key_lo(pos0)
     var s = s_abs - key_lo
     var window = cache.window
+    # This call's own first key index in the span (DEVIATION 807's `own0`
+    # in the backward): query `qi` sits at key `own0 + qi`.
+    var own0 = pos0 - key_lo
 
     st.input_x = x.copy()
     var hton = host_block_timing_on()
@@ -1823,19 +1883,20 @@ def transformer_block_oracle(
     var mrows = b * nh * l
     var mtasks = host_row_tasks(mrows, 3 * s)
     var mchunk = (mrows + mtasks - 1) // mtasks
-    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm pos0, imm key_lo, imm window, imm mfill, imm ufill}:
+    # Each row is three spans (lane neural-pass12): the masked keys before
+    # the window, the visible keys, the masked keys after the query, each
+    # the same per-cell statement `ftz(ftz(score) + fill)` as lanes
+    # (`span_add_scalar`), the fill the one the per-cell test picked.
+    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm own0, imm window, imm mfill, imm ufill}:
         for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
             var qi = r % l
-            var p = pos0 + qi
             var base = r * s
-            for j in range(s):
-                var mv = ufill
-                var pk = key_lo + j
-                if pk > p:
-                    mv = mfill
-                if window > 0 and pk <= p - window:
-                    mv = mfill
-                masked[base + j] = ftz(ftz(scores[base + j]) + mv)
+            var vis = _visible_keys(own0, window, qi, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
+            span_add_scalar(scores, base, jlo, mfill, masked, base)
+            span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill, masked, base + jlo)
+            span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill, masked, base + jhi + 1)
     if mtasks <= 1:
         _mask_rows(0)
     else:
@@ -1862,9 +1923,24 @@ def transformer_block_oracle(
     var stasks = host_row_tasks(srows, s)
     var schunk = (srows + stasks - 1) // stasks
 
-    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm srows, imm schunk}:
+    # THE MASKED KEYS ARE SKIPPED, AND THAT IS THE CONTRACT'S OWN THEOREM
+    # (lane neural-pass10). A masked cell is exactly `-FLT_MAX` (contract
+    # 7.1: a finite score plus the mask fill rounds to the fill), so its
+    # exponential is exactly `+0.0` (the scalar's early return below
+    # -87.33655, `expf_lanes` the same on every bit pattern), its weight
+    # is `+0.0 / denom = +0.0`, and a `+0.0` term is bitwise inert in the
+    # `+0.0`-seeded serial ascending denominator chain (section 7.2's
+    # argument for decode == prefill, and the backward's `z` fold). So the
+    # exponential, the denominator and the weights run over the visible
+    # keys `[jlo, jhi]` only, and the masked cells are WRITTEN `+0.0`,
+    # which is the value the full walk stored. The row maximum stays over
+    # EVERY element of the row (contract 5.2).
+    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm l, imm own0, imm window, imm srows, imm schunk}:
         for r in range(t * schunk, min((t + 1) * schunk, srows)):
             var base = r * s
+            var vis = _visible_keys(own0, window, r % l, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
 
             # S14, the row maximum, over EVERY element of the row
             # INCLUDING the masked ones (contract 5.2, and it is not
@@ -1908,7 +1984,13 @@ def transformer_block_oracle(
             # stops being a checklist.
             amax[r] = ftz(mx)
             # S15 and S16.
-            span_exp_shift(masked, base, s, mx, aexp, base)
+            for j in range(jlo):
+                aexp[base + j] = Float32(0.0)
+                aweights[base + j] = Float32(0.0)
+            for j in range(jhi + 1, s):
+                aexp[base + j] = Float32(0.0)
+                aweights[base + j] = Float32(0.0)
+            span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
             # S17, the denominator: A SERIAL ASCENDING CHAIN over the
             # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
             # nothing to fuse because `e[j]` is not a product.
@@ -1938,7 +2020,7 @@ def transformer_block_oracle(
             # what one thread will walk. This profile is reference
             # quality and slow by construction.
             var acc = Float32(0.0)
-            for j in range(s):
+            for j in range(jlo, jhi + 1):
                 acc = ftz(ftz(acc) + ftz(aexp[base + j]))
             acc = ftz(acc)
             adenom[r] = acc
@@ -1949,7 +2031,7 @@ def transformer_block_oracle(
             # multiplies by a reciprocal, which is evidence about MAX
             # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
             # must move `attn.weights`.
-            span_div(aexp, base, s, acc, aweights, base)
+            span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
 
     if stasks <= 1:
         _softmax_rows(0)
@@ -1997,16 +2079,19 @@ def transformer_block_oracle(
     var vchunk = (vrows + vtasks - 1) // vtasks
     var vcache = st.kv_v_cache.copy()
 
-    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm vrows, imm vchunk}:
+    # The value sum over the visible keys only (the same theorem: a `+0.0`
+    # weight's fma term is inert in the `+0.0`-seeded chain, S19).
+    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm own0, imm window, imm vrows, imm vchunk}:
         for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
             var qi = r % l
             var h = (r // l) % nh
             var bb = r // (l * nh)
             var kv = h // n_rep
+            var vis = _visible_keys(own0, window, qi, s)
             attn_value_sum_lanes(
-                aweights, r * s,
-                vcache, (bb * nkv + kv) * s * hd,
-                actx, (bb * l + qi) * qw + h * hd, s, hd,
+                aweights, r * s + vis[0],
+                vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
+                actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
             )
 
     if vtasks <= 1:

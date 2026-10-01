@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"eps": 1e-06, "seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/transformer-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=transformer-infer arm=ours round=0 ms=50.354 digest=d2e67d7563b0edb2
+NEURAL-ROUND lane=transformer-infer arm=ours round=1 ms=22.002 digest=d2e67d7563b0edb2
+NEURAL-ROUND lane=transformer-infer arm=ours round=2 ms=21.393 digest=d2e67d7563b0edb2
+NEURAL-ROUND lane=transformer-infer arm=ours round=3 ms=23.134 digest=d2e67d7563b0edb2
+NEURAL lane=transformer-infer arm=ours status=ok median_ms=22.001973004080355 quality={}
