@@ -13,3 +13,10 @@ the last chunks were empty and raised "token chunk 17 raised in the projections"
 
 The gate and sweep need the base `_mojolearn` binding built in the tree (argmax_rows_f32 has no CPU
 implementation); built for gfx942 here. NVIDIA host and Apple: not run.
+
+## Second host: the NVIDIA pod's CPU (AMD EPYC 9374F, Zen 4, 128 threads), main with PRs #10 and #11
+
+`tools/hostpr_both.sh`: CPU train gate PASS 640/640 (against the recorded bytes); host step check PASS both
+settings (rows 1909 vs serial 3092 ms/step, 1.62x; the same four losses as on the Zen 5 host); inference gate
+PASS 144/144 with the token split on and off; path sweep PASS 4752/4752. So these CPU paths give the same
+bits on Zen 4, Zen 5 and the recorded Apple bytes.
