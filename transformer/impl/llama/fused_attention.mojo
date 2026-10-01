@@ -4062,9 +4062,13 @@ comptime TILED_TK = 16
 #: MI325X sweep (192 blocks of 64 rows on 304 CUs at the board shape). The
 #: rows a block holds do not touch any cell's chain: same bits.
 #: L40S (peer, 2026-10-01, same bits): bwd_dq_tiled_pf 0.61 -> 0.32 ms a
-#: layer at 16 rows (0.38 at 32), lm-train-step 41.2 -> 38.6 ms; so the
-#: NVIDIA column ships 16 (`-D MOJOLEARN_ATTN_DQ_TQ64=1` restores 64).
-comptime ATTN_DQ_TQ_DEFAULT = 16 if TARGET_COLUMN == COLUMN_NVIDIA else 64
+#: layer at 16 rows (0.38 at 32), lm-train-step 41.2 -> 38.6 ms. MI325X
+#: (same day, same bits, pre-#55 main): 1.69 -> 0.70 (32) -> 0.45 ms (16),
+#: lm-train-step 100.6 -> 93.1 -> 90.9. NVIDIA and AMD ship 16; Apple keeps
+#: 64 until the M3 reads it (`-D MOJOLEARN_ATTN_DQ_TQ64=1` restores 64).
+comptime ATTN_DQ_TQ_DEFAULT = (
+    16 if TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD else 64
+)
 comptime ATTN_DQ_TQ = 16 if is_defined["MOJOLEARN_ATTN_DQ_TQ16"]() else (
     32 if is_defined["MOJOLEARN_ATTN_DQ_TQ32"]() else (
         64 if is_defined["MOJOLEARN_ATTN_DQ_TQ64"]() else ATTN_DQ_TQ_DEFAULT
