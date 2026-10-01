@@ -20,6 +20,7 @@ from x_linear.ops import (
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
 )
 from std.sys.info import is_gpu
+from std.sys.compile import is_defined
 from x_linear.team import Team
 from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
 
@@ -276,6 +277,8 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     gj = fmad(alpha, ld(res, j), gj)
                 st(g, j, gj)
                 gmax = fmax(gmax, fabs(gj))
+            comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+                print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
             if gmax <= tol:
                 flag = 1
             else:
@@ -293,8 +296,22 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     chol_solve(h, 0, m, step, 0)
                 for j in range(m):
                     slope = fmad(ld(g, j), ld(step, j), slope)
+                comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+                    print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
                 if not (slope < 0):
                     flag = 2
+                elif ok and fm(Float32(0.5), fs(Float32(0), slope)) <= tol:
+                    # lane/neural-pass68 (2026-10-01): the Newton decrement, theirs
+                    # (_newton_solver.py check_convergence, criterion 2: 1/2 d^2 <= tol,
+                    # d^2 = g . H^-1 g = -slope; Boyd and Vandenberghe 9.5.1). Theirs
+                    # asks for it AND the gradient test, in float64. In float32 the
+                    # mean gradient of a million rows has a noise floor above tol
+                    # (taxi fares: gmax stalls at 6e-4 against 1e-4 while the step
+                    # is 2e-6 and the objective sits at its float32 floor), so the
+                    # fit ran every one of its 100 iterations, each a line search
+                    # of a dozen objective passes that moved nothing: 78 s on the
+                    # MI325X for a fit that is done after 5. Either test converges.
+                    flag = 1
         flag = t.bcast_int(flag, 1)
         if flag == 1:
             converged = True
@@ -311,7 +328,11 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
             t.sync()
             var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
-            if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
+            # lane/neural-pass68: an objective EQUAL to the current one is no
+            # decrease (the Armijo bound rounds to `f` once `tt * slope`
+            # underflows the objective's float32 resolution, and a step that
+            # moves nothing was "accepted" forever).
+            if ft == ft and ft < f and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 if t.lead():
                     copy(res, 0, trial, 0, m)
                 t.sync()
@@ -319,6 +340,9 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 accepted = True
                 break
             tt = fm(tt, Float32(0.5))
+        comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+            if t.lead():
+                print("GLM_TRACE it", it, "accepted", accepted, "tt", tt, "f", f)
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
             f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
