@@ -4951,9 +4951,13 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
             var k4 = SIMD[DType.float32, CPT * 4](0.0)
             var d4 = SIMD[DType.float32, RPT * 4](0.0)
             comptime for v in range(CPT):
-                k4 = k4.insert[offset = v * 4](kst.unsafe_load[width=4, alignment=16]((tc + v * 16) * KSTR + jk0))
+                var k4_ld = kst.unsafe_load[width=4, alignment=16]((tc + v * 16) * KSTR + jk0)
+                comptime for qq in range(4):
+                    k4[v * 4 + qq] = k4_ld[qq]
             comptime for u in range(RPT):
-                d4 = d4.insert[offset = u * 4](dst.unsafe_load[width=4, alignment=16]((tr + u * 16) * TK + jk0))
+                var d4_ld = dst.unsafe_load[width=4, alignment=16]((tr + u * 16) * TK + jk0)
+                comptime for qq in range(4):
+                    d4[u * 4 + qq] = d4_ld[qq]
             comptime for q in range(4):
                 comptime jk = jk0 + q
                 var jc = j0 + jk
@@ -6524,14 +6528,22 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                         var k4 = SIMD[DType.float32, 8](0.0)
                         comptime if QRES:
                             comptime for u in range(RPT):
-                                q4 = q4.insert[offset = u * 4](stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * HD + pw * KS + p0))
+                                var q4_ld = stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * HD + pw * KS + p0)
+                                comptime for qq in range(4):
+                                    q4[u * 4 + qq] = q4_ld[qq]
                             comptime for v in range(2):
-                                k4 = k4.insert[offset = v * 4](stg.unsafe_load[width=4, alignment=16](KOFF + (tc + v * 16) * STRIDE + p0))
+                                var k4_ld = stg.unsafe_load[width=4, alignment=16](KOFF + (tc + v * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    k4[v * 4 + qq] = k4_ld[qq]
                         else:
                             comptime for u in range(RPT):
-                                q4 = q4.insert[offset = u * 4](stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * STRIDE + p0))
+                                var q4_ld = stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    q4[u * 4 + qq] = q4_ld[qq]
                             comptime for v in range(2):
-                                k4 = k4.insert[offset = v * 4](stg.unsafe_load[width=4, alignment=16]((TQ + tc + v * 16) * STRIDE + p0))
+                                var k4_ld = stg.unsafe_load[width=4, alignment=16]((TQ + tc + v * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    k4[v * 4 + qq] = k4_ld[qq]
                         comptime for pp in range(4):
                             comptime for u in range(RPT):
                                 comptime for v in range(2):
@@ -6601,7 +6613,9 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                     comptime jj0 = j4 * 4
                     var v4 = SIMD[DType.float32, CPT * 4](0.0)
                     comptime for v in range(CPT):
-                        v4 = v4.insert[offset = v * 4](stg.unsafe_load[width=4, alignment=16]((tc + v * 16) * VSTR + jj0))
+                        var v4_ld = stg.unsafe_load[width=4, alignment=16]((tc + v * 16) * VSTR + jj0)
+                        comptime for qq in range(4):
+                            v4[v * 4 + qq] = v4_ld[qq]
                     comptime for q in range(4):
                         comptime jj = jj0 + q
                         var j = kb * BK + jj
