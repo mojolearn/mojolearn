@@ -377,7 +377,7 @@ def mamba3_s16_qk_shared_kernel(
 #:          over its own page (their accumulators are separate, so each
 #:          chain's order is untouched). Exactly the column's 48 KB; only
 #:          where `lib_smem_page_fits_for` says the page fits.
-#: MOJOLEARN_MAMBA3_S16_QK_ARM = naive | shared | regs (default; regs2 on AMD, regs2h on Apple) | regs2 | smem48 | regs2h | regsh
+#: MOJOLEARN_MAMBA3_S16_QK_ARM = naive | shared | regs (default on NVIDIA) | regs2 | smem48 | regs2h (default on AMD and Apple) | regsh | regs2q
 #: picks the launch at run time, one build for the whole sweep; under
 #: MOJOLEARN_MAMBA_TIMING the S16 driver prints a wall per kernel.
 comptime M3_S16_SMEM48_BYTES = (M3_S16_QK_MAXQ * M3_D_STATE + M3_S16_QK_MAXQ * M3_HEADDIM) * 4
@@ -394,7 +394,11 @@ def m3_s16_qk_arm() -> Int:
     bench/results/pass4-20260930). On the Apple column the default is
     `regs2h` (lane/neural-apple3, 2026-10-01): the full-page arms are over
     Metal's 32 KB and fell through to the naive kernel; the half-page arms
-    fit (unmeasured on a Mac at the time of writing; `regsh` is the A/B)."""
+    fit (M3 Ultra: the Mamba-3 backward stages 421.7 -> 170.5 ms, `regsh`
+    382.3; same digests). On the AMD column `regs2h` is the default too
+    (lane/neural-apple4: MI300X 71.0 ms on `regs2` against 56.9 on `regs2h`
+    at the fixture shape, same digests; the half page holds twice the blocks
+    per CU, the same instruction stream)."""
     var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
     if a == "naive":
         return 0
@@ -410,8 +414,10 @@ def m3_s16_qk_arm() -> Int:
         return 5
     if a == "regsh":
         return 6
+    if a == "regs2q":
+        return 7
     comptime if TARGET_COLUMN == COLUMN_AMD:
-        return 4
+        return 5
     comptime if TARGET_COLUMN == COLUMN_APPLE:
         return 5
     return 2
@@ -793,6 +799,104 @@ def mamba3_s16_qk_regsh_kernel(
     d_k.unsafe_store(rowh * M3_D_STATE + n, dk)
 
 
+#: lane/neural-apple4 (2026-10-01): the MI300X priced `regs2h` at 56.9 ms
+#: against `regs2`'s 71.0 (the stage sum at the fixture shape, same
+#: digests): the half page holds twice the blocks per CU for the same
+#: instruction stream, so the page is an occupancy lever off Apple too.
+#: `regs2q` (opt-in) is the same kernel over QUARTER pages (16 value
+#: columns, 9,728 bytes, four staging rounds) to find where the extra
+#: barriers stop paying. SAME BITS by the half-page argument.
+comptime M3_S16_QK_PQ = M3_HEADDIM // 4
+comptime M3_S16_QK_REGS2Q_BYTES = (2 * M3_S16_QK_PQ * M3_S16_QK_STRIDE + 2 * M3_S16_QK_MAXQ + 2 * M3_HEADDIM) * 4
+comptime M3_S16_QK_REGS2Q_FITS = lib_smem_page_fits_for[TARGET_COLUMN, M3_S16_QK_REGS2Q_BYTES]()
+
+
+def mamba3_s16_qk_regs2q_kernel(
+    d_q: MutPointer[Float32, MutAnyOrigin],
+    d_k: MutPointer[Float32, MutAnyOrigin],
+    d_y: MutPointer[Float32, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    k: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    seg_l: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, qsize_in: Int32,
+):
+    """`mamba3_s16_qk_regs2h_kernel` over quarter pages: the transposed v
+    and d_y pages hold M3_S16_QK_PQ = 16 value columns, staged four times;
+    the chains walk p 0..15, 16..31, 32..47, 48..63 off the four stagings,
+    the same steps in the same order."""
+    var b = Int(b_in); var l = Int(l_in); var nh = Int(nh_in); var qs = Int(qsize_in)
+    var vs = stack_allocation[M3_S16_QK_PQ * M3_S16_QK_STRIDE, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dys = stack_allocation[M3_S16_QK_PQ * M3_S16_QK_STRIDE, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var lrow = stack_allocation[M3_S16_QK_MAXQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var lcol = stack_allocation[M3_S16_QK_MAXQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var vtok = stack_allocation[M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dytok = stack_allocation[M3_HEADDIM, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var rowh = Int(block_idx.x)
+    var n = Int(thread_idx.x)
+    if rowh >= b * l * nh:
+        return
+    var h = rowh % nh; var token = (rowh // nh) % l; var bb = rowh // (nh * l)
+    var chunk = token // qs; var inner = token % qs
+    var nc = (l + qs - 1) // qs
+    var lbase = ((bb * nc + chunk) * nh + h) * qs * qs
+    if n < qs:
+        lrow[n] = ftz(seg_l.unsafe_load(lbase + inner * qs + n))
+        lcol[n] = ftz(seg_l.unsafe_load(lbase + n * qs + inner))
+    if n < M3_HEADDIM:
+        vtok[n] = ftz(v.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
+        dytok[n] = ftz(d_y.unsafe_load(((bb * l + token) * nh + h) * M3_HEADDIM + n))
+    var kq = InlineArray[Float32, M3_S16_QK_MAXQ](fill=Float32(0))
+    var dq = Float32(0.0); var dk = Float32(0.0)
+    for quarter in range(4):
+        var p0 = quarter * M3_S16_QK_PQ
+        if quarter > 0:
+            barrier()  # every thread is off the previous quarter's page
+        var e = n
+        while e < qs * M3_S16_QK_PQ:
+            var j = e // M3_S16_QK_PQ
+            var pp = e - j * M3_S16_QK_PQ
+            var tj = chunk * qs + j
+            var vv = Float32(0.0)
+            var dv = Float32(0.0)
+            if tj < l:
+                vv = ftz(v.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p0 + pp))
+                dv = ftz(d_y.unsafe_load(((bb * l + tj) * nh + h) * M3_HEADDIM + p0 + pp))
+            vs[pp * M3_S16_QK_STRIDE + j] = vv
+            dys[pp * M3_S16_QK_STRIDE + j] = dv
+            e += M3_D_STATE
+        barrier()
+        if quarter == 0:
+            comptime for j in range(M3_S16_QK_MAXQ):
+                if j < inner:
+                    var kv = ftz(k.unsafe_load(((bb * l + chunk * qs + j) * nh + h) * M3_D_STATE + n))
+                    kq[j] = ftz(identical_mul(kv, lrow[j]))
+                elif j > inner and j < qs:
+                    var qv = Float32(0.0)
+                    if chunk * qs + j < l:
+                        qv = ftz(q.unsafe_load(((bb * l + chunk * qs + j) * nh + h) * M3_D_STATE + n))
+                    kq[j] = ftz(identical_mul(qv, lcol[j]))
+        for pp in range(M3_S16_QK_PQ):
+            var dy_i = dytok[p0 + pp]
+            var vt = vtok[p0 + pp]
+            var prow = pp * M3_S16_QK_STRIDE
+            comptime for j4 in range(0, M3_S16_QK_MAXQ, 4):
+                if j4 < inner:
+                    var v4 = vs.unsafe_load[width=4, alignment=16](prow + j4)
+                    comptime for jj in range(4):
+                        if j4 + jj < inner:
+                            dq = ftz(identical_mul_add(dy_i, ftz(identical_mul(kq[j4 + jj], v4[jj])), dq))
+            comptime for i4 in range(0, M3_S16_QK_MAXQ, 4):
+                if i4 + 3 > inner and i4 < qs:
+                    var d4 = dys.unsafe_load[width=4, alignment=16](prow + i4)
+                    comptime for ii in range(4):
+                        if i4 + ii > inner and i4 + ii < qs:
+                            if chunk * qs + i4 + ii < l:
+                                dk = ftz(identical_mul_add(d4[ii], ftz(identical_mul(kq[i4 + ii], vt)), dk))
+    d_q.unsafe_store(rowh * M3_D_STATE + n, dq)
+    d_k.unsafe_store(rowh * M3_D_STATE + n, dk)
+
+
 def mamba3_s16_qk_smem48_kernel(
     d_q: MutPointer[Float32, MutAnyOrigin],
     d_k: MutPointer[Float32, MutAnyOrigin],
@@ -1025,6 +1129,11 @@ def mamba3_backward_s16_s15_into(
                     if not took and arm == 6:
                         ctx.enqueue_function[mamba3_s16_qk_regsh_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
                         _s16_tick(ctx, ton, tk, "qk_regsh")
+                        took = True
+                comptime if M3_S16_QK_REGS2Q_FITS:
+                    if not took and arm == 7:
+                        ctx.enqueue_function[mamba3_s16_qk_regs2q_kernel](d_q.unsafe_ptr(), d_ks.unsafe_ptr(), d_y.unsafe_ptr(), q.unsafe_ptr(), ks.unsafe_ptr(), v.unsafe_ptr(), seg_l.unsafe_ptr(), Int32(b), Int32(l), Int32(dims.nheads), Int32(qsize), grid_dim=(b*l*dims.nheads,1,1), block_dim=(M3_D_STATE,1,1))
+                        _s16_tick(ctx, ton, tk, "qk_regs2q")
                         took = True
                 comptime if M3_S16_QK_PAGE_FITS:
                     if not took:
