@@ -1170,7 +1170,7 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
 
 
 def orth_on_device_diag(
-    ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int, ddiag: DeviceBuffer[DType.float32],
+    ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int, mut ddiag: DeviceBuffer[DType.float32],
     with_diag: Bool,
 ) raises:
     """`orth_on_device`, and with `with_diag` the product of the two passes'
