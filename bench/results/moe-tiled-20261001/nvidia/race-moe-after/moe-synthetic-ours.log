@@ -1,0 +1,10 @@
+183277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11ea80000000, nodemask=1)
+183277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1adbc0000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn-pass29/tools/bench_board_algos.py", line 4191, in worker
+    runner = build(args.lane, args.arm, D)
+  File "/root/mojolearn-pass29/tools/bench_board_algos.py", line 2261, in build
+    return fn(lane, arm, D)
+  File "/root/mojolearn-pass29/tools/bench_board_algos.py", line 3354, in _build_layer
+    import torch
+ModuleNotFoundError: No module named 'torch'

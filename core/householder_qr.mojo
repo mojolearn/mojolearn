@@ -429,6 +429,219 @@ def qr_panel_kernel(
         t += QR_TPB
 
 
+# ---- the split panel (lane neural-pass38, 2026-10-01) ------------------------------------
+#: `qr_panel_kernel` applies step j's reflector to the trailing columns ONE
+#: AT A TIME with its 32 threads (a fold per column, then the axpy): at
+#: 200,000 x 220 that loop is 23 s of the mode-"r" QR and of the tall SVD on
+#: an M4 (the slices run side by side, the columns inside a slice do not).
+#: Split per step into a reflector kernel (one block of QR_TPB per slice,
+#: the panel kernel's own statements) and an apply kernel whose blocks
+#: cover (slice, group of QR_APPLY_WARPS columns): each warp takes one
+#: trailing column with the SAME per-lane chain (lane l strides the rows
+#: j + 1 + l, + QR_TPB, ...) and folds its 32 partials with the SAME
+#: two-phase halving tree (`_warp_fold`, the additions of
+#: `two_phase_halving_sum[32]` on a warp-private slab), so the bits are the
+#: panel kernel's. MOJOLEARN_QR_SPLIT=0 keeps the panel kernel.
+comptime QR_APPLY_WARPS = 8
+comptime QR_APPLY_TPB = QR_APPLY_WARPS * QR_TPB
+
+
+def qr_split() -> Bool:
+    return String(getenv("MOJOLEARN_QR_SPLIT")) != "0"
+
+
+@always_inline
+def _warp_fold(slab: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], lane: Int, value: Float32) -> Float32:
+    """`two_phase_halving_sum[QR_TPB]` on a warp-private 32-slot slab: lanes
+    t < 16 add slot t + 16 into slot t, then every lane folds the 16 partials
+    by halving in registers. The same additions in the same order; the
+    barriers are block-wide and every warp of the block runs them."""
+    slab[lane] = value
+    barrier()
+    if lane < 16:
+        slab[lane] = slab[lane] + slab[lane + 16]
+    barrier()
+    var w = InlineArray[Float32, 16](fill=Float32(0.0))
+    comptime for t in range(16):
+        w[t] = slab[t]
+    comptime for k in range(4):
+        comptime S = 16 >> (k + 1)
+        comptime for t in range(S):
+            w[t] = w[t] + w[t + S]
+    var total = w[0]
+    barrier()
+    return total
+
+
+def qr_reflector_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    r_out: MutPointer[Float32, MutAnyOrigin],
+    tau_out: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    lda_in: Int32,
+    n_slices_in: Int32,
+    j_in: Int32,
+):
+    """Step j of `qr_panel_kernel` up to and including the column scaling,
+    one block of QR_TPB threads per slice: the norm fold, R[j, j], the
+    packed w; tau_out[slice] = tau (0 when the column is zero, where the
+    panel kernel touches no trailing column)."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var lda = Int(lda_in)
+    var n_slices = Int(n_slices_in)
+    var j = Int(j_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var rb = (b * m) // n_slices
+    var re = ((b + 1) * m) // n_slices
+    var ms = re - rb
+    var rbase = b * n * n
+    var acc = Float32(0.0)
+    var i = j + tid
+    while i < ms:
+        var v = ftz(a.unsafe_load((rb + i) * lda + j))
+        acc = ftz(identical_mul_add(v, v, acc))
+        i += QR_TPB
+    var sigma = fold_and_broadcast[QR_TPB](acc)
+    var normx = ftz(identical_sqrt(sigma))
+    var ajj = ftz(a.unsafe_load((rb + j) * lda + j))
+    if normx == Float32(0.0):
+        if tid == 0:
+            r_out.unsafe_store(rbase + j * n + j, Float32(0.0))
+            tau_out.unsafe_store(b, Float32(0.0))
+        return
+    var r_jj = qr_reflector_r(ajj, normx)
+    var u1 = qr_reflector_u1(ajj, r_jj)
+    var tau = qr_reflector_tau(ajj, normx, u1)
+    if tid == 0:
+        r_out.unsafe_store(rbase + j * n + j, r_jj)
+        tau_out.unsafe_store(b, tau)
+    var i2 = j + 1 + tid
+    while i2 < ms:
+        var cur = ftz(a.unsafe_load((rb + i2) * lda + j))
+        a.unsafe_store((rb + i2) * lda + j, ftz(identical_div(cur, u1)))
+        i2 += QR_TPB
+
+
+def qr_apply_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    tau_in: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    lda_in: Int32,
+    n_slices_in: Int32,
+    j_in: Int32,
+):
+    """Step j's `H = I - tau w w'` on the trailing columns: block (x, y) =
+    (group of QR_APPLY_WARPS columns, slice), warp g the column c = j + 1 +
+    x * QR_APPLY_WARPS + g, with the panel kernel's per-lane chain, fold,
+    `total`, `td`, diagonal-row write and axpy."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var lda = Int(lda_in)
+    var n_slices = Int(n_slices_in)
+    var j = Int(j_in)
+    var b = Int(block_idx.y)
+    var tid = Int(thread_idx.x)
+    var warp = tid // QR_TPB
+    var lane = tid - warp * QR_TPB
+    var c = j + 1 + Int(block_idx.x) * QR_APPLY_WARPS + warp
+    var rb = (b * m) // n_slices
+    var re = ((b + 1) * m) // n_slices
+    var ms = re - rb
+    var slabs = stack_allocation[QR_APPLY_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var slab = slabs + warp * QR_TPB
+    var tau = tau_in.unsafe_load(b)
+    var live = c < n and tau != Float32(0.0)
+    var dacc = Float32(0.0)
+    if live:
+        var i3 = j + 1 + lane
+        while i3 < ms:
+            var w = ftz(a.unsafe_load((rb + i3) * lda + j))
+            var x = ftz(a.unsafe_load((rb + i3) * lda + c))
+            dacc = ftz(identical_mul_add(w, x, dacc))
+            i3 += QR_TPB
+    var tail = _warp_fold(slab, lane, dacc)
+    if not live:
+        return
+    var ajc = ftz(a.unsafe_load((rb + j) * lda + c))
+    var total = ftz(ajc + tail)
+    var td = ftz(tau * total)
+    if lane == 0:
+        a.unsafe_store((rb + j) * lda + c, ftz(ajc - td))
+    var i4 = j + 1 + lane
+    while i4 < ms:
+        var w2 = ftz(a.unsafe_load((rb + i4) * lda + j))
+        var cur2 = ftz(a.unsafe_load((rb + i4) * lda + c))
+        a.unsafe_store((rb + i4) * lda + c, ftz(identical_mul_add(-td, w2, cur2)))
+        i4 += QR_TPB
+
+
+def qr_r_copy_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    r_out: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    lda_in: Int32,
+    n_slices_in: Int32,
+):
+    """The panel kernel's tail: the strict upper triangle of each slice's R
+    from the factored rows, the strict lower triangle zero."""
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var lda = Int(lda_in)
+    var n_slices = Int(n_slices_in)
+    var b = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var rb = (b * m) // n_slices
+    var re = ((b + 1) * m) // n_slices
+    var ms = re - rb
+    var rbase = b * n * n
+    var t = tid
+    while t < n * n:
+        var rr = t // n
+        var cc = t - rr * n
+        if cc > rr:
+            if rr < ms:
+                r_out.unsafe_store(rbase + t, ftz(a.unsafe_load((rb + rr) * lda + cc)))
+            else:
+                r_out.unsafe_store(rbase + t, Float32(0.0))
+        elif cc < rr:
+            r_out.unsafe_store(rbase + t, Float32(0.0))
+        t += QR_TPB
+
+
+def qr_factor_split(
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], mut r_out: DeviceBuffer[DType.float32],
+    m: Int, n: Int, lda: Int, n_slices: Int,
+) raises:
+    """`qr_panel_kernel` over `n_slices` slices as the split launches: per
+    step the reflector kernel then the apply kernel, then the R copy."""
+    var tau = ctx.enqueue_create_buffer[DType.float32](n_slices if n_slices > 0 else 1)
+    for j in range(n):
+        ctx.enqueue_function[qr_reflector_kernel](
+            a.unsafe_ptr(), r_out.unsafe_ptr(), tau.unsafe_ptr(),
+            Int32(m), Int32(n), Int32(lda), Int32(n_slices), Int32(j),
+            grid_dim=(n_slices, 1, 1), block_dim=(QR_TPB, 1, 1),
+        )
+        var cols = n - j - 1
+        if cols > 0:
+            ctx.enqueue_function[qr_apply_kernel](
+                a.unsafe_ptr(), tau.unsafe_ptr(),
+                Int32(m), Int32(n), Int32(lda), Int32(n_slices), Int32(j),
+                grid_dim=((cols + QR_APPLY_WARPS - 1) // QR_APPLY_WARPS, n_slices, 1),
+                block_dim=(QR_APPLY_TPB, 1, 1),
+            )
+    ctx.enqueue_function[qr_r_copy_kernel](
+        a.unsafe_ptr(), r_out.unsafe_ptr(), Int32(m), Int32(n), Int32(lda), Int32(n_slices),
+        grid_dim=(n_slices, 1, 1), block_dim=(QR_TPB, 1, 1),
+    )
+    ctx.synchronize()
+    _ = tau^
+
+
 def qr_factor(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -463,43 +676,52 @@ def qr_factor(
     if ns < 1:
         raise Error("qr_factor slice count must be at least 1")
     if ns == 1:
+        if qr_split():
+            qr_factor_split(ctx, a, r_out, n_rows, n_cols, n_cols, 1)
+        else:
+            ctx.enqueue_function[qr_panel_kernel](
+                a.unsafe_ptr(),
+                r_out.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                Int32(n_cols),
+                Int32(1),
+                grid_dim=(1, 1, 1),
+                block_dim=(QR_TPB, 1, 1),
+            )
+        ctx.synchronize()
+        return 1
+    if not qr_parallel_panels(ctx,a,r_scratch,n_rows,n_cols,ns):
+        if qr_split():
+            qr_factor_split(ctx, a, r_scratch, n_rows, n_cols, n_cols, ns)
+        else:
+            ctx.enqueue_function[qr_panel_kernel](
+                a.unsafe_ptr(),
+                r_scratch.unsafe_ptr(),
+                Int32(n_rows),
+                Int32(n_cols),
+                Int32(n_cols),
+                Int32(ns),
+                grid_dim=(ns, 1, 1),
+                block_dim=(QR_TPB, 1, 1),
+            )
+    # The `ns` tiles are contiguous `n x n` row-major blocks, so the stack
+    # of them IS an `(ns * n) x n` row-major matrix with leading dimension
+    # `n`. No copy and no transpose: TSQR's second pass is the SAME kernel
+    # on the SAME layout, which is the reason the tiles are stored this way.
+    if qr_split():
+        qr_factor_split(ctx, r_scratch, r_out, ns * n_cols, n_cols, n_cols, 1)
+    else:
         ctx.enqueue_function[qr_panel_kernel](
-            a.unsafe_ptr(),
+            r_scratch.unsafe_ptr(),
             r_out.unsafe_ptr(),
-            Int32(n_rows),
+            Int32(ns * n_cols),
             Int32(n_cols),
             Int32(n_cols),
             Int32(1),
             grid_dim=(1, 1, 1),
             block_dim=(QR_TPB, 1, 1),
         )
-        ctx.synchronize()
-        return 1
-    if not qr_parallel_panels(ctx,a,r_scratch,n_rows,n_cols,ns):
-        ctx.enqueue_function[qr_panel_kernel](
-            a.unsafe_ptr(),
-            r_scratch.unsafe_ptr(),
-            Int32(n_rows),
-            Int32(n_cols),
-            Int32(n_cols),
-            Int32(ns),
-            grid_dim=(ns, 1, 1),
-            block_dim=(QR_TPB, 1, 1),
-        )
-    # The `ns` tiles are contiguous `n x n` row-major blocks, so the stack
-    # of them IS an `(ns * n) x n` row-major matrix with leading dimension
-    # `n`. No copy and no transpose: TSQR's second pass is the SAME kernel
-    # on the SAME layout, which is the reason the tiles are stored this way.
-    ctx.enqueue_function[qr_panel_kernel](
-        r_scratch.unsafe_ptr(),
-        r_out.unsafe_ptr(),
-        Int32(ns * n_cols),
-        Int32(n_cols),
-        Int32(n_cols),
-        Int32(1),
-        grid_dim=(1, 1, 1),
-        block_dim=(QR_TPB, 1, 1),
-    )
     ctx.synchronize()
     return ns
 

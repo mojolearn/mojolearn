@@ -8,7 +8,11 @@ from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.ffi import _Global
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import memcpy
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 
 from checks.vendor import COMPILED_VENDOR
 from core.householder_qr import qr_factor, qr_slice_count
@@ -77,6 +81,8 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
+from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
@@ -439,6 +445,134 @@ def lu_update_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32):
         lu_update_elem(a, scal, Int(k), Int(k) + 1 + t // w, Int(k) + 1 + t % w, Int(n))
 
 
+# ---- the blocked LU (lane neural-pass32, 2026-10-01) ------------------------------------
+#: The panel width (MOJOLEARN_XD_LU_PANEL, default LU_PANEL_NB; 0 keeps the
+#: per-step route) and the trailing tile: LU_TILE x LU_TILE cells a block,
+#: one thread per cell, the L slab (LU_TILE rows x NB) and the U slab (NB x
+#: LU_TILE columns) in threadgroup memory.
+comptime LU_PANEL_NB = 32
+comptime LU_TILE = 16
+comptime LU_TILE_TPB = LU_TILE * LU_TILE
+
+
+def lu_panel_width() -> Int:
+    """The blocked LU's panel width: MOJOLEARN_XD_LU_PANEL (0 = the
+    per-step route, the A/B arm), default LU_PANEL_NB."""
+    var v = String(getenv("MOJOLEARN_XD_LU_PANEL", String(LU_PANEL_NB)))
+    try:
+        return max(0, Int(v))
+    except:
+        return LU_PANEL_NB
+
+
+def lu_swap_cols_kernel(a: F32Ptr, piv: I32Ptr, k: Int32, n: Int32, col_lo: Int32, col_hi: Int32):
+    """`lu_swap_elem` over the columns [col_lo, col_hi) of rows k and
+    piv[k]: the panel's steps swap the panel's and the left columns at once,
+    the trailing columns later, in the same order (`lu_apply_swaps_kernel`)."""
+    var j = Int(col_lo) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(col_hi):
+        lu_swap_elem(a, piv, Int(k), j, Int(n))
+
+
+def lu_update_panel_kernel(a: F32Ptr, scal: F32Ptr, k: Int32, n: Int32, col_hi: Int32):
+    """`lu_update_elem` for the cells (i, j), k < i < n, k < j < col_hi: step
+    k's update restricted to the panel's columns."""
+    var kk = Int(k)
+    var w = Int(col_hi) - kk - 1
+    var h = Int(n) - kk - 1
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if w > 0 and h > 0 and t < h * w:
+        lu_update_elem(a, scal, kk, kk + 1 + t // w, kk + 1 + t % w, Int(n))
+
+
+def lu_act_kernel(scal: F32Ptr, act: F32Ptr, k: Int32):
+    """act[k] = scal[1]: whether step k eliminated (a zero pivot skips its
+    step, and the trailing kernels skip it the same way)."""
+    if block_idx.x == 0 and thread_idx.x == 0:
+        act.unsafe_store(Int(k), scal.unsafe_load(1))
+
+
+def lu_apply_swaps_kernel(a: F32Ptr, piv: I32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """One thread per trailing column j >= k1: the panel's swaps k0 .. k1 - 1
+    applied to that column in order (`lu_swap_elem`, which the serial loop
+    applied to every column at each step; a column's swaps are its own)."""
+    var j = Int(k1) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(n):
+        for k in range(Int(k0), Int(k1)):
+            lu_swap_elem(a, piv, k, j, Int(n))
+
+
+def lu_trsm_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32):
+    """One thread per trailing column j >= k1: the panel's U rows brought up
+    to date. Row k (k0 < k < k1) receives the panel's earlier steps k' = k0
+    .. k - 1 in order, each `lu_update_elem`'s statement with l = a[k, k']
+    (the panel's multiplier) and a[k', j] already final (row k' done
+    first), a step with act[k'] = 0 skipped: the serial loop's chain for
+    that cell."""
+    var nn = Int(n)
+    var j = Int(k1) + Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < nn:
+        for k in range(Int(k0) + 1, Int(k1)):
+            var acc = ftz(a.unsafe_load(k * nn + j))
+            for kp in range(Int(k0), k):
+                if act.unsafe_load(kp) != Float32(0):
+                    var l = a.unsafe_load(k * nn + kp)
+                    acc = ftz(identical_mul_add(-l, ftz(a.unsafe_load(kp * nn + j)), ftz(acc)))
+            a.unsafe_store(k * nn + j, acc)
+
+
+def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32, nb: Int32):
+    """The trailing cells (i, j), i >= k1, j >= k1: the panel's steps k' =
+    k0 .. k1 - 1 applied in order, each `lu_update_elem`'s statement with
+    l = a[i, k'] and u = a[k', j] (both final), a step with act[k'] = 0
+    skipped: the serial loop's chain for that cell, the operands staged
+    through threadgroup memory a tile at a time instead of read from device
+    memory once per step."""
+    var nn = Int(n)
+    var kk0 = Int(k0)
+    var kk1 = Int(k1)
+    var width = Int(nb)
+    var tid = Int(thread_idx.x)
+    var r = tid // LU_TILE
+    var c = tid - r * LU_TILE
+    var i0 = kk1 + Int(block_idx.y) * LU_TILE
+    var j0 = kk1 + Int(block_idx.x) * LU_TILE
+    var ls = stack_allocation[LU_TILE * LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var us = stack_allocation[LU_PANEL_NB * LU_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var acts = stack_allocation[LU_PANEL_NB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    # the L slab: LU_TILE rows x width (unflushed, as the item reads l)
+    var q = tid
+    while q < LU_TILE * width:
+        var rr = q // width
+        var cc = q - rr * width
+        var v = Float32(0)
+        if i0 + rr < nn:
+            v = a.unsafe_load((i0 + rr) * nn + kk0 + cc)
+        ls[q] = v
+        q += LU_TILE_TPB
+    # the U slab: width rows x LU_TILE columns (flushed, as the item reads u)
+    q = tid
+    while q < width * LU_TILE:
+        var rr = q // LU_TILE
+        var cc = q - rr * LU_TILE
+        var v = Float32(0)
+        if j0 + cc < nn:
+            v = ftz(a.unsafe_load((kk0 + rr) * nn + j0 + cc))
+        us[q] = v
+        q += LU_TILE_TPB
+    if tid < width:
+        acts[tid] = act.unsafe_load(kk0 + tid)
+    barrier()
+    var i = i0 + r
+    var j = j0 + c
+    if i < nn and j < nn:
+        var acc = ftz(a.unsafe_load(i * nn + j))
+        for kp in range(width):
+            if acts[kp] != Float32(0):
+                acc = ftz(identical_mul_add(-ls[r * width + kp], us[kp * LU_TILE + c], ftz(acc)))
+        a.unsafe_store(i * nn + j, acc)
+
+
 def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         lu_solve_serial(lu, piv, b, Int(n), Int(nrhs), Int(trans))
@@ -692,36 +826,91 @@ comptime STAGE = 2048
 comptime STAGE_TPB = 256
 
 
+@always_inline
+def _chain_fma(
+    sh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], lo: Int, cnt: Int, off: Int, acc0: Float32
+) -> Float32:
+    """acc = ftz(fma(x_u, y_u, acc)) for u in lo .. lo + cnt - 1, x from `sh[u]`
+    and y from `sh[off + u]` (both already flushed by the staging threads),
+    the one serial chain of `geqrf_dot` / `orgqr_dot` (lane neural-pass18):
+    the same operations in the same order, written eight steps at a time so
+    the sixteen shared loads of a group issue before the eight dependent
+    multiply-adds (the chain's latency is the fma's, not the load's); the
+    tail runs one step at a time."""
+    var acc = acc0
+    var u = lo
+    var end = lo + cnt
+    var body = end - (cnt % 8)
+    while u < body:
+        var x0 = sh[u]
+        var x1 = sh[u + 1]
+        var x2 = sh[u + 2]
+        var x3 = sh[u + 3]
+        var x4 = sh[u + 4]
+        var x5 = sh[u + 5]
+        var x6 = sh[u + 6]
+        var x7 = sh[u + 7]
+        var y0 = sh[off + u]
+        var y1 = sh[off + u + 1]
+        var y2 = sh[off + u + 2]
+        var y3 = sh[off + u + 3]
+        var y4 = sh[off + u + 4]
+        var y5 = sh[off + u + 5]
+        var y6 = sh[off + u + 6]
+        var y7 = sh[off + u + 7]
+        acc = ftz(identical_mul_add(x0, y0, acc))
+        acc = ftz(identical_mul_add(x1, y1, acc))
+        acc = ftz(identical_mul_add(x2, y2, acc))
+        acc = ftz(identical_mul_add(x3, y3, acc))
+        acc = ftz(identical_mul_add(x4, y4, acc))
+        acc = ftz(identical_mul_add(x5, y5, acc))
+        acc = ftz(identical_mul_add(x6, y6, acc))
+        acc = ftz(identical_mul_add(x7, y7, acc))
+        u += 8
+    while u < end:
+        acc = ftz(identical_mul_add(sh[u], sh[off + u], acc))
+        u += 1
+    return acc
+
+
 def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
-    """`geqrf_head` (with its `reflector_norm`), the folds staged."""
+    """`geqrf_head` (with its `reflector_norm`), the folds staged. Lane
+    neural-pass18: the xmax scan is a maximum, exact in any order, so every
+    thread scans its own rows (seeded 0, `if v > local`, so a NaN never
+    enters, as in the serial scan) and the block folds the locals with the
+    same comparison; the norm chain's per-row division (independent of the
+    accumulator) is done by the staging threads into shared memory, and the
+    chain runs through `_chain_fma`."""
     var sh = stack_allocation[STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var red = stack_allocation[STAGE_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bc = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var K = Int(k)
     var M = Int(m)
     var N = Int(n)
     var alpha = ftz(a.unsafe_load(K * N + K))
-    # pass 1: xmax over rows k+1.. (geqrf_head's scan, one thread ascending)
-    var xmax = Float32(0)
-    var c0 = K + 1
-    while c0 < M:
-        var cnt = min(STAGE, M - c0)
-        var t = tid
-        while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
-            t += STAGE_TPB
-        barrier()
-        if tid == 0:
-            for u in range(cnt):
-                var v = abs(ftz(sh[u]))
-                if v > xmax:
-                    xmax = v
-        barrier()
-        c0 += STAGE
-    if tid == 0:
-        bc[0] = xmax
+    # pass 1: xmax over rows k+1.. (geqrf_head's scan): the maximum of the
+    # |values|, which every order gives alike; each thread scans a strided
+    # share of the rows, the block folds the shares
+    var local = Float32(0)
+    var i = K + 1 + tid
+    while i < M:
+        var v = abs(ftz(a.unsafe_load(i * N + K)))
+        if v > local:
+            local = v
+        i += STAGE_TPB
+    red[tid] = local
     barrier()
-    xmax = bc[0]
+    var half = STAGE_TPB // 2
+    while half > 0:
+        if tid < half:
+            var other = red[tid + half]
+            if other > red[tid]:
+                red[tid] = other
+        barrier()
+        half //= 2
+    var xmax = red[0]
+    barrier()
     if xmax == Float32(0):
         if tid == 0:
             tau.unsafe_store(K, Float32(0))
@@ -736,18 +925,17 @@ def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: 
     if xmax > mx:
         mx = xmax
     var acc = Float32(0)
-    c0 = K
+    var c0 = K
     while c0 < M:
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
+            # v = ftz(x / mx), the chain's operand, flushed here
+            sh[t] = ftz(identical_div(ftz(a.unsafe_load((c0 + t) * N + K)), mx))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                var v = ftz(identical_div(ftz(sh[u]), mx))
-                acc = ftz(identical_mul_add(v, v, acc))
+            acc = _chain_fma(sh, 0, cnt, 0, acc)
         barrier()
         c0 += STAGE
     if tid == 0:
@@ -779,13 +967,12 @@ def geqrf_dot_staged_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
-            sh[STAGE + t] = a.unsafe_load((c0 + t) * N + j)
+            sh[t] = ftz(a.unsafe_load((c0 + t) * N + K))
+            sh[STAGE + t] = ftz(a.unsafe_load((c0 + t) * N + j))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
         barrier()
         c0 += STAGE
     if tid == 0:
@@ -815,13 +1002,12 @@ def orgqr_dot_staged_kernel(
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = h.unsafe_load((c0 + t) * N + K)
-            sh[STAGE + t] = q.unsafe_load((c0 + t) * QC + j)
+            sh[t] = ftz(h.unsafe_load((c0 + t) * N + K))
+            sh[STAGE + t] = ftz(q.unsafe_load((c0 + t) * QC + j))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
         barrier()
         c0 += STAGE
     if tid == 0:
@@ -832,10 +1018,84 @@ def _blocks(count: Int) -> Int:
     return (count + TPB - 1) // TPB if count > 0 else 1
 
 
-def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
-    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+# ---- host <-> device transfers through a pinned stage (lane neural-pass27, 2026-10-01)
+#
+# Measured on the Apple M4 through Mojo's Metal context, per 64 MB: a raw
+# host-pointer upload costs ~20 ms the first time a host region is used (every
+# fresh numpy array) and 1.5 ms warm; a device-to-host-pointer download ~21 ms
+# every time; a pinned host buffer DMAs both ways in 2-3 ms, the CPU writes it
+# at full speed, and the CPU reads it at ~3 GB/s on one thread (it is
+# write-combined) but at 10 GB/s and more on four or more threads; a raw
+# upload of a fresh array, on the other hand, is 1.6-2.4 ms, faster than a
+# staged one. So on the Apple column every DOWNLOAD of at least XD_STAGE_MIN
+# floats goes in chunks through ONE pinned stage of XD_STAGE_FLOATS: DMA out,
+# then a read over host tasks; uploads stay raw. Copies only: no bit moves.
+# MOJOLEARN_XD_STAGE=0 keeps the raw download on Apple; MOJOLEARN_XD_STAGE=1
+# turns the stage on elsewhere (NVIDIA and AMD copy pageable memory at tens
+# of GB/s and are not measured).
+comptime XD_STAGE_FLOATS = 1 << 24
+comptime XD_STAGE_MIN = 1 << 18
+
+
+struct _XdStage(Defaultable, Movable):
+    var buf: Optional[HostBuffer[DType.float32]]
+
+    def __init__(out self):
+        self.buf = Optional[HostBuffer[DType.float32]]()
+
+
+comptime X_DECOMP_STAGE = _Global[StorageType=_XdStage, name="MojoXDecompStageIdentical", init_fn=_XdStage.__init__]
+
+
+def _xd_staged(n: Int) -> Bool:
+    if n < XD_STAGE_MIN:
+        return False
+    var v = String(getenv("MOJOLEARN_XD_STAGE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
+
+
+def _xd_stage_ptr(ctx: DeviceContext) raises -> F32Ptr:
+    """The process's pinned stage (XD_STAGE_FLOATS floats), created on first use."""
+    var slot = X_DECOMP_STAGE.get_or_create_ptr()
+    if not slot[].buf:
+        slot[].buf = ctx.enqueue_create_host_buffer[DType.float32](XD_STAGE_FLOATS)
+        ctx.synchronize()
+    return F32Ptr(unsafe_from_address=Int(slot[].buf.value().unsafe_ptr()))
+
+
+def _xd_read_out(dst: F32Ptr, src: F32Ptr, n: Int):
+    """`memcpy(dst, src, n)` over host tasks: the one read of pinned memory."""
+    var tasks = host_predict_task_count(1 << 30)
+    if tasks > 16:
+        tasks = 16
+    if n < XD_STAGE_MIN or tasks <= 1:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    var chunk = (n + tasks - 1) // tasks
+
+    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_piece, tasks)
+
+
+def _up_into(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
+    """Host floats into `buf[0, n)`: the raw host-pointer copy. Measured on
+    the M4 a fresh 64 MB array uploads this way in 1.6-2.4 ms (only the
+    process's first upload pays ~9-20 ms); a memcpy-plus-DMA stage took
+    4.3 ms, so uploads are not staged."""
     if n > 0:
         ctx.enqueue_copy(dst_buf=buf.create_sub_buffer[DType.float32](0, n), src_ptr=p)
+
+
+def _up(ctx: DeviceContext, p: F32Ptr, n: Int) raises -> DeviceBuffer[DType.float32]:
+    var buf = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    _up_into(ctx, buf, p, n)
     return buf^
 
 
@@ -847,8 +1107,19 @@ def _up_i(ctx: DeviceContext, p: I32Ptr, n: Int) raises -> DeviceBuffer[DType.in
 
 
 def _down(ctx: DeviceContext, buf: DeviceBuffer[DType.float32], p: F32Ptr, n: Int) raises:
-    if n > 0:
+    if n <= 0:
+        return
+    if not _xd_staged(n):
         ctx.enqueue_copy(dst_ptr=p, src_buf=buf.create_sub_buffer[DType.float32](0, n))
+        return
+    var stage = _xd_stage_ptr(ctx)
+    var off = 0
+    while off < n:
+        var cnt = min(XD_STAGE_FLOATS, n - off)
+        ctx.enqueue_copy(dst_ptr=stage, src_buf=buf.create_sub_buffer[DType.float32](off, cnt))
+        ctx.synchronize()
+        _xd_read_out(p + off, stage, cnt)
+        off += cnt
 
 
 def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: Int) raises:
@@ -1337,7 +1608,59 @@ struct DevExec(Exec):
         else:
             ctx.enqueue_function[lu_info_init_kernel](di.unsafe_ptr(), grid_dim=1, block_dim=1)
         var pivot_block = lu_pivot_parallel()
-        for k in range(n if n > lu_serial_max() else 0):
+        var nb = min(lu_panel_width(), LU_PANEL_NB)
+        var dact = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        if n > lu_serial_max() and nb > 0:
+            # The blocked route (lane neural-pass32): the panel's steps run
+            # the per-step kernels over the panel's columns; the trailing
+            # columns then get the panel's swaps in order, the U rows
+            # brought up to date, and every trailing cell the panel's
+            # steps in order through tiles. The same cells in the same
+            # order as the per-step route below.
+            var k0 = 0
+            while k0 < n:
+                var k1 = min(k0 + nb, n)
+                for k in range(k0, k1):
+                    if pivot_block:
+                        ctx.enqueue_function[lu_pivot_block_kernel](
+                            da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
+                        )
+                    else:
+                        ctx.enqueue_function[lu_pivot_kernel](da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1)
+                    ctx.enqueue_function[lu_swap_cols_kernel](
+                        da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), Int32(0), Int32(k1),
+                        grid_dim=_blocks(k1), block_dim=TPB,
+                    )
+                    ctx.enqueue_function[lu_diag_kernel](
+                        da.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=1
+                    )
+                    ctx.enqueue_function[lu_act_kernel](ds.unsafe_ptr(), dact.unsafe_ptr(), Int32(k), grid_dim=1, block_dim=1)
+                    if n - k - 1 > 0:
+                        ctx.enqueue_function[lu_l_kernel](
+                            da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), grid_dim=_blocks(n - k - 1), block_dim=TPB
+                        )
+                    if k1 - k - 1 > 0 and n - k - 1 > 0:
+                        ctx.enqueue_function[lu_update_panel_kernel](
+                            da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), Int32(k1),
+                            grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
+                        )
+                if k1 < n:
+                    ctx.enqueue_function[lu_apply_swaps_kernel](
+                        da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
+                        grid_dim=_blocks(n - k1), block_dim=TPB,
+                    )
+                    if k1 - k0 > 1:
+                        ctx.enqueue_function[lu_trsm_kernel](
+                            da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
+                            grid_dim=_blocks(n - k1), block_dim=TPB,
+                        )
+                    var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
+                    ctx.enqueue_function[lu_trail_tiled_kernel](
+                        da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
+                        grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
+                    )
+                k0 = k1
+        for k in range(n if n > lu_serial_max() and nb == 0 else 0):
             if pivot_block:
                 ctx.enqueue_function[lu_pivot_block_kernel](
                     da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k), Int32(n), grid_dim=1, block_dim=LU_PIVOT_TPB
@@ -1366,11 +1689,17 @@ struct DevExec(Exec):
         _ = dp^
         _ = di^
         _ = ds^
+        _ = dact^
         ctx.synchronize()
         _ = ctx^
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        if xd_lu_solve_on_host(n):
+            # lane neural-pass39: the host walk of the same cells (the device
+            # ran one thread per column of B: 64 threads on the whole GPU)
+            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+            return
         var ctx = xd_ctx()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
@@ -1965,6 +2294,10 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        if xd_qr_on_host(m):
+            # lane neural-pass37: the row-streaming host walk of the same cells
+            geqrf_host_rows(a, tau, m, n)
+            return
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
@@ -2004,6 +2337,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        if xd_qr_on_host(m):
+            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+            return
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)

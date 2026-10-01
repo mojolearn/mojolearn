@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/connected-components", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=connected-components dataset=taxi arm=ours round=0 ms=114.262 infer_ms=None digest=f9dd8da0c6fcd7d8
+ALGOS-ROUND lane=connected-components dataset=taxi arm=ours round=1 ms=103.775 infer_ms=None digest=f9dd8da0c6fcd7d8
+ALGOS-ROUND lane=connected-components dataset=taxi arm=ours round=2 ms=105.056 infer_ms=None digest=f9dd8da0c6fcd7d8
+ALGOS-ROUND lane=connected-components dataset=taxi arm=ours round=3 ms=118.386 infer_ms=None digest=f9dd8da0c6fcd7d8
+ALGOS lane=connected-components dataset=taxi arm=ours status=ok median_ms=105.05606420338154 quality={"n_components": 588}

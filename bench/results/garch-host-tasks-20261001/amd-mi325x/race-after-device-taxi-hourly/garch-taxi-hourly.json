@@ -1,0 +1,182 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/garch-amd/venv-after/bin/python",
+        "/root/mojolearn-neural-pass15/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "garch",
+        "--dataset",
+        "taxi-hourly",
+        "--data",
+        "/root/garch-amd/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "78356d7d495daa98",
+        "78356d7d495daa98",
+        "78356d7d495daa98",
+        "78356d7d495daa98"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.GARCH({'p': 1, 'o': 0, 'q': 1, 'power': 2.0, 'mean': 'Constant', 'dist': 'normal'}).fit(Y (64, 1391))",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/garch-amd/venv-after/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_sequence numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.32"
+      },
+      "median_ms": 8793.287879001582,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2039.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2039.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2039.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2039.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        8741.34691299696,
+        8793.287879001582,
+        8865.514261997305
+      ],
+      "params_record": {
+        "__record__": true,
+        "library": "mojolearn",
+        "params": {
+          "dist": "normal",
+          "mean": "Constant",
+          "o": 0,
+          "p": 1,
+          "power": 2.0,
+          "q": 1
+        },
+        "source": "attributes"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "fit + forecast (or decomposition) of every series",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 8860.312924007303
+    }
+  },
+  "block": {
+    "arrays": {
+      "Y": {
+        "dtype": "float32",
+        "sha256": "f8babc05b35e0b1bd3293c7d476b85ef864d71f5c922296332296565b06a518c",
+        "shape": [
+          64,
+          1439
+        ]
+      }
+    },
+    "block": "tsr",
+    "dataset": "taxi-hourly",
+    "h": 48,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": null,
+    "source": "taxi pickup counts per zone per hour, zones 4,13,24,41,42,43,45,48",
+    "written": "2026-10-01T02:28:06Z"
+  },
+  "commit": "unknown",
+  "dataset": "taxi-hourly",
+  "finished": "2026-10-01T02:30:01Z",
+  "lane": "garch",
+  "lane_config": {
+    "block": "tsr",
+    "datasets": [
+      "taxi-hourly",
+      "synthetic"
+    ],
+    "expansion_lane": "sequence",
+    "kind": "ts",
+    "mismatches": [],
+    "notes": [
+      "taxi-hourly: first differences of log(1 + count); synthetic: GARCH(1,1) returns omega 0.1 alpha 0.1 beta 0.8, seed 7",
+      "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', rescale=False) per series (ours refuses rescaling); the forecast is the conditional variance, h steps"
+    ],
+    "ours_class": "mojolearn.GARCH",
+    "params": {
+      "dist": "normal",
+      "mean": "Constant",
+      "o": 0,
+      "p": 1,
+      "power": 2.0,
+      "q": 1
+    },
+    "quality": "mean log-likelihood per series",
+    "task": "garch",
+    "timed_fit": "fit + forecast (or decomposition) of every series",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "p": 1,
+          "seed": "none (deterministic)"
+        },
+        "source": "attributes"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/garch",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "mean_llf": -1132.7127561569214
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "Yfit 64x1391; Yhold 64x48",
+  "started": "2026-10-01T02:29:26Z"
+}

@@ -1,0 +1,18 @@
+58600 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5bd580000000, nodemask=2)
+ring 64 n 64 labels differ 0 modularity 0.75 same levels 3 same sparse 0.070335 ms dense 0.283893 ms
+ring 7 n 7 labels differ 0 modularity 0.22448981 same levels 1 same sparse 0.007982 ms dense 0.004697 ms
+knn n=40 k=2 unit n 40 labels differ 0 modularity 0.39492327 same levels 2 same sparse 0.05396 ms dense 0.12128 ms
+knn n=40 k=2 random n 40 labels differ 0 modularity 0.54854757 same levels 2 same sparse 0.050605 ms dense 0.12037 ms
+knn n=40 k=10 unit n 40 labels differ 0 modularity 0.15588888 same levels 2 same sparse 0.161301 ms dense 0.15442 ms
+knn n=40 k=10 random n 40 labels differ 0 modularity 0.1820145 same levels 2 same sparse 0.1276 ms dense 0.14754 ms
+58600 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x328b40000000, nodemask=1)
+knn n=300 k=2 unit n 300 labels differ 0 modularity 0.5296977 same levels 4 same sparse 2.811053 ms dense 15.502232 ms
+knn n=300 k=2 random n 300 labels differ 0 modularity 0.6586821 same levels 3 same sparse 1.183566 ms dense 9.543955 ms
+knn n=300 k=10 unit n 300 labels differ 0 modularity 0.18589646 same levels 3 same sparse 3.324369 ms dense 7.634477 ms
+knn n=300 k=10 random n 300 labels differ 0 modularity 0.23075215 same levels 3 same sparse 3.06377 ms dense 7.610882 ms
+knn n=1200 k=2 unit n 1200 labels differ 0 modularity 0.53249884 same levels 4 same sparse 6.264053 ms dense 104.470592 ms
+knn n=1200 k=2 random n 1200 labels differ 0 modularity 0.68950635 same levels 4 same sparse 3.927298 ms dense 89.438612 ms
+knn n=1200 k=10 unit n 1200 labels differ 0 modularity 0.20548741 same levels 3 same sparse 30.635845 ms dense 158.748902 ms
+knn n=1200 k=10 random n 1200 labels differ 0 modularity 0.22888839 same levels 3 same sparse 20.790931 ms dense 103.434888 ms
+knn n=6000 k=10 random: sparse 186.333305 ms, modularity 0.22348462 levels 3
+PASS

@@ -1099,6 +1099,26 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: F
 
 
 # DEVIATION 5217 (row 129)
+def graph_symmetry_item(t: Int, a: FP, flags: IP, n: Int):
+    """The adjacency checks the graph estimators' wrappers made in Python
+    over `A.tolist()` (lane neural-pass14; at the board's 20,000 nodes that
+    was a 400-million-cell Python scan): `flags[0] = 1` when some cell
+    `a[u, v]` with `u < v` is not equal to `a[v, u]` (a NaN is not equal to
+    itself, as in Python), `flags[1] = 1` when some cell is nonzero. One
+    item, integers out, no arithmetic."""
+    var asym = Int32(0)
+    var nonzero = Int32(0)
+    for u in range(n):
+        for v in range(n):
+            var x = a.unsafe_load(u * n + v)
+            if x != Float32(0):
+                nonzero = Int32(1)
+            if v > u and x != a.unsafe_load(v * n + u):
+                asym = Int32(1)
+    flags.unsafe_store(0, asym)
+    flags.unsafe_store(1, nonzero)
+
+
 def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
     """Weak connectivity as a product (DBSCAN's weak_cc; cuGraph
     weakly_connected_components_impl.cuh): the smallest label among the node

@@ -1,0 +1,5 @@
+04:40:08 build-embedding rc=0
+04:40:30 check-check-embedding rc=0
+04:40:48 prep rc=0
+04:40:49 race-embedding-before rc=1
+04:40:50 race-embedding-after rc=1

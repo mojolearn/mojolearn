@@ -1,0 +1,77 @@
+119724 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32b100000000, nodemask=1)
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:15:
+/root/mojolearn-pass22/x_neighbors/device_ops.mojo:1471:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:15:
+/root/mojolearn-pass22/x_neighbors/device_ops.mojo:1530:45: warning: left hand side expression of 'if False' is dead
+        grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
+                                            ^
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:17:
+/root/mojolearn-pass22/x_neighbors/host_ops.mojo:406:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+        if (2) > 0:
+               ^
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:10:
+/root/mojolearn-pass22/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:10:
+/root/mojolearn-pass22/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:10:
+/root/mojolearn-pass22/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:10:
+/root/mojolearn-pass22/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:15:
+Imported from /root/mojolearn-pass22/x_neighbors/device_ops.mojo:10:
+/root/mojolearn-pass22/core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:15:
+Imported from /root/mojolearn-pass22/x_neighbors/device_ops.mojo:10:
+/root/mojolearn-pass22/core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-pass22/x_neighbors/checks/graph_check.mojo:15:
+Imported from /root/mojolearn-pass22/x_neighbors/device_ops.mojo:10:
+/root/mojolearn-pass22/core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+  5216 pagerank x@Q fold: fixture separates (13 cells differ between the spellings)
+119724 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5adc00000000, nodemask=2)
+  5216 pagerank_step device: == oracle, bit for bit
+  5216 pagerank_step host: == oracle, bit for bit
+  5216 pagerank dangling weights: fixture separates (21 cells differ between the spellings)
+  5216 pagerank dangling device: == oracle, bit for bit
+  5216 pagerank dangling host: == oracle, bit for bit
+  5217 min-label representative: fixture separates (24 cells differ between the spellings)
+  5217 cc_step device: == oracle, bit for bit
+  5217 cc_step host: == oracle, bit for bit
+  5204 louvain visit order: fixture separates (6 cells differ between the spellings)
+  5204 louvain device labels: == oracle, bit for bit
+  5204 louvain device modularity: == oracle, bit for bit
+  5204 louvain host labels: == oracle, bit for bit
+  5204 louvain host modularity: == oracle, bit for bit
+  5205 cholesky fold: fixture separates (117 cells differ between the spellings)
+  5205 svgp device: == oracle, bit for bit
+  5205 svgp host: == oracle, bit for bit
+PASS x_neighbors graph_check

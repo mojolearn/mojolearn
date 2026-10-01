@@ -151,7 +151,15 @@ def upload_f32(
     if n == 0:
         raise Error("upload_f32: refusing to upload an empty list")
     var buf = ctx.enqueue_create_buffer[DType.float32](n)
-    comptime if ANN3_HOST_PASSES and has_apple_gpu_accelerator():
+    comptime if ANN3_HOST_PASSES:
+        # Every column (lane neural-pass35, 2026-10-01; Apple only since
+        # lane ann-apple3): the copy reads the caller's list and is drained
+        # before the return. The pinned hop below pinned a buffer the size
+        # of the dataset per upload and copied into it first: on the L40S
+        # the build's 352 MB upload read 752 ms (0.47 GB/s) that way
+        # (bench/results/ivf-stages-l40s-20261001.log). The raw host-pointer
+        # upload is the one the resident optimizer step and the x_decomp
+        # kit use on all three vendors with the same words.
         # lane ann-apple3, Apple only, behind `ANN3_HOST_PASSES`: the copy
         # reads the caller's list (the same words, one host pass fewer;
         # `x_ann/io.mojo` has uploaded this way since lane ann-apple2). The

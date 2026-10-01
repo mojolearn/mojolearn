@@ -1,0 +1,8 @@
+main transformer 512 sha256 one 0209f9ff0597cfd4 policy 0209f9ff0597cfd4
+main transformer 2048 sha256 one 93b0da9f81be0dc5 policy 93b0da9f81be0dc5
+main mamba3 512 sha256 one 94bd23787c50a4da policy 94bd23787c50a4da
+main mamba3 2048 sha256 one 62e3661f915836ba policy 62e3661f915836ba
+branch transformer 512 sha256 one 0209f9ff0597cfd4 policy 0209f9ff0597cfd4
+branch transformer 2048 sha256 one 93b0da9f81be0dc5 policy 93b0da9f81be0dc5
+branch mamba3 512 sha256 one 94bd23787c50a4da policy 94bd23787c50a4da
+branch mamba3 2048 sha256 one 62e3661f915836ba policy 62e3661f915836ba

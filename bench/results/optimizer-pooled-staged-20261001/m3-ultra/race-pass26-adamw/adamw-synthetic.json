@@ -1,0 +1,170 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/mojolearn-pass26/.pixi/envs/default/bin/python3",
+        "/Users/ec2-user/mojolearn-pass26/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "adamw",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/pr31-metal/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "a56b45e6a36856e6",
+        "a56b45e6a36856e6",
+        "a56b45e6a36856e6",
+        "a56b45e6a36856e6"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.AdamW([p], {'lr': 0.001, 'betas': (0.9, 0.999), 'eps': 1e-08, 'weight_decay': 0.01, 'maximize': False}).step(g) x 10",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/mojolearn-pass26/python/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_training'))",
+        "numeric_mode_used": "unknown",
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.32"
+      },
+      "median_ms": 120.41133298771456,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1730.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1851.2,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2114.7,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2051.2,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        117.32304199540522,
+        120.41133298771456,
+        121.95887499547098
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "betas": [
+          0.9,
+          0.999
+        ],
+        "eps": 1e-08,
+        "lr": 0.001,
+        "maximize": false,
+        "weight_decay": 0.01
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "10 optimizer steps",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 147.92950000264682
+    }
+  },
+  "block": {
+    "block": "optim",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "unknown",
+  "dataset": "synthetic",
+  "finished": "2026-10-01T05:10:35Z",
+  "lane": "adamw",
+  "lane_config": {
+    "block": "optim",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "training",
+    "kind": "optim",
+    "mismatches": [],
+    "notes": [
+      "one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 steps; quality = the parameter after them vs torch eager",
+      "SGD with momentum 0.9 (coupled L2 off); Adam coupled and AdamW decoupled weight decay at torch's own defaults (0 and 0.01), every hyperparameter explicit on both sides"
+    ],
+    "ours_class": "mojolearn.AdamW or mojolearn.training.AdamW",
+    "params": {
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "eps": 1e-08,
+      "lr": 0.001,
+      "maximize": false,
+      "weight_decay": 0.01
+    },
+    "quality": "max relative difference of the parameter after 10 steps vs torch eager fp32",
+    "task": "optim",
+    "timed_fit": "10 optimizer steps",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "betas": [
+            0.9,
+            0.999
+          ],
+          "eps": 1e-08,
+          "learning_rate": 0.001,
+          "seed": "none (deterministic)",
+          "weight_decay": 0.01
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/adamw",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {}
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-10-01T05:10:33Z"
+}

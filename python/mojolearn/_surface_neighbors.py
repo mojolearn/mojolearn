@@ -79,6 +79,7 @@ FAMILIES = (
             "xn_knn_impute_cells",
             "xn_pagerank_step",
             "xn_cc_step",
+            "xn_graph_symmetry",
             "xn_louvain",
             "xn_svgp",
             "xn_svgp_var",

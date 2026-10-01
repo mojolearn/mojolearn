@@ -31,7 +31,12 @@ from bindings.hostptr import f32_ptr, read_f32, read_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from std.memory import bitcast, memcpy
+from core.device_zero import enqueue_fill
+from core.host_lanes import HOST_FW, U32V
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
@@ -63,22 +68,37 @@ def embedding_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
-def _upload_f32(
-    ctx: DeviceContext, values: List[Float32]
+# ---- transfers (lane neural-pass28, 2026-10-01) ----------------------------------
+# These helpers moved every value through a pinned host buffer ONE SCALAR AT A
+# TIME in a host loop, both ways (32 million stores and 32 million reads of
+# write-combined memory per call at the board's 32,768 x 1,024 table), after
+# copying the caller's table into a list first: forward 270 ms, backward
+# 390 ms on the M4 for a gather and a scatter. Now: an upload is one raw
+# host-pointer copy (1.6-2.4 ms per 64 MB here); a download is one DMA into
+# pinned memory and a read out over host tasks (one thread reads pinned
+# memory at ~3 GB/s, four or more at 10 GB/s and more). Copies: no bit moves.
+comptime EMB_COPY_TASKS_MAX = 16
+
+
+def _upload_f32_ptr(
+    ctx: DeviceContext, p: MutPointer[Float32, MutUntrackedOrigin], n: Int
 ) raises -> DeviceBuffer[DType.float32]:
-    """A device copy of at least one cell (a zero-length buffer is not portable)."""
-    var n = len(values)
+    """A device copy of the caller's n floats (at least one cell)."""
     var n_buf = n if n > 0 else 1
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.float32](0, n), src_ptr=p)
+    else:
+        enqueue_fill(ctx, dev, Float32(0.0))
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
-    for i in range(n, n_buf):
-        host.unsafe_ptr().unsafe_store(i, Float32(0.0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
+    return dev^
+
+
+def _zero_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A device buffer of n +0.0 cells (at least one), filled on the device."""
+    var dev = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    enqueue_fill(ctx, dev, Float32(0.0))
     ctx.synchronize()
-    _ = host^
     return dev^
 
 
@@ -88,16 +108,88 @@ def _upload_i32(
     var n = len(values)
     var n_buf = n if n > 0 else 1
     var dev = ctx.enqueue_create_buffer[DType.int32](n_buf)
-    var host = ctx.enqueue_create_host_buffer[DType.int32](n_buf)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](0, n), src_ptr=values.unsafe_ptr())
+    if n_buf > n:
+        var pad = List[Int32](length=1, fill=Int32(0))
+        ctx.enqueue_copy(dst_buf=dev.create_sub_buffer[DType.int32](n, 1), src_ptr=pad.unsafe_ptr())
+        ctx.synchronize()
+        _ = pad^
     ctx.synchronize()
-    for i in range(n):
-        host.unsafe_ptr().unsafe_store(i, values[i])
-    for i in range(n, n_buf):
-        host.unsafe_ptr().unsafe_store(i, Int32(0))
-    ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
-    ctx.synchronize()
-    _ = host^
     return dev^
+
+
+def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
+    """`memcpy(dst, src, n)` in contiguous chunks over host tasks: the read of pinned memory."""
+    var tasks = host_predict_task_count(1 << 30)
+    if tasks > EMB_COPY_TASKS_MAX:
+        tasks = EMB_COPY_TASKS_MAX
+    if n < (1 << 18) or tasks <= 1:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    var chunk = (n + tasks - 1) // tasks
+
+    def _piece(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_piece, tasks)
+
+
+def _all_finite_ptr(p: MutPointer[Float32, MutUntrackedOrigin], n: Int) -> Bool:
+    """`core.host_lanes.all_finite`'s bit test over the caller's n floats, the
+    ranges over host tasks: it reads bits and computes nothing."""
+    var tasks = host_predict_task_count(1 << 30)
+    if tasks > EMB_COPY_TASKS_MAX:
+        tasks = EMB_COPY_TASKS_MAX
+    if n < (1 << 18) or tasks <= 1:
+        tasks = 1
+    var chunk = (n + tasks - 1) // tasks
+    var bad = List[Int32](length=tasks, fill=Int32(0))
+    var bp = bad.unsafe_ptr()
+
+    def _scan(t: Int) {imm p, imm bp, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        var i = lo
+        var acc = U32V(0)
+        var expm = U32V(0x7F800000)
+        while i + HOST_FW <= hi:
+            var e = bitcast[DType.uint32](p.unsafe_load[width=HOST_FW](i)) & expm
+            acc = acc | e.eq(expm).select(U32V(1), U32V(0))
+            i += HOST_FW
+        var found = acc.reduce_or() != UInt32(0)
+        while i < hi and not found:
+            if (bitcast[DType.uint32](p.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                found = True
+            i += 1
+        if found:
+            bp.unsafe_store(t, Int32(1))
+
+    if tasks <= 1:
+        _scan(0)
+    else:
+        host_parallelize(_scan, tasks)
+    var ok = True
+    for t in range(tasks):
+        if bad[t] != Int32(0):
+            ok = False
+    _ = bad^
+    return ok
+
+
+def _refuse_nonfinite_ptr(name: String, p: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
+    """`refuse_nonfinite` over the caller's floats: the parallel bit test
+    first; only a refusal pays the list copy, so the message and the index
+    it names are the oracle's own."""
+    if _all_finite_ptr(p, n):
+        return
+    var values = List[Float32](length=n if n > 0 else 1, fill=Float32(0.0))
+    if n > 0:
+        memcpy(dest=values.unsafe_ptr(), src=p, count=n)
+    refuse_nonfinite(name, values)
 
 
 def _zeros_i32(n: Int) -> List[Int32]:
@@ -114,10 +206,9 @@ def _download_into(
         return
     var host = ctx.enqueue_create_host_buffer[DType.float32](len(buf))
     ctx.synchronize()
-    ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+    ctx.enqueue_copy(dst_buf=host, src_buf=buf)
     ctx.synchronize()
-    for i in range(n):
-        dst.unsafe_store(i, host.unsafe_ptr().unsafe_load(i))
+    _parallel_copy_out(dst, MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(host.unsafe_ptr())), n)
     _ = host^
 
 
@@ -134,7 +225,7 @@ def _config(vocab: Int, width: Int, padding_idx: Int, accumulate: Bool) raises -
 
 
 def _forward_run(
-    weight: List[Float32],
+    wp: MutPointer[Float32, MutUntrackedOrigin],
     ids: List[Int32],
     n_positions: Int,
     cfg: EmbConfig,
@@ -144,7 +235,7 @@ def _forward_run(
     if cells <= 0:
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var d_w = _upload_f32(ctx, weight)
+    var d_w = _upload_f32_ptr(ctx, wp, cfg.vocab * cfg.width)
     var d_ids = _upload_i32(ctx, ids)
     var d_y = ctx.enqueue_create_buffer[DType.float32](cells)
     ctx.synchronize()
@@ -158,9 +249,8 @@ def _forward_run(
 
 
 def _backward_run(
-    dy: List[Float32],
+    dyp: MutPointer[Float32, MutUntrackedOrigin],
     ids: List[Int32],
-    dw_start: List[Float32],
     n_positions: Int,
     cfg: EmbConfig,
     dwp: MutPointer[Float32, MutUntrackedOrigin],
@@ -170,8 +260,14 @@ def _backward_run(
     if cells <= 0:
         return
     var ctx = neural_ctx[_NEURAL_CTX]()
-    var d_dw = _upload_f32(ctx, dw_start)
-    var d_dy = _upload_f32(ctx, dy)
+    # the carried dW starts from the caller's bits; a fresh one from +0.0
+    # (filled on the device: the same +0.0 cells the host list held)
+    var d_dw: DeviceBuffer[DType.float32]
+    if cfg.accumulate:
+        d_dw = _upload_f32_ptr(ctx, dwp, cells)
+    else:
+        d_dw = _zero_f32(ctx, cells)
+    var d_dy = _upload_f32_ptr(ctx, dyp, n_positions * cfg.width)
     var d_ids = _upload_i32(ctx, ids)
     var counts = _upload_i32(ctx, _zeros_i32(cfg.vocab))
     var run_begin = _upload_i32(ctx, _zeros_i32(cfg.vocab + 1))
@@ -222,13 +318,13 @@ def embedding_forward_binding(
     var n_positions = Int(py=params[2])
     var cfg = _config(vocab, width, EMB_NO_PADDING_IDX, False)
     emb_refuse_shape(cfg, n_positions)
-    var weight = read_f32(Int(py=addrs[0]), vocab * width)
+    var wp = f32_ptr(Int(py=addrs[0]))
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
-    refuse_nonfinite(String("W"), weight)
     var yp = f32_ptr(Int(py=addrs[2]))
     with GILReleased(Python()):
-        _forward_run(weight, ids, n_positions, cfg, yp)
+        _refuse_nonfinite_ptr(String("W"), wp, vocab * width)
+        _forward_run(wp, ids, n_positions, cfg, yp)
     return PythonObject(n_positions * width)
 
 
@@ -287,21 +383,15 @@ def embedding_backward_binding(
         )
     var cfg = _config(vocab, width, padding_idx, acc_code == 1)
     emb_refuse_shape(cfg, n_positions)
-    var dy = read_f32(Int(py=addrs[0]), n_positions * width)
+    var dyp = f32_ptr(Int(py=addrs[0]))
     var ids = read_i32(Int(py=addrs[1]), n_positions)
     emb_refuse_ids(ids, cfg)
-    refuse_nonfinite(String("dY"), dy)
     var dwp = f32_ptr(Int(py=addrs[2]))
-    var dw_start: List[Float32]
-    if cfg.accumulate:
-        dw_start = read_f32(Int(py=addrs[2]), vocab * width)
-        refuse_nonfinite(String("the carried dW"), dw_start)
-    else:
-        # Contents are irrelevant: the fresh path's seed kernel STORES +0.0 in
-        # every cell (contract 5.5), which the check's poisoned buffer gates.
-        dw_start = List[Float32](length=vocab * width, fill=Float32(0.0))
     with GILReleased(Python()):
-        _backward_run(dy, ids, dw_start, n_positions, cfg, dwp, plan)
+        _refuse_nonfinite_ptr(String("dY"), dyp, n_positions * width)
+        if cfg.accumulate:
+            _refuse_nonfinite_ptr(String("the carried dW"), dwp, vocab * width)
+        _backward_run(dyp, ids, n_positions, cfg, dwp, plan)
     return PythonObject(vocab * width)
 
 

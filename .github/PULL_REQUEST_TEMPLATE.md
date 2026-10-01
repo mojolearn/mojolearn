@@ -19,6 +19,7 @@ Reference details:
 - [ ] Bit-inert evidence is attached.
 - [ ] A separating fixture and profile-version decision are attached.
 - [ ] No operation capable of moving IDENTICAL bits changed.
+- [ ] Or: IDENTICAL bits changed on purpose, and the new bits agree on NVIDIA, AMD, Apple and the CPU (evidence linked). While mojolearn is alpha, bits may change between releases; they may never differ across hardware.
 
 ## Evidence
 

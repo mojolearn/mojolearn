@@ -23,6 +23,10 @@ the same row must retain its output bits when its batch neighbors change.
 A pass covers the selected fixtures, routes and properties; it does not prove
 every input, parameter combination or GPU generation.
 
+Recorded hashes belong to one release. While mojolearn is alpha, a release may
+change IDENTICAL output bits; the promise is the same bits across hardware for
+the same release, so verify against the hashes shipped with the installed wheel.
+
 Inspect the installed package's scope before running the checks:
 
 ```sh

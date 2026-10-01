@@ -23,6 +23,8 @@ from core.device_zero import enqueue_fill
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import (
+    _down,
+    _up_into,
     absmax_scratch,
     colsum_scratch,
     launch_absmax,
@@ -177,8 +179,7 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+        _up_into(ctx, p[].bufs[i], src, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
@@ -192,8 +193,7 @@ def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raise
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt))
+        _down(ctx, p[].bufs[i], dst, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
