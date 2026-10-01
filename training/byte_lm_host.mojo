@@ -40,6 +40,7 @@ fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 """
 
 from std.os import getenv
+from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
@@ -275,6 +276,16 @@ def byte_host_token_split_enabled() -> Bool:
     return String(getenv("MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT")) != "0"
 
 
+def _lmhost_tick(on: Bool, mut t: Int, name: String):
+    """MOJOLEARN_BYTE_LM_HOST_TIMING: print `timing lmhost.<name> <ms> ms`
+    (a wall; the host regions have joined when this runs), advance `t`."""
+    if not on:
+        return
+    var now = Int(perf_counter_ns())
+    print("timing lmhost." + name + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
+
+
 def _chunks(n: Int, workers: Int) -> Int:
     var c = workers
     if c > n:
@@ -356,6 +367,8 @@ def block_par(
         except:
             fp.unsafe_store(c, 1)
 
+    var ton = String(getenv("MOJOLEARN_BYTE_LM_HOST_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
     if tasks == 1:
         _pre_task(0)
     else:
@@ -363,19 +376,18 @@ def block_par(
     for c in range(tasks):
         if failed[c] != 0:
             raise Error("byte LM host: token chunk " + String(c) + " raised in the projections")
+    _lmhost_tick(ton, tk, "block.pre")
 
     # ---- region B: attention over all heads and the rest of the block per
     # query chunk. The mask table is the block's, read only.
+    # The causal mask rows are built by the task that reads them (lane
+    # host-token-split-2): the shared `[l, s]` table was written serially
+    # per block (4 M entries at 2048 tokens, eight times a call) and copied
+    # per task; a task's own rows are `rows x s` stores. Same values.
     var mfill = mask_fill()
-    var masks = List[Float32](length=l * s, fill=unmasked_fill())
-    for qi in range(l):
-        for j in range(qi + 1, s):
-            masks[qi * s + j] = mfill
+    var munmasked = unmasked_fill()
     var scale = attention_scale(hd)
     var out = List[Float32](length=l * dm, fill=Float32(0.0))
-    var ms = List[List[Float32]]()
-    ms.append(masks^)
-    var mp = ms.unsafe_ptr()
     var qrs = List[List[Float32]]()
     qrs.append(qr^)
     var krs = List[List[Float32]]()
@@ -389,9 +401,9 @@ def block_par(
     for c in range(tasks):
         failed[c] = 0
 
-    def _post_task(c: Int) {imm tp, imm xp, imm mp, imm qtp, imm ktp, imm vtp, imm op, imm fp, imm chunk,
-                            imm l, imm s, imm dm, imm nh, imm hd, imm qw, imm kw, imm inter, imm n_rep,
-                            imm tb, imm scale}:
+    def _post_task(c: Int) {imm tp, imm xp, imm mfill, imm munmasked, imm qtp, imm ktp, imm vtp, imm op,
+                            imm fp, imm chunk, imm l, imm s, imm dm, imm nh, imm hd, imm qw, imm kw,
+                            imm inter, imm n_rep, imm tb, imm scale}:
         try:
             var lo = c * chunk
             var hi = lo + chunk
@@ -400,7 +412,13 @@ def block_par(
             if lo >= hi:
                 return  # a trailing chunk past the last token: nothing to do
             var rows = hi - lo
-            var mchunk = copy_rows(mp[0], lo, hi, s)
+            # the mask rows of queries [lo, hi): `+0.0` where key j <= query,
+            # the finite fill after, exactly the table's rows
+            var mchunk = List[Float32](length=rows * s, fill=munmasked)
+            var mcp = mchunk.unsafe_ptr()
+            for qi in range(rows):
+                for j in range(lo + qi + 1, s):
+                    mcp.unsafe_store(qi * s + j, mfill)
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
             var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
             var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
@@ -447,8 +465,8 @@ def block_par(
         _post_task(0)
     else:
         host_parallelize(_post_task, tasks)
+    _lmhost_tick(ton, tk, "block.attn_mlp")
     _ = xs^
-    _ = ms^
     _ = qrs^
     _ = krs^
     _ = vs^
@@ -607,13 +625,18 @@ def _threaded_rows(params: List[Float32], inputs: List[Int32], batch: Int, lengt
         var dims_ts = TransformerDims(config.d_model, config.n_heads, config.n_kv, config.head_dim,
                                       config.intermediate, config.length)
         var row_ids_ts = List[Int32](length=length, fill=Int32(0))
+        var ton_ts = String(getenv("MOJOLEARN_BYTE_LM_HOST_TIMING")) != ""
         for r in range(batch):
             for t in range(length):
                 row_ids_ts[t] = inputs[r * length + t]
+            var tk_ts = Int(perf_counter_ns())
             var hidden_ts = hidden_par(held, ropes, row_ids_ts, length, dims_ts, layers, workers)
+            _lmhost_tick(ton_ts, tk_ts, "hidden")
             var part_ts = head_rows_par(hidden_ts, held, head_index, vocab, config.d_model, length, reverse, workers)
+            _lmhost_tick(ton_ts, tk_ts, "head")
             for q in range(length * vocab):
                 logits[r * length * vocab + q] = part_ts[q]
+            _lmhost_tick(ton_ts, tk_ts, "logits_copy")
         _ = held^
         _ = ropes^
         return logits^
