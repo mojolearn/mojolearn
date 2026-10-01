@@ -6,6 +6,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
+from x_neighbors.nan_cells import nan_cells_host
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
@@ -179,6 +180,14 @@ def op_pr_iterate_sparse(
     _ = vb^
     _ = s^
     _ = g^
+
+def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int) raises:
+    """lane/neural-pass71: the NaN cells of x (n x d): flat indices
+    ascending into `cells`, the NaN count per column, the total in info[0].
+    The host pass on every column (x_neighbors/nan_cells.mojo)."""
+    nan_cells_host(FP(unsafe_from_address=x), IP(unsafe_from_address=cells),
+                   IP(unsafe_from_address=colmiss), IP(unsafe_from_address=info), n, d)
+
 
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,

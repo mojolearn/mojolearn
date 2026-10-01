@@ -1260,6 +1260,17 @@ class KNNImputer(_XNeighbors):
         if self.weights not in ("uniform", "distance"):
             raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
 
+    def _nan_cells(self, X):
+        """(cells, colmiss, count): the flat indices of the NaN cells of X
+        ascending (an int32 Array of n * d slots, the first `count` used), the
+        NaN count per column as a list, and the count (xn_nan_cells)."""
+        n, d = X.shape
+        cells = empty((max(n * d, 1),), "<i4")
+        colmiss = empty((max(d, 1),), "<i4")
+        info = empty((1,), "<i4")
+        self._op("nan_cells", [(X, 0), (cells, 1), (colmiss, 1), (info, 1)], (n, d))
+        return cells, colmiss.tolist(), int(info.tolist()[0])
+
     def _masked(self, X):
         X = _f32(X)
         mv = self.missing_values
@@ -1272,10 +1283,11 @@ class KNNImputer(_XNeighbors):
         self._check()
         X = self._masked(X)
         n, d = X.shape
-        rows = X.tolist()
-        miss = [[v != v for v in r] for r in rows]
-        self._valid = [not all(miss[i][f] for i in range(n)) for f in range(d)]
-        self._miss_cols = [f for f in range(d) if any(miss[i][f] for i in range(n))]
+        # lane/neural-pass71 (2026-10-01): the column flags from one native
+        # pass over the cells (xn_nan_cells), no list of the matrix
+        cm = self._nan_cells(X)[1]
+        self._valid = [cm[f] < n for f in range(d)]
+        self._miss_cols = [f for f in range(d) if cm[f] > 0]
         self._fit_X = X
         self.n_features_in_ = d
         return self
@@ -1296,13 +1308,12 @@ class KNNImputer(_XNeighbors):
         else:
             # one GPU thread per MISSING cell (`knn_impute_cells`): the same
             # item statements; a present cell keeps x, as the item stores it
-            flat = X.reshape((n * d,)).tolist()
-            cells = [i for i, v in enumerate(flat) if v != v]
-            out = Array.from_list(flat, "<f4").reshape((n, d))
-            if cells:
+            cells, _, nc = self._nan_cells(X)        # lane/neural-pass71: no Python walk
+            out = X.copy()
+            if nc:
                 self._op("knn_impute_cells" if _OLD_ITEMS else "knn_impute_tiled",
-                         [(_i32(cells, "cells"), 0), (X, 0), (self._fit_X, 0), (out, 1)],
-                         (n, m, d, k, 1 if self.weights == "distance" else 0, len(cells)))
+                         [(cells, 0), (X, 0), (self._fit_X, 0), (out, 1)],
+                         (n, m, d, k, 1 if self.weights == "distance" else 0, nc))
         keep = [f for f in range(d) if self._valid[f]]
         if self.keep_empty_features:
             empty_cols = [f for f in range(d) if not self._valid[f]]
