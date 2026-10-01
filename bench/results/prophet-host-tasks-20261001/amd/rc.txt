@@ -1,0 +1,8 @@
+03:45:46 build-x_sequence rc=0
+03:46:07 prep rc=0
+03:48:16 race-before-synthetic rc=0
+03:50:44 race-before-taxi-hourly rc=0
+03:50:46 race-after-synthetic rc=0
+03:50:47 race-after-taxi-hourly rc=0
+03:52:55 race-after-device-synthetic rc=0
+03:55:24 race-after-device-taxi-hourly rc=0
