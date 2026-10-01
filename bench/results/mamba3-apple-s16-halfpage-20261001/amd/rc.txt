@@ -1,0 +1,9 @@
+09:34:41 build-mamba rc=0
+09:34:58 digest-default rc=0
+09:34:59 timing-default rc=0
+09:35:00 digest-naive rc=0
+09:35:01 timing-naive rc=0
+09:35:01 digest-regs2h rc=0
+09:35:02 timing-regs2h rc=0
+09:35:03 digest-regsh rc=0
+09:35:04 timing-regsh rc=0

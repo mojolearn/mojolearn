@@ -1,0 +1,293 @@
+[
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {},
+  "first": {
+   "lm-forward": 394.656,
+   "lm-train-step": 448.968,
+   "mamba3-forward": 20.176,
+   "samba-forward": 34.008,
+   "samba-train-step": 218.543,
+   "transformer-forward": 307.225
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.835,
+   "lm-train-step": 122.25,
+   "mamba3-forward": 8.275,
+   "samba-forward": 20.934,
+   "samba-train-step": 192.918,
+   "transformer-forward": 5.22
+  },
+  "name": "baseline",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1",
+   "MOJOLEARN_TRANSFORMER_LEGACY_SETUP": "1"
+  },
+  "first": {
+   "lm-forward": 398.495,
+   "lm-train-step": 455.324,
+   "mamba3-forward": 23.418,
+   "samba-forward": 45.605,
+   "samba-train-step": 277.529,
+   "transformer-forward": 340.374
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.409,
+   "lm-train-step": 122.505,
+   "mamba3-forward": 9.167,
+   "samba-forward": 35.593,
+   "samba-train-step": 257.64,
+   "transformer-forward": 12.385
+  },
+  "name": "legacy_everything",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_RETAIN_WEIGHTS": "0",
+   "MOJOLEARN_TRANSFORMER_RETAIN_WEIGHTS": "0"
+  },
+  "first": {
+   "lm-forward": 392.891,
+   "lm-train-step": 447.532,
+   "mamba3-forward": 19.69,
+   "samba-forward": 30.621,
+   "samba-train-step": 235.732,
+   "transformer-forward": 332.529
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.327,
+   "lm-train-step": 124.091,
+   "mamba3-forward": 9.212,
+   "samba-forward": 23.0,
+   "samba-train-step": 208.502,
+   "transformer-forward": 5.373
+  },
+  "name": "no_retain_weights",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"
+  },
+  "first": {
+   "lm-forward": 397.876,
+   "lm-train-step": 449.585,
+   "mamba3-forward": 20.2,
+   "samba-forward": 34.107,
+   "samba-train-step": 218.84,
+   "transformer-forward": 341.424
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.513,
+   "lm-train-step": 122.418,
+   "mamba3-forward": 8.243,
+   "samba-forward": 20.858,
+   "samba-train-step": 193.454,
+   "transformer-forward": 5.112
+  },
+  "name": "no_stage_reset",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_ATTN_SPECULATIVE": "1"
+  },
+  "first": {
+   "lm-forward": 396.861,
+   "lm-train-step": 450.031,
+   "mamba3-forward": 19.569,
+   "samba-forward": 34.084,
+   "samba-train-step": 218.215,
+   "transformer-forward": 335.639
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.85,
+   "lm-train-step": 122.546,
+   "mamba3-forward": 8.267,
+   "samba-forward": 20.911,
+   "samba-train-step": 193.683,
+   "transformer-forward": 5.222
+  },
+  "name": "speculative_attn",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_SWIGLU_FUSED": "1"
+  },
+  "first": {
+   "lm-forward": 401.817,
+   "lm-train-step": 455.078,
+   "mamba3-forward": 19.6,
+   "samba-forward": 34.036,
+   "samba-train-step": 223.462,
+   "transformer-forward": 325.326
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.864,
+   "lm-train-step": 121.723,
+   "mamba3-forward": 8.237,
+   "samba-forward": 20.907,
+   "samba-train-step": 197.566,
+   "transformer-forward": 5.22
+  },
+  "name": "swiglu_fused",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0"
+  },
+  "first": {
+   "lm-forward": 396.408,
+   "lm-train-step": 448.12,
+   "mamba3-forward": 19.97,
+   "samba-forward": 33.678,
+   "samba-train-step": 219.911,
+   "transformer-forward": 327.871
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.642,
+   "lm-train-step": 121.948,
+   "mamba3-forward": 7.968,
+   "samba-forward": 20.765,
+   "samba-train-step": 193.416,
+   "transformer-forward": 5.21
+  },
+  "name": "no_layer_sync",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_ATTN_SPECULATIVE": "1",
+   "MOJOLEARN_BYTE_LM_LAYER_SYNC": "0",
+   "MOJOLEARN_SWIGLU_FUSED": "1",
+   "MOJOLEARN_TRANSFORMER_STAGE_RESET": "0"
+  },
+  "first": {
+   "lm-forward": 396.463,
+   "lm-train-step": 451.162,
+   "mamba3-forward": 20.054,
+   "samba-forward": 33.886,
+   "samba-train-step": 222.866,
+   "transformer-forward": 330.081
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.009,
+   "lm-train-step": 124.814,
+   "mamba3-forward": 8.195,
+   "samba-forward": 20.524,
+   "samba-train-step": 193.201,
+   "transformer-forward": 5.003
+  },
+  "name": "all_on",
+  "returncode": 0,
+  "stderr_tail": ""
+ }
+]

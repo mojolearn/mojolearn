@@ -1,0 +1,27 @@
+lm-host-train-step block stages, last of 2 steps, wall 725.8 ms, ticked 557.3 ms (77% of the wall)
+  hblk.bwd.dctx_v_products                124.93 ms   22.4%
+  hblk.bwd.gate_up_proj                    58.69 ms   10.5%
+  hblk.bwd.qkv_proj                        50.36 ms    9.0%
+  hblk.fwd.scores                          40.41 ms    7.3%
+  hblk.bwd.down_proj_gate_elements         32.38 ms    5.8%
+  hblk.fwd.gate_up_proj                    27.07 ms    4.9%
+  hblk.fwd.qkv_proj                        23.31 ms    4.2%
+  hblk.bwd.attention_chains                22.76 ms    4.1%
+  hblk.bwd.kv_gather_rope                  21.65 ms    3.9%
+  hblk.bwd.o_proj                          19.00 ms    3.4%
+  hblk.fwd.down_proj_residual2             16.72 ms    3.0%
+  hblk.bwd.scale                           13.36 ms    2.4%
+  hblk.bwd.softmax                         13.23 ms    2.4%
+  hblk.fwd.kv_gather                       11.15 ms    2.0%
+  hblk.fwd.softmax                          9.66 ms    1.7%
+  hblk.fwd.rope                             9.09 ms    1.6%
+  hblk.fwd.value_sum                        8.78 ms    1.6%
+  hblk.fwd.residual1_norm2                  8.67 ms    1.6%
+  hblk.fwd.o_proj                           7.74 ms    1.4%
+  hblk.bwd.silu                             7.63 ms    1.4%
+  hblk.fwd.mask                             6.44 ms    1.2%
+  hblk.fwd.norm1                            5.81 ms    1.0%
+  hblk.bwd.norm1                            5.35 ms    1.0%
+  hblk.bwd.norm2                            5.34 ms    1.0%
+  hblk.bwd.d_x                              3.94 ms    0.7%
+  hblk.fwd.silu                             3.85 ms    0.7%

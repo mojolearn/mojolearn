@@ -1,0 +1,3 @@
+CTD-PREP block=reg-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+CTD-PREP block=tsvd-istella X=1000000x220
+MORE-PREP dataset=istella seconds=8.1

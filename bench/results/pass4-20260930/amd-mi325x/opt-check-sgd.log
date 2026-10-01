@@ -1,0 +1,4 @@
+optimizer_resident_check kind sgd floats 5657740 tensors 20 steps 32 mode identical
+  per-call step (moments on the host): median 16.183 ms (first 317.136 ms)
+  resident moments:                    median 10.731 ms (first 9.786 ms)  ratio 1.51x
+OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal)

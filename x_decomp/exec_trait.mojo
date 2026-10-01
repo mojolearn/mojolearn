@@ -60,6 +60,10 @@ trait Exec:
         ...
 
     @staticmethod
+    def orth_diag(a: F32Ptr, m: Int, l: Int, diag: F32Ptr) raises:
+        ...
+
+    @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
         ...
 

@@ -132,6 +132,7 @@ _UNFUSED_KNN = os.environ.get("MOJOLEARN_XN_UNFUSED_KNN", "") == "1"
 #: spreading, PageRank and connected_components in Python, one op per step,
 #: instead of the resident `lp_iterate` / `pr_iterate` / `cc_iterate`.
 _HOST_LOOP_LP = os.environ.get("MOJOLEARN_XN_HOST_LOOPS", "") == "1"
+_PR_SPARSE = os.environ.get("MOJOLEARN_PR_SPARSE", "1") != "0"
 #: A/B arm: KNNImputer.transform over every cell instead of the missing ones.
 _UNCOMPACT_IMPUTE = os.environ.get("MOJOLEARN_XN_UNCOMPACT_IMPUTE", "") == "1"
 #: A/B arm: the one-item forms these replaced (PolynomialCountSketch's
@@ -1381,7 +1382,31 @@ class PageRank(_XNeighbors):
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        if self.weight is None or self.weight is False:
+        binary = self.weight is None or self.weight is False
+        if _PR_SPARSE and not _HOST_LOOP_LP:
+            # lane neural-pass30: the iteration over the nonzero cells of
+            # the adjacency (x_neighbors/pr_sparse.mojo), the same chains
+            # with their zero terms left out; MOJOLEARN_PR_SPARSE=0 keeps
+            # the dense route below
+            if self.personalization is None:
+                p = Array.from_list([1.0 / n] * n, "<f4")
+            else:
+                p = self._unit(self.personalization, n, "personalization")
+            dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+            x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
+            x = Array.from_list(x.tolist(), "<f4")
+            info = empty((2,), "<i4")
+            thr = struct.unpack("<Q", struct.pack("<d", n * float(self.tol)))[0]
+            self._op("pr_iterate_sparse", [(A, 0), (x, 1), (p, 0), (dw, 0), (info, 1)],
+                     (n, int(self.max_iter), thr >> 32, thr & 0xFFFFFFFF, 1 if binary else 0),
+                     (_f32_scalar(self.alpha),))
+            it, ok = info.tolist()
+            if ok:
+                self.pagerank_ = x
+                self.n_iter_ = int(it)
+                return self
+            raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
+        if binary:
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
         Q = _empty_out((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
@@ -1484,10 +1509,15 @@ class Louvain(_XNeighbors):
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        rows = A.tolist()
-        if any(rows[i][j] != rows[j][i] for i in range(n) for j in range(i + 1, n)):
+        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
+        # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
+        # Python scan at the board's 20,000 nodes, most of the race's minute.
+        flags = _empty_out((2,), "<i4")
+        self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
+        flags = flags.tolist()
+        if flags[0]:
             raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
-        if all(v == 0 for r in rows for v in r):
+        if not flags[1]:
             raise ValueError("Louvain: the graph has no edges")
         labels = empty((n,), "<i4")
         info = _empty_out((2,), "<f4")

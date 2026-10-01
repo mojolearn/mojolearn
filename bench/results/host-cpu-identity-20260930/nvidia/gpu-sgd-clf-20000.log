@@ -1,0 +1,3 @@
+36255 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b5200000000, nodemask=2)
+36255 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x112200000000, nodemask=1)
+{"ms": 3427.0099587738514, "digest": "a6cb75bf0e2f93da8e1bed8f10ddcd2f5343e106136f0400f2a0e38ef09b3512", "inputs": "64f661f504bae24600246968a003e1fdb968f77d9f521aaf57d2ca273a7e09b5", "quality": {"score": 0.99025}, "case": "sgd-clf", "size": 20000, "env": {}}

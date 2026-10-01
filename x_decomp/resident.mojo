@@ -19,13 +19,17 @@ from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from max.gpu.host import DeviceBuffer, DeviceContext
+from core.device_zero import enqueue_fill
 
 from x_decomp.cells import F32Ptr
 from x_decomp.device import (
+    _down,
+    _up_into,
     absmax_scratch,
     colsum_scratch,
     launch_absmax,
     orth_on_device,
+    orth_on_device_diag,
     gemm_scratch,
     launch_colsum,
     launch_ew,
@@ -175,8 +179,7 @@ def dev_upload_py(id: PythonObject, addr: PythonObject, n: PythonObject) raises 
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt), src_ptr=src)
+        _up_into(ctx, p[].bufs[i], src, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
@@ -190,8 +193,7 @@ def dev_download_py(id: PythonObject, addr: PythonObject, n: PythonObject) raise
     _ = _ptr(i, cnt)
     with GILReleased(Python()):
         var ctx = xd_ctx()
-        if cnt > 0:
-            ctx.enqueue_copy(dst_ptr=dst, src_buf=p[].bufs[i].create_sub_buffer[DType.float32](0, cnt))
+        _down(ctx, p[].bufs[i], dst, cnt)
         ctx.synchronize()
     return PythonObject(cnt)
 
@@ -296,6 +298,33 @@ def dev_orth_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> P
         ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
         with GILReleased(Python()):
             orth_on_device(ctx, sub, m, l)
+    return PythonObject(cells)
+
+
+def dev_orth_diag_py(a: PythonObject, dst: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`dev_orth_py`, and the host floats at `diag` (l) = the product of the
+    two passes' R diagonals (`orth_on_device_diag`, lane neural-pass17)."""
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var cells = m * l
+    var ia = _id(a)
+    var io = _id(dst)
+    _ = _ptr(ia, cells)
+    _ = _ptr(io, cells)
+    var pd = F32Ptr(unsafe_from_address=Int(py=diag))
+    var pool = X_DECOMP_POOL.get_or_create_ptr()
+    var ctx = xd_ctx()
+    var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
+    enqueue_fill(ctx, dd, Float32(1.0))
+    if cells > 0:
+        var sub = pool[].bufs[io].create_sub_buffer[DType.float32](0, cells)
+        ctx.enqueue_copy(dst_buf=sub, src_buf=pool[].bufs[ia].create_sub_buffer[DType.float32](0, cells))
+        with GILReleased(Python()):
+            orth_on_device_diag(ctx, sub, m, l, dd, True)
+    if l > 0:
+        ctx.enqueue_copy(dst_ptr=pd, src_buf=dd.create_sub_buffer[DType.float32](0, l))
+    ctx.synchronize()
+    _ = dd^
     return PythonObject(cells)
 
 

@@ -1,0 +1,5 @@
+mlp_step_check mode identical rows 32 steps 64
+  per-operation step: median 1.697 ms (first 305.107 ms)
+  fused step:         median 1.190 ms (first 1.243 ms)  ratio 1.43x
+  losses: first 1.741481 last 1.176679 digest 0fa22def6c200ffe
+MLP_STEP_CHECK PASS (64 steps, every byte equal)

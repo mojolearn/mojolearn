@@ -1,0 +1,7 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/bench_board_algos.py", "race", "--lane", "svd", "--dataset", "taxi", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-svd-taxi-new", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/svd", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=0 ms=4324.849 infer_ms=None digest=f07891b9aaf42a98
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=1 ms=4075.867 infer_ms=None digest=f07891b9aaf42a98
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=2 ms=4074.318 infer_ms=None digest=f07891b9aaf42a98
+ALGOS-ROUND lane=svd dataset=taxi arm=ours round=3 ms=4078.962 infer_ms=None digest=f07891b9aaf42a98
+ALGOS lane=svd dataset=taxi arm=ours status=ok median_ms=4075.8670719951624 quality={"max_rel_singular_value_error": 6.33228931077733e-07, "relative_reconstruction_error_100k_rows": 0.0003330177321485153}

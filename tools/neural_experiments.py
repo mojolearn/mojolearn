@@ -67,6 +67,10 @@ EXPERIMENTS = {
     # the chain runs; the same chain in the same order on every arm
     "s17_tail_pipe": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "pipe"},
     "s17_tail_dbuf": {"MOJOLEARN_MAMBA3_S17_TAIL_ARM": "dbuf"},
+    # the half-page arms (lane/neural-apple3): the Apple column's default is
+    # regs2h (the full pages are over Metal's 32 KB); opt-in elsewhere
+    "s16_regs2h": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regs2h"},
+    "s16_regsh": {"MOJOLEARN_MAMBA3_S16_QK_ARM": "regsh"},
     # the optimizer's moments on the host and the per-call optimizer_step
     # (lane/neural-pass4): the before arm of the resident moments
     "opt_host": {"MOJOLEARN_OPTIMIZER_RESIDENT": "0"},
@@ -78,6 +82,9 @@ SETS = {
     # the S16 arms on the Mamba lanes (run with --lane mamba3-forward --lane
     # samba-train-step, or the timing tool for the per-kernel walls)
     "s16": ["baseline", "s16_naive", "s16_shared", "s16_regs2", "s16_smem48"],
+    # the Apple S16 arms (run with --lane mamba3-forward --lane samba-train-step
+    # on a Mac, or the timing tool for the per-kernel walls)
+    "s16_apple": ["baseline", "s16_naive", "s16_regs2h", "s16_regsh"],
     # the resident optimizer moments on the training lanes (run with --lane
     # samba-train-step --lane lm-train-step)
     "optimizer": ["baseline", "opt_host"],

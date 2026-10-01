@@ -1,0 +1,14 @@
+{
+  "state": "finished",
+  "phase": "complete",
+  "vendor": "amd",
+  "utc": "2026-09-30T23:07:06.250044+00:00",
+  "returncodes": {
+    "session-reuse": 0,
+    "session-refusals": 0,
+    "session-lifetime": 0,
+    "session-budget": 0,
+    "neural-sweep": 0,
+    "classical-ab": -11
+  }
+}

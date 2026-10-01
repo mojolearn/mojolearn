@@ -1,0 +1,6 @@
+212498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3960c0000000, nodemask=2)
+212498 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1207c0000000, nodemask=1)
+optimizer_resident_check kind sgd floats 5657740 tensors 20 steps 32 mode identical
+  per-call step (moments on the host): median 39.803 ms (first 1228.457 ms)
+  resident moments:                    median 22.040 ms (first 23.511 ms)  ratio 1.81x
+OPTIMIZER_RESIDENT_CHECK PASS (32 steps, every byte equal)

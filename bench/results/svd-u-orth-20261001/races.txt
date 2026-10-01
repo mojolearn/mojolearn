@@ -1,0 +1,23 @@
+#### AMD
+svd taxi before  ms=4078.894 digest=f07891b9aaf42a98  
+svd taxi after  ms=132.182 digest=64f2344451a1d423  
+svd taxi restore  ms=266.660 digest=f07891b9aaf42a98  
+svd istella before  ms=92170.375 digest=92c189cb2337dc73  
+svd istella after  ms=10206.229 digest=92c189cb2337dc73  
+svd istella restore  ms=10336.292 digest=92c189cb2337dc73  
+#### NV
+svd taxi before  ms=1009.932 digest=f07891b9aaf42a98  
+svd taxi after  ms=136.273 digest=64f2344451a1d423  
+svd taxi restore  ms=320.202 digest=f07891b9aaf42a98  
+svd istella before  ms=43343.591 digest=92c189cb2337dc73  
+svd istella after  ms=16112.025 digest=92c189cb2337dc73  
+svd istella restore  ms=16092.682 digest=92c189cb2337dc73  
+#### M3
+svd-taxi-main  ms=230.241 digest=f07891b9aaf42a98  
+svd-taxi-branch  ms=49.192 digest=64f2344451a1d423  
+svd-taxi-householder  ms=219.926 digest=f07891b9aaf42a98  
+svd-istella-main  ms=15950.030 digest=92c189cb2337dc73  
+svd-istella-branch  ms=15829.297 digest=92c189cb2337dc73  
+svd-istella-householder  ms=15856.584 digest=92c189cb2337dc73  
+
+[exited with code 0]

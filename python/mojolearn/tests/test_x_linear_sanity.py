@@ -143,6 +143,35 @@ def _():
     return ok
 
 
+@case("lars-crossing")
+def _():
+    """DEVIATION 5010: correlated features where an active LAR coefficient
+    crosses zero. With every feature active the LAR path ends at least
+    squares; scikit-learn's lar sign flip ends far from it (train R2 -25
+    against 0.93 at seed 58), so the oracle here is least squares, not
+    their Lars."""
+    from sklearn import linear_model as sk
+    ok = True
+    for n, d, seed in ((60, 5, 58), (100, 6, 44), (200, 8, 2)):
+        rng = np.random.default_rng(seed)
+        Z = rng.standard_normal((n, 3))
+        X = Z @ rng.standard_normal((3, d)) + 0.3 * rng.standard_normal((n, d))
+        y = X @ rng.standard_normal(d) + rng.standard_normal(n)
+        X, y = X.astype(np.float32), y.astype(np.float32)
+        X64, y64 = X.astype(np.float64), y.astype(np.float64)
+        A = np.c_[X64, np.ones(n)]
+        w = np.linalg.lstsq(A, y64, rcond=None)[0]
+        a = ml.Lars(n_nonzero_coefs=500).fit(X, y)
+        b = sk.Lars(n_nonzero_coefs=500).fit(X64, y64)
+        r2 = lambda p: 1.0 - float(((y64 - p) ** 2).sum()) / float(((y64 - y64.mean()) ** 2).sum())
+        ra = r2(X64 @ np.asarray(a.coef_, np.float64) + a.intercept_)
+        print(f"  n={n} d={d} seed={seed}: train R2 ours {ra:.4f}, least squares {r2(A @ w):.4f}, "
+              f"scikit-learn Lars {r2(b.predict(X64)):.4f}")
+        ok &= _close(f"Lars n={n} d={d} seed={seed} coef vs least squares", a.coef_, w[:d], 2e-3)
+        ok &= _close(f"Lars n={n} d={d} seed={seed} intercept", [a.intercept_], [w[d]], 2e-3)
+    return ok
+
+
 @case("quantile")
 def _():
     from sklearn import linear_model as sk

@@ -130,6 +130,17 @@ del _p
 _SOLE_HOLDER = _Probe.seen[0] if _Probe.seen else -1
 
 
+
+def _host_all_finite(a):
+    """True/False from the base binding's `all_finite_f32`, or None when this
+    install has no such helper (the caller then runs the cell form)."""
+    try:
+        from ._buffer import all_finite
+        return bool(all_finite(a))
+    except (ImportError, AttributeError, OSError, TypeError):
+        return None
+
+
 class _M:
     """A row-major float32 matrix held in an `array.array('f')`, or on the
     device (lane decomp-apple): a GPU kit's elementwise, product, fold and
@@ -192,6 +203,24 @@ class _M:
         return cls(array.array("f", values), r, c)
 
     @classmethod
+    def shape_of_input(cls, X, name="X"):
+        """(rows, cols) of an input `from_input` would accept, with the same
+        refusals (shape, dtype, finiteness), and no store built; the cell
+        form of the finiteness check runs where the base binding lacks the
+        host helper."""
+        if _is_sparse(X):
+            X = X.toarray()
+        a = as_f32_c(X, ndim=2, name=name)[0]
+        if a.ndim != 2 or min(a.shape) == 0:
+            raise ValueError(f"{name}: a nonempty two-dimensional input is required")
+        fin = _host_all_finite(a)
+        if fin is False:
+            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
+        if fin is None:
+            cls.from_input(a, name)
+        return a.shape[0], a.shape[1]
+
+    @classmethod
     def from_input(cls, X, name="X"):
         if _is_sparse(X):
             X = X.toarray()          # a scipy.sparse matrix/array: densified (exact)
@@ -205,8 +234,17 @@ class _M:
         # (a 2-D float memoryview is not bytes-like to array.frombytes: cast
         # it to a flat byte view first, as _array.Array does; same bytes)
         s.frombytes(mv.cast("B") if isinstance(mv, memoryview) and mv.c_contiguous else a.tobytes())
+        # The finiteness refusal on the host when the base binding has its
+        # helper (lane neural-pass27, 2026-10-01): the cell form below
+        # uploaded the whole input to the device and freed it again just to
+        # sum x * 0 (880 MB and ~250 ms a call at the board's 1M x 220 on
+        # the M4); the predicate is the same, no recorded bit depends on it.
+        fin = _host_all_finite(a)
+        if fin is False:
+            raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
         m = cls(s, a.shape[0], a.shape[1])
-        m._check_finite(name)
+        if fin is None:
+            m._check_finite(name)
         return m
 
     def _check_finite(self, name):
@@ -593,6 +631,19 @@ class _Kit:
         self.b.x_decomp_orth(Q.addr, [A.r, A.c])
         return Q
 
+    def orth_diag(self, A):
+        """`orth`, and the list of the two passes' R-diagonal products (A.c
+        floats): the sign of entry j orients Q's column j along A's, 0 marks
+        a dependent column (`orth_diag_cell`, lane neural-pass17)."""
+        diag = _M.zeros(1, A.c)
+        if A.r * A.c and self._use(A):
+            Q = self._dout(A.r, A.c)
+            self.b.x_decomp_dev_orth_diag(self._did(A), Q._d.id, diag.addr, [A.r, A.c])
+            return Q, list(diag.s)
+        Q = A.copy()
+        self.b.x_decomp_orth_diag(Q.addr, diag.addr, [A.r, A.c])
+        return Q, list(diag.s)
+
     def lasso_rows(self, G, Q, W, alpha, max_iter, tol, positive):
         """Row-parallel Lasso CD on the Gram (x_decomp/cells.mojo `lasso_row`),
         W (n x k) the warm start, updated in place."""
@@ -941,8 +992,11 @@ class _RandomProjection(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        M = _M.from_input(X)
-        n, d = M.r, M.c
+        # fit reads only the input's shape and refuses a non-finite input;
+        # the store (a copy of the whole input) is transform's to build
+        # (lane neural-pass27: fit_transform converted the 880 MB input
+        # twice at the board's shape)
+        n, d = _M.shape_of_input(X)
         if self.n_components == "auto":
             kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
             if kc <= 0:

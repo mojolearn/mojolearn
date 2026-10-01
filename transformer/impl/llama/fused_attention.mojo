@@ -619,6 +619,14 @@ instantiations stay trial-only)."""
 comptime ATTN_STASH_HD = 64
 """The only head dim the candidate arms instantiate (the target shape)."""
 
+comptime ATTN_FWD_TQ = 16 if is_defined["MOJOLEARN_ATTN_FWD_TQ16"]() else 32
+"""Query rows per block of the second-round forward kernels (lane
+neural-pass46, 2026-10-01): 32 as shipped; `-D MOJOLEARN_ATTN_FWD_TQ16=1`
+instantiates them at 16 rows, which halves a block's threadgroup page
+(the Apple matrix-unit copy: 27.6 KB -> 19 KB) and doubles the blocks, for
+the Apple column where a 256-thread block with a 27.6 KB page sits alone on
+a core. The chains per row are the same; only which block owns a row moves."""
+
 
 def _attn_arm_base_from_name(base: String, full: String) raises -> Int:
     """The first-round base of an arm name (section 12.1)."""
@@ -1887,8 +1895,14 @@ def _attn_speculative() -> Bool:
     caller runs the eager path exactly as before, so no bit moves. The
     kernels run on out-of-regime operands only to be discarded: arithmetic
     on inf or NaN faults nowhere and every loop is shape-bound. Default
-    off; the identity gate is the check."""
-    return String(getenv("MOJOLEARN_ATTN_SPECULATIVE")) == "1"
+    off on NVIDIA and AMD (the L40S toggle sweep read 0.99-1.00) and ON on
+    the Apple column (lane/neural-pass43, 2026-10-01: one Metal round trip
+    a layer instead of two; `MOJOLEARN_ATTN_SPECULATIVE=0` restores the
+    scan in front); the identity gate is the check."""
+    var v = String(getenv("MOJOLEARN_ATTN_SPECULATIVE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
 
 
 def _attn_timer_on() -> Bool:
@@ -7253,26 +7267,26 @@ def fused_forward_launch_ran(
                 if frows == 32 and qres:
                     if fpf:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, True, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, True, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                     else:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, False, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, False, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, True, False, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, True, False, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
@@ -7280,26 +7294,26 @@ def fused_forward_launch_ran(
                 elif frows == 32:
                     if fpf:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, True, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, True, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, True, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, True, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                     else:
                         if nsab:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, False, True](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, False, True](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
                             )
                         else:
-                            _launch_fwd_r2[ATTN_STASH_HD, 32, False, False, False](
+                            _launch_fwd_r2[ATTN_STASH_HD, ATTN_FWD_TQ, False, False, False](
                                 ctx, ton, tk, ctxv, amax, denom, corner, q_rope,
                                 k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo,
                                 window, scale,
@@ -7615,7 +7629,7 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     context chain on Apple's matrix unit where admitted (see THE FORWARD ON
     APPLE'S MATRIX UNIT). Passes, statistics, stash and outputs are the
     original's."""
-    comptime assert HD == 64 and TQ == 32 and PF and not SABN, "amma forward: HD 64, TQ 32, PF, clean"
+    comptime assert HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN, "amma forward: HD 64, TQ 32 or 16, PF, clean"
     comptime RPT = TQ // 16
     comptime BK = ATTN_FR2_BK
     comptime NSG = FUSED_THREADS // 32
@@ -7668,44 +7682,66 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var dacc = Float32(0.0)
 
     # The block's query rows, flushed once, transposed: qT[p][r].
+    # lane/neural-pass46 (2026-10-01): the stagings read four words a
+    # thread (one vector load each) and the admission exponent machinery
+    # (the per-word exponent minima, the warp butterflies, the `emin` page)
+    # is compiled only under ATTN_AMMA_ADMIT, the check arm; the shipped
+    # kernel admits every window (see ATTN_AMMA_ADMIT) and did that work
+    # for nothing on every key block. Same words, same chains.
     var eq = UInt32(0xFF)
-    for i in range(tid, TQ * HD, FUSED_THREADS):
-        var r = i // HD
-        var p = i % HD
-        var x = Float32(0.0)
+    for i in range(tid, (TQ * HD) // 4, FUSED_THREADS):
+        var i4 = i * 4
+        var r = i4 // HD
+        var p = i4 % HD
+        var x4 = SIMD[DType.float32, 4](0.0)
         if t0 + r < l:
-            x = ftz(q_rope.unsafe_load((bb * l + t0 + r) * nh * HD + h * HD + p))
-        qT[p * QST + r] = x
-        eq = min(eq, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
-    eq = _admit_warp_min(eq)
-    if lane == 0:
-        emin[sg] = eq
-    barrier()
+            x4 = q_rope.unsafe_load[width=4]((bb * l + t0 + r) * nh * HD + h * HD + p)
+        var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+        qT[p * QST + r] = f4[0]
+        qT[(p + 1) * QST + r] = f4[1]
+        qT[(p + 2) * QST + r] = f4[2]
+        qT[(p + 3) * QST + r] = f4[3]
+        comptime if ATTN_AMMA_ADMIT:
+            eq = min(eq, _admit_exp_min[4](f4))
     var bq = UInt32(0xFF)
-    comptime for w in range(NSG):
-        bq = min(bq, emin[w])
+    comptime if ATTN_AMMA_ADMIT:
+        eq = _admit_warp_min(eq)
+        if lane == 0:
+            emin[sg] = eq
+        barrier()
+        comptime for w in range(NSG):
+            bq = min(bq, emin[w])
     barrier()
 
     # Pass 1: scores.
     for kb in range(kb_lo, kb_hi + 1):
         var ek = UInt32(0xFF)
-        for i in range(tid, BK * HD, FUSED_THREADS):
-            var r = i // HD
-            var p = i % HD
+        for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
+            var i4 = i * 4
+            var r = i4 // HD
+            var p = i4 % HD
             var j = kb * BK + r
-            var x = Float32(0.0)
+            var x4 = SIMD[DType.float32, 4](0.0)
             if j < s:
-                x = ftz(k_cache.unsafe_load(kvbase + j * HD + p))
-            kv[r * KST + p] = x
-            ek = min(ek, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
-        ek = _admit_warp_min(ek)
-        if lane == 0:
-            emin[sg] = ek
+                x4 = k_cache.unsafe_load[width=4](kvbase + j * HD + p)
+            var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+            kv[r * KST + p] = f4[0]
+            kv[r * KST + p + 1] = f4[1]
+            kv[r * KST + p + 2] = f4[2]
+            kv[r * KST + p + 3] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ek = min(ek, _admit_exp_min[4](f4))
+        comptime if ATTN_AMMA_ADMIT:
+            ek = _admit_warp_min(ek)
+            if lane == 0:
+                emin[sg] = ek
         barrier()
-        var bk = UInt32(0xFF)
-        comptime for w in range(NSG):
-            bk = min(bk, emin[w])
-        var adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM) or not ATTN_AMMA_ADMIT
+        var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bk = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bk = min(bk, emin[w])
+            adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM)
         comptime for q in range(SPS):
             var f = sg * SPS + q
             var fr = f // NFK
@@ -7760,6 +7796,10 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         stats.unsafe_store(tid, m)
         amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
     barrier()
+    comptime if is_defined["MOJOLEARN_ATTN_AMMA_PROBE_P1"]():
+        # PROBE (bench/attention_fwd_price_main.mojo only, never a shipped
+        # build): the kernel ends after pass 1, so its wall is pass 1's.
+        return
 
     # Pass 2: exp, the stash, the serial denominator (the original's lines).
     # lane/neural-apple2 (2026-09-28): the exp tile alternates between `tile`
@@ -7802,21 +7842,30 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
         stats.unsafe_store(TQ + tid, ftz(dacc))
         denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
     barrier()
+    comptime if is_defined["MOJOLEARN_ATTN_AMMA_PROBE_P12"]():
+        # PROBE: the kernel ends after pass 2 (passes 1 and 2's wall).
+        return
 
     # Pass 3: the context chain.
     var cacc = InlineArray[_AMMA_M64, CPS](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier block of this chain admitted
     for kb in range(kb_lo, kb_hi + 1):
         var ev = UInt32(0xFF)
-        for i in range(tid, BK * HD, FUSED_THREADS):
-            var jj = i // HD
-            var c = i % HD
+        for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
+            var i4 = i * 4
+            var jj = i4 // HD
+            var c = i4 % HD
             var j = kb * BK + jj
-            var x = Float32(0.0)
+            var x4 = SIMD[DType.float32, 4](0.0)
             if j < s:
-                x = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
-            kv[c * VST + jj] = x
-            ev = min(ev, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+                x4 = v_cache.unsafe_load[width=4](kvbase + j * HD + c)
+            var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+            kv[c * VST + jj] = f4[0]
+            kv[(c + 1) * VST + jj] = f4[1]
+            kv[(c + 2) * VST + jj] = f4[2]
+            kv[(c + 3) * VST + jj] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ev = min(ev, _admit_exp_min[4](f4))
         var ew = UInt32(0xFF)
         comptime for u in range(RPT):
             var r = tr + u * 16
@@ -7830,22 +7879,26 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                     var e = sstash.unsafe_load(cell)
                     w = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
-                    ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
+                    comptime if ATTN_AMMA_ADMIT:
+                        ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
                 wT[jj * WST + r] = w
-        ev = _admit_warp_min(ev)
-        ew = _admit_warp_min(ew)
-        if lane == 0:
-            emin[sg] = ev
-            emin[NSG + sg] = ew
+        comptime if ATTN_AMMA_ADMIT:
+            ev = _admit_warp_min(ev)
+            ew = _admit_warp_min(ew)
+            if lane == 0:
+                emin[sg] = ev
+                emin[NSG + sg] = ew
         barrier()
-        var bv = UInt32(0xFF)
-        var bw = UInt32(0xFF)
-        comptime for w in range(NSG):
-            bv = min(bv, emin[w])
-            bw = min(bw, emin[NSG + w])
-        var adm = (exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)) or not ATTN_AMMA_ADMIT
-        if not adm:
-            exact_ok = False
+        var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bv = UInt32(0xFF)
+            var bw = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bv = min(bv, emin[w])
+                bw = min(bw, emin[NSG + w])
+            adm = exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not adm:
+                exact_ok = False
         comptime for q in range(CPS):
             var g = sg * CPS + q
             var fr = g // NFC
@@ -8340,7 +8393,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     # kernel below is enqueued on the same in-order `ctx`.
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
     step_count_launch()
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
         comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
         ctx.enqueue_function[ka](
             ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
@@ -8393,7 +8446,7 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and (TQ == 32 or TQ == 16) and PF and not SABN:
         comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
         step_count_launch()
         ctx.enqueue_function[ka](
@@ -9832,13 +9885,13 @@ def fused_forward_launch_estash_ran(
                 # 2657): a shipped build compiles the clean one below alone.
                 if nsab:
                     if swz:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, True](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True, True](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                     else:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, False](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, True, False](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
@@ -9847,19 +9900,19 @@ def fused_forward_launch_estash_ran(
             if not ran_sab:
                 comptime if ATTN_ARM_TRIAL:
                     if swz:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, True](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, True](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                     else:
-                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, False](
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, False](
                             ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                             k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                             scale,
                         )
                 else:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, ATTN_DEFAULT_BSWZ](
+                    _launch_fwd_r2_keep[ATTN_STASH_HD, ATTN_FWD_TQ, True, True, False, ATTN_DEFAULT_BSWZ](
                         ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                         k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                         scale,

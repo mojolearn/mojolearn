@@ -37,15 +37,25 @@ The forward here therefore retains both per layer instead of overwriting one
 running activation, exactly as the device step keeps `tr.forward[layer]` and
 passes `tr.forward[layer - 1].residual2` down.
 
-NO THREADING, NO FAST PATH, in this file. This is the reference path's shape:
-the oracles as written. (Since lane neural-cpu, 2026-09-28, the oracles'
-GEMMs run through `gemm/host/gemm_host_rows.mojo`, which computes
-`gemm_oracle`'s bits, including its fixed leaf-and-tree fold over the token
-axis, whatever the thread count.) The threaded host forward (DEVIATION 2640) has no
-backward twin, and it must not grow one by accident: a weight gradient sums
-over every row of the batch, so unlike the forward it crosses every thread
-boundary, and a threaded version needs a fixed cross thread fold rather than
-letting threads accumulate as they finish.
+NO FAST PATH in this file: the oracles as written, in the oracles' order.
+WHAT RUNS ON MORE THAN ONE CORE, AND WHY THE BITS ARE THE SAME (lane
+neural-cpu 2026-09-28, lane neural-pass6 2026-09-30). Every cross-row fold
+in the step is a gemm v1 call (`gemm/host/gemm_host_rows.mojo` computes
+`gemm_oracle`'s bits, its fixed leaf-and-tree chain over the contraction
+axis, whatever the task count): the projections, the attention products,
+the head, every weight gradient (which is where the sum over the batch
+lives), the norm weight gradients and the loss's denominators. Everything
+else is a per-row or per-element chain, and a chain runs the same
+statements in the same order whichever task runs it, in the calling
+thread's floating-point environment (`core/host_parallel.mojo`, DEVIATION
+5900). So the block oracles' per-row stages, the loss's rows
+(`training/loss_host_rows.mojo`) and the optimizer's elements
+(`training/optimizer_host_rows.mojo`) run over host tasks. The loss and the
+optimizer keep the serial oracle calls one environment value away
+(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`); `tools/byte_lm_host_step_check.py`
+compares the two, every byte of every step, and
+`tools/byte_lm_cpu_train_gate.py cpu` compares either against the recorded
+three-vendor bytes. Nothing lets a thread accumulate as it finishes.
 
 BATCH COMPOSITION IS PART OF THE CLAIM. Nine of the gradients contract over
 the token count, so `gemm_backward.mojo`'s own statement applies: the gradient
@@ -53,6 +63,10 @@ at 1024 tokens is not the bits of the gradient at 512 tokens accumulated
 twice. A pass here is a statement at the shape it ran at.
 """
 
+from std.memory import unsafe_memcpy
+from std.os import getenv
+
+from core.host_lanes import host_f32_uninit
 from gemm.host.identical_gemm import OP_NT, gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
 from embedding.checks.embedding_oracle import (
@@ -75,7 +89,9 @@ from training.checks.optimizer_oracle import (
     OptimizerConfig,
     optimizer_step_oracle,
 )
-from transformer.checks.transformer_fixture import ScorePlant
+from training.loss_host_rows import ce_host_rows
+from training.optimizer_host_rows import adam_host_rows
+from transformer.checks.transformer_fixture import ScorePlant, TransformerWeights
 from transformer.checks.transformer_oracle import (
     RopeTable,
     TransformerKVCache,
@@ -88,6 +104,13 @@ from transformer.checks.transformer_backward_oracle import (
     _gemm_bwd_b,
     transformer_block_backward_oracle,
 )
+
+
+def byte_host_step_rows() -> Bool:
+    """True unless MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0: the loss's rows and the
+    optimizer's elements over host tasks (module note); 0 restores the serial
+    oracle calls for both, which is what the check tool compares against."""
+    return String(getenv("MOJOLEARN_BYTE_LM_HOST_STEP_ROWS")) != "0"
 
 
 def byte_host_adamw(lr: Float32, beta1: Float32, beta2: Float32,
@@ -178,13 +201,15 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     # embedding output for layer 0 and the previous layer's residual2
     # otherwise. The device step reads the same two things.
     var x = emb_forward_oracle(_byte_host_slice(params, offsets, 0), inputs, emb_cfg)
-    var inputs_of = List[List[Float32]]()
+    # Each layer's weights are sliced ONCE a step (lane neural-pass8) and the
+    # backward reads the same lists; the stages keep each layer's input
+    # (`input_x`), so no separate copy of it is held.
+    var weights = List[TransformerWeights]()
     var saved = List[TransformerStages]()
     for layer in range(config.n_layers):
-        var w = byte_host_block_weights(params, offsets, layer, dims)
+        weights.append(byte_host_block_weights(params, offsets, layer, dims))
         var cache = TransformerKVCache(b, dims, l, 0)
-        inputs_of.append(x.copy())
-        var st = transformer_block_oracle(w, x, b, l, cache, rope, ScorePlant.none())
+        var st = transformer_block_oracle(weights[layer], x, b, l, cache, rope, ScorePlant.none())
         x = st.residual2_out.copy()
         saved.append(st^)
 
@@ -192,69 +217,81 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     var head_id = config.n_tensors() - 1
     var lm_w = _byte_host_slice(params, offsets, head_id)
     var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
-    var ce = ce_forward_oracle(logits, targets, ce_cfg)
-    ce_backward_oracle(ce, targets, ce_cfg)
-    var loss = ce.loss[0]
+    var loss: Float32
+    var dlogits: List[Float32]
+    if byte_host_step_rows():
+        var got = ce_host_rows(logits, targets, ce_cfg)
+        loss = got[0]
+        dlogits = got[1].copy()
+    else:
+        var ce = ce_forward_oracle(logits, targets, ce_cfg)
+        ce_backward_oracle(ce, targets, ce_cfg)
+        loss = ce.loss[0]
+        dlogits = ce.dlogits.copy()
+    _ = logits^
 
     # ---- the head's two GEMM backwards ------------------------------------
     # `x` is still the LAST layer's residual2, which is the head's forward `A`
     # operand, so dB reads it unchanged. dA arrives as the last layer's
     # incoming cotangent.
-    var d_h = _gemm_bwd_a(ce.dlogits, lm_w, OP_NT, m, v, dm)
-    var dw_lm = _gemm_bwd_b(ce.dlogits, x, OP_NT, m, v, dm)
+    var d_h = _gemm_bwd_a(dlogits, lm_w, OP_NT, m, v, dm)
+    var dw_lm = _gemm_bwd_b(dlogits, x, OP_NT, m, v, dm)
+    _ = dlogits^
 
     # ---- the blocks, in reverse -------------------------------------------
-    var per_layer = List[List[Float32]]()
-    for _ in range(config.n_layers):
-        per_layer.append(List[Float32]())
+    # Each gradient tensor lands at its registry offset directly (lane
+    # neural-pass8): the same bytes in the same order as the per-layer pack
+    # and the final pack it replaces, written once. `placed` counts floats
+    # so the whole registry is proven covered before the gradient is handed
+    # out (the shape check every tensor passes on its way in).
+    var grad = host_f32_uninit(config.n_total())
+    var placed = 0
     var d_out = d_h.copy()
+    placed += _place(grad, offsets, head_id, dw_lm)
     for layer in range(config.n_layers - 1, -1, -1):
-        var w = byte_host_block_weights(params, offsets, layer, dims)
         var bwd = transformer_block_backward_oracle(
-            w, saved[layer], d_out, b, l, 0, rope
+            weights[layer], saved[layer], d_out, b, l, 0, rope
         )
-        var packed = List[Float32]()
-        _extend(packed, bwd.dw_norm1)
-        _extend(packed, bwd.dw_q)
-        _extend(packed, bwd.dw_k)
-        _extend(packed, bwd.dw_v)
-        _extend(packed, bwd.dw_o)
-        _extend(packed, bwd.dw_norm2)
-        _extend(packed, bwd.dw_gate)
-        _extend(packed, bwd.dw_up)
-        _extend(packed, bwd.dw_down)
-        per_layer[layer] = packed^
+        var base = 1 + layer * 9
+        placed += _place(grad, offsets, base, bwd.dw_norm1)
+        placed += _place(grad, offsets, base + 1, bwd.dw_q)
+        placed += _place(grad, offsets, base + 2, bwd.dw_k)
+        placed += _place(grad, offsets, base + 3, bwd.dw_v)
+        placed += _place(grad, offsets, base + 4, bwd.dw_o)
+        placed += _place(grad, offsets, base + 5, bwd.dw_norm2)
+        placed += _place(grad, offsets, base + 6, bwd.dw_gate)
+        placed += _place(grad, offsets, base + 7, bwd.dw_up)
+        placed += _place(grad, offsets, base + 8, bwd.dw_down)
         d_out = bwd.d_x.copy()
 
     # ---- the embedding gradient -------------------------------------------
     # `accumulate` is off, so `dw_prev` is unread and an empty list is the
     # honest argument; `emb_backward_seed` is the oracle's own decision.
     var dw_emb = emb_backward_oracle(d_out, inputs, emb_cfg, List[Float32]())
-
-    # ---- pack, in the registry's order ------------------------------------
-    var grad = List[Float32](capacity=config.n_total())
-    _extend(grad, dw_emb)
-    for layer in range(config.n_layers):
-        _extend(grad, per_layer[layer])
-    _extend(grad, dw_lm)
-    if len(grad) != config.n_total():
+    placed += _place(grad, offsets, 0, dw_emb)
+    if placed != config.n_total():
         raise Error(
-            String("byte LM host step: packed gradient is ")
-            + String(len(grad)) + " floats, the registry says "
+            String("byte LM host step: placed gradient is ")
+            + String(placed) + " floats, the registry says "
             + String(config.n_total())
         )
     return (loss, grad^)
 
 
-def byte_host_train_step(params: List[Float32], m_state: List[Float32],
-                         v_state: List[Float32], ids: List[Int32],
+def byte_host_train_step(var params: List[Float32], var m_state: List[Float32],
+                         var v_state: List[Float32], ids: List[Int32],
                          config: ByteConfig, opt: OptimizerConfig,
                          completed_steps: Int) raises -> ByteHostStep:
     """One whole step: the gradient, then the update.
 
     `completed_steps` is the number of steps ALREADY taken, so the optimizer's
     `t` is `completed_steps + 1`, which is what the bias correction of a first
-    step needs and what the capture's `initial_*` arrays are the state for."""
+    step needs and what the capture's `initial_*` arrays are the state for.
+
+    The parameters and both moments arrive OWNED (lane neural-pass8) and come
+    back updated in the same lists: the three 80 MB copies a step used to make
+    here, on one thread, were a tenth of its wall on a 64-core host. A caller
+    that still needs its inputs passes copies."""
     config.validate()
     var n = config.n_total()
     if len(params) != n or len(m_state) != n or len(v_state) != n:
@@ -266,30 +303,45 @@ def byte_host_train_step(params: List[Float32], m_state: List[Float32],
     var loss = got[0]
     var grad = got[1].copy()
 
+    if byte_host_step_rows():
+        # No clipping (`byte_validate_optimizer`), so the gradient is read,
+        # not scaled: the elements over host tasks, written in place.
+        adam_host_rows(params, grad, m_state, v_state, opt, completed_steps + 1)
+        return ByteHostStep(loss, grad^, params^, m_state^, v_state^)
     # `optimizer_step_oracle` takes five `mut` arguments and clips `grad` in
-    # place, so the locals are transferred into it rather than assigned.
-    var p_out = params.copy()
+    # place, so the gradient is copied for it.
     var g_out = grad.copy()
-    var m_out = m_state.copy()
-    var v_out = v_state.copy()
     var initialized = List[Bool]()
     for _ in range(config.n_tensors()):
         initialized.append(True)
     var offsets = config.offsets()
-    _ = optimizer_step_oracle(p_out, g_out, m_out, v_out, initialized,
+    _ = optimizer_step_oracle(params, g_out, m_state, v_state, initialized,
                               offsets, opt, completed_steps + 1)
-    return ByteHostStep(loss, grad^, p_out^, m_out^, v_out^)
+    return ByteHostStep(loss, grad^, params^, m_state^, v_state^)
 
 
 def _byte_host_slice(values: List[Float32], offsets: List[Int], j: Int)
         -> List[Float32]:
-    """Registry tensor `j`. A copy, because the oracles take owned lists."""
-    var out = List[Float32](capacity=offsets[j + 1] - offsets[j])
-    for i in range(offsets[j], offsets[j + 1]):
-        out.append(values[i])
+    """Registry tensor `j`. A copy, because the oracles take owned lists; one
+    block copy (lane neural-pass8)."""
+    var n = offsets[j + 1] - offsets[j]
+    var out = host_f32_uninit(n)
+    if n > 0:
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=values.unsafe_ptr().unsafe_offset(offsets[j]), count=n)
     return out^
 
 
-def _extend(mut into: List[Float32], values: List[Float32]):
-    for i in range(len(values)):
-        into.append(values[i])
+def _place(mut grad: List[Float32], offsets: List[Int], j: Int,
+           values: List[Float32]) raises -> Int:
+    """Registry tensor `j` of the gradient := `values`, one block copy at the
+    tensor's offset; refuses a length other than the tensor's. Returns the
+    floats written."""
+    var n = offsets[j + 1] - offsets[j]
+    if len(values) != n:
+        raise Error(
+            String("byte LM host step: gradient tensor ") + String(j) + " holds "
+            + String(len(values)) + " floats, the registry says " + String(n)
+        )
+    if n > 0:
+        unsafe_memcpy(dest=grad.unsafe_ptr().unsafe_offset(offsets[j]), src=values.unsafe_ptr(), count=n)
+    return n
