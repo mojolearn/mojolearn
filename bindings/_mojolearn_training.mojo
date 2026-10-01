@@ -71,7 +71,7 @@ from core.neural_context import neural_ctx
 # One process-lifetime DeviceContext per binding and tier (core/neural_context.mojo).
 comptime _NEURAL_CTX = "MojoNeuralTrainingContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoNeuralTrainingContextFast"
 from checks.vendor import COMPILED_VENDOR
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, HostBuffer
 
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
@@ -308,12 +308,30 @@ def optimizer_step_binding(
 struct _OptPool(Defaultable, Movable):
     var m: List[DeviceBuffer[DType.float32]]
     var v: List[DeviceBuffer[DType.float32]]
+    #: the handle's device copies of the parameters and the gradients (lane
+    #: neural-pass26, 2026-10-01): the resident step uploads into these and
+    #: downloads the parameters from them, where it created two fresh
+    #: buffers of n floats every step (two 64 MB allocations a step at the
+    #: board's 16.8M parameters: 72 to 81 ms a step on the M4, 1.1 s for the
+    #: board's ten steps on every Mac, against a few ms of copies)
+    var p: List[DeviceBuffer[DType.float32]]
+    var g: List[DeviceBuffer[DType.float32]]
+    #: pinned host staging for the two uploads: the caller's arrays are
+    #: memcpy'd here and DMA'd to the device, where a raw host pointer handed
+    #: to the device paid a cold first-use mapping (about 20 ms per 64 MB on
+    #: the M4 for every new gradient array) and ran at a few GB/s
+    var sp: List[HostBuffer[DType.float32]]
+    var sg: List[HostBuffer[DType.float32]]
     #: floats held by each slot; 0 marks a free slot
     var n: List[Int]
 
     def __init__(out self):
         self.m = List[DeviceBuffer[DType.float32]]()
         self.v = List[DeviceBuffer[DType.float32]]()
+        self.p = List[DeviceBuffer[DType.float32]]()
+        self.g = List[DeviceBuffer[DType.float32]]()
+        self.sp = List[HostBuffer[DType.float32]]()
+        self.sg = List[HostBuffer[DType.float32]]()
         self.n = List[Int]()
 
 
@@ -350,17 +368,29 @@ def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObjec
         v.enqueue_fill(Float32(0.0))
         # The fills are ordered before every later use on the one in-order
         # context, and every host read (the download) waits.
+        var pbuf = ctx.enqueue_create_buffer[DType.float32](n)
+        var gbuf = ctx.enqueue_create_buffer[DType.float32](n)
+        var spin = ctx.enqueue_create_host_buffer[DType.float32](n)
+        var sgin = ctx.enqueue_create_host_buffer[DType.float32](n)
         for j in range(len(pool[].n)):
             if pool[].n[j] == 0 and h < 0:
                 h = j
         if h < 0:
             pool[].m.append(m^)
             pool[].v.append(v^)
+            pool[].p.append(pbuf^)
+            pool[].g.append(gbuf^)
+            pool[].sp.append(spin^)
+            pool[].sg.append(sgin^)
             pool[].n.append(n)
             h = len(pool[].n) - 1
         else:
             pool[].m[h] = m^
             pool[].v[h] = v^
+            pool[].p[h] = pbuf^
+            pool[].g[h] = gbuf^
+            pool[].sp[h] = spin^
+            pool[].sg[h] = sgin^
             pool[].n[h] = n
     return PythonObject(h)
 
@@ -374,6 +404,10 @@ def optimizer_resident_close_binding(handle: PythonObject) raises -> PythonObjec
         var pool = _OPT_POOL.get_or_create_ptr()
         pool[].m[h] = ctx.enqueue_create_buffer[DType.float32](1)
         pool[].v[h] = ctx.enqueue_create_buffer[DType.float32](1)
+        pool[].p[h] = ctx.enqueue_create_buffer[DType.float32](1)
+        pool[].g[h] = ctx.enqueue_create_buffer[DType.float32](1)
+        pool[].sp[h] = ctx.enqueue_create_host_buffer[DType.float32](1)
+        pool[].sg[h] = ctx.enqueue_create_host_buffer[DType.float32](1)
         pool[].n[h] = 0
     return PythonObject(h)
 
@@ -462,7 +496,7 @@ def optimizer_resident_step_binding(
             var neg = maximize_negated_copy(gp, n_flat)
             var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
             n_total = identical_optimizer_step_resident_host(
-                ctx, pp, np_, pool[].m[h], pool[].v[h], op, ip, fp, n_tensors,
+                ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
                 kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
                 momentum, dampening, max_norm,
             )
@@ -471,7 +505,7 @@ def optimizer_resident_step_binding(
                     gp[i] = maximize_negate(neg[i])
         else:
             n_total = identical_optimizer_step_resident_host(
-                ctx, pp, gp, pool[].m[h], pool[].v[h], op, ip, fp, n_tensors,
+                ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
                 kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
                 momentum, dampening, max_norm,
             )
