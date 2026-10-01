@@ -19,3 +19,10 @@ R2: measurements/2026-10-01/ab-stack65-amd.tar.gz.
 Same digest and losses on both arms. Main read ~3x slower than this morning's probe on the same box
 (lm-forward stage 271-297 ms vs 91, train step 799-912 vs 275), no swap or thermal cause found. Race lm-forward
 main 331 vs pass58 64 ms, train step 188 vs 192 ms. Rerun queued (~/m3_queue3.sh, after pr67); the old run is ~/pr65-metal-run1.
+
+## M3 Ultra rerun (~/pr65-metal, box back to normal speed): SLOWER, NOT MERGED
+
+Same digest and losses. lm-forward stage 70.9/70.4 main vs 70.5/71.3; race 63.1 vs 63.7.
+lm-train-step stage 198.9/201.5 vs 211.4/207.6 (+4.6%); race 184.5 vs 191.4 (+3.7%).
+Timers (per layer): attn.bwd_kvgrid_dkdv_pf 2.75 -> 3.73 ms (+0.98), bwd.attention 8.43 -> 9.32; everything else flat
+(m3-tick-diff.txt). The stack's dK/dV change regresses Metal; #65 waits on a Metal gate for it.
