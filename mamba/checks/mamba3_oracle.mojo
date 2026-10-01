@@ -134,7 +134,7 @@ from std.os import getenv
 from core.host_predict_threads import host_predict_task_count
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
 from core.host_parallel import host_parallelize
-from gemm.host.gemm_host_rows import GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
+from gemm.host.gemm_host_rows import gemm_host_rows_into, GhrPtr, GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
@@ -1081,6 +1081,38 @@ def mamba3_block_oracle(
     # blocks a head, and each task builds the left operand of its own rows
     # only. At the board's CPU cell (12 heads) a 64-thread host gets 96
     # rows where it had 12; a 10-thread host keeps the 12.
+    # The recurrence's right operand ks (the chunk's scaled keys, rows past
+    # `real` zero) is the same for every state-row block of a (batch, head),
+    # so it is gathered ONCE per (batch, head, chunk) here, rows over tasks,
+    # and the tasks below read it in place through the GEMM's pointer entry
+    # (`gemm_host_rows_into`, the call `gemm_host_rows_right_zero_padded`
+    # makes); a block's cost is then its own rows' share.
+    var ks_all = host_f32_uninit(b * nh * nc * q * n_state)
+    var ksa_p = _p(ks_all)
+    var ks_rows = b * nh * nc
+    var kstasks = host_row_tasks(ks_rows, 2 * q * n_state)
+    var kschunk = (ks_rows + kstasks - 1) // kstasks
+    def _ks_rows(task: Int) {imm ksw_p, imm ksa_p, imm ks_rows, imm nh, imm nc, imm t_work, imm q_v, imm n_state_v, imm kschunk}:
+        for r in range(task * kschunk, min((task + 1) * kschunk, ks_rows)):
+            var c = r % nc
+            var hh = (r // nc) % nh
+            var bb = r // (nc * nh)
+            var c0 = c * q_v
+            var real = t_work - c0
+            if real > q_v:
+                real = q_v
+            var dst = r * q_v * n_state_v
+            for i in range(q_v):
+                for n in range(n_state_v):
+                    if i < real:
+                        ksa_p.unsafe_store(dst + i * n_state_v + n, ksw_p.unsafe_load(
+                            ((bb * t_work + c0 + i) * nh + hh) * n_state_v + n))
+                    else:
+                        ksa_p.unsafe_store(dst + i * n_state_v + n, Float32(0.0))
+    if kstasks <= 1:
+        _ks_rows(0)
+    else:
+        host_parallelize(_ks_rows, kstasks)
     var pblocks = m3_inter_pblocks(bh_rows, p_dim)
     var pblock = (p_dim + pblocks - 1) // pblocks
     var ic_rows = bh_rows * pblocks
@@ -1090,7 +1122,7 @@ def mamba3_block_oracle(
     var pchunk = (ic_rows + ptasks - 1) // ptasks
     var err_flag = _zeros(1)
     var err_p = _p(err_flag)
-    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksw_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm ic_rows, imm pblocks, imm pblock, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
+    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksa_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm ic_rows, imm pblocks, imm pblock, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
         for r0 in range(task * pchunk, min((task + 1) * pchunk, ic_rows)):
             var bh = r0 // pblocks
             var pb = r0 % pblocks
@@ -1106,7 +1138,9 @@ def mamba3_block_oracle(
                 h_run.append(sh_p.unsafe_load(sbase + i))
             var h_sealed = h_run.copy()
             var vs = _zeros(q_v * pw)
-            var ks = _zeros(q_v * n_state_v)
+            var inc = host_f32_uninit(pw * n_state_v)
+            var vs_p = rebind[GhrPtr](vs.unsafe_ptr())
+            var inc_p = rebind[GhrPtr](inc.unsafe_ptr())
             for c in range(nc):
                 var pbase = (((bb * nc + c) * nh + hh) * p_dim_v + p0) * n_state_v
                 for i in range(cells):
@@ -1123,8 +1157,6 @@ def mamba3_block_oracle(
                 )
                 for i in range(q_v * pw):
                     vs[i] = Float32(0.0)
-                for i in range(q_v * n_state_v):
-                    ks[i] = Float32(0.0)
                 for i in range(real):
                     var drev = ftz(
                         dl
@@ -1146,16 +1178,9 @@ def mamba3_block_oracle(
                                 e,
                             )
                         )
-                    for n in range(n_state_v):
-                        ks[i * n_state_v + n] = ksw_p.unsafe_load(
-                            ((bb * t_work + c0 + i) * nh + hh) * n_state_v
-                            + n
-                        )
-                var inc = List[Float32]()
+                var ks_p = rebind[GhrPtr](ksa_p.unsafe_offset(((bb * nh + hh) * nc + c) * q_v * n_state_v))
                 try:
-                    inc = gemm_host_rows_right_zero_padded(
-                        vs, ks, OP_TN, pw, n_state_v, q_v, real
-                    )
+                    gemm_host_rows_into(vs_p, ks_p, inc_p, OP_TN, pw, n_state_v, q_v, False, real)
                 except:
                     # The shapes are the oracle's own, so this cannot
                     # fire; if it ever does, the caller raises after the
@@ -1172,12 +1197,15 @@ def mamba3_block_oracle(
             for i in range(cells):
                 hlast_p.unsafe_store(sbase + i, h_run[i])
                 sh_p.unsafe_store(sbase + i, h_sealed[i])
+            _ = vs^
+            _ = inc^
     if ptasks <= 1:
         _inter_chunk_rows(0)
     else:
         host_parallelize(_inter_chunk_rows, ptasks)
     if err_flag[0] != Float32(0.0):
         raise Error("mamba3_block_oracle: the inter-chunk product refused its operands")
+    _ = ks_all^
 
     host_tick(hton, htk, "m3.inter_chunk")
     # ---- S16 (intra-chunk attention) + S17 (state read-out) + S18 (skip)
