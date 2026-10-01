@@ -4056,6 +4056,14 @@ def fused_bwd_dkdv_stash_kernel[HD: Int, BJ: Int, SABOTAGE: Bool](
 # ===========================================================================
 
 comptime TILED_TK = 16
+#: Query rows per block of `fused_bwd_dq_tiled_pf_kernel` (lane
+#: neural-pass50, 2026-10-01): 64, or 32 / 16 under
+#: `-D MOJOLEARN_ATTN_DQ_TQ32=1` / `-D MOJOLEARN_ATTN_DQ_TQ16=1` for the
+#: MI325X sweep (192 blocks of 64 rows on 304 CUs at the board shape). The
+#: rows a block holds do not touch any cell's chain: same bits.
+comptime ATTN_DQ_TQ = 16 if is_defined["MOJOLEARN_ATTN_DQ_TQ16"]() else (
+    32 if is_defined["MOJOLEARN_ATTN_DQ_TQ32"]() else 64
+)
 """Keys per staged tile of `fused_bwd_dq_tiled_kernel`."""
 comptime TILED_TT = 16
 """Queries per staged tile of `fused_bwd_dkdv_tiled_kernel`."""
@@ -4851,7 +4859,7 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
     K tile is staged through `ftz`. 256 threads; `TQ = 64` rows per block."""
-    comptime TQ = 64
+    comptime TQ = ATTN_DQ_TQ
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
     comptime TK = TILED_TK
@@ -8500,7 +8508,7 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
             block_dim=(FUSED_THREADS, 1, 1),
         )
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + 63) // 64)
+    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
@@ -8684,7 +8692,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         _attn_tick(ctx, on, tk, "bwd_zdot_zdefer_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
-    var dq_blocks = b * nh * ((l + 63) // 64)
+    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
     step_count_launch()
     ctx.enqueue_function[qp](
@@ -9097,7 +9105,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_dres_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_pf")
-    var dq_blocks = b * nh * ((l + 63) // 64)
+    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
     comptime if ATTN_DQ_MFMA and HD == 64:
@@ -9192,7 +9200,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
         _attn_tick(ctx, on, tk, "bwd_zfold_pf")
     else:
         _attn_tick(ctx, on, tk, "bwd_zfold")
-    var dq_blocks = b * nh * ((l + 63) // 64)
+    var dq_blocks = b * nh * ((l + ATTN_DQ_TQ - 1) // ATTN_DQ_TQ)
     var kv_blocks = b * nkv * ((s + 63) // 64)
     comptime if PF:
         comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
