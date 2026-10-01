@@ -1495,10 +1495,21 @@ def mamba3_s17_operands_kernel(
 #: default); a build with MOJOLEARN_MAMBA3_S17_TAIL_NAIVE keeps the naive
 #: operands kernel too. MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE=1 (a build
 #: define) keeps the naive kernel for the A/B and the digest gate.
-comptime M3_S17_OPERANDS_SHARED = (
-    not is_defined["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"]() and M3_S17_TAIL_SHARED
-)
 comptime M3_S17_CARRY_STRIDE = M3_D_STATE + 1
+#: The operands kernel's threadgroup page: the carried [p][n] tile at its
+#: padded stride, the row's dy, v and d_v over p, and q, k and d_q over n
+#: (lane neural-pass24, 2026-10-01: 35,328 bytes, OVER Apple's 32 KB, and the
+#: arm had no fits gate, so the 0.8.32 macOS wheel failed to create the
+#: pipeline for every Mamba-3 backward; where the page does not fit the
+#: naive operands kernel runs, the same chains in the same order).
+comptime M3_S17_OPERANDS_BYTES = (
+    M3_HEADDIM * M3_S17_CARRY_STRIDE + 3 * M3_HEADDIM + 3 * M3_D_STATE
+) * 4
+comptime M3_S17_OPERANDS_SHARED = (
+    not is_defined["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"]()
+    and M3_S17_TAIL_SHARED
+    and lib_smem_page_fits_for[TARGET_COLUMN, M3_S17_OPERANDS_BYTES]()
+)
 
 
 def mamba3_s17_operands_shared_kernel(

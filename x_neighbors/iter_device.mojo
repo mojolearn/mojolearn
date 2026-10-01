@@ -24,6 +24,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
+from x_neighbors.cc_sparse import cc_iterate_sparse
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
 from std.memory import bitcast as _bc
@@ -262,7 +263,16 @@ def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label iteration (`cc_step` until the labels
     stop changing) with A resident; the labels come back each step (n
     integers) for the host's equality test, as Python compared them.
-    `lab` in: 0..n-1, out: the fixed point. info (int32 x 1): steps."""
+    `lab` in: 0..n-1, out: the fixed point. info (int32 x 1): steps.
+    Lane neural-pass22: unless MOJOLEARN_XN_CC_GPU is defined, the rounds run
+    on the HOST as the sparse walk of x_neighbors/cc_sparse.mojo (the same
+    labels and round count; the dense rounds here read row t and column t
+    of the matrix for every node in every round, 800 million cells a round
+    at the board's 20,000 nodes); the resident loop below stays the device
+    body and the reference."""
+    comptime if not is_defined["MOJOLEARN_XN_CC_GPU"]():
+        cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
+        return
     var ctx = xn_ctx()
     var d_a = _buf(ctx, a, n * n, True)
     var d_l0 = _buf_i(ctx, lab, n, True)
