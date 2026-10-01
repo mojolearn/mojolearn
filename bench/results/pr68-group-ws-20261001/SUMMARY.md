@@ -9,3 +9,8 @@ ab_job2 pr68 (main = pre-#65 main at run time, merged into the arm), plus ATTN+S
 
 Ticks (ms/layer, main / pass62): fwd.q_proj 0.084/0.080, k 0.061/0.056, v 0.060/0.055, o 0.070/0.064, gate 0.117/0.112, up 0.117/0.110, down 0.118/0.113;
 bwd.mlp_through_oproj 1.196/1.142, bwd.after_attention 0.623/0.584. Train step -3%. AMD same-bits run: pass10.
+
+## AMD MI325X (DO pass10, main incl. #65 + #67)
+
+Same bits. lm-forward 23.4 / 39.8 (one outlier) vs 23.4 / 23.3; train 58.6 / 58.4 vs 58.4 / 58.5. Neutral (the change is NVIDIA-only).
+MERGED: NVIDIA train -3%, AMD neutral, same bits. R2 ab-pr68-amd.

@@ -3299,8 +3299,21 @@ def gemm_split_cells_cap() -> Int:
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
 #: keeps its tile). NVIDIA and Apple keep 0 (off).
 comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
-    1024 if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_NVIDIA else 0
+    1024 if TARGET_COLUMN == COLUMN_AMD else
+    192 if TARGET_COLUMN == COLUMN_NVIDIA else 0
 )
+#: lane/neural-pass62 tick table on the L40S (2026-10-01, PR #67 tree, same
+#: bits): with the step-down open at every k, the byte LM's forward
+#: projections (k = 384) halved on 64x64 tiles (q/o 0.104/0.084 -> 0.051/0.049
+#: ms a layer at 192 blocks; gate 0.147 -> 0.098 at 512) while the backward
+#: GEMMs with k 1024..2048 lost (+0.2 ms a layer in mlp_through_oproj) and
+#: the head doubled. So the NVIDIA column steps down SHORT chains, k at most
+#: GEMM_TILE_SHORT_K_DEFAULT, and long ones from `gemm_tile_min_k()`; the
+#: middle keeps the wide tile. The block floor is 192 on NVIDIA (the 48-tile
+#: projections stop at 64x64, 192 blocks; at 1024 they would fall to 32x32,
+#: the tiles the old TILE=256 sweep lost on). `MOJOLEARN_GEMM_TILE_SHORT_K`
+#: overrides (0 = no short rule).
+comptime GEMM_TILE_SHORT_K_DEFAULT = 512 if TARGET_COLUMN == COLUMN_NVIDIA else 0
 #: lane/neural-pass54 (2026-10-01): the step-down only from this k (0 = any).
 #: On the L40S the narrower tiles won the 4096^3 race (54.1 -> 47.1 ms) and
 #: lost the LM stages (k 384..2048; lm-train-step 40.7 -> 47 ms), so the
@@ -3347,6 +3360,36 @@ struct _TileMinBlocks(Defaultable, Movable):
 
 comptime _TILE_MIN_NAME = "MojoGemmTileMinBlocksIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinBlocksFast"
 comptime GEMM_TILE_MIN_BLOCKS = _Global[StorageType=_TileMinBlocks, name=_TILE_MIN_NAME, init_fn=_TileMinBlocks.__init__]
+
+
+struct _TileShortK(Defaultable, Movable):
+    var k: Int
+
+    def __init__(out self):
+        self.k = -1
+
+
+comptime _TILE_SHORT_K_NAME = "MojoGemmTileShortKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileShortKFast"
+comptime GEMM_TILE_SHORT_K = _Global[StorageType=_TileShortK, name=_TILE_SHORT_K_NAME, init_fn=_TileShortK.__init__]
+
+
+def gemm_tile_short_k() -> Int:
+    """The largest k the SHORT-chain step-down applies to (0 = none):
+    MOJOLEARN_GEMM_TILE_SHORT_K when set (read once per process), else
+    GEMM_TILE_SHORT_K_DEFAULT."""
+    try:
+        var p = GEMM_TILE_SHORT_K.get_or_create_ptr()
+        if p[].k < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_TILE_SHORT_K"))
+            var k = GEMM_TILE_SHORT_K_DEFAULT
+            if v != "":
+                k = Int(v)
+            if k < 0:
+                k = 0
+            p[].k = k
+        return p[].k
+    except:
+        return GEMM_TILE_SHORT_K_DEFAULT
 
 
 def gemm_tile_min_blocks() -> Int:
@@ -3524,7 +3567,10 @@ def gemm_tile_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
     and only the calls that would run a plain tuned tile step down. The
     same leaves and folds either way."""
     var min_blocks = gemm_tile_min_blocks()
-    if min_blocks <= 0 or k < gemm_tile_min_k():
+    if min_blocks <= 0:
+        return plan
+    var short_k = gemm_tile_short_k()
+    if k < gemm_tile_min_k() and not (short_k > 0 and k <= short_k):
         return plan
     var pick = plan
     if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < min_blocks:
@@ -5666,9 +5712,20 @@ comptime GEMM_IDENTICAL_LEAF_SPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
 )
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
+#: lane/neural-pass62 (2026-10-01): ON by default. Where the kernel body row
+#: is 1 (the NVIDIA column) every call the group rule takes (the byte LM's
+#: layer projections: k 384..1024, under the S tiles) ran `_kpack_run`: a
+#: fresh `m n G` device buffer, a hard `synchronize`, the group launch, the
+#: fold, a second hard `synchronize` and the free, PER GEMM, 56 times an
+#: lm-forward and more a train step, and those waits bypass the step
+#: counters. With the caller's `GemmWorkspace` sized for the groups
+#: (`identical_gemm_workspace_max_floats` below) the same group launch and
+#: the same fold run asynchronously on the stream into the kept buffer: the
+#: same partials, the same fold DAG, no allocation and no wait. A caller
+#: whose scratch is too small still takes the allocating path.
+#: `-D MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS=1` restores it everywhere.
 comptime GEMM_REUSE_GROUP_WS = (
-    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
-    and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
+    not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
 )
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).

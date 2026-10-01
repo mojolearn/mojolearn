@@ -30,3 +30,13 @@ Also tracked in the same evidence commit: bench/results/pr65-attention-stack-202
 | digest / losses | 4a8e781b0739a038 | same |
 
 Neutral on Apple (same bits). Merge once AMD (pass8) is not slower.
+
+## AMD MI325X (DO pass8, ab_job with main 3befccd28 incl. #65 merged in)
+
+| row | main | pass61 |
+|---|---|---|
+| lm-forward stage (ms) | 37.4 / 37.8 (timers 37.5) | 22.8 / 22.6 (timers 23.4) |
+| lm-train-step stage (ms) | 57.3 / 58.4 | 58.5 / 57.5 |
+| digest / losses | 4a8e781b0739a038 | same |
+
+MERGED ae506584d: NVIDIA -67% and AMD -40% forward, M3 neutral, same bits. R2 ab-pr67-amd.
