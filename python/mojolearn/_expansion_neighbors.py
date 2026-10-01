@@ -1484,10 +1484,15 @@ class Louvain(_XNeighbors):
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        rows = A.tolist()
-        if any(rows[i][j] != rows[j][i] for i in range(n) for j in range(i + 1, n)):
+        # The symmetry and no-edge checks run natively (`xn_graph_symmetry`,
+        # lane neural-pass14): over `A.tolist()` they were a 400-million-cell
+        # Python scan at the board's 20,000 nodes, most of the race's minute.
+        flags = _empty_out((2,), "<i4")
+        self._op("graph_symmetry", [(A, 0), (flags, 1)], (n,))
+        flags = flags.tolist()
+        if flags[0]:
             raise ValueError("Louvain: the adjacency matrix must be symmetric (an undirected graph)")
-        if all(v == 0 for r in rows for v in r):
+        if not flags[1]:
             raise ValueError("Louvain: the graph has no edges")
         labels = empty((n,), "<i4")
         info = _empty_out((2,), "<f4")
