@@ -3243,8 +3243,14 @@ comptime SPLITK_MAX_WORKSPACE_FLOATS = 64 * 1024 * 1024
 #: cells, 192 tiles of 64 x 64) ran at 1.5 TFLOPS there
 #: (bench/results/neural-stage-timing-amd-m3-20261001). An execution plan
 #: only: every plan computes the same leaves and folds, the same bits
-#: (`check_device_is_launch_invariant`).
-comptime GEMM_SPLIT_CELLS_DEFAULT = 128 * 1024
+#: (`check_device_is_launch_invariant`). MEASURED on the MI325X
+#: (2026-10-01, bench/results for PR #52): caps 128 K / 512 K / 1 M / 2 M
+#: read lm-train-step 121.6 / 105.0 / 100.9 / 101.0 ms and lm-forward 57.9 /
+#: 59.3 / 54.2 / 54.5, the MLP projections 1.60 -> 1.18 ms a layer, every
+#: digest and loss equal; so the AMD column's default is 1 M cells. NVIDIA
+#: keeps the L40S's 128 K; Apple keeps 128 K too (a raised cap would
+#: pre-empt PLAN_APPLE_MMA).
+comptime GEMM_SPLIT_CELLS_DEFAULT = (1 << 20) if TARGET_COLUMN == COLUMN_AMD else 128 * 1024
 
 
 struct _SplitCells(Defaultable, Movable):
