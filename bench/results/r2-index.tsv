@@ -47,3 +47,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T15:08:54Z	measurements/2026-10-01/ab-stack65-nvidia.tar.gz	93c933ce3688986523a7bca966ba1d162bc33aff0acaf3dee806ff04a4af453a	11277606	8de2d3c1e7ad	/root/ab-stack65-nvidia
 2026-10-01T15:41:47Z	measurements/2026-10-01/ab-fwdtq16-nvidia.tar.gz	904cdf363a35bd8a9c3884869b43319b86751d006e9776cbbd829a3b8b8e3732	17154419	8de2d3c1e7ad	/root/ab-fwdtq16-nvidia
 2026-10-01T16:12:26Z	measurements/2026-10-01/ab-pr67-nvidia.tar.gz	37da697e78489ec57d8839709d5f1c52b65f48dd8f4a620840cd5cae6411c47a	11462126	8de2d3c1e7ad	/root/ab-pr67-nvidia
+2026-10-01T16:14:16Z	measurements/2026-10-01/ab-p63-amd.tar.gz	6abc66f26077a04ff102dd729a5ec0ddb3d64b74dd7d904a9fc38896bbde53d6	22713883	mojolearn-steward-do-amd	/root/ab-p63-amd
+2026-10-01T16:14:19Z	measurements/2026-10-01/ab-stack65-amd.tar.gz	2a76d4c2fe86793da951f234f09a2973313870747224c9632ac350cf2b078ad5	13371137	mojolearn-steward-do-amd	/root/ab-stack65-amd
