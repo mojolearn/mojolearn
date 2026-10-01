@@ -991,7 +991,14 @@ comptime DOT_BYTES = (DOT_ROWS * DOT_LD + DOT_ROWS) * 4
 
 
 def xd_qr_dot_tile() -> Bool:
-    return String(getenv("MOJOLEARN_XD_QR_DOT_TILE")) != "0"
+    """MOJOLEARN_XD_QR_DOT_TILE=1 takes the column-tile dot kernels (the A/B
+    arm); default the one-column kernels. Measured on the L40S (the only
+    column on the device route by default; bench/results/tsqr-split-seqpool-
+    ivf-qrtiles-20261001): with the tiles qr istella 8,252 -> 15,697 ms,
+    svd istella 30,677 -> 37,611: sixteen columns per block leaves 14
+    blocks per launch against the one-column kernels' 219, so most SMs
+    idle while every chain runs at the same per-step latency."""
+    return String(getenv("MOJOLEARN_XD_QR_DOT_TILE")) == "1"
 
 
 @always_inline
