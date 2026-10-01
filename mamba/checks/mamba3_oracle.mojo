@@ -130,6 +130,8 @@ from std.math import min
 
 from std.time import perf_counter_ns
 
+from std.os import getenv
+from core.host_predict_threads import host_predict_task_count
 from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_row_tasks, host_tick
 from core.host_parallel import host_parallelize
 from gemm.host.gemm_host_rows import GHR_SERIAL_FMAS, gemm_host_rows, gemm_host_rows_right_zero_padded
@@ -220,6 +222,36 @@ def m3_refuse_bad_inputs(
     if state.pending:
         refuse_nonfinite("input_states.k", state.pend_k)
         refuse_nonfinite("input_states.v", state.pend_v)
+
+
+#: The inter-chunk pass splits each (batch, head) row into blocks of state
+#: rows p only when the thread policy has more threads than rows (lane
+#: neural-pass20): the blocks halve from the whole head down to
+#: M3_INTER_PBLOCK_MIN rows until (batch x heads x blocks) reaches the
+#: thread count. A schedule knob, it moves no bit (the per-cell chain and
+#: the product's per-cell fold do not depend on which rows share a call);
+#: a split row costs more (its right operand is gathered once per block),
+#: so a host with threads <= rows keeps the whole-head rows.
+#: MOJOLEARN_M3_INTER_PBLOCKS forces the block count (0: the rule).
+comptime M3_INTER_PBLOCK_MIN = 8
+
+
+def m3_inter_pblocks(bh_rows: Int, p_dim: Int) -> Int:
+    var forced = 0
+    try:
+        forced = Int(String(getenv("MOJOLEARN_M3_INTER_PBLOCKS", "0")))
+    except:
+        forced = 0
+    if forced > 0:
+        var f = 1
+        while f * 2 <= forced and p_dim // (f * 2) >= M3_INTER_PBLOCK_MIN:
+            f *= 2
+        return f
+    var want = host_predict_task_count(1 << 30)
+    var blocks = 1
+    while blocks * bh_rows < want and p_dim // (blocks * 2) >= M3_INTER_PBLOCK_MIN:
+        blocks *= 2
+    return blocks
 
 
 def _p(values: List[Float32]) -> HostF32Ptr:
@@ -1035,28 +1067,47 @@ def mamba3_block_oracle(
     var hlast_p = _p(st.h_last)
     var sh_p = _p(state.h)
     var vwork_p = _p(v_work)
-    var ptasks = host_row_tasks(bh_rows, 4 * nc * q * p_dim * n_state)
+    # Lane neural-pass20: the recurrence of state cell (p, n) over the
+    # chunks depends on no other cell (h = exp(dl) h + inc[p, n], inc the
+    # product's cell, whose fold over the chunk's rows is the gemm's own
+    # and does not depend on which rows of the left operand share the
+    # call: gemm_host_rows' module note, dense_check), so the rows of the
+    # split are (batch, head, block of state rows p), `m3_inter_pblocks`
+    # blocks a head, and each task builds the left operand of its own rows
+    # only. At the board's CPU cell (12 heads) a 64-thread host gets 96
+    # rows where it had 12; a 10-thread host keeps the 12.
+    var pblocks = m3_inter_pblocks(bh_rows, p_dim)
+    var pblock = (p_dim + pblocks - 1) // pblocks
+    var ic_rows = bh_rows * pblocks
+    var ptasks = host_row_tasks(ic_rows, 4 * nc * q * pblock * n_state)
     if not chunk_gemms_serial:
         ptasks = 1
-    var pchunk = (bh_rows + ptasks - 1) // ptasks
+    var pchunk = (ic_rows + ptasks - 1) // ptasks
     var err_flag = _zeros(1)
     var err_p = _p(err_flag)
-    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksw_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm bh_rows, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
-        for r0 in range(task * pchunk, min((task + 1) * pchunk, bh_rows)):
-            var bb = r0 // nh
-            var hh = r0 % nh
+    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksw_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm ic_rows, imm pblocks, imm pblock, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
+        for r0 in range(task * pchunk, min((task + 1) * pchunk, ic_rows)):
+            var bh = r0 // pblocks
+            var pb = r0 % pblocks
+            var bb = bh // nh
+            var hh = bh % nh
+            var p0 = pb * pblock
+            var p1 = min(p0 + pblock, p_dim_v)
+            var pw = p1 - p0
+            var cells = pw * n_state_v
+            var sbase = ((bb * nh + hh) * p_dim_v + p0) * n_state_v
             var h_run = List[Float32]()
-            for i in range(p_dim_v * n_state_v):
-                h_run.append(
-                    sh_p.unsafe_load(((bb * nh + hh) * p_dim_v) * n_state_v + i)
-                )
+            for i in range(cells):
+                h_run.append(sh_p.unsafe_load(sbase + i))
             var h_sealed = h_run.copy()
+            var vs = _zeros(q_v * pw)
+            var ks = _zeros(q_v * n_state_v)
             for c in range(nc):
-                var pbase = (((bb * nc + c) * nh + hh) * p_dim_v) * n_state_v
-                for i in range(p_dim_v * n_state_v):
+                var pbase = (((bb * nc + c) * nh + hh) * p_dim_v + p0) * n_state_v
+                for i in range(cells):
                     pass_p.unsafe_store(pbase + i, h_run[i])
                 if c == nc - 1:
-                    for i in range(p_dim_v * n_state_v):
+                    for i in range(cells):
                         h_sealed[i] = h_run[i]
                 var c0 = c * q_v
                 var real = t_work - c0
@@ -1065,8 +1116,10 @@ def mamba3_block_oracle(
                 var dl = ftz(
                     dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + (q_v - 1))
                 )
-                var vs = _zeros(q_v * p_dim_v)
-                var ks = _zeros(q_v * n_state_v)
+                for i in range(q_v * pw):
+                    vs[i] = Float32(0.0)
+                for i in range(q_v * n_state_v):
+                    ks[i] = Float32(0.0)
                 for i in range(real):
                     var drev = ftz(
                         dl
@@ -1075,14 +1128,14 @@ def mamba3_block_oracle(
                         )
                     )
                     var e = ftz(identical_exp(drev))
-                    for p in range(p_dim_v):
-                        vs[i * p_dim_v + p] = ftz(
+                    for pl in range(pw):
+                        vs[i * pw + pl] = ftz(
                             identical_mul(
                                 ftz(
                                     vwork_p.unsafe_load(
                                         ((bb * t_work + c0 + i) * nh + hh)
                                         * p_dim_v
-                                        + p
+                                        + p0 + pl
                                     )
                                 ),
                                 e,
@@ -1096,7 +1149,7 @@ def mamba3_block_oracle(
                 var inc = List[Float32]()
                 try:
                     inc = gemm_host_rows_right_zero_padded(
-                        vs, ks, OP_TN, p_dim_v, n_state_v, q_v, real
+                        vs, ks, OP_TN, pw, n_state_v, q_v, real
                     )
                 except:
                     # The shapes are the oracle's own, so this cannot
@@ -1105,15 +1158,15 @@ def mamba3_block_oracle(
                     err_p.unsafe_store(0, Float32(1.0))
                     return
                 var scale_c = ftz(identical_exp(dl))
-                for i in range(p_dim_v * n_state_v):
+                for i in range(cells):
                     h_run[i] = ftz(
                         identical_mul_add(
                             scale_c, ftz(h_run[i]), ftz(inc[i])
                         )
                     )
-            for i in range(p_dim_v * n_state_v):
-                hlast_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_run[i])
-                sh_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_sealed[i])
+            for i in range(cells):
+                hlast_p.unsafe_store(sbase + i, h_run[i])
+                sh_p.unsafe_store(sbase + i, h_sealed[i])
     if ptasks <= 1:
         _inter_chunk_rows(0)
     else:
