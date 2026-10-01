@@ -4881,8 +4881,13 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
     comptime TK = TILED_TK
-    var kst = stack_allocation[TK * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var dst = stack_allocation[TQ * TK, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    #: lane/neural-pass51 (2026-10-01): K staged transposed, `kst[c * KSTR + jk]`,
+    #: so the chain loop reads four consecutive keys of a column (and four
+    #: consecutive `dst` cells of a row) in one 16-byte shared load each.
+    #: The chain per cell is still `jk` ascending: same bits.
+    comptime KSTR = TK + 4
+    var kst = stack_allocation[HD * KSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dst = stack_allocation[TQ * TK, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
     var zs = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
 
     var b = Int(b_in)
@@ -4948,7 +4953,7 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
             var kv = Float32(0.0)
             if jc < s:
                 kv = ftz(k_cache.unsafe_load(kvbase + jc * HD + c))
-            kst.unsafe_store(i, kv)
+            kst.unsafe_store(c * KSTR + r, kv)
         comptime for si in range(TQ * TK // 256):
             var i = tid + si * 256
             var r = i // TK
@@ -4967,16 +4972,25 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                     dy_st.unsafe_store(cell, dcell)
             dst.unsafe_store(i, dcell)
         barrier()
-        comptime for jk in range(TK):
-            var jc = j0 + jk
-            var ka = SIMD[DType.float32, CPT](0.0)
+        comptime for j4 in range(TK // 4):
+            comptime jk0 = j4 * 4
+            var k4 = SIMD[DType.float32, CPT * 4](0.0)
+            var d4 = SIMD[DType.float32, RPT * 4](0.0)
             comptime for v in range(CPT):
-                ka[v] = kst.unsafe_load(jk * HD + tc + v * 16)
+                var k4_ld = kst.unsafe_load[width=4, alignment=16]((tc + v * 16) * KSTR + jk0)
+                comptime for qq in range(4):
+                    k4[v * 4 + qq] = k4_ld[qq]
             comptime for u in range(RPT):
-                if Int32(jc) >= lo[u] and Int32(jc) <= hi[u]:
-                    var dcell = dst.unsafe_load((tr + u * 16) * TK + jk)
-                    comptime for v in range(CPT):
-                        acc[u * CPT + v] = _step_preflushed(dcell, ka[v], acc[u * CPT + v])
+                var d4_ld = dst.unsafe_load[width=4, alignment=16]((tr + u * 16) * TK + jk0)
+                comptime for qq in range(4):
+                    d4[u * 4 + qq] = d4_ld[qq]
+            comptime for q in range(4):
+                comptime jk = jk0 + q
+                var jc = j0 + jk
+                comptime for u in range(RPT):
+                    if Int32(jc) >= lo[u] and Int32(jc) <= hi[u]:
+                        comptime for v in range(CPT):
+                            acc[u * CPT + v] = _step_preflushed(d4[u * 4 + q], k4[v * 4 + q], acc[u * CPT + v])
         barrier()
     comptime for u in range(RPT):
         var t = t0 + tr + u * 16
@@ -6448,8 +6462,15 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comptime KS = ATTN_FR2_KS
     comptime STRIDE = KS + 4
     comptime KOFF = TQ * HD if QRES else 0
-    comptime SPG = TQ * HD + BK * STRIDE if QRES else BK * HD
-    var stg = stack_allocation[SPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    #: lane/neural-pass51 (2026-10-01): the value pass stages V transposed,
+    #: `stg[c * VSTR + jj]`, so a thread reads four consecutive keys of its
+    #: column in one 16-byte shared load; the score pass reads four
+    #: consecutive `p` of a Q row and a K row the same way. The chain per
+    #: cell is still `p` ascending and `jj` ascending: same bits.
+    comptime VSTR = BK + 4
+    comptime SPG0 = TQ * HD + BK * STRIDE if QRES else BK * HD
+    comptime SPG = SPG0 if SPG0 >= HD * VSTR else HD * VSTR
+    var stg = stack_allocation[SPG, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
     var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
@@ -6527,22 +6548,32 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                                     x = ftz(k_cache.unsafe_load(kvbase + j * HD + pw * KS + p))
                             stg.unsafe_store(r * STRIDE + p, x)
                     barrier()
-                    comptime for p in range(KS):
-                        var qa = SIMD[DType.float32, RPT](0.0)
-                        var ka = SIMD[DType.float32, 2](0.0)
+                    comptime for p4 in range(KS // 4):
+                        comptime p0 = p4 * 4
+                        var q4 = SIMD[DType.float32, RPT * 4](0.0)
+                        var k4 = SIMD[DType.float32, 8](0.0)
                         comptime if QRES:
                             comptime for u in range(RPT):
-                                qa[u] = stg.unsafe_load((tr + u * 16) * HD + pw * KS + p)
+                                var q4_ld = stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * HD + pw * KS + p0)
+                                comptime for qq in range(4):
+                                    q4[u * 4 + qq] = q4_ld[qq]
                             comptime for v in range(2):
-                                ka[v] = stg.unsafe_load(KOFF + (tc + v * 16) * STRIDE + p)
+                                var k4_ld = stg.unsafe_load[width=4, alignment=16](KOFF + (tc + v * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    k4[v * 4 + qq] = k4_ld[qq]
                         else:
                             comptime for u in range(RPT):
-                                qa[u] = stg.unsafe_load((tr + u * 16) * STRIDE + p)
+                                var q4_ld = stg.unsafe_load[width=4, alignment=16]((tr + u * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    q4[u * 4 + qq] = q4_ld[qq]
                             comptime for v in range(2):
-                                ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
-                        comptime for u in range(RPT):
-                            comptime for v in range(2):
-                                dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
+                                var k4_ld = stg.unsafe_load[width=4, alignment=16]((TQ + tc + v * 16) * STRIDE + p0)
+                                comptime for qq in range(4):
+                                    k4[v * 4 + qq] = k4_ld[qq]
+                        comptime for pp in range(4):
+                            comptime for u in range(RPT):
+                                comptime for v in range(2):
+                                    dots[u * 2 + v] = _step_preflushed(q4[u * 4 + pp], k4[v * 4 + pp], dots[u * 2 + v])
                     barrier()
                 comptime for u in range(RPT):
                     var r = tr + u * 16
@@ -6594,23 +6625,35 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                     var x = Float32(0.0)
                     if j < s:
                         x = ftz(v_cache.unsafe_load(kvbase + j * HD + i % HD))
-                    stg.unsafe_store(i, x)
+                    stg.unsafe_store((i % HD) * VSTR + i // HD, x)
                 barrier()
-                comptime for jj in range(BK):
-                    var j = kb * BK + jj
-                    var va = SIMD[DType.float32, CPT](0.0)
-                    comptime for v in range(CPT):
-                        va[v] = stg.unsafe_load(jj * HD + tc + v * 16)
-                    comptime for u in range(RPT):
-                        var r = tr + u * 16
+                var vlo = SIMD[DType.int32, RPT](0)
+                var vhi = SIMD[DType.int32, RPT](-1)
+                comptime for u in range(RPT):
+                    var r = tr + u * 16
+                    if t0 + r < l:
                         var rr = _row_range(t0 + r, pos0, key_lo, window, s)
-                        if t0 + r < l and j >= rr[0] and j <= rr[1]:
-                            var w = tile.unsafe_load(r * 33 + jj)
-                            comptime for v in range(CPT):
-                                comptime if PF:
-                                    cacc[u * CPT + v] = _step_preflushed(w, va[v], cacc[u * CPT + v])
-                                else:
-                                    cacc[u * CPT + v] = _step(w, va[v], cacc[u * CPT + v])
+                        vlo[u] = Int32(rr[0])
+                        vhi[u] = Int32(rr[1])
+                comptime for j4 in range(BK // 4):
+                    comptime jj0 = j4 * 4
+                    var v4 = SIMD[DType.float32, CPT * 4](0.0)
+                    comptime for v in range(CPT):
+                        var v4_ld = stg.unsafe_load[width=4, alignment=16]((tc + v * 16) * VSTR + jj0)
+                        comptime for qq in range(4):
+                            v4[v * 4 + qq] = v4_ld[qq]
+                    comptime for q in range(4):
+                        comptime jj = jj0 + q
+                        var j = kb * BK + jj
+                        comptime for u in range(RPT):
+                            var r = tr + u * 16
+                            if Int32(j) >= vlo[u] and Int32(j) <= vhi[u]:
+                                var w = tile.unsafe_load(r * 33 + jj)
+                                comptime for v in range(CPT):
+                                    comptime if PF:
+                                        cacc[u * CPT + v] = _step_preflushed(w, v4[v * 4 + q], cacc[u * CPT + v])
+                                    else:
+                                        cacc[u * CPT + v] = _step(w, v4[v * 4 + q], cacc[u * CPT + v])
             barrier()
         comptime if phase == 0:
             comptime for u in range(RPT):
