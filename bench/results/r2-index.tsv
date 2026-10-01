@@ -23,3 +23,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T12:19:38Z	measurements/2026-10-01/pr50-amd.tar.gz	aafa50307e81ba94572180084ef3ec9ebac119d2a05f14336b3fb74bf44b18fc	28471	mojolearn-steward-do-amd	/root/pr50-amd
 2026-10-01T12:19:41Z	measurements/2026-10-01/pr50-metal.tar.gz	ae590d3152a78dd537a02ad6d14f0656924f4c0a4bb785e211131ea37491400b	15911	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr50-metal
 2026-10-01T12:34:16Z	measurements/2026-10-01/pr51-metal.tar.gz	88a7735db7b657fd6e46327bcdbadd823bcecc17ac82f95ffaa150e79cb1b819	121215	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr51-metal
+2026-10-01T12:46:07Z	measurements/2026-10-01/pr53-metal.tar.gz	e81050fbc0fe11bfbc2c33d91ff31d2aab29dbc86840051729a402ac0e40c4bd	102066	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr53-metal
