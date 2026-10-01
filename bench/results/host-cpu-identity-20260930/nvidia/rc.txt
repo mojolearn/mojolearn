@@ -1,0 +1,17 @@
+01:43:02 scancheck rc=0
+01:43:51 build-ivf rc=0
+01:43:55 gpu-sgd-reg-20000 rc=0
+01:47:02 gpu-sgd-reg-1000000 rc=0
+01:47:10 gpu-lars-200000 rc=0
+01:47:21 gpu-lars-1000000 rc=0
+01:47:25 gpu-sgd-clf-20000 rc=0
+01:47:26 gpu-lu-1024 rc=0
+01:47:29 gpu-ivf-40000 rc=0
+01:47:35 gpu-ivf-400000 rc=0
+01:47:46 cpu-sgd-reg-20000 rc=0
+01:50:37 cpu-sgd-reg-1000000 rc=0
+01:50:41 cpu-lars-200000 rc=0
+01:50:54 cpu-lars-1000000 rc=0
+01:50:58 cpu-sgd-clf-20000 rc=0
+01:50:58 cpu-lu-1024 rc=0
+01:55:45 cpu-ivf-40000 rc=0
