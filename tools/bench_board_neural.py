@@ -1505,6 +1505,7 @@ def _worker_env(arm):
     env = dict(os.environ)
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
+    ctd.apply_cpu_quota(env)
     if arm in ("ours", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
         if arm == "ours-cpu":

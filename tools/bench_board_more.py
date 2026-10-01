@@ -1723,6 +1723,7 @@ def _worker_env(arm):
     env = dict(os.environ)
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
+    ctd.apply_cpu_quota(env)
     if arm in ("ours", "ours-fast", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
         if arm == "ours-cpu":

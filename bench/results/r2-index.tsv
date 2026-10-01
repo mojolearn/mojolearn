@@ -79,3 +79,14 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T19:48:52Z	measurements/2026-10-01/ab-pr57-amd.tar.gz	ca90d7bd943085ac277baf01704a68dcf006046bf761a2ae6be9934b4acdd1a3	1382315728	mojolearn-steward-do-amd	/root/ab-p57-amd
 2026-10-01T19:48:54Z	measurements/2026-10-01/glm73-amd.tar.gz	dd82598cc852f425afbcca0ccf0e8939d90bb0a994846c6aec129666fa45b23d	4084	mojolearn-steward-do-amd	/root/glm68-amd
 2026-10-01T19:48:56Z	measurements/2026-10-01/glm73-nvidia-final.tar.gz	ffbcaa15695401f1df79d93bc14057ff14da761e62a31584c110ac06179b5e63	4422	f003873fb257	/root/glm68-nvidia
+2026-10-01T19:56:23Z	measurements/2026-10-01/knn76-metal.tar.gz	9e5b446c9164f27cb851c875b2f19d18a522e4f73ce77e967180a1fef62f4395	8871	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr76-metal
+2026-10-01T21:08:25Z	measurements/2026-10-01/knn76-nvidia.tar.gz	809d801fc2aa2a8bb1ecffdcfbf22e2e52a62e0c5f7acb46b531903b3dbb3108	8095	f003873fb257	/root/knn76-nvidia
+2026-10-01T21:23:59Z	measurements/2026-10-01/board-0834-nvc1-l40s.tar.gz	cf4c6a4b78c8e9af4607ef74ced57a847368afc9d097cae8a79c2b12ce5696e1	252268	b07640402f07	/root/board-0834
+2026-10-01T21:55:48Z	measurements/2026-10-01/board-0834-nvc1-l40s.tar.gz	ac5c91f804791eed4b87f4df3b64fb53a45a4705c162657492f9c2cc81097956	4846098	b07640402f07	/root/board-0834
+2026-10-01T22:10:52Z	measurements/2026-10-01/algos-linear-blocks-rows-full.tar.gz	55dbcfefe09a36eb9b0065cea15469341e7201426a44ad4d557d9efb54e39222	387914900	mojolearn-steward-do-amd	/root/linblocks
+2026-10-01T22:12:52Z	measurements/2026-10-01/cc74-amd.tar.gz	25e67ee927756dacebb4ca59095a0e9f5754623b378557ef886258c71c1b2cf2	7585	mojolearn-steward-do-amd	/root/cc74-amd
+2026-10-01T22:12:53Z	measurements/2026-10-01/iso75-amd.tar.gz	c6c0f6a8dd97a6624a22de3b9af941ea204967be7bfd40a5f7a06e946fedcd48	8033	mojolearn-steward-do-amd	/root/iso75-amd
+2026-10-01T22:12:54Z	measurements/2026-10-01/knn76-amd.tar.gz	5cec9cf1c0e85eb8627a50394f63b54c995ea1ed5ec51bf717ded393b7fca25d	11116	mojolearn-steward-do-amd	/root/knn76-amd
+2026-10-01T22:14:42Z	measurements/2026-10-01/pr77-cpu-m2pro.tar.gz	4fe99a74808d4a71f7c30e35b1251cf300c86418594e513bd0a3ded3d028b9e9	5179	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr77-cpu
+2026-10-01T22:14:43Z	measurements/2026-10-01/pr78-cpu-m2pro.tar.gz	a557033d5668561235e5dbbc484374e0f8eb4fe01761b1bf1dee7ced4bd5b98f	13908	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr78-cpu
+2026-10-01T22:14:44Z	measurements/2026-10-01/pr79-cpu-m2pro.tar.gz	d82d1bd4238e090307b28618c0e9a80800c6cb9778d9f2fd0eefda893cc354b3	10587	ip-172-31-45-205.ec2.internal	/Users/ec2-user/pr79-cpu
