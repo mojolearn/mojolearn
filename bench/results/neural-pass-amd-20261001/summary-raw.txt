@@ -1,0 +1,51 @@
+## neural-pass-amd
+13:56:00 stage-arm-fgrid_r64 rc=1
+13:56:06 stage-arm-kvsplit rc=1
+13:56:06 stage-arm-kvrecompute rc=1
+13:56:07 stage-arm-zdefer rc=1
+13:56:07 stage-arm-zlag rc=1
+default arm: stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz
+default stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz
+fgrid_r64 stash_tiled_fgrid_r64_qres_pf_estash_dres_kvgrid_r32_bswz
+kvgrid_r64 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64_bswz
+kvsplit stash_tiled_fgrid_r32_qres_pf_estash_dres_kvsplit_bswz
+kvrecompute stash_tiled_fgrid_r32_qres_pf_estash_dres_kvrecompute_bswz
+zdefer stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_zdefer
+zlag stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_zlag
+bswz_toggle stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+no_dres stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32_bswz
+stage-arm-bswz_toggle.log   lm-forward 41.136 lm-train-step 76.977  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-arm-default.log       lm-forward 41.316 lm-train-step 74.335  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-arm-fgrid_r64.log     
+stage-arm-kvgrid_r64.log    lm-forward 41.505 lm-train-step 273.794  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-arm-kvrecompute.log   
+stage-arm-kvsplit.log       
+stage-arm-no_dres.log       lm-forward 43.041 lm-train-step 74.962  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-arm-zdefer.log        
+stage-arm-zlag.log          
+stage-default1.log          lm-forward 41.224 lm-train-step 75.004  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-default2.log          lm-forward 41.326 lm-train-step 75.007  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-mfma-default.log      lm-forward 39.589 lm-train-step 73.237  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+stage-tile0.log             lm-forward 55.692 lm-train-step 101.049  4a8e781b0739a038[9.018733024597168, 8.418445587158203,  
+race-gemm-default.log median_ms=85.69503200124018 digest=535b4c27bd9313d1
+race-gemm-tile0.log median_ms=85.7320420036558 digest=535b4c27bd9313d1
+gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+## pr56-amd
+stage-nopool1.log       lm-forward 54.624 lm-train-step 101.323  4a8e781b0739a038
+stage-nopool2.log       lm-forward 54.987 lm-train-step 100.848  4a8e781b0739a038
+stage-pool1.log         lm-forward 54.110 lm-train-step 99.555  4a8e781b0739a038
+stage-pool2.log         lm-forward 54.540 lm-train-step 99.582  4a8e781b0739a038
+stage-timers-nopool.log lm-forward 55.426 lm-train-step 101.350  4a8e781b0739a038
+stage-timers-pool.log   lm-forward 54.147 lm-train-step 99.793  4a8e781b0739a038
+== stage-timers-pool.log
+  attn.fwd_corner_flag 0.024 ms
+  attn.bwd_corner_flag 0.450 ms
+  attn.fwd_regime_scan 0.037 ms
+  attn.bwd_regime_scan 0.037 ms
+== stage-timers-nopool.log
+  attn.fwd_corner_flag 0.046 ms
+  attn.bwd_corner_flag 0.473 ms
+  attn.fwd_regime_scan 0.066 ms
+  attn.bwd_regime_scan 0.069 ms
+
+[exited with code 0]

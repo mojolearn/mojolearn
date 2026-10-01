@@ -1,0 +1,46 @@
+== harness 1
+SHAPE B1 L2048 nh6 hd64 causal; median ms 4.51 min 3.53
+DIGEST ctx a6817b7e5cbf00b4 amax f120d9f1c7e2ef86 denom 99cbdf0bfdad1dfd
+== harness 2
+SHAPE B1 L2048 nh6 hd64 causal; median ms 3.325 min 3.084
+DIGEST ctx a6817b7e5cbf00b4 amax f120d9f1c7e2ef86 denom 99cbdf0bfdad1dfd
+== stage-main1
+SUMMARY lm-forward median_after_first=77.175 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=186.556 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.899 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-branch1
+SUMMARY lm-forward median_after_first=66.651 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=175.767 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=10.344 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-main2
+SUMMARY lm-forward median_after_first=78.182 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=182.374 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.637 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-branch2
+SUMMARY lm-forward median_after_first=66.868 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=176.106 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=10.310 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+race-lm-forward-main54.log median_ms=71.88037499145139 digest=4a8e781b0739a038
+race-lm-forward-pass46.log median_ms=60.8724589983467 digest=4a8e781b0739a038
+race-lm-train-step-main54.log median_ms=170.43920799915213 
+race-lm-train-step-pass46.log median_ms=159.25029100617394 
+race-transformer-forward-main54.log median_ms=11.062374993343838 digest=d5a2b289afdb5709
+race-transformer-forward-pass46.log median_ms=10.090499999932945 digest=d5a2b289afdb5709
+
+[exited with code 0]

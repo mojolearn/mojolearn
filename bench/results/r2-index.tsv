@@ -23,3 +23,14 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T12:19:38Z	measurements/2026-10-01/pr50-amd.tar.gz	aafa50307e81ba94572180084ef3ec9ebac119d2a05f14336b3fb74bf44b18fc	28471	mojolearn-steward-do-amd	/root/pr50-amd
 2026-10-01T12:19:41Z	measurements/2026-10-01/pr50-metal.tar.gz	ae590d3152a78dd537a02ad6d14f0656924f4c0a4bb785e211131ea37491400b	15911	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr50-metal
 2026-10-01T12:34:16Z	measurements/2026-10-01/pr51-metal.tar.gz	88a7735db7b657fd6e46327bcdbadd823bcecc17ac82f95ffaa150e79cb1b819	121215	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr51-metal
+2026-10-01T12:46:07Z	measurements/2026-10-01/pr53-metal.tar.gz	e81050fbc0fe11bfbc2c33d91ff31d2aab29dbc86840051729a402ac0e40c4bd	102066	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr53-metal
+2026-10-01T12:48:59Z	measurements/2026-10-01/pr54-metal.tar.gz	01c69d0991da3966632adea93745080215259d1721763f3ca0354fd03e813254	2625	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr54-metal
+2026-10-01T12:52:02Z	measurements/2026-10-01/pr52-amd.tar.gz	708e8b6ac28aa8c7018984855e24837a97b6d94fa77cd42b7b3c39e2ac366296	51255	mojolearn-steward-do-amd	/root/pr52-amd
+2026-10-01T12:52:03Z	measurements/2026-10-01/pr52b-amd.tar.gz	8709f525890d59f9e76a5d779186ff499ca696d88dc7fcd7ffa26c20ebbe6338	44657	mojolearn-steward-do-amd	/root/pr52b-amd
+2026-10-01T12:52:04Z	measurements/2026-10-01/amd-toggle-sweep.tar.gz	b785f915c9ff8f366431fc98402be8f80c99244191814a1d05ebc3d1334e8d5c	37232	mojolearn-steward-do-amd	/root/amd-toggle-sweep
+2026-10-01T13:26:06Z	measurements/2026-10-01/neural-pass-nvidia.tar.gz	62aebdc2b5777c45bcd3267050451bc1b82e07cd199e0a17969ac514a134e05a	8377705	97c359a1d3ef	/root/neural-pass-nvidia
+2026-10-01T13:26:26Z	measurements/2026-10-01/pr56-nvidia.tar.gz	de4d05ba56c99f5f91f1f900df672c1c9a85e513f0888e0b1a4cf1498dec6e29	7426493	97c359a1d3ef	/root/pr56-nvidia
+2026-10-01T13:57:18Z	measurements/2026-10-01/pr54b-metal.tar.gz	546bad6174ab2c13cfb68d2e8731c88482f4e42621c02f880f1d8f7c34c11b25	380495	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr54b-metal
+2026-10-01T14:06:14Z	measurements/2026-10-01/neural-pass-amd.tar.gz	57f60ee84b2d02ec30e044083f76d607ebee64c55250c7ee66cf5b2bb7c760a3	8602097	mojolearn-steward-do-amd	/root/neural-pass-amd
+2026-10-01T14:06:16Z	measurements/2026-10-01/pr56-amd.tar.gz	259f3b62219ee859191e076c0270f7f2f799ad170eb7f766e3ef9c5602b8b0b5	6166423	mojolearn-steward-do-amd	/root/pr56-amd
+2026-10-01T14:12:02Z	measurements/2026-10-01/nv-extra.tar.gz	e7cfef658101bcbad5e7e9c9ddeee3b83c62e92ceb81f8f258b03a1b086bfe2c	46516	97c359a1d3ef	/root/nv-extra

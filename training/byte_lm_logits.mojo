@@ -44,6 +44,7 @@ from training.byte_lm import (
     byte_dims,
 )
 from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into
+from core.device_arena import arena_begin, arena_end, arena_release
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
@@ -122,12 +123,15 @@ struct ByteLogitsScratch(Movable):
     var stages: List[LlamaDeviceStages]
     var logits: DeviceBuffer[DType.float32]
     var head_ws: DeviceBuffer[DType.float32]
+    var arena_id: Int
 
     def __init__(out self, ctx: DeviceContext, batch: Int, length: Int, config: ByteConfig) raises:
         var m = batch * length
         var dims = byte_dims(config)
         self.batch = batch
         self.length = length
+        # lane/neural-pass43: the scratch's buffers carved from arena chunks
+        self.arena_id = arena_begin()
         self.ids = _zeros_i32(ctx, m)
         self.x = _zeros(ctx, m * config.d_model)
         self.cache = LlamaKVCache(ctx, batch, dims, length)
@@ -136,6 +140,13 @@ struct ByteLogitsScratch(Movable):
             self.stages.append(LlamaDeviceStages(ctx, batch, length, length, dims, lean=True))
         self.logits = _zeros(ctx, m * config.vocab_size)
         self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(m, config.vocab_size, config.d_model))
+        arena_end(self.arena_id)
+
+    def __deinit__(deinit self):
+        try:
+            arena_release(self.arena_id)
+        except:
+            pass
 
     def fits(self, batch: Int, length: Int) -> Bool:
         return self.batch == batch and self.length == length

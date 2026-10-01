@@ -1,0 +1,64 @@
+== probe-arena1
+fresh context: 15.3 us per enqueue, 15.7 us per launch with the wait
+open session (B1 L2048, 8 layers): 22.2 us per enqueue, 22.8 us per launch with the wait; arena on, chunks 12 (12 in use, 805306368 floats), views 966
+LAUNCH_PROBE fresh_us 15.35 open_us 22.25 arena 1 views 966
+== probe-arena0
+fresh context: 18.4 us per enqueue, 18.8 us per launch with the wait
+open session (B1 L2048, 8 layers): 65.9 us per enqueue, 66.0 us per launch with the wait; arena off, chunks 0 (0 in use, 0 floats), views 0
+LAUNCH_PROBE fresh_us 18.43 open_us 65.91 arena 0 views 0
+== stage-main1
+SUMMARY lm-forward median_after_first=90.924 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=275.446 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=12.020 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-arena1
+SUMMARY lm-forward median_after_first=77.943 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=182.964 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.634 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-noarena1
+SUMMARY lm-forward median_after_first=90.502 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=275.510 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.862 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-main2
+SUMMARY lm-forward median_after_first=91.153 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=271.517 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.853 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-arena2
+SUMMARY lm-forward median_after_first=77.779 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=186.778 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=11.939 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+== stage-noarena2
+SUMMARY lm-forward median_after_first=93.229 ms
+DIGEST lm-forward 4a8e781b0739a038
+SUMMARY lm-train-step median_after_first=281.433 ms
+DIGEST lm-train-step None
+SUMMARY transformer-forward median_after_first=12.306 ms
+DIGEST transformer-forward d5a2b289afdb5709
+LOSSES lm-train-step [9.018733024597168, 8.418445587158203, 5.91935539
+race-lm-forward-arena.log median_ms=72.6134589931462 digest=4a8e781b0739a038
+race-lm-forward-main.log median_ms=82.15987500443589 digest=4a8e781b0739a038
+race-lm-forward-noarena.log median_ms=82.126708002761 digest=4a8e781b0739a038
+race-lm-train-step-arena.log median_ms=174.6618749893969 
+race-lm-train-step-main.log median_ms=188.7587910023285 
+race-lm-train-step-noarena.log median_ms=188.58466699020937 
+
+[exited with code 0]

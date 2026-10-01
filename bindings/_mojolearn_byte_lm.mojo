@@ -57,6 +57,7 @@ from training.byte_lm import (
     byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
+from core.device_arena import arena_stats, device_arena_on
 from training.byte_lm_model_pool import ByteModelPool
 from training.byte_lm_offload import ByteOffloadedReplay
 from training.byte_lm_parallel import ByteParallelTrainer
@@ -1796,6 +1797,76 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
 
 
 
+def _launch_probe_kernel(p: MutPointer[Float32, MutAnyOrigin]):
+    """One store: the smallest launch, for the per-launch host cost probe."""
+    p[0] = Float32(1.0)
+
+
+def _launch_probe(ctx: DeviceContext, count: Int) raises -> List[Float64]:
+    """[us per enqueue, us per launch including the final wait] over `count`
+    one-thread launches on `ctx` after 10 untimed ones."""
+    var flag = ctx.enqueue_create_buffer[DType.float32](1)
+    for _ in range(10):
+        ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+    ctx.synchronize()
+    var t0 = Int(perf_counter_ns())
+    for _ in range(count):
+        ctx.enqueue_function[_launch_probe_kernel](flag.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1))
+    var t1 = Int(perf_counter_ns())
+    ctx.synchronize()
+    var t2 = Int(perf_counter_ns())
+    _ = flag^
+    var out = List[Float64]()
+    out.append(Float64(t1 - t0) / 1e3 / Float64(count))
+    out.append(Float64(t2 - t0) / 1e3 / Float64(count))
+    return out^
+
+
+def byte_lm_session_launch_probe_binding(session: PythonObject, count: PythonObject) raises -> PythonObject:
+    """lane/neural-pass43: the per-launch host cost ON THE OPEN SESSION'S
+    context (Metal pays per live allocation on every launch, so this reads
+    the session's buffer count), beside the arena pool's state. Returns
+    [us_per_enqueue, us_per_launch_with_wait, arena_on, chunks, chunks_in_use,
+    chunk_floats, views]. Diagnostic: no model state is read or written."""
+    var owner = session.downcast_value_ptr[ByteLMSession]()
+    _require_open(owner[])
+    var n = Int(py=Python.import_module("operator").index(count))
+    if n < 1 or n > 100000:
+        raise Error("byte LM launch probe: count outside [1, 100000]")
+    var res: List[Float64]
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            ref ctx = owner[].ctx.value()
+            res = _launch_probe(ctx, n)
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    var st = arena_stats()
+    var out = Python.list()
+    out.append(PythonObject(res[0]))
+    out.append(PythonObject(res[1]))
+    out.append(PythonObject(1 if device_arena_on() else 0))
+    for i in range(len(st)):
+        out.append(PythonObject(st[i]))
+    return out
+
+
+def byte_lm_launch_probe_binding(count: PythonObject) raises -> PythonObject:
+    """The same probe on a FRESH context with no session buffers alive on
+    it: the floor the open session's number is compared with."""
+    var n = Int(py=Python.import_module("operator").index(count))
+    if n < 1 or n > 100000:
+        raise Error("byte LM launch probe: count outside [1, 100000]")
+    var ctx = DeviceContext()
+    var res = _launch_probe(ctx, n)
+    var out = Python.list()
+    out.append(PythonObject(res[0]))
+    out.append(PythonObject(res[1]))
+    return out
+
+
 @export
 def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
     try:
@@ -1809,6 +1880,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         _ = module.add_type[ByteLMSession]("_ByteLMSession")
         module.def_function[byte_lm_session_create_binding]("byte_lm_session_create")
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
+        module.def_function[byte_lm_session_launch_probe_binding]("byte_lm_session_launch_probe")
+        module.def_function[byte_lm_launch_probe_binding]("byte_lm_launch_probe")
         module.def_function[byte_lm_session_run_binding]("byte_lm_session_run")
         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         # DEVIATION 2514: the device-owned session entries.
