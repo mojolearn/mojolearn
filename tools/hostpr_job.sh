@@ -3,7 +3,7 @@
 # then the board cell with the change on and off. Usage: tools/hostpr_job.sh <pr10|pr11> <vendor nvidia|amd>
 set -uo pipefail
 cd "$(dirname "$0")/.."
-PR=$1; V=${2:-amd}; O=/root/hostpr-$PR; rm -rf $O/rc.txt; mkdir -p $O
+PR=$1; V=${2:-amd}; O=/root/hostpr-$PR-pr12; rm -rf $O/rc.txt; mkdir -p $O
 if [ $V = nvidia ]; then BK=cuda; AR=sm_89; else BK=hip; AR=gfx942; fi
 export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu \
   MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS=2 MOJOLEARN_BENCH_INSTALLED=1 PYTHONUNBUFFERED=1
