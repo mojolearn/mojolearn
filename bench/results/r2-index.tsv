@@ -33,3 +33,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T13:57:18Z	measurements/2026-10-01/pr54b-metal.tar.gz	546bad6174ab2c13cfb68d2e8731c88482f4e42621c02f880f1d8f7c34c11b25	380495	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr54b-metal
 2026-10-01T14:06:14Z	measurements/2026-10-01/neural-pass-amd.tar.gz	57f60ee84b2d02ec30e044083f76d607ebee64c55250c7ee66cf5b2bb7c760a3	8602097	mojolearn-steward-do-amd	/root/neural-pass-amd
 2026-10-01T14:06:16Z	measurements/2026-10-01/pr56-amd.tar.gz	259f3b62219ee859191e076c0270f7f2f799ad170eb7f766e3ef9c5602b8b0b5	6166423	mojolearn-steward-do-amd	/root/pr56-amd
+2026-10-01T14:12:02Z	measurements/2026-10-01/nv-extra.tar.gz	e7cfef658101bcbad5e7e9c9ddeee3b83c62e92ceb81f8f258b03a1b086bfe2c	46516	97c359a1d3ef	/root/nv-extra
