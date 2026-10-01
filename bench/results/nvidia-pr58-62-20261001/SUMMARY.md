@@ -26,3 +26,6 @@ Phase timer values here are sums over the run, not per layer, so compare them wi
 | MIN_K=0 | 50.8 | 49.8 | 50.1 |
 
 The LM GEMMs (k 384..2048) take the same plan as MIN_BLOCKS=0 by construction, so the lm-train-step spread is noise from four jobs sharing the pod. The gemm digest is 535b4c27bd9313d1 for all three. check_device_default_dispatch is OK (5 shapes bit-identical to FLAT and the old plan), and the 8 GEMM gates are green. The AMD default is unchanged from #55 (TILE_MIN_K 0).
+
+## FWD_TQ16 rerun on the fixed base (#66, lane/neural-pass59 ba90adec2)
+With the page-size fix, FWD_TQ16 gives the same bits (digest 4a8e781b0739a038 and the same losses). The phase timers halve: attn.core 2.15 to 1.04 and fwd_r2_keep 1.99 to 0.89. End to end, lm-forward is 51.4 to 51.0 ms and lm-train-step is 41.6 to 41.4 ms, so the gain barely shows on the L40S.
