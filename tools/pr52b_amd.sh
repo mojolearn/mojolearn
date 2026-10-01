@@ -15,7 +15,7 @@ $P -m pip -q install mojolearn==0.8.32 numpy==2.5.2 scipy==1.18.0 > $O/pip.log 2
 S=$($P -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')/mojolearn
 cp $S/_version.py /tmp/v52.py; cp python/mojolearn/*.py $S/; cp /tmp/v52.py $S/_version.py; find $S -name __pycache__ -exec rm -rf {} +
 for m in $MODS; do so=$(ls -t python/mojolearn/identical/_mojolearn_$m.so python/mojolearn/_mojolearn_$m.so 2>/dev/null | head -1); [ -n "$so" ] && cp $so $S/hip/gfx942/identical/ && sha256sum $so >> $O/bindings.sha256; done
-for cap in unset unset2 524288; do ex=""; [ $cap = 524288 ] && ex="MOJOLEARN_GEMM_SPLIT_CELLS=$cap"
+for cap in unset unset2 131072; do ex=""; [ $cap = 131072 ] && ex="MOJOLEARN_GEMM_SPLIT_CELLS=$cap"
   env $ex timeout 3600 $P tools/neural_stage_timing.py --lane lm-forward --lane lm-train-step --calls 6 > $O/stage-$cap.log 2>&1; rc stage-$cap $?; done
 timeout 3600 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_device_check.mojo > $O/gemm-check-default.log 2>&1; rc gemm-check-default $?
 echo done > $O/done
