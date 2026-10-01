@@ -6616,8 +6616,12 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 
 # ===========================================================================
 # THE FORWARD CONTEXT FOLD ON THE MATRIX CORES (lane/amd-step-time-2,
-# 2026-09-25; AMD only, `ATTN_FWD_MFMA`; TRIAL: on only under
-# `-D MOJOLEARN_ATTN_FWD_MFMA=1` until its bits are proven on the device).
+# 2026-09-25; AMD only, `ATTN_FWD_MFMA`; a trial under
+# `-D MOJOLEARN_ATTN_FWD_MFMA=1` until 2026-10-01, when the MI325X read the
+# same lm-forward digest and the same losses as the VALU fold with lm-forward
+# 41.3 -> 39.6 ms and lm-train-step 75.0 -> 73.2 (bench/results, PR #63);
+# the AMD default since; `-D MOJOLEARN_ATTN_NO_FWD_MFMA=1` restores the VALU
+# fold).
 #
 # `fused_attn_forward_r2_kernel[64, TQ, QRES, True, False]` computes, in pass
 # 3, the context chain per (t, c): acc = ftz(fma_rn(w[t][j], v[j][c], acc))
@@ -6632,7 +6636,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 # per-row upper bound).
 # ===========================================================================
 comptime ATTN_FWD_MFMA = (
-    TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_FWD_MFMA"]()
+    TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_NO_FWD_MFMA"]()
 )
 
 
