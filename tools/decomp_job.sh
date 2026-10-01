@@ -19,8 +19,8 @@ for arm in before after; do
     for m in x_decomp linalg; do so=$(ls -t python/mojolearn/identical/_mojolearn_$m.so python/mojolearn/_mojolearn_$m.so 2>/dev/null | head -1); cp $so $S/$BK/$AR/identical/; sha256sum $so >> $O/bindings.sha256; done; fi
 done
 P=$O/venv-before/bin/python
-timeout 3600 $P tools/bench_board_algos.py prep --data $O/data --lanes gaussian-rp,sparse-rp,svd,pca --datasets istella > $O/prep.log 2>&1; rc prep $?
-for lane in gaussian-rp sparse-rp svd pca; do for arm in before after; do for ds in istella; do
+timeout 3600 $P tools/bench_board_algos.py prep --data $O/data --lanes gaussian-rp,sparse-rp,svd --datasets istella > $O/prep.log 2>&1; rc prep $?
+for lane in gaussian-rp sparse-rp svd; do for arm in before after; do for ds in istella; do
   MOJOLEARN_TARGET_COLUMN=$V MOJOLEARN_BENCH_INSTALLED=1 timeout 3600 $O/venv-$arm/bin/python tools/bench_board_algos.py race --lane $lane --dataset $ds --data $O/data --arms ours --rounds 3 --out $O/race-$lane-$arm-$ds --work $O/work --ours-python $O/venv-$arm/bin/python > $O/race-$lane-$arm-$ds.log 2>&1; rc race-$lane-$arm-$ds $?
   echo "$lane $arm $ds $(grep -oE "ALGOS-ROUND.*ms=[0-9.]+ .*digest=[0-9a-f]+" $O/race-$lane-$arm-$ds.log | tail -1 | grep -oE "ms=[0-9.]+|digest=[0-9a-f]+" | tr "\n" " ")" >> $O/races.txt; done; done; done
 echo done > $O/done
