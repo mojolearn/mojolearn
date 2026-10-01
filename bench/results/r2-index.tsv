@@ -50,3 +50,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T16:14:16Z	measurements/2026-10-01/ab-p63-amd.tar.gz	6abc66f26077a04ff102dd729a5ec0ddb3d64b74dd7d904a9fc38896bbde53d6	22713883	mojolearn-steward-do-amd	/root/ab-p63-amd
 2026-10-01T16:14:19Z	measurements/2026-10-01/ab-stack65-amd.tar.gz	2a76d4c2fe86793da951f234f09a2973313870747224c9632ac350cf2b078ad5	13371137	mojolearn-steward-do-amd	/root/ab-stack65-amd
 2026-10-01T16:28:43Z	measurements/2026-10-01/gemm61-nvidia.tar.gz	47b91057fcaca94abad941eef72fea734408192bb7b5ffa8b909d9760198857b	214071	8de2d3c1e7ad	/root/gemm61-nvidia
+2026-10-01T16:30:11Z	measurements/2026-10-01/ab-arms59-amd.tar.gz	c88c105254bb38136ae032af73fecb7f1bea2172ac32919dc79fbb21b5e71f59	18142410	mojolearn-steward-do-amd	/root/ab-arms59-amd
