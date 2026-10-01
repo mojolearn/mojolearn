@@ -3,7 +3,7 @@
 # then the board cell with the change on and off. Usage: tools/hostpr_job.sh <pr10|pr11> <vendor nvidia|amd>
 set -uo pipefail
 cd "$(dirname "$0")/.."
-PR=$1; V=${2:-amd}; O=/root/hostpr-$PR-pr12; rm -rf $O/rc.txt; mkdir -p $O
+PR=$1; V=${2:-amd}; O=/root/hostpr-pr14; rm -rf $O/rc.txt; mkdir -p $O
 if [ $V = nvidia ]; then BK=cuda; AR=sm_89; else BK=hip; AR=gfx942; fi
 export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_VENDOR=cpu \
   MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMPILE_JOBS=2 MOJOLEARN_BENCH_INSTALLED=1 PYTHONUNBUFFERED=1
@@ -16,11 +16,13 @@ st build-host; rm -f python/mojolearn/_mojolearn_byte_lm_host.so python/mojolear
 bash bindings/build_byte_lm_host.sh > $O/build-host.log 2>&1; rc build-host $?
 PYP=$(pixi run python3 -c 'import sys;print(sys.executable)' | tail -1)
 if [ $PR = pr11 ]; then
+  st lanes-sqrt; timeout 3600 pixi run check-host-lanes-sqrt > $O/lanes-sqrt.log 2>&1; rc lanes-sqrt $?
   st gate; timeout 3600 pixi run python tools/byte_lm_cpu_train_gate.py cpu --steps all > $O/train-gate.log 2>&1; rc train-gate $?
   st step-check-board; timeout 3600 pixi run python tools/byte_lm_host_step_check.py --steps 4 > $O/step-check-board.log 2>&1; rc step-check-board $?
   st step-check-small; timeout 3600 pixi run python tools/byte_lm_host_step_check.py --small --steps 16 > $O/step-check-small.log 2>&1; rc step-check-small $?
   st profile; timeout 3600 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings tools/byte_lm_host_step_profile.mojo > $O/profile.log 2>&1; rc profile $?
   for r in 1 0; do st cell-rows$r; MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=$r MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$PWD/python timeout 3600 pixi run python tools/bench_board_neural.py race --lane lm-host-train-step --shape full --arms ours --rounds 3 --out $O/cell-rows$r --work $O/work --ours-python $PYP > $O/cell-rows$r.log 2>&1; rc cell-rows$r $?; done
+  st block-timing; MOJOLEARN_HOST_BLOCK_TIMING=1 PYTHONPATH=$PWD/python timeout 3600 pixi run python tools/byte_lm_host_block_timing.py > $O/block-timing.log 2>&1; rc block-timing $?
 else
   st gate; timeout 3600 pixi run python tools/byte_lm_host_gate.py > $O/host-gate.log 2>&1; rc host-gate $?
   st sweep; timeout 3600 pixi run python tools/byte_lm_host_path_sweep.py > $O/path-sweep.log 2>&1; rc path-sweep $?
