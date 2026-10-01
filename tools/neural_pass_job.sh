@@ -18,7 +18,7 @@ bld byte_lm byte_lm-trial "-D MOJOLEARN_ATTN_ARM_TRIAL=1"
 base=$(pixi run python3 -c 'import sys;print(sys.executable)' | tail -1); $base -m venv $O/venv; P=$O/venv/bin/python
 $P -m pip -q install mojolearn==0.8.33 $PLUG==0.8.33 numpy==2.5.2 scipy==1.18.0 > $O/pip.log 2>&1; $P -m pip -q install $TORCH --index-url $TIDX >> $O/pip.log 2>&1
 S=$($P -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')/mojolearn
-T=$(dirname $($P -c "import mojolearn,os,glob;print(glob.glob(os.path.join(os.path.dirname(mojolearn.__file__),'..','*','$BK','$AR','identical','_mojolearn_byte_lm.so'))[0] if glob.glob(os.path.join(os.path.dirname(mojolearn.__file__),'..','*','$BK','$AR','identical','_mojolearn_byte_lm.so')) else os.path.join(os.path.dirname(mojolearn.__file__),'$BK','$AR','identical','x'))" 2>/dev/null))
+T=$(dirname $(find $S/.. -path "*$BK/$AR/identical/_mojolearn_byte_lm.so" | head -1))
 echo "binding dir $T" > $O/target.txt
 cp $S/_version.py /tmp/vnp.py; cp python/mojolearn/*.py $S/; cp /tmp/vnp.py $S/_version.py; find $S -name __pycache__ -exec rm -rf {} +
 inst() { cp $O/$1.so $T/_mojolearn_$2.so; }
