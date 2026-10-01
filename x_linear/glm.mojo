@@ -93,49 +93,6 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
     return t.bcast(f)
 
 
-#: lane/neural-pass88 (2026-10-01): line-search trials one pass evaluates on
-#: the device. The trials are the loop's own (tt, tt/2, ...), each objective
-#: the same statements as `_objective_team` (its own loss row, folded rows
-#: ascending by its own thread), and the first acceptable trial in that
-#: order is taken: the same words as one trial a pass. A stalled Newton
-#: iteration halves up to 40 times, each a million-row pass plus a serial
-#: fold; here up to GLM_LS_BATCH folds run at once on different threads.
-#: `-D MOJOLEARN_GLM_LS_SERIAL=1` restores one trial a pass.
-comptime GLM_LS_BATCH = 8
-
-
-def _objectives_team_batch(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int,
-                           alpha: Float32, trials: FP, m: Int, kb: Int, sw: Bool, den: Float32, fout: FP):
-    """fout[k] = `_objective_team`'s value at theta = trials[k*m, (k+1)*m),
-    k < kb, in every thread (team rows 3 .. 3 + kb hold the loss terms)."""
-    for i in range(t.tid, n, t.nt):
-        for k in range(kb):
-            var b = ld(trials, k * m + d) if fi else Float32(0)
-            var e = fa(row_dot(x, i, d, trials, k * m), b)
-            var l = _unit(power, link, ld(y, i), e, 0)
-            if sw:
-                l = fm(ld(y, n + i), l)
-            st(t.row(3 + k), i, l)
-    t.sync()
-    if t.tid < kb:
-        var k = t.tid
-        var acc = fold_fa(t.row(3 + k), 0, 1, n)
-        var reg = Float32(0)
-        for j in range(d):
-            var w = ld(trials, k * m + j)
-            reg = fmad(w, w, reg)
-        st(fout, k, fa(fd(acc, den), fm(fm(Float32(0.5), alpha), reg)))
-    t.sync()
-
-
-def _eta_team(t: Team, x: FP, n: Int, d: Int, fi: Bool, theta: FP, eta: FP):
-    """eta at theta, `_objective_team`'s statements for it."""
-    var b = ld(theta, d) if fi else Float32(0)
-    for i in range(t.tid, n, t.nt):
-        st(eta, i, fa(row_dot(x, i, d, theta, 0), b))
-    t.sync()
-
-
 def _objective_host(x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Float32, link: Int, alpha: Float32,
                theta: FP, toff: Int, eta: FP, sw: Bool, den: Float32, ls: FP) -> Float32:
     """Map (eta and each row's loss term into `ls`), then fold rows ascending."""
@@ -368,60 +325,24 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         slope = t.bcast(slope, 2)
         var tt = Float32(1)
         var accepted = False
-        var batched = False
-        comptime if is_gpu() and not is_defined["MOJOLEARN_GLM_LS_SERIAL"]():
-            # trials and their objectives in the device's unused host scratch (s1, s2: 2n words)
-            var kmax = min(GLM_LS_BATCH, (2 * n) // (m + 1))
-            if kmax >= 2 and t.nt >= kmax:
-                batched = True
-                var trials = s1
-                var fout = s1 + kmax * m
-                var tried = 0
-                while tried < 40 and not accepted:
-                    var kb = min(kmax, 40 - tried)
-                    if t.lead():
-                        var tk = tt
-                        for k in range(kb):
-                            for j in range(m):
-                                st(trials, k * m + j, fmad(tk, ld(step, j), ld(res, j)))
-                            tk = fm(tk, Float32(0.5))
-                    t.sync()
-                    _objectives_team_batch(t, x, y, n, d, fi, power, link, alpha, trials, m, kb, sw, den, fout)
-                    for k in range(kb):
-                        var ft = ld(fout, k)
-                        if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
-                            if t.lead():
-                                copy(res, 0, trials, k * m, m)
-                            t.sync()
-                            _eta_team(t, x, n, d, fi, res, eta)
-                            if ft == f:
-                                stall += 1
-                            else:
-                                stall = 0
-                            f = ft
-                            accepted = True
-                            break
-                        tt = fm(tt, Float32(0.5))
-                    tried += kb
-        if not batched:
-            for _ in range(40):
+        for _ in range(40):
+            if t.lead():
+                for j in range(m):
+                    st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
+            t.sync()
+            var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
+            if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 if t.lead():
-                    for j in range(m):
-                        st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
+                    copy(res, 0, trial, 0, m)
                 t.sync()
-                var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
-                if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
-                    if t.lead():
-                        copy(res, 0, trial, 0, m)
-                    t.sync()
-                    if ft == f:
-                        stall += 1
-                    else:
-                        stall = 0
-                    f = ft
-                    accepted = True
-                    break
-                tt = fm(tt, Float32(0.5))
+                if ft == f:
+                    stall += 1
+                else:
+                    stall = 0
+                f = ft
+                accepted = True
+                break
+            tt = fm(tt, Float32(0.5))
         comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
             if t.lead():
                 print("GLM_TRACE it", it, "accepted", accepted, "tt", tt, "f", f)
