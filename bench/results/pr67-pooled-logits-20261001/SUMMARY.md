@@ -19,3 +19,14 @@ Timers (branch): `python.logits_out` 29.5 ms fresh on the first two calls, then 
 AMD MI325X (DO pass8) and M3 Ultra (~/pr67_mac.sh) pending; merge only when all three agree on bits and speed.
 
 Also tracked in the same evidence commit: bench/results/pr65-attention-stack-20261001/nvidia-raw.txt (#65 NVIDIA raw).
+
+## M3 Ultra (~/pr67-metal; branch base differs from main by evidence commits only)
+
+| row | main | pass61 |
+|---|---|---|
+| lm-forward stage (ms) | 70.6 / 70.3 | 77.5 / 68.2 |
+| lm-train-step stage (ms) | 200.6 / 206.7 | 204.5 / 204.1 |
+| lm-forward race (ms) | 65.2 | 65.1 |
+| digest / losses | 4a8e781b0739a038 | same |
+
+Neutral on Apple (same bits). Merge once AMD (pass8) is not slower.
