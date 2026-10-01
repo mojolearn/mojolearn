@@ -255,12 +255,12 @@ def _pool_host(ctx: DeviceContext, n: Int) raises -> Int:
     return len(pool[].host) - 1
 
 
-def _pool_release_dev(i: Int):
+def _pool_release_dev(i: Int) raises:
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     pool[].dev_free[i] = True
 
 
-def _pool_release_host(i: Int):
+def _pool_release_host(i: Int) raises:
     var pool = X_SEQUENCE_POOL.get_or_create_ptr()
     pool[].host_free[i] = True
 
@@ -336,12 +336,15 @@ struct DeviceExec(Exec):
             self.ctx.synchronize()
         except:
             pass
-        for i in range(len(self.pstaged)):
-            _pool_release_host(self.pstaged[i])
-        for i in range(len(self.ppend_host)):
-            _pool_release_host(self.ppend_host[i])
-        for i in range(len(self.pdev)):
-            _pool_release_dev(self.pdev[i])
+        try:
+            for i in range(len(self.pstaged)):
+                _pool_release_host(self.pstaged[i])
+            for i in range(len(self.ppend_host)):
+                _pool_release_host(self.ppend_host[i])
+            for i in range(len(self.pdev)):
+                _pool_release_dev(self.pdev[i])
+        except:
+            pass
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
