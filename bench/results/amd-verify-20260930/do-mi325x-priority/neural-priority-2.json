@@ -1,0 +1,144 @@
+[
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {},
+  "first": {
+   "lm-forward": 400.183,
+   "lm-train-step": 450.397,
+   "mamba3-forward": 19.669,
+   "samba-forward": 33.591,
+   "samba-train-step": 218.484,
+   "transformer-forward": 314.754
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.16,
+   "lm-train-step": 120.946,
+   "mamba3-forward": 8.161,
+   "samba-forward": 20.668,
+   "samba-train-step": 192.73,
+   "transformer-forward": 5.175
+  },
+  "name": "baseline",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_LEGACY_SETUP": "1"
+  },
+  "first": {
+   "lm-forward": 395.262,
+   "lm-train-step": 451.734,
+   "mamba3-forward": 23.689,
+   "samba-forward": 38.195,
+   "samba-train-step": 240.808,
+   "transformer-forward": 324.121
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.065,
+   "lm-train-step": 122.024,
+   "mamba3-forward": 9.625,
+   "samba-forward": 22.481,
+   "samba-train-step": 209.205,
+   "transformer-forward": 5.234
+  },
+  "name": "mamba3_legacy",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_RETAIN_STAGES": "0"
+  },
+  "first": {
+   "lm-forward": 397.29,
+   "lm-train-step": 451.38,
+   "mamba3-forward": 22.903,
+   "samba-forward": 39.581,
+   "samba-train-step": 232.419,
+   "transformer-forward": 332.309
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 56.082,
+   "lm-train-step": 121.891,
+   "mamba3-forward": 8.424,
+   "samba-forward": 20.981,
+   "samba-train-step": 206.364,
+   "transformer-forward": 5.205
+  },
+  "name": "mamba3_no_retain_stages",
+  "returncode": 0,
+  "stderr_tail": ""
+ },
+ {
+  "digest": {
+   "lm-forward": "4a8e781b0739a038",
+   "lm-train-step": "None",
+   "mamba3-forward": "481c50cae2dd749e",
+   "samba-forward": "ddce61948b8456e0",
+   "samba-train-step": "None",
+   "transformer-forward": "d5a2b289afdb5709"
+  },
+  "env": {
+   "MOJOLEARN_TRANSFORMER_NORM_DW_OWN_WS": "1"
+  },
+  "first": {
+   "lm-forward": 395.874,
+   "lm-train-step": 446.865,
+   "mamba3-forward": 18.971,
+   "samba-forward": 32.62,
+   "samba-train-step": 212.982,
+   "transformer-forward": 330.876
+  },
+  "losses": {
+   "lm-train-step": "[9.018733024597168, 8.418445587158203, 5.919355392456055, 5.6011152267456055, 5.798334121704102, 5.619289398193359, 5.167102336883545, 4.685479164123535, 4.248320579528809, 4.319029808044434]",
+   "samba-train-step": "[5.6359100341796875, 4.8339338302612305, 4.159797668457031, 3.7506959438323975, 3.6546571254730225, 3.538167953491211, 3.4727823734283447, 3.3820462226867676, 3.0377860069274902, 3.158280611038208]"
+  },
+  "median": {
+   "lm-forward": 55.868,
+   "lm-train-step": 122.109,
+   "mamba3-forward": 7.945,
+   "samba-forward": 20.001,
+   "samba-train-step": 194.144,
+   "transformer-forward": 5.359
+  },
+  "name": "norm_dw_own_ws",
+  "returncode": 0,
+  "stderr_tail": ""
+ }
+]

@@ -46,3 +46,17 @@ The harness inputs (X, y) are byte-identical on both hosts. So:
   computed on the host whose result varies between x86 CPUs (suspect: a numpy/BLAS reduction in the Python
   wrapper, whose kernel and summation order OpenBLAS picks per CPU, AVX2 vs AVX-512).
 - **IVF 40000 is a true AMD GPU divergence** (AMD CPU = NVIDIA = reference); the 400000 shape agrees.
+
+## Part 3: priority pass on AMD (tools/priority_pass_run.py amd)
+
+Session checks pass; neural priority set ran. Every row: AMD new = AMD old = NVIDIA L40S digest.
+
+| row | digest (AMD = NVIDIA) | AMD old -> new |
+|---|---|---|
+| lr-warmup-cosine | 61e4ce1e09ca405e | 326,669 -> 488 ms (669x) |
+| adafactor | ff4a5ff93e72424e | 10,816 -> 516 ms (21x) |
+| clip-grad-norm | bea62536a1718eb8 | 107 -> 102 ms (the 0.8.25 board's 973aad3b was the old version) |
+| cholesky | c5127aab3d327628 | 475 -> 471 ms |
+| svd taxi / istella | f07891b9aaf42a98 / 92c189cb2337dc73 | 4220 -> 4076 / 95742 -> 92223 ms |
+| qr taxi / istella | e54f8db0f5ca6525 / 76e60d3379a2735a | 4060 -> 4056 / 76829 -> 76821 ms |
+| gemm-int8 (tiled / reference plan) | 9b16c7064e10cecd | 74 / 77 ms |

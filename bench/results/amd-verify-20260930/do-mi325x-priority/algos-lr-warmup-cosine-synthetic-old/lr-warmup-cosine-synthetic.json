@@ -1,0 +1,156 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/priority-pass/venv/bin/python",
+        "/root/mojolearn-amd-verify/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "lr-warmup-cosine",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/priority-pass/algos-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "61e4ce1e09ca405e",
+        "61e4ce1e09ca405e",
+        "61e4ce1e09ca405e",
+        "61e4ce1e09ca405e"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.training.WarmupCosineLR(min_lr=1e-05, peak_lr=0.001, total_steps=100000, warmup_steps=1000)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/priority-pass/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_training'))",
+        "numeric_mode_used": "unknown",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.31"
+      },
+      "median_ms": 326668.71067799366,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 95.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 96.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 97.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 97.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        327648.63621399854,
+        326668.71067799366,
+        326498.7351009986
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "min_lr": 1e-05,
+        "peak_lr": 0.001,
+        "total_steps": 100000,
+        "warmup_steps": 1000
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the learning rate of steps 1 .. 100000",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 327532.712563996
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "75f1ddad40a987e55e30d9c9288fca14cd1e6706",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T23:56:16Z",
+  "lane": "lr-warmup-cosine",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "training",
+    "kind": "extra",
+    "mismatches": [],
+    "notes": [
+      "torch: SequentialLR([LinearLR(1/1000, 1, 999), CosineAnnealingLR(T_max=99000, eta_min=1e-5)], milestones=[1000])"
+    ],
+    "ours_class": "mojolearn.training.WarmupCosineLR",
+    "params": {
+      "min_lr": 1e-05,
+      "peak_lr": 0.001,
+      "total_steps": 100000,
+      "warmup_steps": 1000
+    },
+    "quality": "max relative difference of the learning rates vs ours",
+    "task": "sched",
+    "timed_fit": "the learning rate of steps 1 .. 100000",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/lr-warmup-cosine",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "max_rel_diff_vs_ours": 0.0
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T23:34:27Z"
+}

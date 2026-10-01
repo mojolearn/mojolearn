@@ -1,0 +1,19 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "-m", "pip", "install", "mojolearn==0.8.31", "numpy==2.5.2", "scipy==1.18.0"] ENV {}
+Collecting mojolearn==0.8.31
+  Using cached mojolearn-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (13 kB)
+Collecting numpy==2.5.2
+  Using cached numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting scipy==1.18.0
+  Using cached scipy-1.18.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+Collecting mojolearn-nvidia==0.8.31 (from mojolearn==0.8.31)
+  Using cached mojolearn_nvidia-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Collecting mojolearn-amd==0.8.31 (from mojolearn==0.8.31)
+  Using cached mojolearn_amd-0.8.31-py3-none-manylinux_2_35_x86_64.whl.metadata (2.7 kB)
+Using cached mojolearn-0.8.31-py3-none-manylinux_2_35_x86_64.whl (12.1 MB)
+Using cached numpy-2.5.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.7 MB)
+Using cached scipy-1.18.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+Using cached mojolearn_amd-0.8.31-py3-none-manylinux_2_35_x86_64.whl (33.8 MB)
+Using cached mojolearn_nvidia-0.8.31-py3-none-manylinux_2_35_x86_64.whl (88.7 MB)
+Installing collected packages: numpy, scipy, mojolearn-nvidia, mojolearn-amd, mojolearn
+
+Successfully installed mojolearn-0.8.31 mojolearn-amd-0.8.31 mojolearn-nvidia-0.8.31 numpy-2.5.2 scipy-1.18.0

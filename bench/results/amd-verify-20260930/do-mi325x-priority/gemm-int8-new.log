@@ -1,0 +1,9 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/bench_board_neural.py", "race", "--lane", "gemm-int8", "--shape", "full", "--arms", "ours", "--rounds", "5", "--out", "/root/priority-pass/gemm-int8-new", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-int8", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-int8 arm=ours round=0 ms=246.050 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=1 ms=77.602 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=2 ms=73.057 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=3 ms=74.482 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=4 ms=73.380 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=5 ms=75.235 digest=9b16c7064e10cecd
+NEURAL lane=gemm-int8 arm=ours status=ok median_ms=74.48191400180804 quality={"max_rel_err_vs_fp64": 0.0}
