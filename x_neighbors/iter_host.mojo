@@ -5,6 +5,7 @@ same items. HOST ONLY."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from x_neighbors.cc_sparse import cc_iterate_sparse
 from x_neighbors.items import (
     FP, IP, absdiff_sum_item, matmul_item, lp_clamp_item, ls_clamp_item,
     pagerank_step_item, cc_step_item, pcs_item, knn_sq_item,
@@ -122,6 +123,16 @@ def op_pr_iterate(
 
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
+    """connected_components' min-label rounds as the sparse walk of
+    x_neighbors/cc_sparse.mojo (lane neural-pass22): the same rounds over the
+    graph's edges, the same labels and round count; `cc_iterate_dense` below
+    is the dense loop it is held to (cc_sparse_check)."""
+    cc_iterate_sparse(FP(unsafe_from_address=a), IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n)
+
+
+def cc_iterate_dense(a: Int, lab: Int, info: Int, n: Int) raises:
+    """The rounds of `cc_step_item` over every cell of the n x n matrix: the
+    reference the sparse walk is checked against."""
     var l0 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
     var l1 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
     var pl = IP(unsafe_from_address=lab)
