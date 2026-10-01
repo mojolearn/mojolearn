@@ -114,8 +114,11 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from core.device_arena import arena_active, arena_take
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import host_predict_task_count
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -835,6 +838,27 @@ def download_f32_into(
         return
     if n > len(buf):
         raise Error("download_f32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
+    if download_staged(n):
+        # lane/neural-pass43 (2026-10-01): on the Apple column a device-to-
+        # host-pointer copy runs at about 3 GB/s (21 ms per 64 MB, warm or
+        # not; memory metal-transfer-costs-on-apple), where the DMA into a
+        # pinned host buffer takes 2-3 ms and the memcpy out, over host
+        # tasks, 2-6 ms. The same bytes land in `dst`; a transport choice.
+        step_count_host_alloc()
+        var stage = ctx.enqueue_create_host_buffer[DType.float32](n)
+        if n == len(buf):
+            step_count_d2h()
+            ctx.enqueue_copy(dst_buf=stage, src_buf=buf)
+        else:
+            var view = buf.create_sub_buffer[DType.float32](0, n)
+            step_count_d2h()
+            ctx.enqueue_copy(dst_buf=stage, src_buf=view)
+            _ = view^
+        step_count_sync()
+        ctx.synchronize()
+        _copy_out_tasks(dst, stage.unsafe_ptr(), n)
+        _ = stage^
+        return
     if n == len(buf):
         step_count_d2h()
         ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
@@ -847,6 +871,47 @@ def download_f32_into(
         step_count_sync()
         ctx.synchronize()
         _ = view^
+
+
+#: `download_f32_into` stages a download through a pinned host buffer from
+#: this many floats (4 MB); below it the raw copy is the cheaper call.
+comptime DOWNLOAD_STAGE_MIN = 1 << 20
+
+
+def download_staged(n: Int) -> Bool:
+    """Whether `download_f32_into` goes through a pinned stage (lane
+    neural-pass43, 2026-10-01): the Apple column by default from
+    DOWNLOAD_STAGE_MIN floats, the raw host-pointer copy elsewhere (on the
+    L40S the raw copy is the faster one, on the MI325X they are even: the
+    optimizer's `opt_download_staged` measurements). MOJOLEARN_DOWNLOAD_STAGE=0/1
+    forces either. A transport choice: no bit moves."""
+    if n < DOWNLOAD_STAGE_MIN:
+        return False
+    var v = String(getenv("MOJOLEARN_DOWNLOAD_STAGE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
+
+
+def _copy_out_tasks(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
+    """`memcpy(dst, src, n)` in contiguous chunks over host tasks: one
+    thread reads pinned (write-combined) memory at about 3 GB/s, several
+    read it at 10 GB/s and more (training/estimator.mojo::_parallel_copy_out)."""
+    var tasks = host_predict_task_count(1 << 30)
+    if n < (1 << 20) or tasks <= 1:
+        memcpy(dest=dst, src=src, count=n)
+        return
+    if tasks > 16:
+        tasks = 16
+    var chunk = (n + tasks - 1) // tasks
+
+    def _chunk(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            memcpy(dest=dst + lo, src=src + lo, count=hi - lo)
+
+    host_parallelize(_chunk, tasks)
 
 
 def digest_of_lists(

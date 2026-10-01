@@ -1305,10 +1305,16 @@ def _byte_layer_sync() -> Bool:
     one in-order context, the next layer's kernels are enqueued behind this
     layer's, and the eager-scratch release only drops buffer handles whose
     frees are themselves enqueued (DEVIATION 2520), so no bit moves; what
-    moves is the host idling per layer. Default ON (the measured behaviour)
-    until a box has run both; the step's `step.*` timing ticks read the
-    same either way."""
-    return String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC")) != "0"
+    moves is the host idling per layer. Default ON on NVIDIA and AMD (the
+    measured behaviour; the L40S toggle sweep read 1.00 either way) and OFF
+    on the Apple column (lane/neural-pass43, 2026-10-01: a Metal wait with
+    a readback costs about 0.2 ms on the M4 and more on the M3 Ultra;
+    `MOJOLEARN_BYTE_LM_LAYER_SYNC=1` restores them); the step's `step.*`
+    timing ticks read the same either way."""
+    var v = String(getenv("MOJOLEARN_BYTE_LM_LAYER_SYNC"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v == "1"
+    return v != "0"
 
 
 def _byte_release_forward_scratch(ctx: DeviceContext,
