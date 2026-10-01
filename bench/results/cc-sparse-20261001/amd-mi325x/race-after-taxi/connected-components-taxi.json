@@ -1,0 +1,200 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/cc-amd/venv-after/bin/python",
+        "/root/mojolearn-pass22/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "connected-components",
+        "--dataset",
+        "taxi",
+        "--data",
+        "/root/cc-amd/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "f9dd8da0c6fcd7d8",
+        "f9dd8da0c6fcd7d8",
+        "f9dd8da0c6fcd7d8",
+        "f9dd8da0c6fcd7d8"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.connected_components({}) on the dense adjacency (20000 x 20000)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/cc-amd/venv-after/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_neighbors numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.32"
+      },
+      "median_ms": 55.53075799252838,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1630.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1630.5,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1630.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1630.7,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        51.91612499766052,
+        55.67493799026124,
+        55.53075799252838
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "the graph algorithm on the CSR graph",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 54.83148900384549
+    }
+  },
+  "block": {
+    "arrays": {
+      "X": {
+        "dtype": "float32",
+        "sha256": "e862b85355ccaa4c97adb47ea6e4993a0f1561a4ced9140b4a2909289a110903",
+        "shape": [
+          20000,
+          11
+        ]
+      },
+      "indices": {
+        "dtype": "int64",
+        "sha256": "fa029490f1f4565ef907b1a1f7620a52c76e4bbfd9461aa6dba90efab300fcd2",
+        "shape": [
+          253708
+        ]
+      },
+      "indices2": {
+        "dtype": "int64",
+        "sha256": "8211f9dc72f8b5b58e6a816a084589e3418b119bf362f6362fbc226e66f57f76",
+        "shape": [
+          54528
+        ]
+      },
+      "indptr": {
+        "dtype": "int64",
+        "sha256": "d890fd15fd0a0556da61a5036129a824bf4acf04cede0b0f531f9eab6506fe23",
+        "shape": [
+          20001
+        ]
+      },
+      "indptr2": {
+        "dtype": "int64",
+        "sha256": "f992c676be61a63222d4bb3f8da87be0abad8c5410fea72663fda15162988dc7",
+        "shape": [
+          20001
+        ]
+      },
+      "y": {
+        "dtype": "float32",
+        "sha256": "a9c1ff43396a579b11bd72a28ededbb9bcad05a89a5557fd689ca4e5a2227c31",
+        "shape": [
+          20000
+        ]
+      }
+    },
+    "block": "graph",
+    "dataset": "taxi",
+    "k": 10,
+    "nodes": 20000,
+    "rule": "tools/bench_board_algos.py prep",
+    "seed": 7,
+    "smoke_max_rows": null,
+    "written": "2026-10-01T03:32:40Z"
+  },
+  "commit": "unknown",
+  "dataset": "taxi",
+  "finished": "2026-10-01T03:32:50Z",
+  "lane": "connected-components",
+  "lane_config": {
+    "block": "graphs",
+    "datasets": [
+      "taxi",
+      "istella"
+    ],
+    "expansion_lane": "neighbors",
+    "kind": "graph",
+    "mismatches": [
+      "ours takes a dense adjacency matrix (its class's contract), built from the CSR graph before the clock; networkx and cuGraph take the graph itself"
+    ],
+    "notes": [
+      "the kNN graph with k=2 (sparse enough to have more than one component)"
+    ],
+    "ours_class": "mojolearn.connected_components or mojolearn.ConnectedComponents",
+    "params": {},
+    "quality": "component count; ARI vs networkx's labels",
+    "task": "components",
+    "timed_fit": "the graph algorithm on the CSR graph",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/connected-components",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "n_components": 588
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "X 20000x11; indices 253708; indices2 54528; indptr 20001; indptr2 20001; y 20000",
+  "started": "2026-10-01T03:32:49Z"
+}

@@ -1,0 +1,9 @@
+03:31:50 sparse-check rc=0
+03:31:55 graph-check rc=0
+03:32:08 build-x_neighbors rc=0
+03:32:17 build-x_neighbors_host rc=0
+03:32:40 prep rc=0
+03:32:44 race-before-taxi rc=0
+03:32:49 race-before-istella rc=0
+03:32:50 race-after-taxi rc=0
+03:32:51 race-after-istella rc=0
