@@ -122,7 +122,7 @@ def _glm_host(est):
         vendor = str(_backend.vendor()).strip().lower()
     except Exception:  # noqa: BLE001 - no vendor read-back: the host policy
         vendor = ""
-    if vendor == "nvidia":
+    if vendor in ("cuda", "nvidia"):  # the read-back says "cuda" on an NVIDIA box
         return type(est).__name__ == "PoissonRegressor"
     return True
 
