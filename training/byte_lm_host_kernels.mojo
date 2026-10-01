@@ -456,6 +456,52 @@ def rope_fast(src: List[Float32], n_head: Int, hd: Int, l: Int, rope: RopeTable)
     return out^
 
 
+def copy_rows(src: List[Float32], lo: Int, hi: Int, width: Int) -> List[Float32]:
+    """Rows `[lo, hi)` of a row-major `[*, width]` list as their own list
+    (a plain copy; the token-split forward in `byte_lm_host.mojo` hands
+    each task the rows it owns)."""
+    var out = List[Float32](length=(hi - lo) * width, fill=Float32(0.0))
+    var sp = src.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    for i in range((hi - lo) * width):
+        op.unsafe_store(i, sp.unsafe_load(lo * width + i))
+    return out^
+
+
+def rope_rows(src: List[Float32], n_head: Int, hd: Int, lo: Int, hi: Int, rope: RopeTable) raises -> List[Float32]:
+    """`rope_fast` for the tokens `[lo, hi)` of one batch row: `src` holds
+    those tokens' rows (local index `t - lo`), the rotary position is the
+    global `t`. Per element the same expression on the same operands."""
+    if hi > rope.positions:
+        raise Error("byte LM host kernels: length exceeds the rotary table")
+    var half = hd // 2
+    var width = n_head * hd
+    var out = List[Float32](length=(hi - lo) * width, fill=Float32(0.0))
+    var sp = src.unsafe_ptr()
+    var op = out.unsafe_ptr()
+    var cosp = rope.cos.unsafe_ptr()
+    var sinp = rope.sin.unsafe_ptr()
+    for t in range(lo, hi):
+        var lt = t - lo
+        for h in range(n_head):
+            var base = lt * width + h * hd
+            for j in range(hd):
+                var ci: Int
+                var rot: Float32
+                if j < half:
+                    ci = j
+                    rot = -ftz(sp.unsafe_load(base + j + half))
+                else:
+                    ci = j - half
+                    rot = ftz(sp.unsafe_load(base + j - half))
+                var cv = ftz(cosp.unsafe_load(t * half + ci))
+                var sv = ftz(sinp.unsafe_load(t * half + ci))
+                var pa = ftz(identical_mul(ftz(sp.unsafe_load(base + j)), cv))
+                var pb = ftz(identical_mul(rot, sv))
+                op.unsafe_store(base + j, ftz(ftz(pa) + ftz(pb)))
+    return out^
+
+
 @no_inline
 def _residual_add(a: List[Float32], b: List[Float32]) -> List[Float32]:
     """S22 and S23: `ftz(ftz(a[i]) + ftz(b[i]))`, one add per element, as
