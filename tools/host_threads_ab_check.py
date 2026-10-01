@@ -22,6 +22,8 @@ Prints `HOST_THREADS_AB PASS <model>` or `HOST_THREADS_AB FAIL <what>` and
 exits 1 on FAIL. A FAIL is a bug in a threaded stage, never a result.
 """
 import argparse
+
+import numpy as np
 import hashlib
 import os
 import statistics
@@ -39,12 +41,48 @@ SHAPES = {
 }
 
 
+def _splitmix64(z):
+    """splitmix64 over a uint64 numpy array, wrapping (the fixture generator's
+    hash, transformer/checks/transformer_fixture.mojo::fixture_splitmix64)."""
+    z = z + np.uint64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+    return z ^ (z >> np.uint64(31))
+
+
+class _Fixture:
+    """Platform-independent tensors (lane neural-pass21, 2026-10-01): the
+    fixture generator's recipe, `f32(lo + (hi - lo) * top24 * 2^-24)` of a
+    splitmix64 stream, in uint64 and float64 numpy arithmetic and one
+    round to float32. numpy's float32 normal sampler goes through the
+    platform libm (logf in the ziggurat tail), so `standard_normal(dtype=
+    float32)` gave two x86 hosts and an Apple host different bytes for one
+    weight at length 2048, which made the cross-host shas of this tool
+    incomparable while the arithmetic was identical (the 30-stage digests
+    of tools/transformer_stage_digests.mojo agreed). Every tensor has its
+    own id, so a shape change moves no other tensor."""
+
+    def __init__(self, seed):
+        self.seed = np.uint64(seed)
+        self.next_id = 1
+
+    def __call__(self, *shape, lo=-1.0, hi=1.0):
+        n = int(np.prod(shape)) if shape else 1
+        tid = np.uint64(self.next_id)
+        self.next_id += 1
+        with np.errstate(over="ignore"):
+            key = _splitmix64(self.seed ^ (tid << np.uint64(32)))
+            h = _splitmix64(key + np.arange(n, dtype=np.uint64))
+        unit = (h >> np.uint64(40)).astype(np.float64) * 0.000000059604644775390625
+        return (lo + (hi - lo) * unit).astype("<f4").reshape(shape)
+
+
 def _mamba3_weights(np, rng, dm):
     import mojolearn._mamba_impl as M
     di = 2 * dm
     nh = di // M._M3_HEADDIM
     dip = 2 * di + 2 * M._M3_NGROUPS * M._M3_D_STATE + 3 * nh + M._M3_NUM_ROPE_ANGLES
-    f = lambda *s: (rng.standard_normal(s, dtype=np.float32) * np.float32(0.02)).astype("<f4")
+    f = lambda *s: rng(*s, lo=-0.035, hi=0.035)
     return {"block_norm.weight": f(dm) + np.float32(1.0), "in_proj.weight": f(dip, dm), "dt_bias": f(nh),
             "B_norm.weight": f(M._M3_D_STATE) + np.float32(1.0), "C_norm.weight": f(M._M3_D_STATE) + np.float32(1.0),
             "B_bias": f(nh, M._M3_D_STATE), "C_bias": f(nh, M._M3_D_STATE), "D": f(nh),
@@ -53,7 +91,7 @@ def _mamba3_weights(np, rng, dm):
 
 def _transformer_weights(np, rng, s):
     dm, nh, nkv, hd, it = s["d_model"], s["n_heads"], s["n_kv"], s["head_dim"], s["intermediate"]
-    f = lambda *shape: (rng.standard_normal(shape, dtype=np.float32) * np.float32(0.02)).astype("<f4")
+    f = lambda *shape: rng(*shape, lo=-0.035, hi=0.035)
     return {"input_layernorm.weight": f(dm) + np.float32(1.0), "q_proj.weight": f(nh * hd, dm),
             "k_proj.weight": f(nkv * hd, dm), "v_proj.weight": f(nkv * hd, dm), "o_proj.weight": f(dm, nh * hd),
             "post_attention_layernorm.weight": f(dm) + np.float32(1.0), "gate_proj.weight": f(it, dm),
@@ -67,8 +105,8 @@ def child(args):
     s = dict(SHAPES[args.model])
     if args.length:
         s["length"] = args.length
-    rng = np.random.default_rng(11)
-    x = (rng.standard_normal((s["batch"], s["length"], s["d_model"]), dtype=np.float32) * np.float32(0.5)).astype("<f4")
+    rng = _Fixture(11)
+    x = rng(s["batch"], s["length"], s["d_model"], lo=-0.9, hi=0.9)
     if args.model == "mamba3":
         block = mojolearn.Mamba3BlockInference(_mamba3_weights(np, rng, s["d_model"]))
     else:
