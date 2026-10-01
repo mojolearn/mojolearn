@@ -323,10 +323,21 @@ def block_par(
     var tasks = _chunks(l, workers)
     var chunk = (l + tasks - 1) // tasks
 
-    # ---- region A: norm1, q, k, v, rope per token chunk into shared tables
+    # ---- region A: norm1, q, k, v, rope per token chunk into shared tables.
+    # The keys and values go straight into the ATTENTION LAYOUT, one packed
+    # table per kv head (`kpacks[kvh][d * s + j]`, `vpacks[kvh][j * hd + d]`,
+    # the expressions `block_fast` packs per head), written by the task that
+    # owns token j. Before (PR #10) every query task re-packed every head's
+    # keys and values for itself: tasks x heads x s x hd x 2 copies, at 64
+    # workers and 32-token chunks sixteen times the task's own attention
+    # fmas, which is why the split stopped at 3.65x on 64 cores.
     var qr = List[Float32](length=l * qw, fill=Float32(0.0))
-    var kr = List[Float32](length=l * kw, fill=Float32(0.0))
-    var v = List[Float32](length=l * kw, fill=Float32(0.0))
+    var c_kv = dims.n_kv_heads
+    var kpacks = List[List[Float32]]()
+    var vpacks = List[List[Float32]]()
+    for _ in range(c_kv):
+        kpacks.append(List[Float32](length=hd * s, fill=Float32(0.0)))
+        vpacks.append(List[Float32](length=s * hd, fill=Float32(0.0)))
     var failed = List[Int](length=tasks, fill=0)
     var tp = held.unsafe_ptr()
     var rp = ropes.unsafe_ptr()
@@ -334,12 +345,11 @@ def block_par(
     xs.append(x.copy())
     var xp = xs.unsafe_ptr()
     var qrp = qr.unsafe_ptr()
-    var krp = kr.unsafe_ptr()
-    var vp = v.unsafe_ptr()
+    var kpk = kpacks.unsafe_ptr()
+    var vpk = vpacks.unsafe_ptr()
     var fp = failed.unsafe_ptr()
-    var c_kv = dims.n_kv_heads
 
-    def _pre_task(c: Int) {imm tp, imm rp, imm xp, imm qrp, imm krp, imm vp, imm fp, imm chunk, imm l,
+    def _pre_task(c: Int) {imm tp, imm rp, imm xp, imm qrp, imm kpk, imm vpk, imm fp, imm chunk, imm l, imm s,
                            imm dm, imm nh, imm hd, imm qw, imm kw, imm tb, imm c_kv}:
         try:
             var lo = c * chunk
@@ -361,9 +371,14 @@ def block_par(
             var krc = rope_rows(k, c_kv, hd, lo, hi, rp[])
             for i in range(rows * qw):
                 qrp.unsafe_store(lo * qw + i, qrc[i])
-            for i in range(rows * kw):
-                krp.unsafe_store(lo * kw + i, krc[i])
-                vp.unsafe_store(lo * kw + i, vv[i])
+            for kvh in range(c_kv):
+                var kpp = kpk[kvh].unsafe_ptr()
+                var vpp = vpk[kvh].unsafe_ptr()
+                for lt in range(rows):
+                    var j = lo + lt
+                    for d in range(hd):
+                        kpp.unsafe_store(d * s + j, ftz(krc[lt * kw + kvh * hd + d]))
+                        vpp.unsafe_store(j * hd + d, ftz(vv[lt * kw + kvh * hd + d]))
         except:
             fp.unsafe_store(c, 1)
 
@@ -390,18 +405,12 @@ def block_par(
     var out = List[Float32](length=l * dm, fill=Float32(0.0))
     var qrs = List[List[Float32]]()
     qrs.append(qr^)
-    var krs = List[List[Float32]]()
-    krs.append(kr^)
-    var vs = List[List[Float32]]()
-    vs.append(v^)
     var qtp = qrs.unsafe_ptr()
-    var ktp = krs.unsafe_ptr()
-    var vtp = vs.unsafe_ptr()
     var op = out.unsafe_ptr()
     for c in range(tasks):
         failed[c] = 0
 
-    def _post_task(c: Int) {imm tp, imm xp, imm mfill, imm munmasked, imm qtp, imm ktp, imm vtp, imm op,
+    def _post_task(c: Int) {imm tp, imm xp, imm mfill, imm munmasked, imm qtp, imm kpk, imm vpk, imm op,
                             imm fp, imm chunk, imm l, imm s, imm dm, imm nh, imm hd, imm qw, imm kw,
                             imm inter, imm n_rep, imm tb, imm scale}:
         try:
@@ -421,28 +430,19 @@ def block_par(
                     mcp.unsafe_store(qi * s + j, mfill)
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
             var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
-            var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
-            var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
             var cell = List[Float32](length=rows * s, fill=Float32(0.0))
             var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
             var qsp = qtp[0].unsafe_ptr()
-            var ksp = ktp[0].unsafe_ptr()
-            var vsp = vtp[0].unsafe_ptr()
             var qmp = qmat.unsafe_ptr()
-            var kpp = kpack.unsafe_ptr()
-            var vpp = vpack.unsafe_ptr()
             for h in range(nh):
                 var kvh = h // n_rep
                 for qi in range(rows):
                     for d in range(hd):
                         qmp.unsafe_store(qi * hd + d, qsp.unsafe_load((lo + qi) * qw + h * hd + d))
-                for j in range(s):
-                    for d in range(hd):
-                        kpp.unsafe_store(d * s + j, ftz(ksp.unsafe_load(j * kw + kvh * hd + d)))
-                        vpp.unsafe_store(j * hd + d, ftz(vsp.unsafe_load(j * kw + kvh * hd + d)))
-                gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
+                # the head's keys and values, packed once by region A
+                gemm_nt_rows(qmat, kpk[kvh], s, hd, 0, rows, cell)
                 _softmax_head(cell, mchunk, rows, s, scale, aweights)
-                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx)
+                _value_sum_head(aweights, vpk[kvh], rows, s, hd, qw, h, ctx)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
@@ -468,8 +468,8 @@ def block_par(
     _lmhost_tick(ton, tk, "block.attn_mlp")
     _ = xs^
     _ = qrs^
-    _ = krs^
-    _ = vs^
+    _ = kpacks^
+    _ = vpacks^
     for c in range(tasks):
         if failed[c] != 0:
             raise Error("byte LM host: token chunk " + String(c) + " raised in attention or the MLP")
