@@ -1,0 +1,4 @@
+main mamba3-infer median_ms=26.899872347712517 
+main samba-infer 
+branch mamba3-infer median_ms=28.143083676695824 
+branch samba-infer 
