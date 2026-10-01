@@ -703,22 +703,45 @@ def ivf_flat_search_prepared(
 
     # ---- steps 3-5, FAST on Apple: every query in one launch ------------
     comptime if IVF_FAST_SCAN or IVF_IDENTICAL_SCAN:
+        # lane ivf-filter-fix (2026-10-01): a FILTERED search takes the
+        # batched scans too, with the mask applied inside the scan (the FAST
+        # scan and the IDENTICAL grouped scan carry `keep`), so an all-ones
+        # filter is the unfiltered search bit for bit in every tier; before,
+        # a filtered search fell to the per-query path, whose FAST distances
+        # (the expanded norm form) differ by ulps from the batched scan's
+        # direct sum of squares, and `check_filter_matches_oracle` failed.
+        var batched_filter_ok = True
+        comptime if IVF_IDENTICAL_SCAN:
+            batched_filter_ok = _ivf_scan_grouped()
         if (
             not trace.enabled
             and not partial_storage
-            and not filtered
+            and (not filtered or batched_filter_ok)
             and k <= 32
             and dim <= FIVF_MAX_DIM
         ):
+            # the kept rows per list: the candidate count per query is the
+            # kept candidates (the per-query path's `len(kept)`)
+            var kept_per_list = List[Int32](length=n_lists, fill=Int32(0))
+            if filtered:
+                for l in range(n_lists):
+                    var c = 0
+                    for sl in range(Int(index.list_offsets[l]), Int(index.list_offsets[l + 1])):
+                        if keep[Int(index.list_indices[sl])] != 0:
+                            c += 1
+                    kept_per_list[l] = Int32(c)
             var counts = List[Int32]()
             var enough = True
             for q in range(n_queries):
                 var c = 0
                 for p in range(n_probes):
-                    c += index.list_size(Int(probe_ids[q * n_probes + p]))
+                    var l = Int(probe_ids[q * n_probes + p])
+                    c += Int(kept_per_list[l]) if filtered else index.list_size(l)
                 counts.append(Int32(c))
                 if c < k:
                     enough = False
+            var d_keep = upload_i32(ctx, keep) if filtered else ctx.enqueue_create_buffer[DType.int32](1)
+            var keep_len = len(keep) if filtered else 0
             if enough:
                 var d_od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
                 var d_oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
@@ -775,6 +798,7 @@ def ivf_flat_search_prepared(
                                         d_goff.unsafe_ptr(), d_gq.unsafe_ptr(), d_gp.unsafe_ptr(),
                                         d_bl.unsafe_ptr(), d_bs.unsafe_ptr(),
                                         d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
+                                        d_keep.unsafe_ptr(), Int32(keep_len),
                                         Int32(dim), Int32(n_probes), Int32(k),
                                         grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
                                     )
@@ -798,7 +822,7 @@ def ivf_flat_search_prepared(
                                 _ = gp^
                                 _ = bl^
                                 _ = bs^
-                            elif _ivf_scan_staged():
+                            elif not filtered and _ivf_scan_staged():
                                 ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
                                     dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
                                     dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
@@ -828,6 +852,7 @@ def ivf_flat_search_prepared(
                                 dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
                                 dprobe_idx.unsafe_ptr(),
                                 d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                d_keep.unsafe_ptr(), Int32(keep_len),
                                 Int32(n_queries), Int32(dim), Int32(n_probes),
                                 Int32(k),
                                 grid_dim=grid, block_dim=FIVF_QPB * WARP_SIZE,
@@ -838,6 +863,7 @@ def ivf_flat_search_prepared(
                     postprocess_distances(fd, index.metric)
                 _ = d_od^
                 _ = d_oi^
+                _ = d_keep^
                 _ = dq^
                 _ = dq_norm^
                 _ = dcoarse^
