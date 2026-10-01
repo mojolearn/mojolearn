@@ -1,0 +1,208 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/Users/ec2-user/torchvenv/bin/python",
+        "/Users/ec2-user/mojolearn-mainnow/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "embedding",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/Users/ec2-user/emb-moe-metal/data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "5c23514a916c0930",
+        "5c23514a916c0930",
+        "5c23514a916c0930",
+        "5c23514a916c0930"
+      ],
+      "infer_ms": [
+        336.81875000183936,
+        337.77087499038316,
+        338.4658339928137
+      ],
+      "infer_warmup_ms": 335.01233300194144,
+      "info": {
+        "config": "mojolearn.Embedding({'num_embeddings': 32768, 'embedding_dim': 1024, 'padding_idx': None, 'max_norm': None, 'norm_type': 2.0, 'scale_grad_by_freq': False, 'sparse': False}, weight=torch's init)",
+        "device": "gpu",
+        "device_name": "Apple M3 Ultra",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/Users/ec2-user/mojolearn-mainnow/python/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_embedding'))",
+        "numeric_mode_used": "unknown",
+        "output_comparable": true,
+        "pre_clock_fit": false,
+        "vendor_used": "metal",
+        "version": "0.8.32",
+        "weights_loaded": true
+      },
+      "median_ms": 797.8477909928188,
+      "mem": [
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1759.4,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 1987.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2055.1,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        },
+        {
+          "children_mb": 1.7,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 2012.8,
+          "host_method": "macOS proc_pid_rusage ri_interval_max_phys_footprint (peak physical footprint over the round; Metal buffers are inside it)"
+        }
+      ],
+      "ms": [
+        793.6802499898477,
+        797.8477909928188,
+        797.9795419960283
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "embedding_dim": 1024,
+        "max_norm": null,
+        "norm_type": 2.0,
+        "num_embeddings": 32768,
+        "padding_idx": null,
+        "scale_grad_by_freq": false,
+        "sparse": false
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "forward + backward(dy)",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 1066.3194579974515
+    }
+  },
+  "block": {
+    "block": "tensor",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "unknown",
+  "dataset": "synthetic",
+  "finished": "2026-10-01T04:50:13Z",
+  "infer": {
+    "arms": {
+      "ours": {
+        "digest_stable": true,
+        "digests": [
+          "5c23514a916c0930",
+          "5c23514a916c0930",
+          "5c23514a916c0930",
+          "5c23514a916c0930"
+        ],
+        "error": null,
+        "info": {
+          "config": "mojolearn.Embedding({'num_embeddings': 32768, 'embedding_dim': 1024, 'padding_idx': None, 'max_norm': None, 'norm_type': 2.0, 'scale_grad_by_freq': False, 'sparse': False}, weight=torch's init)",
+          "device": "gpu",
+          "device_name": "Apple M3 Ultra",
+          "input_home": "host",
+          "library": "mojolearn",
+          "module_path": "/Users/ec2-user/mojolearn-mainnow/python/mojolearn/__init__.py",
+          "numeric_mode_env": "identical",
+          "numeric_mode_how": "readback failed (AttributeError('_mojolearn_x_embedding'))",
+          "numeric_mode_used": "unknown",
+          "output_comparable": true,
+          "pre_clock_fit": false,
+          "vendor_used": "metal",
+          "version": "0.8.32",
+          "weights_loaded": true
+        },
+        "ms": [
+          336.81875000183936,
+          337.77087499038316,
+          338.4658339928137
+        ],
+        "status": "ok",
+        "warmup_ms": 335.01233300194144
+      }
+    },
+    "batch": "Xq",
+    "call": "forward(x) (no autograd)",
+    "quality": {},
+    "rows": null
+  },
+  "lane": "embedding",
+  "lane_config": {
+    "block": "tensor",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "embedding",
+    "kind": "layer",
+    "mismatches": [],
+    "notes": [
+      "ids (64, 512) uniform over the 32,768 rows, seed 7; the table is torch's nn.Embedding seeded N(0,1) init, handed to ours as weight= (ours refuses to draw one); training column = forward + the dense (V, d) weight gradient of dy",
+      "fp32 torch arms only: a gather has no matmul for TF32 and autocast leaves nn.Embedding in fp32"
+    ],
+    "ours_class": "mojolearn.Embedding",
+    "params": {
+      "embedding_dim": 1024,
+      "max_norm": null,
+      "norm_type": 2.0,
+      "num_embeddings": 32768,
+      "padding_idx": null,
+      "scale_grad_by_freq": false,
+      "sparse": false
+    },
+    "quality": "max relative difference of the forward output vs torch eager fp32 (same weights)",
+    "task": "embedding",
+    "timed_fit": "forward + backward(dy)",
+    "timed_infer": "forward(x) (no autograd)"
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/embedding",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {}
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-10-01T04:50:06Z"
+}
