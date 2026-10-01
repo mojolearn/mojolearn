@@ -18,7 +18,10 @@ by five) and the loss classes at the top of that file. Differences, named:
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fexp, flog, fabs, fmax, fmin,
     ld, st, ldi, sti, i2f, fill, row_dot, shuffle, axpy_acc, scale_acc, ftzv, par_rows, fz, xmad,
+    dot, X_LINEAR_HOST_SABOTAGE,
 )
+from std.math import fma
+from std.memory import bitcast
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
@@ -134,6 +137,67 @@ def sgd_dloss(kind: Int, y: Float32, p: Float32, eps: Float32) -> Float32:
     return Float32(0)
 
 
+# ------------------------------------------------ the host row chains (lane/neural-pass81)
+# lane/neural-pass81 (2026-10-01): the host's per-row folds without the
+# per-step flush on the chain. A fold `acc = fmad(a_j, b_j, acc)` flushes its
+# accumulator before and after each fused multiply-add; the operand flushes
+# do not depend on the chain, the result flush does, and it was most of the
+# row's latency (sgd-reg istella 50k x 220 on the M4's host: 3.3 us a row).
+# Here the chain runs the bare fused multiply-add and, off the chain, notes
+# whether any intermediate was subnormal. When none was, every flush of the
+# accumulator returned its operand unchanged, so the bare chain IS the
+# flushed chain, step by step, bit for bit; when one was, the row's fold is
+# recomputed with `dot`'s flushed steps. The L1 norm needs no flush on its
+# chain: it adds flushed magnitudes (zero or at least the smallest normal)
+# to a sum that only grows, so no partial sum is subnormal.
+# `-D MOJOLEARN_SGD_HOST_LEGACY=1` restores the flushed chains.
+comptime SGD_HOST_TRACK = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not X_LINEAR_HOST_SABOTAGE
+    and not is_defined["MOJOLEARN_SGD_HOST_LEGACY"]()
+)
+
+
+@always_inline
+def _subnormal(v: Float32) -> Bool:
+    var b = bitcast[DType.uint32](v)
+    return ((b & UInt32(0x7F800000)) == UInt32(0)) & ((b & UInt32(0x007FFFFF)) != UInt32(0))
+
+
+@always_inline
+def _dot_tracked(a: FP, ia: Int, b: FP, ib: Int, count: Int) -> Float32:
+    """`dot`'s word (see the note above)."""
+    var acc = Float32(0)
+    var sub = False
+    for j in range(count):
+        acc = fma(fz(ld(a, ia + j)), fz(ld(b, ib + j)), acc)
+        sub = sub | _subnormal(acc)
+    if sub:
+        return dot(a, ia, b, ib, count)
+    return acc
+
+
+@always_inline
+def _norms_tracked(w: FP, woff: Int, d: Int) -> Tuple[Float32, Float32]:
+    """(sum_j fmad(w_j, w_j, .), sum_j fa(., fabs(w_j))), j ascending: the
+    penalty loop's two folds (see the note above)."""
+    var n2 = Float32(0)
+    var n1 = Float32(0)
+    var sub = False
+    for j in range(d):
+        var wj = fz(ld(w, woff + j))
+        n2 = fma(wj, wj, n2)
+        sub = sub | _subnormal(n2)
+        n1 = n1 + fz(fabs(wj))
+    if sub:
+        n2 = Float32(0)
+        n1 = Float32(0)
+        for j in range(d):
+            var wj = ld(w, woff + j)
+            n2 = fmad(wj, wj, n2)
+            n1 = fa(n1, fabs(wj))
+    return (n2, n1)
+
+
 def sgd_one(
     x: FP, ys: FP, n: Int, d: Int,
     loss: Int, penalty: Int, alpha: Float32, l1_ratio_in: Float32,
@@ -177,7 +241,11 @@ def sgd_one(
         for r in range(n):
             var i = ldi(idx, r)
             var y = ld(ys, i)
-            var p = fa(row_dot(x, i, d, w, woff), intercept)
+            var p: Float32
+            comptime if not is_gpu() and SGD_HOST_TRACK:
+                p = fa(_dot_tracked(x, i * d, w, woff, d), intercept)
+            else:
+                p = fa(row_dot(x, i, d, w, woff), intercept)
             if lr == LR_OPTIMAL:
                 eta = fd(Float32(1), fm(alpha, fs(fa(optimal_init, i2f(t)), Float32(1))))
             elif lr == LR_INVSCALING:
@@ -188,10 +256,15 @@ def sgd_one(
                 if penalty != P_NONE:
                     var n2 = Float32(0)
                     var n1 = Float32(0)
-                    for j in range(d):
-                        var wj = ld(w, woff + j)
-                        n2 = fmad(wj, wj, n2)
-                        n1 = fa(n1, fabs(wj))
+                    comptime if not is_gpu() and SGD_HOST_TRACK:
+                        var nn = _norms_tracked(w, woff, d)
+                        n2 = nn[0]
+                        n1 = nn[1]
+                    else:
+                        for j in range(d):
+                            var wj = ld(w, woff + j)
+                            n2 = fmad(wj, wj, n2)
+                            n1 = fa(n1, fabs(wj))
                     var reg = fa(fm(fm(fs(Float32(1), l1_ratio), Float32(0.5)), n2), fm(l1_ratio, n1))
                     objective = fa(objective, fm(alpha, reg))
                 if one_class:
@@ -199,9 +272,12 @@ def sgd_one(
             var update: Float32
             if lr == LR_PA1 or lr == LR_PA2:
                 var sq = Float32(0)
-                for j in range(d):
-                    var xj = ld(x, i * d + j)
-                    sq = fmad(xj, xj, sq)
+                comptime if not is_gpu() and SGD_HOST_TRACK:
+                    sq = _dot_tracked(x, i * d, x, i * d, d)
+                else:
+                    for j in range(d):
+                        var xj = ld(x, i * d + j)
+                        sq = fmad(xj, xj, sq)
                 if lr == LR_PA1:
                     if sq == 0:
                         continue
