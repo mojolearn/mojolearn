@@ -1464,6 +1464,16 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         raise ValueError("connection must be 'weak' or 'strong'")
     est = _XNeighbors()
     est.numeric_mode = numeric_mode
+    csr = _csr_of(A)
+    if csr is not None:
+        # lane/neural-pass69 (2026-10-01): a sparse graph (scipy.sparse CSR, or
+        # (indptr, indices, n)) walks its edge lists directly: the same rounds
+        # and labels as the dense matrix's, without building or scanning it
+        indptr, indices, n = csr
+        lab = _i32(list(range(n)), "labels")
+        info = empty((1,), "<i4")
+        est._op("cc_iterate_csr", [(indptr, 0), (indices, 0), (lab, 1), (info, 1)], (n, indices.shape[0]))
+        return _cc_relabel(lab, return_labels)
     A = _adjacency(A)
     n = A.shape[0]
     lab = _i32(list(range(n)), "labels")
@@ -1477,12 +1487,37 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         if nxt.tolist() == lab.tolist():
             break
         lab = nxt
+    return _cc_relabel(lab, return_labels)
+
+
+def _cc_relabel(lab, return_labels):
     roots = {}
     out = []
     for v in lab.tolist():
         out.append(roots.setdefault(v, len(roots)))
     labels = Array.from_list(out, "<i4")
     return (len(roots), labels) if return_labels else len(roots)
+
+
+def _csr_of(A):
+    """(indptr, indices, n) as int32 Arrays for a scipy.sparse matrix (any
+    format: converted to CSR) or a tuple (indptr, indices, n); None for a
+    dense input. The edge weights do not matter to connectivity."""
+    if isinstance(A, tuple) and len(A) == 3:
+        indptr, indices, n = A
+        n = int(n)
+    elif hasattr(A, "tocsr") and hasattr(A, "shape"):
+        if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
+            raise ValueError("the adjacency matrix must be square")
+        M = A.tocsr()
+        indptr, indices, n = M.indptr, M.indices, int(M.shape[0])
+    else:
+        return None
+    ip = _i32(indptr, "indptr")
+    ix = _i32(indices, "indices")
+    if ip.shape[0] != n + 1:
+        raise ValueError("connected_components: indptr must hold n + 1 entries")
+    return ip, ix, n
 
 
 # ====================================================================== Louvain

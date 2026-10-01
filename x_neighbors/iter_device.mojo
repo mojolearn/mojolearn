@@ -27,7 +27,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.info import has_apple_gpu_accelerator
 
 from std.sys.compile import is_defined
-from x_neighbors.cc_sparse import cc_iterate_sparse
+from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
 from x_neighbors.items import FP, IP, absdiff_sum_item, _sub, knn_sq_item, knn_impute_finish
 from checks.numerics import identical_mul, identical_div, identical_sqrt
@@ -355,6 +355,14 @@ def op_pr_iterate_sparse(
     _ = d_ds^
     _ = g^
     _ = ctx^
+
+def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
+    indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
+    column, no dense matrix."""
+    cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
+                   IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label iteration (`cc_step` until the labels

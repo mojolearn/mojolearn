@@ -182,6 +182,11 @@ CUSTOM_OPS = [
       ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int"), ("nc", "int")]),
     ("cc_iterate",
      [("a", "fin", "n * n"), ("lab", "iinout", "n"), ("info", "iout", "1"), ("n", "int")]),
+    # lane/neural-pass69 (2026-10-01): the same rounds from a CSR adjacency
+    # (indptr n + 1, indices nnz, int32), no dense matrix anywhere
+    ("cc_iterate_csr",
+     [("indptr", "iin", "n + 1"), ("indices", "iin", "nnz"), ("lab", "iinout", "n"), ("info", "iout", "1"),
+      ("n", "int"), ("nnz", "int")]),
     # lane/py-dn-kern (2026-09-28): the fused kernel chains (the kernel
     # matrix stays on the device, per row tile; only the output comes back)
     ("kpca_transform",

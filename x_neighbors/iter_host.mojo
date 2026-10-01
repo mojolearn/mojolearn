@@ -5,7 +5,7 @@ same items. HOST ONLY."""
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from x_neighbors.cc_sparse import cc_iterate_sparse
+from x_neighbors.cc_sparse import cc_iterate_sparse, cc_iterate_csr
 from core.host_lanes import host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.pr_sparse import PrGraph, pr_graph_from_dense, pagerank_dangling_sum, pagerank_step_sparse_item
@@ -179,6 +179,14 @@ def op_pr_iterate_sparse(
     _ = vb^
     _ = s^
     _ = g^
+
+def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
+    """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
+    indices nnz): the host walk of x_neighbors/cc_sparse.mojo on every
+    column, no dense matrix."""
+    cc_iterate_csr(IP(unsafe_from_address=indptr), IP(unsafe_from_address=indices),
+                   IP(unsafe_from_address=lab), IP(unsafe_from_address=info), n, nnz)
+
 
 def op_cc_iterate(a: Int, lab: Int, info: Int, n: Int) raises:
     """connected_components' min-label rounds as the sparse walk of
