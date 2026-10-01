@@ -5666,9 +5666,20 @@ comptime GEMM_IDENTICAL_LEAF_SPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
 )
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
+#: lane/neural-pass62 (2026-10-01): ON by default. Where the kernel body row
+#: is 1 (the NVIDIA column) every call the group rule takes (the byte LM's
+#: layer projections: k 384..1024, under the S tiles) ran `_kpack_run`: a
+#: fresh `m n G` device buffer, a hard `synchronize`, the group launch, the
+#: fold, a second hard `synchronize` and the free, PER GEMM, 56 times an
+#: lm-forward and more a train step, and those waits bypass the step
+#: counters. With the caller's `GemmWorkspace` sized for the groups
+#: (`identical_gemm_workspace_max_floats` below) the same group launch and
+#: the same fold run asynchronously on the stream into the kept buffer: the
+#: same partials, the same fold DAG, no allocation and no wait. A caller
+#: whose scratch is too small still takes the allocating path.
+#: `-D MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS=1` restores it everywhere.
 comptime GEMM_REUSE_GROUP_WS = (
-    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
-    and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
+    not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
 )
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
