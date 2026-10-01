@@ -157,13 +157,10 @@ def _head_col(col: _FP, tau: F32Ptr, scal: F32Ptr, k: Int, m: Int):
 
 
 @always_inline
-def _step_block(blk: _FP, colk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
-    """One block's W chains and updates for step k; `mask` names the lanes
-    that are trailing columns (the others' words are left as they were)."""
-    var w = ftz_lanes(blk.unsafe_load[width=_W](k * _W))
-    for i in range(k + 1, m):
-        var v = F32V(ftz(colk.unsafe_load(i * _W)))
-        w = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(blk.unsafe_load[width=_W](i * _W)), w))
+def _apply_block(blk: _FP, vk: _FP, t: Float32, w: F32V, k: Int, m: Int, mask: _B32):
+    """One block's update from its chains' results w: tw = ftz(mul(t, w));
+    row k: sub(row, tw); rows i > k: ftz(fma(-tw, vk[i], ftz(row))); the
+    lanes outside `mask` keep their words."""
     var tw = F32V(0)
     for l in range(_W):
         tw[l] = ftz(identical_mul(t, w[l]))
@@ -174,34 +171,92 @@ def _step_block(blk: _FP, colk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
     blk.unsafe_store(k * _W, mask.select(newk, rowk))
     var ntw = -tw
     for i in range(k + 1, m):
-        var v = F32V(ftz(colk.unsafe_load(i * _W)))
+        var v = F32V(vk.unsafe_load(i))
         var old = blk.unsafe_load[width=_W](i * _W)
         var upd = ftz_lanes(identical_mul_add_simd[_W](ntw, v, ftz_lanes(old)))
         blk.unsafe_store(i * _W, mask.select(upd, old))
 
 
 @always_inline
-def _lane_mask(b: Int, k: Int, cols: Int) -> _B32:
-    """The lanes of block b that are trailing columns of step k: k < j < cols."""
-    var lane = iota[DType.int32, _W]() + Int32(b * _W)
-    return lane.gt(Int32(k)) & lane.lt(Int32(cols))
+def _step_block(blk: _FP, vk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
+    """One block's W chains and update for step k (`vk[i]` = ftz of column
+    k's entry, computed once per step); `mask` names the lanes that are
+    trailing columns (the others' words are left as they were)."""
+    var w = ftz_lanes(blk.unsafe_load[width=_W](k * _W))
+    for i in range(k + 1, m):
+        var v = F32V(vk.unsafe_load(i))
+        w = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(blk.unsafe_load[width=_W](i * _W)), w))
+    _apply_block(blk, vk, t, w, k, m, mask)
 
 
-def _trailing_blocks(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
-    """Every block holding a trailing column of step k, the blocks over host
-    tasks in contiguous groups."""
+@always_inline
+def _step_block4(b0: _FP, b1: _FP, b2: _FP, b3: _FP, vk: _FP, t: Float32, k: Int, m: Int,
+                 m0: _B32, m1: _B32, m2: _B32, m3: _B32):
+    """Four blocks' chains advanced in one loop (four independent chains,
+    each `_step_block`'s), then each block's update."""
+    var w0 = ftz_lanes(b0.unsafe_load[width=_W](k * _W))
+    var w1 = ftz_lanes(b1.unsafe_load[width=_W](k * _W))
+    var w2 = ftz_lanes(b2.unsafe_load[width=_W](k * _W))
+    var w3 = ftz_lanes(b3.unsafe_load[width=_W](k * _W))
+    for i in range(k + 1, m):
+        var v = F32V(vk.unsafe_load(i))
+        w0 = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(b0.unsafe_load[width=_W](i * _W)), w0))
+        w1 = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(b1.unsafe_load[width=_W](i * _W)), w1))
+        w2 = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(b2.unsafe_load[width=_W](i * _W)), w2))
+        w3 = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(b3.unsafe_load[width=_W](i * _W)), w3))
+    _apply_block(b0, vk, t, w0, k, m, m0)
+    _apply_block(b1, vk, t, w1, k, m, m1)
+    _apply_block(b2, vk, t, w2, k, m, m2)
+    _apply_block(b3, vk, t, w3, k, m, m3)
+
+
+def _flushed_col(colk: _FP, k: Int, m: Int, mut vk: List[Float32]):
+    """vk[i] = ftz(colk[i]) for i > k: the chain's and the update's flushed
+    operand, computed once per step instead of once per block."""
+    var vp = _FP(unsafe_from_address=Int(vk.unsafe_ptr()))
+    for i in range(k + 1, m):
+        vp.unsafe_store(i, ftz(colk.unsafe_load(i * _W)))
+
+
+@always_inline
+def _run_blocks(base: _FP, vk: _FP, t: Float32, k: Int, m: Int, cols: Int, b_lo: Int, b_hi: Int, all_cols: Bool):
+    """The blocks [b_lo, b_hi), four at a time then one at a time."""
+    var b = b_lo
+    while b + 4 <= b_hi:
+        var l0 = iota[DType.int32, _W]() + Int32(b * _W)
+        var l1 = l0 + Int32(_W)
+        var l2 = l0 + Int32(2 * _W)
+        var l3 = l0 + Int32(3 * _W)
+        var m0 = l0.lt(Int32(cols)) if all_cols else (l0.gt(Int32(k)) & l0.lt(Int32(cols)))
+        var m1 = l1.lt(Int32(cols)) if all_cols else (l1.gt(Int32(k)) & l1.lt(Int32(cols)))
+        var m2 = l2.lt(Int32(cols)) if all_cols else (l2.gt(Int32(k)) & l2.lt(Int32(cols)))
+        var m3 = l3.lt(Int32(cols)) if all_cols else (l3.gt(Int32(k)) & l3.lt(Int32(cols)))
+        _step_block4(base + b * m * _W, base + (b + 1) * m * _W, base + (b + 2) * m * _W, base + (b + 3) * m * _W,
+                     vk, t, k, m, m0, m1, m2, m3)
+        b += 4
+    while b < b_hi:
+        var lane = iota[DType.int32, _W]() + Int32(b * _W)
+        var mask = lane.lt(Int32(cols)) if all_cols else (lane.gt(Int32(k)) & lane.lt(Int32(cols)))
+        _step_block(base + b * m * _W, vk, t, k, m, mask)
+        b += 1
+
+
+def _trailing_blocks(base: _FP, vk: _FP, t: Float32, k: Int, m: Int, cols: Int, all_cols: Bool):
+    """Every block holding a column of step k (the trailing ones k < j <
+    cols; with `all_cols`, orgqr's every column j < cols), the blocks over
+    host tasks in contiguous groups."""
     var nb = (cols + _W - 1) // _W
-    var b_lo = (k + 1) // _W
+    var b_lo = 0 if all_cols else (k + 1) // _W
     if b_lo >= nb:
         return
     var count = nb - b_lo
     var tasks = host_row_tasks(count, 2 * (m - k) * _W)
     var chunk = (count + tasks - 1) // tasks
-    def _run(task: Int) {imm base, imm colk, imm t, imm k, imm m, imm cols, imm chunk, imm b_lo, imm nb}:
+    def _run(task: Int) {imm base, imm vk, imm t, imm k, imm m, imm cols, imm chunk, imm b_lo, imm nb, imm all_cols}:
         var b0 = b_lo + task * chunk
         var b1 = min(b0 + chunk, nb)
-        for b in range(b0, b1):
-            _step_block(base + b * m * _W, colk, t, k, m, _lane_mask(b, k, cols))
+        if b1 > b0:
+            _run_blocks(base, vk, t, k, m, cols, b0, b1, all_cols)
     if tasks <= 1:
         _run(0)
     else:
@@ -217,6 +272,8 @@ def geqrf_host_rows(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
     var base = _FP(unsafe_from_address=Int(at.unsafe_ptr()))
     var scal = InlineArray[Float32, 2](fill=Float32(0))
     var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
+    var vk = List[Float32](length=max(m, 1), fill=Float32(0))
+    var vkp = _FP(unsafe_from_address=Int(vk.unsafe_ptr()))
     for k in range(kk):
         var colk = _blk(base, m, k) + (k % _W)
         _head_col(colk, tau, sp, k, m)
@@ -225,9 +282,11 @@ def geqrf_host_rows(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
                 colk.unsafe_store(i * _W, div0(colk.unsafe_load(i * _W), scal[0]))
         if scal[1] == Float32(0):
             continue
-        _trailing_blocks(base, colk, tau.unsafe_load(k), k, m, n)
+        _flushed_col(colk, k, m, vk)
+        _trailing_blocks(base, vkp, tau.unsafe_load(k), k, m, n, False)
     _pack_out(at, m, n, a)
     _ = at^
+    _ = vk^
 
 
 def orgqr_host_rows(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int):
@@ -245,6 +304,8 @@ def orgqr_host_rows(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, 
     for j in range(qc):
         if j < m:
             (_blk(qb, m, j) + (j % _W)).unsafe_store(j * _W, Float32(1))
+    var vk = List[Float32](length=max(m, 1), fill=Float32(0))
+    var vkp = _FP(unsafe_from_address=Int(vk.unsafe_ptr()))
     for r in range(kk):
         var k = kk - 1 - r
         var t = ftz(tau.unsafe_load(k))
@@ -253,24 +314,9 @@ def orgqr_host_rows(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, 
         var colk = _blk(hb, m, k) + (k % _W)
         # every column of Q is updated by every reflector (orgqr_col's loop
         # starts at column 0): the mask is "j < qc", not "j > k"
-        _trailing_blocks_all(qb, colk, t, k, m, qc)
+        _flushed_col(colk, k, m, vk)
+        _trailing_blocks(qb, vkp, t, k, m, qc, True)
     _pack_out(qt, m, qc, q)
     _ = ht^
     _ = qt^
-
-
-def _trailing_blocks_all(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
-    """`_trailing_blocks` over every column j < cols (orgqr's columns of Q)."""
-    var nb = (cols + _W - 1) // _W
-    var tasks = host_row_tasks(nb, 2 * (m - k) * _W)
-    var chunk = (nb + tasks - 1) // tasks
-    def _run(task: Int) {imm base, imm colk, imm t, imm k, imm m, imm cols, imm chunk, imm nb}:
-        var b0 = task * chunk
-        var b1 = min(b0 + chunk, nb)
-        for b in range(b0, b1):
-            var lane = iota[DType.int32, _W]() + Int32(b * _W)
-            _step_block(base + b * m * _W, colk, t, k, m, lane.lt(Int32(cols)))
-    if tasks <= 1:
-        _run(0)
-    else:
-        host_parallelize(_run, tasks)
+    _ = vk^
