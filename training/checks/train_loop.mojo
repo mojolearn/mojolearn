@@ -115,6 +115,7 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
+from core.device_arena import arena_active, arena_take
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -1061,8 +1062,12 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var k = n
     if k < 1:
         k = 1
-    step_count_device_alloc()
-    var b = ctx.enqueue_create_buffer[DType.float32](k)
+    var b: DeviceBuffer[DType.float32]
+    if arena_active():
+        b = arena_take(ctx, k)
+    else:
+        step_count_device_alloc()
+        b = ctx.enqueue_create_buffer[DType.float32](k)
     ctx.enqueue_memset(b, Float32(0.0))
     step_count_sync()
     ctx.synchronize()
@@ -1093,8 +1098,12 @@ def _upload(
     ctx.synchronize()
     for i in range(n):
         h.unsafe_ptr().unsafe_store(i, values[i])
-    step_count_device_alloc()
-    var d = ctx.enqueue_create_buffer[DType.float32](n)
+    var d: DeviceBuffer[DType.float32]
+    if arena_active():
+        d = arena_take(ctx, n)
+    else:
+        step_count_device_alloc()
+        d = ctx.enqueue_create_buffer[DType.float32](n)
     step_count_h2d()
     ctx.enqueue_copy(dst_buf=d, src_ptr=h.unsafe_ptr())
     step_count_sync()
