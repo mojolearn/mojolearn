@@ -1,0 +1,11 @@
+{
+  "ms": 32869.20703799842,
+  "digest": "89cfa8f1827cd043bfe6cc78e742c4618753c728d3337c2fa8cc1c8b23b2e520",
+  "inputs": "64f661f504bae24600246968a003e1fdb968f77d9f521aaf57d2ca273a7e09b5",
+  "quality": {
+    "score": 0.9998983260982511
+  },
+  "case": "sgd-reg",
+  "size": 20000,
+  "env": {}
+}

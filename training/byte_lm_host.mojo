@@ -44,6 +44,9 @@ from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
+from std.memory import unsafe_memcpy
+
+from core.host_lanes import host_f32_uninit
 from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -100,9 +103,12 @@ def _require_identical() raises:
 
 
 def _slice(values: List[Float32], offsets: List[Int], j: Int) -> List[Float32]:
-    var out = List[Float32](capacity=offsets[j + 1] - offsets[j])
-    for i in range(offsets[j], offsets[j + 1]):
-        out.append(values[i])
+    """Registry tensor `j` as one block copy (lane neural-pass8): the same
+    values in the same order as the element loop it replaces."""
+    var n = offsets[j + 1] - offsets[j]
+    var out = host_f32_uninit(n)
+    if n > 0:
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=values.unsafe_ptr().unsafe_offset(offsets[j]), count=n)
     return out^
 
 
@@ -441,8 +447,8 @@ def block_par(
                         kpp.unsafe_store(d * s + j, ftz(ksp.unsafe_load(j * kw + kvh * hd + d)))
                         vpp.unsafe_store(j * hd + d, ftz(vsp.unsafe_load(j * kw + kvh * hd + d)))
                 gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
-                _softmax_head(cell, mchunk, rows, s, scale, aweights)
-                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx)
+                _softmax_head(cell, mchunk, rows, s, scale, aweights, lo)
+                _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx, lo)
             var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)

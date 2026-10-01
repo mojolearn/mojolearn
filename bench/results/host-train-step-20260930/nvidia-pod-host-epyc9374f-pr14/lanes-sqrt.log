@@ -1,0 +1,25 @@
+✨ Pixi task (check-host-lanes-sqrt in default): mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/host_lanes_sqrt_check.mojo
+14413 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x790f80000000, nodemask=2)
+Imported from /root/mojolearn-pass8/training/checks/host_lanes_sqrt_check.mojo:34:
+/root/mojolearn-pass8/core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-pass8/training/checks/host_lanes_sqrt_check.mojo:34:
+/root/mojolearn-pass8/core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-pass8/training/checks/host_lanes_sqrt_check.mojo:34:
+/root/mojolearn-pass8/core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+14413 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x721b40000000, nodemask=1)
+sqrt bit patterns checked: 4294967296 lanes of width 16 mismatches: 0
+div pairs checked: 67108864 mismatches: 0
+adam quadruples checked: 16777216 mismatches: 0
+PASS

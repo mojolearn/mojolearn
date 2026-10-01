@@ -1,0 +1,14 @@
+01:39:09 build-neural_host rc=0
+01:39:41 build-mamba_host rc=0
+01:39:53 build-byte_lm_host rc=0
+01:39:58 check-gemm-host-rows rc=0
+01:40:00 ab-mamba3 rc=0
+01:40:02 ab-transformer rc=0
+01:40:02 train-gate rc=0
+01:40:02 check-mamba3-corpus rc=2
+01:40:05 gemm-bench-1 rc=0
+01:40:06 gemm-bench-policy rc=0
+01:40:06 cell-mamba3-infer rc=1
+01:40:07 cell-samba-infer rc=0
+01:40:07 cell-transformer-infer rc=0
+01:40:10 cell-lm-host-train-step rc=0

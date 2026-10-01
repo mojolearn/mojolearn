@@ -1,0 +1,10 @@
+# released 0.8.31, IVF 40000 (classical_pass_ab inputs), MOJOLEARN_IDENTITY_TRACE cards: M4 Metal (= reference 5bf7822421de6cd5) vs MI325X (deec079c73e23671)
+## first differing stages (seq, tag, M4 hash, MI325X hash)
+0 same ivf.quantizer.fit.x_norm 6fcf6f06c4dcecc4 6fcf6f06c4dcecc4
+1 same ivf.quantizer.restart00.init.par.fit.x_norm 39641c099b5561db 39641c099b5561db
+2 DIFF ivf.quantizer.restart00.init.par.restart00.init.centroids d6bfad374f4bfe3e 131d02a220714fd2
+3 DIFF ivf.quantizer.restart00.init.par.restart00.iter01.centroid_norm 13b763b0cbd343af 064922380360c5b9
+4 DIFF ivf.quantizer.restart00.init.par.restart00.iter01.labels 628749cccf9c3595 c821fef2bb6757a9
+5 DIFF ivf.quantizer.restart00.init.par.restart00.iter01.min_dist 08effc9f61412d0a a0200be9f2d75f30
+## k-means++ init centroids of the k-means|| step-8 recluster (MOJOLEARN_IDENTITY_TRACE_DUMP)
+picks 0..889 identical; first differing pick 890; 116 of 1024 picks differ; the pick-890 row of each side appears nowhere in the other (a different candidate drawn)

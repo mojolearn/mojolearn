@@ -17,6 +17,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
+from core.host_lanes import HostF32Ptr, host_f32_copy, host_f32_uninit
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -198,6 +199,18 @@ def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
     return PythonObject(batch)
 
 
+def _read_f32_rows(address: Int, n: Int) raises -> List[Float32]:
+    """`read_f32` through the chunked copy: an owned list of the `n` floats at
+    `address`, every element written by the copy."""
+    var src = f32_ptr(address)
+    if n < 0:
+        raise Error("byte LM host: negative float32 copy length")
+    var out = host_f32_uninit(n)
+    if n > 0:
+        host_f32_copy(rebind[HostF32Ptr](out.unsafe_ptr()), rebind[HostF32Ptr](src), n)
+    return out^
+
+
 def _write_span(address: Int, values: List[Float32]) raises:
     """Copy a host list into a caller-owned buffer at `address`.
 
@@ -205,7 +218,7 @@ def _write_span(address: Int, values: List[Float32]) raises:
     calls a raising function must say so."""
     var out = f32_ptr(address)
     if len(values) > 0:
-        memcpy(dest=out, src=values.unsafe_ptr(), count=len(values))
+        host_f32_copy(rebind[HostF32Ptr](out), rebind[HostF32Ptr](values.unsafe_ptr()), len(values))
 
 
 def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject,
@@ -243,16 +256,18 @@ def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject
     if completed_steps < 0:
         raise Error("byte LM host: completed_steps must not be negative")
     var n = cfg.n_total()
-    var params = read_f32(_index(addresses[0]), n)
-    var m_state = read_f32(_index(addresses[1]), n)
-    var v_state = read_f32(_index(addresses[2]), n)
+    # The three registry-sized inputs come in through the chunked copy (lane
+    # neural-pass8) and go into the step OWNED; the step updates them in place.
+    var params = _read_f32_rows(_index(addresses[0]), n)
+    var m_state = _read_f32_rows(_index(addresses[1]), n)
+    var v_state = _read_f32_rows(_index(addresses[2]), n)
     var ids = read_i32(_index(addresses[3]), cfg.batch * (cfg.length + 1))
     var opt = byte_host_adamw(
         Float32(Float64(py=scalars[0])), Float32(Float64(py=scalars[1])),
         Float32(Float64(py=scalars[2])), Float32(Float64(py=scalars[3])),
         Float32(Float64(py=scalars[4])),
     )
-    var step = byte_host_train_step(params, m_state, v_state, ids, cfg, opt,
+    var step = byte_host_train_step(params^, m_state^, v_state^, ids, cfg, opt,
                                    completed_steps)
     _write_span(_index(addresses[4]), step.grad)
     _write_span(_index(addresses[5]), step.param)

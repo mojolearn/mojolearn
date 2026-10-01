@@ -26,7 +26,12 @@ SCHEDULE only:
     oracle's own call;
   - the stage lists the oracle appends (`shift`, `expo`, `weights`, ...) are not
     materialized except `expo`, which the backward reads; `shift[base + y]` is
-    recomputed by the statement that produced it.
+    recomputed by the statement that produced it;
+  - (lane neural-pass8) inside a row, `HOST_FW` cells advance together through
+    the lane twins of the scalar seams (`expf_lanes` for `identical_exp`,
+    `div_lanes` for `identical_div`, `ftz_lanes` for `ftz`), each equal to its
+    scalar on every bit pattern; the row's tail cells take the scalar
+    statements.
 
 Label smoothing (`cfg.eps != 0`) and `REDUCTION_NONE` are refused here; the
 caller runs the oracle for those. `tools/byte_lm_cpu_train_gate.py cpu` is the
@@ -36,7 +41,16 @@ gate: the step's loss bits and gradient against the three-vendor capture.
 from std.math import min
 
 from checks.numerics import ftz, identical_div, identical_exp, identical_log
-from core.host_lanes import host_row_tasks
+from core.host_lanes import (
+    F32V,
+    HOST_FW,
+    div_lanes,
+    expf_lanes,
+    ftz_lanes,
+    host_f32_uninit,
+    host_row_tasks,
+    lanes_are_identical,
+)
 from core.host_parallel import host_parallelize
 from gemm.checks.gemm_oracle import OP_NN
 from gemm.host.gemm_host_rows import gemm_host_rows
@@ -72,17 +86,29 @@ def ce_host_rows(
 
     # ---- L1-L3 per row: the max, the shift, the exponential ---------------
     var max_v = List[Float32](length=n, fill=Float32(0.0))
-    var expo = List[Float32](length=n * v, fill=Float32(0.0))
+    var expo = host_f32_uninit(n * v)
     var tasks = host_row_tasks(n, 4 * v)
     var chunk = (n + tasks - 1) // tasks
-    def _expo_rows(t: Int) {imm logits, mut max_v, mut expo, imm n, imm v, imm chunk}:
+    var lp = logits.unsafe_ptr()
+    var ep = expo.unsafe_ptr()
+    # LANES (lane neural-pass8): `expf_lanes` equals `identical_exp` on every
+    # bit pattern (byte_lm_host_exp_check), `ftz_lanes` equals `ftz`; the
+    # row's tail cells take the scalar statements.
+    def _expo_rows(t: Int) {imm logits, imm lp, imm ep, mut max_v, imm n, imm v, imm chunk}:
         for i in range(t * chunk, min((t + 1) * chunk, n)):
             var base = i * v
             var m = _row_max(logits, base, v)
             max_v[i] = m
-            for vv in range(v):
-                var s = ftz(ftz(logits[base + vv]) - ftz(m))
-                expo[base + vv] = identical_exp(s)
+            var vv = 0
+            comptime if lanes_are_identical:
+                var mv = ftz_lanes(F32V(m))
+                while vv + HOST_FW <= v:
+                    ep.unsafe_store(base + vv, expf_lanes(ftz_lanes(ftz_lanes(lp.unsafe_load[width=HOST_FW](base + vv)) - mv)))
+                    vv += HOST_FW
+            while vv < v:
+                var s = ftz(ftz(lp.unsafe_load(base + vv)) - ftz(m))
+                ep.unsafe_store(base + vv, identical_exp(s))
+                vv += 1
     if tasks <= 1:
         _expo_rows(0)
     else:
@@ -125,24 +151,44 @@ def ce_host_rows(
     var loss = ftz(identical_div(ftz(total), divisor))
 
     # ---- L14, L16 per row: the weights and the gradient --------------------
-    var dlogits = List[Float32](length=n * v, fill=Float32(0.0))
-    def _grad_rows(t: Int) {imm targets, imm expo, imm denom, mut dlogits, imm n, imm v, imm chunk, imm ignore, imm divisor, imm t_target, imm t_other}:
+    var dlogits = host_f32_uninit(n * v)
+    var dp = dlogits.unsafe_ptr()
+    # LANES (lane neural-pass8): `div_lanes` is `portable_divf` on every lane;
+    # every cell of a row takes `t_other` on lanes, then the target's cell is
+    # rewritten by the scalar statement with `t_target`. An ignored row is zeros.
+    def _grad_rows(t: Int) {imm targets, imm ep, imm denom, imm dp, imm n, imm v, imm chunk, imm ignore, imm divisor, imm t_target, imm t_other}:
         for i in range(t * chunk, min((t + 1) * chunk, n)):
             var base = i * v
             var y = Int(targets[i])
             var ignored = y == ignore
             var dn = denom[i]
-            for vv in range(v):
-                var w = ftz(identical_div(ftz(expo[base + vv]), ftz(dn)))
-                if ignored:
-                    dlogits[base + vv] = Float32(0.0)
-                    continue
-                var tt = t_other
-                if vv == y:
-                    tt = t_target
-                dlogits[base + vv] = ftz(identical_div(ftz(ftz(w) - ftz(tt)), divisor))
+            if ignored:
+                for vv in range(v):
+                    dp.unsafe_store(base + vv, Float32(0.0))
+                continue
+            var vv = 0
+            comptime if lanes_are_identical:
+                var dnv = ftz_lanes(F32V(dn))
+                var tov = ftz_lanes(F32V(t_other))
+                var dv = F32V(divisor)
+                while vv + HOST_FW <= v:
+                    var w = ftz_lanes(div_lanes(ftz_lanes(ep.unsafe_load[width=HOST_FW](base + vv)), dnv))
+                    dp.unsafe_store(base + vv, ftz_lanes(div_lanes(ftz_lanes(ftz_lanes(w) - tov), dv)))
+                    vv += HOST_FW
+            while vv < v:
+                var w = ftz(identical_div(ftz(ep.unsafe_load(base + vv)), ftz(dn)))
+                dp.unsafe_store(base + vv, ftz(identical_div(ftz(ftz(w) - ftz(t_other)), divisor)))
+                vv += 1
+            var wy = ftz(identical_div(ftz(ep.unsafe_load(base + y)), ftz(dn)))
+            dp.unsafe_store(base + y, ftz(identical_div(ftz(ftz(wy) - ftz(t_target)), divisor)))
     if tasks <= 1:
         _grad_rows(0)
     else:
         host_parallelize(_grad_rows, tasks)
+    # KEEP-ALIVE: `expo` is reached by `ep` above after its last use by name
+    # (the denominators' gemm call), and Mojo destroys a local at that last
+    # use; without this line the gradient rows read a freed block (which the
+    # allocator had handed back as `dlogits`, so the bytes were right by
+    # chance; lane neural-pass9).
+    _ = expo^
     return (loss, dlogits^)

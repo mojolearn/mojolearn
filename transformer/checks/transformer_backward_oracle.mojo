@@ -133,6 +133,9 @@ from std.math import min
 from std.memory import bitcast
 
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
+from std.time import perf_counter_ns
+
+from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
 from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
@@ -713,8 +716,8 @@ def rms_norm_backward_into(
     # fold, `dW`, is the caller's gemm call over `dprod`. The three outputs
     # are sized once and written by index in the order the appends made.
     dot = List[Float32](length=m, fill=Float32(0.0))
-    dx = List[Float32](length=m * dm, fill=Float32(0.0))
-    dprod = List[Float32](length=m * dm, fill=Float32(0.0))
+    dx = host_f32_uninit(m * dm)
+    dprod = host_f32_uninit(m * dm)
     var tasks = host_row_tasks(m, 12 * dm)
     var chunk = (m + tasks - 1) // tasks
     def _rows(task: Int) {imm dy, imm x, imm wnorm, imm sumsq, mut dot, mut dx, mut dprod, imm m, imm dm, imm chunk}:
@@ -809,7 +812,7 @@ def silu_backward_into(
     # ELEMENTS OVER HOST TASKS (lane neural-pass6): an element's six
     # statements read that element alone. `dg` is sized once and written by
     # index in the order the appends made.
-    dg = List[Float32](length=n, fill=Float32(0.0))
+    dg = host_f32_uninit(n)
     var tasks = host_row_tasks(n, 24)
     var chunk = (n + tasks - 1) // tasks
     def _elements(task: Int) {imm dsi, imm g, mut dg, imm n, imm chunk}:
@@ -904,7 +907,7 @@ def rope_backward_into(
                 + " quantity, so a call that overruns it is a"
                 + " misconfiguration and not something to grow into)"
             )
-    out = List[Float32](length=m * width, fill=Float32(0.0))
+    out = host_f32_uninit(m * width)
     var tasks = host_row_tasks(m, 8 * width)
     var chunk = (m + tasks - 1) // tasks
     def _tokens(task: Int) {imm dout, imm rope, mut out, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm half, imm width, imm chunk}:
@@ -945,6 +948,8 @@ def softmax_backward_into(
     s: Int,
     mut zdot: List[Float32],
     mut ds: List[Float32],
+    own0: Int = -1,
+    window: Int = 0,
 ) raises:
     """The backward of seams S14 through S18, as ONE closed form.
     DEVIATIONS 1406 and 1407.
@@ -1027,14 +1032,20 @@ def softmax_backward_into(
     # written by index in the order the appends made.
     var rows = b * nh * l
     zdot = List[Float32](length=rows, fill=Float32(0.0))
-    ds = List[Float32](length=rows * s, fill=Float32(0.0))
+    ds = host_f32_uninit(rows * s)
     var tasks = host_row_tasks(rows, 6 * s)
     var chunk = (rows + tasks - 1) // tasks
-    def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm chunk}:
+    # The `z` fold runs over the VISIBLE keys only when the caller names
+    # `own0` (lane neural-pass10): a masked key's `y` is exactly `+0.0`, so
+    # its fma term is inert in the `+0.0`-seeded chain, the theorem this
+    # docstring proves above. `dS` is still written for every key (a
+    # masked cell's `+0.0 * diff` keeps its own sign of zero).
+    def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm l, imm own0, imm window, imm chunk}:
         for r in range(task * chunk, min((task + 1) * chunk, rows)):
             var base = r * s
+            var vis = _visible_keys_bwd(own0, window, r % l, s)
             var z = Float32(0.0)
-            for j in range(s):
+            for j in range(vis[0], vis[1] + 1):
                 z = ftz(
                     identical_mul_add(
                         ftz(dy[base + j]), ftz(y[base + j]), z
@@ -1056,6 +1067,42 @@ def softmax_backward_into(
 # ===========================================================================
 
 
+@always_inline
+def _visible_keys_bwd(own0: Int, window: Int, qi: Int, s: Int) -> Tuple[Int, Int]:
+    """`transformer_oracle._visible_keys`: the keys query `qi` attends to,
+    `[jlo, jhi]` inclusive; `own0 < 0` means every key."""
+    if own0 < 0:
+        return (0, s - 1)
+    var jhi = own0 + qi
+    if jhi > s - 1:
+        jhi = s - 1
+    var jlo = 0
+    if window > 0:
+        jlo = own0 + qi - window + 1
+        if jlo < 0:
+            jlo = 0
+    return (jlo, jhi)
+
+
+@always_inline
+def _visible_queries_bwd(own0: Int, window: Int, j: Int, l: Int) -> Tuple[Int, Int]:
+    """The queries of this call that attend to key `j`, `[tlo, thi]`
+    inclusive, the same rule read the other way: `j <= own0 + tt` and, under
+    a window, `j > own0 + tt - window`. Empty (`tlo > thi`) for a key no
+    query sees; `own0 < 0` means every query."""
+    if own0 < 0:
+        return (0, l - 1)
+    var tlo = j - own0
+    if tlo < 0:
+        tlo = 0
+    var thi = l - 1
+    if window > 0:
+        var last = j - own0 + window - 1
+        if last < thi:
+            thi = last
+    return (tlo, thi)
+
+
 def _bwd_attention_chains(
     dqk: List[Float32],
     kcache: List[Float32],
@@ -1066,9 +1113,16 @@ def _bwd_attention_chains(
     mut d_k: List[Float32],
     mut d_v: List[Float32],
     b: Int, l: Int, s: Int, nh: Int, nkv: Int, n_rep: Int, hd: Int, qw: Int,
+    own0: Int = -1, window: Int = 0,
 ):
     """The d_q_rope, d_k_cache and d_v_cache chains (see the call site), as
-    `head_dim` SIMD lanes per row, rows over host tasks (lane neural-cpu)."""
+    `head_dim` SIMD lanes per row, rows over host tasks (lane neural-cpu).
+    With `own0` named, each chain runs over the VISIBLE (query, key) pairs
+    only (lane neural-pass10): a masked pair's `d_qk_cell` is a signed zero
+    and its `attn.weights` is `+0.0`, so its fma terms are inert in the
+    `+0.0`-seeded chains (the softmax backward's theorem). A key no query
+    of this call sees keeps the chain's seed, `+0.0`, which the full walk
+    also produced."""
     var dqkp = dqk.unsafe_ptr()
     var kp = kcache.unsafe_ptr()
     var qp = qrope.unsafe_ptr()
@@ -1086,7 +1140,14 @@ def _bwd_attention_chains(
     var qtasks = host_row_tasks(qrows, s * hd)
     var qchunk = (qrows + qtasks - 1) // qtasks
 
-    def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm qrows, imm qchunk, imm vec_hd}:
+    # CHAINS IN FLIGHT (lane neural-pass7): a lane's chain over j is the same
+    # statements in the same order as before; four vectors of lanes advance
+    # together per step (as `attn_value_sum_lanes` does in the forward), so the
+    # fma latency of one chain overlaps three others. The `vec_hd` tail keeps
+    # one vector, then one lane.
+    comptime G4 = 4 * HOST_FW
+    comptime V64 = 64 // HOST_FW
+    def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm own0, imm window, imm qrows, imm qchunk, imm vec_hd}:
         for r in range(t * qchunk, min((t + 1) * qchunk, qrows)):
             var h = r % nh
             var qi = (r // nh) % l
@@ -1095,10 +1156,43 @@ def _bwd_attention_chains(
             var wbase = ((bb * nh + h) * l + qi) * s
             var vbase = (bb * nkv + kv) * s * hd
             var obase = (bb * l + qi) * qw + h * hd
+            var vis = _visible_keys_bwd(own0, window, qi, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
             var d = 0
+            # head_dim 64: every lane of the head in flight in one pass over
+            # the keys (lane neural-pass10); each lane's chain unchanged.
+            if vec_hd == 64:
+                var accs = InlineArray[F32V, V64](fill=F32V(0.0))
+                for j in range(jlo, jhi + 1):
+                    var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                    var row = vbase + j * hd
+                    comptime for v in range(V64):
+                        accs[v] = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                            w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + v * HOST_FW)), accs[v]))
+                comptime for v in range(V64):
+                    dqp.unsafe_store(obase + v * HOST_FW, accs[v])
+                continue
+            while d + G4 <= vec_hd:
+                var a0 = F32V(0.0)
+                var a1 = F32V(0.0)
+                var a2 = F32V(0.0)
+                var a3 = F32V(0.0)
+                for j in range(jlo, jhi + 1):
+                    var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                    var row = vbase + j * hd + d
+                    a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row)), a0))
+                    a1 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + HOST_FW)), a1))
+                    a2 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + 2 * HOST_FW)), a2))
+                    a3 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + 3 * HOST_FW)), a3))
+                dqp.unsafe_store(obase + d, a0)
+                dqp.unsafe_store(obase + d + HOST_FW, a1)
+                dqp.unsafe_store(obase + d + 2 * HOST_FW, a2)
+                dqp.unsafe_store(obase + d + 3 * HOST_FW, a3)
+                d += G4
             while d < vec_hd:
                 var acc = F32V(0.0)
-                for j in range(s):
+                for j in range(jlo, jhi + 1):
                     acc = ftz_lanes(identical_mul_add_simd[HOST_FW](
                         F32V(ftz(dqkp.unsafe_load(wbase + j))),
                         ftz_lanes(kp.unsafe_load[width=HOST_FW](vbase + j * hd + d)), acc))
@@ -1106,11 +1200,10 @@ def _bwd_attention_chains(
                 d += HOST_FW
             while d < hd:
                 var acc_s = Float32(0.0)
-                for j in range(s):
+                for j in range(jlo, jhi + 1):
                     acc_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(kp.unsafe_load(vbase + j * hd + d)), acc_s))
                 dqp.unsafe_store(obase + d, acc_s)
                 d += 1
-
     if qtasks <= 1:
         _q_rows(0)
     else:
@@ -1121,19 +1214,55 @@ def _bwd_attention_chains(
     var ktasks = host_row_tasks(krows, 2 * n_rep * l * hd)
     var kchunk = (krows + ktasks - 1) // ktasks
 
-    def _kv_rows(t: Int) {imm dqkp, imm qp, imm awp, imm dcp, imm dkp, imm dvp, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm krows, imm kchunk, imm vec_hd}:
+    def _kv_rows(t: Int) {imm dqkp, imm qp, imm awp, imm dcp, imm dkp, imm dvp, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm own0, imm window, imm krows, imm kchunk, imm vec_hd}:
         for r in range(t * kchunk, min((t + 1) * kchunk, krows)):
             var j = r % s
             var kv = (r // s) % nkv
             var bb = r // (s * nkv)
             var obase = r * hd
+            var qvis = _visible_queries_bwd(own0, window, j, l)
+            var tlo = qvis[0]
+            var thi = qvis[1]
             var d = 0
+            while d + G4 <= vec_hd:
+                var k0 = F32V(0.0)
+                var k1 = F32V(0.0)
+                var k2 = F32V(0.0)
+                var k3 = F32V(0.0)
+                var v0 = F32V(0.0)
+                var v1 = F32V(0.0)
+                var v2 = F32V(0.0)
+                var v3 = F32V(0.0)
+                for hh in range(n_rep):
+                    var h = kv * n_rep + hh
+                    for tt in range(tlo, thi + 1):
+                        var wbase = ((bb * nh + h) * l + tt) * s
+                        var rowq = (bb * l + tt) * qw + h * hd + d
+                        var wq = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                        var wa = F32V(ftz(awp.unsafe_load(wbase + j)))
+                        k0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq)), k0))
+                        k1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + HOST_FW)), k1))
+                        k2 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + 2 * HOST_FW)), k2))
+                        k3 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + 3 * HOST_FW)), k3))
+                        v0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq)), v0))
+                        v1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + HOST_FW)), v1))
+                        v2 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + 2 * HOST_FW)), v2))
+                        v3 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + 3 * HOST_FW)), v3))
+                dkp.unsafe_store(obase + d, k0)
+                dkp.unsafe_store(obase + d + HOST_FW, k1)
+                dkp.unsafe_store(obase + d + 2 * HOST_FW, k2)
+                dkp.unsafe_store(obase + d + 3 * HOST_FW, k3)
+                dvp.unsafe_store(obase + d, v0)
+                dvp.unsafe_store(obase + d + HOST_FW, v1)
+                dvp.unsafe_store(obase + d + 2 * HOST_FW, v2)
+                dvp.unsafe_store(obase + d + 3 * HOST_FW, v3)
+                d += G4
             while d < vec_hd:
                 var ak = F32V(0.0)
                 var av = F32V(0.0)
                 for hh in range(n_rep):
                     var h = kv * n_rep + hh
-                    for tt in range(l):
+                    for tt in range(tlo, thi + 1):
                         var wbase = ((bb * nh + h) * l + tt) * s
                         var rowq = (bb * l + tt) * qw + h * hd + d
                         ak = ftz_lanes(identical_mul_add_simd[HOST_FW](
@@ -1150,7 +1279,7 @@ def _bwd_attention_chains(
                 var av_s = Float32(0.0)
                 for hh in range(n_rep):
                     var h = kv * n_rep + hh
-                    for tt in range(l):
+                    for tt in range(tlo, thi + 1):
                         var wbase = ((bb * nh + h) * l + tt) * s
                         var rowq = (bb * l + tt) * qw + h * hd + d
                         ak_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(qp.unsafe_load(rowq)), ak_s))
@@ -1158,7 +1287,6 @@ def _bwd_attention_chains(
                 dkp.unsafe_store(obase + d, ak_s)
                 dvp.unsafe_store(obase + d, av_s)
                 d += 1
-
     if ktasks <= 1:
         _kv_rows(0)
     else:
@@ -1300,6 +1428,8 @@ def transformer_block_backward_oracle(
     # this refusal more likely to fire than the forward's and makes the
     # named error worth more.
     refuse_nonfinite("d_residual2", d_out)
+    var hton = host_block_timing_on()
+    var htk = Int(perf_counter_ns())
 
     var ones_m = _ones(m)
 
@@ -1331,33 +1461,32 @@ def transformer_block_backward_oracle(
     # ELEMENTS OVER HOST TASKS (lane neural-pass6) for the [M, inter] and
     # [B, nh, L, S] products below; the [M, d_model] sums are written by
     # index on the calling thread. Same statements, same operands per cell.
-    var d_silu = List[Float32](length=m * inter, fill=Float32(0.0))
-    var d_up = List[Float32](length=m * inter, fill=Float32(0.0))
+    var d_silu = host_f32_uninit(m * inter)
+    var d_up = host_f32_uninit(m * inter)
     var gtasks = host_row_tasks(m * inter, 6)
     var gchunk = (m * inter + gtasks - 1) // gtasks
-    var dmg = st.d_mlp_gated.copy()
-    var up_out = fwd.up_proj_out.copy()
-    var silu_out = fwd.silu_out.copy()
+    var dmg = rebind[HostF32Ptr](st.d_mlp_gated.unsafe_ptr())
+    var up_out = fwd.up_proj_out.unsafe_ptr()
+    var silu_out = fwd.silu_out.unsafe_ptr()
     def _gate_elements(task: Int) {imm dmg, imm up_out, imm silu_out, mut d_silu, mut d_up, imm m, imm inter, imm gchunk}:
         for i in range(task * gchunk, min((task + 1) * gchunk, m * inter)):
-            var dgt = ftz(dmg[i])
-            d_silu[i] = ftz(identical_mul(dgt, ftz(up_out[i])))
-            d_up[i] = ftz(identical_mul(dgt, ftz(silu_out[i])))
+            var dgt = ftz(dmg.unsafe_load(i))
+            d_silu[i] = ftz(identical_mul(dgt, ftz(up_out.unsafe_load(i))))
+            d_up[i] = ftz(identical_mul(dgt, ftz(silu_out.unsafe_load(i))))
     if gtasks <= 1:
         _gate_elements(0)
     else:
         host_parallelize(_gate_elements, gtasks)
-    _ = dmg^
-    _ = up_out^
-    _ = silu_out^
     st.d_silu_out = d_silu^
     st.d_up_proj_out = d_up^
+    host_tick(hton, htk, "bwd.down_proj_gate_elements")
     # =====================================================================
     var dgate = List[Float32]()
     silu_backward_into(
         st.d_silu_out, fwd.gate_proj_out, m * inter, dgate
     )
     st.d_gate_proj_out = dgate^
+    host_tick(hton, htk, "bwd.silu")
 
     # =====================================================================
     # STAGE 7-9. `gate_proj` and `up_proj`: forward `OP_NT` at
@@ -1392,11 +1521,12 @@ def transformer_block_backward_oracle(
         st.d_gate_proj_out, w.w_gate, OP_NT, m, inter, dm
     )
     var t_up = _gemm_bwd_a(st.d_up_proj_out, w.w_up, OP_NT, m, inter, dm)
-    st.d_norm2_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_norm2_out = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_norm2_out[i] = ftz(ftz(t_gate[i]) + ftz(t_up[i]))
     _ = t_gate^
     _ = t_up^
+    host_tick(hton, htk, "bwd.gate_up_proj")
 
     # =====================================================================
     # STAGE 10-12. `post_attention_layernorm` backward. The norm's forward
@@ -1420,13 +1550,14 @@ def transformer_block_backward_oracle(
     st.dw_norm2 = gemm_host_rows(ones_m, prod2, OP_NN, 1, dm, m)
     st.norm2_dx = dx2^
     _ = prod2^
+    host_tick(hton, htk, "bwd.norm2")
 
     # =====================================================================
     # STAGE 13-14. S22, `r1 = x + o`. `residual1.out` fans out into the
     # norm (LDL:321) and into the residual add (LDL:323); FORWARD-USE ORDER
     # puts the norm branch first. Two terms, so no order to pin, stated.
     # =====================================================================
-    st.d_residual1 = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_residual1 = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_residual1[i] = ftz(ftz(st.norm2_dx[i]) + ftz(st.in_d_residual2[i]))
     st.d_o_proj_out = st.d_residual1.copy()
@@ -1436,6 +1567,7 @@ def transformer_block_backward_oracle(
     # =====================================================================
     st.d_attn_ctx = _gemm_bwd_a(st.d_o_proj_out, w.w_o, OP_NT, m, dm, qw)
     st.dw_o = _gemm_bwd_b(st.d_o_proj_out, fwd.attn_ctx, OP_NT, m, dm, qw)
+    host_tick(hton, htk, "bwd.o_proj")
 
     # =====================================================================
     # STAGE 17. The attention-weight gradient. **ROUTED**, DEVIATION 1405,
@@ -1472,27 +1604,24 @@ def transformer_block_backward_oracle(
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var dctx_head = List[Float32]()
+            var dctx_head = host_f32_uninit(l * hd)
             for qi in range(l):
                 for d in range(hd):
-                    dctx_head.append(
-                        st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
-                    )
-            var v_head = List[Float32]()
+                    dctx_head[qi * hd + d] = st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
+            var v_head = host_f32_uninit(s * hd)
             for j in range(s):
                 for d in range(hd):
-                    v_head.append(
-                        fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
-                    )
+                    v_head[j * hd + d] = fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
             var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
             if len(st.d_attn_weights) != cells:
-                st.d_attn_weights = List[Float32](length=cells, fill=Float32(0.0))
+                st.d_attn_weights = host_f32_uninit(cells)
             var cbase = (bb * nh + h) * l * s
             for i in range(l * s):
                 st.d_attn_weights[cbase + i] = cell[i]
             _ = dctx_head^
             _ = v_head^
             _ = cell^
+    host_tick(hton, htk, "bwd.dctx_v_products")
 
     # =====================================================================
     # STAGE 18-19. The softmax backward, ONE closed form. DEVIATION 1406.
@@ -1500,10 +1629,11 @@ def transformer_block_backward_oracle(
     var zdot = List[Float32]()
     var dsoft = List[Float32]()
     softmax_backward_into(
-        st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft
+        st.d_attn_weights, fwd.attn_weights, b, nh, l, s, zdot, dsoft, own0, window
     )
     st.attn_zdot = zdot^
     st.d_attn_masked = dsoft^
+    host_tick(hton, htk, "bwd.softmax")
 
     # =====================================================================
     # STAGE 20. S13's backward, an EXACT IDENTITY. DEVIATION 1414.
@@ -1535,19 +1665,19 @@ def transformer_block_backward_oracle(
     # scale SPELLING -- is what makes this arm fire at all.
     # =====================================================================
     var scale = attention_scale(hd)
-    var dqk = List[Float32](length=cells, fill=Float32(0.0))
+    var dqk = host_f32_uninit(cells)
     var ctasks = host_row_tasks(cells, 3)
     var cchunk = (cells + ctasks - 1) // ctasks
-    var dsc = st.d_attn_scores.copy()
+    var dsc = rebind[HostF32Ptr](st.d_attn_scores.unsafe_ptr())
     def _scale_cells(task: Int) {imm dsc, mut dqk, imm cells, imm scale, imm cchunk}:
         for i in range(task * cchunk, min((task + 1) * cchunk, cells)):
-            dqk[i] = ftz(identical_mul(ftz(dsc[i]), scale))
+            dqk[i] = ftz(identical_mul(ftz(dsc.unsafe_load(i)), scale))
     if ctasks <= 1:
         _scale_cells(0)
     else:
         host_parallelize(_scale_cells, ctasks)
-    _ = dsc^
     st.d_qk_cell = dqk^
+    host_tick(hton, htk, "bwd.scale")
 
     # =====================================================================
     # STAGE 22. `dq`. **NEW ARITHMETIC, AND THE LANE'S LARGEST FINDING.**
@@ -1649,14 +1779,15 @@ def transformer_block_backward_oracle(
     #   d_q_rope[(bb*l + qi)*qw + h*hd + d]     = chain over j of dqk[j] * k[j, d]
     #   d_k_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of dqk[t, j] * q[t, d]
     #   d_v_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of w[t, j] * dctx[t, d]
-    st.d_q_rope = List[Float32](length=b * l * nh * hd, fill=Float32(0.0))
-    st.d_k_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
-    st.d_v_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    st.d_q_rope = host_f32_uninit(b * l * nh * hd)
+    st.d_k_cache = host_f32_uninit(b * nkv * s * hd)
+    st.d_v_cache = host_f32_uninit(b * nkv * s * hd)
     _bwd_attention_chains(
         st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
         st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
-        b, l, s, nh, nkv, n_rep, hd, qw,
+        b, l, s, nh, nkv, n_rep, hd, qw, own0, window,
     )
+    host_tick(hton, htk, "bwd.attention_chains")
 
     # =====================================================================
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic. This
@@ -1664,8 +1795,8 @@ def transformer_block_backward_oracle(
     # simply read out at the token-major `[M, kw]` layout the projections
     # expect. Slots `[0, pos0)` are the handoff.
     # =====================================================================
-    st.d_k_rope = List[Float32](length=m * kw, fill=Float32(0.0))
-    st.d_v_proj_out = List[Float32](length=m * kw, fill=Float32(0.0))
+    st.d_k_rope = host_f32_uninit(m * kw)
+    st.d_v_proj_out = host_f32_uninit(m * kw)
     for bb in range(b):
         for li in range(l):
             for kv in range(nkv):
@@ -1689,6 +1820,7 @@ def transformer_block_backward_oracle(
     rope_backward_into(st.d_k_rope, nkv, hd, b, l, pos0, rope, dkp)
     st.d_q_proj_out = dqp^
     st.d_k_proj_out = dkp^
+    host_tick(hton, htk, "bwd.kv_gather_rope")
 
     # =====================================================================
     # STAGE 29-32. The three input projections: forward `OP_NT` at
@@ -1706,13 +1838,14 @@ def transformer_block_backward_oracle(
     var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
     var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
-    st.d_norm1_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_norm1_out = host_f32_uninit(m * dm)
     for i in range(m * dm):
         var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
         st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
     _ = t_q^
     _ = t_k^
     _ = t_v^
+    host_tick(hton, htk, "bwd.qkv_proj")
 
     # =====================================================================
     # STAGE 33-35. `input_layernorm` backward. Its forward INPUT is the
@@ -1736,15 +1869,17 @@ def transformer_block_backward_oracle(
     st.dw_norm1 = gemm_host_rows(ones_m, prod1, OP_NN, 1, dm, m)
     st.norm1_dx = dx1^
     _ = prod1^
+    host_tick(hton, htk, "bwd.norm1")
 
     # =====================================================================
     # STAGE 36. THE OUTPUT. `x` fans out into the norm (LDL:306) and into
     # the residual add (LDL:317); FORWARD-USE ORDER puts the norm first.
     # Two terms, no order to pin, no seed.
     # =====================================================================
-    st.d_x = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_x = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_x[i] = ftz(ftz(st.norm1_dx[i]) + ftz(st.d_residual1[i]))
 
     _ = ones_m^
+    host_tick(hton, htk, "bwd.d_x")
     return st^
