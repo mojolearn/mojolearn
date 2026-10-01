@@ -299,6 +299,7 @@ from core.step_glue import (
 
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from core.device_arena import arena_active, arena_take
 from gemm.checks.gemm_identical import GemmWorkspace
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -752,8 +753,12 @@ def _upload(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    step_count_device_alloc()
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev: DeviceBuffer[DType.float32]
+    if arena_active():
+        dev = arena_take(ctx, n_buf)
+    else:
+        step_count_device_alloc()
+        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     step_count_sync()
@@ -800,8 +805,12 @@ def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    step_count_device_alloc()
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev: DeviceBuffer[DType.float32]
+    if arena_active():
+        dev = arena_take(ctx, n_buf)
+    else:
+        step_count_device_alloc()
+        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
     comptime if wait:
