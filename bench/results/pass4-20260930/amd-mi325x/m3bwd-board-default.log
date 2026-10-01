@@ -1,0 +1,29 @@
+Mamba-3 backward, B=2 L=512 d_model=384, median of 4 calls after warm-up (ms)
+stage                                       ms   share
+m3bwd.s17_operands                      36.681   43.7%
+m3bwd.s16_s15                           18.607   22.2%
+m3bwd.s16.qk_regs                       18.010   21.5%
+m3bwd.angle                              3.101    3.7%
+m3bwd.bcnorm                             1.385    1.6%
+m3bwd.proj_a                             0.923    1.1%
+m3bwd.proj_b                             0.901    1.1%
+m3bwd.seg_adt                            0.764    0.9%
+m3bwd.block_norm                         0.535    0.6%
+m3bwd.qkdot                              0.400    0.5%
+m3bwd.s17_state                          0.397    0.5%
+m3bwd.s16.v_shared                       0.305    0.4%
+m3bwd.join_current                       0.278    0.3%
+m3bwd.reduce                             0.259    0.3%
+m3bwd.gate_skip                          0.242    0.3%
+m3bwd.join_rotary                        0.228    0.3%
+m3bwd.join_s16_s17                       0.182    0.2%
+m3bwd.pack_in_proj                       0.165    0.2%
+m3bwd.rotary_only                        0.161    0.2%
+m3bwd.s15_only                           0.158    0.2%
+m3bwd.dt_partial                         0.083    0.1%
+m3bwd.adt_product                        0.079    0.1%
+m3bwd.dacs_to_adt                        0.049    0.1%
+m3bwd.join_two                           0.045    0.1%
+m3bwd.a_heavy_tail                       0.025    0.0%
+total (sum of stages)                   83.962
+session counters: {"weight_uploads": 1, "weight_recopies": 0, "weight_reuses": 9, "backward_reuses": 5, "backward_recomputes": 0, "stages_held": 1}
