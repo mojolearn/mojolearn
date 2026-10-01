@@ -2,7 +2,8 @@
 # Main vs one or more neural branches on one GPU box (NVIDIA or AMD), no env knobs: each tree's neural bindings are
 # built from source (plain and with -D MOJOLEARN_ATTN_PHASE_TIMERS=1), laid over the released 0.8.33 wheel in turn,
 # and timed with tools/neural_stage_timing.py (lm-forward, lm-train-step), twice each, interleaved.
-# Usage: tools/ab_job.sh <nvidia|amd> <tag> <branch>... (main is always the first arm). Out: /root/ab-<tag>-<vendor>.
+# Usage: tools/ab_job.sh <nvidia|amd> <tag> <arm>... (main is always the first arm). An arm is <branch> or
+# <branch>@NAME1,NAME2 (each NAME built as -D NAME=1 into every binding). Out: /root/ab-<tag>-<vendor>.
 set -uo pipefail
 V=$1; TAG=$2; shift 2; O=/root/ab-$TAG-$V; rm -rf $O; mkdir -p $O
 if [ $V = nvidia ]; then BK=cuda; AR=sm_89; PLUG=mojolearn-nvidia; else BK=hip; AR=gfx942; PLUG=mojolearn-amd; fi
@@ -12,11 +13,14 @@ R=/root/ab-repo; [ -d $R/.git ] || git clone -q https://github.com/mojolearn/moj
 cd $R && git fetch -q origin
 ARMS=main; for b in "$@"; do ARMS="$ARMS $b"; done
 MODS="transformer byte_lm training"
-for b in $ARMS; do a=$(echo $b | tr / _); t=$O/tree-$a
-  git -C $R worktree prune; git -C $R worktree add -q -f --detach $t origin/$b; git -C $t rev-parse HEAD > $O/head-$a.txt
-  cd $t; pixi install > $O/pixi-$a.log 2>&1
+tree() { echo ${1%%@*} | tr / _; }
+defs() { case $1 in *@*) echo ${1#*@} | tr , '\n' | sed 's/^/-D /; s/$/=1/' | tr '\n' ' ';; esac; }
+for b in $ARMS; do br=${b%%@*}; ta=$(tree $b); t=$O/tree-$ta; a=$(echo $b | tr /@, ___)
+  if [ ! -d $t ]; then git -C $R worktree prune; git -C $R worktree add -q -f --detach $t origin/$br; git -C $t rev-parse HEAD > $O/head-$ta.txt
+    (cd $t; pixi install > $O/pixi-$ta.log 2>&1); fi
+  cd $t; d=$(defs $b)
   for m in $MODS; do for k in plain timers; do
-    f=""; [ $k = timers ] && f="-D MOJOLEARN_ATTN_PHASE_TIMERS=1"; [ $k = timers ] && [ $m != byte_lm ] && continue
+    f="$d"; [ $k = timers ] && f="$d -D MOJOLEARN_ATTN_PHASE_TIMERS=1"; [ $k = timers ] && [ $m != byte_lm ] && continue
     rm -f python/mojolearn/identical/_mojolearn_$m.so python/mojolearn/_mojolearn_$m.so
     MOJOLEARN_MOJO_BUILD_FLAGS="$f" bash bindings/build_$m.sh > $O/build-$a-$m-$k.log 2>&1; rc build-$a-$m-$k $?
     s=$(ls -t python/mojolearn/identical/_mojolearn_$m.so python/mojolearn/_mojolearn_$m.so 2>/dev/null | head -1); [ -n "$s" ] && cp $s $O/$a-$m-$k.so
@@ -27,9 +31,9 @@ $P -m pip -q install mojolearn==0.8.33 $PLUG==0.8.33 numpy==2.5.2 scipy==1.18.0 
 S=$($P -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')/mojolearn
 T=$(dirname $(find $S/.. -path "*$BK/$AR/identical/_mojolearn_byte_lm.so" | head -1)); echo "$T" > $O/target.txt
 cp $S/_version.py $O/_version.py
-use() { a=$1; k=$2; cp $O/tree-$a/python/mojolearn/*.py $S/; cp $O/_version.py $S/_version.py; find $S -name __pycache__ -exec rm -rf {} +
+use() { a=$(echo $1 | tr /@, ___); k=$2; cp $O/tree-$(tree $1)/python/mojolearn/*.py $S/; cp $O/_version.py $S/_version.py; find $S -name __pycache__ -exec rm -rf {} +
   for m in $MODS; do cp $O/$a-$m-plain.so $T/_mojolearn_$m.so; done; [ $k = timers ] && cp $O/$a-byte_lm-timers.so $T/_mojolearn_byte_lm.so; true; }
 st() { cd $O/tree-main; timeout 3600 $P tools/neural_stage_timing.py --lane lm-forward --lane lm-train-step --calls 8 > $O/stage-$1.log 2>&1; rc stage-$1 $?; }
-for i in 1 2; do for b in $ARMS; do a=$(echo $b | tr / _); use $a plain; st $a-$i; done; done
-for b in $ARMS; do a=$(echo $b | tr / _); use $a timers; st timers-$a; done
+for i in 1 2; do for b in $ARMS; do use $b plain; st $(echo $b | tr /@, ___)-$i; done; done
+for b in $ARMS; do use $b timers; st timers-$(echo $b | tr /@, ___); done
 echo done > $O/done
