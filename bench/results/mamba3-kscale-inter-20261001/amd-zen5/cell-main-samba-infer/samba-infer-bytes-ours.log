@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/root/mojolearn-pr26main/tools/bench_board_neural.py", line 1387, in worker
+    runner = build_runner(args.lane, args.arm, args.shape, data)
+  File "/root/mojolearn-pr26main/tools/bench_board_neural.py", line 1369, in build_runner
+    return OURS[MODEL_OF[lane]](lane, shape, data)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn-pr26main/tools/bench_board_neural.py", line 899, in __init__
+    self.model = ml.SambaInference(cfg, w)
+                 ~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn-pr26main/python/mojolearn/neural_inference.py", line 251, in __init__
+    if not all_finite(a):
+           ~~~~~~~~~~^^^
+  File "/root/mojolearn-pr26main/python/mojolearn/_buffer.py", line 831, in all_finite
+    fn = _native("all_finite_f32" if arr.dtype == "<f4" else "all_finite_f64")
+  File "/root/mojolearn-pr26main/python/mojolearn/_buffer.py", line 900, in _native
+    fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+  File "/root/mojolearn-pr26main/python/mojolearn/_backend.py", line 1504, in __getattr__
+    raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+ImportError: mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see SUPPORT_MATRIX.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_mamba_host, _mojolearn_neural_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+mojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request (flat layout)
