@@ -82,7 +82,7 @@ from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
     identical_optimizer_step_host,
-    identical_optimizer_step_resident_host,
+    identical_optimizer_step_resident_host, opt_download_staged,
 )
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
@@ -370,8 +370,9 @@ def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObjec
         # context, and every host read (the download) waits.
         var pbuf = ctx.enqueue_create_buffer[DType.float32](n)
         var gbuf = ctx.enqueue_create_buffer[DType.float32](n)
-        var spin = ctx.enqueue_create_host_buffer[DType.float32](n)
-        var sgin = ctx.enqueue_create_host_buffer[DType.float32](n)
+        var n_stage = n if opt_download_staged() else 1
+        var spin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
+        var sgin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
         for j in range(len(pool[].n)):
             if pool[].n[j] == 0 and h < 0:
                 h = j

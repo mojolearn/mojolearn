@@ -92,6 +92,7 @@ time.
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
+from std.os import getenv
 from core.host_predict_threads import host_predict_task_count
 from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
@@ -376,6 +377,17 @@ def identical_optimizer_step_host(
     return n_done
 
 
+
+def opt_download_staged() -> Bool:
+    """Whether the resident step downloads through its pinned stage (lane
+    neural-pass26): off unless MOJOLEARN_OPT_STAGE=1. With the pooled device
+    buffers in place the raw download reads the same as the staged one on
+    the M4 (Adam 25 ms a step either way) and faster on the L40S (the staged
+    path read 20-25% slower there; even on the MI325X), so the raw copy is
+    the default on every column and the stage is an A/B arm."""
+    return String(getenv("MOJOLEARN_OPT_STAGE")) == "1"
+
+
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
     """`memcpy(dst, src, n)` in contiguous chunks over host tasks (lane
     neural-pass26): the one leg of the resident optimizer step that reads
@@ -538,18 +550,25 @@ def identical_optimizer_step_resident_host(
     # copy ran at about 3 GB/s here; the DMA into pinned memory and the
     # memcpy out together take a fifth of that)
     _step_timing_tick(ctx, rton, rtk, "resident.device_step")
-    ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
-    if max_norm > Float32(0.0):
-        ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
-    ctx.synchronize()
-    _step_timing_tick(ctx, rton, rtk, "resident.dma_down")
-    # the reads out of pinned memory go over host tasks: a single thread
-    # reads write-combined memory at about 3 GB/s here (26 ms per 64 MB),
-    # four or more read it at 10 GB/s and more (6 ms); a copy, no bit moves
-    _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
-    if max_norm > Float32(0.0):
-        _parallel_copy_out(grad_ptr, g_stage.unsafe_ptr(), n_total)
-    _step_timing_tick(ctx, rton, rtk, "resident.memcpy_out")
+    if opt_download_staged():
+        ctx.enqueue_copy(dst_buf=p_stage, src_buf=p_buf)
+        if max_norm > Float32(0.0):
+            ctx.enqueue_copy(dst_buf=g_stage, src_buf=g_buf)
+        ctx.synchronize()
+        _step_timing_tick(ctx, rton, rtk, "resident.dma_down")
+        # the reads out of pinned memory go over host tasks: a single thread
+        # reads write-combined memory at about 3 GB/s here (26 ms per 64 MB),
+        # four or more read it at 10 GB/s and more (6 ms); a copy, no bit moves
+        _parallel_copy_out(param_ptr, p_stage.unsafe_ptr(), n_total)
+        if max_norm > Float32(0.0):
+            _parallel_copy_out(grad_ptr, g_stage.unsafe_ptr(), n_total)
+        _step_timing_tick(ctx, rton, rtk, "resident.memcpy_out")
+    else:
+        ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=p_buf)
+        if max_norm > Float32(0.0):
+            ctx.enqueue_copy(dst_ptr=grad_ptr, src_buf=g_buf)
+        ctx.synchronize()
+        _step_timing_tick(ctx, rton, rtk, "resident.download")
 
     for j in range(n_tensors):
         var flag = Int32(0)
