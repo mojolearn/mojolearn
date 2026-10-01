@@ -35,6 +35,9 @@ from checks.numerics import (
 )
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
+from std.sys.info import is_gpu
+from core.host_parallel import host_parallelize
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 comptime IP = MutPointer[Int32, MutAnyOrigin]
@@ -1325,6 +1328,69 @@ def _chol_solve(l: FP, m: Int, b: FP, x: FP):
         x.unsafe_store(i, ftz(identical_div(s, l.unsafe_load(i * m + i))))
 
 
+def _svgp_c_cols(cmat: FP, luu: FP, ls: FP, e: FP, col: FP, m: Int, j0: Int, j1: Int):
+    """Columns [j0, j1) of C = Kuu^-1 - Sigma^-1 (svgp_item's loop)."""
+    for j in range(j0, j1):
+        for i in range(m):
+            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
+        _chol_solve(luu, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
+
+
+def _svgp_q_cols(kuu: FP, qsqrt: FP, ls: FP, e: FP, col: FP, m: Int, jitter: Float32, j0: Int, j1: Int):
+    """Columns [j0, j1) of Kuu Sigma^-1 Kuu (svgp_item's loop, before its Cholesky)."""
+    for j in range(j0, j1):
+        for i in range(m):
+            var kv = kuu.unsafe_load(i * m + j)
+            if i == j:
+                kv = _add(kv, jitter)
+            e.unsafe_store(i, kv)
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            var s = Float32(0)
+            for k in range(m):
+                var kv = kuu.unsafe_load(i * m + k)
+                if i == k:
+                    kv = _add(kv, jitter)
+                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
+            qsqrt.unsafe_store(i * m + j, s)
+
+
+def _svgp_cq_par(kuu: FP, cmat: FP, qsqrt: FP, luu: FP, ls: FP, m: Int, jitter: Float32):
+    """`_svgp_c_cols` and `_svgp_q_cols` over all columns as host tasks, one
+    column of each per task with its own scratch (host only)."""
+    def task(t: Int) {imm kuu, imm cmat, imm qsqrt, imm luu, imm ls, imm m, imm jitter}:
+        var sc = List[Float32](length=2 * m, fill=Float32(0))
+        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
+        var col = e.unsafe_offset(m)
+        if t < m:
+            _svgp_c_cols(cmat, luu, ls, e, col, m, t, t + 1)
+        else:
+            _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, t - m, t - m + 1)
+        _ = sc^
+
+    host_parallelize(task, 2 * m)
+
+
+def _svgp_trace_par(bmat: FP, luu: FP, m: Int, out: FP):
+    """out[j] = ((L L^T)^-1 B[:, j])[j] for every j, as host tasks (host only)."""
+    def task(j: Int) {imm bmat, imm luu, imm m, imm out}:
+        var sc = List[Float32](length=2 * m, fill=Float32(0))
+        var e = FP(unsafe_from_address=Int(sc.unsafe_ptr()))
+        var col = e.unsafe_offset(m)
+        for i in range(m):
+            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
+        _chol_solve(luu, m, e, col)
+        out.unsafe_store(j, col.unsafe_load(j))
+        _ = sc^
+
+    host_parallelize(task, m)
+
+
 def _log_diag_sum(l: FP, m: Int) -> Float32:
     var s = Float32(0)
     for i in range(m):
@@ -1363,15 +1429,17 @@ def svgp_item(
     for i in range(m):
         alpha.unsafe_store(i, ftz(identical_div(alpha.unsafe_load(i), noise)))
     # C = Kuu^-1 - Sigma^-1, column by column; e / col are m floats of scratch
-    for j in range(m):
-        for i in range(m):
-            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
-        _chol_solve(luu, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
+    # lane/neural-pass80 (2026-10-01): on the host the three column loops
+    # below (C, q_sqrt and the trace term: two thirds of a billion serial
+    # fmas at m = 512) run their columns over the host pool, each with its
+    # own unit/rhs and solution scratch. A column's solve and fold are the
+    # same statements in the same order and write only that column; the
+    # trace term's sum stays one ascending fold over j, of per-column values.
+    # `-D MOJOLEARN_SVGP_SERIAL=1` restores the single loop.
+    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        _svgp_cq_par(kuu, cmat, qsqrt, luu, ls, m, jitter)
+    else:
+        _svgp_c_cols(cmat, luu, ls, e, col, m, 0, m)
     # q_mu = Kuu alpha (the jittered Kuu, as the solves)
     for i in range(m):
         var s = Float32(0)
@@ -1382,21 +1450,8 @@ def svgp_item(
             s = ftz(identical_mul_add(kv, alpha.unsafe_load(k), s))
         qmu.unsafe_store(i, s)
     # S = Kuu Sigma^-1 Kuu, then its Cholesky into q_sqrt
-    for j in range(m):
-        for i in range(m):
-            var kv = kuu.unsafe_load(i * m + j)
-            if i == j:
-                kv = _add(kv, jitter)
-            e.unsafe_store(i, kv)
-        _chol_solve(ls, m, e, col)
-        for i in range(m):
-            var s = Float32(0)
-            for k in range(m):
-                var kv = kuu.unsafe_load(i * m + k)
-                if i == k:
-                    kv = _add(kv, jitter)
-                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
-            qsqrt.unsafe_store(i * m + j, s)
+    comptime if is_gpu() or is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        _svgp_q_cols(kuu, qsqrt, ls, e, col, m, jitter, 0, m)
     var ok3 = _chol_inplace(qsqrt, m)
     # the collapsed bound
     var yty = Float32(0)
@@ -1414,11 +1469,19 @@ def svgp_item(
     )
     # tr(Kuu^-1 B): column solves against B
     var trq = Float32(0)
-    for j in range(m):
-        for i in range(m):
-            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
-        _chol_solve(luu, m, e, col)
-        trq = _add(trq, col.unsafe_load(j))
+    comptime if not is_gpu() and not is_defined["MOJOLEARN_SVGP_SERIAL"]():
+        var tv = List[Float32](length=m, fill=Float32(0))
+        var tvp = FP(unsafe_from_address=Int(tv.unsafe_ptr()))
+        _svgp_trace_par(bmat, luu, m, tvp)
+        for j in range(m):
+            trq = _add(trq, tvp.unsafe_load(j))
+        _ = tv^
+    else:
+        for j in range(m):
+            for i in range(m):
+                e.unsafe_store(i, bmat.unsafe_load(i * m + j))
+            _chol_solve(luu, m, e, col)
+            trq = _add(trq, col.unsafe_load(j))
     var trace_term = ftz(identical_div(_sub(ftz(identical_mul(Float32(n), kdiag)), trq), noise))
     var log2pi = Float32(1.8378770664093453)
     var elbo = -ftz(identical_mul(Float32(0.5), _add(_add(ftz(identical_mul(Float32(n), log2pi)), logdet), _add(quad, trace_term))))
