@@ -6547,6 +6547,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comptime VSTR = BK + 4
     comptime SPG0 = TQ * HD + BK * STRIDE if QRES else BK * HD
     comptime SPG = SPG0 if SPG0 >= HD * VSTR else HD * VSTR
+    comptime assert SPG >= BK * HD, "forward r2: the shared page must hold the V tile"
     var stg = stack_allocation[SPG, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
     var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
@@ -6805,7 +6806,14 @@ def fused_attn_forward_r2_mfma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     comptime KS = ATTN_FR2_KS
     comptime STRIDE = KS + 4
     comptime KOFF = TQ * HD if QRES else 0
-    comptime SPG = TQ * HD + BK * STRIDE if QRES else BK * HD
+    #: The page holds the Q rows + the K window in the score pass and the V
+    #: tile (BK * HD) in the value pass: never smaller than the V tile. At
+    #: TQ 16 under QRES the first form is 1664 floats against a 2048-float
+    #: V tile, and the stage overran into the statistics (L40S, 2026-10-01,
+    #: -D MOJOLEARN_ATTN_FWD_TQ16=1: lm-forward digest c1ff2015add6814a).
+    comptime SPGQ = TQ * HD + BK * STRIDE
+    comptime SPG = (SPGQ if SPGQ >= BK * HD else BK * HD) if QRES else BK * HD
+    comptime assert SPG >= BK * HD, "forward r2: the shared page must hold the V tile"
     var stg = stack_allocation[SPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
