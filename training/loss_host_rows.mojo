@@ -185,4 +185,10 @@ def ce_host_rows(
         _grad_rows(0)
     else:
         host_parallelize(_grad_rows, tasks)
+    # KEEP-ALIVE: `expo` is reached by `ep` above after its last use by name
+    # (the denominators' gemm call), and Mojo destroys a local at that last
+    # use; without this line the gradient rows read a freed block (which the
+    # allocator had handed back as `dlogits`, so the bytes were right by
+    # chance; lane neural-pass9).
+    _ = expo^
     return (loss, dlogits^)

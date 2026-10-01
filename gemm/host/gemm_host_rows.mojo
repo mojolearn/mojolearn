@@ -63,6 +63,7 @@ from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from std.sys.info import simd_width_of
 
+from core.host_lanes import host_f32_uninit
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 from checks.numerics import (
@@ -512,8 +513,14 @@ def gemm_host_rows_into(
         host_parallelize(_cols, stasks)
         return
     var npan = ghr_panel_count(n)
-    var ap_l = List[Float32](length=max(m * k, 1), fill=Float32(0.0))
-    var bp_l = List[Float32](length=max(npan * k * GHR_G, 1), fill=Float32(0.0))
+    # The packs write every element of both buffers (`ghr_pack_a` every
+    # `[m x k]` cell, `ghr_pack_b` every panel cell including the `+0.0`
+    # columns past n), so neither is zero-filled first (lane neural-pass9):
+    # on a 64-core host the serial memset of the two buffers was a visible
+    # share of every mid-size call, where the tiles take a fraction of a
+    # millisecond across the cores.
+    var ap_l = host_f32_uninit(max(m * k, 1))
+    var bp_l = host_f32_uninit(max(npan * k * GHR_G, 1))
     var ap = rebind[GhrPtr](ap_l.unsafe_ptr())
     var bp = rebind[GhrPtr](bp_l.unsafe_ptr())
     var tasks = ghr_task_count(m, npan, n, k)
