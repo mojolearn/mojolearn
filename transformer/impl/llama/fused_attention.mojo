@@ -4064,6 +4064,18 @@ def fused_bwd_dkdv_stash_kernel[HD: Int, BJ: Int, SABOTAGE: Bool](
 # y tile (dv moves, dk does not).
 # ===========================================================================
 
+#: lane/neural-pass65 (2026-10-01): the `_r32` dkdv arm's keys per block.
+#: PR #64's arm (`-D MOJOLEARN_ATTN_DKDV_BJ16=1`): MI325X lm-train-step
+#: 75.0 -> 71.9 ms, slower on the L40S, so 16 is the AMD column's default
+#: (768 blocks at the board shape instead of 384) and 32 stays everywhere
+#: else; `-D MOJOLEARN_ATTN_DKDV_BJ32=1` restores 32 on AMD. The keys a block
+#: owns touch no chain: same bits.
+comptime ATTN_DKDV_BJ_R32 = (
+    16 if is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]()
+    or (TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_DKDV_BJ32"]())
+    else 32
+)
+
 comptime TILED_TK = 16
 #: Query rows per block of `fused_bwd_dq_tiled_pf_kernel` (lane
 #: neural-pass50, 2026-10-01): 64, or 32 / 16 under
@@ -9319,9 +9331,9 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
-            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
         else:
-            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     else:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
             _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
