@@ -5736,11 +5736,22 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     #: `[col][tk]` at stride TT + 4, so the chain loop reads four consecutive
     #: query rows of a column in one 16-byte shared load. The chain per cell
     #: is still `tk` ascending: same bits.
+    #: lane/neural-pass58 head 3 (2026-10-01): the transposed staging is
+    #: OFF on the Apple column (M3 Ultra: dkdv 2.75 -> 3.73 ms a layer with
+    #: it, every other tick flat), which keeps main's `[tk][col]` tiles and
+    #: scalar chain reads there; `-D MOJOLEARN_ATTN_DKDV_T4=1` forces it on
+    #: Apple, `-D MOJOLEARN_ATTN_DKDV_NO_T4=1` turns it off anywhere.
+    comptime T4 = (
+        (TARGET_COLUMN != COLUMN_APPLE or is_defined["MOJOLEARN_ATTN_DKDV_T4"]())
+        and not is_defined["MOJOLEARN_ATTN_DKDV_NO_T4"]()
+    )
     comptime TSTR = TT + 4
-    var qs = stack_allocation[HD * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
-    var dcs = stack_allocation[HD * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
-    var ys = stack_allocation[BJ * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
-    var dss = stack_allocation[BJ * TSTR, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    comptime QN = HD * TSTR if T4 else TT * HD
+    comptime YN = BJ * TSTR if T4 else TT * BJ
+    var qs = stack_allocation[QN, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dcs = stack_allocation[QN, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[YN, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[YN, Scalar[DType.float32], alignment = 16, address_space = AddressSpace.SHARED]()
 
     var b = Int(b_in)
     var l = Int(l_in)
@@ -5810,8 +5821,12 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                     var off = (bb * l + t) * nh * HD + h * HD + c
                     qv = ftz(q_rope.unsafe_load(off))
                     dcv = ftz(dctx.unsafe_load(off))
-                qs.unsafe_store(c * TSTR + r, qv)
-                dcs.unsafe_store(c * TSTR + r, dcv)
+                comptime if T4:
+                    qs.unsafe_store(c * TSTR + r, qv)
+                    dcs.unsafe_store(c * TSTR + r, dcv)
+                else:
+                    qs.unsafe_store(i, qv)
+                    dcs.unsafe_store(i, dcv)
             # y and dcell tiles [TT][BJ], coalesced along j.
             comptime for si in range(TT * BJ // 256):
                 var i = tid + si * 256
@@ -5828,13 +5843,28 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                         yv = y_st.unsafe_load(cell)
                         dsv = ds_st.unsafe_load(cell)
                 comptime if SAB:
-                    ys.unsafe_store(c * TSTR + r, _flip_ulp(yv))
-                    dss.unsafe_store(c * TSTR + r, _flip_ulp(dsv))
+                    ys.unsafe_store((c * TSTR + r) if T4 else i, _flip_ulp(yv))
+                    dss.unsafe_store((c * TSTR + r) if T4 else i, _flip_ulp(dsv))
                 else:
-                    ys.unsafe_store(c * TSTR + r, yv)
-                    dss.unsafe_store(c * TSTR + r, dsv)
+                    ys.unsafe_store((c * TSTR + r) if T4 else i, yv)
+                    dss.unsafe_store((c * TSTR + r) if T4 else i, dsv)
             barrier()
-            comptime for t4 in range(TT // 4):
+            comptime if not T4:
+                comptime for tk in range(TT):
+                    var t = tq0 + tk
+                    var qa = SIMD[DType.float32, CPT](0.0)
+                    var da = SIMD[DType.float32, CPT](0.0)
+                    comptime for v in range(CPT):
+                        qa[v] = qs.unsafe_load(tk * HD + tc + v * 16)
+                        da[v] = dcs.unsafe_load(tk * HD + tc + v * 16)
+                    comptime for u in range(RPT):
+                        if t < l and Int32(t) >= lo[u] and Int32(t) <= hi[u]:
+                            var dcell = dss.unsafe_load(tk * BJ + tr + u * 16)
+                            var yv = ys.unsafe_load(tk * BJ + tr + u * 16)
+                            comptime for v in range(CPT):
+                                dk_acc[u * CPT + v] = _stepfx(dcell, qa[v], dk_acc[u * CPT + v])
+                                dv_acc[u * CPT + v] = _stepfx(yv, da[v], dv_acc[u * CPT + v])
+            comptime for t4 in range(TT // 4 if T4 else 0):
                 comptime tk0 = t4 * 4
                 var q4 = SIMD[DType.float32, CPT * 4](0.0)
                 var d4 = SIMD[DType.float32, CPT * 4](0.0)

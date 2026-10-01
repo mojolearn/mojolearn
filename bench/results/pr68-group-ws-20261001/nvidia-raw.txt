@@ -1,0 +1,87 @@
+17:01:36 merge-main-lane_neural-pass49-on-61 rc=1
+## /root/ab-pr68-nvidia
+stage-pass62-1                              48.334 40.530  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass62-2                              50.758 40.462  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                49.473 41.811  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                50.629 41.842  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+## /root/ab-p57on61-nvidia
+stage-pass49-on-61-1                        15.634 39.075  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass49-on-61-2                        15.873 38.032  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass61-1                              17.625 38.094  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass61-2                              17.506 37.851  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                61.657 37.721  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                54.644 37.943  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+#### pr68 ticks
+bwd.after_attention                                 0.6232                  0.5843
+bwd.attention                                       1.7348                  1.7219
+bwd.before_attention                                0.0015                  0.0013
+bwd.mlp_through_oproj                               1.1961                  1.1418
+fwd.down_proj                                       0.1184                  0.1132
+fwd.gate_mul                                        0.0166                  0.0163
+fwd.gate_proj                                       0.1167                  0.1122
+fwd.k_proj                                          0.0609                  0.0563
+fwd.norm1                                           0.0506                  0.0502
+fwd.norm2                                           0.0502                  0.0498
+fwd.o_proj                                          0.0703                  0.0637
+fwd.q_proj                                          0.0836                  0.0803
+fwd.refuse_call                                     0.0336                  0.0332
+fwd.residual1_add                                   0.0147                  0.0143
+fwd.residual2_add                                   0.0115                  0.0109
+fwd.silu                                            0.0172                  0.0172
+fwd.up_proj                                         0.1172                  0.1096
+fwd.v_proj                                          0.0603                  0.0554
+step.bind_final_sync                                0.0018                  0.0017
+step.bind_publish                                   0.0218                  0.0208
+step.bind_publish_bytes                           300.0000                300.0000
+step.bind_scalar_admission                          0.0033                  0.0032
+step.ce_backward                                    0.1571                  0.1562
+step.ce_forward                                     0.4238                  0.4243
+step.ce_refuse_scan                                 0.0922                  0.0868
+step.ce_refuse_scan_bytes                    67108864.0000           67108864.0000
+step.ce_refuse_scan_download_bytes               8192.0000               8192.0000
+step.embedding_backward                             0.3241                  0.3185
+step.embedding_forward                              0.0358                  0.0339
+step.head_backward_da                               1.4130                  1.4160
+step.head_backward_db                               0.5768                  0.5757
+step.head_forward                                   0.5365                  0.5365
+step.loss_download                                  0.0141                  0.0144
+step.loss_download_bytes                            4.0000                  4.0000
+step.optimizer                                      0.8451                  0.8494
+step.pack_grads                                     0.2442                  0.2452
+step.pack_grads_bytes                        81813504.0000           81813504.0000
+step.py_flags                                       0.1074                  0.0925
+step.py_flags_bytes                               296.0000                296.0000
+step.py_open_session                              557.7884                455.3184
+step.py_open_session_bytes                  245440512.0000          245440512.0000
+step.py_tokens                                      0.1003                  0.0957
+step.py_tokens_bytes                             8196.0000               8196.0000
+step.unpack_weights                                 0.2093                  0.2070
+step.unpack_weights_bytes                    81813504.0000           81813504.0000
+step.upload_inputs                                  0.0404                  0.0390
+step.upload_inputs_bytes                        16384.0000              16384.0000
+step.validate_after_scan                            0.5391                  0.5320
+step.validate_after_scan_bytes              327254016.0000          327254016.0000
+step.validate_grads_scan                            0.1182                  0.1214
+step.validate_grads_scan_bytes               81813504.0000           81813504.0000
+tick                                          ticks68-mainticks68-lane_neural-pass62
+#### p57 ticks
+ticks57-lane_neural-pass61/stage-1-default  17.355 37.493  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks57-lane_neural-pass61/stage-2-default  17.757 37.773  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks57-lane_neural-pass49-on-61/stage-1-default15.995 38.255  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks57-lane_neural-pass49-on-61/stage-2-default15.715 37.762  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+logits.download                                     3.1725                  3.4492
+logits.head_gemm                                    0.5785                  0.5798
+logits.ids_and_embedding                            0.2287                  0.2221
+logits.layers                                      14.5050                 14.3894
+logits.scan                                         1.6384                  0.0102
+step.bind_final_sync                                0.0020                  0.0017
+step.bind_publish                                   0.0232                  0.0221
+step.bind_publish_bytes                           300.0000                300.0000
+step.bind_scalar_admission                          0.0038                  0.0033
+step.ce_refuse_scan                                 0.0923                  0.0887
+step.ce_refuse_scan_bytes                    67108864.0000           67108864.0000
+step.ce_refuse_scan_download_bytes               8192.0000               8192.0000
+step.loss_download                                  0.0145                  0.0129
+step.loss_download_bytes                            4.0000                  4.0000
+tick                              ticks57-lane_neural-pass61ticks57-lane_neural-pass49-on-61
+[exited with code 0]
