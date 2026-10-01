@@ -2055,55 +2055,71 @@ def transformer_block_oracle(
         var q_rope_f = _hp(st.q_rope_out)
         var vcache_f = st.kv_v_cache.copy()
         var arows = b * nh * l
-        var a_split = _row_split(arows, s * hd + 6 * s)
-        var a_tasks = a_split[0]
-        var a_chunk = a_split[1]
+        #: units of ATTN_HOST_RB query rows of one (batch, head): `ghr_tile`
+        #: walks a K panel once for every row of the unit; the units are
+        #: dealt round-robin (unit u to task u % tasks) since causal rows
+        #: grow in work along the query axis.
+        comptime RB = 32
+        var nqb = (l + RB - 1) // RB
+        var units = b * nh * nqb
+        var a_tasks = host_row_tasks(units, RB * (s * hd + 6 * s))
         var mfill_f = mask_fill()
         var ufill_f = unmasked_fill()
-        def _attn_row(task: Int) {imm q_rope_f, imm kp_p, imm vcache_f, mut scores, mut masked, mut amax, mut aexp, mut adenom, mut aweights, mut actx, imm pidx, imm pbits, imm pat, imm arows, imm a_chunk, imm l, imm s, imm hd, imm nh, imm nkv, imm n_rep, imm qw, imm npan, imm plen, imm scale, imm own0, imm window, imm mfill_f, imm ufill_f}:
-            var qrow = host_f32_uninit(hd)
-            var cell = host_f32_uninit(s)
-            var q_p = _hp(qrow)
-            var c_p = _hp(cell)
-            for r in range(task * a_chunk, min((task + 1) * a_chunk, arows)):
-                var qi = r % l
-                var h = (r // l) % nh
-                var bb = r // (l * nh)
+        def _attn_row(task: Int) {imm q_rope_f, imm kp_p, imm vcache_f, mut scores, mut masked, mut amax, mut aexp, mut adenom, mut aweights, mut actx, imm pidx, imm pbits, imm pat, imm units, imm a_tasks, imm nqb, imm l, imm s, imm hd, imm nh, imm nkv, imm n_rep, imm qw, imm npan, imm plen, imm scale, imm own0, imm window, imm mfill_f, imm ufill_f}:
+            var qblk = host_f32_uninit(RB * hd)
+            var cblk = host_f32_uninit(RB * s)
+            var q_p = _hp(qblk)
+            var c_p = _hp(cblk)
+            var u = task
+            while u < units:
+                var qb = u % nqb
+                var bh = u // nqb
+                var h = bh % nh
+                var bb = bh // nh
                 var kv = h // n_rep
-                var base = r * s
-                ghr_pack_a(q_rope_f.unsafe_offset((bb * l + qi) * qw + h * hd), OP_NT, 1, hd, q_p)
-                ghr_tile(q_p, kp_p.unsafe_offset((bb * nkv + kv) * plen), c_p, s, hd, 0, 1, 0, npan)
-                span_scale(cell, 0, s, scale, scores, base)
-                _apply_plant_row(scores, pidx, pbits, pat, PLANT_AT_SCORES, base, s)
-                var vis = _visible_keys(own0, window, qi, s)
-                var jlo = vis[0]
-                var jhi = vis[1]
-                span_add_scalar(scores, base, jlo, mfill_f, masked, base)
-                span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill_f, masked, base + jlo)
-                span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill_f, masked, base + jhi + 1)
-                _apply_plant_row(masked, pidx, pbits, pat, PLANT_AT_MASKED, base, s)
-                var mx = span_fmax_fold(masked, base, s)
-                amax[r] = ftz(mx)
-                for j in range(jlo):
-                    aexp[base + j] = Float32(0.0)
-                    aweights[base + j] = Float32(0.0)
-                for j in range(jhi + 1, s):
-                    aexp[base + j] = Float32(0.0)
-                    aweights[base + j] = Float32(0.0)
-                span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
-                var acc = Float32(0.0)
-                for j in range(jlo, jhi + 1):
-                    acc = ftz(ftz(acc) + ftz(aexp[base + j]))
-                acc = ftz(acc)
-                adenom[r] = acc
-                span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
-                attn_value_sum_lanes(
-                    aweights, base + jlo,
-                    vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
-                    actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
-                )
-            _ = qrow^
-            _ = cell^
+                var q0 = qb * RB
+                var rows = min(RB, l - q0)
+                for i in range(rows):
+                    var src = (bb * l + q0 + i) * qw + h * hd
+                    for d in range(hd):
+                        q_p.unsafe_store(i * hd + d, ftz(q_rope_f.unsafe_load(src + d)))
+                ghr_tile(q_p, kp_p.unsafe_offset((bb * nkv + kv) * plen), c_p, s, hd, 0, rows, 0, npan)
+                for i in range(rows):
+                    var qi = q0 + i
+                    var r = bh * l + qi
+                    var base = r * s
+                    span_scale(cblk, i * s, s, scale, scores, base)
+                    _apply_plant_row(scores, pidx, pbits, pat, PLANT_AT_SCORES, base, s)
+                    var vis = _visible_keys(own0, window, qi, s)
+                    var jlo = vis[0]
+                    var jhi = vis[1]
+                    span_add_scalar(scores, base, jlo, mfill_f, masked, base)
+                    span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill_f, masked, base + jlo)
+                    span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill_f, masked, base + jhi + 1)
+                    _apply_plant_row(masked, pidx, pbits, pat, PLANT_AT_MASKED, base, s)
+                    var mx = span_fmax_fold(masked, base, s)
+                    amax[r] = ftz(mx)
+                    for j in range(jlo):
+                        aexp[base + j] = Float32(0.0)
+                        aweights[base + j] = Float32(0.0)
+                    for j in range(jhi + 1, s):
+                        aexp[base + j] = Float32(0.0)
+                        aweights[base + j] = Float32(0.0)
+                    span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
+                    var acc = Float32(0.0)
+                    for j in range(jlo, jhi + 1):
+                        acc = ftz(ftz(acc) + ftz(aexp[base + j]))
+                    acc = ftz(acc)
+                    adenom[r] = acc
+                    span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
+                    attn_value_sum_lanes(
+                        aweights, base + jlo,
+                        vcache_f, (bb * nkv + kv) * s * hd + jlo * hd,
+                        actx, (bb * l + qi) * qw + h * hd, jhi - jlo + 1, hd,
+                    )
+                u += a_tasks
+            _ = qblk^
+            _ = cblk^
         if a_tasks <= 1:
             _attn_row(0)
         else:
