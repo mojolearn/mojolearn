@@ -14,6 +14,9 @@ compared in double exactly as Python compared it. The CPU column runs the
 same loop over the items (`x_neighbors/iter_host.mojo`).
 """
 from std.memory import bitcast
+from core.host_lanes import host_row_tasks
+from std.time import perf_counter_ns
+from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
@@ -284,7 +287,13 @@ def op_pr_iterate_sparse(
     the device over the column lists. `x` in: the start, out: the last
     iterate. info (int32 x 2): iterations run, converged."""
     var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
+    var timing = String(getenv("MOJOLEARN_PR_TIMING")) == "1"
+    var t_start = perf_counter_ns()
     var g = pr_graph_from_dense(FP(unsafe_from_address=a), n, binary != 0)
+    if timing:
+        print("pr_iterate_sparse: scan", (perf_counter_ns() - t_start) // 1000000, "ms, nnz", g.nnz,
+              "tasks", host_row_tasks(n, 2 * n))
+        t_start = perf_counter_ns()
     var ctx = xn_ctx()
     var d_ip = _buf_i(ctx, Int(g.indptr.unsafe_ptr()), n + 1, True)
     var d_rows = _buf_i(ctx, Int(g.rows.unsafe_ptr()), g.nnz, True)
@@ -328,6 +337,8 @@ def op_pr_iterate_sparse(
     else:
         _down(ctx, d_b, x, n)
     ctx.synchronize()
+    if timing:
+        print("pr_iterate_sparse: device", (perf_counter_ns() - t_start) // 1000000, "ms,", n_iter, "iterations")
     var inf = IP(unsafe_from_address=info)
     inf.unsafe_store(0, Int32(n_iter))
     inf.unsafe_store(1, Int32(1 if converged else 0))

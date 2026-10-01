@@ -40,10 +40,11 @@ seen.
 from std.memory import bitcast
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from core.host_lanes import host_row_tasks
+from core.host_lanes import HOST_FW, U32V, host_row_tasks
 from core.host_parallel import host_parallelize
 from x_neighbors.items import FP, IP, _add, _sub
 
+comptime _MAG = U32V(0x7FFFFFFF)
 comptime _IntPtr = MutPointer[Int, MutUntrackedOrigin]
 comptime _I32Ptr = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32Ptr = MutPointer[Float32, MutUntrackedOrigin]
@@ -98,11 +99,25 @@ def pr_graph_from_dense(a: FP, n: Int, binary: Bool) -> PrGraph:
             var c = 0
             var s = Float32(0)
             var base = t * n
-            for j in range(n):
+            # a chunk of HOST_FW cells with no nonzero bit pattern holds only
+            # +-0.0 cells, which the fold leaves out; a chunk with one is
+            # walked cell by cell in order
+            var j = 0
+            while j + HOST_FW <= n:
+                var bits = bitcast[DType.uint32](a.unsafe_load[width=HOST_FW](base + j)) & _MAG
+                if bits.reduce_or() != UInt32(0):
+                    for q in range(j, j + HOST_FW):
+                        var v = a.unsafe_load(base + q)
+                        if v != Float32(0):
+                            c += 1
+                            s = _add(s, Float32(1) if binary else v)
+                j += HOST_FW
+            while j < n:
                 var v = a.unsafe_load(base + j)
                 if v != Float32(0):
                     c += 1
                     s = _add(s, Float32(1) if binary else v)
+                j += 1
             cp.unsafe_store(t, c)
             sp.unsafe_store(t, s)
     if tasks <= 1:
@@ -129,12 +144,24 @@ def pr_graph_from_dense(a: FP, n: Int, binary: Bool) -> PrGraph:
             if s == Float32(0):
                 s = Float32(1)
             var base = t * n
-            for j in range(n):
+            var j = 0
+            while j + HOST_FW <= n:
+                var bits = bitcast[DType.uint32](a.unsafe_load[width=HOST_FW](base + j)) & _MAG
+                if bits.reduce_or() != UInt32(0):
+                    for q in range(j, j + HOST_FW):
+                        var v = a.unsafe_load(base + q)
+                        if v != Float32(0):
+                            colp.unsafe_store(w, Int32(q))
+                            rvp.unsafe_store(w, ftz(identical_div(ftz(Float32(1) if binary else v), s)))
+                            w += 1
+                j += HOST_FW
+            while j < n:
                 var v = a.unsafe_load(base + j)
                 if v != Float32(0):
                     colp.unsafe_store(w, Int32(j))
                     rvp.unsafe_store(w, ftz(identical_div(ftz(Float32(1) if binary else v), s)))
                     w += 1
+                j += 1
     if tasks <= 1:
         _fill(0)
     else:
