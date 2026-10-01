@@ -1,0 +1,147 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/torchvenv/bin/python",
+        "/root/mojolearn-pr26main/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "samba-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/pr26-amd/work/neural-samba-infer-full.npz"
+      ],
+      "digest_stable": null,
+      "digests": [],
+      "error": {
+        "error": "ImportError('mojolearn: no CPU implementation of _mojolearn.all_finite_f32 yet; see SUPPORT_MATRIX.md (no host binding covers _mojolearn; host bindings built here: _mojolearn_mamba_host, _mojolearn_neural_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:\\nmojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request (flat layout)')",
+        "event": "error",
+        "stage": "ready"
+      },
+      "median_ms": null,
+      "mem": [],
+      "ms": [],
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "not_ready",
+      "warmup_ms": null
+    }
+  },
+  "commit": "unknown",
+  "dataset": "bytes",
+  "finished": "2026-10-01T03:23:01Z",
+  "inputs": {
+    "init": "SambaStack._init_tensor rules on default_rng(7)",
+    "lane": "samba-infer",
+    "parameters": 5664944,
+    "schedule": "the LM lanes' byte schedule",
+    "seed": 7,
+    "sha256": {
+      "batches": "34602515628e28e4",
+      "w:embed.weight": "540d8713e7b354aa",
+      "w:layers.0.B_bias": "4fcbec4ade9b5fcf",
+      "w:layers.0.B_norm.weight": "02722f124d0f1736",
+      "w:layers.0.C_bias": "4fcbec4ade9b5fcf",
+      "w:layers.0.C_norm.weight": "02722f124d0f1736",
+      "w:layers.0.D": "6ea78411bee8a810",
+      "w:layers.0.block_norm.weight": "702cc37cfd91cac6",
+      "w:layers.0.dt_bias": "d8e72877d64b91eb",
+      "w:layers.0.in_proj.weight": "48bb34097b6a9c5f",
+      "w:layers.0.out_proj.weight": "5172ae34002f8d44",
+      "w:layers.1.down_proj.weight": "1148da1e4f95ab17",
+      "w:layers.1.gate_proj.weight": "b6416587cad9ec3c",
+      "w:layers.1.input_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.1.k_proj.weight": "64431f5df0a31abd",
+      "w:layers.1.o_proj.weight": "0be228f877a95b4b",
+      "w:layers.1.post_attention_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.1.q_proj.weight": "a52e55fedd7a0210",
+      "w:layers.1.up_proj.weight": "faed6044fbe4a9b3",
+      "w:layers.1.v_proj.weight": "96a2de8c487c2b16",
+      "w:layers.2.B_bias": "4fcbec4ade9b5fcf",
+      "w:layers.2.B_norm.weight": "02722f124d0f1736",
+      "w:layers.2.C_bias": "4fcbec4ade9b5fcf",
+      "w:layers.2.C_norm.weight": "02722f124d0f1736",
+      "w:layers.2.D": "6ea78411bee8a810",
+      "w:layers.2.block_norm.weight": "702cc37cfd91cac6",
+      "w:layers.2.dt_bias": "f7048b7c9592a8e0",
+      "w:layers.2.in_proj.weight": "9671583a3aef641b",
+      "w:layers.2.out_proj.weight": "0c2d4ec038a30128",
+      "w:layers.3.down_proj.weight": "117bd15e3846fe4a",
+      "w:layers.3.gate_proj.weight": "ebf3c632489bb0d1",
+      "w:layers.3.input_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.3.k_proj.weight": "894f40e9497e613f",
+      "w:layers.3.o_proj.weight": "6a70eb72ec82c8b5",
+      "w:layers.3.post_attention_layernorm.weight": "702cc37cfd91cac6",
+      "w:layers.3.q_proj.weight": "ba0bd8c3c76adc2c",
+      "w:layers.3.up_proj.weight": "84335d5dd21f303b",
+      "w:layers.3.v_proj.weight": "9f3f43c14357e323",
+      "w:norm_f.weight": "702cc37cfd91cac6"
+    },
+    "shape": {
+      "batch": 2,
+      "d_model": 384,
+      "intermediate": 1024,
+      "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+      "layers": [
+        "mamba3",
+        "attention",
+        "mamba3",
+        "attention"
+      ],
+      "length": 512,
+      "n_heads": 6,
+      "name": "full",
+      "vocab": 256
+    },
+    "steps": 6,
+    "stream": {
+      "bytes": 13902336,
+      "files": 424,
+      "package_dir": "/root/mojolearn-pr26main/python/mojolearn",
+      "sha256": "f3394388a8fc47f4bffd706d1701f679849c1084c9b8d9253bb48a29b3e69fc8",
+      "source": "installed mojolearn package .py sources, sorted by path, concatenated"
+    }
+  },
+  "lane": "samba-infer",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {},
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/samba-infer",
+    "problems": [],
+    "reference": null,
+    "seed": 7,
+    "seed_none_deterministic": [],
+    "verdict": "MATCHED"
+  },
+  "quality": {},
+  "rounds_requested": 5,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+  "shape_record": {
+    "batch": 2,
+    "d_model": 384,
+    "intermediate": 1024,
+    "label": "B2 L512 DM384 V256 H6 FF1024 layers mamba3+attention+mamba3+attention",
+    "layers": [
+      "mamba3",
+      "attention",
+      "mamba3",
+      "attention"
+    ],
+    "length": 512,
+    "n_heads": 6,
+    "name": "full",
+    "vocab": 256
+  },
+  "started": "2026-10-01T03:23:01Z",
+  "torch_settings": {}
+}

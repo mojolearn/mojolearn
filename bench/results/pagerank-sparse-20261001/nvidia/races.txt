@@ -1,0 +1,6 @@
+pagerank istella before  ms=1208.579 digest=7eb6c05c6a688609  
+pagerank istella after  ms=34.571 digest=7eb6c05c6a688609  
+pagerank istella restore  ms=1223.353 digest=7eb6c05c6a688609  
+pagerank taxi before  ms=1357.684 digest=8084077034791453  
+pagerank taxi after  ms=25.739 digest=8084077034791453  
+pagerank taxi restore  ms=1191.039 digest=8084077034791453  

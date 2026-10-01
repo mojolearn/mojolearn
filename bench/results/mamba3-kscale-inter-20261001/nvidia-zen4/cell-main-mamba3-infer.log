@@ -1,0 +1,8 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/mamba3-infer", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=mamba3-infer arm=ours round=0 ms=33.762 digest=1b972178883b8734
+NEURAL-ROUND lane=mamba3-infer arm=ours round=1 ms=29.994 digest=1b972178883b8734
+NEURAL-ROUND lane=mamba3-infer arm=ours round=2 ms=34.588 digest=1b972178883b8734
+NEURAL-ROUND lane=mamba3-infer arm=ours round=3 ms=25.645 digest=1b972178883b8734
+NEURAL-ROUND lane=mamba3-infer arm=ours round=4 ms=26.900 digest=1b972178883b8734
+NEURAL-ROUND lane=mamba3-infer arm=ours round=5 ms=16.522 digest=1b972178883b8734
+NEURAL lane=mamba3-infer arm=ours status=ok median_ms=26.899872347712517 quality={}

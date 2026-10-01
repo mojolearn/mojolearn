@@ -110,6 +110,9 @@ from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 # lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
 from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
+from std.time import perf_counter_ns
+
+from core.host_lanes import HostF32Ptr, host_block_timing_on, host_f32_uninit, host_tick
 from core.host_parallel import host_parallelize
 from core.host_lanes import (
     host_row_tasks,
@@ -1024,6 +1027,78 @@ def record_transformer_card(
 # ===========================================================================
 
 
+@always_inline
+def _hp(values: List[Float32]) -> HostF32Ptr:
+    """A raw pointer to a list's cells for the task closures below (lane
+    neural-pass21): the list outlives every region that reads it."""
+    return HostF32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+
+
+@always_inline
+def _row_split(rows: Int, work_per_row: Int) -> Tuple[Int, Int]:
+    """(tasks, rows per task) for a stage whose rows are independent (lane
+    neural-pass21): `host_row_tasks`' count, a schedule knob that moves no
+    bit; every row's statements run unchanged in whichever task owns it."""
+    var tasks = host_row_tasks(rows, work_per_row)
+    return (tasks, (rows + tasks - 1) // tasks)
+
+
+def _span_par(n: Int, work_per_cell: Int) -> Tuple[Int, Int]:
+    """(tasks, cells per task) for an elementwise span: the per-cell lane
+    statement is the same whichever task runs the cell."""
+    var tasks = host_row_tasks(n, work_per_cell)
+    return (tasks, (n + tasks - 1) // tasks)
+
+
+def _span_add_par(a: List[Float32], b: List[Float32], n: Int, mut dst: List[Float32]):
+    """`span_add` over blocks of cells on host tasks (lane neural-pass21):
+    the same per-cell statement whichever block a cell falls in."""
+    var sp = _span_par(n, 1)
+    var tasks = sp[0]
+    var chunk = sp[1]
+    def _blocks(t: Int) {imm a, imm b, mut dst, imm n, imm chunk}:
+        var c0 = t * chunk
+        var c1 = min((t + 1) * chunk, n)
+        if c1 > c0:
+            span_add(a, c0, b, c0, c1 - c0, dst, c0)
+    if tasks <= 1:
+        _blocks(0)
+    else:
+        host_parallelize(_blocks, tasks)
+
+
+def _span_mul_par(a: List[Float32], b: List[Float32], n: Int, mut dst: List[Float32]):
+    """`span_mul` over blocks of cells on host tasks (lane neural-pass21)."""
+    var sp = _span_par(n, 1)
+    var tasks = sp[0]
+    var chunk = sp[1]
+    def _blocks(t: Int) {imm a, imm b, mut dst, imm n, imm chunk}:
+        var c0 = t * chunk
+        var c1 = min((t + 1) * chunk, n)
+        if c1 > c0:
+            span_mul(a, c0, b, c0, c1 - c0, dst, c0)
+    if tasks <= 1:
+        _blocks(0)
+    else:
+        host_parallelize(_blocks, tasks)
+
+
+def _span_silu_par(a: List[Float32], n: Int, mut dst: List[Float32]):
+    """`span_silu` over blocks of cells on host tasks (lane neural-pass21)."""
+    var sp = _span_par(n, 8)
+    var tasks = sp[0]
+    var chunk = sp[1]
+    def _blocks(t: Int) {imm a, mut dst, imm n, imm chunk}:
+        var c0 = t * chunk
+        var c1 = min((t + 1) * chunk, n)
+        if c1 > c0:
+            span_silu(a, c0, c1 - c0, dst, c0)
+    if tasks <= 1:
+        _blocks(0)
+    else:
+        host_parallelize(_blocks, tasks)
+
+
 def rms_norm_into(
     src: List[Float32],
     wnorm: List[Float32],
@@ -1081,17 +1156,32 @@ def rms_norm_into(
     `mean + eps` at :66 is a plain add and is spelled as one. It is not a
     seam the reference rounds twice and there is no product to contract it
     into."""
-    for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(src[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
-        for j in range(dm):
-            var inner = ftz(identical_mul(ftz(src[t * dm + j]), rstd))
-            out.append(ftz(identical_mul(ftz(wnorm[j]), inner)))
+    # ROWS OVER HOST TASKS (lane neural-pass21): each row's two serial
+    # folds and its scalings are the statements above, unchanged; the lists
+    # are sized once and written by index.
+    sumsq = host_f32_uninit(m)
+    out = host_f32_uninit(m * dm)
+    var sp = _hp(sumsq)
+    var op = _hp(out)
+    var split = _row_split(m, 4 * dm)
+    var ntasks = split[0]
+    var chunk = split[1]
+    def _rows(task: Int) {imm src, imm wnorm, imm sp, imm op, imm m, imm dm, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, m)):
+            var acc = Float32(0.0)
+            for j in range(dm):
+                var xj = ftz(src[t * dm + j])
+                acc = ftz(identical_mul_add(xj, xj, acc))
+            sp.unsafe_store(t, acc)
+            var mean = ftz(identical_div(acc, Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+            for j in range(dm):
+                var inner = ftz(identical_mul(ftz(src[t * dm + j]), rstd))
+                op.unsafe_store(t * dm + j, ftz(identical_mul(ftz(wnorm[j]), inner)))
+    if ntasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, ntasks)
 
 
 def norm_into(
@@ -1144,26 +1234,41 @@ def norm_into(
     S1-S4 unchanged. Gemma keeps the whole norm in float32, which is this
     profile's dtype anyway.
     """
+    # ROWS OVER HOST TASKS (lane neural-pass21), both arms: each row's
+    # serial folds and scalings are the statements above, unchanged; the
+    # lists are sized once and written by index.
+    sumsq = host_f32_uninit(m)
+    out = host_f32_uninit(m * dm)
+    var sp = _hp(sumsq)
+    var op = _hp(out)
+    var split = _row_split(m, 6 * dm)
+    var ntasks = split[0]
+    var chunk = split[1]
     if kind == NORM_LAYERNORM:
-        for t in range(m):
-            var acc = Float32(0.0)
-            for j in range(dm):
-                acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
-            var mean = ftz(identical_div(acc, Float32(dm)))
-            var acc2 = Float32(0.0)
-            for j in range(dm):
-                var dev = ftz(ftz(src[t * dm + j]) - mean)
-                acc2 = ftz(identical_mul_add(dev, dev, acc2))
-            sumsq.append(acc2)
-            var variance = ftz(identical_div(acc2, Float32(dm)))
-            var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
-            for j in range(dm):
-                var dev = ftz(ftz(src[t * dm + j]) - mean)
-                var inner = ftz(identical_mul(dev, rstd))
-                var y = ftz(identical_mul(ftz(wnorm[j]), inner))
-                if has_bias:
-                    y = ftz(ftz(y) + ftz(bnorm[j]))
-                out.append(y)
+        def _ln_rows(task: Int) {imm src, imm wnorm, imm bnorm, imm sp, imm op, imm m, imm dm, imm eps, imm has_bias, imm chunk}:
+            for t in range(task * chunk, min((task + 1) * chunk, m)):
+                var acc = Float32(0.0)
+                for j in range(dm):
+                    acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
+                var mean = ftz(identical_div(acc, Float32(dm)))
+                var acc2 = Float32(0.0)
+                for j in range(dm):
+                    var dev = ftz(ftz(src[t * dm + j]) - mean)
+                    acc2 = ftz(identical_mul_add(dev, dev, acc2))
+                sp.unsafe_store(t, acc2)
+                var variance = ftz(identical_div(acc2, Float32(dm)))
+                var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
+                for j in range(dm):
+                    var dev = ftz(ftz(src[t * dm + j]) - mean)
+                    var inner = ftz(identical_mul(dev, rstd))
+                    var y = ftz(identical_mul(ftz(wnorm[j]), inner))
+                    if has_bias:
+                        y = ftz(ftz(y) + ftz(bnorm[j]))
+                    op.unsafe_store(t * dm + j, y)
+        if ntasks <= 1:
+            _ln_rows(0)
+        else:
+            host_parallelize(_ln_rows, ntasks)
         return
     if kind != NORM_RMSNORM and kind != NORM_RMSNORM_OFFSET:
         raise Error(
@@ -1171,20 +1276,25 @@ def norm_into(
         )
     if has_bias:
         raise Error("transformer: an RMSNorm carries no bias (norm_bias needs layernorm)")
-    for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(src[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.append(acc)
-        var mean = ftz(identical_div(acc, Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
-        for j in range(dm):
-            var inner = ftz(identical_mul(ftz(src[t * dm + j]), rstd))
-            var wj = ftz(wnorm[j])
-            if kind == NORM_RMSNORM_OFFSET:
-                wj = ftz(Float32(1.0) + wj)
-            out.append(ftz(identical_mul(wj, inner)))
+    def _rms_rows(task: Int) {imm src, imm wnorm, imm sp, imm op, imm m, imm dm, imm eps, imm kind, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, m)):
+            var acc = Float32(0.0)
+            for j in range(dm):
+                var xj = ftz(src[t * dm + j])
+                acc = ftz(identical_mul_add(xj, xj, acc))
+            sp.unsafe_store(t, acc)
+            var mean = ftz(identical_div(acc, Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+            for j in range(dm):
+                var inner = ftz(identical_mul(ftz(src[t * dm + j]), rstd))
+                var wj = ftz(wnorm[j])
+                if kind == NORM_RMSNORM_OFFSET:
+                    wj = ftz(Float32(1.0) + wj)
+                op.unsafe_store(t * dm + j, ftz(identical_mul(wj, inner)))
+    if ntasks <= 1:
+        _rms_rows(0)
+    else:
+        host_parallelize(_rms_rows, ntasks)
 
 
 def add_bias_into(mut buf: List[Float32], bias: List[Float32], rows: Int, width: Int) raises:
@@ -1202,10 +1312,20 @@ def add_bias_into(mut buf: List[Float32], bias: List[Float32], rows: Int, width:
             + String(width)
             + " columns"
         )
-    for t in range(rows):
-        for j in range(width):
-            var i = t * width + j
-            buf[i] = ftz(ftz(buf[i]) + ftz(bias[j]))
+    # ROWS OVER HOST TASKS (lane neural-pass21): the same add per cell.
+    var bp = _hp(buf)
+    var split = _row_split(rows, width)
+    var ntasks = split[0]
+    var chunk = split[1]
+    def _rows(task: Int) {imm bp, imm bias, imm rows, imm width, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, rows)):
+            for j in range(width):
+                var i = t * width + j
+                bp.unsafe_store(i, ftz(ftz(bp.unsafe_load(i)) + ftz(bias[j])))
+    if ntasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, ntasks)
 
 
 def apply_rope_into(
@@ -1286,8 +1406,7 @@ def apply_rope_into(
             + " REFUSED"
         )
     for t in range(m):
-        var li = t % l
-        var p = pos0 + li
+        var p = pos0 + t % l
         if p < 0 or p >= rope.positions:
             raise Error(
                 String("transformer: absolute position ")
@@ -1298,25 +1417,83 @@ def apply_rope_into(
                 + " configuration quantity, so a call that overruns it is a"
                 + " misconfiguration and not something to grow into)"
             )
-        for h in range(n_head):
-            var base = t * width + h * head_dim
-            for j in range(head_dim):
-                if j >= rd:
-                    out.append(ftz(src[base + j]))
-                    continue
-                var ci: Int
-                var rot: Float32
-                if j < half:
-                    ci = j
-                    rot = -ftz(src[base + j + half])
-                else:
-                    ci = j - half
-                    rot = ftz(src[base + j - half])
-                var c = ftz(rope.cos[p * half + ci])
-                var s = ftz(rope.sin[p * half + ci])
-                var pa = ftz(identical_mul(ftz(src[base + j]), c))
-                var pb = ftz(identical_mul(rot, s))
-                out.append(ftz(ftz(pa) + ftz(pb)))
+    # TOKENS OVER HOST TASKS (lane neural-pass21): each token's cells are
+    # the statements above, unchanged; the list is sized once and written
+    # by index (the refusal above ran first, so no task raises).
+    out = host_f32_uninit(m * width)
+    var op = _hp(out)
+    var split = _row_split(m, 6 * width)
+    var ntasks = split[0]
+    var chunk = split[1]
+    def _tokens(task: Int) {imm src, imm rope, imm op, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm width, imm rd, imm half, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, m)):
+            var li = t % l
+            var p = pos0 + li
+            for h in range(n_head):
+                var base = t * width + h * head_dim
+                for j in range(head_dim):
+                    if j >= rd:
+                        op.unsafe_store(base + j, ftz(src[base + j]))
+                        continue
+                    var ci: Int
+                    var rot: Float32
+                    if j < half:
+                        ci = j
+                        rot = -ftz(src[base + j + half])
+                    else:
+                        ci = j - half
+                        rot = ftz(src[base + j - half])
+                    var c = ftz(rope.cos[p * half + ci])
+                    var s = ftz(rope.sin[p * half + ci])
+                    var pa = ftz(identical_mul(ftz(src[base + j]), c))
+                    var pb = ftz(identical_mul(rot, s))
+                    op.unsafe_store(base + j, ftz(ftz(pa) + ftz(pb)))
+    if ntasks <= 1:
+        _tokens(0)
+    else:
+        host_parallelize(_tokens, ntasks)
+
+
+@always_inline
+def _visible_keys(own0: Int, window: Int, qi: Int, s: Int) -> Tuple[Int, Int]:
+    """The keys query `qi` attends to, `[jlo, jhi]` inclusive, the mask's
+    own rule read back: key `j` is visible when `key_lo + j <= p` and, under
+    a window, `key_lo + j > p - window`, with `p = pos0 + qi` and
+    `own0 = pos0 - key_lo`. `own0 < 0` means every key (the mask-free
+    callers). The range is never empty: key `own0 + qi` is always visible."""
+    if own0 < 0:
+        return (0, s - 1)
+    var jhi = own0 + qi
+    if jhi > s - 1:
+        jhi = s - 1
+    var jlo = 0
+    if window > 0:
+        jlo = own0 + qi - window + 1
+        if jlo < 0:
+            jlo = 0
+    return (jlo, jhi)
+
+
+@always_inline
+def span_add_scalar(src: List[Float32], sb: Int, n: Int, fill: Float32, mut dst: List[Float32], db: Int):
+    """`dst[db + j] = ftz(ftz(src[sb + j]) + fill)` for j < n, as lanes: one
+    plain add per cell, the same rounding on every lane as the scalar."""
+    if n <= 0:
+        return
+    var sp = src.unsafe_ptr()
+    var dp = dst.unsafe_ptr()
+    var fv = GhrF(fill)
+    var j = 0
+    while j + GHR_FW <= n:
+        dp.unsafe_store(db + j, ghr_ftz_lanes(ghr_ftz_lanes(sp.unsafe_load[width=GHR_FW](sb + j)) + fv))
+        j += GHR_FW
+    while j < n:
+        dp.unsafe_store(db + j, ftz(ftz(sp.unsafe_load(sb + j)) + fill))
+        j += 1
+
+
+#: Lanes of `head_dim` the 64-wide value-sum arm keeps in flight at once.
+comptime ATTN_VALUE_64 = 64 // GHR_FW
 
 
 def attn_value_sum_lanes(
@@ -1339,6 +1516,21 @@ def attn_value_sum_lanes(
     var op = out.unsafe_ptr()
     comptime G = 4 * GHR_FW
     var d = 0
+    # head_dim 64 (the byte LM's, the board's): every lane of the head in
+    # flight in ONE pass over the keys (lane neural-pass10) instead of four
+    # passes of four vectors; each lane's chain is the same statements in
+    # the same order.
+    if hd == 64:
+        var accs = InlineArray[GhrF, ATTN_VALUE_64](fill=GhrF(0.0))
+        for j in range(s):
+            var wv = GhrF(ftz(wp.unsafe_load(wbase + j)))
+            var row = vbase + j * hd
+            comptime for v in range(ATTN_VALUE_64):
+                accs[v] = ghr_ftz_lanes(identical_mul_add_simd[GHR_FW](
+                    wv, ghr_ftz_lanes(vp.unsafe_load[width=GHR_FW](row + v * GHR_FW)), accs[v]))
+        comptime for v in range(ATTN_VALUE_64):
+            op.unsafe_store(obase + v * GHR_FW, accs[v])
+        return
     while d + G <= hd:
         var a0 = GhrF(0.0)
         var a1 = GhrF(0.0)
@@ -1568,8 +1760,13 @@ def transformer_block_oracle(
     var key_lo = cache.key_lo(pos0)
     var s = s_abs - key_lo
     var window = cache.window
+    # This call's own first key index in the span (DEVIATION 807's `own0`
+    # in the backward): query `qi` sits at key `own0 + qi`.
+    var own0 = pos0 - key_lo
 
     st.input_x = x.copy()
+    var hton = host_block_timing_on()
+    var htk = Int(perf_counter_ns())
 
     # ---- S1-S4, input_layernorm (LDL:306, LRN:62-67) --------------------
     # LOCALS THEN ASSIGN, never `mut st.field` at a call site. A struct
@@ -1587,6 +1784,7 @@ def transformer_block_oracle(
     )
     st.norm1_sumsq = n1_sumsq^
     st.norm1_out = n1_out^
+    host_tick(hton, htk, "fwd.norm1")
 
     # ---- S5, q/k/v (LlamaAttention.forward :250-252) ---------------------
     # `nn.Linear` stores weight [out, in] and applies y = x @ W^T, which is
@@ -1605,6 +1803,7 @@ def transformer_block_oracle(
     st.q_proj_out = _oracle_product(st.norm1_out, w.w_q, m, qw, dm, int15)
     st.k_proj_out = _oracle_product(st.norm1_out, w.w_k, m, kw, dm, int15)
     st.v_proj_out = _oracle_product(st.norm1_out, w.w_v, m, kw, dm, int15)
+    host_tick(hton, htk, "fwd.qkv_proj")
     # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
     # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
     # the card keeps its thirty tags.
@@ -1666,6 +1865,7 @@ def transformer_block_oracle(
     apply_rope_into(st.k_proj_out, nkv, hd, b, l, pos0, rope, k_rope)
     st.q_rope_out = q_rope^
     st.k_rope_out = k_rope^
+    host_tick(hton, htk, "fwd.rope")
 
     # ---- the key span, BEFORE the append. A COPY. -----------------------
     # The stage `kv.k_cache` is `[B, n_kv, S, head_dim]`: the keys this
@@ -1673,38 +1873,68 @@ def transformer_block_oracle(
     # Positions before `pos0` come from the cache, this call's own from
     # `k_rope_out` / `v_proj_out`. Gathered BEFORE the append because, under
     # a window, this call's tokens may evict positions it still attends to.
-    for bb in range(b):
-        for kv in range(nkv):
-            for j in range(s):
-                var pos = key_lo + j
-                for d in range(hd):
-                    if pos < pos0:
-                        var ix = cache.slot(bb, kv, pos, d)
-                        st.kv_k_cache.append(cache.k[ix])
-                        st.kv_v_cache.append(cache.v[ix])
-                    else:
-                        var src = (bb * l + (pos - pos0)) * kw + kv * hd + d
-                        st.kv_k_cache.append(st.k_rope_out[src])
-                        st.kv_v_cache.append(st.v_proj_out[src])
+    st.kv_k_cache = host_f32_uninit(b * nkv * s * hd)
+    st.kv_v_cache = host_f32_uninit(b * nkv * s * hd)
+    # (batch, kv head, key) ROWS OVER HOST TASKS (lane neural-pass21): a
+    # copy, each cell read from one place and written to one place.
+    var kv_rows = b * nkv * s
+    var kvc_k = _hp(st.kv_k_cache)
+    var kvc_v = _hp(st.kv_v_cache)
+    var k_rope_p = _hp(st.k_rope_out)
+    var v_proj_p = _hp(st.v_proj_out)
+    var kv_split = _row_split(kv_rows, 2 * hd)
+    var kv_tasks = kv_split[0]
+    var kv_chunk = kv_split[1]
+    def _gather_rows(task: Int) {imm cache, imm kvc_k, imm kvc_v, imm k_rope_p, imm v_proj_p, imm kv_rows, imm nkv, imm s, imm hd, imm l, imm kw, imm key_lo, imm pos0, imm kv_chunk}:
+        for r in range(task * kv_chunk, min((task + 1) * kv_chunk, kv_rows)):
+            var j = r % s
+            var kv = (r // s) % nkv
+            var bb = r // (s * nkv)
+            var pos = key_lo + j
+            var dst = ((bb * nkv + kv) * s + j) * hd
+            for d in range(hd):
+                if pos < pos0:
+                    var ix = cache.slot(bb, kv, pos, d)
+                    kvc_k.unsafe_store(dst + d, cache.k[ix])
+                    kvc_v.unsafe_store(dst + d, cache.v[ix])
+                else:
+                    var src = (bb * l + (pos - pos0)) * kw + kv * hd + d
+                    kvc_k.unsafe_store(dst + d, k_rope_p.unsafe_load(src))
+                    kvc_v.unsafe_store(dst + d, v_proj_p.unsafe_load(src))
+    if kv_tasks <= 1:
+        _gather_rows(0)
+    else:
+        host_parallelize(_gather_rows, kv_tasks)
 
     # ---- the KV append (:261-262 past_key_values.update). A COPY. --------
     # In position order, so under a ring the highest position wins a slot.
-    for t in range(m):
-        var bb = t // l
-        var li = t % l
-        for kv in range(nkv):
-            for d in range(hd):
+    # (kv head, d) COLUMNS OVER HOST TASKS (lane neural-pass21), the tokens
+    # in position order inside each: a slot's cell (kv, d) is written by the
+    # one task that owns that column, in the same t order as before, so under
+    # a ring the highest position still wins it.
+    var cols = nkv * hd
+    var ck = _hp(cache.k)
+    var cv = _hp(cache.v)
+    var ap_split = _row_split(cols, 2 * m)
+    var ap_tasks = ap_split[0]
+    var ap_chunk = ap_split[1]
+    def _append_cols(task: Int) {imm cache, imm ck, imm cv, imm k_rope_p, imm v_proj_p, imm cols, imm m, imm l, imm nkv, imm hd, imm kw, imm pos0, imm ap_chunk}:
+        for col in range(task * ap_chunk, min((task + 1) * ap_chunk, cols)):
+            var kv = col // hd
+            var d = col % hd
+            for t in range(m):
+                var bb = t // l
+                var li = t % l
                 var src = t * kw + kv * hd + d
-                # The index is computed into a local FIRST. `cache.k[cache.slot(...)] = v`
-                # borrows `cache` immutably inside a mutable-borrow
-                # assignment to `cache.k`, and that is a borrow-checker
-                # argument this author cannot settle without a compiler.
                 var dst = cache.slot(bb, kv, pos0 + li, d)
-                var kbits = st.k_rope_out[src]
-                var vbits = st.v_proj_out[src]
-                cache.k[dst] = kbits
-                cache.v[dst] = vbits
+                ck.unsafe_store(dst, k_rope_p.unsafe_load(src))
+                cv.unsafe_store(dst, v_proj_p.unsafe_load(src))
+    if ap_tasks <= 1:
+        _append_cols(0)
+    else:
+        host_parallelize(_append_cols, ap_tasks)
     cache.used = s_abs
+    host_tick(hton, htk, "fwd.kv_gather")
 
     # ---- S11, S12: the scores (EAF:204) ---------------------------------
     # `torch.matmul(query, key_states.transpose(2, 3)) * scaling`.
@@ -1731,30 +1961,60 @@ def transformer_block_oracle(
     # naming the statement it equals). Every stage still completes over the
     # whole array before the next one reads it, so the plants land where they
     # did.
-    var scores = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
-    var masked = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var scores = host_f32_uninit(b * nh * l * s)
+    var masked = host_f32_uninit(b * nh * l * s)
     var amax = List[Float32](length=b * nh * l, fill=Float32(0.0))
-    var aexp = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var aexp = host_f32_uninit(b * nh * l * s)
     var adenom = List[Float32](length=b * nh * l, fill=Float32(0.0))
-    var aweights = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var aweights = host_f32_uninit(b * nh * l * s)
     var actx = List[Float32]()
 
     var scale = attention_scale(hd)
+    var q_rope_p = _hp(st.q_rope_out)
+    var kvk_p = _hp(st.kv_k_cache)
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var qmat = List[Float32]()
-            for qi in range(l):
-                for d in range(hd):
-                    qmat.append(st.q_rope_out[(bb * l + qi) * qw + h * hd + d])
-            var kmat = List[Float32]()
-            for j in range(s):
-                for d in range(hd):
-                    kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
+            # the head's query and key matrices, rows over tasks (lane
+            # neural-pass21): copies, one source cell to one destination
+            var qmat = host_f32_uninit(l * hd)
+            var kmat = host_f32_uninit(s * hd)
+            var qm_p = _hp(qmat)
+            var km_p = _hp(kmat)
+            var g_split = _row_split(l + s, hd)
+            var g_tasks = g_split[0]
+            var g_chunk = g_split[1]
+            def _gather(task: Int) {imm q_rope_p, imm kvk_p, imm qm_p, imm km_p, imm l, imm s, imm hd, imm qw, imm nkv, imm bb, imm h, imm kv, imm g_chunk}:
+                for r in range(task * g_chunk, min((task + 1) * g_chunk, l + s)):
+                    if r < l:
+                        var qi = r
+                        for d in range(hd):
+                            qm_p.unsafe_store(qi * hd + d, q_rope_p.unsafe_load((bb * l + qi) * qw + h * hd + d))
+                    else:
+                        var j = r - l
+                        for d in range(hd):
+                            km_p.unsafe_store(j * hd + d, kvk_p.unsafe_load(((bb * nkv + kv) * s + j) * hd + d))
+            if g_tasks <= 1:
+                _gather(0)
+            else:
+                host_parallelize(_gather, g_tasks)
             var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
             var sbase = (bb * nh + h) * l * s
             if not opts.has_softcap():
-                span_scale(cell, 0, l * s, scale, scores, sbase)
+                # the scale over query rows as spans (the same per-cell lane
+                # statement whichever task runs the row)
+                var sc_split = _row_split(l, s)
+                var sc_tasks = sc_split[0]
+                var sc_chunk = sc_split[1]
+                def _scale_rows(task: Int) {imm cell, mut scores, imm l, imm s, imm scale, imm sbase, imm sc_chunk}:
+                    var r0 = task * sc_chunk
+                    var r1 = min((task + 1) * sc_chunk, l)
+                    if r1 > r0:
+                        span_scale(cell, r0 * s, (r1 - r0) * s, scale, scores, sbase + r0 * s)
+                if sc_tasks <= 1:
+                    _scale_rows(0)
+                else:
+                    host_parallelize(_scale_rows, sc_tasks)
                 continue
             for qi in range(l):
                 for j in range(s):
@@ -1774,6 +2034,7 @@ def transformer_block_oracle(
                         sc = ftz(identical_mul(th, cap))
                     scores[sbase + qi * s + j] = sc
     _apply_plant(scores, plant, PLANT_AT_SCORES)
+    host_tick(hton, htk, "fwd.scores")
 
     # ---- S13: the additive causal mask (EAF:205-206) ---------------------
     # `attn_weights = attn_weights + attention_mask`, with the mask built at
@@ -1804,20 +2065,32 @@ def transformer_block_oracle(
     # Two spellings of one reduction in one file.
     var mfill = mask_fill()
     var ufill = unmasked_fill()
-    for bb in range(b):
-        for h in range(nh):
-            for qi in range(l):
-                var p = pos0 + qi
-                var base = ((bb * nh + h) * l + qi) * s
-                for j in range(s):
-                    var mv = ufill
-                    var pk = key_lo + j
-                    if pk > p:
-                        mv = mfill
-                    if window > 0 and pk <= p - window:
-                        mv = mfill
-                    masked[base + j] = ftz(ftz(scores[base + j]) + mv)
+    # ROWS OVER HOST TASKS (lane neural-pass7): a (batch, head, query) row's
+    # cells read that row of `scores` and the row's own position; the same
+    # statement per cell whichever task runs it.
+    var mrows = b * nh * l
+    var mtasks = host_row_tasks(mrows, 3 * s)
+    var mchunk = (mrows + mtasks - 1) // mtasks
+    # Each row is three spans (lane neural-pass12): the masked keys before
+    # the window, the visible keys, the masked keys after the query, each
+    # the same per-cell statement `ftz(ftz(score) + fill)` as lanes
+    # (`span_add_scalar`), the fill the one the per-cell test picked.
+    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm own0, imm window, imm mfill, imm ufill}:
+        for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
+            var qi = r % l
+            var base = r * s
+            var vis = _visible_keys(own0, window, qi, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
+            span_add_scalar(scores, base, jlo, mfill, masked, base)
+            span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill, masked, base + jlo)
+            span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill, masked, base + jhi + 1)
+    if mtasks <= 1:
+        _mask_rows(0)
+    else:
+        host_parallelize(_mask_rows, mtasks)
     _apply_plant(masked, plant, PLANT_AT_MASKED)
+    host_tick(hton, htk, "fwd.mask")
 
     # ---- S14 through S18: the softmax (EAF:208) --------------------------
     # `nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)`,
@@ -1838,9 +2111,24 @@ def transformer_block_oracle(
     var stasks = host_row_tasks(srows, s)
     var schunk = (srows + stasks - 1) // stasks
 
-    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm srows, imm schunk}:
+    # THE MASKED KEYS ARE SKIPPED, AND THAT IS THE CONTRACT'S OWN THEOREM
+    # (lane neural-pass10). A masked cell is exactly `-FLT_MAX` (contract
+    # 7.1: a finite score plus the mask fill rounds to the fill), so its
+    # exponential is exactly `+0.0` (the scalar's early return below
+    # -87.33655, `expf_lanes` the same on every bit pattern), its weight
+    # is `+0.0 / denom = +0.0`, and a `+0.0` term is bitwise inert in the
+    # `+0.0`-seeded serial ascending denominator chain (section 7.2's
+    # argument for decode == prefill, and the backward's `z` fold). So the
+    # exponential, the denominator and the weights run over the visible
+    # keys `[jlo, jhi]` only, and the masked cells are WRITTEN `+0.0`,
+    # which is the value the full walk stored. The row maximum stays over
+    # EVERY element of the row (contract 5.2).
+    def _softmax_rows(t: Int) {imm masked, mut amax, mut aexp, mut adenom, mut aweights, imm s, imm l, imm own0, imm window, imm srows, imm schunk}:
         for r in range(t * schunk, min((t + 1) * schunk, srows)):
             var base = r * s
+            var vis = _visible_keys(own0, window, r % l, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
 
             # S14, the row maximum, over EVERY element of the row
             # INCLUDING the masked ones (contract 5.2, and it is not
@@ -1884,7 +2172,13 @@ def transformer_block_oracle(
             # stops being a checklist.
             amax[r] = ftz(mx)
             # S15 and S16.
-            span_exp_shift(masked, base, s, mx, aexp, base)
+            for j in range(jlo):
+                aexp[base + j] = Float32(0.0)
+                aweights[base + j] = Float32(0.0)
+            for j in range(jhi + 1, s):
+                aexp[base + j] = Float32(0.0)
+                aweights[base + j] = Float32(0.0)
+            span_exp_shift(masked, base + jlo, jhi - jlo + 1, mx, aexp, base + jlo)
             # S17, the denominator: A SERIAL ASCENDING CHAIN over the
             # ABSOLUTE key index, seeded `+0.0`, plain adds. There is
             # nothing to fuse because `e[j]` is not a product.
@@ -1914,7 +2208,7 @@ def transformer_block_oracle(
             # what one thread will walk. This profile is reference
             # quality and slow by construction.
             var acc = Float32(0.0)
-            for j in range(s):
+            for j in range(jlo, jhi + 1):
                 acc = ftz(ftz(acc) + ftz(aexp[base + j]))
             acc = ftz(acc)
             adenom[r] = acc
@@ -1925,12 +2219,13 @@ def transformer_block_oracle(
             # multiplies by a reciprocal, which is evidence about MAX
             # and not about the reference. Sabotage `S18_RECIPROCAL_MUL`
             # must move `attn.weights`.
-            span_div(aexp, base, s, acc, aweights, base)
+            span_div(aexp, base + jlo, jhi - jlo + 1, acc, aweights, base + jlo)
 
     if stasks <= 1:
         _softmax_rows(0)
     else:
         host_parallelize(_softmax_rows, stasks)
+    host_tick(hton, htk, "fwd.softmax")
 
     # ---- S19: the attention-weighted value sum (EAF:210) -----------------
     # `torch.matmul(attn_weights, value_states)`.
@@ -1966,22 +2261,25 @@ def transformer_block_oracle(
     # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
     # same operands, j ascending from `+0.0`, one fused multiply-add and one
     # flush per step. `actx` is sized once; every cell is written.
-    actx = List[Float32](length=m * qw, fill=Float32(0.0))
+    actx = host_f32_uninit(m * qw)
     var vrows = b * nh * l
     var vtasks = host_row_tasks(vrows, s * hd)
     var vchunk = (vrows + vtasks - 1) // vtasks
     var vcache = st.kv_v_cache.copy()
 
-    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm vrows, imm vchunk}:
+    # The value sum over the visible keys only (the same theorem: a `+0.0`
+    # weight's fma term is inert in the `+0.0`-seeded chain, S19).
+    def _value_rows(t: Int) {imm aweights, imm vcache, mut actx, imm s, imm hd, imm qw, imm l, imm nh, imm nkv, imm n_rep, imm own0, imm window, imm vrows, imm vchunk}:
         for r in range(t * vchunk, min((t + 1) * vchunk, vrows)):
             var qi = r % l
             var h = (r // l) % nh
             var bb = r // (l * nh)
             var kv = h // n_rep
+            var vis = _visible_keys(own0, window, qi, s)
             attn_value_sum_lanes(
-                aweights, r * s,
-                vcache, (bb * nkv + kv) * s * hd,
-                actx, (bb * l + qi) * qw + h * hd, s, hd,
+                aweights, r * s + vis[0],
+                vcache, (bb * nkv + kv) * s * hd + vis[0] * hd,
+                actx, (bb * l + qi) * qw + h * hd, vis[1] - vis[0] + 1, hd,
             )
 
     if vtasks <= 1:
@@ -1989,6 +2287,7 @@ def transformer_block_oracle(
     else:
         host_parallelize(_value_rows, vtasks)
     _ = vcache^
+    host_tick(hton, htk, "fwd.value_sum")
 
     st.attn_scores = scores^
     st.attn_masked = masked^
@@ -2000,6 +2299,7 @@ def transformer_block_oracle(
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
     st.o_proj_out = _oracle_product(st.attn_ctx, w.w_o, m, dm, qw, int15)
+    host_tick(hton, htk, "fwd.o_proj")
     # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
     if opts.o_bias:
         var ob = st.o_proj_out.copy()
@@ -2010,8 +2310,8 @@ def transformer_block_oracle(
     # `hidden_states = residual + hidden_states`, where `residual` is the
     # BLOCK INPUT and not the normalized one (:305 captures it before :306
     # normalizes). One plain add of two already-rounded values.
-    for i in range(m * dm):
-        st.residual1_out.append(ftz(ftz(x[i]) + ftz(st.o_proj_out[i])))
+    st.residual1_out = host_f32_uninit(m * dm)
+    _span_add_par(x, st.o_proj_out, m * dm, st.residual1_out)
 
     # ---- S1-S4 again, post_attention_layernorm (LDL:321) -----------------
     var n2_sumsq = List[Float32]()
@@ -2022,6 +2322,7 @@ def transformer_block_oracle(
     )
     st.norm2_sumsq = n2_sumsq^
     st.norm2_out = n2_out^
+    host_tick(hton, htk, "fwd.residual1_norm2")
 
     # ---- S5, S20, S21, S5: the MLP (LMLP:174-176) ------------------------
     # `down_proj(act_fn(gate_proj(x)) * up_proj(x))` at the default record.
@@ -2048,6 +2349,7 @@ def transformer_block_oracle(
             add_bias_into(gb, w.b_gate, m, inter)
             st.gate_proj_out = gb^
     st.up_proj_out = _oracle_product(st.norm2_out, w.w_up, m, inter, dm, int15)
+    host_tick(hton, htk, "fwd.gate_up_proj")
     if opts.mlp_bias:
         var ub = st.up_proj_out.copy()
         add_bias_into(ub, w.b_up, m, inter)
@@ -2060,12 +2362,13 @@ def transformer_block_oracle(
     # `S20_SILU_MUL_SIGMOID` must move `silu.out`.
     if opts.act_is_silu():
         # CPU SPEED (lane neural-cpu): the statement below as lanes.
-        st.silu_out = List[Float32](length=m * inter, fill=Float32(0.0))
+        st.silu_out = host_f32_uninit(m * inter)
         if gated:
-            span_silu(st.gate_proj_out, 0, m * inter, st.silu_out, 0)
+            _span_silu_par(st.gate_proj_out, m * inter, st.silu_out)
         else:
-            span_silu(st.up_proj_out, 0, m * inter, st.silu_out, 0)
+            _span_silu_par(st.up_proj_out, m * inter, st.silu_out)
     var scalar_act = 0 if opts.act_is_silu() else m * inter
+    host_tick(hton, htk, "fwd.silu")
     for i in range(scalar_act):
         var z: Float32
         if gated:
@@ -2081,8 +2384,8 @@ def transformer_block_oracle(
 
     # S21: one product, so `pinned_mul`. Absent under an ungated MLP.
     if gated:
-        st.mlp_gated = List[Float32](length=m * inter, fill=Float32(0.0))
-        span_mul(st.silu_out, 0, st.up_proj_out, 0, m * inter, st.mlp_gated, 0)
+        st.mlp_gated = host_f32_uninit(m * inter)
+        _span_mul_par(st.silu_out, st.up_proj_out, m * inter, st.mlp_gated)
         st.down_proj_out = _oracle_product(st.mlp_gated, w.w_down, m, dm, inter, int15)
     else:
         st.down_proj_out = _oracle_product(st.silu_out, w.w_down, m, dm, inter, int15)
@@ -2092,8 +2395,9 @@ def transformer_block_oracle(
         st.down_proj_out = db^
 
     # ---- S23, the second residual (LDL:323) ------------------------------
-    st.residual2_out = List[Float32](length=m * dm, fill=Float32(0.0))
-    span_add(st.residual1_out, 0, st.down_proj_out, 0, m * dm, st.residual2_out, 0)
+    st.residual2_out = host_f32_uninit(m * dm)
+    _span_add_par(st.residual1_out, st.down_proj_out, m * dm, st.residual2_out)
+    host_tick(hton, htk, "fwd.down_proj_residual2")
 
     return st^
 

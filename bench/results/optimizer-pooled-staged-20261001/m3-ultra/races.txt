@@ -1,0 +1,3 @@
+pass26 sgd ms=111.030 digest=0743826898a3d479 
+pass26 adam ms=115.444 digest=04d59ea621486362 
+pass26 adamw ms=121.959 digest=a56b45e6a36856e6 

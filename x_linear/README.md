@@ -34,6 +34,12 @@ schedules are the speed work that follows.
 | 5008 | exp and log in the fits (`ops.fexp`, `flog`) | PIN: the portable spellings of checks/numerics.mojo |
 | 5009 | the CV alpha grid (`cd.alpha_grid_value`) | PIN: alpha_max * exp(frac * log eps) |
 
+## Algorithm differences that are not seams
+
+| DEVIATION | where | what |
+|---|---|---|
+| 5010 | `lars.mojo`, Lars (method lar) | When an active coefficient crosses zero, scikit-learn's lar method flips its `sign_active` entry and adds no feature on the next step. LAR keeps every active correlation's sign (only the coefficient changes sign), so the flip breaks the equiangular step and the path diverges: their own float64 Lars ends at train R2 -25 where least squares gives 0.93 on a 60 x 5 problem with every feature active, and at R2 below -1e20 on the bench board's Istella block. Ours lets the coefficient cross (plain LAR, Efron et al. 2004). LassoLars keeps the drop. Fits with no crossing are bit for bit unchanged. Check: `python -m mojolearn.tests.test_x_linear_sanity lars-crossing`. |
+
 Check: `tools/with_identical_mode.sh pixi run mojo run -I . x_linear/checks/seams_check.mojo`
 (oracle `x_linear/checks/seams_oracle.mojo`; each seam's fixture must separate
 its pinned spelling from the unpinned one first). Sabotage arms:

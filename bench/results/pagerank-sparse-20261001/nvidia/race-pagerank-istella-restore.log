@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"alpha": 0.85, "max_iter": 100, "seed": "none (deterministic)", "tol": 1e-06}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/pagerank", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=pagerank dataset=istella arm=ours round=0 ms=2193.673 infer_ms=None digest=7eb6c05c6a688609
+ALGOS-ROUND lane=pagerank dataset=istella arm=ours round=1 ms=1358.676 infer_ms=None digest=7eb6c05c6a688609
+ALGOS-ROUND lane=pagerank dataset=istella arm=ours round=2 ms=1361.195 infer_ms=None digest=7eb6c05c6a688609
+ALGOS-ROUND lane=pagerank dataset=istella arm=ours round=3 ms=1223.353 infer_ms=None digest=7eb6c05c6a688609
+ALGOS lane=pagerank dataset=istella arm=ours status=ok median_ms=1358.6757481098175 quality={"sum": 1.0000000375148375}

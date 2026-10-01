@@ -34,6 +34,22 @@ def sha(*arrays):
     return h.hexdigest()
 
 
+def host_independent_xw(X, w):
+    """X @ w as the SAME bits on every host: float64 elementwise IEEE
+    operations over the columns, j ascending, no BLAS. `X @ w` (sgemv)
+    gives bits that depend on the OpenBLAS kernel and on its THREAD COUNT
+    (the row split moves the kernel's blocking): on the 20-vCPU MI325X box,
+    OPENBLAS_NUM_THREADS 3, 6, 7, 12, 16, 32 and 48 each gave a different y
+    at 20000 rows, and a 64-CPU view reproduced the L4 pod's SGD-reg and
+    LARS digests exactly (bench/results/host-cpu-identity-20260930). The
+    library was never host-dependent; the harness's y was."""
+    import numpy as np
+    acc = np.zeros(X.shape[0], np.float64)
+    for j in range(X.shape[1]):
+        acc = acc + X[:, j].astype(np.float64) * float(w[j])
+    return acc
+
+
 def run_case(name, n):
     import numpy as np
     import mojolearn as ml
@@ -51,7 +67,8 @@ def run_case(name, n):
         return {"ms": ms, "digest": sha(lu, piv, x), "quality": {"rel_residual": res}}
     X = rng.standard_normal((n, D)).astype(np.float32)
     w = rng.standard_normal(D).astype(np.float32)
-    y = (X @ w + 0.1 * rng.standard_normal(n)).astype(np.float32)
+    y = (host_independent_xw(X, w) + 0.1 * rng.standard_normal(n)).astype(np.float32)
+    inputs = sha(X, y)
     if name in ("sgd-reg", "sgd-clf"):
         kw = dict(penalty="l2", alpha=1e-4, max_iter=100, tol=None, shuffle=True, random_state=7,
                   learning_rate="constant", eta0=0.005, numeric_mode="identical")
@@ -60,12 +77,12 @@ def run_case(name, n):
         else:
             est = ml.SGDClassifier(loss="hinge", **kw); y = (y > 0).astype(np.int32)
         t = time.perf_counter(); est.fit(X, y); ms = (time.perf_counter() - t) * 1000
-        return {"ms": ms, "digest": sha(est.coef_, est.intercept_),
+        return {"ms": ms, "digest": sha(est.coef_, est.intercept_), "inputs": inputs,
                 "quality": {"score": float(est.score(X[:20000], y[:20000]))}}
     if name == "lars":
         est = ml.Lars(n_nonzero_coefs=500, fit_intercept=True, random_state=7, numeric_mode="identical")
         t = time.perf_counter(); est.fit(X, y); ms = (time.perf_counter() - t) * 1000
-        return {"ms": ms, "digest": sha(est.coef_, est.intercept_),
+        return {"ms": ms, "digest": sha(est.coef_, est.intercept_), "inputs": inputs,
                 "quality": {"score": float(est.score(X[:20000], y[:20000]))}}
     if name == "ivf":
         q = rng.standard_normal((n // 100, D)).astype(np.float32)
@@ -73,7 +90,7 @@ def run_case(name, n):
                           metric="sqeuclidean", random_state=7, numeric_mode="identical")
         t = time.perf_counter(); idx.fit(X); out = idx.search(q); ms = (time.perf_counter() - t) * 1000
         dist, ind = (out if isinstance(out, tuple) else (out, None))
-        return {"ms": ms, "digest": sha(dist, ind) if ind is not None else sha(dist)}
+        return {"ms": ms, "digest": sha(dist, ind) if ind is not None else sha(dist), "inputs": sha(X, q)}
     raise SystemExit("unknown case " + name)
 
 

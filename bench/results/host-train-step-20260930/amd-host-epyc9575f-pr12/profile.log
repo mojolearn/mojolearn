@@ -1,0 +1,46 @@
+Imported from /root/mojolearn-pass7/tools/byte_lm_host_step_profile.mojo:49:
+Imported from ./training/loss_host_rows.mojo:40:
+/root/mojolearn-pass7/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-pass7/tools/byte_lm_host_step_profile.mojo:49:
+Imported from ./training/loss_host_rows.mojo:40:
+/root/mojolearn-pass7/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-pass7/tools/byte_lm_host_step_profile.mojo:49:
+Imported from ./training/loss_host_rows.mojo:40:
+/root/mojolearn-pass7/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Included from /root/mojolearn-pass7/tools/byte_lm_host_step_profile.mojo:52:
+Included from /root/mojolearn-pass7/./transformer/checks/transformer_backward_oracle.mojo:162:
+/root/mojolearn-pass7/./transformer/checks/transformer_oracle.mojo:1743:29: warning: assignment to 'actx' was never used; assign to '_' instead?
+    var actx = List[Float32]()
+                            ^
+profile shape batch 1 length 512 d_model 384 layers 8 vocab 8192 n_total 20453376
+profile loss 9.01091
+profile emb_forward 5.119861
+profile block_weights_fwd 40.184168
+profile blocks_forward 221.139737
+profile head_gemm 13.837055
+profile ce_forward 77.346292
+profile ce_backward 50.56109
+profile ce_rows 17.811618
+profile head_bwd_dA 9.196413
+profile head_bwd_dB 6.828008
+profile blocks_backward 301.419315
+profile blocks_pack 27.376511
+profile emb_backward 5.347601
+profile grad_pack 27.308101
+profile optimizer_copies 53.405645
+profile optimizer_step 979.943436
+profile stages_sum 1847.806742
+profile optimizer_rows 71.080334
+profile total 684.015872

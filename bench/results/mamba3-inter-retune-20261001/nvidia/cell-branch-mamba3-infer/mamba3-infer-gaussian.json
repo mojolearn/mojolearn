@@ -1,0 +1,208 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/torchvenv/bin/python",
+        "/root/mojolearn-pass25/tools/bench_board_neural.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "mamba3-infer",
+        "--shape",
+        "full",
+        "--data",
+        "/root/pr29-nvidia/work/neural-mamba3-infer-full.npz"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "1b972178883b8734",
+        "1b972178883b8734",
+        "1b972178883b8734",
+        "1b972178883b8734",
+        "1b972178883b8734",
+        "1b972178883b8734"
+      ],
+      "info": {
+        "call": "mojolearn.Mamba3BlockInference(weights).forward(x) (CPU host binding)",
+        "cls": "Mamba3BlockInference",
+        "device": "cpu",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/mojolearn-pass25/python/mojolearn/neural_inference.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "cpu",
+        "version": "0.8.32"
+      },
+      "median_ms": 28.40189076960087,
+      "mem": [
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 103.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 135.8,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 139.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 140.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 158.9,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 2.0,
+          "gpu_mb": null,
+          "gpu_method": "cpu arm: no device memory",
+          "host_mb": 148.6,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        38.93998824059963,
+        24.88824352622032,
+        28.40189076960087,
+        29.72542867064476,
+        23.926537483930588
+      ],
+      "params_record": {
+        "__library__": "mojolearn"
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "host inputs to the device, the call, the result back on the host, synchronized",
+        "pre_clock_fit": false
+      },
+      "status": "ok",
+      "warmup_ms": 43.1634820997715
+    }
+  },
+  "commit": "unknown",
+  "dataset": "gaussian",
+  "finished": "2026-10-01T03:54:40Z",
+  "inputs": {
+    "inputs": "every tensor default_rng(7).uniform over mamba/corpus/gen_corpus.py's default range for it",
+    "lane": "mamba3-infer",
+    "ranges": {
+      "B_bias": [
+        0.5,
+        1.5
+      ],
+      "B_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "C_bias": [
+        0.5,
+        1.5
+      ],
+      "C_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "D": [
+        0.5,
+        1.5
+      ],
+      "block_norm.weight": [
+        0.5,
+        1.5
+      ],
+      "dt_bias": [
+        -7.0,
+        -2.0
+      ],
+      "in_proj.weight": [
+        -0.015625,
+        0.015625
+      ],
+      "out_proj.weight": [
+        -0.015625,
+        0.015625
+      ]
+    },
+    "seed": 7,
+    "sha256": {
+      "w:B_bias": "a9a8b062450ae62b",
+      "w:B_norm.weight": "55dfd3959b1522d0",
+      "w:C_bias": "0ca29b45b693f9ff",
+      "w:C_norm.weight": "63ee77435d78b3ce",
+      "w:D": "9109c3392c57e588",
+      "w:block_norm.weight": "cb75423c968fcd4f",
+      "w:dt_bias": "503ad1ebfc1aea36",
+      "w:in_proj.weight": "0bd52bf63f4c3018",
+      "w:out_proj.weight": "7806c30fb277c3d2",
+      "x": "8c25b3ca135c317e"
+    },
+    "shape": {
+      "batch": 1,
+      "d_model": 384,
+      "label": "B1 L512 DM384",
+      "length": 512,
+      "name": "full"
+    },
+    "steps": 6
+  },
+  "lane": "mamba3-infer",
+  "ours_device": "cpu",
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "neural",
+    "lane": "neural/mamba3-infer",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {}
+  },
+  "rounds_requested": 5,
+  "script": "tools/bench_board_neural.py",
+  "shape": "B1 L512 DM384",
+  "shape_record": {
+    "batch": 1,
+    "d_model": 384,
+    "label": "B1 L512 DM384",
+    "length": 512,
+    "name": "full"
+  },
+  "started": "2026-10-01T03:54:40Z",
+  "torch_settings": {}
+}

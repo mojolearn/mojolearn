@@ -1,0 +1,4 @@
+✨ Pixi task (check-mamba3-corpus in default): python tools/mamba_corpus_check.py mamba/corpus/mamba3/m3_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6
+usage: mamba_corpus_check.py [-h] [--rtol RTOL] [--atol ATOL] [--self-test]
+                             case_dir [dump_dir]
+mamba_corpus_check.py: error: dump_dir is required unless --self-test

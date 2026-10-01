@@ -1,0 +1,55 @@
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+./xtrees/api.mojo:512:48: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
+                            ~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+./xtrees/api.mojo:512:112: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        platt_apply_strided(f64_ptr(Int(py=f)) + fo, fs, n, _f(params, 1), _f(params, 2), f64_ptr(Int(py=res)) + ro, rs)
+                                                                                          ~~~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+./xtrees/api.mojo:532:98: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        isotonic_predict_strided(f64_ptr(Int(py=kx)), f64_ptr(Int(py=ky)), m, f64_ptr(Int(py=t)) + to, ts, n,
+                                                                              ~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+./xtrees/api.mojo:533:55: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                                 f64_ptr(Int(py=res)) + ro, rs)
+                                 ~~~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+Imported from ./xtrees/api.mojo:16:
+./xtrees/ops.mojo:610:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    bp[0] = Int32(1)
+                    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+Imported from ./xtrees/api.mojo:16:
+Imported from ./xtrees/ops.mojo:37:
+/root/mojolearn-pass31/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+Imported from ./xtrees/api.mojo:16:
+Imported from ./xtrees/ops.mojo:37:
+/root/mojolearn-pass31/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+Imported from ./xtrees/api.mojo:16:
+Imported from ./xtrees/ops.mojo:37:
+/root/mojolearn-pass31/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Included from /root/mojolearn-pass31/bindings/_mojolearn_x_trees.mojo:12:
+./xtrees/api.mojo:299:9: warning: unreachable code after raise statement
+        if k < 2:
+        ^
+built python/mojolearn/identical/_mojolearn_x_trees.so

@@ -31,9 +31,8 @@ from checks.kernel_matrix import (
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
-from core.pinned_reduce import pinned_block_sum
+from core.pinned_reduce import pinned_block_sum, pinned_block_prefix_sum
 from checks.numerics import ftz, identical_mul_add
-from max.gpu.primitives.block import prefix_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 
@@ -209,7 +208,7 @@ def scan_chunk_offsets_kernel(
         sum += totals.unsafe_load(i)
         i += 1
 
-    var offset = prefix_sum[block_size=PLUS_PLUS_TPB, exclusive=True](sum)
+    var offset = pinned_block_prefix_sum[PLUS_PLUS_TPB, exclusive=True](sum)
 
     var running = offset
     i = begin
@@ -253,7 +252,7 @@ def write_inclusive_scan_kernel(
         var v = Float32(0.0)
         if i < n and c0 + tid < chunk:
             v = a.unsafe_load(i)
-        var inc = prefix_sum[block_size=PLUS_PLUS_TPB](v)
+        var inc = pinned_block_prefix_sum[PLUS_PLUS_TPB](v)
         if i < n and c0 + tid < chunk:
             csum.unsafe_store(i, base + carry[0] + inc)
         barrier()

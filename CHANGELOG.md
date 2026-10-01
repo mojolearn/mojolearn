@@ -4,10 +4,15 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
-## 0.8.32 (published 2026-09-30)
+- Fix Lars (DEVIATION 5010): an active coefficient that crosses zero no longer flips its sign in the equiangular step. That flip came from scikit-learn's lar method, and it makes the path diverge. On the bench board's Istella regression cell, held-out R2 goes from -1.36 to 0.309 (least squares 0.330). scikit-learn's own Lars scores -4e13 on that cell. Lars fits without a crossing, and every LassoLars fit, keep the same bits.
+
+## 0.8.32 (published 2026-10-01)
 
 - Ship merged main: KernelPCA GPU top-k Lanczos on by default in scope (exact dense path otherwise), ordered-boosting speed with the Apple 256-thread histogram cap, the GBDT split-score fix (gradients snapped onto the histogram's fixed-point grid), the fused small-MLP training step, and the strides, S16 and priority passes on the neural kernels.
-- Reuse completed checks on merged main and unchanged native binaries. No fresh numerical verification or installed wheel smoke is run for this release.
+- Ship neural pass 4 (PR #8): optimizer moments stay resident on the device between steps for AdamW, Adam and SGD (every byte equal to the per-step route on NVIDIA and AMD). The Mamba-3 S16 arm defaults to regs2 on AMD and regs elsewhere, same bits.
+- Ship the byte LM CPU inference token split (PR #10) and the CPU training step over host tasks (PR #11, #12), same bits as before.
+- AMD MI325X checks of the 2026-09-30 merges are in bench/results/amd-verify-20260930. They found three differences that the released 0.8.31 wheel has too: SGD with regularization and LARS at 200k rows follow the host CPU model (not the GPU vendor), and IVF at 40k rows differs on the AMD GPU. These are not fixed in this release.
+- Reuse completed checks on merged main. No fresh numerical verification or installed wheel smoke is run for this release.
 
 ## 0.8.31 (published 2026-09-29)
 

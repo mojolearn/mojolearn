@@ -307,7 +307,7 @@ def main() raises:
         if not total_only:
             _profile_once(params, m_state, v_state, ids, config, walls)
         var t0 = perf_counter_ns()
-        var step = byte_host_train_step(params, m_state, v_state, ids, config, opt, 0)
+        var step = byte_host_train_step(params.copy(), m_state.copy(), v_state.copy(), ids, config, opt, 0)
         var t1 = perf_counter_ns()
         walls.add("total", t1 - t0)
         print("profile loss", step.loss)

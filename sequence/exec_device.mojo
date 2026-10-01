@@ -5,15 +5,17 @@ over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
 from std.ffi import _Global
 from std.memory import bitcast
 from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
 from std.memory import memcpy
 from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
+from sequence.moe_tiled import MOE_TPB, moe_combine_kernel, moe_hidden_tiled_kernel, moe_out_tiled_kernel
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
-from sequence.ops import FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
+from sequence.ops import OP_MOE_OUT, OP_MOE_HIDDEN, FP, Args, OP_AF_ALPHA, OP_AF_DENOM, OP_GEMM, OP_LAMB_RATIO, OP_SEG_SUMSQ
 from sequence.coop import COOP_W, apply_coop
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -77,6 +79,11 @@ def _flo(w: Int64) -> Float32:
 @always_inline
 def _fhi(w: Int64) -> Float32:
     return bitcast[DType.float32](UInt32((w >> 32) & 0xFFFFFFFF))
+
+
+
+def _moe_tiled_on() -> Bool:
+    return String(getenv("MOJOLEARN_SEQ_MOE_TILED")) != "0"
 
 
 def seq_kernel[OP: Int](
@@ -253,6 +260,30 @@ struct DeviceExec(Exec):
         for v in [a.i0, a.i1, a.i2, a.i3, a.i4, a.i5, a.i6, a.i7, a.i8, a.i9, a.i10, a.i11]:
             if v > I32_MAX or v < -I32_MAX - 1:
                 raise Error("sequence DeviceExec: an integer argument does not fit Int32 (" + String(v) + ")")
+        # The MoE products as tiled kernels with the items' chains (lane
+        # neural-pass29, sequence/moe_tiled.mojo) when the entry grouped the
+        # pairs by expert (a.i4 = the block count); MOJOLEARN_SEQ_MOE_TILED=0
+        # keeps the one-thread-per-cell items.
+        comptime if OP == OP_MOE_HIDDEN:
+            if a.i4 > 0 and _moe_tiled_on():
+                self.ctx.enqueue_function[moe_hidden_tiled_kernel](
+                    a.p0, a.p1, a.p4, a.p5, a.p6, a.p3,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),
+                    grid_dim=(a.i4, 1, 1), block_dim=(MOE_TPB, 1, 1),
+                )
+                return
+        comptime if OP == OP_MOE_OUT:
+            if a.i4 > 0 and _moe_tiled_on():
+                self.ctx.enqueue_function[moe_out_tiled_kernel](
+                    a.p0, a.p1, a.p6, a.p7, a.p8, a.p5,
+                    Int32(a.i0), Int32(a.i1), Int32(a.i2), Int32(a.i3), Int32(a.i5),
+                    grid_dim=(a.i4, 1, 1), block_dim=(MOE_TPB, 1, 1),
+                )
+                self.ctx.enqueue_function[moe_combine_kernel](
+                    a.p3, a.p5, a.p4, Int32(a.i0), Int32(a.i2), Int32(n),
+                    grid_dim=((n + TPB - 1) // TPB, 1, 1), block_dim=(TPB, 1, 1),
+                )
+                return
         comptime if SEQ_COOP and (OP == OP_AF_ALPHA or OP == OP_AF_DENOM or OP == OP_SEG_SUMSQ
                                   or OP == OP_LAMB_RATIO or OP == OP_GEMM):
             var coop = True

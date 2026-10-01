@@ -17,12 +17,15 @@ arithmetic. A caller compiled in another tier must keep the scalar seam
 (`lanes_are_identical` says which).
 """
 
-from std.math import floor, fma, max, min
-from std.memory import bitcast
+from std.math import abs, floor, fma, max, min
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.info import simd_width_of
 
+from std.os import getenv
 from std.sys import llvm_intrinsic
+from std.time import perf_counter_ns
 
+from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count
 
 from checks.numerics import (
@@ -109,6 +112,67 @@ def expf_lanes(x: F32V) -> F32V:
     y = under.select(F32V(0.0), y)
     y = over.select(bitcast[DType.float32](U32V(0x7F800000)), y)
     return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x), bitcast[DType.uint32](y)))
+
+
+@always_inline
+def div_lanes(a: F32V, b: F32V) -> F32V:
+    """`checks/numerics.mojo::portable_divf` on every lane:
+    `_ftz_always(_ftz_always(a) / _ftz_always(b))`, the flushes `ftz_lanes`
+    (the same map on every bit pattern) around one correctly rounded
+    division. `silu_lanes`' quotient is this spelling; `span_div` too."""
+    return ftz_lanes(ftz_lanes(a) / ftz_lanes(b))
+
+
+@always_inline
+def sqrt_lanes(x_in: F32V) -> F32V:
+    """`checks/numerics.mojo::portable_sqrtf` on every lane: the same seed,
+    the same three Newton steps through `pinned_mul_lanes`, the same five
+    candidates and fma residuals in the same order, the same 2^64 / 2^-32
+    scaling of inputs below 2^-96, with the scalar's four early returns
+    (NaN as is, +-0 and subnormals to +0.0, negatives to the quiet NaN
+    0x7FC00000, +inf as is) applied last as masks in the scalar's priority.
+    Special lanes run the arithmetic on 1.0, so no lane divides by zero.
+    `training/checks/host_lanes_sqrt_check.mojo` compares this with the
+    scalar over all 2^32 bit patterns."""
+    var nan = _nan_bits(x_in)
+    var tiny = abs(x_in).lt(F32V(1.1754943508222875e-38))
+    var neg = x_in.lt(F32V(0.0))
+    var inf = x_in.eq(bitcast[DType.float32](U32V(0x7F800000)))
+    var x = (nan | tiny | neg | inf).select(F32V(1.0), x_in)
+    var small = x.lt(bitcast[DType.float32](U32V(0x0F800000)))
+    x = small.select(x * bitcast[DType.float32](U32V(0x5F800000)), x)
+    var bits = bitcast[DType.uint32](x)
+    var y = bitcast[DType.float32]((bits >> U32V(1)) + U32V(0x1FBD1DF5))
+    y = pinned_mul_lanes(F32V(0.5), y + x / y)
+    y = pinned_mul_lanes(F32V(0.5), y + x / y)
+    y = pinned_mul_lanes(F32V(0.5), y + x / y)
+    var yb = bitcast[DType.uint32](y)
+    var best = y
+    var r_best = abs(fma(-y, y, x))
+    var c0 = bitcast[DType.float32](yb - U32V(1))
+    var r0 = abs(fma(-c0, c0, x))
+    var b0 = r0.lt(r_best)
+    best = b0.select(c0, best)
+    r_best = b0.select(r0, r_best)
+    var c1 = bitcast[DType.float32](yb + U32V(1))
+    var r1 = abs(fma(-c1, c1, x))
+    var b1 = r1.lt(r_best)
+    best = b1.select(c1, best)
+    r_best = b1.select(r1, r_best)
+    var c2 = bitcast[DType.float32](yb - U32V(2))
+    var r2 = abs(fma(-c2, c2, x))
+    var b2 = r2.lt(r_best)
+    best = b2.select(c2, best)
+    r_best = b2.select(r2, r_best)
+    var c3 = bitcast[DType.float32](yb + U32V(2))
+    var r3 = abs(fma(-c3, c3, x))
+    var b3 = r3.lt(r_best)
+    best = b3.select(c3, best)
+    best = small.select(best * bitcast[DType.float32](U32V(0x2F800000)), best)
+    var out = inf.select(bitcast[DType.float32](U32V(0x7F800000)), best)
+    out = neg.select(bitcast[DType.float32](U32V(0x7FC00000)), out)
+    out = tiny.select(F32V(0.0), out)
+    return bitcast[DType.float32](nan.select(bitcast[DType.uint32](x_in), bitcast[DType.uint32](out)))
 
 
 @always_inline
@@ -297,6 +361,64 @@ def span_add(a: List[Float32], ab: Int, b: List[Float32], bb: Int, n: Int, mut d
     while j < n:
         dp.unsafe_store(db + j, ftz(ftz(ap.unsafe_load(ab + j)) + ftz(bp.unsafe_load(bb + j))))
         j += 1
+
+
+def host_f32_uninit(n: Int) -> List[Float32]:
+    """A float32 list of `n` elements whose every element the caller writes
+    before reading (lane neural-pass8): no fill, so the page-touching memset
+    of a `List(length=n, fill=0.0)` is paid once by the writes instead of
+    twice. Not for a list any element of which could be read unwritten."""
+    var out = List[Float32]()
+    if n > 0:
+        out.resize(unsafe_uninit_length=n)
+    return out^
+
+
+#: Floats below which a copy is one memcpy on the calling thread.
+comptime HOST_COPY_TASK_MIN = 1 << 20
+
+
+#: The pointer the copy below takes; a list's pointer is `rebind`ed to it.
+comptime HostF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
+    """`memcpy` of `n` floats, in chunks over host tasks when `n` is large
+    (lane neural-pass8): a copy moves no bit, so the task count is a
+    schedule knob. The 80 MB registry copies of the byte LM host step took
+    a fifth of its wall on one thread of a 64-core host."""
+    if n <= 0:
+        return
+    var tasks = 1
+    if n >= 2 * HOST_COPY_TASK_MIN:
+        tasks = max(1, min(host_predict_task_count(n // HOST_COPY_TASK_MIN), n // HOST_COPY_TASK_MIN))
+    if tasks <= 1:
+        unsafe_memcpy(dest=dst, src=src, count=n)
+        return
+    var chunk = (n + tasks - 1) // tasks
+    def _copy(t: Int) {imm dst, imm src, imm n, imm chunk}:
+        var lo = t * chunk
+        var hi = min(lo + chunk, n)
+        if hi > lo:
+            unsafe_memcpy(dest=dst.unsafe_offset(lo), src=src.unsafe_offset(lo), count=hi - lo)
+    host_parallelize(_copy, tasks)
+
+
+def host_block_timing_on() -> Bool:
+    """MOJOLEARN_HOST_BLOCK_TIMING set: the block oracles print a wall per
+    stage (`timing hblk.<stage> <ms> ms`, lane neural-pass8), the host twin
+    of MOJOLEARN_MAMBA_TIMING. Off, nothing is read or printed."""
+    return String(getenv("MOJOLEARN_HOST_BLOCK_TIMING")) != ""
+
+
+def host_tick(on: Bool, mut t: Int, name: StaticString):
+    """Print `timing hblk.<name> <ms> ms` since `t` and advance `t`; a no-op
+    when `on` is False. Timing only: it computes no value."""
+    if not on:
+        return
+    var now = Int(perf_counter_ns())
+    print("timing hblk." + String(name) + " " + String(Float64(now - t) / 1000000.0) + " ms")
+    t = now
 
 
 #: Scalar operations below which a row split is not worth a thread fork.
