@@ -20,7 +20,6 @@ from decomposition.impl.linalg.detail.svd_full import svd_of_r
 from decomposition.linalg_public_device import device_eigh, device_qr_r
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, identical_mul, identical_mul_add
 from x_decomp.cells import (
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
     lu_solve_col,
     div0,
     sqrt0,
@@ -81,6 +80,7 @@ from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
     pdist_cell,
     sqdist_cell,
 )
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (

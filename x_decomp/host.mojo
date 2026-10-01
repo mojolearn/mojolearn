@@ -20,7 +20,6 @@ from decomposition.host.pca_oracle import host_sign_flip
 from checks.numerics import ftz
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from x_decomp.cells import (
-from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
     F32Ptr,
     absmax_sign_cell,
     FOLD_BLOCK,
@@ -46,6 +45,7 @@ from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
     rand_cell,
     pdist_cell,
 )
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 from x_decomp.exec_trait import Exec
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
