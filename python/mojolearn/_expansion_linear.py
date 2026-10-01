@@ -1248,26 +1248,23 @@ class IsotonicRegression(NumericModeMixin):
     def fit(self, X, y, sample_weight=None):
         if self.out_of_bounds not in ("nan", "clip", "raise"):
             raise ValueError("mojolearn IsotonicRegression: out_of_bounds must be 'nan', 'clip' or 'raise'")
-        xs = _column(X).tolist()
-        n = len(xs)
-        ys = _vector(y, n).tolist()
-        ws = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
+        # lane/neural-pass70 (2026-10-01): no lists and no Python sort; the
+        # binding sorts the positive-weight rows by (x, y, row) itself
+        xa = _column(X)
+        n = xa.shape[0]
+        yv = _vector(y, n)
         if self.increasing == "auto":
-            self.increasing_ = _spearman_sign(xs, ys) >= 0
+            self.increasing_ = _spearman_sign(xa.tolist(), yv.tolist()) >= 0
         else:
             self.increasing_ = bool(self.increasing)
-        keep = [i for i in range(n) if ws[i] > 0]
-        order = sorted(keep, key=lambda i: (xs[i], ys[i]))
-        m = len(order)
-        xa = Array.from_list([[xs[i]] for i in order], "<f4")
-        yy = Array.from_list([ys[i] for i in order] + [ws[i] for i in order], "<f4")
-        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None)]
+        yy, has_w = _with_weights(yv, sample_weight, n)
+        ip = [int(self.increasing_), int(self.y_min is not None), int(self.y_max is not None), int(has_w)]
         fp = [0.0 if self.y_min is None else self.y_min, 0.0 if self.y_max is None else self.y_max]
-        vals = _run(self, ALGO_ISOTONIC, xa, m, 1, yy, ip, fp, 3 + 2 * m, 3 * m, m)
+        vals = _run(self, ALGO_ISOTONIC, xa, n, 1, yy, ip, fp, 3 + 2 * n, 6 * n, 3 * n)
         k = int(vals[0])
         self.X_min_, self.X_max_ = float(vals[1]), float(vals[2])
         self.X_thresholds_ = Array.from_list(vals[3:3 + k], "<f4")
-        self.y_thresholds_ = Array.from_list(vals[3 + m:3 + m + k], "<f4")
+        self.y_thresholds_ = Array.from_list(vals[3 + n:3 + n + k], "<f4")
         self.n_features_in_ = 1
         return self
 
