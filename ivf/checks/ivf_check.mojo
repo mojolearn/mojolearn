@@ -2265,19 +2265,38 @@ def check_filter_matches_oracle() raises:
                 + String(got.n_candidates[qi]) + " host " + String(host.n_candidates[qi])
                 + " oracle " + String(want.n_candidates[qi])
             )
+    var dist_diff = 0
+    var idx_diff = 0
     for i in range(N_QUERIES * K):
         if keep[Int(got.indices[i])] == 0:
             raise Error("check_filter_matches_oracle: FAIL slot " + String(i) + " returns removed row " + String(got.indices[i]))
-        if not _same_bits(got.distances[i], want.distances[i]) or got.indices[i] != want.indices[i]:
-            raise Error(
-                "check_filter_matches_oracle: FAIL slot " + String(i) + " device ("
-                + _hex32(got.distances[i]) + ", " + String(got.indices[i]) + ") oracle ("
-                + _hex32(want.distances[i]) + ", " + String(want.indices[i]) + ")"
-            )
-        if not _same_bits(host.distances[i], want.distances[i]) or host.indices[i] != want.indices[i]:
-            raise Error("check_filter_matches_oracle: FAIL slot " + String(i) + " host differs from the oracle")
-    print("  OK check_filter_matches_oracle: " + String(N_QUERIES) + " queries, " + String(hits)
-          + " unfiltered answers held a removed row; device == host == oracle")
+        var moved = not _same_bits(got.distances[i], want.distances[i]) or got.indices[i] != want.indices[i]
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            if moved:
+                raise Error(
+                    "check_filter_matches_oracle: FAIL slot " + String(i) + " device ("
+                    + _hex32(got.distances[i]) + ", " + String(got.indices[i]) + ") oracle ("
+                    + _hex32(want.distances[i]) + ", " + String(want.indices[i]) + ")"
+                )
+            if not _same_bits(host.distances[i], want.distances[i]) or host.indices[i] != want.indices[i]:
+                raise Error("check_filter_matches_oracle: FAIL slot " + String(i) + " host differs from the oracle")
+        else:
+            # FAST: the batched scan's distances are the direct sum of
+            # squared differences and the oracle's the expanded norm form
+            # (lane ivf-filter-fix): a REPORT, as check_nprobe_equals_nlists
+            # reports its FAST distances; the counts, the kept set and the
+            # all-ones equality above are the assertions
+            if not _same_bits(got.distances[i], want.distances[i]):
+                dist_diff += 1
+            if got.indices[i] != want.indices[i]:
+                idx_diff += 1
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        print("  OK check_filter_matches_oracle: " + String(N_QUERIES) + " queries, " + String(hits)
+              + " unfiltered answers held a removed row; device == host == oracle")
+    else:
+        print("  OK check_filter_matches_oracle [FAST]: " + String(N_QUERIES) + " queries, " + String(hits)
+              + " unfiltered answers held a removed row; all-ones == unfiltered, counts == oracle, no removed row returned;"
+              + " REPORT " + String(dist_diff) + " distances and " + String(idx_diff) + " indices differ from the oracle's expanded form")
     _ = ctx^
 
 

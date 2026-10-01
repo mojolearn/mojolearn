@@ -83,6 +83,8 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
+from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
@@ -1826,6 +1828,11 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        if xd_lu_solve_on_host(n):
+            # lane neural-pass39: the host walk of the same cells (the device
+            # ran one thread per column of B: 64 threads on the whole GPU)
+            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+            return
         var ctx = xd_ctx()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
@@ -2403,6 +2410,10 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        if xd_qr_on_host(m):
+            # lane neural-pass37: the row-streaming host walk of the same cells
+            geqrf_host_rows(a, tau, m, n)
+            return
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
@@ -2442,6 +2453,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        if xd_qr_on_host(m):
+            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+            return
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)
