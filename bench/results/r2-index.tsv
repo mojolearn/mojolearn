@@ -61,3 +61,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T17:22:42Z	measurements/2026-10-01/lr-rerun-amd.tar.gz	84ef29ca4ff8f8a3818d39d7f4ccab66b249f955e10a040a940ac6c96e06ef69	26833	mojolearn-steward-do-amd	/root/lr-rerun-amd
 2026-10-01T17:31:11Z	measurements/2026-10-01/launch-probe-amd.tar.gz	43ca64bbc6417403e7e863f405a90123fc1fe496ef7301c3e95cb47e77145fde	25599	mojolearn-steward-do-amd	/root/launch-probe-amd
 2026-10-01T17:31:24Z	measurements/2026-10-01/ab-pr67-amd.tar.gz	46908c44c40ca6a8a8640f7b397e183897f16652e8bdf1bc1a1b5954004fecb7	106193	mojolearn-steward-do-amd	/root/ab-pr67-amd
+2026-10-01T17:41:13Z	measurements/2026-10-01/ab-pr69-nvidia.tar.gz	a6b557f03974574baed72af6a80ae501c4ad473cf45b1c2158460cdd15e7fab5	154840	8de2d3c1e7ad	/root/ab-pr69-nvidia
+2026-10-01T17:41:23Z	measurements/2026-10-01/ticks69-main.tar.gz	023f42c570a60c0bd9e0ddaa811bdce3610d86ae077e6d05f2a77fe54c728a90	76365	8de2d3c1e7ad	/root/ticks69-main
+2026-10-01T17:41:26Z	measurements/2026-10-01/ticks69-lane_neural-pass64.tar.gz	09465ece06c9114e2506398edf8a8e0d0208061628081f82da297f1036946800	76180	8de2d3c1e7ad	/root/ticks69-lane_neural-pass64
+2026-10-01T17:41:29Z	measurements/2026-10-01/ticks69-lane_neural-pass62-on-64.tar.gz	214a21197c6898e93064944f14470ff93f7d6699a2b046a606c51fa942eb3f3c	76443	8de2d3c1e7ad	/root/ticks69-lane_neural-pass62-on-64
