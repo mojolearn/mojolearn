@@ -1,0 +1,24 @@
+AMD
+build rc=0
+check-ivf rc=1
+before rep1 RESULT fit 3480.7 ms search 559.4 ms sha 95089ab768e8be7a
+before rep2 RESULT fit 3476.9 ms search 557.7 ms sha 95089ab768e8be7a
+after rep1 RESULT fit 3449.5 ms search 69.3 ms sha 95089ab768e8be7a
+after rep2 RESULT fit 3434.5 ms search 69.5 ms sha 95089ab768e8be7a
+after-ungrouped rep1 RESULT fit 3453.0 ms search 453.0 ms sha 95089ab768e8be7a
+after-ungrouped rep2 RESULT fit 3432.1 ms search 453.9 ms sha 95089ab768e8be7a
+Unhandled exception caught during execution: check_filter_matches_oracle: FAIL an all-ones filter moved slot 1
+/root/mojolearn-pass42/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+NVIDIA
+build rc=0
+check-ivf rc=1
+before rep1 RESULT fit 2746.5 ms search 775.7 ms sha 95089ab768e8be7a
+before rep2 RESULT fit 2712.3 ms search 819.4 ms sha 95089ab768e8be7a
+after rep1 RESULT fit 2744.4 ms search 254.4 ms sha 95089ab768e8be7a
+after rep2 RESULT fit 2706.5 ms search 194.5 ms sha 95089ab768e8be7a
+after-ungrouped rep1 RESULT fit 2679.6 ms search 605.4 ms sha 95089ab768e8be7a
+after-ungrouped rep2 RESULT fit 2614.2 ms search 588.7 ms sha 95089ab768e8be7a
+Unhandled exception caught during execution: check_filter_matches_oracle: FAIL an all-ones filter moved slot 1
+/root/mojolearn-pass42/.pixi/envs/default/bin/mojo: error: execution exited with a non-zero result: 1
+
+[exited with code 0]

@@ -85,6 +85,10 @@ from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
     IIVF_MAX_DIM,
     IIVF_QPB,
     identical_ivf_scan_kernel,
+    identical_ivf_scan_staged_kernel,
+    identical_ivf_scan_grouped_kernel,
+    identical_ivf_merge_kernel,
+    GQPB,
 )
 from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_MAX_DIM,
@@ -92,6 +96,8 @@ from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     fast_ivf_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.os import getenv
+from x_ann.io import upload_i32
 from std.gpu import WARP_SIZE
 from std.sys.info import has_apple_gpu_accelerator
 from x_ann.switches import ANN3_PREPARE
@@ -196,6 +202,29 @@ struct IvfSearchResult(Movable):
     var distances: List[Float32]
     var indices: List[UInt32]
     var n_candidates: List[Int32]
+
+
+
+
+def _ivf_scan_grouped() -> Bool:
+    """The identical scan grouped by list (identical_ivf_scan_grouped_kernel
+    + identical_ivf_merge_kernel, lane neural-pass42): default on;
+    MOJOLEARN_IVF_SCAN_GROUPED=0 keeps the per-query kernels. Same bits."""
+    return String(getenv("MOJOLEARN_IVF_SCAN_GROUPED")) != "0"
+
+
+def _ivf_scan_staged() -> Bool:
+    """The identical scan with its candidate rows staged through threadgroup
+    memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the
+    default on NVIDIA and AMD, where the plain kernel's lanes each walk
+    their own row (WARP_SIZE scattered rows per load); the plain kernel on
+    Apple, where the staged kernel's barriers cost more than they save
+    (M4, 200,000 x 220, 256 lists, 2,000 queries: 3.4 -> 12.2 s). The same
+    bits either way; MOJOLEARN_IVF_SCAN_STAGED=0/1 forces either."""
+    var v = String(getenv("MOJOLEARN_IVF_SCAN_STAGED"))
+    comptime if has_apple_gpu_accelerator():
+        return v == "1"
+    return v != "0"
 
 
 def _expanded_distances(
@@ -697,17 +726,102 @@ def ivf_flat_search_prepared(
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
                         comptime if IVF_IDENTICAL_SCAN:
-                            ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
-                                dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
-                                dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
-                                dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
-                                dprobe_idx.unsafe_ptr(),
-                                d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                                Int32(n_queries), Int32(dim), Int32(n_probes),
-                                Int32(k),
-                                grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
-                                block_dim=IIVF_QPB * WARP_SIZE,
-                            )
+                            if _ivf_scan_grouped():
+                                # lane neural-pass42: the (query, probe) pairs grouped by
+                                # list on the host (a counting sort, ascending (q, p)
+                                # within a list), the blocks GQPB pairs of one list each
+                                var gcount = List[Int32](length=n_lists + 1, fill=Int32(0))
+                                for q in range(n_queries):
+                                    for p in range(n_probes):
+                                        gcount[Int(probe_ids[q * n_probes + p]) + 1] += 1
+                                var goff = List[Int32](length=n_lists + 1, fill=Int32(0))
+                                for l in range(n_lists):
+                                    goff[l + 1] = goff[l] + gcount[l + 1]
+                                var cursor = List[Int32](length=n_lists, fill=Int32(0))
+                                for l in range(n_lists):
+                                    cursor[l] = goff[l]
+                                var gq = List[Int32](length=max(n_queries * n_probes, 1), fill=Int32(0))
+                                var gp = List[Int32](length=max(n_queries * n_probes, 1), fill=Int32(0))
+                                for q in range(n_queries):
+                                    for p in range(n_probes):
+                                        var l = Int(probe_ids[q * n_probes + p])
+                                        gq[Int(cursor[l])] = Int32(q)
+                                        gp[Int(cursor[l])] = Int32(p)
+                                        cursor[l] += 1
+                                var bl = List[Int32]()
+                                var bs = List[Int32]()
+                                for l in range(n_lists):
+                                    var j = Int(goff[l])
+                                    while j < Int(goff[l + 1]):
+                                        bl.append(Int32(l))
+                                        bs.append(Int32(j))
+                                        j += GQPB
+                                var n_blocks = len(bl)
+                                if n_blocks == 0:
+                                    bl.append(Int32(0))
+                                    bs.append(Int32(0))
+                                var d_goff = upload_i32(ctx, goff)
+                                var d_gq = upload_i32(ctx, gq)
+                                var d_gp = upload_i32(ctx, gp)
+                                var d_bl = upload_i32(ctx, bl)
+                                var d_bs = upload_i32(ctx, bs)
+                                var d_pd = ctx.enqueue_create_buffer[DType.float32](max(n_queries * n_probes * KM, 1))
+                                var d_pi = ctx.enqueue_create_buffer[DType.uint32](max(n_queries * n_probes * KM, 1))
+                                if n_blocks > 0:
+                                    ctx.enqueue_function[identical_ivf_scan_grouped_kernel[KM]](
+                                        dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                        dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                        dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                        d_goff.unsafe_ptr(), d_gq.unsafe_ptr(), d_gp.unsafe_ptr(),
+                                        d_bl.unsafe_ptr(), d_bs.unsafe_ptr(),
+                                        d_pd.unsafe_ptr(), d_pi.unsafe_ptr(),
+                                        Int32(dim), Int32(n_probes), Int32(k),
+                                        grid_dim=n_blocks, block_dim=GQPB * WARP_SIZE,
+                                    )
+                                ctx.enqueue_function[identical_ivf_merge_kernel[KM]](
+                                    d_pd.unsafe_ptr(), d_pi.unsafe_ptr(), d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    Int32(n_queries), Int32(n_probes), Int32(k),
+                                    grid_dim=(n_queries + 255) // 256, block_dim=256,
+                                )
+                                ctx.synchronize()
+                                _ = d_goff^
+                                _ = d_gq^
+                                _ = d_gp^
+                                _ = d_bl^
+                                _ = d_bs^
+                                _ = d_pd^
+                                _ = d_pi^
+                                _ = gcount^
+                                _ = goff^
+                                _ = cursor^
+                                _ = gq^
+                                _ = gp^
+                                _ = bl^
+                                _ = bs^
+                            elif _ivf_scan_staged():
+                                ctx.enqueue_function[identical_ivf_scan_staged_kernel[KM]](
+                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                    dprobe_idx.unsafe_ptr(),
+                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    Int32(n_queries), Int32(dim), Int32(n_probes),
+                                    Int32(k),
+                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
+                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                )
+                            else:
+                                ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
+                                    dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                    dev.dlist_data.unsafe_ptr(), dev.dlist_norm.unsafe_ptr(),
+                                    dev.d_off.unsafe_ptr(), dev.d_ind.unsafe_ptr(),
+                                    dprobe_idx.unsafe_ptr(),
+                                    d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                    Int32(n_queries), Int32(dim), Int32(n_probes),
+                                    Int32(k),
+                                    grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
+                                    block_dim=IIVF_QPB * WARP_SIZE,
+                                )
                         else:
                             ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
                                 dq.unsafe_ptr(), dev.dlist_data.unsafe_ptr(),

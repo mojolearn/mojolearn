@@ -34,11 +34,13 @@ from core.householder_qr import (
     qr_reflector_u1,
     qr_slice_count,
 )
+from core.householder_qr import QR_APPLY_TPB, QR_APPLY_WARPS, qr_apply_kernel, qr_r_copy_kernel, qr_reflector_kernel, qr_split
 
 #: Cell updates per launch (a column step at j costs (rows - j) (n - j) cells
 #: plus QRB_BARRIER_CELLS per barrier): about 0.3 s on the M2 Pro.
 comptime QRB_CELLS = 1 << 24
 comptime QRB_BARRIER_CELLS = 256
+comptime QRB_SPLIT_SYNC = 32
 
 
 def qr_panel_cols_kernel(
@@ -183,6 +185,33 @@ def _qrb_pass(
     """One `qr_panel_kernel` launch's work (grid `ns`, one block per slice) as
     consecutive column ranges of about QRB_CELLS cells, each waited for."""
     var rows = (m + ns - 1) // ns
+    if qr_split():
+        # lane neural-pass38: the split launches (core/householder_qr.mojo
+        # qr_reflector_kernel + qr_apply_kernel per column, then the R copy),
+        # the same cells and folds as qr_panel_cols_kernel; a launch is one
+        # column step, so a wait every QRB_SPLIT_SYNC columns keeps every
+        # launch short and the cut-launch poison check as it was.
+        var tau = ctx.enqueue_create_buffer[DType.float32](ns if ns > 0 else 1)
+        for j in range(n):
+            ctx.enqueue_function[qr_reflector_kernel](
+                a, r_out, tau.unsafe_ptr(), Int32(m), Int32(n), Int32(n), Int32(ns), Int32(j),
+                grid_dim=(ns, 1, 1), block_dim=(QR_TPB, 1, 1),
+            )
+            var cols = n - j - 1
+            if cols > 0:
+                ctx.enqueue_function[qr_apply_kernel](
+                    a, tau.unsafe_ptr(), Int32(m), Int32(n), Int32(n), Int32(ns), Int32(j),
+                    grid_dim=((cols + QR_APPLY_WARPS - 1) // QR_APPLY_WARPS, ns, 1),
+                    block_dim=(QR_APPLY_TPB, 1, 1),
+                )
+            if (j + 1) % QRB_SPLIT_SYNC == 0:
+                ctx.synchronize()
+        ctx.enqueue_function[qr_r_copy_kernel](
+            a, r_out, Int32(m), Int32(n), Int32(n), Int32(ns), grid_dim=(ns, 1, 1), block_dim=(QR_TPB, 1, 1),
+        )
+        ctx.synchronize()
+        _ = tau^
+        return
     var j0 = 0
     while j0 < n:
         var cost = 0
