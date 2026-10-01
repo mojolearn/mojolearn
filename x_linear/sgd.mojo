@@ -21,7 +21,8 @@ from x_linear.ops import (
     dot, X_LINEAR_HOST_SABOTAGE,
 )
 from std.math import fma
-from std.memory import bitcast
+from std.memory import bitcast, alloc
+from std.sys import llvm_intrinsic
 from std.sys.info import is_gpu
 from std.gpu import WARP_SIZE
 from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
@@ -164,16 +165,45 @@ def _subnormal(v: Float32) -> Bool:
 
 
 @always_inline
-def _dot_tracked(a: FP, ia: Int, b: FP, ib: Int, count: Int) -> Float32:
-    """`dot`'s word (see the note above)."""
+def _dot_tracked[FA: Bool](a: FP, ia: Int, b: FP, ib: Int, count: Int, trace: FP) -> Float32:
+    """`dot`'s word (see the note above) for a `b` that holds flushed words
+    only (the weights: every store to them is a flushed result) and, unless
+    FA, an `a` with no subnormal word (`_has_subnormal` said so). The chain's
+    partial sums go to `trace` and are checked after the fold."""
     var acc = Float32(0)
-    var sub = False
     for j in range(count):
-        acc = fma(fz(ld(a, ia + j)), fz(ld(b, ib + j)), acc)
-        sub = sub | _subnormal(acc)
-    if sub:
+        var aj = ld(a, ia + j)
+        comptime if FA:
+            aj = fz(aj)
+        acc = fma(aj, ld(b, ib + j), acc)
+        st(trace, j, acc)
+    if _has_subnormal(trace, count):
         return dot(a, ia, b, ib, count)
     return acc
+
+
+def _has_subnormal(p: FP, count: Int) -> Bool:
+    """Whether any of p[0..count) is a subnormal word."""
+    comptime V = 8
+    var hit = SIMD[DType.bool, V](False)
+    var j = 0
+    while j + V <= count:
+        var b = bitcast[DType.uint32](p.unsafe_load[width=V](j))
+        hit = hit | ((b & UInt32(0x7F800000)).eq(UInt32(0)) & (b & UInt32(0x007FFFFF)).ne(UInt32(0)))
+        j += V
+    var any = hit.reduce_or()
+    while j < count:
+        any = any | _subnormal(ld(p, j))
+        j += 1
+    return any
+
+
+@always_inline
+def _prefetch_row(x: FP, off: Int, d: Int):
+    var j = 0
+    while j < d:
+        llvm_intrinsic["llvm.prefetch.p0", NoneType]((x + off + j).bitcast[NoneType](), Int32(0), Int32(3), Int32(1))
+        j += 16
 
 
 @always_inline
@@ -217,6 +247,11 @@ def sgd_one(
     fill(w, woff, d, Float32(0))
     fill(q, 0, d, Float32(0))
     var intercept = Float32(1) if one_class else Float32(0)
+    var x_sub = True
+    var trace = q
+    comptime if not is_gpu() and SGD_HOST_TRACK:
+        x_sub = _has_subnormal(x, n * d)
+        trace = alloc[Float32](d + 8)
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
@@ -243,7 +278,12 @@ def sgd_one(
             var y = ld(ys, i)
             var p: Float32
             comptime if not is_gpu() and SGD_HOST_TRACK:
-                p = fa(_dot_tracked(x, i * d, w, woff, d), intercept)
+                if r + 1 < n:
+                    _prefetch_row(x, Int(ldi(idx, r + 1)) * d, d)
+                if x_sub:
+                    p = fa(_dot_tracked[True](x, i * d, w, woff, d, trace), intercept)
+                else:
+                    p = fa(_dot_tracked[False](x, i * d, w, woff, d, trace), intercept)
             else:
                 p = fa(row_dot(x, i, d, w, woff), intercept)
             if lr == LR_OPTIMAL:
@@ -273,7 +313,7 @@ def sgd_one(
             if lr == LR_PA1 or lr == LR_PA2:
                 var sq = Float32(0)
                 comptime if not is_gpu() and SGD_HOST_TRACK:
-                    sq = _dot_tracked(x, i * d, x, i * d, d)
+                    sq = dot(x, i * d, x, i * d, d) if x_sub else _dot_tracked[False](x, i * d, x, i * d, d, trace)
                 else:
                     for j in range(d):
                         var xj = ld(x, i * d + j)
@@ -326,6 +366,8 @@ def sgd_one(
         if not finite:
             st(b, boff, Float32(0))
             fill(w, woff, d, Float32(0))
+            comptime if not is_gpu() and SGD_HOST_TRACK:
+                trace.free()
             return -1
         var mean_obj = fd(objective, i2f(n))
         if tol > Float32(-3.0e38) and mean_obj > fs(best, tol):
@@ -341,6 +383,8 @@ def sgd_one(
             else:
                 break
     st(b, boff, intercept)
+    comptime if not is_gpu() and SGD_HOST_TRACK:
+        trace.free()
     return epochs
 
 
