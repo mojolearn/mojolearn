@@ -187,6 +187,12 @@ CUSTOM_OPS = [
     ("cc_iterate_csr",
      [("indptr", "iin", "n + 1"), ("indices", "iin", "nnz"), ("lab", "iinout", "n"), ("info", "iout", "1"),
       ("n", "int"), ("nnz", "int")]),
+    # lane/neural-pass71 (2026-10-01): the NaN cells of an n x d matrix in
+    # one host pass (flat indices ascending, the NaN count per column, the
+    # count): KNNImputer's mask without a Python walk of every cell
+    ("nan_cells",
+     [("x", "fin", "n * d"), ("cells", "iout", "n * d"), ("colmiss", "iout", "d"), ("info", "iout", "1"),
+      ("n", "int"), ("d", "int")]),
     # lane/py-dn-kern (2026-09-28): the fused kernel chains (the kernel
     # matrix stays on the device, per row tile; only the output comes back)
     ("kpca_transform",
