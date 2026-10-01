@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/lu-solve", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=0 ms=4784.432 infer_ms=None digest=43e06346de01739b
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=1 ms=4561.966 infer_ms=None digest=43e06346de01739b
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=2 ms=4546.274 infer_ms=None digest=43e06346de01739b
+ALGOS-ROUND lane=lu-solve dataset=synthetic arm=ours round=3 ms=4515.479 infer_ms=None digest=43e06346de01739b
+ALGOS lane=lu-solve dataset=synthetic arm=ours status=ok median_ms=4546.2744776159525 quality={"relative_residual": 3.2485170230905617e-06}

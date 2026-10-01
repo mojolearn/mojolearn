@@ -1,0 +1,13 @@
+05:11:56 build-mainnow rc=0
+05:12:17 build_x_decomp-mainnow rc=0
+05:12:34 build_linalg-mainnow rc=0
+05:13:33 build-pass32 rc=0
+05:13:55 build_x_decomp-pass32 rc=0
+05:14:11 build_linalg-pass32 rc=0
+05:14:12 prep rc=0
+05:15:43 race-lu-factor-main rc=0
+05:16:43 race-lu-factor-branch rc=0
+05:18:13 race-lu-factor-restore rc=0
+05:19:43 race-lu-solve-main rc=0
+05:20:42 race-lu-solve-branch rc=0
+05:22:13 race-lu-solve-restore rc=0
