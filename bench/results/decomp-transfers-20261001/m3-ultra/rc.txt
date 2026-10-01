@@ -1,0 +1,13 @@
+04:25:35 build-mainnow rc=0
+04:25:39 build_x_decomp-mainnow rc=0
+04:25:43 build_linalg-mainnow rc=0
+04:26:40 build-pass27 rc=0
+04:27:02 build_x_decomp-pass27 rc=0
+04:27:19 build_linalg-pass27 rc=0
+04:27:28 prep rc=0
+04:27:30 race-mainnow-gaussian-rp rc=1
+04:27:32 race-pass27-gaussian-rp rc=1
+04:27:33 race-mainnow-sparse-rp rc=1
+04:27:33 race-pass27-sparse-rp rc=1
+04:30:38 race-mainnow-svd rc=0
+04:33:35 race-pass27-svd rc=0
