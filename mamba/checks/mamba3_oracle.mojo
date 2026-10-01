@@ -249,6 +249,8 @@ def m3_inter_pblocks(bh_rows: Int, p_dim: Int) -> Int:
         return f
     var want = host_predict_task_count(1 << 30)
     var blocks = 1
+    if bh_rows * 4 > want:
+        return 1  # fewer than four threads a row: the whole-head loop wins
     while blocks * bh_rows < want and p_dim // (blocks * 2) >= M3_INTER_PBLOCK_MIN:
         blocks *= 2
     return blocks
@@ -1081,131 +1083,222 @@ def mamba3_block_oracle(
     # blocks a head, and each task builds the left operand of its own rows
     # only. At the board's CPU cell (12 heads) a 64-thread host gets 96
     # rows where it had 12; a 10-thread host keeps the 12.
-    # The recurrence's right operand ks (the chunk's scaled keys, rows past
-    # `real` zero) is the same for every state-row block of a (batch, head),
-    # so it is gathered ONCE per (batch, head, chunk) here, rows over tasks,
-    # and the tasks below read it in place through the GEMM's pointer entry
-    # (`gemm_host_rows_into`, the call `gemm_host_rows_right_zero_padded`
-    # makes); a block's cost is then its own rows' share.
-    var ks_all = host_f32_uninit(b * nh * nc * q * n_state)
-    var ksa_p = _p(ks_all)
-    var ks_rows = b * nh * nc
-    var kstasks = host_row_tasks(ks_rows, 2 * q * n_state)
-    var kschunk = (ks_rows + kstasks - 1) // kstasks
-    def _ks_rows(task: Int) {imm ksw_p, imm ksa_p, imm ks_rows, imm nh, imm nc, imm t_work, imm q_v, imm n_state_v, imm kschunk}:
-        for r in range(task * kschunk, min((task + 1) * kschunk, ks_rows)):
-            var c = r % nc
-            var hh = (r // nc) % nh
-            var bb = r // (nc * nh)
-            var c0 = c * q_v
-            var real = t_work - c0
-            if real > q_v:
-                real = q_v
-            var dst = r * q_v * n_state_v
-            for i in range(q_v):
-                for n in range(n_state_v):
-                    if i < real:
-                        ksa_p.unsafe_store(dst + i * n_state_v + n, ksw_p.unsafe_load(
-                            ((bb * t_work + c0 + i) * nh + hh) * n_state_v + n))
-                    else:
-                        ksa_p.unsafe_store(dst + i * n_state_v + n, Float32(0.0))
-    if kstasks <= 1:
-        _ks_rows(0)
-    else:
-        host_parallelize(_ks_rows, kstasks)
+    # Lane neural-pass20/25: the split rows (below) pay a shared gather of the
+    # right operand and a pointer product per block; measured on Zen 4 that
+    # path at ONE block cost about 2x main's whole-head loop, so the
+    # whole-head loop is the one-block path verbatim, and the split runs
+    # only when the thread policy has at least four threads per
+    # (batch, head) row (`m3_inter_pblocks`).
     var pblocks = m3_inter_pblocks(bh_rows, p_dim)
-    var pblock = (p_dim + pblocks - 1) // pblocks
-    var ic_rows = bh_rows * pblocks
-    var ptasks = host_row_tasks(ic_rows, 4 * nc * q * pblock * n_state)
-    if not chunk_gemms_serial:
-        ptasks = 1
-    var pchunk = (ic_rows + ptasks - 1) // ptasks
     var err_flag = _zeros(1)
     var err_p = _p(err_flag)
-    def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksa_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm ic_rows, imm pblocks, imm pblock, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
-        for r0 in range(task * pchunk, min((task + 1) * pchunk, ic_rows)):
-            var bh = r0 // pblocks
-            var pb = r0 % pblocks
-            var bb = bh // nh
-            var hh = bh % nh
-            var p0 = pb * pblock
-            var p1 = min(p0 + pblock, p_dim_v)
-            var pw = p1 - p0
-            var cells = pw * n_state_v
-            var sbase = ((bb * nh + hh) * p_dim_v + p0) * n_state_v
-            var h_run = List[Float32]()
-            for i in range(cells):
-                h_run.append(sh_p.unsafe_load(sbase + i))
-            var h_sealed = h_run.copy()
-            var vs = _zeros(q_v * pw)
-            var inc = host_f32_uninit(pw * n_state_v)
-            var vs_p = rebind[GhrPtr](vs.unsafe_ptr())
-            var inc_p = rebind[GhrPtr](inc.unsafe_ptr())
-            for c in range(nc):
-                var pbase = (((bb * nc + c) * nh + hh) * p_dim_v + p0) * n_state_v
-                for i in range(cells):
-                    pass_p.unsafe_store(pbase + i, h_run[i])
-                if c == nc - 1:
-                    for i in range(cells):
-                        h_sealed[i] = h_run[i]
+    if pblocks <= 1:
+        var ptasks = host_row_tasks(bh_rows, 4 * nc * q * p_dim * n_state)
+        if not chunk_gemms_serial:
+            ptasks = 1
+        var pchunk = (bh_rows + ptasks - 1) // ptasks
+        def _inter_chunk_whole(task: Int) {imm dacs_p, imm vwork_p, imm ksw_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm bh_rows, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
+            for r0 in range(task * pchunk, min((task + 1) * pchunk, bh_rows)):
+                var bb = r0 // nh
+                var hh = r0 % nh
+                var h_run = List[Float32]()
+                for i in range(p_dim_v * n_state_v):
+                    h_run.append(
+                        sh_p.unsafe_load(((bb * nh + hh) * p_dim_v) * n_state_v + i)
+                    )
+                var h_sealed = h_run.copy()
+                for c in range(nc):
+                    var pbase = (((bb * nc + c) * nh + hh) * p_dim_v) * n_state_v
+                    for i in range(p_dim_v * n_state_v):
+                        pass_p.unsafe_store(pbase + i, h_run[i])
+                    if c == nc - 1:
+                        for i in range(p_dim_v * n_state_v):
+                            h_sealed[i] = h_run[i]
+                    var c0 = c * q_v
+                    var real = t_work - c0
+                    if real > q_v:
+                        real = q_v
+                    var dl = ftz(
+                        dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + (q_v - 1))
+                    )
+                    var vs = _zeros(q_v * p_dim_v)
+                    var ks = _zeros(q_v * n_state_v)
+                    for i in range(real):
+                        var drev = ftz(
+                            dl
+                            - ftz(
+                                dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + i)
+                            )
+                        )
+                        var e = ftz(identical_exp(drev))
+                        for p in range(p_dim_v):
+                            vs[i * p_dim_v + p] = ftz(
+                                identical_mul(
+                                    ftz(
+                                        vwork_p.unsafe_load(
+                                            ((bb * t_work + c0 + i) * nh + hh)
+                                            * p_dim_v
+                                            + p
+                                        )
+                                    ),
+                                    e,
+                                )
+                            )
+                        for n in range(n_state_v):
+                            ks[i * n_state_v + n] = ksw_p.unsafe_load(
+                                ((bb * t_work + c0 + i) * nh + hh) * n_state_v
+                                + n
+                            )
+                    var inc = List[Float32]()
+                    try:
+                        inc = gemm_host_rows_right_zero_padded(
+                            vs, ks, OP_TN, p_dim_v, n_state_v, q_v, real
+                        )
+                    except:
+                        # The shapes are the oracle's own, so this cannot
+                        # fire; if it ever does, the caller raises after the
+                        # region instead of this task swallowing it.
+                        err_p.unsafe_store(0, Float32(1.0))
+                        return
+                    var scale_c = ftz(identical_exp(dl))
+                    for i in range(p_dim_v * n_state_v):
+                        h_run[i] = ftz(
+                            identical_mul_add(
+                                scale_c, ftz(h_run[i]), ftz(inc[i])
+                            )
+                        )
+                for i in range(p_dim_v * n_state_v):
+                    hlast_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_run[i])
+                    sh_p.unsafe_store(((bb * nh + hh) * p_dim_v) * n_state_v + i, h_sealed[i])
+        if ptasks <= 1:
+            _inter_chunk_whole(0)
+        else:
+            host_parallelize(_inter_chunk_whole, ptasks)
+        if err_flag[0] != Float32(0.0):
+            raise Error("mamba3_block_oracle: the inter-chunk product refused its operands")
+    else:
+        # The recurrence's right operand ks (the chunk's scaled keys, rows past
+        # `real` zero) is the same for every state-row block of a (batch, head),
+        # so it is gathered ONCE per (batch, head, chunk) here, rows over tasks,
+        # and the tasks below read it in place through the GEMM's pointer entry
+        # (`gemm_host_rows_into`, the call `gemm_host_rows_right_zero_padded`
+        # makes); a block's cost is then its own rows' share.
+        var ks_all = host_f32_uninit(b * nh * nc * q * n_state)
+        var ksa_p = _p(ks_all)
+        var ks_rows = b * nh * nc
+        var kstasks = host_row_tasks(ks_rows, 2 * q * n_state)
+        var kschunk = (ks_rows + kstasks - 1) // kstasks
+        def _ks_rows(task: Int) {imm ksw_p, imm ksa_p, imm ks_rows, imm nh, imm nc, imm t_work, imm q_v, imm n_state_v, imm kschunk}:
+            for r in range(task * kschunk, min((task + 1) * kschunk, ks_rows)):
+                var c = r % nc
+                var hh = (r // nc) % nh
+                var bb = r // (nc * nh)
                 var c0 = c * q_v
                 var real = t_work - c0
                 if real > q_v:
                     real = q_v
-                var dl = ftz(
-                    dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + (q_v - 1))
-                )
-                for i in range(q_v * pw):
-                    vs[i] = Float32(0.0)
-                for i in range(real):
-                    var drev = ftz(
-                        dl
-                        - ftz(
-                            dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + i)
-                        )
+                var dst = r * q_v * n_state_v
+                for i in range(q_v):
+                    for n in range(n_state_v):
+                        if i < real:
+                            ksa_p.unsafe_store(dst + i * n_state_v + n, ksw_p.unsafe_load(
+                                ((bb * t_work + c0 + i) * nh + hh) * n_state_v + n))
+                        else:
+                            ksa_p.unsafe_store(dst + i * n_state_v + n, Float32(0.0))
+        if kstasks <= 1:
+            _ks_rows(0)
+        else:
+            host_parallelize(_ks_rows, kstasks)
+        var pblock = (p_dim + pblocks - 1) // pblocks
+        var ic_rows = bh_rows * pblocks
+        var ptasks = host_row_tasks(ic_rows, 4 * nc * q * pblock * n_state)
+        if not chunk_gemms_serial:
+            ptasks = 1
+        var pchunk = (ic_rows + ptasks - 1) // ptasks
+        def _inter_chunk_rows(task: Int) {imm dacs_p, imm vwork_p, imm ksa_p, imm pass_p, imm hlast_p, imm sh_p, imm err_p, imm ic_rows, imm pblocks, imm pblock, imm nh, imm nc, imm t_work, imm q_v, imm p_dim_v, imm n_state_v, imm pchunk}:
+            for r0 in range(task * pchunk, min((task + 1) * pchunk, ic_rows)):
+                var bh = r0 // pblocks
+                var pb = r0 % pblocks
+                var bb = bh // nh
+                var hh = bh % nh
+                var p0 = pb * pblock
+                var p1 = min(p0 + pblock, p_dim_v)
+                var pw = p1 - p0
+                var cells = pw * n_state_v
+                var sbase = ((bb * nh + hh) * p_dim_v + p0) * n_state_v
+                var h_run = List[Float32]()
+                for i in range(cells):
+                    h_run.append(sh_p.unsafe_load(sbase + i))
+                var h_sealed = h_run.copy()
+                var vs = _zeros(q_v * pw)
+                var inc = host_f32_uninit(pw * n_state_v)
+                var vs_p = rebind[GhrPtr](vs.unsafe_ptr())
+                var inc_p = rebind[GhrPtr](inc.unsafe_ptr())
+                for c in range(nc):
+                    var pbase = (((bb * nc + c) * nh + hh) * p_dim_v + p0) * n_state_v
+                    for i in range(cells):
+                        pass_p.unsafe_store(pbase + i, h_run[i])
+                    if c == nc - 1:
+                        for i in range(cells):
+                            h_sealed[i] = h_run[i]
+                    var c0 = c * q_v
+                    var real = t_work - c0
+                    if real > q_v:
+                        real = q_v
+                    var dl = ftz(
+                        dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + (q_v - 1))
                     )
-                    var e = ftz(identical_exp(drev))
-                    for pl in range(pw):
-                        vs[i * pw + pl] = ftz(
-                            identical_mul(
-                                ftz(
-                                    vwork_p.unsafe_load(
-                                        ((bb * t_work + c0 + i) * nh + hh)
-                                        * p_dim_v
-                                        + p0 + pl
-                                    )
-                                ),
-                                e,
+                    for i in range(q_v * pw):
+                        vs[i] = Float32(0.0)
+                    for i in range(real):
+                        var drev = ftz(
+                            dl
+                            - ftz(
+                                dacs_p.unsafe_load(((bb * nh + hh) * nc + c) * q_v + i)
                             )
                         )
-                var ks_p = rebind[GhrPtr](ksa_p.unsafe_offset(((bb * nh + hh) * nc + c) * q_v * n_state_v))
-                try:
-                    gemm_host_rows_into(vs_p, ks_p, inc_p, OP_TN, pw, n_state_v, q_v, False, real)
-                except:
-                    # The shapes are the oracle's own, so this cannot
-                    # fire; if it ever does, the caller raises after the
-                    # region instead of this task swallowing it.
-                    err_p.unsafe_store(0, Float32(1.0))
-                    return
-                var scale_c = ftz(identical_exp(dl))
-                for i in range(cells):
-                    h_run[i] = ftz(
-                        identical_mul_add(
-                            scale_c, ftz(h_run[i]), ftz(inc[i])
+                        var e = ftz(identical_exp(drev))
+                        for pl in range(pw):
+                            vs[i * pw + pl] = ftz(
+                                identical_mul(
+                                    ftz(
+                                        vwork_p.unsafe_load(
+                                            ((bb * t_work + c0 + i) * nh + hh)
+                                            * p_dim_v
+                                            + p0 + pl
+                                        )
+                                    ),
+                                    e,
+                                )
+                            )
+                    var ks_p = rebind[GhrPtr](ksa_p.unsafe_offset(((bb * nh + hh) * nc + c) * q_v * n_state_v))
+                    try:
+                        gemm_host_rows_into(vs_p, ks_p, inc_p, OP_TN, pw, n_state_v, q_v, False, real)
+                    except:
+                        # The shapes are the oracle's own, so this cannot
+                        # fire; if it ever does, the caller raises after the
+                        # region instead of this task swallowing it.
+                        err_p.unsafe_store(0, Float32(1.0))
+                        return
+                    var scale_c = ftz(identical_exp(dl))
+                    for i in range(cells):
+                        h_run[i] = ftz(
+                            identical_mul_add(
+                                scale_c, ftz(h_run[i]), ftz(inc[i])
+                            )
                         )
-                    )
-            for i in range(cells):
-                hlast_p.unsafe_store(sbase + i, h_run[i])
-                sh_p.unsafe_store(sbase + i, h_sealed[i])
-            _ = vs^
-            _ = inc^
-    if ptasks <= 1:
-        _inter_chunk_rows(0)
-    else:
-        host_parallelize(_inter_chunk_rows, ptasks)
-    if err_flag[0] != Float32(0.0):
-        raise Error("mamba3_block_oracle: the inter-chunk product refused its operands")
-    _ = ks_all^
+                for i in range(cells):
+                    hlast_p.unsafe_store(sbase + i, h_run[i])
+                    sh_p.unsafe_store(sbase + i, h_sealed[i])
+                _ = vs^
+                _ = inc^
+        if ptasks <= 1:
+            _inter_chunk_rows(0)
+        else:
+            host_parallelize(_inter_chunk_rows, ptasks)
+        if err_flag[0] != Float32(0.0):
+            raise Error("mamba3_block_oracle: the inter-chunk product refused its operands")
+        _ = ks_all^
 
     host_tick(hton, htk, "m3.inter_chunk")
     # ---- S16 (intra-chunk attention) + S17 (state read-out) + S18 (skip)

@@ -1,0 +1,22 @@
+stage walls of the last policy call (19.5 ms ticked):
+  hblk.m3.working_seq              4.36 ms   22.4%
+  hblk.m3.chunk_attention          4.05 ms   20.8%
+  hblk.m3.inter_chunk              2.48 ms   12.7%
+  hblk.m3.in_proj                  1.93 ms    9.9%
+  hblk.m3.rotation                 1.76 ms    9.0%
+  hblk.m3.out_proj                 1.00 ms    5.1%
+  hblk.m3.kscale                   0.66 ms    3.4%
+  hblk.m3.angle                    0.65 ms    3.3%
+  hblk.m3.decay                    0.65 ms    3.3%
+  hblk.m3.reports_buffer           0.51 ms    2.6%
+  hblk.m3.qkdot                    0.28 ms    1.4%
+  hblk.m3.a_dt                     0.27 ms    1.4%
+  hblk.m3.gamma_scale              0.23 ms    1.2%
+  hblk.m3.bc_norm                  0.23 ms    1.2%
+  hblk.m3.norm                     0.14 ms    0.7%
+  hblk.m3.residual                 0.12 ms    0.6%
+  hblk.m3.adt_sigma                0.11 ms    0.6%
+  hblk.m3.cumsum                   0.03 ms    0.2%
+  hblk.m3.pending                  0.00 ms    0.0%
+mamba3: one thread 85.9 ms, policy 28.9 ms, ratio 2.97x, 196608 floats, sha256 one 94bd23787c50a4da policy 94bd23787c50a4da
+HOST_THREADS_AB PASS mamba3
