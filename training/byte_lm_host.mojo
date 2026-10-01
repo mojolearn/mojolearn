@@ -45,7 +45,7 @@ from std.sys.info import num_physical_cores
 
 from core.host_parallel import host_parallelize
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
@@ -509,7 +509,7 @@ def head_rows_par(
             if hi > l:
                 hi = l
             var part = List[Float32](length=(hi - lo) * vocab, fill=Float32(0.0))
-            gemm_nt_rows(hp[][0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
+            gemm_nt_rows(hp[0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
             for i in range((hi - lo) * vocab):
                 op.unsafe_store(lo * vocab + i, part[i])
         except:
