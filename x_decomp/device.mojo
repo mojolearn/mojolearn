@@ -5,6 +5,7 @@ cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
+from std.time import perf_counter_ns
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys.info import is_apple_gpu
@@ -666,9 +667,13 @@ def lu_panel_fused_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, scal: F32Ptr, ac
 
 
 def lu_panel_fused() -> Bool:
-    """MOJOLEARN_XD_LU_FUSED=0 keeps the per-step launches inside a panel
-    (the A/B arm); default the fused panel kernel."""
-    return String(getenv("MOJOLEARN_XD_LU_FUSED")) != "0"
+    """MOJOLEARN_XD_LU_FUSED=1 runs a panel's steps in one launch (the A/B
+    arm); default the per-step launches inside the panel. Measured on the
+    boxes at 8,192 (bench/results/lu-fused-panel-20261001): the fused
+    panel is 4-8% slower than the per-step launches on the L40S, the
+    MI325X and the M3 Ultra (same digests), so the launch count was not the
+    remaining time; MOJOLEARN_XD_LU_TIMING=1 prints the per-kernel split."""
+    return String(getenv("MOJOLEARN_XD_LU_FUSED")) == "1"
 
 
 def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
@@ -1102,6 +1107,42 @@ def orgqr_dot_staged_kernel(
         c0 += STAGE
     if tid == 0:
         w.unsafe_store(j, acc)
+
+
+
+comptime _LU_KINDS = 10
+
+
+def _lu_tick(ctx: DeviceContext, mut lut: List[Int], mut luk: List[Int], slot: Int) raises:
+    """MOJOLEARN_XD_LU_TIMING=1: a sync at each panel's boundaries and
+    around its three trailing kernels, the wall accumulated per kind (slot
+    -1 starts a span): the panel's per-step launches as one span (a sync
+    per launch would cost more than those kernels on Metal). Off by
+    default: no sync, no bit."""
+    if luk[0] != 1:
+        return
+    ctx.synchronize()
+    var now = Int(perf_counter_ns())
+    if slot >= 0:
+        lut[slot] += now - luk[1]
+    luk[1] = now
+
+
+def _lu_timing_print(lut: List[Int], n: Int):
+    var names = List[String]()
+    names.append("panel_steps (pivot+swap+diag+act+l+update, or the fused panel)")
+    names.append("-")
+    names.append("-")
+    names.append("-")
+    names.append("-")
+    names.append("-")
+    names.append("apply_swaps")
+    names.append("trsm")
+    names.append("trail_tiled")
+    names.append("-")
+    print("lu timing n =", n)
+    for i in range(_LU_KINDS):
+        print("  lu", names[i], lut[i] // 1000000, "ms")
 
 
 def _blocks(count: Int) -> Int:
@@ -1665,6 +1706,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
+        var lut = List[Int](length=_LU_KINDS, fill=0)
+        var luk = List[Int](length=2, fill=0)
+        luk[0] = 1 if String(getenv("MOJOLEARN_XD_LU_TIMING")) == "1" else 0
         var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
@@ -1693,6 +1737,7 @@ struct DevExec(Exec):
             var fused = lu_panel_fused()
             while k0 < n:
                 var k1 = min(k0 + nb, n)
+                _lu_tick(ctx, lut, luk, -1)
                 if fused:
                     ctx.enqueue_function[lu_panel_fused_kernel](
                         da.unsafe_ptr(), dp.unsafe_ptr(), di.unsafe_ptr(), ds.unsafe_ptr(), dact.unsafe_ptr(),
@@ -1722,21 +1767,25 @@ struct DevExec(Exec):
                             da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n), Int32(k1),
                             grid_dim=_blocks((n - k - 1) * (k1 - k - 1)), block_dim=TPB,
                         )
+                _lu_tick(ctx, lut, luk, 0)
                 if k1 < n:
                     ctx.enqueue_function[lu_apply_swaps_kernel](
                         da.unsafe_ptr(), dp.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
                         grid_dim=_blocks(n - k1), block_dim=TPB,
                     )
+                    _lu_tick(ctx, lut, luk, 6)
                     if k1 - k0 > 1:
                         ctx.enqueue_function[lu_trsm_kernel](
                             da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n),
                             grid_dim=_blocks(n - k1), block_dim=TPB,
                         )
+                        _lu_tick(ctx, lut, luk, 7)
                     var tiles = (n - k1 + LU_TILE - 1) // LU_TILE
                     ctx.enqueue_function[lu_trail_tiled_kernel](
                         da.unsafe_ptr(), dact.unsafe_ptr(), Int32(k0), Int32(k1), Int32(n), Int32(k1 - k0),
                         grid_dim=(tiles, tiles, 1), block_dim=(LU_TILE_TPB, 1, 1),
                     )
+                    _lu_tick(ctx, lut, luk, 8)
                 k0 = k1
         for k in range(n if n > lu_serial_max() and nb == 0 else 0):
             if pivot_block:
@@ -1759,6 +1808,8 @@ struct DevExec(Exec):
                     da.unsafe_ptr(), ds.unsafe_ptr(), Int32(k), Int32(n),
                     grid_dim=_blocks((n - k - 1) * (n - k - 1)), block_dim=TPB,
                 )
+        if luk[0] == 1:
+            _lu_timing_print(lut, n)
         _down(ctx, da, a, n * n)
         _down_i(ctx, dp, piv, n)
         _down(ctx, di, info, 1)
@@ -1768,6 +1819,8 @@ struct DevExec(Exec):
         _ = di^
         _ = ds^
         _ = dact^
+        _ = lut^
+        _ = luk^
         ctx.synchronize()
         _ = ctx^
 
