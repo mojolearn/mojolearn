@@ -706,40 +706,54 @@ def rms_norm_backward_into(
 
     `dot`, `dx` and `dprod` are APPENDED to in row-major order and are
     expected empty on entry."""
-    for t in range(m):
-        # ---- rstd, recomputed. DEVIATION 1420. -------------------------
-        var mean = ftz(identical_div(ftz(sumsq[t]), Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+    # ROWS OVER HOST TASKS (lane neural-pass6): a row's chain reads only its
+    # own `dy`, `x` and `sumsq` and runs the statements above in the order
+    # above whichever task runs it, in the calling thread's floating-point
+    # environment (`host_parallelize`, DEVIATION 5900); the one cross-row
+    # fold, `dW`, is the caller's gemm call over `dprod`. The three outputs
+    # are sized once and written by index in the order the appends made.
+    dot = List[Float32](length=m, fill=Float32(0.0))
+    dx = List[Float32](length=m * dm, fill=Float32(0.0))
+    dprod = List[Float32](length=m * dm, fill=Float32(0.0))
+    var tasks = host_row_tasks(m, 12 * dm)
+    var chunk = (m + tasks - 1) // tasks
+    def _rows(task: Int) {imm dy, imm x, imm wnorm, imm sumsq, mut dot, mut dx, mut dprod, imm m, imm dm, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, m)):
+            # ---- rstd, recomputed. DEVIATION 1420. ---------------------
+            var mean = ftz(identical_div(ftz(sumsq[t]), Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
 
-        # ---- dh and the c fold, one ascending pass. ---------------------
-        var dh = List[Float32]()
-        var c = Float32(0.0)
-        for j in range(dm):
-            var dhj = ftz(identical_mul(ftz(dy[t * dm + j]), ftz(wnorm[j])))
-            dh.append(dhj)
-            c = ftz(identical_mul_add(dhj, ftz(x[t * dm + j]), c))
-        c = ftz(c)
-        dot.append(c)
+            # ---- dh and the c fold, one ascending pass. -----------------
+            var dh = List[Float32](capacity=dm)
+            var c = Float32(0.0)
+            for j in range(dm):
+                var dhj = ftz(identical_mul(ftz(dy[t * dm + j]), ftz(wnorm[j])))
+                dh.append(dhj)
+                c = ftz(identical_mul_add(dhj, ftz(x[t * dm + j]), c))
+            c = ftz(c)
+            dot[t] = c
 
-        # ---- the rsqrt / mean tail, once per row. -----------------------
-        var r2 = ftz(identical_mul(rstd, rstd))
-        var r3 = ftz(identical_mul(r2, rstd))
-        var cr3 = ftz(identical_mul(c, r3))
-        var da = ftz(identical_mul(BWD_NEG_HALF, cr3))
-        var dv = ftz(identical_div(da, Float32(dm)))
+            # ---- the rsqrt / mean tail, once per row. -------------------
+            var r2 = ftz(identical_mul(rstd, rstd))
+            var r3 = ftz(identical_mul(r2, rstd))
+            var cr3 = ftz(identical_mul(c, r3))
+            var da = ftz(identical_mul(BWD_NEG_HALF, cr3))
+            var dv = ftz(identical_div(da, Float32(dm)))
 
-        # ---- the two x branches, and the weight-gradient product. -------
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            var dx1 = ftz(identical_mul(dh[j], rstd))
-            var tx = ftz(identical_mul(BWD_TWO, xj))
-            var dx2 = ftz(identical_mul(dv, tx))
-            dx.append(ftz(ftz(dx1) + ftz(dx2)))
-            var inner = ftz(identical_mul(xj, rstd))
-            dprod.append(
-                ftz(identical_mul(ftz(dy[t * dm + j]), inner))
-            )
-        _ = dh^
+            # ---- the two x branches, and the weight-gradient product. ---
+            for j in range(dm):
+                var xj = ftz(x[t * dm + j])
+                var dx1 = ftz(identical_mul(dh[j], rstd))
+                var tx = ftz(identical_mul(BWD_TWO, xj))
+                var dx2 = ftz(identical_mul(dv, tx))
+                dx[t * dm + j] = ftz(ftz(dx1) + ftz(dx2))
+                var inner = ftz(identical_mul(xj, rstd))
+                dprod[t * dm + j] = ftz(identical_mul(ftz(dy[t * dm + j]), inner))
+            _ = dh^
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
 
 
 def silu_backward_into(
@@ -792,14 +806,25 @@ def silu_backward_into(
     **This is a stated gap, not a decision made on evidence**, it is
     contract section 5.4's gap in a second place, and it is the second thing
     to check when a checkout lands."""
-    for i in range(n):
-        var x = ftz(g[i])
-        var sg = ftz(identical_sigmoid(x))
-        var r1 = ftz(ftz(Float32(1.0)) - ftz(sg))
-        var r2 = ftz(identical_mul(x, r1))
-        var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
-        var r4 = ftz(identical_mul(sg, r3))
-        dg.append(ftz(identical_mul(ftz(dsi[i]), r4)))
+    # ELEMENTS OVER HOST TASKS (lane neural-pass6): an element's six
+    # statements read that element alone. `dg` is sized once and written by
+    # index in the order the appends made.
+    dg = List[Float32](length=n, fill=Float32(0.0))
+    var tasks = host_row_tasks(n, 24)
+    var chunk = (n + tasks - 1) // tasks
+    def _elements(task: Int) {imm dsi, imm g, mut dg, imm n, imm chunk}:
+        for i in range(task * chunk, min((task + 1) * chunk, n)):
+            var x = ftz(g[i])
+            var sg = ftz(identical_sigmoid(x))
+            var r1 = ftz(ftz(Float32(1.0)) - ftz(sg))
+            var r2 = ftz(identical_mul(x, r1))
+            var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
+            var r4 = ftz(identical_mul(sg, r3))
+            dg[i] = ftz(identical_mul(ftz(dsi[i]), r4))
+    if tasks <= 1:
+        _elements(0)
+    else:
+        host_parallelize(_elements, tasks)
 
 
 def rope_backward_into(
@@ -863,9 +888,12 @@ def rope_backward_into(
     var half = head_dim // 2
     var width = n_head * head_dim
     var m = b * l
+    # The position refusal first, over every token, so the rows below cannot
+    # raise; then TOKENS OVER HOST TASKS (lane neural-pass6): a token's cells
+    # read its own `dout` row and the table at its own absolute position.
+    # `out` is sized once and written by index in the order the appends made.
     for t in range(m):
-        var li = t % l
-        var p = pos0 + li
+        var p = pos0 + t % l
         if p < 0 or p >= rope.positions:
             raise Error(
                 String("transformer backward: absolute position ")
@@ -876,25 +904,36 @@ def rope_backward_into(
                 + " quantity, so a call that overruns it is a"
                 + " misconfiguration and not something to grow into)"
             )
-        for h in range(n_head):
-            var base = t * width + h * head_dim
-            for j in range(head_dim):
-                var ci: Int
-                var rot: Float32
-                # THE ONE CHARACTER. The forward negates the UPPER partner
-                # for the lower half; the transpose negates the LOWER
-                # partner for the upper half.
-                if j < half:
-                    ci = j
-                    rot = ftz(dout[base + j + half])
-                else:
-                    ci = j - half
-                    rot = -ftz(dout[base + j - half])
-                var c = ftz(rope.cos[p * half + ci])
-                var s = ftz(rope.sin[p * half + ci])
-                var pa = ftz(identical_mul(ftz(dout[base + j]), c))
-                var pb = ftz(identical_mul(rot, s))
-                out.append(ftz(ftz(pa) + ftz(pb)))
+    out = List[Float32](length=m * width, fill=Float32(0.0))
+    var tasks = host_row_tasks(m, 8 * width)
+    var chunk = (m + tasks - 1) // tasks
+    def _tokens(task: Int) {imm dout, imm rope, mut out, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm half, imm width, imm chunk}:
+        for t in range(task * chunk, min((task + 1) * chunk, m)):
+            var li = t % l
+            var p = pos0 + li
+            for h in range(n_head):
+                var base = t * width + h * head_dim
+                for j in range(head_dim):
+                    var ci: Int
+                    var rot: Float32
+                    # THE ONE CHARACTER. The forward negates the UPPER
+                    # partner for the lower half; the transpose negates the
+                    # LOWER partner for the upper half.
+                    if j < half:
+                        ci = j
+                        rot = ftz(dout[base + j + half])
+                    else:
+                        ci = j - half
+                        rot = -ftz(dout[base + j - half])
+                    var c = ftz(rope.cos[p * half + ci])
+                    var s = ftz(rope.sin[p * half + ci])
+                    var pa = ftz(identical_mul(ftz(dout[base + j]), c))
+                    var pb = ftz(identical_mul(rot, s))
+                    out[base + j] = ftz(ftz(pa) + ftz(pb))
+    if tasks <= 1:
+        _tokens(0)
+    else:
+        host_parallelize(_tokens, tasks)
 
 
 def softmax_backward_into(
@@ -982,22 +1021,34 @@ def softmax_backward_into(
 
     `zdot` is appended `[B, nh, L]` and `ds` `[B, nh, L, S]`, both in the
     card's layout, both expected empty on entry."""
-    for bb in range(b):
-        for h in range(nh):
-            for qi in range(l):
-                var base = ((bb * nh + h) * l + qi) * s
-                var z = Float32(0.0)
-                for j in range(s):
-                    z = ftz(
-                        identical_mul_add(
-                            ftz(dy[base + j]), ftz(y[base + j]), z
-                        )
+    # ROWS OVER HOST TASKS (lane neural-pass6): a (batch, head, query) row's
+    # `z` chain and its cells read that row of `dy` and `y` alone, ascending
+    # `j` from `+0.0` whichever task runs it. Both outputs are sized once and
+    # written by index in the order the appends made.
+    var rows = b * nh * l
+    zdot = List[Float32](length=rows, fill=Float32(0.0))
+    ds = List[Float32](length=rows * s, fill=Float32(0.0))
+    var tasks = host_row_tasks(rows, 6 * s)
+    var chunk = (rows + tasks - 1) // tasks
+    def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm chunk}:
+        for r in range(task * chunk, min((task + 1) * chunk, rows)):
+            var base = r * s
+            var z = Float32(0.0)
+            for j in range(s):
+                z = ftz(
+                    identical_mul_add(
+                        ftz(dy[base + j]), ftz(y[base + j]), z
                     )
-                z = ftz(z)
-                zdot.append(z)
-                for j in range(s):
-                    var diff = ftz(ftz(dy[base + j]) - ftz(z))
-                    ds.append(ftz(identical_mul(ftz(y[base + j]), diff)))
+                )
+            z = ftz(z)
+            zdot[r] = z
+            for j in range(s):
+                var diff = ftz(ftz(dy[base + j]) - ftz(z))
+                ds[base + j] = ftz(identical_mul(ftz(y[base + j]), diff))
+    if tasks <= 1:
+        _rows(0)
+    else:
+        host_parallelize(_rows, tasks)
 
 
 # ===========================================================================
@@ -1277,17 +1328,30 @@ def transformer_block_backward_oracle(
     # settles the fusion question by existing (DEVIATION 720), so this lane
     # chooses nothing.
     # =====================================================================
-    for i in range(m * inter):
-        var dgt = ftz(st.d_mlp_gated[i])
-        st.d_silu_out.append(
-            ftz(identical_mul(dgt, ftz(fwd.up_proj_out[i])))
-        )
-        st.d_up_proj_out.append(
-            ftz(identical_mul(dgt, ftz(fwd.silu_out[i])))
-        )
-
-    # =====================================================================
-    # STAGE 6. S20, the SiLU derivative. NEW ARITHMETIC. DEVIATION 1411.
+    # ELEMENTS OVER HOST TASKS (lane neural-pass6) for the [M, inter] and
+    # [B, nh, L, S] products below; the [M, d_model] sums are written by
+    # index on the calling thread. Same statements, same operands per cell.
+    var d_silu = List[Float32](length=m * inter, fill=Float32(0.0))
+    var d_up = List[Float32](length=m * inter, fill=Float32(0.0))
+    var gtasks = host_row_tasks(m * inter, 6)
+    var gchunk = (m * inter + gtasks - 1) // gtasks
+    var dmg = st.d_mlp_gated.copy()
+    var up_out = fwd.up_proj_out.copy()
+    var silu_out = fwd.silu_out.copy()
+    def _gate_elements(task: Int) {imm dmg, imm up_out, imm silu_out, mut d_silu, mut d_up, imm m, imm inter, imm gchunk}:
+        for i in range(task * gchunk, min((task + 1) * gchunk, m * inter)):
+            var dgt = ftz(dmg[i])
+            d_silu[i] = ftz(identical_mul(dgt, ftz(up_out[i])))
+            d_up[i] = ftz(identical_mul(dgt, ftz(silu_out[i])))
+    if gtasks <= 1:
+        _gate_elements(0)
+    else:
+        host_parallelize(_gate_elements, gtasks)
+    _ = dmg^
+    _ = up_out^
+    _ = silu_out^
+    st.d_silu_out = d_silu^
+    st.d_up_proj_out = d_up^
     # =====================================================================
     var dgate = List[Float32]()
     silu_backward_into(
@@ -1328,8 +1392,9 @@ def transformer_block_backward_oracle(
         st.d_gate_proj_out, w.w_gate, OP_NT, m, inter, dm
     )
     var t_up = _gemm_bwd_a(st.d_up_proj_out, w.w_up, OP_NT, m, inter, dm)
+    st.d_norm2_out = List[Float32](length=m * dm, fill=Float32(0.0))
     for i in range(m * dm):
-        st.d_norm2_out.append(ftz(ftz(t_gate[i]) + ftz(t_up[i])))
+        st.d_norm2_out[i] = ftz(ftz(t_gate[i]) + ftz(t_up[i]))
     _ = t_gate^
     _ = t_up^
 
@@ -1361,10 +1426,9 @@ def transformer_block_backward_oracle(
     # norm (LDL:321) and into the residual add (LDL:323); FORWARD-USE ORDER
     # puts the norm branch first. Two terms, so no order to pin, stated.
     # =====================================================================
+    st.d_residual1 = List[Float32](length=m * dm, fill=Float32(0.0))
     for i in range(m * dm):
-        st.d_residual1.append(
-            ftz(ftz(st.norm2_dx[i]) + ftz(st.in_d_residual2[i]))
-        )
+        st.d_residual1[i] = ftz(ftz(st.norm2_dx[i]) + ftz(st.in_d_residual2[i]))
     st.d_o_proj_out = st.d_residual1.copy()
 
     # =====================================================================
@@ -1421,8 +1485,11 @@ def transformer_block_backward_oracle(
                         fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
                     )
             var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
+            if len(st.d_attn_weights) != cells:
+                st.d_attn_weights = List[Float32](length=cells, fill=Float32(0.0))
+            var cbase = (bb * nh + h) * l * s
             for i in range(l * s):
-                st.d_attn_weights.append(cell[i])
+                st.d_attn_weights[cbase + i] = cell[i]
             _ = dctx_head^
             _ = v_head^
             _ = cell^
@@ -1468,10 +1535,19 @@ def transformer_block_backward_oracle(
     # scale SPELLING -- is what makes this arm fire at all.
     # =====================================================================
     var scale = attention_scale(hd)
-    for i in range(cells):
-        st.d_qk_cell.append(
-            ftz(identical_mul(ftz(st.d_attn_scores[i]), scale))
-        )
+    var dqk = List[Float32](length=cells, fill=Float32(0.0))
+    var ctasks = host_row_tasks(cells, 3)
+    var cchunk = (cells + ctasks - 1) // ctasks
+    var dsc = st.d_attn_scores.copy()
+    def _scale_cells(task: Int) {imm dsc, mut dqk, imm cells, imm scale, imm cchunk}:
+        for i in range(task * cchunk, min((task + 1) * cchunk, cells)):
+            dqk[i] = ftz(identical_mul(ftz(dsc[i]), scale))
+    if ctasks <= 1:
+        _scale_cells(0)
+    else:
+        host_parallelize(_scale_cells, ctasks)
+    _ = dsc^
+    st.d_qk_cell = dqk^
 
     # =====================================================================
     # STAGE 22. `dq`. **NEW ARITHMETIC, AND THE LANE'S LARGEST FINDING.**
@@ -1588,13 +1664,16 @@ def transformer_block_backward_oracle(
     # simply read out at the token-major `[M, kw]` layout the projections
     # expect. Slots `[0, pos0)` are the handoff.
     # =====================================================================
+    st.d_k_rope = List[Float32](length=m * kw, fill=Float32(0.0))
+    st.d_v_proj_out = List[Float32](length=m * kw, fill=Float32(0.0))
     for bb in range(b):
         for li in range(l):
             for kv in range(nkv):
                 for d in range(hd):
                     var ix = (bb * nkv + kv) * s * hd + (own0 + li) * hd + d
-                    st.d_k_rope.append(st.d_k_cache[ix])
-                    st.d_v_proj_out.append(st.d_v_cache[ix])
+                    var ox = (bb * l + li) * kw + kv * hd + d
+                    st.d_k_rope[ox] = st.d_k_cache[ix]
+                    st.d_v_proj_out[ox] = st.d_v_cache[ix]
 
     # =====================================================================
     # STAGE 27-28. The RoPE backward, on q and on k. DEVIATION 1412.
@@ -1627,9 +1706,10 @@ def transformer_block_backward_oracle(
     var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
     var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
+    st.d_norm1_out = List[Float32](length=m * dm, fill=Float32(0.0))
     for i in range(m * dm):
         var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
-        st.d_norm1_out.append(ftz(ftz(acc) + ftz(t_v[i])))
+        st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
     _ = t_q^
     _ = t_k^
     _ = t_v^
@@ -1662,8 +1742,9 @@ def transformer_block_backward_oracle(
     # the residual add (LDL:317); FORWARD-USE ORDER puts the norm first.
     # Two terms, no order to pin, no seed.
     # =====================================================================
+    st.d_x = List[Float32](length=m * dm, fill=Float32(0.0))
     for i in range(m * dm):
-        st.d_x.append(ftz(ftz(st.norm1_dx[i]) + ftz(st.d_residual1[i])))
+        st.d_x[i] = ftz(ftz(st.norm1_dx[i]) + ftz(st.d_residual1[i]))
 
     _ = ones_m^
     return st^
