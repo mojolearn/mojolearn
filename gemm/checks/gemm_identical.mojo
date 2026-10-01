@@ -135,7 +135,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
-from std.ffi import external_call
+from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
@@ -3234,6 +3234,52 @@ def _is_split_plan(plan: Int) -> Bool:
 comptime SPLITK_MAX_WORKSPACE_FLOATS = 64 * 1024 * 1024
 
 
+#: The tuned tiles' minimum block count (lane/neural-pass47, 2026-10-01):
+#: when the output tiled at the chosen width makes fewer blocks than this,
+#: the chooser steps down to the next narrower tuned tile (128 -> 64 -> 32)
+#: while the output still fills it. The L40S (142 SMs) chose the widths at
+#: 128 K cells and above; the MI325X has 304 CUs, and the LM's 2048 x 384
+#: projections (k = 384, three leaves, under the split plans' floor) ran on
+#: 192 tiles of 64 x 64 at about 1.5 TFLOPS, the MLP gate/up on 128 tiles
+#: of 128 x 128. Read once per process from MOJOLEARN_GEMM_TILE_MIN_BLOCKS
+#: (0 = off); an execution plan only: every tuned plan computes the same
+#: leaves and folds (`check_device_is_launch_invariant`).
+comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = 0
+
+
+struct _TileMinBlocks(Defaultable, Movable):
+    var blocks: Int
+
+    def __init__(out self):
+        self.blocks = -1
+
+
+comptime _TILE_MIN_NAME = "MojoGemmTileMinBlocksIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinBlocksFast"
+comptime GEMM_TILE_MIN_BLOCKS = _Global[StorageType=_TileMinBlocks, name=_TILE_MIN_NAME, init_fn=_TileMinBlocks.__init__]
+
+
+def gemm_tile_min_blocks() -> Int:
+    """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
+    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT."""
+    try:
+        var p = GEMM_TILE_MIN_BLOCKS.get_or_create_ptr()
+        if p[].blocks < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_TILE_MIN_BLOCKS"))
+            var blocks = GEMM_TILE_MIN_BLOCKS_DEFAULT
+            if v != "":
+                blocks = Int(v)
+            if blocks < 0:
+                blocks = 0
+            p[].blocks = blocks
+        return p[].blocks
+    except:
+        return GEMM_TILE_MIN_BLOCKS_DEFAULT
+
+
+def _tuned_tile_blocks(m: Int, n: Int, tile: Int) -> Int:
+    return ((m + tile - 1) // tile) * ((n + tile - 1) // tile)
+
+
 def identical_gemm_splitk_fits(m: Int, n: Int, k: Int) -> Bool:
     return (
         identical_gemm_workspace_floats(m, n, k, PLAN_SPLITK)
@@ -3302,7 +3348,7 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
             or tiles == PLAN_TUNED_32_2X2
         ) and m >= 64 and n >= 64 and apple_mma_applies(m, n, k):
             return PLAN_APPLE_MMA
-    return tiles
+    return gemm_tile_step_down(m, n, tiles)
 
 
 def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
@@ -3375,6 +3421,25 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     if m >= TUNED_BM_WIDE and n >= TUNED_BN_WIDE:
         return PLAN_TUNED_64_4X4
     return PLAN_TUNED_32_2X2
+
+
+def gemm_tile_step_down(m: Int, n: Int, plan: Int) -> Int:
+    """lane/neural-pass47: a narrower tuned tile where the wide one makes
+    fewer than `gemm_tile_min_blocks()` blocks (0 = off): 128 -> 64 -> 32
+    while the output still fills the tile. Applied by `choose_gemm_plan`
+    (the shipped dispatcher) AFTER the ksplit rule has read the tile
+    chooser, so a call the long-k group rule takes keeps its group kernel
+    and only the calls that would run a plain tuned tile step down. The
+    same leaves and folds either way."""
+    var min_blocks = gemm_tile_min_blocks()
+    if min_blocks <= 0:
+        return plan
+    var pick = plan
+    if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < min_blocks:
+        pick = PLAN_TUNED_64_4X4
+    if pick == PLAN_TUNED_64_4X4 and _tuned_tile_blocks(m, n, TUNED_BM_WIDE) < min_blocks:
+        pick = PLAN_TUNED_32_2X2
+    return pick
 
 
 def choose_gemm_plan_untuned(m: Int, n: Int, k: Int) -> Int:
