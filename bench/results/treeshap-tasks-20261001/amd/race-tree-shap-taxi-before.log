@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"max_depth": 6, "n_estimators": 100, "seed": 7}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/tree-shap", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS-ROUND lane=tree-shap dataset=taxi arm=ours round=0 ms=3843.914 infer_ms=None digest=8fd935518dd93613
+ALGOS-ROUND lane=tree-shap dataset=taxi arm=ours round=1 ms=3815.342 infer_ms=None digest=8fd935518dd93613
+ALGOS-ROUND lane=tree-shap dataset=taxi arm=ours round=2 ms=3823.957 infer_ms=None digest=8fd935518dd93613
+ALGOS-ROUND lane=tree-shap dataset=taxi arm=ours round=3 ms=3815.575 infer_ms=None digest=8fd935518dd93613
+ALGOS lane=tree-shap dataset=taxi arm=ours status=ok median_ms=3815.575100001297 quality={"max_additivity_error": 3.250122080089568e-05}

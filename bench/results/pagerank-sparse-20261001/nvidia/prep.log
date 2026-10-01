@@ -1,0 +1,8 @@
+CTD-PREP block=cls-istella X=1000000x220 y=1000000 Xq=100000x220 yq=100000
+MORE-PREP dataset=istella seconds=21.7
+CTD-PREP block=cls-taxi X=1000000x11 y=1000000 Xq=100000x11 yq=100000
+MORE-PREP dataset=taxi seconds=0.7
+CTD-PREP block=graphs-istella X=20000x220 y=20000 indptr=20001 indices=304830 indptr2=20001 indices2=62848
+ALGOS-PREP block=graphs dataset=istella seconds=11.9
+CTD-PREP block=graphs-taxi X=20000x11 y=20000 indptr=20001 indices=253708 indptr2=20001 indices2=54528
+ALGOS-PREP block=graphs dataset=taxi seconds=12.9
