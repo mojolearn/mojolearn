@@ -28,3 +28,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T12:52:02Z	measurements/2026-10-01/pr52-amd.tar.gz	708e8b6ac28aa8c7018984855e24837a97b6d94fa77cd42b7b3c39e2ac366296	51255	mojolearn-steward-do-amd	/root/pr52-amd
 2026-10-01T12:52:03Z	measurements/2026-10-01/pr52b-amd.tar.gz	8709f525890d59f9e76a5d779186ff499ca696d88dc7fcd7ffa26c20ebbe6338	44657	mojolearn-steward-do-amd	/root/pr52b-amd
 2026-10-01T12:52:04Z	measurements/2026-10-01/amd-toggle-sweep.tar.gz	b785f915c9ff8f366431fc98402be8f80c99244191814a1d05ebc3d1334e8d5c	37232	mojolearn-steward-do-amd	/root/amd-toggle-sweep
+2026-10-01T13:26:06Z	measurements/2026-10-01/neural-pass-nvidia.tar.gz	62aebdc2b5777c45bcd3267050451bc1b82e07cd199e0a17969ac514a134e05a	8377705	97c359a1d3ef	/root/neural-pass-nvidia
+2026-10-01T13:26:26Z	measurements/2026-10-01/pr56-nvidia.tar.gz	de4d05ba56c99f5f91f1f900df672c1c9a85e513f0888e0b1a4cf1498dec6e29	7426493	97c359a1d3ef	/root/pr56-nvidia
