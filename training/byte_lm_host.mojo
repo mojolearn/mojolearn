@@ -335,6 +335,8 @@ def block_par(
             var hi = lo + chunk
             if hi > l:
                 hi = l
+            if lo >= hi:
+                return  # a trailing chunk past the last token: nothing to do
             var rows = hi - lo
             var xc = copy_rows(xp[0], lo, hi, dm)
             var n1 = rms_norm_fast(xc, tp[][tb], rows, dm)
@@ -395,6 +397,8 @@ def block_par(
             var hi = lo + chunk
             if hi > l:
                 hi = l
+            if lo >= hi:
+                return  # a trailing chunk past the last token: nothing to do
             var rows = hi - lo
             var mchunk = copy_rows(mp[0], lo, hi, s)
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
@@ -508,6 +512,8 @@ def head_rows_par(
             var hi = lo + chunk
             if hi > l:
                 hi = l
+            if lo >= hi:
+                return  # a trailing chunk past the last token: nothing to do
             var part = List[Float32](length=(hi - lo) * vocab, fill=Float32(0.0))
             gemm_nt_rows(hp[0], wp[][head_index], vocab, dm, lo, hi, part, reverse)
             for i in range((hi - lo) * vocab):
