@@ -573,7 +573,7 @@ def lu_trail_tiled_kernel(a: F32Ptr, act: F32Ptr, k0: Int32, k1: Int32, n: Int32
 
 
 # ---- the fused panel (lane neural-pass36, 2026-10-01) -------------------------------------
-comptime LU_PANEL_TPB = LU_PIVOT_TPB
+comptime LU_PANEL_TPB = 1024
 
 
 @always_inline
