@@ -1,11 +1,9 @@
 name: Light checks
 
-# LIGHT TOUCH: the ONLY workflow that runs by itself.
-# One Linux runner, Python only, no Mojo build, no bindings, no matrix, a hard
-# ten minute cap. Everything heavy is manual with confirm RUN-HEAVY.
+# Manual only (2026-10-01): no workflow runs by itself on a push or a PR; merges are decided by measurements on the
+# boxes. One Linux runner, Python only, no Mojo build, no bindings, no matrix, a hard ten minute cap. Run it by hand
+# when wanted (gh workflow run light-checks.yml).
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
