@@ -1,0 +1,42 @@
+# PR #67 pooled logits output (lane/neural-pass61), 2026-10-01
+
+Arms: main vs lane/neural-pass61 (main merged in), released 0.8.33 venv with the branch builds overlaid.
+Bulk logs in R2: measurements/2026-10-01/ab-pr67-nvidia.tar.gz (row in r2-index.tsv).
+
+## NVIDIA L40S (nvc1), stage runs x2 interleaved + timers build + board race
+
+| row | main | pass61 |
+|---|---|---|
+| lm-forward stage (ms) | 51.7 / 51.2 | 17.2 / 17.0 |
+| lm-train-step stage (ms) | 41.8 / 41.5 | 41.6 / 41.7 |
+| lm-forward race (ms) | 54.7 | 16.8 |
+| lm-forward digest | 4a8e781b0739a038 | 4a8e781b0739a038 |
+| losses begin | 9.018733024597168, 8.418445587158203 | same |
+
+Timers (branch): `python.logits_out` 29.5 ms fresh on the first two calls, then 0.007 to 0.017 ms pooled;
+`python.logits_binding` 16.7 ms steady.
+
+AMD MI325X (DO pass8) and M3 Ultra (~/pr67_mac.sh) pending; merge only when all three agree on bits and speed.
+
+Also tracked in the same evidence commit: bench/results/pr65-attention-stack-20261001/nvidia-raw.txt (#65 NVIDIA raw).
+
+## M3 Ultra (~/pr67-metal; branch base differs from main by evidence commits only)
+
+| row | main | pass61 |
+|---|---|---|
+| lm-forward stage (ms) | 70.6 / 70.3 | 77.5 / 68.2 |
+| lm-train-step stage (ms) | 200.6 / 206.7 | 204.5 / 204.1 |
+| lm-forward race (ms) | 65.2 | 65.1 |
+| digest / losses | 4a8e781b0739a038 | same |
+
+Neutral on Apple (same bits). Merge once AMD (pass8) is not slower.
+
+## AMD MI325X (DO pass8, ab_job with main 3befccd28 incl. #65 merged in)
+
+| row | main | pass61 |
+|---|---|---|
+| lm-forward stage (ms) | 37.4 / 37.8 (timers 37.5) | 22.8 / 22.6 (timers 23.4) |
+| lm-train-step stage (ms) | 57.3 / 58.4 | 58.5 / 57.5 |
+| digest / losses | 4a8e781b0739a038 | same |
+
+MERGED ae506584d: NVIDIA -67% and AMD -40% forward, M3 neutral, same bits. R2 ab-pr67-amd.

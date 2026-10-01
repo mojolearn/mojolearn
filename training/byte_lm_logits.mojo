@@ -49,7 +49,10 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.checks.gemm_oracle import OP_NT
 from embedding.checks.embedding_identical import identical_embedding_forward_into
 from embedding.checks.embedding_oracle import EmbConfig
+from std.time import perf_counter_ns
 from transformer.impl.llama.modeling_llama import (
+    timing_on,
+    timing_tick,
     LlamaDeviceStages,
     LlamaDeviceWeights,
     LlamaKVCache,
@@ -182,8 +185,11 @@ def _logits_enqueue(
     if len(inputs) != m:
         raise Error("byte LM logits: ids must hold batch * length tokens")
 
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     ctx.enqueue_copy(dst_buf=sc.ids, src_ptr=inputs.unsafe_ptr())
     identical_embedding_forward_into(ctx, sc.x, emb_w, sc.ids, m, EmbConfig.llama(vocab, dm))
+    timing_tick(ctx, ton, tk, "logits.ids_and_embedding")
 
     # One cache for every block, reset to a fresh prefill before each, as the
     # trainer's `prefill_cache` is; stages sized for this call's shape.
@@ -223,9 +229,10 @@ def _logits_enqueue(
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
                     batch, length, 0, trace, prefix, norm1_ready=norm1_ready, forward_only=True)
         sc.stages.insert(layer, st^)
-
+    timing_tick(ctx, ton, tk, "logits.layers")
     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
         m, vocab, dm, OP_NT)
+    timing_tick(ctx, ton, tk, "logits.head_gemm")
     _ = trace
 
 
@@ -321,11 +328,15 @@ def _logits_forward_into(
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
+    var ton = timing_on()
+    var tk = Int(perf_counter_ns())
     var bad = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, True)
+    timing_tick(ctx, ton, tk, "logits.download")
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
     if bad >= 0:
         _raise_nonfinite_logit(bad)
+    timing_tick(ctx, ton, tk, "logits.scan")
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],

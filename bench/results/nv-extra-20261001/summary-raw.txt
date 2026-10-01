@@ -1,0 +1,32 @@
+job 0002: done
+stage-main        lm-forward 49.699 lm-train-step 41.054 transformer-forward 2.385  4a8e781b0739a038 d5a2b289afdb5709
+stage-layersync0  lm-forward 51.305 lm-train-step 41.133 transformer-forward 2.396  4a8e781b0739a038 d5a2b289afdb5709
+stage-spec1       lm-forward 51.295 lm-train-step 40.993 transformer-forward 2.374  4a8e781b0739a038 d5a2b289afdb5709
+stage-arena1      lm-forward 51.306 lm-train-step 41.248 transformer-forward 2.442  4a8e781b0739a038 d5a2b289afdb5709
+stage-timers      lm-forward 52.027 lm-train-step 41.464 transformer-forward 2.446  4a8e781b0739a038 d5a2b289afdb5709
+== attn phase ticks (lm-train-step + lm-forward, per layer avg)
+  bwd.attention 1.720
+  block.attention_total 1.000
+  attn.core 0.666
+  attn.bwd_dq_tiled_pf 0.627
+  attn.fwd_r2_keep_kernel 0.607
+  attn.bwd_zdot_estash_dres_pf 0.512
+  attn.bwd_kvgrid_dkdv_pf 0.499
+  bwd.after_attention 0.455
+  block.mlp_and_residuals 0.446
+  attn.qkv_proj 0.208
+  block.norm1 0.082
+  attn.o_proj 0.075
+  attn.fwd_estash_alloc 0.057
+  attn.rope_and_cache 0.041
+  attn.bwd_regime_scan 0.039
+  attn.fwd_regime_scan 0.028
+  attn.bwd_corner_flag 0.021
+  attn.fwd_corner_flag 0.017
+  attn.bwd_scratch_alloc 0.012
+  bwd.before_attention 0.002
+transformer-forward 0.8.25: median_ms=4.389168694615364 digest=d5a2b289afdb5709
+transformer-forward 0.8.32: median_ms=3.9779916405677795 digest=d5a2b289afdb5709
+transformer-forward 0.8.33: median_ms=3.9917826652526855 digest=d5a2b289afdb5709
+
+[exited with code 0]
