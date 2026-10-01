@@ -1,0 +1,6 @@
+mainnow sgd ms=431.641 digest=0743826898a3d479 
+mainnow adam ms=442.592 digest=04d59ea621486362 
+mainnow adamw ms=437.477 digest=a56b45e6a36856e6 
+pass26 sgd ms=114.799 digest=0743826898a3d479 
+pass26 adam ms=122.747 digest=04d59ea621486362 
+pass26 adamw ms=119.935 digest=a56b45e6a36856e6 
