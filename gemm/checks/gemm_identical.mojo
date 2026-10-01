@@ -3298,7 +3298,44 @@ def gemm_split_cells_cap() -> Int:
 #: every digest and loss equal. So the AMD column's default is 1024 (the
 #: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
 #: keeps its tile). NVIDIA and Apple keep 0 (off).
-comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = 1024 if TARGET_COLUMN == COLUMN_AMD else 0
+comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = (
+    1024 if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_NVIDIA else 0
+)
+#: lane/neural-pass54 (2026-10-01): the step-down only from this k (0 = any).
+#: On the L40S the narrower tiles won the 4096^3 race (54.1 -> 47.1 ms) and
+#: lost the LM stages (k 384..2048; lm-train-step 40.7 -> 47 ms), so the
+#: NVIDIA column steps down only when the K loop is long enough to amortize
+#: the smaller tile; AMD keeps every k. MOJOLEARN_GEMM_TILE_MIN_K overrides.
+comptime GEMM_TILE_MIN_K_DEFAULT = 4096 if TARGET_COLUMN == COLUMN_NVIDIA else 0
+
+
+struct _TileMinK(Defaultable, Movable):
+    var k: Int
+
+    def __init__(out self):
+        self.k = -1
+
+
+comptime _TILE_MIN_K_NAME = "MojoGemmTileMinKIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinKFast"
+comptime GEMM_TILE_MIN_K = _Global[StorageType=_TileMinK, name=_TILE_MIN_K_NAME, init_fn=_TileMinK.__init__]
+
+
+def gemm_tile_min_k() -> Int:
+    """The smallest k the tile step-down applies to: MOJOLEARN_GEMM_TILE_MIN_K
+    when set (read once per process), else GEMM_TILE_MIN_K_DEFAULT."""
+    try:
+        var p = GEMM_TILE_MIN_K.get_or_create_ptr()
+        if p[].k < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_TILE_MIN_K"))
+            var k = GEMM_TILE_MIN_K_DEFAULT
+            if v != "":
+                k = Int(v)
+            if k < 0:
+                k = 0
+            p[].k = k
+        return p[].k
+    except:
+        return GEMM_TILE_MIN_K_DEFAULT
 
 
 struct _TileMinBlocks(Defaultable, Movable):
@@ -3402,7 +3439,7 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
             or tiles == PLAN_TUNED_32_2X2
         ) and m >= 64 and n >= 64 and apple_mma_applies(m, n, k):
             return PLAN_APPLE_MMA
-    return gemm_tile_step_down(m, n, tiles)
+    return gemm_tile_step_down(m, n, k, tiles)
 
 
 def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
@@ -3478,7 +3515,7 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     return PLAN_TUNED_32_2X2
 
 
-def gemm_tile_step_down(m: Int, n: Int, plan: Int) -> Int:
+def gemm_tile_step_down(m: Int, n: Int, k: Int, plan: Int) -> Int:
     """lane/neural-pass47: a narrower tuned tile where the wide one makes
     fewer than `gemm_tile_min_blocks()` blocks (0 = off): 128 -> 64 -> 32
     while the output still fills the tile. Applied by `choose_gemm_plan`
@@ -3487,7 +3524,7 @@ def gemm_tile_step_down(m: Int, n: Int, plan: Int) -> Int:
     and only the calls that would run a plain tuned tile step down. The
     same leaves and folds either way."""
     var min_blocks = gemm_tile_min_blocks()
-    if min_blocks <= 0:
+    if min_blocks <= 0 or k < gemm_tile_min_k():
         return plan
     var pick = plan
     if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < min_blocks:
