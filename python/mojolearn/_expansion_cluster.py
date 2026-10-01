@@ -72,6 +72,40 @@ def _callable_init(init, X, k, random_state):
     return init(X, k, random_state=rs)
 
 
+#: lane/neural-pass77 (2026-10-01): MeanShift's fit takes the CPU host
+#: binding on a GPU install too. The device runs one thread per seed (about
+#: a hundred threads on a board fit), the host runs the seeds over its cores
+#: with the distances as lanes: istella 10K x 220 on the M4 Metal 16.8 s,
+#: host 2.3 s, labels and centers equal (the same IDENTICAL arithmetic).
+#: `MOJOLEARN_X_CLUSTER_DEVICE=1` keeps the device.
+_HOST_ENTRIES = None
+_HOST_MOD = []
+
+
+def _host_entries():
+    global _HOST_ENTRIES
+    if _HOST_ENTRIES is None:
+        import os
+        _HOST_ENTRIES = frozenset() if os.environ.get("MOJOLEARN_X_CLUSTER_DEVICE", "") == "1" else frozenset((_E_MEANSHIFT,))
+    return _HOST_ENTRIES
+
+
+def _host_module():
+    """`mojolearn.host._mojolearn_x_cluster_host` when importable, else None; resolved once."""
+    if not _HOST_MOD:
+        mod = None
+        try:
+            import importlib
+            pkg = __name__.rsplit(".", 1)[0]
+            cand = importlib.import_module(f"{pkg}.host._mojolearn_x_cluster_host")
+            if getattr(cand, "x_cluster_call", None) is not None:
+                mod = cand
+        except Exception:  # noqa: BLE001 - no host set: the device binding serves
+            mod = None
+        _HOST_MOD.append(mod)
+    return _HOST_MOD[0]
+
+
 class _XCluster(NumericModeMixin):
     """The lane's shared call: `x_cluster_call` on `_mojolearn_x_cluster`
     (the CPU host binding `_mojolearn_x_cluster_host` on a CPU-only install)."""
@@ -79,6 +113,10 @@ class _XCluster(NumericModeMixin):
 
     def _call(self, which, x, a, ip, fp=()):
         b = self._bind()
+        if which in _host_entries() and str(getattr(self, "numeric_mode", "identical") or "identical").strip().lower() == "identical":
+            h = _host_module()
+            if h is not None:
+                b = h
         xa = _buffer.addr_ro(x, name="X") if x is not None else 0
         xn = x.size if x is not None else 0
         aa = _buffer.addr_ro(a, name="aux") if a is not None and a.size else 0
