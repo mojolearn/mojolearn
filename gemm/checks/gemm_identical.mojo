@@ -135,7 +135,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
-from std.ffi import external_call
+from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
@@ -3234,6 +3234,54 @@ def _is_split_plan(plan: Int) -> Bool:
 comptime SPLITK_MAX_WORKSPACE_FLOATS = 64 * 1024 * 1024
 
 
+#: The split plans' output cap, in cells: below it the output alone cannot
+#: fill the machine and the leaves of `contract_partition(k)` are spread
+#: over blocks (PLAN_SPLIT_64_4X4 and the smaller tiles). 128 K was measured
+#: on an L40S (142 SMs, 2026-09-09). lane/neural-pass45 (2026-10-01) reads it
+#: once per process from MOJOLEARN_GEMM_SPLIT_CELLS so a box can sweep it:
+#: the MI325X has 304 CUs, and the LM's 2048 x 384 x 384 projections (786 K
+#: cells, 192 tiles of 64 x 64) ran at 1.5 TFLOPS there
+#: (bench/results/neural-stage-timing-amd-m3-20261001). An execution plan
+#: only: every plan computes the same leaves and folds, the same bits
+#: (`check_device_is_launch_invariant`). MEASURED on the MI325X
+#: (2026-10-01, bench/results for PR #52): caps 128 K / 512 K / 1 M / 2 M
+#: read lm-train-step 121.6 / 105.0 / 100.9 / 101.0 ms and lm-forward 57.9 /
+#: 59.3 / 54.2 / 54.5, the MLP projections 1.60 -> 1.18 ms a layer, every
+#: digest and loss equal; so the AMD column's default is 1 M cells. NVIDIA
+#: keeps the L40S's 128 K; Apple keeps 128 K too (a raised cap would
+#: pre-empt PLAN_APPLE_MMA).
+comptime GEMM_SPLIT_CELLS_DEFAULT = (1 << 20) if TARGET_COLUMN == COLUMN_AMD else 128 * 1024
+
+
+struct _SplitCells(Defaultable, Movable):
+    var cells: Int
+
+    def __init__(out self):
+        self.cells = -1
+
+
+comptime _SPLIT_CELLS_NAME = "MojoGemmSplitCellsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmSplitCellsFast"
+comptime GEMM_SPLIT_CELLS = _Global[StorageType=_SplitCells, name=_SPLIT_CELLS_NAME, init_fn=_SplitCells.__init__]
+
+
+def gemm_split_cells_cap() -> Int:
+    """The split plans' output cap: MOJOLEARN_GEMM_SPLIT_CELLS when set
+    (read once per process), else GEMM_SPLIT_CELLS_DEFAULT."""
+    try:
+        var p = GEMM_SPLIT_CELLS.get_or_create_ptr()
+        if p[].cells < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_SPLIT_CELLS"))
+            var cells = GEMM_SPLIT_CELLS_DEFAULT
+            if v != "":
+                cells = Int(v)
+            if cells < 1:
+                cells = GEMM_SPLIT_CELLS_DEFAULT
+            p[].cells = cells
+        return p[].cells
+    except:
+        return GEMM_SPLIT_CELLS_DEFAULT
+
+
 def identical_gemm_splitk_fits(m: Int, n: Int, k: Int) -> Bool:
     return (
         identical_gemm_workspace_floats(m, n, k, PLAN_SPLITK)
@@ -3330,6 +3378,7 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # plans' 128 K-cell floor.
     var p_count = contract_partition(k)[1]
     if p_count >= 4 and identical_gemm_splitk_fits(m, n, k):
+        var cap = gemm_split_cells_cap()
         if m <= 8 and n >= 256:
             if m == 1:
                 return PLAN_SPLIT_1X256
@@ -3339,11 +3388,11 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
             # do more work than the existing 64-wide plan.
             if p_count >= 512 and m % 128 == 0 and n % 128 == 0 and m * n <= 128 * 1024:
                 return PLAN_SPLIT_128_8X8
-        if m >= 64 and n >= 64 and m * n <= 128 * 1024:
+        if m >= 64 and n >= 64 and m * n <= cap:
             return PLAN_SPLIT_64_4X4
-        if m >= 32 and n >= 32 and m * n <= 128 * 1024:
+        if m >= 32 and n >= 32 and m * n <= cap:
             return PLAN_SPLIT_32_2X2
-        if m >= 16 and n >= 16 and m * n <= 128 * 1024:
+        if m >= 16 and n >= 16 and m * n <= cap:
             return PLAN_SPLIT_16_1X1
         if base == PLAN_SPLITK:
             return PLAN_SPLIT_16_1X1
