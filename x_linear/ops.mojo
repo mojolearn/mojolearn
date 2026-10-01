@@ -425,7 +425,24 @@ def cholesky(a: FP, aoff: Int, m: Int) -> Bool:
             return False
         var r = fsqrt(s)
         st(a, aoff + j * m + j, r)
-        for i in range(j + 1, m):
+        var i0 = j + 1
+        comptime if not is_gpu() and not is_defined["MOJOLEARN_X_LINEAR_CHOL_SCALAR"]():
+            # lane/neural-pass83 (2026-10-01): eight rows of column j at once
+            # on the host, lane l the entry (i0 + l, j): each lane is that
+            # entry's own chain, k ascending, the same `fm` product and `fs`
+            # step (fmulv8 / ftzv), so every word is the scalar loop's. LARS
+            # refactors G_AA every step: 0.32 s of a 1.0 s istella 100k fit
+            # on the M4. `-D MOJOLEARN_X_LINEAR_CHOL_SCALAR=1` restores it.
+            while i0 + 8 <= m:
+                var t = (a + aoff + i0 * m + j).unsafe_strided_load[width=8](m)
+                for k in range(j):
+                    var lik = (a + aoff + i0 * m + k).unsafe_strided_load[width=8](m)
+                    var ljk = SIMD[DType.float32, 8](ld(a, aoff + j * m + k))
+                    t = ftzv[8](ftzv[8](t) - fmulv8(lik, ljk))
+                for l in range(8):
+                    st(a, aoff + (i0 + l) * m + j, fd(t[l], r))
+                i0 += 8
+        for i in range(i0, m):
             var t = ld(a, aoff + i * m + j)
             for k in range(j):
                 t = fs(t, fm(ld(a, aoff + i * m + k), ld(a, aoff + j * m + k)))
