@@ -702,7 +702,12 @@ def mamba3_block_oracle(
     var bet_p = _p(betap_work)
     var scl_p = _p(scale_work)
     var wrows = b * t_work
-    var wtasks = host_row_tasks(wrows, 6 * nh)
+    # lane neural-pass20: a (batch, t) row of the K scaling is nh x n_state
+    # cells (1,536 at the board shape), not nh; the old estimate of 6 nh
+    # per row kept the stage under host_row_tasks' minimum work at every
+    # shape the board runs, so it ran on ONE thread on every host (1.2 ms
+    # of a 14 ms call on the 64-core AMD host). A schedule knob: no bit moves.
+    var wtasks = host_row_tasks(wrows, 6 * nh * n_state)
     var wchunk = (wrows + wtasks - 1) // wtasks
     def _gamma_rows(task: Int) {imm dtw_p, imm sigw_p, imm gam_p, imm bet_p, imm scl_p, imm wrows, imm t_work, imm nh, imm wchunk}:
         for r in range(task * wchunk, min((task + 1) * wchunk, wrows)):
@@ -899,7 +904,7 @@ def mamba3_block_oracle(
 
     host_tick(hton, htk, "m3.qkdot")
     # ---- S15: K scaling over ALL working rows, (batch, t) rows over tasks -
-    var kscale_work = _zeros(b * t_work * nh * n_state)
+    var kscale_work = host_f32_uninit(b * t_work * nh * n_state)  # every cell written by _kscale_rows
     var ksw_p = _p(kscale_work)
     def _kscale_rows(task: Int) {imm rotk_p, imm scl_p, imm ksw_p, imm wrows, imm t_work, imm nh, imm n_state_v, imm wchunk}:
         for r in range(task * wchunk, min((task + 1) * wchunk, wrows)):
