@@ -8,7 +8,7 @@ if [ $V = nvidia ]; then BK=cuda; AR=sm_89; else BK=hip; AR=gfx942; fi
 export PATH=/root/.pixi/bin:/opt/rocm/bin:$PATH MOJOLEARN_NUMERIC_MODE=identical PYTHONUNBUFFERED=1 MOJOLEARN_COMPILE_JOBS=4; unset PYTHONPATH
 rc() { echo "$(date -u +%T) $1 rc=$2" >> $O/rc.txt; }
 git rev-parse HEAD > $O/head.txt; pixi install > $O/pixi.log 2>&1
-MOJOLEARN_TARGET_COLUMN=$V MOJOLEARN_GPU_ARCHS=$AR bash bindings/build_x_decomp.sh > $O/build-x_decomp.log 2>&1; rc build-x_decomp $?
+for m in x_decomp linalg; do MOJOLEARN_TARGET_COLUMN=$V MOJOLEARN_GPU_ARCHS=$AR bash bindings/build_$m.sh > $O/build-$m.log 2>&1; rc build-$m $?; done
 MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_x_decomp_host.sh > $O/build-x_decomp_host.log 2>&1; rc build-x_decomp_host $?
 base=$(pixi run python3 -c 'import sys;print(sys.executable)' | tail -1)
 for arm in before after; do
@@ -16,7 +16,7 @@ for arm in before after; do
   $P -m pip -q install mojolearn==0.8.32 numpy==2.5.2 scipy==1.18.0 networkx > $O/pip-$arm.log 2>&1
   if [ $arm = after ]; then S=$($P -c 'import sysconfig;print(sysconfig.get_paths()["purelib"])')/mojolearn
     cp $S/_version.py /tmp/v.py; cp python/mojolearn/*.py $S/; cp /tmp/v.py $S/_version.py; find $S -name __pycache__ -exec rm -rf {} +
-    so=$(ls -t python/mojolearn/identical/_mojolearn_x_decomp.so python/mojolearn/_mojolearn_x_decomp.so 2>/dev/null | head -1); cp $so $S/$BK/$AR/identical/; sha256sum $so >> $O/bindings.sha256; fi
+    for m in x_decomp linalg; do so=$(ls -t python/mojolearn/identical/_mojolearn_$m.so python/mojolearn/_mojolearn_$m.so 2>/dev/null | head -1); cp $so $S/$BK/$AR/identical/; sha256sum $so >> $O/bindings.sha256; done; fi
 done
 P=$O/venv-before/bin/python
 timeout 3600 $P tools/bench_board_algos.py prep --data $O/data --lanes qr,svd --datasets taxi,istella > $O/prep.log 2>&1; rc prep $?
