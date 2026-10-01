@@ -29,6 +29,7 @@ comptime GLM_LINK_LOG = 1
 #: rows per block of the host gradient/Hessian fold (a block of X stays in
 #: cache while every unit folds it; lane linear-cpu)
 comptime GLM_ROW_BLOCK = 8192
+comptime GLM_STALL_ITERS = 3
 
 
 @always_inline
@@ -174,6 +175,19 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var iters = 0
     var converged = False
     var f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+    # lane/neural-pass68 (2026-10-01): iterations whose accepted step left the
+    # objective unchanged at float32 resolution, in a row. In float32 the mean
+    # gradient of a million rows keeps a noise floor above `tol` (taxi fares:
+    # gmax stalls at 6e-4 against 1e-4 while the step is 2e-6), so the
+    # gradient test never fires and the fit ran every one of its 100
+    # iterations, each a line search of a dozen objective passes that moved
+    # the objective by nothing (78 s on the MI325X). Theirs converges in
+    # float64 by the gradient test; this stops once GLM_STALL_ITERS such
+    # iterations have passed: the coefficients of the 100-iteration fit to
+    # within the objective's resolution (taxi: iteration 10-11 of 100, the
+    # same held-out R2 to 1e-6; a stop at 5 by the Newton decrement, theirs'
+    # second criterion, read 0.035736 against 0.035965 and was dropped).
+    var stall = 0
     for it in range(max_iter):
         comptime if is_gpu():
             # gradient and Hessian at res (eta holds the current linear predictor):
@@ -300,18 +314,6 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
                 if not (slope < 0):
                     flag = 2
-                elif ok and fm(Float32(0.5), fs(Float32(0), slope)) <= tol:
-                    # lane/neural-pass68 (2026-10-01): the Newton decrement, theirs
-                    # (_newton_solver.py check_convergence, criterion 2: 1/2 d^2 <= tol,
-                    # d^2 = g . H^-1 g = -slope; Boyd and Vandenberghe 9.5.1). Theirs
-                    # asks for it AND the gradient test, in float64. In float32 the
-                    # mean gradient of a million rows has a noise floor above tol
-                    # (taxi fares: gmax stalls at 6e-4 against 1e-4 while the step
-                    # is 2e-6 and the objective sits at its float32 floor), so the
-                    # fit ran every one of its 100 iterations, each a line search
-                    # of a dozen objective passes that moved nothing: 78 s on the
-                    # MI325X for a fit that is done after 5. Either test converges.
-                    flag = 1
         flag = t.bcast_int(flag, 1)
         if flag == 1:
             converged = True
@@ -328,14 +330,14 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     st(trial, j, fmad(tt, ld(step, j), ld(res, j)))
             t.sync()
             var ft = _objective(t, x, y, n, d, fi, power, link, alpha, trial, 0, eta, sw, den, s1)
-            # lane/neural-pass68: an objective EQUAL to the current one is no
-            # decrease (the Armijo bound rounds to `f` once `tt * slope`
-            # underflows the objective's float32 resolution, and a step that
-            # moves nothing was "accepted" forever).
-            if ft == ft and ft < f and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
+            if ft == ft and ft <= fa(f, fm(fm(Float32(1e-4), tt), slope)):
                 if t.lead():
                     copy(res, 0, trial, 0, m)
                 t.sync()
+                if ft == f:
+                    stall += 1
+                else:
+                    stall = 0
                 f = ft
                 accepted = True
                 break
@@ -346,6 +348,9 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
             f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+            break
+        if stall >= GLM_STALL_ITERS:
+            converged = True
             break
     if t.lead():
         if not fi:
