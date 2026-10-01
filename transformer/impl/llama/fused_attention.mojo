@@ -104,6 +104,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.scratch_pool import give_dev_f32, give_host_f32, take_dev_f32, take_host_f32
 from core.step_phase import (
     step_count_d2h,
     step_count_device_alloc,
@@ -2263,10 +2264,8 @@ def device_absmax4(
     var out = StaticTuple[Float64, 4](0.0, 0.0, 0.0, 0.0)
     if total == 0:
         return out
-    step_count_device_alloc()
-    var part = ctx.enqueue_create_buffer[DType.float32](total)
-    step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](total)
+    var part = take_dev_f32(ctx, total)
+    var host = take_host_f32(ctx, total)
     var off = 0
     if k0 > 0:
         step_count_launch()
@@ -2315,8 +2314,8 @@ def device_absmax4(
                 m = v
         out[which] = Float64(m)
         lo += kb
-    _ = host^
-    _ = part^
+    give_host_f32(host^)
+    give_dev_f32(part^)
     return out
 
 
@@ -7094,8 +7093,9 @@ def _read_flags(
     # the copy and the kernels that wrote `flag` are in stream order on
     # `ctx`, so the wait after the copy covers them all. The wait that sat
     # between the creation and the copy was a second full round trip.
-    step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
+    # lane/neural-pass48: the pinned mirror from the scratch pool (a pinned
+    # allocation per read cost 0.47 ms a layer on the MI325X).
+    var host = take_host_f32(ctx, len(flag))
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flag)
     step_count_sync()
@@ -7107,7 +7107,7 @@ def _read_flags(
             repaired += 1
         if host.unsafe_ptr().unsafe_load(2) != Float32(0.0):
             repaired += 2
-    _ = host^
+    give_host_f32(host^)
     return (v != Float32(0.0), repaired)
 
 def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]) raises -> Bool:

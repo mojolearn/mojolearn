@@ -300,6 +300,7 @@ from core.step_glue import (
 from core.identity_trace import IdentityTrace
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from core.device_arena import arena_active, arena_take
+from core.scratch_pool import give_host_f32, take_host_f32
 from gemm.checks.gemm_identical import GemmWorkspace
 # lane/lowbit-blocks (2026-09-29): the block's products under
 # `numeric_profile="fixed15_v1"`; absent planes leave every call below as it was.
@@ -3628,16 +3629,13 @@ def _refuse_nonfinite_at(
     if idx < 0:
         return
     var one = buf.create_sub_buffer[DType.float32](idx, 1)
-    step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
-    step_count_sync()
-    ctx.synchronize()
+    var host = take_host_f32(ctx, 1)
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
     step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
-    _ = host^
+    give_host_f32(host^)
     var au = bitcast[DType.uint32](v) & UInt32(0x7FFFFFFF)
     if au > UInt32(0x7F800000):
         raise Error(
