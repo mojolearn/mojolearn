@@ -233,37 +233,59 @@ def gemm_narrow_task_count(m: Int) -> Int:
 
 
 def gemm_narrow_task(t: Int, a: F32Ptr, bt: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int):
-    comptime NP = NARROW_V * W
     var nv = ceildiv(n, W)
+    if nv == 1:
+        _narrow_rows[1](t, a, bt, c, m, k, n)
+    elif nv == 2:
+        _narrow_rows[2](t, a, bt, c, m, k, n)
+    else:  # 3 or 4 vectors: the packed B is zero padded to NARROW_V * W, the extra lanes never stored
+        _narrow_rows[4](t, a, bt, c, m, k, n)
+
+
+def _narrow_rows[NVQ: Int](t: Int, a: F32Ptr, bt: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int):
+    """Rows [NARROW_RB * t, +NARROW_RB) of the narrow C, NVQ column vectors."""
+    comptime NP = NARROW_V * W
     var nb = ceildiv(k, FOLD_BLOCK)
     var i0 = t * NARROW_RB
     var i1 = min(m, i0 + NARROW_RB)
+    var cellbuf = InlineArray[Float32, NARROW_RI * NP](fill=Float32(0))
     var tot = InlineArray[Float32, NARROW_RI * NP](fill=Float32(0))
+    var cb = F32Ptr(unsafe_from_address=Int(cellbuf.unsafe_ptr()))
     var i = i0
     while i < i1:
         var rows = min(NARROW_RI, i1 - i)
         for blk in range(nb):
             var p0 = blk * FOLD_BLOCK
             var p1 = min(k, p0 + FOLD_BLOCK)
-            var acc = InlineArray[V, NARROW_RI * NARROW_V](fill=V(0))
             if rows == NARROW_RI:
+                var a0 = SIMD[DType.float32, W * NVQ](0)
+                var a1 = SIMD[DType.float32, W * NVQ](0)
+                var a2 = SIMD[DType.float32, W * NVQ](0)
+                var a3 = SIMD[DType.float32, W * NVQ](0)
+                var r0 = a.unsafe_offset(i * k)
+                var r1 = a.unsafe_offset((i + 1) * k)
+                var r2 = a.unsafe_offset((i + 2) * k)
+                var r3 = a.unsafe_offset((i + 3) * k)
                 for p in range(p0, p1):
-                    var brow = bt.unsafe_offset(p * NP)
-                    comptime for r in range(NARROW_RI):
-                        var x = V(_ftz1(a.unsafe_load((i + r) * k + p)))
-                        comptime for v in range(NARROW_V):
-                            if v < nv:
-                                acc[r * NARROW_V + v] = ftz_v[W](mul_add_v[W](x, brow.unsafe_load[width=W](v * W), acc[r * NARROW_V + v]))
+                    var y = bt.unsafe_load[width=W * NVQ](p * NP)
+                    a0 = ftz_v[W * NVQ](mul_add_v[W * NVQ](SIMD[DType.float32, W * NVQ](_ftz1(r0.unsafe_load(p))), y, a0))
+                    a1 = ftz_v[W * NVQ](mul_add_v[W * NVQ](SIMD[DType.float32, W * NVQ](_ftz1(r1.unsafe_load(p))), y, a1))
+                    a2 = ftz_v[W * NVQ](mul_add_v[W * NVQ](SIMD[DType.float32, W * NVQ](_ftz1(r2.unsafe_load(p))), y, a2))
+                    a3 = ftz_v[W * NVQ](mul_add_v[W * NVQ](SIMD[DType.float32, W * NVQ](_ftz1(r3.unsafe_load(p))), y, a3))
+                cb.unsafe_store(0 * NP, a0)
+                cb.unsafe_store(1 * NP, a1)
+                cb.unsafe_store(2 * NP, a2)
+                cb.unsafe_store(3 * NP, a3)
             else:
-                for p in range(p0, p1):
-                    var brow = bt.unsafe_offset(p * NP)
-                    for r in range(rows):
-                        var x = V(_ftz1(a.unsafe_load((i + r) * k + p)))
-                        for v in range(nv):
-                            acc[r * NARROW_V + v] = ftz_v[W](mul_add_v[W](x, brow.unsafe_load[width=W](v * W), acc[r * NARROW_V + v]))
+                for r in range(rows):
+                    var ar = SIMD[DType.float32, W * NVQ](0)
+                    var rp = a.unsafe_offset((i + r) * k)
+                    for p in range(p0, p1):
+                        ar = ftz_v[W * NVQ](mul_add_v[W * NVQ](SIMD[DType.float32, W * NVQ](_ftz1(rp.unsafe_load(p))), bt.unsafe_load[width=W * NVQ](p * NP), ar))
+                    cb.unsafe_store(r * NP, ar)
             for r in range(rows):
                 for q in range(n):
-                    var cell = acc[r * NARROW_V + q // W][q % W]
+                    var cell = cb.unsafe_load(r * NP + q)
                     if nb == 1:
                         tot[r * NP + q] = cell
                     elif blk == 0:
