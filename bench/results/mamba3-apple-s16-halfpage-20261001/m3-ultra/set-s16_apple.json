@@ -1,0 +1,72 @@
+[
+ {
+  "digest": {
+   "mamba3-forward": "481c50cae2dd749e"
+  },
+  "env": {},
+  "first": {
+   "mamba3-forward": 56.621
+  },
+  "losses": {},
+  "median": {
+   "mamba3-forward": 23.767
+  },
+  "name": "baseline",
+  "returncode": 1,
+  "stderr_tail": "Traceback (most recent call last):\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 106, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 62, in main\n    runner.call()\n    ~~~~~~~~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/bench_board_neural.py\", line 919, in call\n    res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 568, in train_step\n    loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,\n                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                      dropout_stream=stream,\n                                      ^^^^^^^^^^^^^^^^^^^^^^\n                                      token_offset=k * rows * l)\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 491, in loss_and_grads\n    fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))\n                                            ~~~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_training_impl.py\", line 233, in _load\n    mod = _backend.binding(_EXT_NAME, mode)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1938, in binding\n    module = getattr(selected, name)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1778, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_training.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh\n"
+ },
+ {
+  "digest": {
+   "mamba3-forward": "481c50cae2dd749e"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_S16_QK_ARM": "naive"
+  },
+  "first": {
+   "mamba3-forward": 52.764
+  },
+  "losses": {},
+  "median": {
+   "mamba3-forward": 22.498
+  },
+  "name": "s16_naive",
+  "returncode": 1,
+  "stderr_tail": "Traceback (most recent call last):\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 106, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 62, in main\n    runner.call()\n    ~~~~~~~~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/bench_board_neural.py\", line 919, in call\n    res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 568, in train_step\n    loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,\n                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                      dropout_stream=stream,\n                                      ^^^^^^^^^^^^^^^^^^^^^^\n                                      token_offset=k * rows * l)\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 491, in loss_and_grads\n    fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))\n                                            ~~~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_training_impl.py\", line 233, in _load\n    mod = _backend.binding(_EXT_NAME, mode)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1938, in binding\n    module = getattr(selected, name)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1778, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_training.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh\n"
+ },
+ {
+  "digest": {
+   "mamba3-forward": "481c50cae2dd749e"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_S16_QK_ARM": "regs2h"
+  },
+  "first": {
+   "mamba3-forward": 54.691
+  },
+  "losses": {},
+  "median": {
+   "mamba3-forward": 22.331
+  },
+  "name": "s16_regs2h",
+  "returncode": 1,
+  "stderr_tail": "Traceback (most recent call last):\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 106, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 62, in main\n    runner.call()\n    ~~~~~~~~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/bench_board_neural.py\", line 919, in call\n    res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 568, in train_step\n    loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,\n                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                      dropout_stream=stream,\n                                      ^^^^^^^^^^^^^^^^^^^^^^\n                                      token_offset=k * rows * l)\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 491, in loss_and_grads\n    fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))\n                                            ~~~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_training_impl.py\", line 233, in _load\n    mod = _backend.binding(_EXT_NAME, mode)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1938, in binding\n    module = getattr(selected, name)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1778, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_training.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh\n"
+ },
+ {
+  "digest": {
+   "mamba3-forward": "481c50cae2dd749e"
+  },
+  "env": {
+   "MOJOLEARN_MAMBA3_S16_QK_ARM": "regsh"
+  },
+  "first": {
+   "mamba3-forward": 54.177
+  },
+  "losses": {},
+  "median": {
+   "mamba3-forward": 22.027
+  },
+  "name": "s16_regsh",
+  "returncode": 1,
+  "stderr_tail": "Traceback (most recent call last):\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 106, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/neural_stage_timing.py\", line 62, in main\n    runner.call()\n    ~~~~~~~~~~~^^\n  File \"/Users/ec2-user/mojolearn-apple3/tools/bench_board_neural.py\", line 919, in call\n    res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 568, in train_step\n    loss_k, g_k = self.loss_and_grads(ids[sl], y[sl], num_items=count,\n                  ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                      dropout_stream=stream,\n                                      ^^^^^^^^^^^^^^^^^^^^^^\n                                      token_offset=k * rows * l)\n                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_samba_impl.py\", line 491, in loss_and_grads\n    fused = callable(T._optional_samba_head(T._load(self.numeric_mode)))\n                                            ~~~~~~~^^^^^^^^^^^^^^^^^^^\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_training_impl.py\", line 233, in _load\n    mod = _backend.binding(_EXT_NAME, mode)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1938, in binding\n    module = getattr(selected, name)\n  File \"/Users/ec2-user/mojolearn-apple3/python/mojolearn/_backend.py\", line 1778, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_training.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh\n"
+ }
+]
