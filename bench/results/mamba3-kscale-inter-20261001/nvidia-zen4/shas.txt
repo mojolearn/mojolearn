@@ -1,0 +1,8 @@
+main L512 pblocks=default sha256 one 94bd23787c50a4da policy 94bd23787c50a4da   hblk.m3.kscale 3.64 ms 13.1%  hblk.m3.inter_chunk 3.39 ms 12.2% 
+main L2048 pblocks=default sha256 one 62e3661f915836ba policy 62e3661f915836ba   hblk.m3.kscale 6.90 ms 10.8%  hblk.m3.inter_chunk 6.60 ms 10.3% 
+branch L512 pblocks=default sha256 one 94bd23787c50a4da policy 94bd23787c50a4da   hblk.m3.inter_chunk 2.55 ms 12.7%  hblk.m3.kscale 0.59 ms 2.9% 
+branch L512 pblocks=8 sha256 one 94bd23787c50a4da policy 94bd23787c50a4da   hblk.m3.inter_chunk 2.16 ms 11.0%  hblk.m3.kscale 0.59 ms 3.0% 
+branch L512 pblocks=1 sha256 one 94bd23787c50a4da policy 94bd23787c50a4da   hblk.m3.inter_chunk 5.60 ms 23.0%  hblk.m3.kscale 0.56 ms 2.3% 
+branch L2048 pblocks=default sha256 one 62e3661f915836ba policy 62e3661f915836ba   hblk.m3.inter_chunk 7.09 ms 12.3%  hblk.m3.kscale 1.28 ms 2.2% 
+branch L2048 pblocks=8 sha256 one 62e3661f915836ba policy 62e3661f915836ba   hblk.m3.inter_chunk 5.97 ms 10.4%  hblk.m3.kscale 1.06 ms 1.8% 
+branch L2048 pblocks=1 sha256 one 62e3661f915836ba policy 62e3661f915836ba   hblk.m3.inter_chunk 13.56 ms 22.2%  hblk.m3.kscale 0.99 ms 1.6% 

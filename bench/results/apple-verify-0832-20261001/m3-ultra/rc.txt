@@ -1,0 +1,17 @@
+03:28:33 pip rc=0
+03:28:36 digest-board rc=1
+03:28:38 digest-default rc=1
+03:28:38 matmul rc=0
+03:28:39 mlp-check-256 rc=0
+03:28:40 mlp-check-32 rc=0
+03:28:44 opt-check-adamw rc=0
+03:28:47 opt-check-adam rc=0
+03:28:51 opt-check-sgd rc=0
+03:28:51 classical-lu rc=0
+03:28:59 classical-sgd-reg rc=0
+03:29:05 classical-sgd-clf rc=0
+03:29:34 classical-lars rc=0
+03:29:35 classical-ivf rc=0
+03:29:37 kpca-256 rc=0
+03:29:38 kpca-1000 rc=0
+03:29:39 kpca-10000 rc=0
