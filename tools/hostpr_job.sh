@@ -20,10 +20,10 @@ if [ $PR = pr11 ]; then
   st step-check-board; timeout 3600 pixi run python tools/byte_lm_host_step_check.py --steps 4 > $O/step-check-board.log 2>&1; rc step-check-board $?
   st step-check-small; timeout 3600 pixi run python tools/byte_lm_host_step_check.py --small --steps 16 > $O/step-check-small.log 2>&1; rc step-check-small $?
   st profile; timeout 3600 pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings tools/byte_lm_host_step_profile.mojo > $O/profile.log 2>&1; rc profile $?
-  for r in 1 0; do st exp-rows$r; MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=$r timeout 3600 pixi run python tools/neural_experiments.py --lane lm-host-train-step --calls 5 --json $O/exp-rows$r.json > $O/exp-rows$r.log 2>&1; rc exp-rows$r $?; done
+  for r in 1 0; do st cell-rows$r; MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=$r MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$PWD/python timeout 3600 pixi run python tools/bench_board_neural.py race --lane lm-host-train-step --shape full --arms ours --rounds 3 --out $O/cell-rows$r --work $O/work --ours-python $PYP > $O/cell-rows$r.log 2>&1; rc cell-rows$r $?; done
 else
   st gate; timeout 3600 pixi run python tools/byte_lm_host_gate.py > $O/host-gate.log 2>&1; rc host-gate $?
   st sweep; timeout 3600 pixi run python tools/byte_lm_host_path_sweep.py > $O/path-sweep.log 2>&1; rc path-sweep $?
-  for r in 1 0; do st exp-split$r; MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=$r timeout 3600 pixi run python tools/neural_experiments.py --lane lm-infer --calls 5 --json $O/exp-split$r.json > $O/exp-split$r.log 2>&1; rc exp-split$r $?; done
+  for r in 1 0; do st cell-split$r; MOJOLEARN_BYTE_LM_HOST_TOKEN_SPLIT=$r MOJOLEARN_BENCH_INSTALLED=0 PYTHONPATH=$PWD/python timeout 3600 pixi run python tools/bench_board_neural.py race --lane lm-infer --shape full --arms ours --rounds 3 --out $O/cell-split$r --work $O/work --ours-python $PYP > $O/cell-split$r.log 2>&1; rc cell-split$r $?; done
 fi
 st done; echo done > $O/done
