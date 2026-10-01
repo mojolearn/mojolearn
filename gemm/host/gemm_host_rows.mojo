@@ -537,17 +537,29 @@ def gemm_host_rows_into(
         # every task in the caller's floating-point environment.
         var rchunk = (m + tasks - 1) // tasks
         var pchunk = (npan + tasks - 1) // tasks
+        var by_rows = m >= 2 * tasks
 
-        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan}:
-            ghr_pack_a(a, op, m, k, ap, t * rchunk, min((t + 1) * rchunk, m))
+        # lane neural-pass19: when the cells split by rows, each compute
+        # task packs its own left rows right before it tiles them (the rows
+        # are then hot in that core's cache, and the left matrix is read
+        # once by one task instead of twice by two), so the first fork
+        # packs the right panels only. The right pack stays over tasks:
+        # packing it on the calling thread (lane neural-pass13) serialized
+        # 1 to 2 MB a call and lost 30-50% at 64 threads. A cell's bits do
+        # not depend on which task packs or computes it (module note).
+        def _pack(t: Int) {imm a, imm b, imm ap, imm bp, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows}:
+            if not by_rows:
+                ghr_pack_a(a, op, m, k, ap, t * rchunk, min((t + 1) * rchunk, m))
             ghr_pack_b(b, op, n, k, bp, t * pchunk, min((t + 1) * pchunk, npan))
 
         host_parallelize(_pack, tasks)
-        var by_rows = m >= 2 * tasks
 
-        def _cells(t: Int) {imm ap, imm bp, imm c, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows, imm force_redo, imm real_k}:
+        def _cells(t: Int) {imm a, imm ap, imm bp, imm c, imm op, imm m, imm n, imm k, imm rchunk, imm pchunk, imm npan, imm by_rows, imm force_redo, imm real_k}:
             if by_rows:
-                ghr_tile(ap, bp, c, n, k, t * rchunk, min((t + 1) * rchunk, m), 0, npan, force_redo, real_k)
+                var r0 = t * rchunk
+                var r1 = min((t + 1) * rchunk, m)
+                ghr_pack_a(a, op, m, k, ap, r0, r1)
+                ghr_tile(ap, bp, c, n, k, r0, r1, 0, npan, force_redo, real_k)
             else:
                 ghr_tile(ap, bp, c, n, k, 0, m, t * pchunk, min((t + 1) * pchunk, npan), force_redo, real_k)
 
