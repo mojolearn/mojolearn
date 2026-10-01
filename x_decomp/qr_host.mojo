@@ -11,24 +11,29 @@ the update, so at 200,000 x 220 it touches 48,000 columns' worth of strided
 rows per step and takes 300 s on an M4 core. The device's one-block-per-
 column staged chains take 17 s there (the chain is 200,000 dependent
 multiply-adds per column, which no GPU runs faster than its fma latency).
-Here the matrix is transposed once into a column-major copy (every column
-contiguous), the walk runs there, and the result is transposed back. A
-column's chain `w_j = ftz(fma(ftz(a[i, k]), ftz(a[i, j]), w_j))` is then two
-sequential streams (column k and column j), which the prefetcher follows
-(a first version streamed the row-major rows and was latency-bound on the
-880-byte stride: 17 s at 200,000 x 220, the device's time). Each chain is
-the serial loop's: the same operands in the same order from the same
-`ftz(a[k, j])`; the chains of four columns are advanced in one loop so the
-four independent fma chains overlap, which changes no chain. The trailing
-columns go over host tasks in contiguous groups (a task's columns are its
-own; column k is read by every task and written by none during the step).
-The head and the multipliers are `geqrf_head`'s and `geqrf_scale_elem`'s
-statements over the contiguous column (`_head_col`, `_norm_col`), the row-k
-update is `sub`. `orgqr` is the same shape with the reflectors applied last
-to first to the columns of Q.
+Here the matrix is copied once into a BLOCK-INTERLEAVED layout: the columns
+in blocks of W = HOST_FW, each block holding its W columns row-interleaved
+(row i of block b is W consecutive words), the walk runs there, and the
+result is copied back. A block's W chains `w_j = ftz(fma(ftz(a[i, k]),
+ftz(a[i, j]), w_j))` then advance together one row at a time: one vector
+load, `identical_mul_add_simd` and `ftz_lanes`, which are the scalar fma
+and flush lane by lane, so each column's chain is the serial loop's (the
+same operands in the same order from the same `ftz(a[k, j])`); column k is
+read down its own block at stride W. (A first version streamed the
+row-major rows and was latency-bound on the 880-byte stride, 17 s at
+200,000 x 220; a column-major version was instruction-bound on the scalar
+flushes, 10.5 s; the serial loop takes 300 s.) The trailing blocks go over
+host tasks in contiguous groups (a task's blocks are its own; column k is
+read by every task and written by none during the step); the block that
+holds column k, and the last block's padding, mask the lanes that are not
+trailing columns, whose words are left exactly as they were. The head and
+the multipliers are `geqrf_head`'s and `geqrf_scale_elem`'s statements
+over the strided column (`_head_col`, `_norm_col`), the row-k update is
+`sub`. `orgqr` is the same shape with the reflectors applied last to first
+to the columns of Q.
 """
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from core.host_lanes import host_row_tasks
+from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_mul_add_simd
+from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks
 from core.host_parallel import host_parallelize
 from std.os import getenv
 from x_decomp.cells import F32Ptr, div0, sqrt0, sub
@@ -59,55 +64,51 @@ def xd_qr_on_host(m: Int) -> Bool:
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
 
 
-comptime _ILP = 4
+comptime _W = HOST_FW
+comptime _B32 = SIMD[DType.bool, _W]
 
 
-def _transpose_in(src: F32Ptr, rows: Int, cols: Int, mut dst: List[Float32]):
-    """dst[j * rows + i] = src[i * cols + j], tiles of 64 x 64, the
-    destination columns over host tasks. A copy."""
+@always_inline
+def _blk(base: _FP, m: Int, j: Int) -> _FP:
+    """Block j // W's base: row i of the block is W words at + i * W."""
+    return base + (j // _W) * m * _W
+
+
+def _pack_in(src: F32Ptr, rows: Int, cols: Int, mut dst: List[Float32]):
+    """The block-interleaved copy of a row-major rows x cols matrix (the
+    padding columns of the last block zero), the blocks over host tasks."""
+    var nb = (cols + _W - 1) // _W
     var dp = _FP(unsafe_from_address=Int(dst.unsafe_ptr()))
-    var tasks = host_row_tasks(cols, 2 * rows)
-    var chunk = (cols + tasks - 1) // tasks
-    def _t(task: Int) {imm src, imm dp, imm rows, imm cols, imm chunk}:
-        var c0 = task * chunk
-        var c1 = min(c0 + chunk, cols)
-        var i0 = 0
-        while i0 < rows:
-            var i1 = min(i0 + 64, rows)
-            var j0 = c0
-            while j0 < c1:
-                var j1 = min(j0 + 64, c1)
-                for i in range(i0, i1):
-                    for j in range(j0, j1):
-                        dp.unsafe_store(j * rows + i, src.unsafe_load(i * cols + j))
-                j0 = j1
-            i0 = i1
+    var tasks = host_row_tasks(nb, 2 * rows * _W)
+    var chunk = (nb + tasks - 1) // tasks
+    def _t(task: Int) {imm src, imm dp, imm rows, imm cols, imm chunk, imm nb}:
+        var b0 = task * chunk
+        var b1 = min(b0 + chunk, nb)
+        for b in range(b0, b1):
+            var out = dp + b * rows * _W
+            var j0 = b * _W
+            for i in range(rows):
+                for l in range(_W):
+                    var j = j0 + l
+                    out.unsafe_store(i * _W + l, src.unsafe_load(i * cols + j) if j < cols else Float32(0))
     if tasks <= 1:
         _t(0)
     else:
         host_parallelize(_t, tasks)
 
 
-def _transpose_out(src: List[Float32], rows: Int, cols: Int, dst: F32Ptr):
-    """dst[i * cols + j] = src[j * rows + i], the destination rows over
-    host tasks. A copy."""
+def _pack_out(src: List[Float32], rows: Int, cols: Int, dst: F32Ptr):
+    """The row-major matrix back from the block-interleaved copy, the rows
+    over host tasks."""
     var sp = _FP(unsafe_from_address=Int(src.unsafe_ptr()))
     var tasks = host_row_tasks(rows, 2 * cols)
     var chunk = (rows + tasks - 1) // tasks
     def _t(task: Int) {imm sp, imm dst, imm rows, imm cols, imm chunk}:
         var r0 = task * chunk
         var r1 = min(r0 + chunk, rows)
-        var i0 = r0
-        while i0 < r1:
-            var i1 = min(i0 + 64, r1)
-            var j0 = 0
-            while j0 < cols:
-                var j1 = min(j0 + 64, cols)
-                for j in range(j0, j1):
-                    for i in range(i0, i1):
-                        dst.unsafe_store(i * cols + j, sp.unsafe_load(j * rows + i))
-                j0 = j1
-            i0 = i1
+        for i in range(r0, r1):
+            for j in range(cols):
+                dst.unsafe_store(i * cols + j, sp.unsafe_load((j // _W) * rows * _W + i * _W + (j % _W)))
     if tasks <= 1:
         _t(0)
     else:
@@ -116,29 +117,29 @@ def _transpose_out(src: List[Float32], rows: Int, cols: Int, dst: F32Ptr):
 
 @always_inline
 def _norm_col(col: _FP, k: Int, m: Int) -> Float32:
-    """`reflector_norm` over the contiguous column: the largest |entry| first,
-    the sum of squares ascending in the row index."""
+    """`reflector_norm` over column k read at stride W: the largest |entry|
+    first, the sum of squares ascending in the row index."""
     var mx = Float32(0)
     for i in range(k, m):
-        var v = abs(ftz(col.unsafe_load(i)))
+        var v = abs(ftz(col.unsafe_load(i * _W)))
         if v > mx:
             mx = v
     if mx == Float32(0):
         return Float32(0)
     var acc = Float32(0)
     for i in range(k, m):
-        var v = ftz(identical_div(ftz(col.unsafe_load(i)), mx))
+        var v = ftz(identical_div(ftz(col.unsafe_load(i * _W)), mx))
         acc = ftz(identical_mul_add(v, v, acc))
     return ftz(identical_mul(sqrt0(acc), mx))
 
 
 @always_inline
 def _head_col(col: _FP, tau: F32Ptr, scal: F32Ptr, k: Int, m: Int):
-    """`geqrf_head` over the contiguous column k (the same statements)."""
-    var alpha = ftz(col.unsafe_load(k))
+    """`geqrf_head` over column k read at stride W (the same statements)."""
+    var alpha = ftz(col.unsafe_load(k * _W))
     var xmax = Float32(0)
     for i in range(k + 1, m):
-        var v = abs(ftz(col.unsafe_load(i)))
+        var v = abs(ftz(col.unsafe_load(i * _W)))
         if v > xmax:
             xmax = v
     if xmax == Float32(0):
@@ -151,136 +152,129 @@ def _head_col(col: _FP, tau: F32Ptr, scal: F32Ptr, k: Int, m: Int):
     tau.unsafe_store(k, div0(sub(beta, alpha), beta))
     scal.unsafe_store(0, sub(alpha, beta))
     scal.unsafe_store(1, Float32(1))
-    col.unsafe_store(k, beta)
+    col.unsafe_store(k * _W, beta)
 
 
 @always_inline
-def _chain4(colk: _FP, c0: _FP, c1: _FP, c2: _FP, c3: _FP, k: Int, m: Int, mut w: InlineArray[Float32, 4]):
-    """Four columns' dot chains in one loop: w[c] = ftz(c[k]) then, for i in
-    k + 1 .. m - 1 ascending, w[c] = ftz(fma(ftz(colk[i]), ftz(c[i]), w[c])).
-    Four independent chains, each the serial loop's."""
-    var w0 = ftz(c0.unsafe_load(k))
-    var w1 = ftz(c1.unsafe_load(k))
-    var w2 = ftz(c2.unsafe_load(k))
-    var w3 = ftz(c3.unsafe_load(k))
+def _step_block(blk: _FP, colk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
+    """One block's W chains and updates for step k; `mask` names the lanes
+    that are trailing columns (the others' words are left as they were)."""
+    var w = ftz_lanes(blk.unsafe_load[width=_W](k * _W))
     for i in range(k + 1, m):
-        var v = ftz(colk.unsafe_load(i))
-        w0 = ftz(identical_mul_add(v, ftz(c0.unsafe_load(i)), w0))
-        w1 = ftz(identical_mul_add(v, ftz(c1.unsafe_load(i)), w1))
-        w2 = ftz(identical_mul_add(v, ftz(c2.unsafe_load(i)), w2))
-        w3 = ftz(identical_mul_add(v, ftz(c3.unsafe_load(i)), w3))
-    w[0] = w0
-    w[1] = w1
-    w[2] = w2
-    w[3] = w3
-
-
-@always_inline
-def _chain1(colk: _FP, c: _FP, k: Int, m: Int) -> Float32:
-    var w = ftz(c.unsafe_load(k))
+        var v = F32V(ftz(colk.unsafe_load(i * _W)))
+        w = ftz_lanes(identical_mul_add_simd[_W](v, ftz_lanes(blk.unsafe_load[width=_W](i * _W)), w))
+    var tw = F32V(0)
+    for l in range(_W):
+        tw[l] = ftz(identical_mul(t, w[l]))
+    var rowk = blk.unsafe_load[width=_W](k * _W)
+    var newk = F32V(0)
+    for l in range(_W):
+        newk[l] = sub(rowk[l], tw[l])
+    blk.unsafe_store(k * _W, mask.select(newk, rowk))
+    var ntw = -tw
     for i in range(k + 1, m):
-        w = ftz(identical_mul_add(ftz(colk.unsafe_load(i)), ftz(c.unsafe_load(i)), w))
-    return w
+        var v = F32V(ftz(colk.unsafe_load(i * _W)))
+        var old = blk.unsafe_load[width=_W](i * _W)
+        var upd = ftz_lanes(identical_mul_add_simd[_W](ntw, v, ftz_lanes(old)))
+        blk.unsafe_store(i * _W, mask.select(upd, old))
 
 
 @always_inline
-def _apply_col(colk: _FP, c: _FP, t: Float32, w: Float32, k: Int, m: Int):
-    """tw = ftz(mul(t, w)); c[k] = sub(c[k], tw); for i > k: c[i] =
-    ftz(fma(-tw, ftz(colk[i]), ftz(c[i])))."""
-    var tw = ftz(identical_mul(t, w))
-    c.unsafe_store(k, sub(c.unsafe_load(k), tw))
-    for i in range(k + 1, m):
-        c.unsafe_store(i, ftz(identical_mul_add(-tw, ftz(colk.unsafe_load(i)), ftz(c.unsafe_load(i)))))
+def _lane_mask(b: Int, k: Int, cols: Int) -> _B32:
+    """The lanes of block b that are trailing columns of step k: k < j < cols."""
+    var mask = _B32(False)
+    for l in range(_W):
+        var j = b * _W + l
+        mask[l] = j > k and j < cols
+    return mask
 
 
-@always_inline
-def _step_cols(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, j0: Int, j1: Int):
-    """The trailing columns [j0, j1) of a column-major buffer (column j at
-    base + j * m): each column's chain, then its update."""
-    var j = j0
-    var w4 = InlineArray[Float32, 4](fill=Float32(0))
-    while j + _ILP <= j1:
-        var c0 = base + j * m
-        var c1 = base + (j + 1) * m
-        var c2 = base + (j + 2) * m
-        var c3 = base + (j + 3) * m
-        _chain4(colk, c0, c1, c2, c3, k, m, w4)
-        _apply_col(colk, c0, t, w4[0], k, m)
-        _apply_col(colk, c1, t, w4[1], k, m)
-        _apply_col(colk, c2, t, w4[2], k, m)
-        _apply_col(colk, c3, t, w4[3], k, m)
-        j += _ILP
-    while j < j1:
-        var c = base + j * m
-        _apply_col(colk, c, t, _chain1(colk, c, k, m), k, m)
-        j += 1
+def _trailing_blocks(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
+    """Every block holding a trailing column of step k, the blocks over host
+    tasks in contiguous groups."""
+    var nb = (cols + _W - 1) // _W
+    var b_lo = (k + 1) // _W
+    if b_lo >= nb:
+        return
+    var count = nb - b_lo
+    var tasks = host_row_tasks(count, 2 * (m - k) * _W)
+    var chunk = (count + tasks - 1) // tasks
+    def _run(task: Int) {imm base, imm colk, imm t, imm k, imm m, imm cols, imm chunk, imm b_lo, imm nb}:
+        var b0 = b_lo + task * chunk
+        var b1 = min(b0 + chunk, nb)
+        for b in range(b0, b1):
+            _step_block(base + b * m * _W, colk, t, k, m, _lane_mask(b, k, cols))
+    if tasks <= 1:
+        _run(0)
+    else:
+        host_parallelize(_run, tasks)
 
 
 def geqrf_host_rows(a: F32Ptr, tau: F32Ptr, m: Int, n: Int):
-    """`geqrf_serial` on a column-major copy (the module docstring)."""
+    """`geqrf_serial` on the block-interleaved copy (the module docstring)."""
     var kk = m if m < n else n
-    var at = List[Float32](unsafe_uninit_length=max(m * n, 1))
-    _transpose_in(a, m, n, at)
+    var nb = (n + _W - 1) // _W
+    var at = List[Float32](unsafe_uninit_length=max(nb * _W * m, 1))
+    _pack_in(a, m, n, at)
     var base = _FP(unsafe_from_address=Int(at.unsafe_ptr()))
     var scal = InlineArray[Float32, 2](fill=Float32(0))
     var sp = F32Ptr(unsafe_from_address=Int(scal.unsafe_ptr()))
     for k in range(kk):
-        var colk = base + k * m
+        var colk = _blk(base, m, k) + (k % _W)
         _head_col(colk, tau, sp, k, m)
         if scal[1] != Float32(0):
             for i in range(k + 1, m):
-                colk.unsafe_store(i, div0(colk.unsafe_load(i), scal[0]))
+                colk.unsafe_store(i * _W, div0(colk.unsafe_load(i * _W), scal[0]))
         if scal[1] == Float32(0):
             continue
-        var cols = n - k - 1
-        if cols <= 0:
-            continue
-        var t = tau.unsafe_load(k)
-        var tasks = host_row_tasks(cols, 4 * (m - k))
-        var chunk = (cols + tasks - 1) // tasks
-        def _step(task: Int) {imm base, imm colk, imm t, imm k, imm m, imm chunk, imm cols}:
-            var j0 = k + 1 + task * chunk
-            var j1 = min(j0 + chunk, k + 1 + cols)
-            if j1 > j0:
-                _step_cols(base, colk, t, k, m, j0, j1)
-        if tasks <= 1:
-            _step(0)
-        else:
-            host_parallelize(_step, tasks)
-    _transpose_out(at, m, n, a)
+        _trailing_blocks(base, colk, tau.unsafe_load(k), k, m, n)
+    _pack_out(at, m, n, a)
     _ = at^
 
 
 def orgqr_host_rows(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int):
-    """`orgqr_col` for every column of Q on column-major copies: Q = I, then
-    the reflectors last to first (the module docstring)."""
+    """`orgqr_col` for every column of Q on block-interleaved copies: Q = I,
+    then the reflectors last to first (the module docstring)."""
     if qc <= 0:
         return
-    var ht = List[Float32](unsafe_uninit_length=max(m * n, 1))
-    _transpose_in(h, m, n, ht)
+    var nbh = (n + _W - 1) // _W
+    var ht = List[Float32](unsafe_uninit_length=max(nbh * _W * m, 1))
+    _pack_in(h, m, n, ht)
     var hb = _FP(unsafe_from_address=Int(ht.unsafe_ptr()))
-    var qt = List[Float32](unsafe_uninit_length=max(m * qc, 1))
+    var nbq = (qc + _W - 1) // _W
+    var qt = List[Float32](length=max(nbq * _W * m, 1), fill=Float32(0))
     var qb = _FP(unsafe_from_address=Int(qt.unsafe_ptr()))
     for j in range(qc):
-        for i in range(m):
-            qb.unsafe_store(j * m + i, Float32(1) if i == j else Float32(0))
+        if j < m:
+            (_blk(qb, m, j) + (j % _W)).unsafe_store(j * _W, Float32(1))
     for r in range(kk):
         var k = kk - 1 - r
         var t = ftz(tau.unsafe_load(k))
         if t == Float32(0):
             continue
-        var colk = hb + k * m
-        var tasks = host_row_tasks(qc, 4 * (m - k))
-        var chunk = (qc + tasks - 1) // tasks
-        def _step(task: Int) {imm qb, imm colk, imm t, imm k, imm m, imm qc, imm chunk}:
-            var j0 = task * chunk
-            var j1 = min(j0 + chunk, qc)
-            if j1 > j0:
-                _step_cols(qb, colk, t, k, m, j0, j1)
-        if tasks <= 1:
-            _step(0)
-        else:
-            host_parallelize(_step, tasks)
-    _transpose_out(qt, m, qc, q)
+        var colk = _blk(hb, m, k) + (k % _W)
+        # every column of Q is updated by every reflector (orgqr_col's loop
+        # starts at column 0): the mask is "j < qc", not "j > k"
+        _trailing_blocks_all(qb, colk, t, k, m, qc)
+    _pack_out(qt, m, qc, q)
     _ = ht^
     _ = qt^
+
+
+def _trailing_blocks_all(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
+    """`_trailing_blocks` over every column j < cols (orgqr's columns of Q)."""
+    var nb = (cols + _W - 1) // _W
+    var tasks = host_row_tasks(nb, 2 * (m - k) * _W)
+    var chunk = (nb + tasks - 1) // tasks
+    def _run(task: Int) {imm base, imm colk, imm t, imm k, imm m, imm cols, imm chunk, imm nb}:
+        var b0 = task * chunk
+        var b1 = min(b0 + chunk, nb)
+        for b in range(b0, b1):
+            var mask = _B32(False)
+            for l in range(_W):
+                mask[l] = b * _W + l < cols
+            _step_block(base + b * m * _W, colk, t, k, m, mask)
+    if tasks <= 1:
+        _run(0)
+    else:
+        host_parallelize(_run, tasks)
