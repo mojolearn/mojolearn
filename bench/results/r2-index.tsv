@@ -38,3 +38,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T14:20:11Z	measurements/2026-10-01/pr58-amd.tar.gz	af378a2f436d9de1f00e3a91c66da21a877063a426d51acbc8065c78042aeefe	11622614	mojolearn-steward-do-amd	/root/pr58-amd
 2026-10-01T14:20:45Z	measurements/2026-10-01/pr57-nvidia.tar.gz	f2e3d2cda55d63c993f8bc4ad39d9ca8fda2f14799a237e79931d8fb63178ad6	5643260	97c359a1d3ef	/root/pr57-nvidia
 2026-10-01T14:21:46Z	measurements/2026-10-01/pr58-nvidia.tar.gz	1d4e35d70a2f7fbb607da38d38179751f299e28a668399614599440dd4a05fbc	14259483	97c359a1d3ef	/root/pr58-nvidia
+2026-10-01T14:43:22Z	measurements/2026-10-01/ab-p596061-amd.tar.gz	38616826766696ef4214c0980d8580b26406c994ff1f23315880e00ead9f4331	18140440	mojolearn-steward-do-amd	/root/ab-p596061-amd
+2026-10-01T14:43:23Z	measurements/2026-10-01/pr54-amd.tar.gz	f3246823ad39feb99085f1cab543c79f96c11ea1c300c2ca76dc35c7484f43e5	4730698	mojolearn-steward-do-amd	/root/pr54-amd
