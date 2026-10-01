@@ -20,8 +20,12 @@ numeric row."""
 from std.memory import bitcast, memcpy
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, identical_div, identical_mul
+from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
+from core.host_parallel import host_parallelize
+from std.sys.info import simd_width_of
 from cluster.host.host_cells import ftz_v, host_cells, mul_v
+
+comptime MS_W = simd_width_of[DType.float32]()
 from x_cluster.host.moments_gemm import gemm_fold_cov, gemm_fold_means
 
 from x_cluster.bodies import (
@@ -299,10 +303,101 @@ struct HostOps(ClusterOps):
         var pi = self._ip(intensity)
         var pt = self._ip(iters)
 
-        def body(t: Int) {imm px, imm pc, imm ps, imm pi, imm pt, imm n, imm d, imm bw, imm stop, imm max_iter}:
-            meanshift_seed[X_CLUSTER_HOST_SABOTAGE](px, n, d, bw, stop, max_iter, pc, ps, pi, pt, t)
+        comptime if X_CLUSTER_HOST_SABOTAGE or is_defined["MOJOLEARN_MEANSHIFT_HOST_SCALAR"]():
+            def body(t: Int) {imm px, imm pc, imm ps, imm pi, imm pt, imm n, imm d, imm bw, imm stop, imm max_iter}:
+                meanshift_seed[X_CLUSTER_HOST_SABOTAGE](px, n, d, bw, stop, max_iter, pc, ps, pi, pt, t)
 
-        host_cells(body, ns, 3 * n * d)
+            host_cells(body, ns, 3 * n * d)
+            return
+        # lane/neural-pass77 (2026-10-01): `meanshift_seed` with its two loops
+        # as lanes, the same chains. X is flushed once (ftz is pure and
+        # idempotent) into a row-major copy and a feature-major copy. The
+        # distance of point p is still one ascending chain over the features,
+        # `acc = ftz(acc + ftz(t * t))`, `t = ftz(c_f - x_pf)`, but MS_W points
+        # advance together, one lane each, reading MS_W consecutive points of
+        # feature f. The window sum of feature f is still one ascending chain
+        # over the points, the features as lanes. Every seed is its own pool
+        # task (seeds stop at different iterations).
+        # `-D MOJOLEARN_MEANSHIFT_HOST_SCALAR=1` restores the scalar body.
+        var xf_l = List[Float32](length=n * d, fill=Float32(0))
+        var xt_l = List[Float32](length=n * d, fill=Float32(0))
+        var xf = xf_l.unsafe_ptr()
+        var xt = xt_l.unsafe_ptr()
+
+        def prep(p: Int) {imm px, imm xf, imm xt, imm n, imm d}:
+            for f in range(d):
+                var v = ftz(px[p * d + f])
+                xf[p * d + f] = v
+                xt[f * n + p] = v
+
+        host_cells(prep, n, 2 * d)
+
+        def seed(s: Int) {imm px, imm xf, imm xt, imm pc, imm ps, imm pi, imm pt, imm n, imm d, imm bw, imm stop, imm max_iter}:
+            comptime W = MS_W
+            var cf = List[Float32](length=d, fill=Float32(0))
+            var acc_l = List[Float32](length=d, fill=Float32(0))
+            var cfp = cf.unsafe_ptr()
+            var ap = acc_l.unsafe_ptr()
+            var completed = 0
+            var within = 0
+            var body_n = n - n % W
+            var body_d = d - d % W
+            while True:
+                within = 0
+                for f in range(d):
+                    cfp[f] = ftz(pc[s * d + f])
+                    ap[f] = Float32(0)
+                var pb = 0
+                while pb < n:
+                    var dist = SIMD[DType.float32, W](0)
+                    var lanes = W if pb < body_n else 1
+                    if lanes == W:
+                        for f in range(d):
+                            var t = ftz_v[W](SIMD[DType.float32, W](cfp[f]) - xt.load[width=W](f * n + pb))
+                            dist = ftz_v[W](dist + ftz_v[W](mul_v[W](t, t)))
+                    else:
+                        var a1 = Float32(0)
+                        for f in range(d):
+                            var t = ftz(cfp[f] - xf[pb * d + f])
+                            a1 = ftz(a1 + ftz(identical_mul(t, t)))
+                        dist[0] = a1
+                    for q in range(lanes):
+                        if identical_sqrt(dist[q]) <= bw:
+                            within += 1
+                            var row = (pb + q) * d
+                            var f = 0
+                            while f < body_d:
+                                ap.store(f, ftz_v[W](ap.load[width=W](f) + xf.load[width=W](row + f)))
+                                f += W
+                            while f < d:
+                                ap[f] = ftz(ap[f] + xf[row + f])
+                                f += 1
+                    pb += lanes
+                for f in range(d):
+                    ps[s * d + f] = ap[f]
+                if within == 0:
+                    break
+                var shift2 = Float32(0)
+                var cnt = Float32(within)
+                for f in range(d):
+                    var m = ftz(identical_div(ap[f], cnt))
+                    var t = ftz(m - pc[s * d + f])
+                    shift2 = ftz(shift2 + ftz(identical_mul(t, t)))
+                    pc[s * d + f] = m
+                if identical_sqrt(shift2) <= stop or completed == max_iter:
+                    break
+                completed += 1
+            pi[s] = Int32(within)
+            pt[s] = Int32(completed)
+            _ = cf^
+            _ = acc_l^
+
+        if ns == 1:
+            seed(0)
+        else:
+            host_parallelize(seed, ns)
+        _ = xf_l^
+        _ = xt_l^
 
     def ap_r(mut self, s: Int, a: Int, r: Int, n: Int, damping: Float32) raises:
         var ps = self._fp(s)
