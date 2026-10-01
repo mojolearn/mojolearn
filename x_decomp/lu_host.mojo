@@ -105,7 +105,7 @@ def _solve_blocks(lu: F32Ptr, piv: I32Ptr, base: _FP, n: Int, nrhs: Int, trans: 
         var laneA = iota[DType.int32, _W]() + Int32(b * _W)
         var laneB = laneA + Int32(_W)
         var mA = laneA.lt(Int32(nrhs))
-        var mB = laneB.lt(Int32(nrhs)) if two else _B32(False)
+        var mB = laneB.lt(Int32(nrhs))
         if trans != 0:
             for i in range(n):
                 var accA = ftz_lanes(blkA.unsafe_load[width=_W](i * _W))
