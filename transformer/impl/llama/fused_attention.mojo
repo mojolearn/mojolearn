@@ -98,6 +98,7 @@ from std.ffi import _Global
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
+from std.sys._assembly import inlined_assembly
 from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
@@ -4851,6 +4852,7 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
     K tile is staged through `ftz`. 256 threads; `TQ = 64` rows per block."""
+    _attn_mode_enter()
     comptime TQ = 64
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
@@ -4936,8 +4938,8 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                     var cell = (hbase + t) * s + jc
                     var yv = ftz(y_st.unsafe_load(cell))
                     var dv = ftz(dy_st.unsafe_load(cell))
-                    var ds = _pmul(yv, ftz(ftz(dv) - ftz(zs.unsafe_load(r))))
-                    dcell = _pmul(ftz(ds), scale_in)
+                    var ds = _pmulx(yv, ftz(ftz(dv) - ftz(zs.unsafe_load(r))))
+                    dcell = _pmulx(ftz(ds), scale_in)
                     dy_st.unsafe_store(cell, dcell)
             dst.unsafe_store(i, dcell)
         barrier()
@@ -4950,7 +4952,7 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                 if Int32(jc) >= lo[u] and Int32(jc) <= hi[u]:
                     var dcell = dst.unsafe_load((tr + u * 16) * TK + jk)
                     comptime for v in range(CPT):
-                        acc[u * CPT + v] = _step_preflushed(dcell, ka[v], acc[u * CPT + v])
+                        acc[u * CPT + v] = _stepfx(dcell, ka[v], acc[u * CPT + v])
         barrier()
     comptime for u in range(RPT):
         var t = t0 + tr + u * 16
@@ -4968,9 +4970,9 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                             var z = ftz(zs.unsafe_load(tr + u * 16))
                             for j in range(Int(hi[u]) + 1, s):
                                 var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
-                                var ds = _pmul(Float32(0.0), ftz(dy - z))
-                                var dcell = _pmul(ftz(ds), scale_in)
-                                x = _step_preflushed(dcell, ftz(k_cache.unsafe_load(kvbase + j * HD + tc + v * 16)), x)
+                                var ds = _pmulx(Float32(0.0), ftz(dy - z))
+                                var dcell = _pmulx(ftz(ds), scale_in)
+                                x = _stepfx(dcell, ftz(k_cache.unsafe_load(kvbase + j * HD + tc + v * 16)), x)
                                 if bitcast[DType.uint32](x) != NEG_ZERO_BITS:
                                     break
                     else:
@@ -5027,6 +5029,60 @@ def _mfma16_step(a: Float32, b: Float32, acc: SIMD[DType.float32, 16]) -> SIMD[D
             a, b, acc, Int32(0), Int32(0), Int32(0)
         )
     return acc
+
+
+#: lane/neural-pass53 (2026-10-01): on the AMD column the four chain kernels
+#: (forward r2, dq, dkdv, zdot) run with the wave's MODE f32 FP_DENORM field
+#: at 2, where every VALU input is flushed by the hardware and outputs are
+#: kept (gemm/checks/amd_mfma_probe2.mojo: a product by one returned ftz(x)
+#: on 8,388,608 words). The chain step `ftz(fma(ftz(a), ftz(b), acc))` is
+#: then `fma(a, b, acc) * 1.0`: the fma flushes a, b and the (already
+#: flushed) accumulator on input and keeps its rounded result, and the
+#: product by one flushes that result. Same bits as the software spelling,
+#: two instructions a step instead of the bit tests. Every other operand
+#: these kernels read is a flushed value already (the staging flushes, the
+#: chain outputs, the exp and div results), so the mode moves no other
+#: bit. `-D MOJOLEARN_ATTN_NO_MODE_FLUSH=1` restores the software seams.
+comptime ATTN_AMD_MODE_FLUSH = (
+    TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_NO_MODE_FLUSH"]()
+)
+
+
+@always_inline
+def _amd_flush1(x: Float32) -> Float32:
+    """`x * 1.0` on the VALU; under MODE FP_DENORM 2 that is `ftz(x)`."""
+    comptime if is_amd_gpu():
+        return inlined_assembly[
+            "v_mul_f32 $0, 1.0, $1", Float32, constraints="=v,v", has_side_effect=False,
+        ](x)
+    return ftz(x)
+
+
+@always_inline
+def _attn_mode_enter():
+    comptime if ATTN_AMD_MODE_FLUSH:
+        _attn_set_mode(2)
+
+
+@always_inline
+def _stepx(a: Float32, b: Float32, acc: Float32) -> Float32:
+    comptime if ATTN_AMD_MODE_FLUSH:
+        return _amd_flush1(identical_mul_add(a, b, acc))
+    return _step(a, b, acc)
+
+
+@always_inline
+def _stepfx(a: Float32, b: Float32, acc: Float32) -> Float32:
+    comptime if ATTN_AMD_MODE_FLUSH:
+        return _amd_flush1(identical_mul_add(a, b, acc))
+    return _step_preflushed(a, b, acc)
+
+
+@always_inline
+def _pmulx(a: Float32, b: Float32) -> Float32:
+    comptime if ATTN_AMD_MODE_FLUSH:
+        return _amd_flush1(identical_mul_add(a, b, Float32(-0.0)))
+    return _pmul(a, b)
 
 
 @always_inline
@@ -5620,6 +5676,7 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     """DEVIATION 2597: `fused_bwd_dkdv_tiled_pf_kernel` with `BJ` (64 or 32)
     keys per block; `SAB` (ATTN_ARM_SABOTAGE_KV) flips one ulp of every
     staged y and dcell. See the comment above. 256 threads."""
+    _attn_mode_enter()
     comptime RPT = BJ // 16
     comptime CPT = HD // 16
     comptime TT = ATTN_KV_TT
@@ -5732,8 +5789,8 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                         var dcell = dss.unsafe_load(tk * BJ + tr + u * 16)
                         var yv = ys.unsafe_load(tk * BJ + tr + u * 16)
                         comptime for v in range(CPT):
-                            dk_acc[u * CPT + v] = _step_preflushed(dcell, qa[v], dk_acc[u * CPT + v])
-                            dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
+                            dk_acc[u * CPT + v] = _stepfx(dcell, qa[v], dk_acc[u * CPT + v])
+                            dv_acc[u * CPT + v] = _stepfx(yv, da[v], dv_acc[u * CPT + v])
             barrier()
         # The end of this head's visible run for every key this thread
         # holds: a `-0.0` here could be laundered by the masked tail --
@@ -6416,6 +6473,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     comment above. Instantiated at HD 64 with TQ 64 or 32 only, QRES only
     at TQ 32 (`fused_attention_fwd_rows`); 256 threads per block, grid
     `B * nh * ceil(L / TQ)`; one shared page of `_fwd_r2_page_bytes`."""
+    _attn_mode_enter()
     comptime RPT = TQ // 16
     comptime CPT = HD // 16
     comptime BK = ATTN_FR2_BK
@@ -6516,7 +6574,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                                 ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
                         comptime for u in range(RPT):
                             comptime for v in range(2):
-                                dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
+                                dots[u * 2 + v] = _stepfx(qa[u], ka[v], dots[u * 2 + v])
                     barrier()
                 comptime for u in range(RPT):
                     var r = tr + u * 16
@@ -6526,7 +6584,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                         var jj = tc + v * 16
                         var j = kb * BK + jj
                         if t < l and j >= rr[0] and j <= rr[1]:
-                            var masked = ftz(_pmul(dots[u * 2 + v], scale_in) + Float32(0.0))
+                            var masked = ftz(_pmulx(dots[u * 2 + v], scale_in) + Float32(0.0))
                             mpart[u] = identical_fmax(mpart[u], masked)
                             var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                             sstash.unsafe_store(cell, masked)
@@ -6582,9 +6640,9 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                             var w = tile.unsafe_load(r * 33 + jj)
                             comptime for v in range(CPT):
                                 comptime if PF:
-                                    cacc[u * CPT + v] = _step_preflushed(w, va[v], cacc[u * CPT + v])
+                                    cacc[u * CPT + v] = _stepfx(w, va[v], cacc[u * CPT + v])
                                 else:
-                                    cacc[u * CPT + v] = _step(w, va[v], cacc[u * CPT + v])
+                                    cacc[u * CPT + v] = _stepx(w, va[v], cacc[u * CPT + v])
             barrier()
         comptime if phase == 0:
             comptime for u in range(RPT):
@@ -6922,6 +6980,7 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     Instantiated at HD 64 and the routed TQ (8 or 16); 256 threads per block,
     grid `B * nh * ceil(L / TQ)`.  TQ changes ownership only across query
     rows; every row still folds visible keys in ascending order."""
+    _attn_mode_enter()
     comptime BK = FUSED_THREADS // TQ
     comptime KSTRIDE = HD + 1
     comptime ESTRIDE = BK + 1
@@ -7037,10 +7096,10 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                 var dy = Float32(0.0)
                 comptime if DRES:
                     comptime for p in range(HD):
-                        dy = _step_preflushed(dsh.unsafe_load(tr * HD + p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                        dy = _stepfx(dsh.unsafe_load(tr * HD + p), vs.unsafe_load(kj * KSTRIDE + p), dy)
                 else:
                     comptime for p in range(HD):
-                        dy = _step_preflushed(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
+                        dy = _stepfx(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
                 var dyv = ftz(dy)
                 var ecell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, tt, j, l, nh, s, pos0, key_lo, window)
                 var e = e_st.unsafe_load(ecell)
@@ -7057,7 +7116,7 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
             for jj in range(BK):
                 var j = kb * BK + jj
                 if j >= j_lo and j <= j_hi:
-                    z = _step_preflushed(
+                    z = _stepfx(
                         dys.unsafe_load(tr * ESTRIDE + jj),
                         ys.unsafe_load(tr * ESTRIDE + jj),
                         z,
@@ -7071,7 +7130,7 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                 comptime if not ATTN_REPAIR_SAB_Z:
                     for j in range(j_hi + 1, s):
                         var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
-                        zf = _step_preflushed(dy, Float32(0.0), zf)
+                        zf = _stepfx(dy, Float32(0.0), zf)
                         if bitcast[DType.uint32](zf) != NEG_ZERO_BITS:
                             break
             else:
