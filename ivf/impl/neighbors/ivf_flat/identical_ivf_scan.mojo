@@ -340,10 +340,19 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
     blk_start: MutPointer[Int32, MutAnyOrigin],
     part_dist: MutPointer[Float32, MutAnyOrigin],
     part_idx: MutPointer[UInt32, MutAnyOrigin],
+    keep: MutPointer[Int32, MutAnyOrigin],
+    keep_len: Int32,
     dim_in: Int32,
     n_probes_in: Int32,
     k_in: Int32,
 ):
+    """`keep` (lane ivf-filter-fix): the sample filter, one int32 per
+    original row, 0 removing the row; `keep_len` 0 is no filter. A removed
+    candidate is never scored, selected or counted (`filter_candidate_slots`
+    drops it before the per-query path scores it), so a filtered search is
+    this kernel over the kept set, whose top-k by the key is the oracle's
+    over the index with the removed rows deleted, and an all-ones filter is
+    the unfiltered search bit for bit."""
     var warp = Int(thread_idx.x) // WARP_SIZE
     var lane = Int(lane_id())
     var tid = Int(thread_idx.x)
@@ -381,6 +390,8 @@ def identical_ivf_scan_grouped_kernel[KM: Int](
     while base < e:
         var pos = base + lane
         var mine = active and pos < e
+        if mine and keep_len != 0 and keep[Int(list_indices[pos])] == 0:
+            mine = False
         var acc = Float32(0.0)
         for c in range(n_chunks):
             var c0 = c * IIVF_CH
