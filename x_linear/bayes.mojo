@@ -497,12 +497,14 @@ def ard_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
         alpha = t.bcast(alpha, 2)
         if t.bcast_int(stop, 3) == 1:
             break
+    # the lead's any_kept (the other threads never computed it)
+    any_kept = t.bcast_int(1 if any_kept else 0, 0) == 1
+    if any_kept:
+        var dk = _t_ard_sigma(t, d, fw, gg, aa, sg, lamo, alpha, iw, keep)
+        _t_ard_coef(t, d, dk, fw, sg, xty, alpha, iw, keep, res)
     if not t.lead():
         return
-    if any_kept:
-        var dk = _ard_sigma(d, fw, gg, aa, sg, lamo, alpha, iw, keep)
-        _ard_coef(d, dk, fw, sg, xty, alpha, iw, keep, res)
-    else:
+    if not any_kept:
         fill(res, 0, d, Float32(0))
     st(res, d, _intercept(d, fw, xm, ym, res, 0) if fi else Float32(0))
     st(res, d + 1, alpha)
