@@ -336,7 +336,7 @@ def block_par(
             if hi > l:
                 hi = l
             var rows = hi - lo
-            var xc = copy_rows(xp[][0], lo, hi, dm)
+            var xc = copy_rows(xp[0], lo, hi, dm)
             var n1 = rms_norm_fast(xc, tp[][tb], rows, dm)
             var q = List[Float32](length=rows * qw, fill=Float32(0.0))
             var k = List[Float32](length=rows * kw, fill=Float32(0.0))
@@ -396,16 +396,16 @@ def block_par(
             if hi > l:
                 hi = l
             var rows = hi - lo
-            var mchunk = copy_rows(mp[][0], lo, hi, s)
+            var mchunk = copy_rows(mp[0], lo, hi, s)
             var ctx = List[Float32](length=rows * qw, fill=Float32(0.0))
             var qmat = List[Float32](length=rows * hd, fill=Float32(0.0))
             var kpack = List[Float32](length=hd * s, fill=Float32(0.0))
             var vpack = List[Float32](length=s * hd, fill=Float32(0.0))
             var cell = List[Float32](length=rows * s, fill=Float32(0.0))
             var aweights = List[Float32](length=rows * s, fill=Float32(0.0))
-            var qsp = qtp[][0].unsafe_ptr()
-            var ksp = ktp[][0].unsafe_ptr()
-            var vsp = vtp[][0].unsafe_ptr()
+            var qsp = qtp[0].unsafe_ptr()
+            var ksp = ktp[0].unsafe_ptr()
+            var vsp = vtp[0].unsafe_ptr()
             var qmp = qmat.unsafe_ptr()
             var kpp = kpack.unsafe_ptr()
             var vpp = vpack.unsafe_ptr()
@@ -421,7 +421,7 @@ def block_par(
                 gemm_nt_rows(qmat, kpack, s, hd, 0, rows, cell)
                 _softmax_head(cell, mchunk, rows, s, scale, aweights)
                 _value_sum_head(aweights, vpack, rows, s, hd, qw, h, ctx)
-            var xc = copy_rows(xp[][0], lo, hi, dm)
+            var xc = copy_rows(xp[0], lo, hi, dm)
             var o = List[Float32](length=rows * dm, fill=Float32(0.0))
             gemm_nt_rows(ctx, tp[][tb + 4], dm, qw, 0, rows, o)
             var r1 = _residual_add(xc, o)
