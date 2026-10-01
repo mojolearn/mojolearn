@@ -316,7 +316,7 @@ def ghr_tile(
         rk = real_k
     var leaf = contract_leaf_size(k)
     var pcount = leaf_count(k, leaf)
-    var scratch_l = List[Float32](length=pcount * GHR_G, fill=Float32(0.0))
+    var scratch_l = host_f32_uninit(pcount * GHR_G)  # every leaf row written by its chain
     var scratch = rebind[GhrPtr](scratch_l.unsafe_ptr())
     for g in range(glo, ghi):
         var panel = bp.unsafe_offset(g * k * GHR_G)
@@ -389,7 +389,7 @@ def ghr_small_m(
                 c.unsafe_store(i * n + j, Float32(0.0))
         return
     var width = m * GHR_FW
-    var scratch_l = List[Float32](length=max(pcount, 1) * width, fill=Float32(0.0))
+    var scratch_l = host_f32_uninit(max(pcount, 1) * width)  # every row written by the chains
     var scratch = rebind[GhrPtr](scratch_l.unsafe_ptr())
     var j0 = jlo
     while j0 < jhi:
@@ -570,7 +570,10 @@ def gemm_host_rows(
         or len(a) < m * k or len(b) < n * k
     ):
         return gemm_oracle(a, b, op, m, n, k)
-    var c = List[Float32](length=m * n, fill=Float32(0.0))
+    # Every output cell is written by the tiles (or zeroed by the k <= 0
+    # arm), so the output is not zero-filled first (lane neural-pass12): the
+    # lm_head's 16 MB memset a call was a serial cost on a 64-core host.
+    var c = host_f32_uninit(m * n)
     try:
         gemm_host_rows_into(
             rebind[GhrPtr](a.unsafe_ptr()), rebind[GhrPtr](b.unsafe_ptr()),
@@ -596,7 +599,7 @@ def gemm_host_rows_right_zero_padded(
         or len(a) < m * k or len(b) < n * k
     ):
         return gemm_oracle_right_zero_padded(a, b, op, m, n, k, real_k)
-    var c = List[Float32](length=m * n, fill=Float32(0.0))
+    var c = host_f32_uninit(m * n)
     gemm_host_rows_into(
         rebind[GhrPtr](a.unsafe_ptr()), rebind[GhrPtr](b.unsafe_ptr()),
         rebind[GhrPtr](c.unsafe_ptr()), op, m, n, k, force_redo, real_k,

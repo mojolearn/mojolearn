@@ -1342,6 +1342,24 @@ def _visible_keys(own0: Int, window: Int, qi: Int, s: Int) -> Tuple[Int, Int]:
     return (jlo, jhi)
 
 
+@always_inline
+def span_add_scalar(src: List[Float32], sb: Int, n: Int, fill: Float32, mut dst: List[Float32], db: Int):
+    """`dst[db + j] = ftz(ftz(src[sb + j]) + fill)` for j < n, as lanes: one
+    plain add per cell, the same rounding on every lane as the scalar."""
+    if n <= 0:
+        return
+    var sp = src.unsafe_ptr()
+    var dp = dst.unsafe_ptr()
+    var fv = GhrF(fill)
+    var j = 0
+    while j + GHR_FW <= n:
+        dp.unsafe_store(db + j, ghr_ftz_lanes(ghr_ftz_lanes(sp.unsafe_load[width=GHR_FW](sb + j)) + fv))
+        j += GHR_FW
+    while j < n:
+        dp.unsafe_store(db + j, ftz(ftz(sp.unsafe_load(sb + j)) + fill))
+        j += 1
+
+
 #: Lanes of `head_dim` the 64-wide value-sum arm keeps in flight at once.
 comptime ATTN_VALUE_64 = 64 // GHR_FW
 
@@ -1865,19 +1883,20 @@ def transformer_block_oracle(
     var mrows = b * nh * l
     var mtasks = host_row_tasks(mrows, 3 * s)
     var mchunk = (mrows + mtasks - 1) // mtasks
-    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm pos0, imm key_lo, imm window, imm mfill, imm ufill}:
+    # Each row is three spans (lane neural-pass12): the masked keys before
+    # the window, the visible keys, the masked keys after the query, each
+    # the same per-cell statement `ftz(ftz(score) + fill)` as lanes
+    # (`span_add_scalar`), the fill the one the per-cell test picked.
+    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm own0, imm window, imm mfill, imm ufill}:
         for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
             var qi = r % l
-            var p = pos0 + qi
             var base = r * s
-            for j in range(s):
-                var mv = ufill
-                var pk = key_lo + j
-                if pk > p:
-                    mv = mfill
-                if window > 0 and pk <= p - window:
-                    mv = mfill
-                masked[base + j] = ftz(ftz(scores[base + j]) + mv)
+            var vis = _visible_keys(own0, window, qi, s)
+            var jlo = vis[0]
+            var jhi = vis[1]
+            span_add_scalar(scores, base, jlo, mfill, masked, base)
+            span_add_scalar(scores, base + jlo, jhi - jlo + 1, ufill, masked, base + jlo)
+            span_add_scalar(scores, base + jhi + 1, s - jhi - 1, mfill, masked, base + jhi + 1)
     if mtasks <= 1:
         _mask_rows(0)
     else:
