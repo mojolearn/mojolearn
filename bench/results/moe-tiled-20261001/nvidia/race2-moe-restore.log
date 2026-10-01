@@ -1,0 +1,3 @@
+ALGOS-REFUSED lane=moe dataset=synthetic arm=ours stage=ready detail={"error": "ModuleNotFoundError(\"No module named 'torch'\")", "event": "error", "stage": "ready"}
+BOARD-PARAMS {"arms": {}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/moe", "problems": [], "reference": null, "seed": 7, "seed_none_deterministic": [], "verdict": "MATCHED"}
+ALGOS lane=moe dataset=synthetic arm=ours status=not_ready median_ms=None quality={}
