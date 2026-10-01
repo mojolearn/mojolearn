@@ -37,21 +37,33 @@ The forward here therefore retains both per layer instead of overwriting one
 running activation, exactly as the device step keeps `tr.forward[layer]` and
 passes `tr.forward[layer - 1].residual2` down.
 
-NO THREADING, NO FAST PATH, in this file. This is the reference path's shape:
-the oracles as written. (Since lane neural-cpu, 2026-09-28, the oracles'
-GEMMs run through `gemm/host/gemm_host_rows.mojo`, which computes
-`gemm_oracle`'s bits, including its fixed leaf-and-tree fold over the token
-axis, whatever the thread count.) The threaded host forward (DEVIATION 2640) has no
-backward twin, and it must not grow one by accident: a weight gradient sums
-over every row of the batch, so unlike the forward it crosses every thread
-boundary, and a threaded version needs a fixed cross thread fold rather than
-letting threads accumulate as they finish.
+NO FAST PATH in this file: the oracles as written, in the oracles' order.
+WHAT RUNS ON MORE THAN ONE CORE, AND WHY THE BITS ARE THE SAME (lane
+neural-cpu 2026-09-28, lane neural-pass6 2026-09-30). Every cross-row fold
+in the step is a gemm v1 call (`gemm/host/gemm_host_rows.mojo` computes
+`gemm_oracle`'s bits, its fixed leaf-and-tree chain over the contraction
+axis, whatever the task count): the projections, the attention products,
+the head, every weight gradient (which is where the sum over the batch
+lives), the norm weight gradients and the loss's denominators. Everything
+else is a per-row or per-element chain, and a chain runs the same
+statements in the same order whichever task runs it, in the calling
+thread's floating-point environment (`core/host_parallel.mojo`, DEVIATION
+5900). So the block oracles' per-row stages, the loss's rows
+(`training/loss_host_rows.mojo`) and the optimizer's elements
+(`training/optimizer_host_rows.mojo`) run over host tasks. The loss and the
+optimizer keep the serial oracle calls one environment value away
+(`MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`); `tools/byte_lm_host_step_check.py`
+compares the two, every byte of every step, and
+`tools/byte_lm_cpu_train_gate.py cpu` compares either against the recorded
+three-vendor bytes. Nothing lets a thread accumulate as it finishes.
 
 BATCH COMPOSITION IS PART OF THE CLAIM. Nine of the gradients contract over
 the token count, so `gemm_backward.mojo`'s own statement applies: the gradient
 at 1024 tokens is not the bits of the gradient at 512 tokens accumulated
 twice. A pass here is a statement at the shape it ran at.
 """
+
+from std.os import getenv
 
 from gemm.host.identical_gemm import OP_NT, gemm_oracle
 from gemm.host.gemm_host_rows import gemm_host_rows
@@ -75,6 +87,8 @@ from training.checks.optimizer_oracle import (
     OptimizerConfig,
     optimizer_step_oracle,
 )
+from training.loss_host_rows import ce_host_rows
+from training.optimizer_host_rows import adam_host_rows
 from transformer.checks.transformer_fixture import ScorePlant
 from transformer.checks.transformer_oracle import (
     RopeTable,
@@ -88,6 +102,13 @@ from transformer.checks.transformer_backward_oracle import (
     _gemm_bwd_b,
     transformer_block_backward_oracle,
 )
+
+
+def byte_host_step_rows() -> Bool:
+    """True unless MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0: the loss's rows and the
+    optimizer's elements over host tasks (module note); 0 restores the serial
+    oracle calls for both, which is what the check tool compares against."""
+    return String(getenv("MOJOLEARN_BYTE_LM_HOST_STEP_ROWS")) != "0"
 
 
 def byte_host_adamw(lr: Float32, beta1: Float32, beta2: Float32,
@@ -192,16 +213,26 @@ def byte_host_gradient(params: List[Float32], ids: List[Int32],
     var head_id = config.n_tensors() - 1
     var lm_w = _byte_host_slice(params, offsets, head_id)
     var logits = gemm_host_rows(x, lm_w, OP_NT, m, v, dm)
-    var ce = ce_forward_oracle(logits, targets, ce_cfg)
-    ce_backward_oracle(ce, targets, ce_cfg)
-    var loss = ce.loss[0]
+    var loss: Float32
+    var dlogits: List[Float32]
+    if byte_host_step_rows():
+        var got = ce_host_rows(logits, targets, ce_cfg)
+        loss = got[0]
+        dlogits = got[1].copy()
+    else:
+        var ce = ce_forward_oracle(logits, targets, ce_cfg)
+        ce_backward_oracle(ce, targets, ce_cfg)
+        loss = ce.loss[0]
+        dlogits = ce.dlogits.copy()
+    _ = logits^
 
     # ---- the head's two GEMM backwards ------------------------------------
     # `x` is still the LAST layer's residual2, which is the head's forward `A`
     # operand, so dB reads it unchanged. dA arrives as the last layer's
     # incoming cotangent.
-    var d_h = _gemm_bwd_a(ce.dlogits, lm_w, OP_NT, m, v, dm)
-    var dw_lm = _gemm_bwd_b(ce.dlogits, x, OP_NT, m, v, dm)
+    var d_h = _gemm_bwd_a(dlogits, lm_w, OP_NT, m, v, dm)
+    var dw_lm = _gemm_bwd_b(dlogits, x, OP_NT, m, v, dm)
+    _ = dlogits^
 
     # ---- the blocks, in reverse -------------------------------------------
     var per_layer = List[List[Float32]]()
@@ -266,12 +297,17 @@ def byte_host_train_step(params: List[Float32], m_state: List[Float32],
     var loss = got[0]
     var grad = got[1].copy()
 
-    # `optimizer_step_oracle` takes five `mut` arguments and clips `grad` in
-    # place, so the locals are transferred into it rather than assigned.
     var p_out = params.copy()
-    var g_out = grad.copy()
     var m_out = m_state.copy()
     var v_out = v_state.copy()
+    if byte_host_step_rows():
+        # No clipping (`byte_validate_optimizer`), so the gradient is read,
+        # not scaled: the elements over host tasks, written in place.
+        adam_host_rows(p_out, grad, m_out, v_out, opt, completed_steps + 1)
+        return ByteHostStep(loss, grad^, p_out^, m_out^, v_out^)
+    # `optimizer_step_oracle` takes five `mut` arguments and clips `grad` in
+    # place, so the locals are transferred into it rather than assigned.
+    var g_out = grad.copy()
     var initialized = List[Bool]()
     for _ in range(config.n_tensors()):
         initialized.append(True)

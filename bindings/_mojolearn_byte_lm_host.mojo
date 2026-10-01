@@ -10,7 +10,7 @@ The loss comes back as its IEEE-754 bit pattern, an int, so the gate compares
 bytes and nothing on the Python side rounds it.
 """
 from std.math import isfinite
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -204,8 +204,8 @@ def _write_span(address: Int, values: List[Float32]) raises:
     `raises` because `f32_ptr` refuses a null address, and a function that
     calls a raising function must say so."""
     var out = f32_ptr(address)
-    for i in range(len(values)):
-        out.unsafe_store(i, values[i])
+    if len(values) > 0:
+        memcpy(dest=out, src=values.unsafe_ptr(), count=len(values))
 
 
 def byte_lm_host_train_step_binding(addresses: PythonObject, shape: PythonObject,
