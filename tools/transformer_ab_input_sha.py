@@ -12,8 +12,9 @@ from host_threads_ab_check import SHAPES, _transformer_weights  # noqa: E402
 L = int(sys.argv[1]) if len(sys.argv) > 1 else 2048
 s = dict(SHAPES["transformer"])
 s["length"] = L
-rng = np.random.default_rng(11)
-x = (rng.standard_normal((s["batch"], s["length"], s["d_model"]), dtype=np.float32) * np.float32(0.5)).astype("<f4")
+from host_threads_ab_check import _Fixture  # noqa: E402
+rng = _Fixture(11)
+x = rng(s["batch"], s["length"], s["d_model"], lo=-0.9, hi=0.9)
 w = _transformer_weights(np, rng, s)
 h = lambda a: hashlib.sha256(np.ascontiguousarray(a).tobytes()).hexdigest()[:16]
 print("numpy", np.__version__, "length", L, "x", h(x))
