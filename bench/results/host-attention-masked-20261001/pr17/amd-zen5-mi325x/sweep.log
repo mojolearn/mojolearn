@@ -1,0 +1,3 @@
+sweep: PASS: 864/864 comparisons equal (384 logits, 384 next_bytes, 96 loss_bits) over 2 states, batch 1..2, length 1..32, threads [1, 8, 64], 256 byte values
+sweep: reference logits sha256 initial bb91882532123ac6b242fd8f7fd7b798c9bf85870b4cb29ff7f7eb700b5d608e
+sweep: reference logits sha256 final 0b2a4a2cfc0c58519dfa24aeb65ce45ad62d1d4116ab0ef5efa27fae7a340821
