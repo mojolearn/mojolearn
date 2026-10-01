@@ -1,0 +1,2 @@
+PASS pinned_scan_check: warp 64 TPB 128 replay == host 32-lane oracle (inclusive, exclusive); library scan equals it: False ; identical build: True
+SCAN_DONE 0
