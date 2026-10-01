@@ -1,3 +1,8 @@
+# PR #65 attention stack (#58+#59+#60+#61 on main, lane/neural-pass58), 2026-10-01
+
+## NVIDIA L40S (nvc1)
+
+lm-train-step 41.3 -> 37.0 ms, same digest 4a8e781b0739a038 and losses. Raw: nvidia-raw.txt; R2 ab-stack65-nvidia.
 
 ## AMD MI325X (DO), ab_job stack65 (main merged into each arm)
 
