@@ -45,6 +45,47 @@ from . import _numeric_profile
 import operator
 import os
 import time as _time
+
+
+class _LogitsPool:
+    """Host storage for `logits()` outputs, reused across calls of one
+    trainer (lane/neural-pass61, 2026-10-01). A fresh 64 MiB output per
+    call cost ~30 of the L40S's ~50 ms lm-forward (zero fill plus first
+    touch), the native call being ~19 ms. A store comes back here when the
+    caller drops the Array it was handed, so no two live arrays ever share
+    memory; the next call takes it instead of allocating. At most `keep`
+    stores of the current size are held; `close()` empties it."""
+
+    def __init__(self, keep=2):
+        self.keep = keep
+        self.free = []
+
+    def take(self, size):
+        for i in range(len(self.free)):
+            if len(self.free[i]) == size:
+                return self.free.pop(i)
+        return None
+
+    def give(self, store):
+        if store is None:
+            return
+        if any(st is store for st in self.free):
+            return
+        if len(self.free) >= self.keep:
+            self.free.pop(0)
+        self.free.append(store)
+
+
+class _PooledLogits(_Array):
+    """An owned logits Array whose storage returns to `_pool` when the
+    last reference to the Array goes away. Every value in it is written by
+    the download that produced it (`_require_written`)."""
+
+    def __del__(self):
+        pool = getattr(self, "_pool", None)
+        store = getattr(self, "_store", None)
+        if pool is not None and store is not None:
+            pool.give(store)
 from pathlib import Path
 import struct
 import tempfile
@@ -515,6 +556,7 @@ class SmallByteLanguageModelTrainer:
         self._native_session = None
         self._session_binding = None
         self._session_open = False
+        self._logits_pool = _LogitsPool()
         self._grad_step = -1
         self._last_export_step = 0
         self._lost_at = None
@@ -768,6 +810,7 @@ class SmallByteLanguageModelTrainer:
         self._native_session = None
         self._session_binding = None
         self._session_open = False
+        self._logits_pool = _LogitsPool()
         self._grad_step = -1
         if session is not None:
             binding.byte_lm_session_close(session)
@@ -1122,10 +1165,21 @@ class SmallByteLanguageModelTrainer:
             self._open_session(binding, shape)
         timing = bool(os.environ.get('MOJOLEARN_TRANSFORMER_TIMING'))
         t0 = _time.perf_counter() if timing else 0.0
-        out = zeros((batch, length, shape.vocab_size), '<f4')
+        pool = getattr(self, '_logits_pool', None)
+        if pool is None:
+            pool = self._logits_pool = _LogitsPool()
+        n_out = batch * length * shape.vocab_size
+        store = pool.take(n_out)
+        if store is None:
+            out = _PooledLogits((batch, length, shape.vocab_size), '<f4')
+            reused = 'fresh'
+        else:
+            out = _PooledLogits._owned(store, (batch, length, shape.vocab_size), '<f4', 'C')
+            reused = 'pooled'
+        out._pool = pool
         if timing:
             t1 = _time.perf_counter()
-            print('timing python.logits_zeros %.3f ms' % ((t1 - t0) * 1000.0), flush=True)
+            print('timing python.logits_out %.3f ms %s' % ((t1 - t0) * 1000.0, reused), flush=True)
         try:
             written = binding.byte_lm_session_logits(
                 self._native_session, [addr_ro(tokens, name='ids'), addr(out, name='logits')],
