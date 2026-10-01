@@ -73,6 +73,13 @@ def _vector(y, n, name="y"):
 #: against 0.2 s on the M4's cores, the same bits either way (the host
 #: binding is the same IDENTICAL arithmetic). These take the host binding
 #: when it is installed; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device.
+#: lane/neural-pass81 (2026-10-01): plain SGD (SGDClassifier, SGDRegressor,
+#: Perceptron, PassiveAggressive*, SGDOneClassSVM) too: its row pass is one
+#: serial chain per row (the dot product, j ascending), which a device runs
+#: on one warp at a shuffle per term (board 0.8.33: sgd-reg istella 185 s on
+#: the L40S, 175 s on the MI325X, sklearn 42 s) and the host runs at one
+#: fused multiply-add per term (x_linear/sgd.mojo `_dot_tracked`).
+#: `MOJOLEARN_X_LINEAR_SGD_DEVICE=1` keeps SGD on the device.
 _HOST_ALGOS = None
 
 
@@ -80,7 +87,7 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_SGD))
     return _HOST_ALGOS
 
 
@@ -129,6 +136,8 @@ def _glm_host(est):
 
 def _fit_module(est, algo):
     mode = getattr(est, "numeric_mode", None)
+    if algo == ALGO_SGD and os.environ.get("MOJOLEARN_X_LINEAR_SGD_DEVICE", "") == "1":
+        return est._bind(_BINDING)
     if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
             and (algo != ALGO_GLM or _glm_host(est)):
         host = _host_fit_module()

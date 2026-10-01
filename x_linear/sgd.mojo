@@ -185,7 +185,7 @@ def _dot_tracked[FA: Bool](a: FP, ia: Int, b: FP, ib: Int, count: Int, trace: FP
 def _has_subnormal(p: FP, count: Int) -> Bool:
     """Whether any of p[0..count) is a subnormal word."""
     comptime V = 8
-    var hit = SIMD[DType.bool, V](False)
+    var hit = SIMD[DType.bool, V](fill=False)
     var j = 0
     while j + V <= count:
         var b = bitcast[DType.uint32](p.unsafe_load[width=V](j))
@@ -251,7 +251,7 @@ def sgd_one(
     var trace = q
     comptime if not is_gpu() and SGD_HOST_TRACK:
         x_sub = _has_subnormal(x, n * d)
-        trace = alloc[Float32](d + 8)
+        trace = alloc[Float32](d + 8).unsafe_origin_cast[MutAnyOrigin]()
     for i in range(n):
         sti(idx, i, i)
     var rng = seed
