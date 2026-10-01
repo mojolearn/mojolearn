@@ -683,36 +683,91 @@ comptime STAGE = 2048
 comptime STAGE_TPB = 256
 
 
+@always_inline
+def _chain_fma(
+    sh: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED], lo: Int, cnt: Int, off: Int, acc0: Float32
+) -> Float32:
+    """acc = ftz(fma(x_u, y_u, acc)) for u in lo .. lo + cnt - 1, x from `sh[u]`
+    and y from `sh[off + u]` (both already flushed by the staging threads),
+    the one serial chain of `geqrf_dot` / `orgqr_dot` (lane neural-pass18):
+    the same operations in the same order, written eight steps at a time so
+    the sixteen shared loads of a group issue before the eight dependent
+    multiply-adds (the chain's latency is the fma's, not the load's); the
+    tail runs one step at a time."""
+    var acc = acc0
+    var u = lo
+    var end = lo + cnt
+    var body = end - (cnt % 8)
+    while u < body:
+        var x0 = sh[u]
+        var x1 = sh[u + 1]
+        var x2 = sh[u + 2]
+        var x3 = sh[u + 3]
+        var x4 = sh[u + 4]
+        var x5 = sh[u + 5]
+        var x6 = sh[u + 6]
+        var x7 = sh[u + 7]
+        var y0 = sh[off + u]
+        var y1 = sh[off + u + 1]
+        var y2 = sh[off + u + 2]
+        var y3 = sh[off + u + 3]
+        var y4 = sh[off + u + 4]
+        var y5 = sh[off + u + 5]
+        var y6 = sh[off + u + 6]
+        var y7 = sh[off + u + 7]
+        acc = ftz(identical_mul_add(x0, y0, acc))
+        acc = ftz(identical_mul_add(x1, y1, acc))
+        acc = ftz(identical_mul_add(x2, y2, acc))
+        acc = ftz(identical_mul_add(x3, y3, acc))
+        acc = ftz(identical_mul_add(x4, y4, acc))
+        acc = ftz(identical_mul_add(x5, y5, acc))
+        acc = ftz(identical_mul_add(x6, y6, acc))
+        acc = ftz(identical_mul_add(x7, y7, acc))
+        u += 8
+    while u < end:
+        acc = ftz(identical_mul_add(sh[u], sh[off + u], acc))
+        u += 1
+    return acc
+
+
 def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: Int32, n: Int32):
-    """`geqrf_head` (with its `reflector_norm`), the folds staged."""
+    """`geqrf_head` (with its `reflector_norm`), the folds staged. Lane
+    neural-pass18: the xmax scan is a maximum, exact in any order, so every
+    thread scans its own rows (seeded 0, `if v > local`, so a NaN never
+    enters, as in the serial scan) and the block folds the locals with the
+    same comparison; the norm chain's per-row division (independent of the
+    accumulator) is done by the staging threads into shared memory, and the
+    chain runs through `_chain_fma`."""
     var sh = stack_allocation[STAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var red = stack_allocation[STAGE_TPB, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bc = stack_allocation[2, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var K = Int(k)
     var M = Int(m)
     var N = Int(n)
     var alpha = ftz(a.unsafe_load(K * N + K))
-    # pass 1: xmax over rows k+1.. (geqrf_head's scan, one thread ascending)
-    var xmax = Float32(0)
-    var c0 = K + 1
-    while c0 < M:
-        var cnt = min(STAGE, M - c0)
-        var t = tid
-        while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
-            t += STAGE_TPB
-        barrier()
-        if tid == 0:
-            for u in range(cnt):
-                var v = abs(ftz(sh[u]))
-                if v > xmax:
-                    xmax = v
-        barrier()
-        c0 += STAGE
-    if tid == 0:
-        bc[0] = xmax
+    # pass 1: xmax over rows k+1.. (geqrf_head's scan): the maximum of the
+    # |values|, which every order gives alike; each thread scans a strided
+    # share of the rows, the block folds the shares
+    var local = Float32(0)
+    var i = K + 1 + tid
+    while i < M:
+        var v = abs(ftz(a.unsafe_load(i * N + K)))
+        if v > local:
+            local = v
+        i += STAGE_TPB
+    red[tid] = local
     barrier()
-    xmax = bc[0]
+    var half = STAGE_TPB // 2
+    while half > 0:
+        if tid < half:
+            var other = red[tid + half]
+            if other > red[tid]:
+                red[tid] = other
+        barrier()
+        half //= 2
+    var xmax = red[0]
+    barrier()
     if xmax == Float32(0):
         if tid == 0:
             tau.unsafe_store(K, Float32(0))
@@ -727,18 +782,17 @@ def geqrf_head_staged_kernel(a: F32Ptr, tau: F32Ptr, scal: F32Ptr, k: Int32, m: 
     if xmax > mx:
         mx = xmax
     var acc = Float32(0)
-    c0 = K
+    var c0 = K
     while c0 < M:
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
+            # v = ftz(x / mx), the chain's operand, flushed here
+            sh[t] = ftz(identical_div(ftz(a.unsafe_load((c0 + t) * N + K)), mx))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                var v = ftz(identical_div(ftz(sh[u]), mx))
-                acc = ftz(identical_mul_add(v, v, acc))
+            acc = _chain_fma(sh, 0, cnt, 0, acc)
         barrier()
         c0 += STAGE
     if tid == 0:
@@ -770,13 +824,12 @@ def geqrf_dot_staged_kernel(a: F32Ptr, scal: F32Ptr, w: F32Ptr, k: Int32, m: Int
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = a.unsafe_load((c0 + t) * N + K)
-            sh[STAGE + t] = a.unsafe_load((c0 + t) * N + j)
+            sh[t] = ftz(a.unsafe_load((c0 + t) * N + K))
+            sh[STAGE + t] = ftz(a.unsafe_load((c0 + t) * N + j))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
         barrier()
         c0 += STAGE
     if tid == 0:
@@ -806,13 +859,12 @@ def orgqr_dot_staged_kernel(
         var cnt = min(STAGE, M - c0)
         var t = tid
         while t < cnt:
-            sh[t] = h.unsafe_load((c0 + t) * N + K)
-            sh[STAGE + t] = q.unsafe_load((c0 + t) * QC + j)
+            sh[t] = ftz(h.unsafe_load((c0 + t) * N + K))
+            sh[STAGE + t] = ftz(q.unsafe_load((c0 + t) * QC + j))
             t += STAGE_TPB
         barrier()
         if tid == 0:
-            for u in range(cnt):
-                acc = ftz(identical_mul_add(ftz(sh[u]), ftz(sh[STAGE + u]), acc))
+            acc = _chain_fma(sh, 0, cnt, STAGE, acc)
         barrier()
         c0 += STAGE
     if tid == 0:

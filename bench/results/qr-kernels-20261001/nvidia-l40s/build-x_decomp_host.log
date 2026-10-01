@@ -1,0 +1,9 @@
+72424 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19da00000000, nodemask=2)
+Imported from /root/mojolearn-pass18/bindings/_mojolearn_x_decomp_host.mojo:18:
+Imported from ./x_decomp/host.mojo:57:
+./x_decomp/host_simd.mojo:333:64: warning: 'strided_load' is deprecated, use 'unsafe_strided_load' instead
+            acc = ftz_v[W](acc + ftz_v[W](row0.unsafe_offset(j).strided_load[width=W](d)))
+                                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+                                                                unsafe_strided_load
+<unknown>:0: note: 'strided_load' declared here
+built python/mojolearn/host/_mojolearn_x_decomp_host.so
