@@ -37,6 +37,7 @@ from std.math import iota
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks
 from core.host_parallel import host_parallelize
 from std.os import getenv
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from x_decomp.cells import F32Ptr, div0, sqrt0, sub
 
 
@@ -51,15 +52,21 @@ comptime XD_QR_HOST_MIN = 1 << 16
 
 def xd_qr_on_host(m: Int) -> Bool:
     """Whether the device kit runs geqrf/orgqr as the host walk: by default
-    for m >= XD_QR_HOST_MIN rows (the device's one-chain-per-column kernels
-    are bound by m dependent multiply-adds per column, 17 s at 200,000 x 220
-    on an M4 against this walk's host time); MOJOLEARN_XD_QR_HOST=0/1
-    forces either. The same cells either way."""
+    on the AMD and Apple columns for m >= XD_QR_HOST_MIN rows, never on
+    NVIDIA; MOJOLEARN_XD_QR_HOST=0/1 forces either. The same cells either
+    way. Measured on the boxes (PR #41, the board's qr and svd cells on
+    taxi / istella, digests identical): MI325X qr 888 -> 183 and 16,733 ->
+    5,082 ms, svd 915 -> 279 and 38,030 -> 27,372; M3 Ultra qr 498 -> 195
+    and 16,954 -> 7,729, svd 533 -> 234 and 43,915 -> 35,699; L40S qr 284
+    -> 544 and 8,352 -> 14,345, svd 305 -> 723 and 30,534 -> 33,945 (its
+    device route is already fast and its host is a Zen 4 VM)."""
     var v = String(getenv("MOJOLEARN_XD_QR_HOST"))
     if v == "0":
         return False
     if v == "1":
         return True
+    comptime if TARGET_COLUMN == COLUMN_NVIDIA:
+        return False
     return m >= XD_QR_HOST_MIN
 
 comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
