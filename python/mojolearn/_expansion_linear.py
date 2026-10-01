@@ -22,6 +22,7 @@ float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
 import os
 from . import _portable_math as _pm
+from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
@@ -103,9 +104,33 @@ def _host_fit_module():
     return _HOST_MODULE[0]
 
 
+def _glm_host(est):
+    """Whether this GLM fit takes the host route (peer measurement on the
+    #73 head, 2026-10-01, bits equal on both routes): on the MI325X the host
+    wins for every family (gamma 615 vs 1726 ms, tweedie 495 vs 1237), on
+    the L40S box the device is ahead for tweedie (631 vs 764 ms) and gamma
+    is a wash, and poisson's 11 Newton iterations take the host everywhere
+    (2.07 s vs 49 s). So NVIDIA keeps the device for every family but
+    poisson. MOJOLEARN_X_LINEAR_GLM_HOST=1 forces the host route and =0 the
+    device route on any vendor."""
+    forced = os.environ.get("MOJOLEARN_X_LINEAR_GLM_HOST", "").strip()
+    if forced == "1":
+        return True
+    if forced == "0":
+        return False
+    try:
+        vendor = str(_backend.vendor()).strip().lower()
+    except Exception:  # noqa: BLE001 - no vendor read-back: the host policy
+        vendor = ""
+    if vendor in ("cuda", "nvidia"):  # the read-back says "cuda" on an NVIDIA box
+        return type(est).__name__ == "PoissonRegressor"
+    return True
+
+
 def _fit_module(est, algo):
     mode = getattr(est, "numeric_mode", None)
-    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical"):
+    if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
+            and (algo != ALGO_GLM or _glm_host(est)):
         host = _host_fit_module()
         if host is not None:
             return host
