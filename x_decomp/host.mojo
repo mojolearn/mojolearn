@@ -40,6 +40,7 @@ from x_decomp.cells import (
     lasso_row,
     omp_row,
     lu_solve_serial,
+    orth_diag_cell,
     orth_rank_guard,
     trsm_row,
     rand_cell,
@@ -325,6 +326,21 @@ struct HostExec(Exec):
 
     @staticmethod
     def orth(a: F32Ptr, m: Int, l: Int) raises:
+        var none = List[Float32](length=1, fill=Float32(1))
+        HostExec._orth_passes(a, m, l, F32Ptr(unsafe_from_address=Int(none.unsafe_ptr())), False)
+        _ = none^
+
+    @staticmethod
+    def orth_diag(a: F32Ptr, m: Int, l: Int, diag: F32Ptr) raises:
+        """`orth`, and `diag` (l floats) the product of the two passes'
+        guarded R diagonals (`orth_diag_cell`; the device's
+        `orth_on_device_diag`)."""
+        for j in range(l):
+            diag.unsafe_store(j, Float32(1))
+        HostExec._orth_passes(a, m, l, diag, True)
+
+    @staticmethod
+    def _orth_passes(a: F32Ptr, m: Int, l: Int, diag: F32Ptr, with_diag: Bool) raises:
         for _ in range(2):
             var w = List[Float32](capacity=m * l)
             for t in range(m * l):
@@ -332,6 +348,9 @@ struct HostExec(Exec):
             var r = HostExec._qr_r(F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m, l)
             var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
             orth_rank_guard(pr, l)
+            if with_diag:
+                for j in range(l):
+                    orth_diag_cell(pr, diag, j, l)
             var pw = F32Ptr(unsafe_from_address=Int(w.unsafe_ptr()))
 
             def row(i: Int) {imm pw, imm pr, imm a, imm l}:

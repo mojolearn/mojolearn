@@ -192,6 +192,18 @@ def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
     return PythonObject(l)
 
 
+def orth_diag_py[E: Exec](a: PythonObject, diag: PythonObject, p: PythonObject) raises -> PythonObject:
+    """`orth` in place, and diag (l floats) = the product of the two passes'
+    R diagonals (lane neural-pass17)."""
+    var m = _n(p, 0)
+    var l = _n(p, 1)
+    var pa = _f(a)
+    var pd = _f(diag)
+    with GILReleased(Python()):
+        E.orth_diag(pa, m, l, pd)
+    return PythonObject(l)
+
+
 def svd_py[E: Exec](a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
     var m = _n(p, 0)
     var n = _n(p, 1)

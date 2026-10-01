@@ -1244,6 +1244,22 @@ def svdvals(a):
 _SVD_NULL_RTOL = 2.0 ** -20
 
 
+def _svd_stage_timer():
+    """MOJOLEARN_LINALG_TIMING=1: each stage of `_svd_tall` and its wall on
+    stderr (the device waited for, since every stage's result is read)."""
+    if os.environ.get("MOJOLEARN_LINALG_TIMING") != "1":
+        return lambda name: None
+    import sys
+    import time
+    last = [time.perf_counter()]
+
+    def tick(name):
+        now = time.perf_counter()
+        print("svd stage %-28s %9.1f ms" % (name, (now - last[0]) * 1e3), file=sys.stderr)
+        last[0] = now
+    return tick
+
+
 def _svd_tall(k, A, full):
     """(U, S, Vt) of a tall A (m >= n) as _M: S and V from the decomp lane's
     QR + one-sided Jacobi (`Kit.svd`, descending, ties to the lower index);
@@ -1253,12 +1269,35 @@ def _svd_tall(k, A, full):
     columns."""
     from ._expansion_decomp import _M
     m, n = A.r, A.c
+    tick = _svd_stage_timer()
     S, Vt = k.svd(A)
+    tick("svd (sliced QR + Jacobi of R)")
     s0 = S.s[0] if n else 0.0
     r = sum(1 for v in S.s if v > 0.0 and v > s0 * _SVD_NULL_RTOL)
     AV = k.mm(A, Vt, tb=True)                                   # m x n
+    tick("A V (gemm)")
     Ug = k.ew("div", AV.take_cols(list(range(r))) if r < n else AV, S.take_cols(list(range(r))) if r < n else S)
+    tick("A V / s")
     width = m if full else n
+    if r == n and width == n and os.environ.get("MOJOLEARN_LINALG_SVD_U", "orth") != "householder":
+        # lane neural-pass17: with every direction kept and no trailing
+        # columns wanted, U is the orthonormalized A V / s: the kit's orth
+        # (two sliced-QR passes and a row-parallel A R^-1, DEVIATION 5309),
+        # whose folds run over the row slices in parallel, where geqrf +
+        # orgqr ran 4 n serial one-thread chains over the m rows (at
+        # 1,000,000 x 220, 880 chains of a million dependent steps: most
+        # of the bench board's svd race on every GPU). Column j is signed
+        # by the product of the passes' R diagonals, which is Q_j . Ug_j:
+        # the same orientation geqrf's R[j, j] gave (Ug_j's). A guarded
+        # (zero) product means a dependent column the orth cannot build;
+        # the Householder route then stands. MOJOLEARN_LINALG_SVD_U=
+        # householder keeps that route for every call.
+        Qo, d = k.orth_diag(Ug)
+        tick("U = orth(A V / s)")
+        if all(v != 0.0 for v in d):
+            out = Qo.neg_cols([v < 0.0 for v in d])
+            tick("U column signs")
+            return out, S, Vt
     import array as _array
     if not r:
         eye = _array.array("f", [1.0 if i == j else 0.0 for i in range(m) for j in range(width)])
@@ -1269,7 +1308,9 @@ def _svd_tall(k, A, full):
     # A v_j / s_j to that same error, orthonormal to float32, and Q's
     # trailing columns are the complement's basis.
     h, tau = k.geqrf(Ug)
+    tick("geqrf(A V / s)")
     Qc = k.orgqr(h, tau, width)
+    tick("orgqr")
     neg = [h.s[j * r + j] < 0.0 for j in range(r)] + [False] * (width - r)
     # lane/neural-net-experiment (2026-09-30): the sign flip of Q's columns
     # was a Python loop over every value of each flipped column (m Python
