@@ -5804,6 +5804,13 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
 # steps in the same order. Keys past `s` are stepped by full queries but
 # never stored, and their cells never reach the corner test.
 # ===========================================================================
+#: lane/neural-pass57 (2026-10-01): the `_r32` dkdv arm's keys per block,
+#: 32, or 16 under `-D MOJOLEARN_ATTN_DKDV_BJ16=1` for the MI325X and L40S
+#: sweep (the dq kernel's 16-row blocks took 1.69 -> 0.45 ms a layer on the
+#: MI325X; dkdv at 32 keys makes 384 blocks at the board shape). The keys a
+#: block owns touch no chain: same bits.
+comptime ATTN_DKDV_BJ_R32 = 16 if is_defined["MOJOLEARN_ATTN_DKDV_BJ16"]() else 32
+
 comptime ATTN_DKDV_MFMA = (
     TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_DKDV_MFMA"]()
 )
@@ -9160,9 +9167,9 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
-            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
         else:
-            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+            _estash_dkdv_launch[HD, ATTN_DKDV_BJ_R32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     else:
         comptime if ATTN_V1_ALIAS_Y_ESTASH:
             _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
