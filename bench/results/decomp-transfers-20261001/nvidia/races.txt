@@ -1,0 +1,6 @@
+gaussian-rp before istella ms=460.161 ms=53.19401063024998 digest=66275aa7ff67e576 
+gaussian-rp after istella ms=95.682 ms=61.56722269952297 digest=66275aa7ff67e576 
+sparse-rp before istella ms=529.378 ms=60.72923354804516 digest=d01cdcaa5dd4ef1c 
+sparse-rp after istella ms=104.196 ms=66.28686934709549 digest=d01cdcaa5dd4ef1c 
+svd before istella ms=42309.087 digest=92c189cb2337dc73 
+svd after istella ms=30505.170 digest=92c189cb2337dc73 
