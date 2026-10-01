@@ -1,0 +1,2 @@
+mamba3: one thread 208.7 ms, policy 32.8 ms, ratio 6.37x, 786432 floats, sha256 one e0de9d88212ad12c policy e0de9d88212ad12c
+HOST_THREADS_AB PASS mamba3
