@@ -1,0 +1,12 @@
+02:44:52 build-x_decomp rc=0
+02:45:14 build-linalg rc=0
+02:45:23 build-x_decomp_host rc=0
+02:45:39 prep rc=0
+02:45:56 race-qr-before-taxi rc=0
+02:51:05 race-qr-before-istella rc=0
+02:51:10 race-qr-after-taxi rc=0
+02:52:19 race-qr-after-istella rc=0
+02:52:36 race-svd-before-taxi rc=0
+02:58:48 race-svd-before-istella rc=0
+02:58:53 race-svd-after-taxi rc=0
+03:01:28 race-svd-after-istella rc=0
