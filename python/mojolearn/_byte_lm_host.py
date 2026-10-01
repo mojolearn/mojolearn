@@ -476,10 +476,15 @@ class LanguageModelHostTrainer:
         _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch,
                     self._shape.length + 1, self._shape.length)
         n = self._shape.n_total
-        grad = zeros((n,), '<f4')
-        post_p = zeros((n,), '<f4')
-        post_m = zeros((n,), '<f4')
-        post_v = zeros((n,), '<f4')
+        # Uninitialized, not zeroed: the binding writes every element of all
+        # four (`_write_span` memcpy of n), and a failed call discards them
+        # (the gradient is None and the state is the previous step's). Four
+        # 80 MB memsets a step at the board shape were the Python side's cost.
+        from ._buffer import empty as _empty
+        grad = _empty((n,), '<f4')
+        post_p = _empty((n,), '<f4')
+        post_m = _empty((n,), '<f4')
+        post_v = _empty((n,), '<f4')
         self._gradient = None
         bits = int(self._binding.byte_lm_host_train_step(
             [addr_ro(self._parameters, name='parameters'),
