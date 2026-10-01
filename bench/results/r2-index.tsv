@@ -60,3 +60,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T17:15:52Z	measurements/2026-10-01/ticks57-lane_neural-pass49-on-61.tar.gz	1f7ce7ca2c08e295d08ee90e2aa17f2156fa5259b595c1eaa4c9e2dfd5e28c7e	77587	8de2d3c1e7ad	/root/ticks57-lane_neural-pass49-on-61
 2026-10-01T17:22:42Z	measurements/2026-10-01/lr-rerun-amd.tar.gz	84ef29ca4ff8f8a3818d39d7f4ccab66b249f955e10a040a940ac6c96e06ef69	26833	mojolearn-steward-do-amd	/root/lr-rerun-amd
 2026-10-01T17:31:11Z	measurements/2026-10-01/launch-probe-amd.tar.gz	43ca64bbc6417403e7e863f405a90123fc1fe496ef7301c3e95cb47e77145fde	25599	mojolearn-steward-do-amd	/root/launch-probe-amd
+2026-10-01T17:31:24Z	measurements/2026-10-01/ab-pr67-amd.tar.gz	46908c44c40ca6a8a8640f7b397e183897f16652e8bdf1bc1a1b5954004fecb7	106193	mojolearn-steward-do-amd	/root/ab-pr67-amd
