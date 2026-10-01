@@ -12,3 +12,13 @@
 
 #57: ~2% faster on Apple. #56: neutral (closed). An earlier run with unmerged arms (~20 commits behind) is superseded.
 #57 decision waits on the L40S rerun on the #67 tree (nvc1-0013, lane/neural-pass49-on-61).
+
+## NVIDIA L40S, #57 on the #67 tree (measure-only lane/neural-pass49-on-61, both arms with main 3befccd28 merged in)
+
+| row | pass61 (#67) | pass49-on-61 (#67 + #57) |
+|---|---|---|
+| lm-forward stage (ms) | 17.6 / 17.5 (timers 17.4 / 17.8) | 15.6 / 15.9 (timers 16.0 / 15.7) |
+| lm-train-step stage (ms) | 38.1 / 37.9 | 39.1 / 38.0 |
+
+Same bits. Ticks: logits.scan 1.638 -> 0.010, logits.download 3.17 -> 3.45: forward -10%, train step neutral.
+The merge of main into the arm conflicted only in bench/results/r2-index.tsv (gemm_identical.mojo resolved without markers; builds rc=0).

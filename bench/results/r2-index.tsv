@@ -52,3 +52,9 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T16:28:43Z	measurements/2026-10-01/gemm61-nvidia.tar.gz	47b91057fcaca94abad941eef72fea734408192bb7b5ffa8b909d9760198857b	214071	8de2d3c1e7ad	/root/gemm61-nvidia
 2026-10-01T16:30:11Z	measurements/2026-10-01/ab-arms59-amd.tar.gz	c88c105254bb38136ae032af73fecb7f1bea2172ac32919dc79fbb21b5e71f59	18142410	mojolearn-steward-do-amd	/root/ab-arms59-amd
 2026-10-01T16:42:16Z	measurements/2026-10-01/pr65-metal-run2.tar.gz	a2f95d77dbe9e213342fe037cd0f89a7be421c73273bc14c0678e01961c82060	113671	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr65-metal
+2026-10-01T17:15:38Z	measurements/2026-10-01/ab-pr68-nvidia.tar.gz	3487e979172b1b6f63fa8dbc9a5a8749fbac4367b631a7b83721b2753d5ca0d8	103929	8de2d3c1e7ad	/root/ab-pr68-nvidia
+2026-10-01T17:15:41Z	measurements/2026-10-01/ab-p57on61-nvidia.tar.gz	c11f309b5c9c9422595bdfe7216cbf9531d1b3e697a260aa04871e80e554961b	157966	8de2d3c1e7ad	/root/ab-p57on61-nvidia
+2026-10-01T17:15:44Z	measurements/2026-10-01/ticks68-main.tar.gz	0a55f2f77b4bb565773bc36e3a25e86be7e4b632d95c01a9a115f2374ed5a60d	76234	8de2d3c1e7ad	/root/ticks68-main
+2026-10-01T17:15:47Z	measurements/2026-10-01/ticks68-lane_neural-pass62.tar.gz	763eba2f0107d389fd233a158aab0531b06fd328f2d0cd48e8ab0f48abe19ad8	76413	8de2d3c1e7ad	/root/ticks68-lane_neural-pass62
+2026-10-01T17:15:49Z	measurements/2026-10-01/ticks57-lane_neural-pass61.tar.gz	76aa76e5355fe158904915fd14b3f595d149a9525d326c4b5cee7c28aa414ce7	77995	8de2d3c1e7ad	/root/ticks57-lane_neural-pass61
+2026-10-01T17:15:52Z	measurements/2026-10-01/ticks57-lane_neural-pass49-on-61.tar.gz	1f7ce7ca2c08e295d08ee90e2aa17f2156fa5259b595c1eaa4c9e2dfd5e28c7e	77587	8de2d3c1e7ad	/root/ticks57-lane_neural-pass49-on-61
