@@ -1,0 +1,139 @@
+120310 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x501340000000, nodemask=1)
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:13:
+./x_neighbors/host_ops.mojo:132:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+        if (1) > 0:
+               ^
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:13:
+./x_neighbors/host_ops.mojo:272:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+        if (1) > 0:
+               ^
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:13:
+./x_neighbors/host_ops.mojo:406:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+        if (2) > 0:
+               ^
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:276:43: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var K = FP(unsafe_from_address=q) + r0 * d
+                ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:291:87: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _matmul_rows(kcp, FP(unsafe_from_address=alphas), FP(unsafe_from_address=res) + r0 * c, rows, nf, c)
+                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:310:48: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _kernel_rows(FP(unsafe_from_address=q) + r0 * d, FP(unsafe_from_address=y), kp, rows, m, d, kind, degree,
+                     ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:312:81: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _matmul_rows(kp, FP(unsafe_from_address=w), FP(unsafe_from_address=res) + r0 * c, rows, m, c)
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:343:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _scaled_rbf_rows(FP(unsafe_from_address=x) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
+                         ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:345:44: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var yp = FP(unsafe_from_address=y) + r0
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:371:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _scaled_rbf_rows(FP(unsafe_from_address=q) + r0 * d, FP(unsafe_from_address=z), kp, ksp, rows, m, d, gamma,
+                         ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:373:87: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        _matmul_rows(ksp, FP(unsafe_from_address=alpha), FP(unsafe_from_address=mean) + r0, rows, m, 1)
+                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+./x_neighbors/iter_host.mojo:374:47: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        var vp = FP(unsafe_from_address=var_) + r0
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:721:23: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var acc_row = scr + t * 2 * nc          # the running product
+                  ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:722:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sk = scr + t * 2 * nc + nc          # this degree's sketch
+             ~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:722:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sk = scr + t * 2 * nc + nc          # this degree's sketch
+             ~~~~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:764:16: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var o = sk + t * nc
+            ~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:785:18: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var ar = acc + r * nc
+             ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:786:17: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var sr = sk + (r * degree + p) * nc
+             ~~~^~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:1032:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bd = best_d + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:11:
+Imported from ./x_neighbors/eigh.mojo:15:
+./x_neighbors/items.mojo:1033:21: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+    var bi = best_i + t * k
+             ~~~~~~~^~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+Imported from ./x_neighbors/iter_host.mojo:8:
+Imported from ./x_neighbors/cc_sparse.mojo:26:
+/root/mojolearn-pass22/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+Imported from ./x_neighbors/iter_host.mojo:8:
+Imported from ./x_neighbors/cc_sparse.mojo:26:
+/root/mojolearn-pass22/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+Imported from ./x_neighbors/iter_host.mojo:8:
+Imported from ./x_neighbors/cc_sparse.mojo:26:
+/root/mojolearn-pass22/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+/root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:42:18: warning: assignment to 'sweeps' was never used; assign to '_' instead?
+    var sweeps = 0
+                 ^
+Included from /root/mojolearn-pass22/bindings/_mojolearn_x_neighbors_host.mojo:14:
+Included from ./x_neighbors/iter_host.mojo:385:
+./x_neighbors/lp_knn.mojo:50:13: warning: ref 'e' was never used, remove it?
+        for e in range(counts[i]):
+            ^
+built python/mojolearn/host/_mojolearn_x_neighbors_host.so
