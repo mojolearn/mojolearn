@@ -1,0 +1,10 @@
+amd-gpu-fixed ivf 40000 rc=0 5bf7822421de6cd5 98dfc90fe3e3f631 793
+amd-gpu-fixed sgd-reg 20000 rc=0 89cfa8f1827cd043 64f661f504bae246 32869
+amd-gpu-fixed sgd-clf 20000 rc=0 a6cb75bf0e2f93da 64f661f504bae246 33044
+amd-gpu-fixed lars 200000 rc=0 640cb53e8400f17d fb874f9aa1a538c9 45719
+amd-gpu-fixed lu 1024 rc=0 b53aeffc5bf56d98  9454
+amd-gpu-fixed ivf 400000 rc=0 26a769d35c913838 c0d3f3c9c8492d21 4240
+amd-gpu-fixed sgd-reg 1000000 rc=0 23f7125a7f0738c6 1ab207098c809206 1672202
+amd-gpu-fixed sgd-clf 1000000 rc=0 bcac4b45fd82f48b 1ab207098c809206 1663712
+amd-gpu-fixed lars 1000000 rc=0 4f5339c631d9eb2e 1ab207098c809206 99172
+amd-gpu-fixed lu 8192 rc=0 2a296d1d25da0a2c  602264
