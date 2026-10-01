@@ -1,0 +1,6 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"max_iter": 10000, "seed": "none (deterministic)"}, "source": "attributes"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/prophet", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=prophet dataset=taxi-hourly arm=ours round=0 ms=7191.115 infer_ms=None digest=66f5dd106a7a3f88
+ALGOS-ROUND lane=prophet dataset=taxi-hourly arm=ours round=1 ms=6362.236 infer_ms=None digest=66f5dd106a7a3f88
+ALGOS-ROUND lane=prophet dataset=taxi-hourly arm=ours round=2 ms=6362.081 infer_ms=None digest=66f5dd106a7a3f88
+ALGOS-ROUND lane=prophet dataset=taxi-hourly arm=ours round=3 ms=6362.002 infer_ms=None digest=66f5dd106a7a3f88
+ALGOS lane=prophet dataset=taxi-hourly arm=ours status=ok median_ms=6362.080750986934 quality={"forecast_rmse": 32.04928089075462}

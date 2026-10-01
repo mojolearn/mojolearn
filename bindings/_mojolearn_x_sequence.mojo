@@ -121,7 +121,27 @@ def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return garch_py(ex, addrs, ip)
 
 
+def prophet_host_max() -> Int:
+    """Batches of at most this many series run the Prophet fit on a HostExec
+    inside the GPU binding (lane neural-pass23), as garch does above: each
+    series is one serial optimizer (`sequence/prophet.mojo::op_prophet_fit`),
+    which one GPU thread runs far slower than one CPU core (the board's 64 x
+    1,440 race: 17 to 37 s on the GPUs against 0.25 to 0.9 s for prophet on
+    the CPU), while the host executor runs the series over host tasks. The
+    same element body, the host column's own statements, which the identity
+    gates hold to the device column. MOJOLEARN_SEQ_PROPHET_HOST_MAX
+    overrides it (0: always the device)."""
+    var v = String(_getenv_seq("MOJOLEARN_SEQ_PROPHET_HOST_MAX", "4096"))
+    try:
+        return Int(v)
+    except:
+        return 4096
+
+
 def prophet_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    if len(ip) >= 1 and ival(ip, 0) <= prophet_host_max():
+        var hx = HostExec()
+        return prophet_fit_py(hx, addrs, ip, fp)
     var ex = DeviceExec()
     return prophet_fit_py(ex, addrs, ip, fp)
 
