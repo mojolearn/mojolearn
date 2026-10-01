@@ -40,3 +40,7 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T14:21:46Z	measurements/2026-10-01/pr58-nvidia.tar.gz	1d4e35d70a2f7fbb607da38d38179751f299e28a668399614599440dd4a05fbc	14259483	97c359a1d3ef	/root/pr58-nvidia
 2026-10-01T14:43:22Z	measurements/2026-10-01/ab-p596061-amd.tar.gz	38616826766696ef4214c0980d8580b26406c994ff1f23315880e00ead9f4331	18140440	mojolearn-steward-do-amd	/root/ab-p596061-amd
 2026-10-01T14:43:23Z	measurements/2026-10-01/pr54-amd.tar.gz	f3246823ad39feb99085f1cab543c79f96c11ea1c300c2ca76dc35c7484f43e5	4730698	mojolearn-steward-do-amd	/root/pr54-amd
+2026-10-01T15:06:52Z	measurements/2026-10-01/ab-p5960-nvidia.tar.gz	6973e19dfa534ab0effe34ee95987113567bc582bd9d5ac515bab03d5a293b51	17245422	8de2d3c1e7ad	/root/ab-p5960-nvidia
+2026-10-01T15:07:09Z	measurements/2026-10-01/ab-pr58b-nvidia.tar.gz	aeb16115120ebeab3f053514aa6d33fc271be0af6d8719e8929331f9f2273117	11233146	8de2d3c1e7ad	/root/ab-pr58b-nvidia
+2026-10-01T15:07:24Z	measurements/2026-10-01/ab-arms57-nvidia.tar.gz	09b4ec598e6acae5746f1b750c4da530a56d8da5e28cdb652d51d87eeacaa116	17159492	8de2d3c1e7ad	/root/ab-arms57-nvidia
+2026-10-01T15:07:39Z	measurements/2026-10-01/pr62-nvidia.tar.gz	c34d28db19fd1bfff849aa64e28802bb187234c7796f2eeb59ab9d18f9561cfe	5627274	8de2d3c1e7ad	/root/pr62-nvidia
