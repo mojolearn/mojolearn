@@ -1887,8 +1887,14 @@ def _attn_speculative() -> Bool:
     caller runs the eager path exactly as before, so no bit moves. The
     kernels run on out-of-regime operands only to be discarded: arithmetic
     on inf or NaN faults nowhere and every loop is shape-bound. Default
-    off; the identity gate is the check."""
-    return String(getenv("MOJOLEARN_ATTN_SPECULATIVE")) == "1"
+    off on NVIDIA and AMD (the L40S toggle sweep read 0.99-1.00) and ON on
+    the Apple column (lane/neural-pass43, 2026-10-01: one Metal round trip
+    a layer instead of two; `MOJOLEARN_ATTN_SPECULATIVE=0` restores the
+    scan in front); the identity gate is the check."""
+    var v = String(getenv("MOJOLEARN_ATTN_SPECULATIVE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
 
 
 def _attn_timer_on() -> Bool:
