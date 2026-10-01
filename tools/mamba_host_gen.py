@@ -122,7 +122,7 @@ SUBSTITUTIONS = (
      r'comptime M3_S16_QK_SHARED = not is_defined\["MOJOLEARN_MAMBA3_S16_QK_NAIVE"\]\(\)',
      "comptime M3_S16_QK_SHARED = False"),
     ("mamba/impl/modules/mamba3_backward.mojo",
-     r'comptime M3_S17_OPERANDS_SHARED = \(\n    not is_defined\["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"\]\(\) and M3_S17_TAIL_SHARED\n\)',
+     r'comptime M3_S17_OPERANDS_SHARED = \(\n    not is_defined\["MOJOLEARN_MAMBA3_S17_OPERANDS_NAIVE"\]\(\)\n    and M3_S17_TAIL_SHARED\n    and False\n\)',
      "comptime M3_S17_OPERANDS_SHARED = False"),
     ("mamba/impl/modules/mamba3_backward.mojo",
      r"ctx\.enqueue_function\[mamba3_s16_qkv_backward_kernel\]\(",
