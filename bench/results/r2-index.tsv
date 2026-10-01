@@ -46,3 +46,4 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T15:07:39Z	measurements/2026-10-01/pr62-nvidia.tar.gz	c34d28db19fd1bfff849aa64e28802bb187234c7796f2eeb59ab9d18f9561cfe	5627274	8de2d3c1e7ad	/root/pr62-nvidia
 2026-10-01T15:08:54Z	measurements/2026-10-01/ab-stack65-nvidia.tar.gz	93c933ce3688986523a7bca966ba1d162bc33aff0acaf3dee806ff04a4af453a	11277606	8de2d3c1e7ad	/root/ab-stack65-nvidia
 2026-10-01T15:41:47Z	measurements/2026-10-01/ab-fwdtq16-nvidia.tar.gz	904cdf363a35bd8a9c3884869b43319b86751d006e9776cbbd829a3b8b8e3732	17154419	8de2d3c1e7ad	/root/ab-fwdtq16-nvidia
+2026-10-01T16:12:26Z	measurements/2026-10-01/ab-pr67-nvidia.tar.gz	37da697e78489ec57d8839709d5f1c52b65f48dd8f4a620840cd5cae6411c47a	11462126	8de2d3c1e7ad	/root/ab-pr67-nvidia

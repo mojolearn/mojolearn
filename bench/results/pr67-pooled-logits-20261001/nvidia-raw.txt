@@ -1,0 +1,27 @@
+## /root/ab-pr67-nvidia
+stage-pass61-1                              17.182 41.645  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass61-2                              17.037 41.668  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                51.707 41.824  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                51.173 41.505  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-tailtimers-branch                     17.044  4a8e781b0739a038
+stage-timers-pass61                         17.195 41.815  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-main                           51.320 41.962  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+== stage-timers-pass61
+== stage-timers-main
+race-lm-forward-lane_neural-pass61.log digest=4a8e781b0739a038 median_ms=16.808999702334404 
+race-lm-forward-main.log digest=4a8e781b0739a038 median_ms=54.68358471989632 
+timing python.logits_out 29.518 ms fresh
+timing python.logits_binding 25.020 ms
+timing python.logits_out 29.208 ms fresh
+timing python.logits_binding 16.969 ms
+timing python.logits_out 0.017 ms pooled
+timing python.logits_binding 16.732 ms
+timing python.logits_out 0.009 ms pooled
+timing python.logits_binding 16.749 ms
+timing python.logits_out 0.007 ms pooled
+timing python.logits_binding 16.772 ms
+timing python.logits_out 0.007 ms pooled
+timing python.logits_binding 16.718 ms
+SUMMARY lm-forward first=1309.720 median_after_first=17.044 ms
+
+[exited with code 0]

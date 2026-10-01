@@ -1,0 +1,21 @@
+## /root/ab-stack65-nvidia
+stage-pass58-1                              49.739 36.969  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass58-2                              50.274 37.063  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                51.569 41.136  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                49.784 41.390  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-pass58                         49.921 37.746  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-timers-main                           49.749 41.643  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+== stage-timers-pass58
+attn.bwd_dq_tiled_pf 0.587339 ms
+attn.bwd_kvgrid_dkdv_pf 0.569422 ms
+attn.bwd_zdot_estash_dres_pf 0.612106 ms
+attn.core 2.127283 ms
+attn.fwd_r2_keep_kernel 1.963658 ms
+== stage-timers-main
+attn.bwd_dq_tiled_pf 1.325744 ms
+attn.bwd_kvgrid_dkdv_pf 0.679977 ms
+attn.bwd_zdot_estash_dres_pf 0.690684 ms
+attn.core 2.120894 ms
+attn.fwd_r2_keep_kernel 1.955166 ms
+
+[exited with code 0]
