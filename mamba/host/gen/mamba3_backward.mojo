@@ -325,12 +325,15 @@ def m3_s16_qk_arm() -> Int:
     on the L4 `regs` read 9.2 ms against `regs2`'s 10.8 at the board shape
     and 83.5 against 86.0 at the default shape, the same bits on every arm;
     `regs2` was the S16 pass's default and stays one env value away).
-    On the AMD column the default is `regs2` (2026-09-30, MI325X: `regs` read
-    18.6 ms against `regs2`'s 12.1 at the board shape, same bits;
-    bench/results/pass4-20260930). On the Apple column the default is
-    `regs2h` (lane/neural-apple3, 2026-10-01): the full-page arms are over
-    Metal's 32 KB and fell through to the naive kernel; the half-page arms
-    fit (unmeasured on a Mac at the time of writing; `regsh` is the A/B)."""
+    On the AMD column the default is `regs2h` (lane/mamba3-amd-regs2h,
+    2026-10-01, MI325X at B=2 L=512 d_model=384: the q/k stage read 4.5 ms
+    on `regs2h` against `regs2`'s 11.5 and `regs`'s 18.6, the backward's
+    stage sum 56.9 against 71.0, same bits on every arm;
+    bench/results/mamba3-apple-s16-halfpage-20261001/amd). On the Apple
+    column the default is `regs2h` (lane/neural-apple3, 2026-10-01): the
+    full-page arms are over Metal's 32 KB and fell through to the naive
+    kernel; the half-page arms fit (M3 Ultra: 2.5x the naive run;
+    `regsh` is the A/B)."""
     var a = String(getenv("MOJOLEARN_MAMBA3_S16_QK_ARM"))
     if a == "naive":
         return 0
@@ -346,9 +349,7 @@ def m3_s16_qk_arm() -> Int:
         return 5
     if a == "regsh":
         return 6
-    comptime if TARGET_COLUMN == COLUMN_AMD:
-        return 4
-    comptime if TARGET_COLUMN == COLUMN_APPLE:
+    comptime if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_APPLE:
         return 5
     return 2
 
