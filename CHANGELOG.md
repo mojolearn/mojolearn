@@ -4,7 +4,42 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.33 (published 2026-10-01)
+
+Every change below was measured before merging, with the same digests on NVIDIA, AMD and Apple (or on every vendor named) and the same bits as the route it replaces unless it says otherwise.
+
+### Fixed
+- Mamba-3 and Samba training on Apple GPUs (PR #28). In 0.8.32 a threadgroup page larger than the Metal limit made Mamba-3 backward fail on Apple. It runs again on the M3 Ultra, and its digests equal NVIDIA and AMD.
 - Fix Lars (DEVIATION 5010): an active coefficient that crosses zero no longer flips its sign in the equiangular step. That flip came from scikit-learn's lar method, and it makes the path diverge. On the bench board's Istella regression cell, held-out R2 goes from -1.36 to 0.309 (least squares 0.330). scikit-learn's own Lars scores -4e13 on that cell. Lars fits without a crossing, and every LassoLars fit, keep the same bits.
+- The k-means++ float scan now runs at a 32-lane warp on every vendor, so IVF and k-means seeding give the same bits on NVIDIA, AMD, the CPU and Metal. The identity harness inputs no longer depend on the host BLAS.
+- The IVF filter (PR #48): check-ivf passes in both tiers on all three vendors.
+
+### Changed (classical)
+- Louvain as a sparse walk, 61-66x on AMD and NVIDIA (PR #20).
+- GARCH series as host tasks, 93-128x on the AMD box (PR #21).
+- Prophet series as host tasks, 30-186x on both GPUs (PR #30).
+- Connected components as a sparse walk, 8-20x on both GPUs (PR #27).
+- PageRank over the nonzero cells, 5-53x on all three vendors (PR #35).
+- TreeSHAP rows over host tasks, 12-31x on all three vendors (PR #36).
+- Gaussian and sparse random projection, 2.1-5.1x on AMD, NVIDIA and Apple (PR #32).
+- Blocked LU (PR #37) and the LU solve host walk (PR #42): LU cells 3.7-13x on all three vendors.
+- Bit-inert geqrf/orgqr kernels, QR and SVD 1.3-4.6x on both GPUs (PR #24); the QR host walk is the default on AMD and Apple, 2.2-4.9x, with the device route kept on NVIDIA (PR #41).
+- TSQR steps split into reflector and apply kernels: SVD 1.8-2.7x, full PCA 5-8x (PR #43).
+- IVF search grouped by list, 3-8x on AMD and NVIDIA (PR #47); the IVF build uploads the caller's list directly (PR #39).
+
+### Changed (neural)
+- Mamba-3 backward 2.5x on Metal with the Apple half-page S16 arms (PR #44).
+- Mixture-of-experts tiled expert products, 6.0-7.5x on NVIDIA and AMD (PR #34).
+- Embedding transfers, 1.8-7.9x (PR #33).
+- The pooled resident optimizer with the staged Apple download: Apple optimizer cells 3.6-3.9x (PR #31). The pool is the Apple default only; NVIDIA and AMD keep the earlier transport, same bytes (PR #38).
+- Apple layernorm 2.1x through pooled stages and device buffers in the sequence executor (PR #45).
+- Byte LM inference with masked keys skipped and key packs, lm-infer 1.28x (PR #16, #17, #22).
+- Host training and inference passes over host tasks (PR #14, #15, #18, #25, #26, #29), each gated bit for bit on Zen 4 and Zen 5 hosts.
+
+### Documentation
+- The identity contract now reads: IDENTICAL means the same bits across hardware within a release; bits may change between alpha releases.
+
+Reuse completed checks on merged main. No fresh numerical verification or installed wheel smoke is run for this release.
 
 ## 0.8.32 (published 2026-10-01)
 
