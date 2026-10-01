@@ -29,6 +29,7 @@ FOLD_BLOCK boundaries; the host arms 5300_host_gemm_order.patch and
 """
 from std.math import ceildiv, fma
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from std.sys.info import simd_width_of
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -196,6 +197,85 @@ def _gemm_micro(
 
 
 # ------------------------------------------------ gemm, a single column C
+# lane/neural-pass78 (2026-10-01): a narrow C (2 to NARROW_V * W columns)
+# of A x op(B), A row-major and not transposed. B is packed once, flushed and
+# transposed, `[k x NARROW_V * W]` (columns past n are +0 and never stored);
+# each task walks NARROW_RI rows of A at a time, and every output cell is the
+# same chain `gemm_task` computes: per FOLD_BLOCK, `acc = ftz(fma(ftz(a),
+# ftz(b), acc))` for p ascending from +0, the columns as lanes; past one block
+# the partials fold by `fold_cell`'s ascending adds from +0. It replaces the
+# swapped path's packing of all of A per task and its transpose back.
+comptime NARROW_V = 4
+comptime NARROW_RI = 4
+comptime NARROW_RB = 128  # rows per task
+
+
+def gemm_narrow(m: Int, n: Int, ta: Bool) -> Bool:
+    comptime if is_defined["MOJOLEARN_XDECOMP_NO_NARROW_GEMM"]():
+        return False
+    return (not ta) and n >= 2 and n <= NARROW_V * W and m >= 2 * NARROW_RI
+
+
+def gemm_narrow_pack(b: F32Ptr, k: Int, n: Int, tb: Bool) -> List[Float32]:
+    """op(B) flushed as `[k x NARROW_V * W]`, zero padded."""
+    comptime NP = NARROW_V * W
+    var out = List[Float32](length=k * NP if k > 0 else 1, fill=Float32(0))
+    var o = F32Ptr(unsafe_from_address=Int(out.unsafe_ptr()))
+    for j in range(n):
+        for p in range(k):
+            var v = b.unsafe_load(j * k + p) if tb else b.unsafe_load(p * n + j)
+            o.unsafe_store(p * NP + j, _ftz1(v))
+    return out^
+
+
+def gemm_narrow_task_count(m: Int) -> Int:
+    return ceildiv(m, NARROW_RB)
+
+
+def gemm_narrow_task(t: Int, a: F32Ptr, bt: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int):
+    comptime NP = NARROW_V * W
+    var nv = ceildiv(n, W)
+    var nb = ceildiv(k, FOLD_BLOCK)
+    var i0 = t * NARROW_RB
+    var i1 = min(m, i0 + NARROW_RB)
+    var tot = InlineArray[Float32, NARROW_RI * NP](fill=Float32(0))
+    var i = i0
+    while i < i1:
+        var rows = min(NARROW_RI, i1 - i)
+        for blk in range(nb):
+            var p0 = blk * FOLD_BLOCK
+            var p1 = min(k, p0 + FOLD_BLOCK)
+            var acc = InlineArray[V, NARROW_RI * NARROW_V](fill=V(0))
+            if rows == NARROW_RI:
+                for p in range(p0, p1):
+                    var brow = bt.unsafe_offset(p * NP)
+                    comptime for r in range(NARROW_RI):
+                        var x = V(_ftz1(a.unsafe_load((i + r) * k + p)))
+                        comptime for v in range(NARROW_V):
+                            if v < nv:
+                                acc[r * NARROW_V + v] = ftz_v[W](mul_add_v[W](x, brow.unsafe_load[width=W](v * W), acc[r * NARROW_V + v]))
+            else:
+                for p in range(p0, p1):
+                    var brow = bt.unsafe_offset(p * NP)
+                    for r in range(rows):
+                        var x = V(_ftz1(a.unsafe_load((i + r) * k + p)))
+                        for v in range(nv):
+                            acc[r * NARROW_V + v] = ftz_v[W](mul_add_v[W](x, brow.unsafe_load[width=W](v * W), acc[r * NARROW_V + v]))
+            for r in range(rows):
+                for q in range(n):
+                    var cell = acc[r * NARROW_V + q // W][q % W]
+                    if nb == 1:
+                        tot[r * NP + q] = cell
+                    elif blk == 0:
+                        tot[r * NP + q] = add(Float32(0), cell)
+                    else:
+                        tot[r * NP + q] = add(tot[r * NP + q], cell)
+        for r in range(rows):
+            for q in range(n):
+                c.unsafe_store((i + r) * n + q, tot[r * NP + q])
+        i += rows
+
+
 comptime RB = 256  # rows per row-dot task
 comptime RI = 8  # rows whose chains advance together
 

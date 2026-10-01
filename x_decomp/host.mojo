@@ -55,6 +55,10 @@ from x_decomp.host_ew import ew_range
 from x_decomp.host_lda import lda_doc_row_host, lda_pack_t
 from x_decomp.host_graph import EdgeList, dijkstra_heap_row
 from x_decomp.host_simd import (
+    gemm_narrow,
+    gemm_narrow_pack,
+    gemm_narrow_task,
+    gemm_narrow_task_count,
     gemm_fold_rows,
     gemm_prepare,
     gemm_rowdot,
@@ -108,6 +112,15 @@ struct HostExec(Exec):
                 rowdot_task(t, a, b, c, m, k)
 
             xd_parallel(rd, rowdot_task_count(m))
+        elif gemm_narrow(m, n, ta):
+            var btl = gemm_narrow_pack(b, k, n, tb)
+            var bt = F32Ptr(unsafe_from_address=Int(btl.unsafe_ptr()))
+
+            def nr(t: Int) {imm a, imm bt, imm c, imm m, imm k, imm n}:
+                gemm_narrow_task(t, a, bt, c, m, k, n)
+
+            xd_parallel(nr, gemm_narrow_task_count(m))
+            _ = btl^
         elif gemm_swapped(m, n):
             # a narrow C (a matrix-vector product): C^T = op(B)^T op(A)^T fills
             # the vector lanes; each output's chain is the same (fma(x, y, acc)
