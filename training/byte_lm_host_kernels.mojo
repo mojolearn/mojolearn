@@ -533,8 +533,9 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
     the denominator (S17) as the oracle's serial scalar folds.
 
     `q_first >= 0` (lane neural-pass11) says the rows are a causal prefill's
-    queries `q_first .. q_first + l - 1` over keys `0 .. s - 1` (the mask the
-    two callers build: key `j` visible iff `j <= query`), and then the
+    queries `q_first .. q_first + l - 1` over keys `0 .. s - 1` (key `j`
+    visible iff `j <= query`; `masks` is then not read, the fill is formed
+    per key, lane neural-pass16), and then the
     exponential, the denominator and the division run over the visible keys
     only, the masked cells written `+0.0`: a masked cell is exactly
     `-FLT_MAX`, its exponential exactly `+0.0`, its weight `+0.0 / den =
@@ -551,19 +552,46 @@ def _softmax_head(cell: List[Float32], masks: List[Float32], l: Int, s: Int, sca
     var neg0 = _neg_zero_lanes()
     var scale_v = F32V(scale)
     var sbody = s - s % HOST_FW
+    # A causal prefill's additive mask is a pure function of (query, key):
+    # `unmasked_fill()` up to the query's key, `mask_fill()` after it, so
+    # with `q_first >= 0` the fill is formed here per key and `masks` is not
+    # read (lane neural-pass16: the callers built and copied an [l, s] mask
+    # per layer, 16 MB at the board shape). The same statement per cell.
+    var causal = q_first >= 0
+    var mfill_v = F32V(mask_fill())
+    var ufill_v = F32V(unmasked_fill())
     for qi in range(l):
         var crow = qi * s
         # S12, S13.
         var jv = 0
-        while jv < sbody:
-            var sc = ftz_lanes(identical_mul_add_simd[HOST_FW](
-                ftz_lanes(cellp.unsafe_load[width=HOST_FW](crow + jv)), scale_v, neg0))
-            mp.unsafe_store[width=HOST_FW](jv, ftz_lanes(sc + mkp.unsafe_load[width=HOST_FW](crow + jv)))
-            jv += HOST_FW
-        while jv < s:
-            var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
-            mp.unsafe_store(jv, ftz(ftz(sc_s) + mkp.unsafe_load(crow + jv)))
-            jv += 1
+        if causal:
+            var vis_end = q_first + qi + 1  # keys 0 .. vis_end - 1 are visible
+            if vis_end > s:
+                vis_end = s
+            var vbody = vis_end - vis_end % HOST_FW
+            while jv < vbody:
+                var sc = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                    ftz_lanes(cellp.unsafe_load[width=HOST_FW](crow + jv)), scale_v, neg0))
+                mp.unsafe_store[width=HOST_FW](jv, ftz_lanes(sc + ufill_v))
+                jv += HOST_FW
+            while jv < vis_end:
+                var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
+                mp.unsafe_store(jv, ftz(ftz(sc_s) + unmasked_fill()))
+                jv += 1
+            while jv < s:
+                var sc_m = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
+                mp.unsafe_store(jv, ftz(ftz(sc_m) + mask_fill()))
+                jv += 1
+        else:
+            while jv < sbody:
+                var sc = ftz_lanes(identical_mul_add_simd[HOST_FW](
+                    ftz_lanes(cellp.unsafe_load[width=HOST_FW](crow + jv)), scale_v, neg0))
+                mp.unsafe_store[width=HOST_FW](jv, ftz_lanes(sc + mkp.unsafe_load[width=HOST_FW](crow + jv)))
+                jv += HOST_FW
+            while jv < s:
+                var sc_s = ftz(identical_mul(ftz(cellp.unsafe_load(crow + jv)), scale))
+                mp.unsafe_store(jv, ftz(ftz(sc_s) + mkp.unsafe_load(crow + jv)))
+                jv += 1
         # S14. The maximum's fold shape is free (`fmax_fold_span`), so it
         # runs as lanes; a single key performs no fmax and is itself, flushed.
         var mx = ftz(mp.unsafe_load(0))
@@ -742,11 +770,8 @@ def block_fast(
 
     # S13's additive mask per (query, key), `+0.0` where the key is visible
     # and the finite fill where it is not, exactly the `mv` the oracle picks.
-    var mfill = mask_fill()
-    var masks = List[Float32](length=l * s, fill=unmasked_fill())
-    for qi in range(l):
-        for j in range(qi + 1, s):
-            masks[qi * s + j] = mfill
+    # The causal mask is formed inside `_softmax_head` (q_first = 0).
+    var masks = List[Float32]()
     var scale = attention_scale(hd)
     var ctx = List[Float32](length=m * qw, fill=Float32(0.0))
     var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
