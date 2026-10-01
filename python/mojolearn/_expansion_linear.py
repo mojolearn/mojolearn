@@ -76,11 +76,36 @@ def _vector(y, n, name="y"):
 _HOST_ALGOS = None
 
 
+#: lane/neural-pass76 (2026-10-01): the coordinate-descent CV path
+#: (LassoCV, ElasticNetCV), BayesianRidge, ARDRegression and the ridge
+#: family (Ridge, RidgeClassifier, RidgeCV) take the host route too: the
+#: same one-block device shape (one thread per Gram cell chaining every
+#: row), the same bits on both routes (M4: lasso-cv taxi 200K 0.58 -> 0.18 s,
+#: bayesian-ridge 0.089 -> 0.058, ridge-clf 0.097 -> 0.042, coefs equal).
+#: `MOJOLEARN_X_LINEAR_HOST_ALGOS` names the host set exactly (a comma list
+#: of glm, isotonic, enetcv, bayes, ard, ridge; empty for none), for a
+#: per-algorithm A/B; `MOJOLEARN_X_LINEAR_DEVICE=1` keeps the device for all.
+_HOST_ALGO_NAMES = {
+    "glm": (ALGO_GLM,), "isotonic": (ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT),
+    "enetcv": (ALGO_ENETCV,), "bayes": (ALGO_BAYES,), "ard": (ALGO_ARD,), "ridge": (ALGO_RIDGE,),
+}
+_HOST_ALGO_DEFAULT = ("glm", "isotonic", "enetcv", "bayes", "ard", "ridge")
+
+
 def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
-        _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT))
+        if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1":
+            names = ()
+        elif "MOJOLEARN_X_LINEAR_HOST_ALGOS" in os.environ:
+            names = [t.strip().lower() for t in os.environ["MOJOLEARN_X_LINEAR_HOST_ALGOS"].split(",") if t.strip()]
+            bad = [t for t in names if t not in _HOST_ALGO_NAMES]
+            if bad:
+                raise ValueError("MOJOLEARN_X_LINEAR_HOST_ALGOS: unknown name(s) %s; known: %s"
+                                 % (", ".join(bad), ", ".join(sorted(_HOST_ALGO_NAMES))))
+        else:
+            names = _HOST_ALGO_DEFAULT
+        _HOST_ALGOS = frozenset(a for t in names for a in _HOST_ALGO_NAMES[t])
     return _HOST_ALGOS
 
 
