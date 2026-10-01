@@ -4,6 +4,24 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+## 0.8.34 (published 2026-10-01)
+
+Every change below was measured on the NVIDIA L40S, the AMD MI325X and the Apple M3 Ultra before merging, with the same digests on every vendor and the same bits as the route it replaces unless it says otherwise.
+
+### Changed (neural)
+- Attention stack (PR #65, with #58-#61): lm-train-step 41.3 -> 37.0 ms on NVIDIA and 75.5 -> 58.5 ms on AMD.
+- Pooled logits host storage (PR #67): lm-forward 51.4 -> 17.1 ms on NVIDIA and 37.6 -> 22.7 ms on AMD.
+- Download pipeline (PR #57): lm-forward -10% on NVIDIA, -6% on AMD.
+- Grouped GEMM reuses the caller's workspace on NVIDIA (PR #68) and the NVIDIA short-k tile rule (PR #69): L40S train step -6% together.
+- dK/dV block of 16 rows as the AMD default (PR #71): dK/dV 0.60 -> 0.44 ms per layer, MI325X train step -2%.
+- AMD GEMM tile minimum of 1024 blocks (PR #55): AMD lm-train-step 101 -> 75 ms; AMD split-plan cap of 1M cells (PR #52): 1.2x.
+- regs2h as the AMD S16 default (PR #50): samba-train-step -10% on AMD.
+- Apple: byte-LM transport defaults (PR #51, lm-forward 1.3x), byte-LM device arenas (PR #53, lm-train-step 1.48x), matrix-unit attention forward stagings (PR #54, lm-forward 77.7 -> 66.8 ms) and dK/dV transposed staging off (PR #70, train step -12%).
+
+### Changed (classical)
+- GLM fits stop on the Newton decrement and run on the host route (PR #73); on NVIDIA, gamma and tweedie keep the device route. Poisson on the taxi block: 49.1 s -> 2.1 s on NVIDIA, 78.4 s -> 1.4 s on AMD. The fitted coefficients change and are the same on every vendor.
+- SVD U from the sliced orthogonalization (PR #23): new U bits, the same on all three vendors; svd taxi 2-4.7x.
+
 ## 0.8.33 (published 2026-10-01)
 
 Every change below was measured before merging, with the same digests on NVIDIA, AMD and Apple (or on every vendor named) and the same bits as the route it replaces unless it says otherwise.
