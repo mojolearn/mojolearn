@@ -7682,44 +7682,66 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var dacc = Float32(0.0)
 
     # The block's query rows, flushed once, transposed: qT[p][r].
+    # lane/neural-pass46 (2026-10-01): the stagings read four words a
+    # thread (one vector load each) and the admission exponent machinery
+    # (the per-word exponent minima, the warp butterflies, the `emin` page)
+    # is compiled only under ATTN_AMMA_ADMIT, the check arm; the shipped
+    # kernel admits every window (see ATTN_AMMA_ADMIT) and did that work
+    # for nothing on every key block. Same words, same chains.
     var eq = UInt32(0xFF)
-    for i in range(tid, TQ * HD, FUSED_THREADS):
-        var r = i // HD
-        var p = i % HD
-        var x = Float32(0.0)
+    for i in range(tid, (TQ * HD) // 4, FUSED_THREADS):
+        var i4 = i * 4
+        var r = i4 // HD
+        var p = i4 % HD
+        var x4 = SIMD[DType.float32, 4](0.0)
         if t0 + r < l:
-            x = ftz(q_rope.unsafe_load((bb * l + t0 + r) * nh * HD + h * HD + p))
-        qT[p * QST + r] = x
-        eq = min(eq, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
-    eq = _admit_warp_min(eq)
-    if lane == 0:
-        emin[sg] = eq
-    barrier()
+            x4 = q_rope.unsafe_load[width=4]((bb * l + t0 + r) * nh * HD + h * HD + p)
+        var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+        qT[p * QST + r] = f4[0]
+        qT[(p + 1) * QST + r] = f4[1]
+        qT[(p + 2) * QST + r] = f4[2]
+        qT[(p + 3) * QST + r] = f4[3]
+        comptime if ATTN_AMMA_ADMIT:
+            eq = min(eq, _admit_exp_min[4](f4))
     var bq = UInt32(0xFF)
-    comptime for w in range(NSG):
-        bq = min(bq, emin[w])
+    comptime if ATTN_AMMA_ADMIT:
+        eq = _admit_warp_min(eq)
+        if lane == 0:
+            emin[sg] = eq
+        barrier()
+        comptime for w in range(NSG):
+            bq = min(bq, emin[w])
     barrier()
 
     # Pass 1: scores.
     for kb in range(kb_lo, kb_hi + 1):
         var ek = UInt32(0xFF)
-        for i in range(tid, BK * HD, FUSED_THREADS):
-            var r = i // HD
-            var p = i % HD
+        for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
+            var i4 = i * 4
+            var r = i4 // HD
+            var p = i4 % HD
             var j = kb * BK + r
-            var x = Float32(0.0)
+            var x4 = SIMD[DType.float32, 4](0.0)
             if j < s:
-                x = ftz(k_cache.unsafe_load(kvbase + j * HD + p))
-            kv[r * KST + p] = x
-            ek = min(ek, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
-        ek = _admit_warp_min(ek)
-        if lane == 0:
-            emin[sg] = ek
+                x4 = k_cache.unsafe_load[width=4](kvbase + j * HD + p)
+            var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+            kv[r * KST + p] = f4[0]
+            kv[r * KST + p + 1] = f4[1]
+            kv[r * KST + p + 2] = f4[2]
+            kv[r * KST + p + 3] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ek = min(ek, _admit_exp_min[4](f4))
+        comptime if ATTN_AMMA_ADMIT:
+            ek = _admit_warp_min(ek)
+            if lane == 0:
+                emin[sg] = ek
         barrier()
-        var bk = UInt32(0xFF)
-        comptime for w in range(NSG):
-            bk = min(bk, emin[w])
-        var adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM) or not ATTN_AMMA_ADMIT
+        var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bk = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bk = min(bk, emin[w])
+            adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM)
         comptime for q in range(SPS):
             var f = sg * SPS + q
             var fr = f // NFK
@@ -7829,15 +7851,21 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
     var exact_ok = True  # every earlier block of this chain admitted
     for kb in range(kb_lo, kb_hi + 1):
         var ev = UInt32(0xFF)
-        for i in range(tid, BK * HD, FUSED_THREADS):
-            var jj = i // HD
-            var c = i % HD
+        for i in range(tid, (BK * HD) // 4, FUSED_THREADS):
+            var i4 = i * 4
+            var jj = i4 // HD
+            var c = i4 % HD
             var j = kb * BK + jj
-            var x = Float32(0.0)
+            var x4 = SIMD[DType.float32, 4](0.0)
             if j < s:
-                x = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
-            kv[c * VST + jj] = x
-            ev = min(ev, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+                x4 = v_cache.unsafe_load[width=4](kvbase + j * HD + c)
+            var f4 = SIMD[DType.float32, 4](ftz(x4[0]), ftz(x4[1]), ftz(x4[2]), ftz(x4[3]))
+            kv[c * VST + jj] = f4[0]
+            kv[(c + 1) * VST + jj] = f4[1]
+            kv[(c + 2) * VST + jj] = f4[2]
+            kv[(c + 3) * VST + jj] = f4[3]
+            comptime if ATTN_AMMA_ADMIT:
+                ev = min(ev, _admit_exp_min[4](f4))
         var ew = UInt32(0xFF)
         comptime for u in range(RPT):
             var r = tr + u * 16
@@ -7851,22 +7879,26 @@ def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SA
                     var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                     var e = sstash.unsafe_load(cell)
                     w = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
-                    ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
+                    comptime if ATTN_AMMA_ADMIT:
+                        ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
                 wT[jj * WST + r] = w
-        ev = _admit_warp_min(ev)
-        ew = _admit_warp_min(ew)
-        if lane == 0:
-            emin[sg] = ev
-            emin[NSG + sg] = ew
+        comptime if ATTN_AMMA_ADMIT:
+            ev = _admit_warp_min(ev)
+            ew = _admit_warp_min(ew)
+            if lane == 0:
+                emin[sg] = ev
+                emin[NSG + sg] = ew
         barrier()
-        var bv = UInt32(0xFF)
-        var bw = UInt32(0xFF)
-        comptime for w in range(NSG):
-            bv = min(bv, emin[w])
-            bw = min(bw, emin[NSG + w])
-        var adm = (exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)) or not ATTN_AMMA_ADMIT
-        if not adm:
-            exact_ok = False
+        var adm = True
+        comptime if ATTN_AMMA_ADMIT:
+            var bv = UInt32(0xFF)
+            var bw = UInt32(0xFF)
+            comptime for w in range(NSG):
+                bv = min(bv, emin[w])
+                bw = min(bw, emin[NSG + w])
+            adm = exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not adm:
+                exact_ok = False
         comptime for q in range(CPS):
             var g = sg * CPS + q
             var fr = g // NFC
