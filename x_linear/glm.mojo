@@ -22,7 +22,7 @@ from x_linear.ops import (
 from std.sys.info import is_gpu
 from std.sys.compile import is_defined
 from x_linear.team import Team
-from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
+from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled, t_fold_fa_staged
 
 comptime GLM_LINK_IDENTITY = 0
 comptime GLM_LINK_LOG = 1
@@ -82,8 +82,9 @@ def _objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, fi: Bool, power: Floa
         st(lt, i, l)
     t.sync()
     var f = Float32(0)
+    var acc0 = t_fold_fa_staged(t, lt, 0, n)
     if t.lead():
-        var acc = fold_fa(lt, 0, 1, n)
+        var acc = acc0
         var reg = Float32(0)
         for j in range(d):
             var w = ld(theta, toff + j)
