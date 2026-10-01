@@ -1,0 +1,150 @@
+{
+  "arms": {
+    "ours": {
+      "command": [
+        "/root/priority-pass/venv/bin/python",
+        "/root/mojolearn-amd-verify/tools/bench_board_algos.py",
+        "worker",
+        "--arm",
+        "ours",
+        "--lane",
+        "cholesky",
+        "--dataset",
+        "synthetic",
+        "--data",
+        "/root/priority-pass/algos-data"
+      ],
+      "digest_stable": true,
+      "digests": [
+        "c5127aab3d327628",
+        "c5127aab3d327628",
+        "c5127aab3d327628",
+        "c5127aab3d327628"
+      ],
+      "infer_ms": [],
+      "infer_warmup_ms": null,
+      "info": {
+        "config": "mojolearn.Cholesky(jitter=0.0)",
+        "device": "gpu",
+        "device_name": "AMD Instinct Mi325X VF",
+        "input_home": "host",
+        "library": "mojolearn",
+        "module_path": "/root/priority-pass/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+        "numeric_mode_env": "identical",
+        "numeric_mode_how": "_mojolearn_x_decomp numeric_mode constant",
+        "numeric_mode_used": "identical",
+        "pre_clock_fit": false,
+        "vendor_used": "hip",
+        "version": "0.8.31"
+      },
+      "median_ms": 470.900899003027,
+      "mem": [
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 3137.1,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4098.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4284.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        },
+        {
+          "children_mb": 4.1,
+          "gpu_mb": null,
+          "gpu_method": "Apple unified memory: no per-process GPU counter; Metal buffers are inside peak_host_mb (phys_footprint)",
+          "host_mb": 4284.2,
+          "host_method": "Linux VmHWM after clear_refs 5 (peak RSS over the round)"
+        }
+      ],
+      "ms": [
+        526.9967999993241,
+        470.900899003027,
+        462.842044995341
+      ],
+      "params_record": {
+        "__library__": "mojolearn",
+        "jitter": 0.0
+      },
+      "span": {
+        "input_home": "host",
+        "inside_clock": "Cholesky factor",
+        "pre_clock_fit": false,
+        "upload_ms_untimed": null
+      },
+      "status": "ok",
+      "warmup_ms": 849.4349390020943
+    }
+  },
+  "block": {
+    "block": "sym",
+    "dataset": "synthetic",
+    "synthetic": true
+  },
+  "commit": "75f1ddad40a987e55e30d9c9288fca14cd1e6706",
+  "dataset": "synthetic",
+  "finished": "2026-09-30T23:10:09Z",
+  "lane": "cholesky",
+  "lane_config": {
+    "block": "sym",
+    "datasets": [
+      "synthetic"
+    ],
+    "expansion_lane": "decomp",
+    "kind": "linalg",
+    "mismatches": [],
+    "notes": [
+      "A = (M + M^T) / 2 + 2 sqrt(n) I, M N(0,1) 8192 x 8192 seed 7 (symmetric positive definite); ours Cholesky(jitter=0.0).fit(A) (no ridge, as numpy.linalg.cholesky)"
+    ],
+    "ours_class": "mojolearn.Cholesky or mojolearn.linalg.Cholesky",
+    "params": {
+      "jitter": 0.0
+    },
+    "quality": "relative residual ||L L^T - A|| / ||A||",
+    "task": "chol",
+    "timed_fit": "Cholesky factor",
+    "timed_infer": null
+  },
+  "params_check": {
+    "arms": {
+      "ours": {
+        "library": "mojolearn",
+        "params": {
+          "seed": "none (deterministic)"
+        },
+        "source": "declared"
+      }
+    },
+    "compared": [],
+    "exceptions": [],
+    "family": "algos",
+    "lane": "algos/cholesky",
+    "problems": [],
+    "reference": "ours",
+    "seed": 7,
+    "seed_none_deterministic": [
+      "ours"
+    ],
+    "verdict": "MATCHED"
+  },
+  "quality": {
+    "ours": {
+      "relative_residual": 2.9000699916434393e-07
+    }
+  },
+  "rounds_requested": 3,
+  "script": "tools/bench_board_algos.py",
+  "shape": "",
+  "started": "2026-09-30T23:09:59Z"
+}

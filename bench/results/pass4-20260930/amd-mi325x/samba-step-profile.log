@@ -1,0 +1,16 @@
+SambaStack.train_step B=2 L=512 d_model=384: median 205.43 ms over 5 calls after warm-up
+phase (inclusive walls, summed over the step)                           ms   share
+stack.loss_and_grads (forward + loss + backward)                    193.42   94.2%
+Mamba3Block.backward                                                144.78   70.5%
+stack._forward (embedding + all blocks + norm/head fwd)              23.72   11.5%
+TransformerBlock.backward                                            21.24   10.3%
+Mamba3Block.forward                                                  15.19    7.4%
+TransformerBlock.forward                                              7.54    3.7%
+optimizer.step (AdamW)                                                7.12    3.5%
+T.samba_head_loss                                                     1.69    0.8%
+T.rms_norm_backward                                                   1.04    0.5%
+T.embedding_backward                                                  0.61    0.3%
+T.accumulate_grads                                                    0.28    0.1%
+T.embedding_forward                                                   0.26    0.1%
+leaf phases (blocks + T.* + optimizer) summed                       199.74   97.2%
+everything else (Python between the leaves)                           5.69    2.8%

@@ -1,0 +1,7 @@
+COMMAND ["/root/priority-pass/venv/bin/python", "/root/mojolearn-amd-verify/tools/bench_board_algos.py", "race", "--lane", "cholesky", "--dataset", "synthetic", "--data", "/root/priority-pass/algos-data", "--arms", "ours", "--rounds", "3", "--out", "/root/priority-pass/algos-cholesky-synthetic-new", "--work", "/root/priority-pass/work", "--ours-python", "/root/priority-pass/venv/bin/python"] ENV {}
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "algos", "lane": "algos/cholesky", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=0 ms=849.435 infer_ms=None digest=c5127aab3d327628
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=1 ms=526.997 infer_ms=None digest=c5127aab3d327628
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=2 ms=470.901 infer_ms=None digest=c5127aab3d327628
+ALGOS-ROUND lane=cholesky dataset=synthetic arm=ours round=3 ms=462.842 infer_ms=None digest=c5127aab3d327628
+ALGOS lane=cholesky dataset=synthetic arm=ours status=ok median_ms=470.900899003027 quality={"relative_residual": 2.9000699916434393e-07}
