@@ -82,7 +82,7 @@ from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
     identical_optimizer_step_host,
-    identical_optimizer_step_resident_host, opt_download_staged,
+    identical_optimizer_step_resident_host, opt_download_staged, opt_pool_buffers,
 )
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer
@@ -368,8 +368,9 @@ def optimizer_resident_open_binding(n_total: PythonObject) raises -> PythonObjec
         v.enqueue_fill(Float32(0.0))
         # The fills are ordered before every later use on the one in-order
         # context, and every host read (the download) waits.
-        var pbuf = ctx.enqueue_create_buffer[DType.float32](n)
-        var gbuf = ctx.enqueue_create_buffer[DType.float32](n)
+        var n_pool = n if opt_pool_buffers() else 1
+        var pbuf = ctx.enqueue_create_buffer[DType.float32](n_pool)
+        var gbuf = ctx.enqueue_create_buffer[DType.float32](n_pool)
         var n_stage = n if opt_download_staged() else 1
         var spin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
         var sgin = ctx.enqueue_create_host_buffer[DType.float32](n_stage)
@@ -496,20 +497,44 @@ def optimizer_resident_step_binding(
             var n_flat = Int(op[n_tensors])
             var neg = maximize_negated_copy(gp, n_flat)
             var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
+            # the parameter/gradient device buffers: the handle's pooled pair on
+            # Apple, a fresh pair per step elsewhere (lane neural-pass34)
+            var pooled = opt_pool_buffers()
+            var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+            var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+            if pooled:
+                n_total = identical_optimizer_step_resident_host(
+                    ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                    momentum, dampening, max_norm,
+                )
+            else:
+                n_total = identical_optimizer_step_resident_host(
+                    ctx, pp, np_, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                    momentum, dampening, max_norm,
+                )
             if max_norm > Float32(0.0):
                 for i in range(n_flat):
                     gp[i] = maximize_negate(neg[i])
         else:
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
+            # the parameter/gradient device buffers: the handle's pooled pair on
+            # Apple, a fresh pair per step elsewhere (lane neural-pass34)
+            var pooled = opt_pool_buffers()
+            var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+            var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].n[h])
+            if pooled:
+                n_total = identical_optimizer_step_resident_host(
+                    ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                    momentum, dampening, max_norm,
+                )
+            else:
+                n_total = identical_optimizer_step_resident_host(
+                    ctx, pp, gp, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+                    kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+                    momentum, dampening, max_norm,
+                )
     return PythonObject(n_total)
 
 
