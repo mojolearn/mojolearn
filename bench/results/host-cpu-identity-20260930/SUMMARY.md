@@ -26,5 +26,7 @@ deec079c73e23671 -> 5bf7822421de6cd5 (the reference).
 | lu 1024 / 8192 | b53aeffc5bf56d98 / 2a296d1d25da0a2c | same / same | 1024 same | 1024 same |
 | ivf 40000 / 400000 | 5bf7822421de6cd5 / 26a769d35c913838 | 40000 same | not run | released 5bf7822421de6cd5 |
 
-NVIDIA columns: pending one run of the fixed harness (the library bits there cannot move: the scan compiles to the
-same library call).
+**NVIDIA (L40S pod, released 0.8.32 + IVF rebuilt from this branch; `nvidia/`):** `check-pinned-scan` PASS (warp 32:
+the library scan equals the replay). GPU and CPU columns: sgd-reg 89cfa8f1827cd043 / 23f7125a7f0738c6, lars
+640cb53e8400f17d / 4f5339c631d9eb2e, sgd-clf a6cb75bf0e2f93da, lu b53aeffc5bf56d98, ivf 5bf7822421de6cd5 /
+26a769d35c913838: every digest and every input digest equal to the AMD and M4 columns. All four columns agree.
