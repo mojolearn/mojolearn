@@ -46,6 +46,7 @@ from x_decomp.cells import (
     pdist_cell,
 )
 from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_serial
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_serial
 from x_decomp.exec_trait import Exec
 from x_decomp.host_jacobi import fast_jacobi_eigh, fast_one_sided_jacobi_svd
 from x_decomp.host_qr import fast_qr_finish, qr_slice, qr_slices
@@ -443,12 +444,21 @@ struct HostExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
-        geqrf_serial(a, tau, m, n)
+        # lane neural-pass37: the row-streaming walk of the same cells
+        # (x_decomp/qr_host.mojo); MOJOLEARN_XD_QR_SERIAL=1 keeps the
+        # column-by-column serial loop (the A/B arm)
+        if xd_qr_serial():
+            geqrf_serial(a, tau, m, n)
+        else:
+            geqrf_host_rows(a, tau, m, n)
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
-        for j in range(qc):
-            orgqr_col(h, tau, q, j, m, n, kk, qc)
+        if xd_qr_serial():
+            for j in range(qc):
+                orgqr_col(h, tau, q, j, m, n, kk, qc)
+        else:
+            orgqr_host_rows(h, tau, q, m, n, kk, qc)
 
     @staticmethod
     def als_cg_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, steps: F32Ptr, n: Int, m: Int, f: Int, reg: Float32, cg: Int) raises:
