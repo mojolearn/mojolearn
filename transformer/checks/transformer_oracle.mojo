@@ -110,6 +110,7 @@ from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_oracle import OP_NT, gemm_oracle
 # lane/lowbit-blocks (2026-09-29): the profile's host answer, Lane C's.
 from gemm.host.gemm_int15_oracle import gemm_int15_from_f32_oracle
+from core.host_lanes import host_f32_uninit
 from core.host_parallel import host_parallelize
 from core.host_lanes import (
     host_row_tasks,
@@ -1673,8 +1674,8 @@ def transformer_block_oracle(
     # Positions before `pos0` come from the cache, this call's own from
     # `k_rope_out` / `v_proj_out`. Gathered BEFORE the append because, under
     # a window, this call's tokens may evict positions it still attends to.
-    st.kv_k_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
-    st.kv_v_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    st.kv_k_cache = host_f32_uninit(b * nkv * s * hd)
+    st.kv_v_cache = host_f32_uninit(b * nkv * s * hd)
     for bb in range(b):
         for kv in range(nkv):
             for j in range(s):
@@ -1734,23 +1735,23 @@ def transformer_block_oracle(
     # naming the statement it equals). Every stage still completes over the
     # whole array before the next one reads it, so the plants land where they
     # did.
-    var scores = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
-    var masked = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var scores = host_f32_uninit(b * nh * l * s)
+    var masked = host_f32_uninit(b * nh * l * s)
     var amax = List[Float32](length=b * nh * l, fill=Float32(0.0))
-    var aexp = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var aexp = host_f32_uninit(b * nh * l * s)
     var adenom = List[Float32](length=b * nh * l, fill=Float32(0.0))
-    var aweights = List[Float32](length=b * nh * l * s, fill=Float32(0.0))
+    var aweights = host_f32_uninit(b * nh * l * s)
     var actx = List[Float32]()
 
     var scale = attention_scale(hd)
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
+            var qmat = host_f32_uninit(l * hd)
             for qi in range(l):
                 for d in range(hd):
                     qmat[qi * hd + d] = st.q_rope_out[(bb * l + qi) * qw + h * hd + d]
-            var kmat = List[Float32](length=s * hd, fill=Float32(0.0))
+            var kmat = host_f32_uninit(s * hd)
             for j in range(s):
                 for d in range(hd):
                     kmat[j * hd + d] = st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d]
@@ -1979,7 +1980,7 @@ def transformer_block_oracle(
     # output (`attn_value_sum_lanes`). Each lane runs its output's chain: the
     # same operands, j ascending from `+0.0`, one fused multiply-add and one
     # flush per step. `actx` is sized once; every cell is written.
-    actx = List[Float32](length=m * qw, fill=Float32(0.0))
+    actx = host_f32_uninit(m * qw)
     var vrows = b * nh * l
     var vtasks = host_row_tasks(vrows, s * hd)
     var vchunk = (vrows + vtasks - 1) // vtasks
@@ -2023,7 +2024,7 @@ def transformer_block_oracle(
     # `hidden_states = residual + hidden_states`, where `residual` is the
     # BLOCK INPUT and not the normalized one (:305 captures it before :306
     # normalizes). One plain add of two already-rounded values.
-    st.residual1_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.residual1_out = host_f32_uninit(m * dm)
     span_add(x, 0, st.o_proj_out, 0, m * dm, st.residual1_out, 0)
 
     # ---- S1-S4 again, post_attention_layernorm (LDL:321) -----------------
@@ -2073,7 +2074,7 @@ def transformer_block_oracle(
     # `S20_SILU_MUL_SIGMOID` must move `silu.out`.
     if opts.act_is_silu():
         # CPU SPEED (lane neural-cpu): the statement below as lanes.
-        st.silu_out = List[Float32](length=m * inter, fill=Float32(0.0))
+        st.silu_out = host_f32_uninit(m * inter)
         if gated:
             span_silu(st.gate_proj_out, 0, m * inter, st.silu_out, 0)
         else:
@@ -2094,7 +2095,7 @@ def transformer_block_oracle(
 
     # S21: one product, so `pinned_mul`. Absent under an ungated MLP.
     if gated:
-        st.mlp_gated = List[Float32](length=m * inter, fill=Float32(0.0))
+        st.mlp_gated = host_f32_uninit(m * inter)
         span_mul(st.silu_out, 0, st.up_proj_out, 0, m * inter, st.mlp_gated, 0)
         st.down_proj_out = _oracle_product(st.mlp_gated, w.w_down, m, dm, inter, int15)
     else:
@@ -2105,7 +2106,7 @@ def transformer_block_oracle(
         st.down_proj_out = db^
 
     # ---- S23, the second residual (LDL:323) ------------------------------
-    st.residual2_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.residual2_out = host_f32_uninit(m * dm)
     span_add(st.residual1_out, 0, st.down_proj_out, 0, m * dm, st.residual2_out, 0)
 
     return st^

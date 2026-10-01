@@ -1081,6 +1081,7 @@ check-gemm-oracle = "mojo run -I . gemm/checks/gemm_oracle_check.mojo"
 # gemm/host/gemm_host_rows.mojo (the CPU speed of gemm_oracle) against the oracle bit for bit;
 # the sabotage (the deferred flush never falls back) must FAIL.
 check-gemm-host-rows = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_host_rows_check.mojo"
+check-host-lanes-sqrt = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . training/checks/host_lanes_sqrt_check.mojo"
 check-gemm-host-rows-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_GEMM_HOST_ROWS_SABOTAGE=1 -I . gemm/checks/gemm_host_rows_check.mojo"
 # core/host_lanes.mojo's span helpers against the scalar statements they name.
 check-host-lanes = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . core/host_lanes_check.mojo"

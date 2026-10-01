@@ -42,6 +42,9 @@ fold inside the kernel it actually runs (`gemm_nt_rows(..., reverse=True)`).
 from std.sys.compile import is_defined
 from std.sys.info import num_physical_cores
 
+from std.memory import unsafe_memcpy
+
+from core.host_lanes import host_f32_uninit
 from core.host_parallel import host_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
@@ -88,9 +91,12 @@ def _require_identical() raises:
 
 
 def _slice(values: List[Float32], offsets: List[Int], j: Int) -> List[Float32]:
-    var out = List[Float32](capacity=offsets[j + 1] - offsets[j])
-    for i in range(offsets[j], offsets[j + 1]):
-        out.append(values[i])
+    """Registry tensor `j` as one block copy (lane neural-pass8): the same
+    values in the same order as the element loop it replaces."""
+    var n = offsets[j + 1] - offsets[j]
+    var out = host_f32_uninit(n)
+    if n > 0:
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=values.unsafe_ptr().unsafe_offset(offsets[j]), count=n)
     return out^
 
 

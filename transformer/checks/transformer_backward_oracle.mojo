@@ -133,6 +133,7 @@ from std.math import min
 from std.memory import bitcast
 
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks, lanes_are_identical
+from core.host_lanes import HostF32Ptr, host_f32_uninit
 from core.host_parallel import host_parallelize
 from core.identity_trace import IdentityTrace
 from gemm.checks.gemm_backward import (
@@ -713,8 +714,8 @@ def rms_norm_backward_into(
     # fold, `dW`, is the caller's gemm call over `dprod`. The three outputs
     # are sized once and written by index in the order the appends made.
     dot = List[Float32](length=m, fill=Float32(0.0))
-    dx = List[Float32](length=m * dm, fill=Float32(0.0))
-    dprod = List[Float32](length=m * dm, fill=Float32(0.0))
+    dx = host_f32_uninit(m * dm)
+    dprod = host_f32_uninit(m * dm)
     var tasks = host_row_tasks(m, 12 * dm)
     var chunk = (m + tasks - 1) // tasks
     def _rows(task: Int) {imm dy, imm x, imm wnorm, imm sumsq, mut dot, mut dx, mut dprod, imm m, imm dm, imm chunk}:
@@ -809,7 +810,7 @@ def silu_backward_into(
     # ELEMENTS OVER HOST TASKS (lane neural-pass6): an element's six
     # statements read that element alone. `dg` is sized once and written by
     # index in the order the appends made.
-    dg = List[Float32](length=n, fill=Float32(0.0))
+    dg = host_f32_uninit(n)
     var tasks = host_row_tasks(n, 24)
     var chunk = (n + tasks - 1) // tasks
     def _elements(task: Int) {imm dsi, imm g, mut dg, imm n, imm chunk}:
@@ -904,7 +905,7 @@ def rope_backward_into(
                 + " quantity, so a call that overruns it is a"
                 + " misconfiguration and not something to grow into)"
             )
-    out = List[Float32](length=m * width, fill=Float32(0.0))
+    out = host_f32_uninit(m * width)
     var tasks = host_row_tasks(m, 8 * width)
     var chunk = (m + tasks - 1) // tasks
     def _tokens(task: Int) {imm dout, imm rope, mut out, imm m, imm l, imm pos0, imm n_head, imm head_dim, imm half, imm width, imm chunk}:
@@ -1027,7 +1028,7 @@ def softmax_backward_into(
     # written by index in the order the appends made.
     var rows = b * nh * l
     zdot = List[Float32](length=rows, fill=Float32(0.0))
-    ds = List[Float32](length=rows * s, fill=Float32(0.0))
+    ds = host_f32_uninit(rows * s)
     var tasks = host_row_tasks(rows, 6 * s)
     var chunk = (rows + tasks - 1) // tasks
     def _rows(task: Int) {imm dy, imm y, mut zdot, mut ds, imm rows, imm s, imm chunk}:
@@ -1385,25 +1386,22 @@ def transformer_block_backward_oracle(
     # ELEMENTS OVER HOST TASKS (lane neural-pass6) for the [M, inter] and
     # [B, nh, L, S] products below; the [M, d_model] sums are written by
     # index on the calling thread. Same statements, same operands per cell.
-    var d_silu = List[Float32](length=m * inter, fill=Float32(0.0))
-    var d_up = List[Float32](length=m * inter, fill=Float32(0.0))
+    var d_silu = host_f32_uninit(m * inter)
+    var d_up = host_f32_uninit(m * inter)
     var gtasks = host_row_tasks(m * inter, 6)
     var gchunk = (m * inter + gtasks - 1) // gtasks
-    var dmg = st.d_mlp_gated.copy()
-    var up_out = fwd.up_proj_out.copy()
-    var silu_out = fwd.silu_out.copy()
+    var dmg = rebind[HostF32Ptr](st.d_mlp_gated.unsafe_ptr())
+    var up_out = fwd.up_proj_out.unsafe_ptr()
+    var silu_out = fwd.silu_out.unsafe_ptr()
     def _gate_elements(task: Int) {imm dmg, imm up_out, imm silu_out, mut d_silu, mut d_up, imm m, imm inter, imm gchunk}:
         for i in range(task * gchunk, min((task + 1) * gchunk, m * inter)):
-            var dgt = ftz(dmg[i])
-            d_silu[i] = ftz(identical_mul(dgt, ftz(up_out[i])))
-            d_up[i] = ftz(identical_mul(dgt, ftz(silu_out[i])))
+            var dgt = ftz(dmg.unsafe_load(i))
+            d_silu[i] = ftz(identical_mul(dgt, ftz(up_out.unsafe_load(i))))
+            d_up[i] = ftz(identical_mul(dgt, ftz(silu_out.unsafe_load(i))))
     if gtasks <= 1:
         _gate_elements(0)
     else:
         host_parallelize(_gate_elements, gtasks)
-    _ = dmg^
-    _ = up_out^
-    _ = silu_out^
     st.d_silu_out = d_silu^
     st.d_up_proj_out = d_up^
     # =====================================================================
@@ -1446,7 +1444,7 @@ def transformer_block_backward_oracle(
         st.d_gate_proj_out, w.w_gate, OP_NT, m, inter, dm
     )
     var t_up = _gemm_bwd_a(st.d_up_proj_out, w.w_up, OP_NT, m, inter, dm)
-    st.d_norm2_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_norm2_out = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_norm2_out[i] = ftz(ftz(t_gate[i]) + ftz(t_up[i]))
     _ = t_gate^
@@ -1480,7 +1478,7 @@ def transformer_block_backward_oracle(
     # norm (LDL:321) and into the residual add (LDL:323); FORWARD-USE ORDER
     # puts the norm branch first. Two terms, so no order to pin, stated.
     # =====================================================================
-    st.d_residual1 = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_residual1 = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_residual1[i] = ftz(ftz(st.norm2_dx[i]) + ftz(st.in_d_residual2[i]))
     st.d_o_proj_out = st.d_residual1.copy()
@@ -1526,17 +1524,17 @@ def transformer_block_backward_oracle(
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var dctx_head = List[Float32](length=l * hd, fill=Float32(0.0))
+            var dctx_head = host_f32_uninit(l * hd)
             for qi in range(l):
                 for d in range(hd):
                     dctx_head[qi * hd + d] = st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
-            var v_head = List[Float32](length=s * hd, fill=Float32(0.0))
+            var v_head = host_f32_uninit(s * hd)
             for j in range(s):
                 for d in range(hd):
                     v_head[j * hd + d] = fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
             var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
             if len(st.d_attn_weights) != cells:
-                st.d_attn_weights = List[Float32](length=cells, fill=Float32(0.0))
+                st.d_attn_weights = host_f32_uninit(cells)
             var cbase = (bb * nh + h) * l * s
             for i in range(l * s):
                 st.d_attn_weights[cbase + i] = cell[i]
@@ -1585,18 +1583,17 @@ def transformer_block_backward_oracle(
     # scale SPELLING -- is what makes this arm fire at all.
     # =====================================================================
     var scale = attention_scale(hd)
-    var dqk = List[Float32](length=cells, fill=Float32(0.0))
+    var dqk = host_f32_uninit(cells)
     var ctasks = host_row_tasks(cells, 3)
     var cchunk = (cells + ctasks - 1) // ctasks
-    var dsc = st.d_attn_scores.copy()
+    var dsc = rebind[HostF32Ptr](st.d_attn_scores.unsafe_ptr())
     def _scale_cells(task: Int) {imm dsc, mut dqk, imm cells, imm scale, imm cchunk}:
         for i in range(task * cchunk, min((task + 1) * cchunk, cells)):
-            dqk[i] = ftz(identical_mul(ftz(dsc[i]), scale))
+            dqk[i] = ftz(identical_mul(ftz(dsc.unsafe_load(i)), scale))
     if ctasks <= 1:
         _scale_cells(0)
     else:
         host_parallelize(_scale_cells, ctasks)
-    _ = dsc^
     st.d_qk_cell = dqk^
 
     # =====================================================================
@@ -1699,9 +1696,9 @@ def transformer_block_backward_oracle(
     #   d_q_rope[(bb*l + qi)*qw + h*hd + d]     = chain over j of dqk[j] * k[j, d]
     #   d_k_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of dqk[t, j] * q[t, d]
     #   d_v_cache[((bb*nkv + kv)*s + j)*hd + d] = chain over (hh, t) of w[t, j] * dctx[t, d]
-    st.d_q_rope = List[Float32](length=b * l * nh * hd, fill=Float32(0.0))
-    st.d_k_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
-    st.d_v_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    st.d_q_rope = host_f32_uninit(b * l * nh * hd)
+    st.d_k_cache = host_f32_uninit(b * nkv * s * hd)
+    st.d_v_cache = host_f32_uninit(b * nkv * s * hd)
     _bwd_attention_chains(
         st.d_qk_cell, fwd.kv_k_cache, fwd.q_rope_out, fwd.attn_weights,
         st.d_attn_ctx, st.d_q_rope, st.d_k_cache, st.d_v_cache,
@@ -1714,8 +1711,8 @@ def transformer_block_backward_oracle(
     # simply read out at the token-major `[M, kw]` layout the projections
     # expect. Slots `[0, pos0)` are the handoff.
     # =====================================================================
-    st.d_k_rope = List[Float32](length=m * kw, fill=Float32(0.0))
-    st.d_v_proj_out = List[Float32](length=m * kw, fill=Float32(0.0))
+    st.d_k_rope = host_f32_uninit(m * kw)
+    st.d_v_proj_out = host_f32_uninit(m * kw)
     for bb in range(b):
         for li in range(l):
             for kv in range(nkv):
@@ -1756,7 +1753,7 @@ def transformer_block_backward_oracle(
     var t_q = _gemm_bwd_a(st.d_q_proj_out, w.w_q, OP_NT, m, qw, dm)
     var t_k = _gemm_bwd_a(st.d_k_proj_out, w.w_k, OP_NT, m, kw, dm)
     var t_v = _gemm_bwd_a(st.d_v_proj_out, w.w_v, OP_NT, m, kw, dm)
-    st.d_norm1_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_norm1_out = host_f32_uninit(m * dm)
     for i in range(m * dm):
         var acc = ftz(ftz(t_q[i]) + ftz(t_k[i]))
         st.d_norm1_out[i] = ftz(ftz(acc) + ftz(t_v[i]))
@@ -1792,7 +1789,7 @@ def transformer_block_backward_oracle(
     # the residual add (LDL:317); FORWARD-USE ORDER puts the norm first.
     # Two terms, no order to pin, no seed.
     # =====================================================================
-    st.d_x = List[Float32](length=m * dm, fill=Float32(0.0))
+    st.d_x = host_f32_uninit(m * dm)
     for i in range(m * dm):
         st.d_x[i] = ftz(ftz(st.norm1_dx[i]) + ftz(st.d_residual1[i]))
 
