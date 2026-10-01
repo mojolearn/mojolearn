@@ -69,3 +69,6 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T18:25:32Z	measurements/2026-10-01/pr72-metal.tar.gz	62af9e851e6e1c8ff168e0c62c2aab52c01040ff70c977f8f765079b881e5566	115610	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr72-metal
 2026-10-01T18:25:33Z	measurements/2026-10-01/pr74-metal.tar.gz	40ba4024e90e4cd17eeacab2b1182148a1fc4896b257170e8981242ac5afaeb2	3859	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr74-metal
 2026-10-01T18:25:34Z	measurements/2026-10-01/pr75-metal.tar.gz	6bbfa92577458aaecf4d929ab5cfe1607769a95b7f85a514b468975d7e741580	2952	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr75-metal
+2026-10-01T18:47:05Z	measurements/2026-10-01/ab-dq58-amd.tar.gz	8a41fbe3625f99806ba4d4b349bde2e1310beab84090c0ce5018564bee69afd7	138102	mojolearn-steward-do-amd	/root/ab-dq58-amd
+2026-10-01T18:47:07Z	measurements/2026-10-01/ab-pr68-amd.tar.gz	886c209b566dea590e02586874afb309d12e79a8d1ed9f10d20df863e2c3f51b	108252	mojolearn-steward-do-amd	/root/ab-pr68-amd
+2026-10-01T18:47:08Z	measurements/2026-10-01/gemm61-amd.tar.gz	c9c7cc0afb0438780e9933d7f3122cb615153c36368a52db2a9517be238fc420	205222	mojolearn-steward-do-amd	/root/gemm61-amd
