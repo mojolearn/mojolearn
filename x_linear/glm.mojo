@@ -20,6 +20,7 @@ from x_linear.ops import (
     fill, copy, row_dot, cholesky, chol_solve, mean_of, axpy_acc, par_rows, row_dots,
 )
 from std.sys.info import is_gpu
+from std.sys.compile import is_defined
 from x_linear.team import Team
 from x_linear.tops import fold_fa, chain_fmad, chain_fmad_scaled
 
@@ -28,6 +29,7 @@ comptime GLM_LINK_LOG = 1
 #: rows per block of the host gradient/Hessian fold (a block of X stays in
 #: cache while every unit folds it; lane linear-cpu)
 comptime GLM_ROW_BLOCK = 8192
+comptime GLM_STALL_ITERS = 3
 
 
 @always_inline
@@ -173,6 +175,19 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     var iters = 0
     var converged = False
     var f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+    # lane/neural-pass68 (2026-10-01): iterations whose accepted step left the
+    # objective unchanged at float32 resolution, in a row. In float32 the mean
+    # gradient of a million rows keeps a noise floor above `tol` (taxi fares:
+    # gmax stalls at 6e-4 against 1e-4 while the step is 2e-6), so the
+    # gradient test never fires and the fit ran every one of its 100
+    # iterations, each a line search of a dozen objective passes that moved
+    # the objective by nothing (78 s on the MI325X). Theirs converges in
+    # float64 by the gradient test; this stops once GLM_STALL_ITERS such
+    # iterations have passed: the coefficients of the 100-iteration fit to
+    # within the objective's resolution (taxi: iteration 10-11 of 100, the
+    # same held-out R2 to 1e-6; a stop at 5 by the Newton decrement, theirs'
+    # second criterion, read 0.035736 against 0.035965 and was dropped).
+    var stall = 0
     for it in range(max_iter):
         comptime if is_gpu():
             # gradient and Hessian at res (eta holds the current linear predictor):
@@ -276,6 +291,8 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     gj = fmad(alpha, ld(res, j), gj)
                 st(g, j, gj)
                 gmax = fmax(gmax, fabs(gj))
+            comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+                print("GLM_TRACE it", it, "f", f, "gmax", gmax, "tol", tol)
             if gmax <= tol:
                 flag = 1
             else:
@@ -293,6 +310,8 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                     chol_solve(h, 0, m, step, 0)
                 for j in range(m):
                     slope = fmad(ld(g, j), ld(step, j), slope)
+                comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+                    print("GLM_TRACE it", it, "slope", slope, "chol_ok", ok, "step0", ld(step, 0), "stepd", ld(step, m - 1))
                 if not (slope < 0):
                     flag = 2
         flag = t.bcast_int(flag, 1)
@@ -315,13 +334,23 @@ def glm_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
                 if t.lead():
                     copy(res, 0, trial, 0, m)
                 t.sync()
+                if ft == f:
+                    stall += 1
+                else:
+                    stall = 0
                 f = ft
                 accepted = True
                 break
             tt = fm(tt, Float32(0.5))
+        comptime if is_defined["MOJOLEARN_GLM_TRACE"]() and not is_gpu():
+            if t.lead():
+                print("GLM_TRACE it", it, "accepted", accepted, "tt", tt, "f", f)
         if not accepted:
             # no decrease at float32 resolution: the fit has converged as far as it can
             f = _objective(t, x, y, n, d, fi, power, link, alpha, res, 0, eta, sw, den, s1)
+            break
+        if stall >= GLM_STALL_ITERS:
+            converged = True
             break
     if t.lead():
         if not fi:
