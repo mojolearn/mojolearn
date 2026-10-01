@@ -43,7 +43,7 @@ from training.byte_lm import (
     _unpack_block,
     byte_dims,
 )
-from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into
+from training.checks.train_loop import _copy_into, _upload, _zeros, _zeros_i32, download_f32, download_f32_into, download_f32_into_scanned
 from core.device_arena import arena_begin, arena_end, arena_release
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NT
@@ -279,9 +279,13 @@ def _refuse_nonfinite_logits(destination: MutPointer[Float32, MutUntrackedOrigin
         i += W
     while i < n:
         if (bitcast[DType.uint32](destination.unsafe_load(i)) & UInt32(0x7F800000)) == UInt32(0x7F800000):
-            raise Error("byte LM logits: non-finite logit at flat index " + String(i)
-                        + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
+            _raise_nonfinite_logit(i)
         i += 1
+
+
+def _raise_nonfinite_logit(i: Int) raises:
+    raise Error("byte LM logits: non-finite logit at flat index " + String(i)
+                + " REFUSED (NaN payloads are vendor-shaped, IDENTITY_PATHS row 39)")
 
 
 def _logits_forward_into(
@@ -317,10 +321,11 @@ def _logits_forward_into(
     var m = batch * length
     var vocab = config.vocab_size
     _logits_enqueue(ctx, weights, emb_w, lm_w, rope, sc, inputs, batch, length, config)
-    download_f32_into(ctx, sc.logits, m * vocab, destination)
+    var bad = download_f32_into_scanned(ctx, sc.logits, m * vocab, destination, True)
     comptime if is_defined["MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE"]():
         destination.unsafe_store(0, bitcast[DType.float32](bitcast[DType.uint32](destination.unsafe_load(0)) ^ UInt32(1)))
-    _refuse_nonfinite_logits(destination, m * vocab)
+    if bad >= 0:
+        _raise_nonfinite_logit(bad)
 
 
 def byte_logits_from_params(ctx: DeviceContext, params: List[Float32], inputs: List[Int32],
