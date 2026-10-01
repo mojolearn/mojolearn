@@ -66,3 +66,6 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T17:41:26Z	measurements/2026-10-01/ticks69-lane_neural-pass64.tar.gz	09465ece06c9114e2506398edf8a8e0d0208061628081f82da297f1036946800	76180	8de2d3c1e7ad	/root/ticks69-lane_neural-pass64
 2026-10-01T17:41:29Z	measurements/2026-10-01/ticks69-lane_neural-pass62-on-64.tar.gz	214a21197c6898e93064944f14470ff93f7d6699a2b046a606c51fa942eb3f3c	76443	8de2d3c1e7ad	/root/ticks69-lane_neural-pass62-on-64
 2026-10-01T17:57:19Z	measurements/2026-10-01/pr70-metal.tar.gz	0fbe9845f466d430de269baa211e66d7f9f4c23bb20eb1440f196c85fc490537	114860	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr70-metal
+2026-10-01T18:25:32Z	measurements/2026-10-01/pr72-metal.tar.gz	62af9e851e6e1c8ff168e0c62c2aab52c01040ff70c977f8f765079b881e5566	115610	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr72-metal
+2026-10-01T18:25:33Z	measurements/2026-10-01/pr74-metal.tar.gz	40ba4024e90e4cd17eeacab2b1182148a1fc4896b257170e8981242ac5afaeb2	3859	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr74-metal
+2026-10-01T18:25:34Z	measurements/2026-10-01/pr75-metal.tar.gz	6bbfa92577458aaecf4d929ab5cfe1607769a95b7f85a514b468975d7e741580	2952	ip-172-31-43-215.ec2.internal	/Users/ec2-user/pr75-metal
