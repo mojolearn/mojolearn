@@ -135,7 +135,7 @@ from std.sys.compile import is_defined
 from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu
 from core.apple_air import simdgroup_load_legacy_air
-from std.ffi import external_call
+from std.ffi import _Global, external_call
 from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
@@ -3234,6 +3234,106 @@ def _is_split_plan(plan: Int) -> Bool:
 comptime SPLITK_MAX_WORKSPACE_FLOATS = 64 * 1024 * 1024
 
 
+#: The split plans' output cap, in cells: below it the output alone cannot
+#: fill the machine and the leaves of `contract_partition(k)` are spread
+#: over blocks (PLAN_SPLIT_64_4X4 and the smaller tiles). 128 K was measured
+#: on an L40S (142 SMs, 2026-09-09). lane/neural-pass45 (2026-10-01) reads it
+#: once per process from MOJOLEARN_GEMM_SPLIT_CELLS so a box can sweep it:
+#: the MI325X has 304 CUs, and the LM's 2048 x 384 x 384 projections (786 K
+#: cells, 192 tiles of 64 x 64) ran at 1.5 TFLOPS there
+#: (bench/results/neural-stage-timing-amd-m3-20261001). An execution plan
+#: only: every plan computes the same leaves and folds, the same bits
+#: (`check_device_is_launch_invariant`). MEASURED on the MI325X
+#: (2026-10-01, bench/results for PR #52): caps 128 K / 512 K / 1 M / 2 M
+#: read lm-train-step 121.6 / 105.0 / 100.9 / 101.0 ms and lm-forward 57.9 /
+#: 59.3 / 54.2 / 54.5, the MLP projections 1.60 -> 1.18 ms a layer, every
+#: digest and loss equal; so the AMD column's default is 1 M cells. NVIDIA
+#: keeps the L40S's 128 K; Apple keeps 128 K too (a raised cap would
+#: pre-empt PLAN_APPLE_MMA).
+comptime GEMM_SPLIT_CELLS_DEFAULT = (1 << 20) if TARGET_COLUMN == COLUMN_AMD else 128 * 1024
+
+
+struct _SplitCells(Defaultable, Movable):
+    var cells: Int
+
+    def __init__(out self):
+        self.cells = -1
+
+
+comptime _SPLIT_CELLS_NAME = "MojoGemmSplitCellsIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmSplitCellsFast"
+comptime GEMM_SPLIT_CELLS = _Global[StorageType=_SplitCells, name=_SPLIT_CELLS_NAME, init_fn=_SplitCells.__init__]
+
+
+def gemm_split_cells_cap() -> Int:
+    """The split plans' output cap: MOJOLEARN_GEMM_SPLIT_CELLS when set
+    (read once per process), else GEMM_SPLIT_CELLS_DEFAULT."""
+    try:
+        var p = GEMM_SPLIT_CELLS.get_or_create_ptr()
+        if p[].cells < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_SPLIT_CELLS"))
+            var cells = GEMM_SPLIT_CELLS_DEFAULT
+            if v != "":
+                cells = Int(v)
+            if cells < 1:
+                cells = GEMM_SPLIT_CELLS_DEFAULT
+            p[].cells = cells
+        return p[].cells
+    except:
+        return GEMM_SPLIT_CELLS_DEFAULT
+
+#: The tuned tiles' minimum block count (lane/neural-pass47, 2026-10-01):
+#: when the output tiled at the chosen width makes fewer blocks than this,
+#: the chooser steps down to the next narrower tuned tile (128 -> 64 -> 32)
+#: while the output still fills it. The L40S (142 SMs) chose the widths at
+#: 128 K cells and above; the MI325X has 304 CUs, and the LM's 2048 x 384
+#: projections (k = 384, three leaves, under the split plans' floor) ran on
+#: 192 tiles of 64 x 64 at about 1.5 TFLOPS, the MLP gate/up on 128 tiles
+#: of 128 x 128. Read once per process from MOJOLEARN_GEMM_TILE_MIN_BLOCKS
+#: (0 = off); an execution plan only: every tuned plan computes the same
+#: leaves and folds (`check_device_is_launch_invariant`). MEASURED on the
+#: MI325X (2026-10-01, bench/results for PR #55, with the 1 M split cap):
+#: minimum blocks off / 256 / 512 / 1024 read lm-train-step 101.1 / 77.0 /
+#: 76.5 / 75.0 ms and lm-forward 56.6 / 40.6 / 40.9 / 39.9; q/k/v 1.21 ->
+#: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
+#: every digest and loss equal. So the AMD column's default is 1024 (the
+#: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
+#: keeps its tile). NVIDIA and Apple keep 0 (off).
+comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = 1024 if TARGET_COLUMN == COLUMN_AMD else 0
+
+
+struct _TileMinBlocks(Defaultable, Movable):
+    var blocks: Int
+
+    def __init__(out self):
+        self.blocks = -1
+
+
+comptime _TILE_MIN_NAME = "MojoGemmTileMinBlocksIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoGemmTileMinBlocksFast"
+comptime GEMM_TILE_MIN_BLOCKS = _Global[StorageType=_TileMinBlocks, name=_TILE_MIN_NAME, init_fn=_TileMinBlocks.__init__]
+
+
+def gemm_tile_min_blocks() -> Int:
+    """The tuned tiles' minimum block count: MOJOLEARN_GEMM_TILE_MIN_BLOCKS
+    when set (read once per process), else GEMM_TILE_MIN_BLOCKS_DEFAULT."""
+    try:
+        var p = GEMM_TILE_MIN_BLOCKS.get_or_create_ptr()
+        if p[].blocks < 0:
+            var v = String(getenv("MOJOLEARN_GEMM_TILE_MIN_BLOCKS"))
+            var blocks = GEMM_TILE_MIN_BLOCKS_DEFAULT
+            if v != "":
+                blocks = Int(v)
+            if blocks < 0:
+                blocks = 0
+            p[].blocks = blocks
+        return p[].blocks
+    except:
+        return GEMM_TILE_MIN_BLOCKS_DEFAULT
+
+
+def _tuned_tile_blocks(m: Int, n: Int, tile: Int) -> Int:
+    return ((m + tile - 1) // tile) * ((n + tile - 1) // tile)
+
+
 def identical_gemm_splitk_fits(m: Int, n: Int, k: Int) -> Bool:
     return (
         identical_gemm_workspace_floats(m, n, k, PLAN_SPLITK)
@@ -3302,7 +3402,7 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
             or tiles == PLAN_TUNED_32_2X2
         ) and m >= 64 and n >= 64 and apple_mma_applies(m, n, k):
             return PLAN_APPLE_MMA
-    return tiles
+    return gemm_tile_step_down(m, n, tiles)
 
 
 def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
@@ -3330,6 +3430,7 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     # plans' 128 K-cell floor.
     var p_count = contract_partition(k)[1]
     if p_count >= 4 and identical_gemm_splitk_fits(m, n, k):
+        var cap = gemm_split_cells_cap()
         if m <= 8 and n >= 256:
             if m == 1:
                 return PLAN_SPLIT_1X256
@@ -3339,11 +3440,11 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
             # do more work than the existing 64-wide plan.
             if p_count >= 512 and m % 128 == 0 and n % 128 == 0 and m * n <= 128 * 1024:
                 return PLAN_SPLIT_128_8X8
-        if m >= 64 and n >= 64 and m * n <= 128 * 1024:
+        if m >= 64 and n >= 64 and m * n <= cap:
             return PLAN_SPLIT_64_4X4
-        if m >= 32 and n >= 32 and m * n <= 128 * 1024:
+        if m >= 32 and n >= 32 and m * n <= cap:
             return PLAN_SPLIT_32_2X2
-        if m >= 16 and n >= 16 and m * n <= 128 * 1024:
+        if m >= 16 and n >= 16 and m * n <= cap:
             return PLAN_SPLIT_16_1X1
         if base == PLAN_SPLITK:
             return PLAN_SPLIT_16_1X1
@@ -3375,6 +3476,25 @@ def choose_gemm_plan_tiles(m: Int, n: Int, k: Int) -> Int:
     if m >= TUNED_BM_WIDE and n >= TUNED_BN_WIDE:
         return PLAN_TUNED_64_4X4
     return PLAN_TUNED_32_2X2
+
+
+def gemm_tile_step_down(m: Int, n: Int, plan: Int) -> Int:
+    """lane/neural-pass47: a narrower tuned tile where the wide one makes
+    fewer than `gemm_tile_min_blocks()` blocks (0 = off): 128 -> 64 -> 32
+    while the output still fills the tile. Applied by `choose_gemm_plan`
+    (the shipped dispatcher) AFTER the ksplit rule has read the tile
+    chooser, so a call the long-k group rule takes keeps its group kernel
+    and only the calls that would run a plain tuned tile step down. The
+    same leaves and folds either way."""
+    var min_blocks = gemm_tile_min_blocks()
+    if min_blocks <= 0:
+        return plan
+    var pick = plan
+    if pick == PLAN_TUNED_128_8X8 and _tuned_tile_blocks(m, n, 2 * TUNED_BM_WIDE) < min_blocks:
+        pick = PLAN_TUNED_64_4X4
+    if pick == PLAN_TUNED_64_4X4 and _tuned_tile_blocks(m, n, TUNED_BM_WIDE) < min_blocks:
+        pick = PLAN_TUNED_32_2X2
+    return pick
 
 
 def choose_gemm_plan_untuned(m: Int, n: Int, k: Int) -> Int:

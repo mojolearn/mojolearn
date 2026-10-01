@@ -73,6 +73,7 @@ from x_decomp.cells import (
     lu_update_elem,
     omp_row,
     lu_solve_serial,
+    orth_diag_cell,
     orth_rank_guard,
     trsm_row,
     rand_cell,
@@ -80,6 +81,8 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
+from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
+from x_decomp.qr_host import geqrf_host_rows, orgqr_host_rows, xd_qr_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
@@ -619,6 +622,14 @@ def trsm_kernel(a: F32Ptr, r: F32Ptr, q: F32Ptr, m: Int32, l: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i < Int(m):
         trsm_row(a, r, q, i, Int(l))
+
+
+def orth_diag_kernel(r: F32Ptr, diag: F32Ptr, l: Int32):
+    """diag[j] *= R[j, j] (after the rank guard, so a dependent column leaves
+    0): one thread per column, the cell `orth_diag_cell`."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j < Int(l):
+        orth_diag_cell(r, diag, j, Int(l))
 
 
 def lasso_rows_kernel(
@@ -1424,6 +1435,20 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
     on a device copy, as `device_qr_r`), the rank guard on the host
     (DEVIATION 5318), then A R^-1 by rows (`trsm_kernel`, DEVIATION 5309).
     Waits for the device (the guard reads R on the host)."""
+    var none = ctx.enqueue_create_buffer[DType.float32](1)
+    orth_on_device_diag(ctx, da, m, l, none, False)
+    _ = none^
+
+
+def orth_on_device_diag(
+    ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int, mut ddiag: DeviceBuffer[DType.float32],
+    with_diag: Bool,
+) raises:
+    """`orth_on_device`, and with `with_diag` the product of the two passes'
+    guarded R diagonals into `ddiag` (l floats the caller filled with 1.0):
+    `ddiag[j] = R2[j, j] * R1[j, j]`, whose sign orients Q's column j along
+    the input's (Q_j . A_j = (R2 R1)[j, j]), and a dependent column's is 0
+    (lane neural-pass17, `linalg.svd`'s U)."""
     var cells = m * l if m * l > 0 else 1
     var dq = ctx.enqueue_create_buffer[DType.float32](cells)
     var dw = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -1449,6 +1474,10 @@ def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, 
             ctx.synchronize()
             orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
             ctx.enqueue_copy(dst_buf=r_buf.create_sub_buffer[DType.float32](0, l * l), src_ptr=F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())))
+        if with_diag and l > 0:
+            ctx.enqueue_function[orth_diag_kernel](
+                r_buf.unsafe_ptr(), ddiag.unsafe_ptr(), Int32(l), grid_dim=_blocks(l), block_dim=TPB
+            )
         ctx.enqueue_function[trsm_kernel](
             src.unsafe_ptr(), r_buf.unsafe_ptr(), dst.unsafe_ptr(), Int32(m), Int32(l), grid_dim=_blocks(m), block_dim=TPB
         )
@@ -1666,6 +1695,11 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        if xd_lu_solve_on_host(n):
+            # lane neural-pass39: the host walk of the same cells (the device
+            # ran one thread per column of B: 64 threads on the whole GPU)
+            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+            return
         var ctx = xd_ctx()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
@@ -1963,6 +1997,23 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
+    def orth_diag(a: F32Ptr, m: Int, l: Int, diag: F32Ptr) raises:
+        """`orth`, and `diag` (l floats) the product of the two passes' R
+        diagonals (`orth_on_device_diag`). One upload, two downloads."""
+        var ctx = xd_ctx()
+        var da = _up(ctx, a, m * l)
+        var dd = ctx.enqueue_create_buffer[DType.float32](l if l > 0 else 1)
+        enqueue_fill(ctx, dd, Float32(1.0))
+        orth_on_device_diag(ctx, da, m, l, dd, True)
+        _down(ctx, da, a, m * l)
+        _down(ctx, dd, diag, l)
+        ctx.synchronize()
+        _ = da^
+        _ = dd^
+        ctx.synchronize()
+        _ = ctx^
+
+    @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
         """`device_svdvals`'s route (qr_factor, then svd_of_r) keeping V."""
         DevExec.svd_cells(a, m, n, s, v, QRB_CELLS, J2_CHUNK_CELLS)
@@ -2243,6 +2294,10 @@ struct DevExec(Exec):
 
     @staticmethod
     def geqrf(a: F32Ptr, tau: F32Ptr, m: Int, n: Int) raises:
+        if xd_qr_on_host(m):
+            # lane neural-pass37: the row-streaming host walk of the same cells
+            geqrf_host_rows(a, tau, m, n)
+            return
         var ctx = xd_ctx()
         var kk = m if m < n else n
         var da = _up(ctx, a, m * n)
@@ -2282,6 +2337,9 @@ struct DevExec(Exec):
 
     @staticmethod
     def orgqr(h: F32Ptr, tau: F32Ptr, q: F32Ptr, m: Int, n: Int, kk: Int, qc: Int) raises:
+        if xd_qr_on_host(m):
+            orgqr_host_rows(h, tau, q, m, n, kk, qc)
+            return
         var ctx = xd_ctx()
         var dh = _up(ctx, h, m * n)
         var dt = _up(ctx, tau, kk if kk > 0 else 1)

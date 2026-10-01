@@ -143,6 +143,21 @@ def inventory(argv):
     # multi-GPU pool starts `-m mojolearn._parallel_worker`) is reached by
     # that module, though no import statement names it.
     launched = re.compile(r"""['"]-m['"]\s*,\s*['"]""" + q + r"""\.([A-Za-z_][A-Za-z0-9_]*)['"]""")
+    # A LAZY EXPORT TABLE is an import too: `_LAZY_EXPORTS = {'GARCH': ('_x_sequence_garch', 'GARCH'), ...}`
+    # with a module `__getattr__` that runs `import_module("." + module, __package__)` on first access
+    # (_expansion_sequence.py). The table's string literals name the submodules, so the module holding the
+    # table reaches each of them; a stem the table no longer names is an orphan again.
+    def lazy_targets(path):
+        out = []
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (isinstance(node, (ast.Assign, ast.AnnAssign)) and isinstance(node.value, ast.Dict)
+                    and any(isinstance(t, ast.Name) and t.id == "_LAZY_EXPORTS"
+                            for t in (node.targets if isinstance(node, ast.Assign) else [node.target]))):
+                for v in node.value.values:
+                    if (isinstance(v, ast.Tuple) and v.elts and isinstance(v.elts[0], ast.Constant)
+                            and isinstance(v.elts[0].value, str)):
+                        out.append(v.elts[0].value.lstrip("."))
+        return out
     # A standalone top-level module may pull package modules in too.
     for f in extra_roots:
         queue.extend(_intra_package_imports(f, pkg))
@@ -157,6 +172,7 @@ def inventory(argv):
             queue.extend(_intra_package_imports(present[name], pkg))
             queue.extend(dynamic.get(name, []))
             queue.extend(launched.findall(present[name].read_text(encoding="utf-8")))
+            queue.extend(lazy_targets(present[name]))
 
     orphans = sorted(set(present) - reached)
     if orphans:

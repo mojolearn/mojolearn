@@ -107,6 +107,11 @@ modes.
 | `deterministic` | The same bits on repeated runs on one device. |
 | `fast` | Throughput only, with no repeatability promise. |
 
+The `identical` contract is across hardware within one release. mojolearn is
+alpha: a release may change `identical` output bits (a faster or more accurate
+route), provided the new bits agree on every supported vendor and the CPU.
+Compare runs made with the same release.
+
 Select a mode per estimator with `numeric_mode=`, per process with
 `mojolearn.set_numeric_mode(...)`, or before import with
 `MOJOLEARN_NUMERIC_MODE`. A configuration that cannot meet its mode's

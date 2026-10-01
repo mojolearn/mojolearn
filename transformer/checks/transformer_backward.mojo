@@ -9,6 +9,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
+from core.device_arena import arena_active, arena_take
 from core.step_phase import (
     StepPhaseClock,
     step_count_d2h,
@@ -137,8 +138,12 @@ def _upload(
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    step_count_device_alloc()
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev: DeviceBuffer[DType.float32]
+    if arena_active():
+        dev = arena_take(ctx, n_buf)
+    else:
+        step_count_device_alloc()
+        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     step_count_sync()
@@ -184,8 +189,12 @@ def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
-    step_count_device_alloc()
-    var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
+    var dev: DeviceBuffer[DType.float32]
+    if arena_active():
+        dev = arena_take(ctx, n_buf)
+    else:
+        step_count_device_alloc()
+        dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
     comptime if wait:

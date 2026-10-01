@@ -1,0 +1,12 @@
+qr taxi before  ms=4049.074 digest=e54f8db0f5ca6525  
+qr taxi after  ms=182.700 digest=e54f8db0f5ca6525  
+qr taxi restore  ms=888.361 digest=e54f8db0f5ca6525  
+qr istella before  ms=76779.519 digest=76e60d3379a2735a  
+qr istella after  ms=5081.556 digest=76e60d3379a2735a  
+qr istella restore  ms=16732.610 digest=76e60d3379a2735a  
+svd taxi before  ms=4079.537 digest=f07891b9aaf42a98  
+svd taxi after  ms=278.999 digest=f07891b9aaf42a98  
+svd taxi restore  ms=914.810 digest=f07891b9aaf42a98  
+svd istella before  ms=92193.568 digest=92c189cb2337dc73  
+svd istella after  ms=27372.062 digest=92c189cb2337dc73  
+svd istella restore  ms=38029.668 digest=92c189cb2337dc73  
