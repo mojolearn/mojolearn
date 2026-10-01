@@ -1,0 +1,28 @@
+Imported from /root/mojolearn-neural-pass13/tools/gemm_host_rows_bench.mojo:16:
+Imported from ./gemm/host/gemm_host_rows.mojo:67:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:74:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(0))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn-neural-pass13/tools/gemm_host_rows_bench.mojo:16:
+Imported from ./gemm/host/gemm_host_rows.mojo:67:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:76:24: warning: 'load' is deprecated, use 'unsafe_load' instead
+        return UInt64(p.load(0))
+                      ~^~~~~
+                        unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn-neural-pass13/tools/gemm_host_rows_bench.mojo:16:
+Imported from ./gemm/host/gemm_host_rows.mojo:67:
+/root/mojolearn-neural-pass13/./core/host_parallel.mojo:90:10: warning: 'store' is deprecated, use 'unsafe_store' instead
+        p.store(0, UInt32(v))
+        ~^~~~~~
+          unsafe_store
+<unknown>:0: note: 'store' declared here
+gemm qkv_proj m 512 n 384 k 384 ms 0.464749 gflops 324.8956834764572 digest 3897614604367775087
+gemm gate_up_proj m 512 n 1024 k 384 ms 0.838558 gflops 480.17332611459193 digest 17859164619596542695
+gemm down_proj m 512 n 384 k 1024 ms 0.874289 gflops 460.5492966284604 digest 16280522911086435825
+gemm dW_gate (k = tokens) m 1024 n 384 k 512 ms 0.594098 gflops 677.7554948846823 digest 10252327364388705110
+gemm head_scores m 512 n 512 k 64 ms 0.07216 gflops 465.00044345898004 digest 15490121971385427657
+gemm lm_head m 512 n 8192 k 384 ms 3.671694 gflops 877.3131617177248 digest 8283376667491874104
+gemm mamba3_in_proj m 2048 n 1728 k 384 ms 3.703444 gflops 733.8868879885857 digest 11721081545930648343
