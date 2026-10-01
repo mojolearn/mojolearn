@@ -1,0 +1,33 @@
+stage-pass62-on-64-1                        55.652 35.762  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass62-on-64-2                        57.609 35.949  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass64-1                              58.067 36.457  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-pass64-2                              59.858 36.517  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-1                                61.501 38.185  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+stage-main-2                                59.795 37.978  4a8e781b0739a038p [9.018733024597168, 8.418445587158203
+#### pr69 ticks
+ticks69-main/stage-1-default                63.190 38.558  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks69-main/stage-2-default                62.049 38.160  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks69-lane_neural-pass64/stage-1-default  51.554 36.277  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks69-lane_neural-pass64/stage-2-default  50.740 36.201  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks69-lane_neural-pass62-on-64/stage-1-default48.540 35.749  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+ticks69-lane_neural-pass62-on-64/stage-2-default51.267 35.688  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+bwd.after_attention                                 0.7046                  0.5956                  0.5799
+bwd.attention                                       1.2062                  1.1912                  1.1925
+bwd.before_attention                                0.0013                  0.0014                  0.0014
+bwd.mlp_through_oproj                               1.3039                  1.1941                  1.1603
+fwd.down_proj                                       0.1195                  0.1493                  0.1412
+fwd.gate_mul                                        0.0164                  0.0168                  0.0166
+fwd.gate_proj                                       0.1183                  0.0995                  0.0997
+fwd.k_proj                                          0.0612                  0.0488                  0.0489
+fwd.norm1                                           0.0504                  0.0506                  0.0508
+fwd.norm2                                           0.0497                  0.0494                  0.0493
+fwd.o_proj                                          0.0682                  0.0506                  0.0506
+fwd.q_proj                                          0.0902                  0.0528                  0.0519
+fwd.refuse_call                                     0.0334                  0.0336                  0.0346
+fwd.residual1_add                                   0.0141                  0.0137                  0.0140
+fwd.residual2_add                                   0.0111                  0.0123                  0.0122
+fwd.silu                                            0.0170                  0.0173                  0.0173
+fwd.up_proj                                         0.1189                  0.1025                  0.1023
+fwd.v_proj                                          0.0608                  0.0493                  0.0494
+tick                                          ticks69-mainticks69-lane_neural-pass64ticks69-lane_neural-pass62-on-64
+[exited with code 0]
