@@ -32,3 +32,17 @@ at the digest shapes). Neural toggle sweep on AMD: every experiment's digests eq
 The released 0.8.31 wheel on the L4 gives the NVIDIA digests on both its GPU and CPU columns, so the CPU
 reference agrees with NVIDIA. Next: the released 0.8.31 wheel (cached gfx942 binaries) on AMD, GPU and CPU
 columns, to tell a cold-build artifact from a shipped divergence.
+
+## The divergence, isolated with the RELEASED 0.8.31 wheel (no overlay)
+
+| case | L4 box GPU | L4 box CPU (Zen 2 EPYC 7542) | MI325X GPU | MI325X box CPU (Zen 5 EPYC 9575F, `MOJOLEARN_VENDOR=cpu`) |
+|---|---|---|---|---|
+| SGD-reg 20000 | 431ad9f1214c29a2 | 431ad9f1214c29a2 | f2571b6b6c94680d | **f2571b6b6c94680d** |
+| LARS 200000 | 356afc301a0d55c1 | 356afc301a0d55c1 | 97a2c17f10a7f5ee | **97a2c17f10a7f5ee** |
+| IVF 40000 | 5bf7822421de6cd5 | 5bf7822421de6cd5 | deec079c73e23671 | 5bf7822421de6cd5 |
+
+The harness inputs (X, y) are byte-identical on both hosts. So:
+- **SGD-reg and LARS follow the HOST CPU, not the GPU vendor**: the identity path depends on something
+  computed on the host whose result varies between x86 CPUs (suspect: a numpy/BLAS reduction in the Python
+  wrapper, whose kernel and summation order OpenBLAS picks per CPU, AVX2 vs AVX-512).
+- **IVF 40000 is a true AMD GPU divergence** (AMD CPU = NVIDIA = reference); the 400000 shape agrees.
