@@ -476,18 +476,15 @@ def identical_optimizer_step_resident_host(
     # Lane neural-pass26: the handle's resident parameter and gradient
     # buffers (`p_buf`, `g_buf`, n_total floats each, created once at
     # optimizer_resident_open) take the uploads; no buffer is created here.
-    # the uploads through the handle's pinned stages (lane neural-pass26): a
-    # memcpy from the caller's array, then a DMA copy; a raw host pointer
-    # handed to the device paid a cold mapping on every new gradient array
     var rton = _step_timing_on()
     var rtk = Int(perf_counter_ns())
-    memcpy(dest=p_stage.unsafe_ptr(), src=param_ptr, count=n_total)
-    memcpy(dest=g_stage.unsafe_ptr(), src=grad_ptr, count=n_total)
-    _step_timing_tick(ctx, rton, rtk, "resident.memcpy_in")
-    ctx.enqueue_copy(dst_buf=p_buf, src_buf=p_stage)
-    ctx.enqueue_copy(dst_buf=g_buf, src_buf=g_stage)
+    # the uploads are raw host-pointer copies: measured on the M4, a fresh
+    # 64 MB array uploads in 1.6-2.4 ms this way (only the process's first
+    # upload pays ~9-20 ms), and the memcpy-plus-DMA stage took 4.3 ms
+    ctx.enqueue_copy(dst_buf=p_buf, src_ptr=param_ptr)
+    ctx.enqueue_copy(dst_buf=g_buf, src_ptr=grad_ptr)
     ctx.synchronize()
-    _step_timing_tick(ctx, rton, rtk, "resident.dma_up")
+    _step_timing_tick(ctx, rton, rtk, "resident.upload")
 
     # `denom_out` and `q_out` are written only under `MOJOLEARN_OPT_RECORD`.
     # The pointers are in the kernel signature either way, so the recording
