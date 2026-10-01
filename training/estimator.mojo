@@ -93,6 +93,7 @@ time.
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.memory import memcpy
 from std.os import getenv
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from core.host_predict_threads import host_predict_task_count
 from core.host_parallel import host_parallelize
 from std.time import perf_counter_ns
@@ -380,12 +381,17 @@ def identical_optimizer_step_host(
 
 def opt_download_staged() -> Bool:
     """Whether the resident step downloads through its pinned stage (lane
-    neural-pass26): off unless MOJOLEARN_OPT_STAGE=1. With the pooled device
-    buffers in place the raw download reads the same as the staged one on
-    the M4 (Adam 25 ms a step either way) and faster on the L40S (the staged
-    path read 20-25% slower there; even on the MI325X), so the raw copy is
-    the default on every column and the stage is an A/B arm."""
-    return String(getenv("MOJOLEARN_OPT_STAGE")) == "1"
+    neural-pass26): the Apple column by default, the raw copy elsewhere;
+    MOJOLEARN_OPT_STAGE=0/1 forces either. Measured on the boxes with the
+    pooled buffers in place: on the M3 Ultra the staged download is the
+    lever (the sgd/adam/adamw cells 348-363 ms raw -> 111-112 ms staged;
+    the raw device-to-host-pointer download is slow there), on the L40S the
+    raw path is faster (the staged one read 20-25% slower) and on the
+    MI325X they are even. A transport choice: no bit moves."""
+    var v = String(getenv("MOJOLEARN_OPT_STAGE"))
+    comptime if TARGET_COLUMN == COLUMN_APPLE:
+        return v != "0"
+    return v == "1"
 
 
 def _parallel_copy_out(dst: MutPointer[Float32, MutUntrackedOrigin], src: MutPointer[Float32, MutUntrackedOrigin], n: Int):
