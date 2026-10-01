@@ -80,6 +80,7 @@ from x_decomp.cells import (
     pdist_cell,
     sqdist_cell,
 )
+from x_decomp.lu_host import lu_solve_host_rows, xd_lu_solve_on_host
 from x_decomp.exec_trait import Exec
 from x_decomp.host import HostExec
 from x_decomp.jacobi2 import (
@@ -1666,6 +1667,11 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        if xd_lu_solve_on_host(n):
+            # lane neural-pass39: the host walk of the same cells (the device
+            # ran one thread per column of B: 64 threads on the whole GPU)
+            lu_solve_host_rows(lu, piv, b, n, nrhs, trans)
+            return
         var ctx = xd_ctx()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
