@@ -1086,6 +1086,12 @@ def _bwd_attention_chains(
     var qtasks = host_row_tasks(qrows, s * hd)
     var qchunk = (qrows + qtasks - 1) // qtasks
 
+    # CHAINS IN FLIGHT (lane neural-pass7): a lane's chain over j is the same
+    # statements in the same order as before; four vectors of lanes advance
+    # together per step (as `attn_value_sum_lanes` does in the forward), so the
+    # fma latency of one chain overlaps three others. The `vec_hd` tail keeps
+    # one vector, then one lane.
+    comptime G4 = 4 * HOST_FW
     def _q_rows(t: Int) {imm dqkp, imm kp, imm dqp, imm b, imm l, imm s, imm nh, imm nkv, imm n_rep, imm hd, imm qw, imm qrows, imm qchunk, imm vec_hd}:
         for r in range(t * qchunk, min((t + 1) * qchunk, qrows)):
             var h = r % nh
@@ -1096,6 +1102,23 @@ def _bwd_attention_chains(
             var vbase = (bb * nkv + kv) * s * hd
             var obase = (bb * l + qi) * qw + h * hd
             var d = 0
+            while d + G4 <= vec_hd:
+                var a0 = F32V(0.0)
+                var a1 = F32V(0.0)
+                var a2 = F32V(0.0)
+                var a3 = F32V(0.0)
+                for j in range(s):
+                    var w = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                    var row = vbase + j * hd + d
+                    a0 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row)), a0))
+                    a1 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + HOST_FW)), a1))
+                    a2 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + 2 * HOST_FW)), a2))
+                    a3 = ftz_lanes(identical_mul_add_simd[HOST_FW](w, ftz_lanes(kp.unsafe_load[width=HOST_FW](row + 3 * HOST_FW)), a3))
+                dqp.unsafe_store(obase + d, a0)
+                dqp.unsafe_store(obase + d + HOST_FW, a1)
+                dqp.unsafe_store(obase + d + 2 * HOST_FW, a2)
+                dqp.unsafe_store(obase + d + 3 * HOST_FW, a3)
+                d += G4
             while d < vec_hd:
                 var acc = F32V(0.0)
                 for j in range(s):
@@ -1110,7 +1133,6 @@ def _bwd_attention_chains(
                     acc_s = ftz(identical_mul_add(ftz(dqkp.unsafe_load(wbase + j)), ftz(kp.unsafe_load(vbase + j * hd + d)), acc_s))
                 dqp.unsafe_store(obase + d, acc_s)
                 d += 1
-
     if qtasks <= 1:
         _q_rows(0)
     else:
@@ -1128,6 +1150,39 @@ def _bwd_attention_chains(
             var bb = r // (s * nkv)
             var obase = r * hd
             var d = 0
+            while d + G4 <= vec_hd:
+                var k0 = F32V(0.0)
+                var k1 = F32V(0.0)
+                var k2 = F32V(0.0)
+                var k3 = F32V(0.0)
+                var v0 = F32V(0.0)
+                var v1 = F32V(0.0)
+                var v2 = F32V(0.0)
+                var v3 = F32V(0.0)
+                for hh in range(n_rep):
+                    var h = kv * n_rep + hh
+                    for tt in range(l):
+                        var wbase = ((bb * nh + h) * l + tt) * s
+                        var rowq = (bb * l + tt) * qw + h * hd + d
+                        var wq = F32V(ftz(dqkp.unsafe_load(wbase + j)))
+                        var wa = F32V(ftz(awp.unsafe_load(wbase + j)))
+                        k0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq)), k0))
+                        k1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + HOST_FW)), k1))
+                        k2 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + 2 * HOST_FW)), k2))
+                        k3 = ftz_lanes(identical_mul_add_simd[HOST_FW](wq, ftz_lanes(qp.unsafe_load[width=HOST_FW](rowq + 3 * HOST_FW)), k3))
+                        v0 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq)), v0))
+                        v1 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + HOST_FW)), v1))
+                        v2 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + 2 * HOST_FW)), v2))
+                        v3 = ftz_lanes(identical_mul_add_simd[HOST_FW](wa, ftz_lanes(dcp.unsafe_load[width=HOST_FW](rowq + 3 * HOST_FW)), v3))
+                dkp.unsafe_store(obase + d, k0)
+                dkp.unsafe_store(obase + d + HOST_FW, k1)
+                dkp.unsafe_store(obase + d + 2 * HOST_FW, k2)
+                dkp.unsafe_store(obase + d + 3 * HOST_FW, k3)
+                dvp.unsafe_store(obase + d, v0)
+                dvp.unsafe_store(obase + d + HOST_FW, v1)
+                dvp.unsafe_store(obase + d + 2 * HOST_FW, v2)
+                dvp.unsafe_store(obase + d + 3 * HOST_FW, v3)
+                d += G4
             while d < vec_hd:
                 var ak = F32V(0.0)
                 var av = F32V(0.0)
@@ -1158,7 +1213,6 @@ def _bwd_attention_chains(
                 dkp.unsafe_store(obase + d, ak_s)
                 dvp.unsafe_store(obase + d, av_s)
                 d += 1
-
     if ktasks <= 1:
         _kv_rows(0)
     else:
@@ -1472,18 +1526,14 @@ def transformer_block_backward_oracle(
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var dctx_head = List[Float32]()
+            var dctx_head = List[Float32](length=l * hd, fill=Float32(0.0))
             for qi in range(l):
                 for d in range(hd):
-                    dctx_head.append(
-                        st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
-                    )
-            var v_head = List[Float32]()
+                    dctx_head[qi * hd + d] = st.d_attn_ctx[(bb * l + qi) * qw + h * hd + d]
+            var v_head = List[Float32](length=s * hd, fill=Float32(0.0))
             for j in range(s):
                 for d in range(hd):
-                    v_head.append(
-                        fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
-                    )
+                    v_head[j * hd + d] = fwd.kv_v_cache[(bb * nkv + kv) * s * hd + j * hd + d]
             var cell = gemm_host_rows(dctx_head, v_head, OP_NT, l, s, hd)
             if len(st.d_attn_weights) != cells:
                 st.d_attn_weights = List[Float32](length=cells, fill=Float32(0.0))

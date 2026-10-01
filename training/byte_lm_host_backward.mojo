@@ -327,5 +327,6 @@ def _byte_host_slice(values: List[Float32], offsets: List[Int], j: Int)
 
 
 def _extend(mut into: List[Float32], values: List[Float32]):
-    for i in range(len(values)):
-        into.append(values[i])
+    """Append `values` as one block copy (lane neural-pass7): the same values
+    in the same order as the element loop it replaces."""
+    into.extend(Span(values))

@@ -1673,19 +1673,22 @@ def transformer_block_oracle(
     # Positions before `pos0` come from the cache, this call's own from
     # `k_rope_out` / `v_proj_out`. Gathered BEFORE the append because, under
     # a window, this call's tokens may evict positions it still attends to.
+    st.kv_k_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
+    st.kv_v_cache = List[Float32](length=b * nkv * s * hd, fill=Float32(0.0))
     for bb in range(b):
         for kv in range(nkv):
             for j in range(s):
                 var pos = key_lo + j
+                var dst = ((bb * nkv + kv) * s + j) * hd
                 for d in range(hd):
                     if pos < pos0:
                         var ix = cache.slot(bb, kv, pos, d)
-                        st.kv_k_cache.append(cache.k[ix])
-                        st.kv_v_cache.append(cache.v[ix])
+                        st.kv_k_cache[dst + d] = cache.k[ix]
+                        st.kv_v_cache[dst + d] = cache.v[ix]
                     else:
                         var src = (bb * l + (pos - pos0)) * kw + kv * hd + d
-                        st.kv_k_cache.append(st.k_rope_out[src])
-                        st.kv_v_cache.append(st.v_proj_out[src])
+                        st.kv_k_cache[dst + d] = st.k_rope_out[src]
+                        st.kv_v_cache[dst + d] = st.v_proj_out[src]
 
     # ---- the KV append (:261-262 past_key_values.update). A COPY. --------
     # In position order, so under a ring the highest position wins a slot.
@@ -1743,14 +1746,14 @@ def transformer_block_oracle(
     for bb in range(b):
         for h in range(nh):
             var kv = h // n_rep
-            var qmat = List[Float32]()
+            var qmat = List[Float32](length=l * hd, fill=Float32(0.0))
             for qi in range(l):
                 for d in range(hd):
-                    qmat.append(st.q_rope_out[(bb * l + qi) * qw + h * hd + d])
-            var kmat = List[Float32]()
+                    qmat[qi * hd + d] = st.q_rope_out[(bb * l + qi) * qw + h * hd + d]
+            var kmat = List[Float32](length=s * hd, fill=Float32(0.0))
             for j in range(s):
                 for d in range(hd):
-                    kmat.append(st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d])
+                    kmat[j * hd + d] = st.kv_k_cache[((bb * nkv + kv) * s + j) * hd + d]
             var cell = _oracle_product(qmat, kmat, l, s, hd, int15)
             var sbase = (bb * nh + h) * l * s
             if not opts.has_softcap():
@@ -1804,19 +1807,29 @@ def transformer_block_oracle(
     # Two spellings of one reduction in one file.
     var mfill = mask_fill()
     var ufill = unmasked_fill()
-    for bb in range(b):
-        for h in range(nh):
-            for qi in range(l):
-                var p = pos0 + qi
-                var base = ((bb * nh + h) * l + qi) * s
-                for j in range(s):
-                    var mv = ufill
-                    var pk = key_lo + j
-                    if pk > p:
-                        mv = mfill
-                    if window > 0 and pk <= p - window:
-                        mv = mfill
-                    masked[base + j] = ftz(ftz(scores[base + j]) + mv)
+    # ROWS OVER HOST TASKS (lane neural-pass7): a (batch, head, query) row's
+    # cells read that row of `scores` and the row's own position; the same
+    # statement per cell whichever task runs it.
+    var mrows = b * nh * l
+    var mtasks = host_row_tasks(mrows, 3 * s)
+    var mchunk = (mrows + mtasks - 1) // mtasks
+    def _mask_rows(t: Int) {imm scores, mut masked, imm mrows, imm mchunk, imm l, imm s, imm pos0, imm key_lo, imm window, imm mfill, imm ufill}:
+        for r in range(t * mchunk, min((t + 1) * mchunk, mrows)):
+            var qi = r % l
+            var p = pos0 + qi
+            var base = r * s
+            for j in range(s):
+                var mv = ufill
+                var pk = key_lo + j
+                if pk > p:
+                    mv = mfill
+                if window > 0 and pk <= p - window:
+                    mv = mfill
+                masked[base + j] = ftz(ftz(scores[base + j]) + mv)
+    if mtasks <= 1:
+        _mask_rows(0)
+    else:
+        host_parallelize(_mask_rows, mtasks)
     _apply_plant(masked, plant, PLANT_AT_MASKED)
 
     # ---- S14 through S18: the softmax (EAF:208) --------------------------
@@ -2010,8 +2023,8 @@ def transformer_block_oracle(
     # `hidden_states = residual + hidden_states`, where `residual` is the
     # BLOCK INPUT and not the normalized one (:305 captures it before :306
     # normalizes). One plain add of two already-rounded values.
-    for i in range(m * dm):
-        st.residual1_out.append(ftz(ftz(x[i]) + ftz(st.o_proj_out[i])))
+    st.residual1_out = List[Float32](length=m * dm, fill=Float32(0.0))
+    span_add(x, 0, st.o_proj_out, 0, m * dm, st.residual1_out, 0)
 
     # ---- S1-S4 again, post_attention_layernorm (LDL:321) -----------------
     var n2_sumsq = List[Float32]()
