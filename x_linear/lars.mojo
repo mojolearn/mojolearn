@@ -7,8 +7,7 @@ Reference: scikit-learn `sklearn/linear_model/_least_angle.py`,
 line ~637): the most correlated inactive feature joins with the sign of its
 correlation, the equiangular direction is `L L' ls = sign_A` scaled by
 AA = 1/sqrt(sum ls*sign), the step is min(g1, g2, C/AA) over the inactive
-correlations, the lasso drop at z_pos = min_pos(-coef_A / ls) (the lar
-method flips the sign and adds nothing next step), the early stop at
+correlations, the lasso drop at z_pos = min_pos(-coef_A / ls), the early stop at
 alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
 (pivot < 1e-7) and the lasso stop when alpha grows. Named differences:
   * the correlations are recomputed as X'y - G coef every step instead of
@@ -17,7 +16,10 @@ alpha <= alpha_min with linear interpolation, the degenerate-regressor skip
   * the Cholesky of G_AA is refactored each step (x_linear/ops.mojo) instead
     of updated/downdated; ties in argmax|Cov| go to the lowest feature index
     (theirs: the lowest position in their permuted Cov array);
-  * float32 throughout; equality tolerance float32 eps, tiny32 as theirs.
+  * float32 throughout; equality tolerance float32 eps, tiny32 as theirs;
+  * DEVIATION 5010: the lar method lets an active coefficient cross zero
+    (plain LAR); theirs flips its sign and adds nothing next step, which
+    diverges (see the comment at the step).
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
@@ -186,18 +188,26 @@ def lars_fit(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw:
                     gamma = g2
         drop = False
         var z_pos = BIG
-        for a in range(k):
-            var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
-            if z > 0 and z < z_pos:
-                z_pos = z
-        if z_pos < gamma:
+        # DEVIATION 5010 (x_linear/README.md): the zero crossing is the lasso
+        # modification only. Their lar method also flips sign_active and
+        # skips the next addition when an active coefficient crosses zero,
+        # which breaks the equiangular invariant (an active correlation keeps
+        # its sign in LAR; only the coefficient changes sign) and diverges:
+        # their own Lars, float64, ends far from least squares even with
+        # every feature active (python -m mojolearn.tests.test_x_linear_sanity
+        # lars-crossing). Plain LAR (Efron et al. 2004) lets it cross.
+        if lasso:
             for a in range(k):
                 var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
-                if z == z_pos:
-                    st(fw, sgn + a, -ld(fw, sgn + a))
-            if lasso:
+                if z > 0 and z < z_pos:
+                    z_pos = z
+            if z_pos < gamma:
+                for a in range(k):
+                    var z = fd(-ld(res, ldi(iw, act + a)), fa(ld(fw, ls + a), TINY32))
+                    if z == z_pos:
+                        st(fw, sgn + a, -ld(fw, sgn + a))
                 gamma = z_pos
-            drop = True
+                drop = True
         n_iter += 1
         copy(fw, prev, res, 0, d)
         prev_alpha = alpha

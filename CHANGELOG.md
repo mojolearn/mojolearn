@@ -4,6 +4,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## Unreleased
 
+- Fix Lars (DEVIATION 5010): an active coefficient that crosses zero no longer flips its sign in the equiangular step. That flip came from scikit-learn's lar method, and it makes the path diverge. On the bench board's Istella regression cell, held-out R2 goes from -1.36 to 0.309 (least squares 0.330). scikit-learn's own Lars scores -4e13 on that cell. Lars fits without a crossing, and every LassoLars fit, keep the same bits.
+
 ## 0.8.32 (published 2026-10-01)
 
 - Ship merged main: KernelPCA GPU top-k Lanczos on by default in scope (exact dense path otherwise), ordered-boosting speed with the Apple 256-thread histogram cap, the GBDT split-score fix (gradients snapped onto the histogram's fixed-point grid), the fused small-MLP training step, and the strides, S16 and priority passes on the neural kernels.
