@@ -1,0 +1,31 @@
+{
+  "rows": 256,
+  "features": 11,
+  "fit_transform_ms": [
+    338.8164999996661,
+    30.839899001875892
+  ],
+  "output_sha256": [
+    "b92023de7a6e41d5881d8bc43a45d0a3d947e3652ca1a08b41980767d9d0496d",
+    "b92023de7a6e41d5881d8bc43a45d0a3d947e3652ca1a08b41980767d9d0496d"
+  ],
+  "repeat_identical": true,
+  "vendor": "hip",
+  "input_sha256": "6eadcafd451b64795b256852a42a1070e4ac206cfe0bf42854ab83d6c3206327",
+  "relative_residual": 5.509002676262753e-06,
+  "orthogonality_max_abs": 5.7220458984375e-06,
+  "fit_transform_vs_transform_relative_max": 5.799649898108328e-06,
+  "passed": true,
+  "scope": "Experimental opt-in. Same-device repeatability only; Apple/AMD identity NOT certified.",
+  "reference_relative_eigenvalue_error": 5.453830461626756e-06,
+  "subspace_cosines": [
+    0.9999999999999768,
+    0.9999999999999744,
+    0.9999999999999513,
+    0.9999999999999503,
+    0.9999999999999407,
+    0.9999999999999063,
+    0.9999999999994632,
+    0.9999999999793001
+  ]
+}

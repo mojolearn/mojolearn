@@ -1,0 +1,8 @@
+BOARD-PARAMS {"arms": {"ours": {"library": "mojolearn", "params": {"seed": "none (deterministic)"}, "source": "declared"}}, "compared": [], "exceptions": [], "family": "neural", "lane": "neural/gemm-int8", "problems": [], "reference": "ours", "seed": 7, "seed_none_deterministic": ["ours"], "verdict": "MATCHED"}
+NEURAL-ROUND lane=gemm-int8 arm=ours round=0 ms=242.849 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=1 ms=79.460 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=2 ms=74.773 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=3 ms=75.858 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=4 ms=73.426 digest=9b16c7064e10cecd
+NEURAL-ROUND lane=gemm-int8 arm=ours round=5 ms=75.751 digest=9b16c7064e10cecd
+NEURAL lane=gemm-int8 arm=ours status=ok median_ms=75.75086400174769 quality={"max_rel_err_vs_fp64": 0.0}
