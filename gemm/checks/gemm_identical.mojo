@@ -3290,8 +3290,15 @@ def gemm_split_cells_cap() -> Int:
 #: 192 tiles of 64 x 64 at about 1.5 TFLOPS, the MLP gate/up on 128 tiles
 #: of 128 x 128. Read once per process from MOJOLEARN_GEMM_TILE_MIN_BLOCKS
 #: (0 = off); an execution plan only: every tuned plan computes the same
-#: leaves and folds (`check_device_is_launch_invariant`).
-comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = 0
+#: leaves and folds (`check_device_is_launch_invariant`). MEASURED on the
+#: MI325X (2026-10-01, bench/results for PR #55, with the 1 M split cap):
+#: minimum blocks off / 256 / 512 / 1024 read lm-train-step 101.1 / 77.0 /
+#: 76.5 / 75.0 ms and lm-forward 56.6 / 40.6 / 40.9 / 39.9; q/k/v 1.21 ->
+#: 0.24 ms a layer, o_proj 0.40 -> 0.09, the MLP 1.22 -> 0.70 at 1024;
+#: every digest and loss equal. So the AMD column's default is 1024 (the
+#: 4096^3 gemm cell, 1,024 tiles of 128 x 128, is at the boundary and
+#: keeps its tile). NVIDIA and Apple keep 0 (off).
+comptime GEMM_TILE_MIN_BLOCKS_DEFAULT = 1024 if TARGET_COLUMN == COLUMN_AMD else 0
 
 
 struct _TileMinBlocks(Defaultable, Movable):
