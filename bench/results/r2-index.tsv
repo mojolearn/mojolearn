@@ -73,3 +73,5 @@ utc	r2_key	sha256	bytes	box	source_dir
 2026-10-01T18:47:07Z	measurements/2026-10-01/ab-pr68-amd.tar.gz	886c209b566dea590e02586874afb309d12e79a8d1ed9f10d20df863e2c3f51b	108252	mojolearn-steward-do-amd	/root/ab-pr68-amd
 2026-10-01T18:47:08Z	measurements/2026-10-01/gemm61-amd.tar.gz	c9c7cc0afb0438780e9933d7f3122cb615153c36368a52db2a9517be238fc420	205222	mojolearn-steward-do-amd	/root/gemm61-amd
 2026-10-01T18:57:44Z	measurements/2026-10-01/ab-pr69-amd.tar.gz	df1db057f38c749a482745858275bc48dd38cbc599143909accaeb379efd6dc3	105770	mojolearn-steward-do-amd	/root/ab-pr69-amd
+2026-10-01T19:21:31Z	measurements/2026-10-01/ab-pr71-amd.tar.gz	0b5ebc26bfb6a867471a72cc9677bcc61c6c6429e05ddb4f281ad3917fdd1ddd	1382365719	mojolearn-steward-do-amd	/root/ab-pr71-amd
+2026-10-01T19:24:15Z	measurements/2026-10-01/ab-pr72-amd.tar.gz	52d01518505482f5716c50dc6faa6877f28d359456a26c61aeb6261ea0662db8	1382385982	mojolearn-steward-do-amd	/root/ab-pr72-amd
