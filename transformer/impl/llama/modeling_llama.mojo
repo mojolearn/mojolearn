@@ -4703,8 +4703,16 @@ def llama_attention_forward(
             grid_dim=(_grid(b * nkv * kv.cap * hd), 1, 1),
             block_dim=(LLAMA_TPB, 1, 1),
         )
-    step_count_sync()
-    ctx.synchronize()
+    #: lane/neural-pass67 (2026-10-01): the hard wait that sat here after the
+    #: cache update ran once per layer per forward (eight a call, in the
+    #: train step's forward too) and ordered nothing: every consumer of the
+    #: cache stages is a launch on the same in-order context, and the host
+    #: reads nothing of it before its own wait. On the M3 Ultra the
+    #: rope-and-cache tick read 0.54 ms a layer (0.05 on the MI325X): a Metal
+    #: command-buffer wait each. `-D MOJOLEARN_ATTN_CACHE_WAIT=1` restores it.
+    comptime if is_defined["MOJOLEARN_ATTN_CACHE_WAIT"]():
+        step_count_sync()
+        ctx.synchronize()
     kv.s = s_old + l
     timing_tick(ctx, ton, tk, "attn.rope_and_cache")
 
