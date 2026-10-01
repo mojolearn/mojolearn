@@ -2964,10 +2964,15 @@ def _build_graph(lane, arm, D):
         A[np.repeat(np.arange(n), np.diff(ip)), ix] = 1.0
         info["pre_clock_fit"] = False
         info["config"] = "mojolearn.%s(%s) on the dense adjacency (%d x %d)" % (name, p, n, n)
+        if t == "components":
+            # lane/neural-pass69 (2026-10-01): the sparse graph, as the opponents
+            # receive it (scipy's csgraph and networkx read the CSR)
+            csr = (np.ascontiguousarray(ip, dtype=np.int32), np.ascontiguousarray(ix, dtype=np.int32), n)
+            info["config"] = "mojolearn.%s(%s) on the CSR adjacency (%d nodes, %d edges)" % (name, p, n, ix.shape[0])
 
         def fit():
             if t == "components":
-                S["lab"] = cls(A, directed=False)[1]
+                S["lab"] = cls(csr, directed=False)[1]
             else:
                 S["e"] = cls(**p).fit(A)
 

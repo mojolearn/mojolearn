@@ -163,6 +163,67 @@ def cc_iterate_sparse(a: FP, lab: IP, info: IP, n: Int):
     number of rounds run, the last one the round that changed nothing."""
     var rows = _row_adj(a, n)
     var cols = _col_adj(a, n)
+    _cc_rounds(rows, cols, lab, info, n)
+    _ = rows^
+    _ = cols^
+
+
+def _csr_adj(indptr: IP, indices: IP, n: Int, nnz: Int) -> _Adj:
+    """The row lists of a CSR adjacency as `_row_adj` builds them from a
+    dense matrix (a copy: the walk owns its lists)."""
+    var g = _Adj(n)
+    for t in range(n + 1):
+        g.indptr[t] = Int(indptr.unsafe_load(t))
+    g.cols = List[Int32](length=nnz if nnz > 0 else 1, fill=Int32(0))
+    for e in range(nnz):
+        g.cols[e] = indices.unsafe_load(e)
+    return g^
+
+
+def _csr_transpose(rows: _Adj, n: Int) -> _Adj:
+    """The column lists (the CSR of the transpose), each ascending as
+    `_col_adj` builds them: a count pass over the rows, the prefix, a fill
+    pass in row order."""
+    var g = _Adj(n)
+    var counts = List[Int](length=n, fill=0)
+    var total = rows.indptr[n]
+    for e in range(total):
+        counts[Int(rows.cols[e])] += 1
+    var acc = 0
+    for t in range(n):
+        g.indptr[t] = acc
+        acc += counts[t]
+    g.indptr[n] = acc
+    g.cols = List[Int32](length=total if total > 0 else 1, fill=Int32(0))
+    var cursor = List[Int](length=n, fill=0)
+    for t in range(n):
+        cursor[t] = g.indptr[t]
+    for r in range(n):
+        for e in range(rows.indptr[r], rows.indptr[r + 1]):
+            var c = Int(rows.cols[e])
+            g.cols[cursor[c]] = Int32(r)
+            cursor[c] += 1
+    _ = counts^
+    _ = cursor^
+    return g^
+
+
+def cc_iterate_csr(indptr: IP, indices: IP, lab: IP, info: IP, n: Int, nnz: Int):
+    """lane/neural-pass69 (2026-10-01): `cc_iterate_sparse`'s rounds from a
+    CSR adjacency (indptr n + 1, indices nnz, int32): the same row lists and
+    column lists the dense scan builds, so the same rounds, labels and round
+    count, without the n x n matrix (1.6 GB and a 160 ms scan at the board's
+    20,000 nodes for 54,528 edges)."""
+    var rows = _csr_adj(indptr, indices, n, nnz)
+    var cols = _csr_transpose(rows, n)
+    _cc_rounds(rows, cols, lab, info, n)
+    _ = rows^
+    _ = cols^
+
+
+def _cc_rounds(rows: _Adj, cols: _Adj, lab: IP, info: IP, n: Int):
+    """The min-label rounds over the row and column lists until a round
+    changes nothing (the dense loop's rounds, node by node)."""
     var l0 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
     var l1 = List[Int32](length=n if n > 0 else 1, fill=Int32(0))
     for i in range(n):
@@ -214,5 +275,3 @@ def cc_iterate_sparse(a: FP, lab: IP, info: IP, n: Int):
     info.unsafe_store(0, Int32(steps))
     _ = l0^
     _ = l1^
-    _ = rows^
-    _ = cols^

@@ -91,6 +91,7 @@ FAMILIES = (
             "xn_knn_sq_tiled",
             "xn_knn_impute_tiled",
             "xn_cc_iterate",
+            "xn_cc_iterate_csr",
             "xn_kpca_transform",
             "xn_kernel_matmul",
             "xn_svgp_stats",
