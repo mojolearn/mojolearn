@@ -33,6 +33,7 @@ over the strided column (`_head_col`, `_norm_col`), the row-k update is
 to the columns of Q.
 """
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_mul_add_simd
+from std.math import iota
 from core.host_lanes import F32V, HOST_FW, ftz_lanes, host_row_tasks
 from core.host_parallel import host_parallelize
 from std.os import getenv
@@ -182,11 +183,8 @@ def _step_block(blk: _FP, colk: _FP, t: Float32, k: Int, m: Int, mask: _B32):
 @always_inline
 def _lane_mask(b: Int, k: Int, cols: Int) -> _B32:
     """The lanes of block b that are trailing columns of step k: k < j < cols."""
-    var mask = _B32(False)
-    for l in range(_W):
-        var j = b * _W + l
-        mask[l] = j > k and j < cols
-    return mask
+    var lane = iota[DType.int32, _W]() + Int32(b * _W)
+    return (lane > Int32(k)) & (lane < Int32(cols))
 
 
 def _trailing_blocks(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols: Int):
@@ -270,10 +268,8 @@ def _trailing_blocks_all(base: _FP, colk: _FP, t: Float32, k: Int, m: Int, cols:
         var b0 = task * chunk
         var b1 = min(b0 + chunk, nb)
         for b in range(b0, b1):
-            var mask = _B32(False)
-            for l in range(_W):
-                mask[l] = b * _W + l < cols
-            _step_block(base + b * m * _W, colk, t, k, m, mask)
+            var lane = iota[DType.int32, _W]() + Int32(b * _W)
+            _step_block(base + b * m * _W, colk, t, k, m, lane < Int32(cols))
     if tasks <= 1:
         _run(0)
     else:
