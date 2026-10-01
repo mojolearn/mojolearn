@@ -79,6 +79,10 @@ def _vector(y, n, name="y"):
 #: cores and the refactor in vector lanes, same bits (board 0.8.33: lars
 #: taxi 652 ms on the MI325X against sklearn's 32 ms; M4 host 62 ms).
 #: `MOJOLEARN_X_LINEAR_LARS_DEVICE=1` keeps LARS on the device.
+#: lane/neural-pass84 (2026-10-01): HuberRegressor too (board 0.8.33: huber
+#: taxi 16.8 s on the MI325X, 20.2 s on the M3 Ultra, sklearn about 2 s; the
+#: M4's host 1.8 s before the fold went on the pool). Same bits.
+#: `MOJOLEARN_X_LINEAR_HUBER_DEVICE=1` keeps Huber on the device.
 _HOST_ALGOS = None
 
 
@@ -86,7 +90,7 @@ def _host_algos():
     global _HOST_ALGOS
     if _HOST_ALGOS is None:
         _HOST_ALGOS = frozenset() if os.environ.get("MOJOLEARN_X_LINEAR_DEVICE", "") == "1" else frozenset(
-            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_LARS))
+            (ALGO_GLM, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_LARS, ALGO_HUBER))
     return _HOST_ALGOS
 
 
@@ -136,6 +140,8 @@ def _glm_host(est):
 def _fit_module(est, algo):
     mode = getattr(est, "numeric_mode", None)
     if algo == ALGO_LARS and os.environ.get("MOJOLEARN_X_LINEAR_LARS_DEVICE", "") == "1":
+        return est._bind(_BINDING)
+    if algo == ALGO_HUBER and os.environ.get("MOJOLEARN_X_LINEAR_HUBER_DEVICE", "") == "1":
         return est._bind(_BINDING)
     if algo in _host_algos() and (mode is None or str(mode).strip().lower() == "identical") \
             and (algo != ALGO_GLM or _glm_host(est)):

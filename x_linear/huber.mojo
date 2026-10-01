@@ -12,6 +12,7 @@ x_linear/lbfgs.mojo (the same minimizer; a different path).
 """
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, fexp, fabs, ld, st, ldi, i2f, fill, row_dot, axpy_acc, par_rows, row_dots
 from std.sys.info import is_gpu
+from std.sys.compile import is_defined
 from x_linear.lbfgs import lbfgs, lbfgs_work
 from x_linear.team import Team
 from x_linear.tops import chain_fmad, fold_fa
@@ -184,6 +185,19 @@ def _huber_objective_team(t: Team, x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP,
     return t.bcast(out)
 
 
+@always_inline
+def _huber_coef(r: Float32, sw: Bool, wi: Float32, thr: Float32, two_eps: Float32, two_over_sigma: Float32) -> Float32:
+    """The gradient coefficient of a row with residual r: the one-pass
+    fold's statements (lane/neural-pass84)."""
+    if sw:
+        if fabs(r) > thr:
+            return fm(wi, -two_eps if r > 0 else two_eps)
+        return fm(-two_over_sigma, fm(wi, r))
+    if fabs(r) > thr:
+        return -two_eps if r > 0 else two_eps
+    return fm(-two_over_sigma, r)
+
+
 def _huber_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: Int, g: FP, goff: Int, sc: FP) -> Float32:
     """Map (each row's residual into `sc`), then fold rows ascending."""
     var fi = ldi(ip, 1) != 0
@@ -210,31 +224,93 @@ def _huber_objective_host(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, 
             st(sc, i, fs(fs(ld(y, i), ld(sc, i)), b))
 
     par_rows(rows_map, n)
-    for i in range(n):
-        var r = ld(sc, i)
-        var ar = fabs(r)
-        var coefv: Float32
-        if sw:
-            # their weighted form: each term times w_i, n becomes sum w
-            var wi = ld(y, n + i)
-            w_all = fa(w_all, wi)
-            if ar > thr:
-                w_out = fa(w_out, wi)
-                out_abs = fmad(wi, ar, out_abs)
-                coefv = fm(wi, -two_eps if r > 0 else two_eps)
+    comptime if is_defined["MOJOLEARN_HUBER_HOST_SERIAL_FOLD"]():
+        for i in range(n):
+            var r = ld(sc, i)
+            var ar = fabs(r)
+            var coefv: Float32
+            if sw:
+                # their weighted form: each term times w_i, n becomes sum w
+                var wi = ld(y, n + i)
+                w_all = fa(w_all, wi)
+                if ar > thr:
+                    w_out = fa(w_out, wi)
+                    out_abs = fmad(wi, ar, out_abs)
+                    coefv = fm(wi, -two_eps if r > 0 else two_eps)
+                else:
+                    sq = fmad(fm(wi, r), r, sq)
+                    coefv = fm(-two_over_sigma, fm(wi, r))
+            elif ar > thr:
+                n_out += 1
+                out_abs = fa(out_abs, ar)
+                coefv = -two_eps if r > 0 else two_eps
             else:
-                sq = fmad(fm(wi, r), r, sq)
-                coefv = fm(-two_over_sigma, fm(wi, r))
-        elif ar > thr:
-            n_out += 1
-            out_abs = fa(out_abs, ar)
-            coefv = -two_eps if r > 0 else two_eps
-        else:
-            sq = fmad(r, r, sq)
-            coefv = fm(-two_over_sigma, r)
-        axpy_acc(g, goff, coefv, x, i * d, d)
-        if fi:
-            st(g, goff + d, fa(ld(g, goff + d), coefv))
+                sq = fmad(r, r, sq)
+                coefv = fm(-two_over_sigma, r)
+            axpy_acc(g, goff, coefv, x, i * d, d)
+            if fi:
+                st(g, goff + d, fa(ld(g, goff + d), coefv))
+    else:
+        # lane/neural-pass84 (2026-10-01): the fold as units on the host
+        # pool. Unit u < nb owns the gradient columns of band u and folds
+        # every row into them ascending (`axpy_acc`, one fmad per column,
+        # the coefficient recomputed from the row's residual by the same
+        # statements); the last unit owns the scalar sums and the intercept.
+        # Every accumulator's chain is the one-pass loop's, so the bits are
+        # too. `-D MOJOLEARN_HUBER_HOST_SERIAL_FOLD=1` restores the one pass.
+        var bw = 1 if d <= 32 else 16
+        var nb = (d + bw - 1) // bw
+        var sums = List[Float32](length=4, fill=Float32(0))
+        var cnts = List[Int](length=1, fill=0)
+        var sp = sums.unsafe_ptr()
+        var cp = cnts.unsafe_ptr()
+
+        def units(lo: Int, hi: Int) {imm x, imm y, imm n, imm d, imm sc, imm g, imm goff, imm sw, imm fi, imm thr,
+                                      imm two_eps, imm two_over_sigma, imm bw, imm nb, imm sp, imm cp}:
+            for u in range(lo, hi):
+                if u < nb:
+                    var j0 = u * bw
+                    var cw = min(d, j0 + bw) - j0
+                    for i in range(n):
+                        var cv = _huber_coef(ld(sc, i), sw, ld(y, n + i) if sw else Float32(1), thr, two_eps, two_over_sigma)
+                        axpy_acc(g, goff + j0, cv, x, i * d + j0, cw)
+                    continue
+                var sq_ = Float32(0)
+                var out_abs_ = Float32(0)
+                var w_out_ = Float32(0)
+                var w_all_ = Float32(0)
+                var n_out_ = 0
+                for i in range(n):
+                    var r = ld(sc, i)
+                    var ar = fabs(r)
+                    var wi = ld(y, n + i) if sw else Float32(1)
+                    if sw:
+                        w_all_ = fa(w_all_, wi)
+                        if ar > thr:
+                            w_out_ = fa(w_out_, wi)
+                            out_abs_ = fmad(wi, ar, out_abs_)
+                        else:
+                            sq_ = fmad(fm(wi, r), r, sq_)
+                    elif ar > thr:
+                        n_out_ += 1
+                        out_abs_ = fa(out_abs_, ar)
+                    else:
+                        sq_ = fmad(r, r, sq_)
+                    if fi:
+                        var cv = _huber_coef(r, sw, wi, thr, two_eps, two_over_sigma)
+                        st(g, goff + d, fa(ld(g, goff + d), cv))
+                sp[0] = sq_
+                sp[1] = out_abs_
+                sp[2] = w_out_
+                sp[3] = w_all_
+                cp[0] = n_out_
+
+        par_rows(units, nb + 1, 1)
+        sq = sums[0]
+        out_abs = sums[1]
+        w_out = sums[2]
+        w_all = sums[3]
+        n_out = cnts[0]
     var wn = Float32(0)
     for j in range(d):
         var w = ld(th, toff + j)
