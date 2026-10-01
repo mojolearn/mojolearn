@@ -203,9 +203,16 @@ struct IvfSearchResult(Movable):
 
 def _ivf_scan_staged() -> Bool:
     """The identical scan with its candidate rows staged through threadgroup
-    memory (identical_ivf_scan_staged_kernel, lane neural-pass35); default
-    on, MOJOLEARN_IVF_SCAN_STAGED=0 keeps the plain kernel. Same bits."""
-    return String(getenv("MOJOLEARN_IVF_SCAN_STAGED")) != "0"
+    memory (identical_ivf_scan_staged_kernel, lane neural-pass35): the
+    default on NVIDIA and AMD, where the plain kernel's lanes each walk
+    their own row (WARP_SIZE scattered rows per load); the plain kernel on
+    Apple, where the staged kernel's barriers cost more than they save
+    (M4, 200,000 x 220, 256 lists, 2,000 queries: 3.4 -> 12.2 s). The same
+    bits either way; MOJOLEARN_IVF_SCAN_STAGED=0/1 forces either."""
+    var v = String(getenv("MOJOLEARN_IVF_SCAN_STAGED"))
+    comptime if has_apple_gpu_accelerator():
+        return v == "1"
+    return v != "0"
 
 
 def _expanded_distances(
