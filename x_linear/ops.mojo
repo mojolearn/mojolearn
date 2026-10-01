@@ -518,10 +518,48 @@ def centered_gram(x: FP, n: Int, d: Int, xm: FP, xmoff: Int, g: FP, goff: Int):
     accumulator."""
     for j in range(d):
         fill(g, goff + j * d + j, d - j, Float32(0))
-    for i in range(n):
+    comptime if is_gpu() or is_defined["MOJOLEARN_X_LINEAR_GRAM_SERIAL"]():
+        for i in range(n):
+            for j in range(d):
+                var a = fs(ld(x, i * d + j), ld(xm, xmoff + j))
+                axpy_centered(g, goff + j * d + j, a, x, i * d + j, xm, xmoff + j, d - j)
+    else:
+        # lane/neural-pass83 (2026-10-01): bands of G's rows on the host pool
+        # (`par_rows`), about the same number of cells each. A band owns its
+        # rows' accumulators and folds every row of X into them ascending,
+        # in row blocks so a block of X is reused across the band's rows
+        # while it is in cache: each cell's chain is the one-pass loop's, so
+        # the bits are too. `-D MOJOLEARN_X_LINEAR_GRAM_SERIAL=1` restores
+        # the one pass on the calling thread.
+        var nb = min(d, 4 * host_predict_task_count(d))
+        var cells = d * (d + 1) // 2
+        var starts = List[Int](length=nb + 1, fill=d)
+        starts[0] = 0
+        var acc = 0
+        var b = 1
         for j in range(d):
-            var a = fs(ld(x, i * d + j), ld(xm, xmoff + j))
-            axpy_centered(g, goff + j * d + j, a, x, i * d + j, xm, xmoff + j, d - j)
+            acc += d - j
+            if b < nb and acc * nb >= b * cells:
+                starts[b] = j + 1
+                b += 1
+        var sp = starts.unsafe_ptr()
+
+        def bands(lo: Int, hi: Int) {imm x, imm n, imm d, imm xm, imm xmoff, imm g, imm goff, imm sp}:
+            for band in range(lo, hi):
+                var j0 = sp[band]
+                var j1 = sp[band + 1]
+                var i0 = 0
+                while i0 < n:
+                    var i1 = min(n, i0 + 256)
+                    for j in range(j0, j1):
+                        var mj = ld(xm, xmoff + j)
+                        for i in range(i0, i1):
+                            var a = fs(ld(x, i * d + j), mj)
+                            axpy_centered(g, goff + j * d + j, a, x, i * d + j, xm, xmoff + j, d - j)
+                    i0 = i1
+
+        par_rows(bands, nb, 1)
+        _ = starts^
     for j in range(d):
         for k in range(j + 1, d):
             st(g, goff + k * d + j, ld(g, goff + j * d + k))
