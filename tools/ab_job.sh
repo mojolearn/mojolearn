@@ -1,7 +1,7 @@
 #!/bin/bash
 # Main vs one or more neural branches on one GPU box (NVIDIA or AMD), no env knobs: each tree's neural bindings are
 # built from source (plain and with -D MOJOLEARN_ATTN_PHASE_TIMERS=1), laid over the released 0.8.33 wheel in turn,
-# and timed with tools/neural_stage_timing.py (lm-forward, lm-train-step), twice each, interleaved.
+# each branch merged with origin/main first (so it is measured on today's main), and timed with tools/neural_stage_timing.py (lm-forward, lm-train-step), twice each, interleaved.
 # Usage: tools/ab_job.sh <nvidia|amd> <tag> <arm>... (main is always the first arm). An arm is <branch> or
 # <branch>@NAME1,NAME2 (each NAME built as -D NAME=1 into every binding). Out: /root/ab-<tag>-<vendor>.
 set -uo pipefail
@@ -17,6 +17,7 @@ tree() { echo ${1%%@*} | tr / _; }
 defs() { case $1 in *@*) echo ${1#*@} | tr , '\n' | sed 's/^/-D /; s/$/=1/' | tr '\n' ' ';; esac; }
 for b in $ARMS; do br=${b%%@*}; ta=$(tree $b); t=$O/tree-$ta; a=$(echo $b | tr /@, ___)
   if [ ! -d $t ]; then git -C $R worktree prune; git -C $R worktree add -q -f --detach $t origin/$br; git -C $t rev-parse HEAD > $O/head-$ta.txt
+    [ $br = main ] || { git -C $t -c user.name=ab -c user.email=ab@local merge -q --no-edit origin/main > $O/merge-$ta.log 2>&1; rc merge-main-$ta $?; }
     (cd $t; pixi install > $O/pixi-$ta.log 2>&1); fi
   cd $t; d=$(defs $b)
   for m in $MODS; do for k in plain timers; do
