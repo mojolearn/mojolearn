@@ -1,0 +1,86 @@
+stage-1-default       17.147 41.546  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+stage-1-k0b128        16.584 43.578  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+stage-1-k0b192        16.209 43.013  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+stage-2-default       19.347 42.076  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+stage-2-k0b128        16.663 43.565  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+stage-2-k0b192        16.247 43.026  4a8e781b0739a038018733024597168, 8.418445587158203, 5.
+
+== stage-timers-default
+bwd.after_attention                  0.6636 ms  n=64
+bwd.attention                        1.7341 ms  n=64
+bwd.before_attention                 0.0013 ms  n=64
+bwd.mlp_through_oproj                1.2140 ms  n=64
+fwd.down_proj                        0.1179 ms  n=128
+fwd.gate_mul                         0.0162 ms  n=128
+fwd.gate_proj                        0.1472 ms  n=128
+fwd.k_proj                           0.0597 ms  n=128
+fwd.norm1                            0.0502 ms  n=128
+fwd.norm2                            0.0497 ms  n=128
+fwd.o_proj                           0.0835 ms  n=128
+fwd.q_proj                           0.1042 ms  n=128
+fwd.refuse_call                      0.0319 ms  n=128
+fwd.residual1_add                    0.0141 ms  n=128
+fwd.residual2_add                    0.0109 ms  n=128
+fwd.silu                             0.0170 ms  n=128
+fwd.up_proj                          0.1163 ms  n=128
+fwd.v_proj                           0.0594 ms  n=128
+logits.download                      3.0526 ms  n=8
+logits.head_gemm                     0.5820 ms  n=8
+logits.ids_and_embedding             0.2224 ms  n=8
+logits.layers                       14.8227 ms  n=8
+logits.scan                          1.5002 ms  n=8
+== stage-timers-k0b128
+bwd.after_attention                  0.7653 ms  n=64
+bwd.attention                        1.7298 ms  n=64
+bwd.before_attention                 0.0013 ms  n=64
+bwd.mlp_through_oproj                1.4130 ms  n=64
+fwd.down_proj                        0.1150 ms  n=128
+fwd.gate_mul                         0.0161 ms  n=128
+fwd.gate_proj                        0.1448 ms  n=128
+fwd.k_proj                           0.0476 ms  n=128
+fwd.norm1                            0.0501 ms  n=128
+fwd.norm2                            0.0489 ms  n=128
+fwd.o_proj                           0.0496 ms  n=128
+fwd.q_proj                           0.0506 ms  n=128
+fwd.refuse_call                      0.0333 ms  n=128
+fwd.residual1_add                    0.0128 ms  n=128
+fwd.residual2_add                    0.0116 ms  n=128
+fwd.silu                             0.0168 ms  n=128
+fwd.up_proj                          0.1171 ms  n=128
+fwd.v_proj                           0.0480 ms  n=128
+logits.download                      3.0536 ms  n=8
+logits.head_gemm                     0.5825 ms  n=8
+logits.ids_and_embedding             0.2241 ms  n=8
+logits.layers                       13.1809 ms  n=8
+logits.scan                          1.4983 ms  n=8
+== stage-timers-k0b192
+bwd.after_attention                  0.7775 ms  n=64
+bwd.attention                        1.7126 ms  n=64
+bwd.before_attention                 0.0013 ms  n=64
+bwd.mlp_through_oproj                1.4099 ms  n=64
+fwd.down_proj                        0.1132 ms  n=128
+fwd.gate_mul                         0.0161 ms  n=128
+fwd.gate_proj                        0.0982 ms  n=128
+fwd.k_proj                           0.0479 ms  n=128
+fwd.norm1                            0.0501 ms  n=128
+fwd.norm2                            0.0488 ms  n=128
+fwd.o_proj                           0.0494 ms  n=128
+fwd.q_proj                           0.0508 ms  n=128
+fwd.refuse_call                      0.0334 ms  n=128
+fwd.residual1_add                    0.0129 ms  n=128
+fwd.residual2_add                    0.0103 ms  n=128
+fwd.silu                             0.0168 ms  n=128
+fwd.up_proj                          0.0995 ms  n=128
+fwd.v_proj                           0.0483 ms  n=128
+logits.download                      3.2839 ms  n=8
+logits.head_gemm                     1.0982 ms  n=8
+logits.ids_and_embedding             0.2218 ms  n=8
+logits.layers                       12.5715 ms  n=8
+logits.scan                          1.4739 ms  n=8
+
+[exited with code 0]
