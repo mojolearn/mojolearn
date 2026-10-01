@@ -999,91 +999,37 @@ def _dot_tile_chain(
     tile: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
     c: Int, cnt: Int, acc0: Float32,
 ) -> Float32:
-    """acc = ftz(fma(colk[r], tile[r, c], acc)) for r ascending over the slab:
-    the same chain, software-pipelined one group of eight rows ahead (the
-    next group's sixteen operands are loaded before this group's eight
-    dependent multiply-adds issue, so the shared loads' latency overlaps
-    the chain instead of adding to every step)."""
+    """acc = ftz(fma(colk[r], tile[r, c], acc)) for r ascending over the slab,
+    eight rows' operands loaded before their eight dependent multiply-adds
+    (the chain's latency is the fma's, not the load's): the same chain."""
     var acc = acc0
     var r = 0
-    if cnt >= 8:
-        var k0 = colk[0]
-        var k1 = colk[1]
-        var k2 = colk[2]
-        var k3 = colk[3]
-        var k4 = colk[4]
-        var k5 = colk[5]
-        var k6 = colk[6]
-        var k7 = colk[7]
-        var x0 = tile[c]
-        var x1 = tile[DOT_LD + c]
-        var x2 = tile[2 * DOT_LD + c]
-        var x3 = tile[3 * DOT_LD + c]
-        var x4 = tile[4 * DOT_LD + c]
-        var x5 = tile[5 * DOT_LD + c]
-        var x6 = tile[6 * DOT_LD + c]
-        var x7 = tile[7 * DOT_LD + c]
-        while r + 8 <= cnt:
-            var nr = r + 8
-            var more = nr + 8 <= cnt
-            var nk0 = k0
-            var nk1 = k1
-            var nk2 = k2
-            var nk3 = k3
-            var nk4 = k4
-            var nk5 = k5
-            var nk6 = k6
-            var nk7 = k7
-            var nx0 = x0
-            var nx1 = x1
-            var nx2 = x2
-            var nx3 = x3
-            var nx4 = x4
-            var nx5 = x5
-            var nx6 = x6
-            var nx7 = x7
-            if more:
-                nk0 = colk[nr]
-                nk1 = colk[nr + 1]
-                nk2 = colk[nr + 2]
-                nk3 = colk[nr + 3]
-                nk4 = colk[nr + 4]
-                nk5 = colk[nr + 5]
-                nk6 = colk[nr + 6]
-                nk7 = colk[nr + 7]
-                nx0 = tile[nr * DOT_LD + c]
-                nx1 = tile[(nr + 1) * DOT_LD + c]
-                nx2 = tile[(nr + 2) * DOT_LD + c]
-                nx3 = tile[(nr + 3) * DOT_LD + c]
-                nx4 = tile[(nr + 4) * DOT_LD + c]
-                nx5 = tile[(nr + 5) * DOT_LD + c]
-                nx6 = tile[(nr + 6) * DOT_LD + c]
-                nx7 = tile[(nr + 7) * DOT_LD + c]
-            acc = ftz(identical_mul_add(k0, x0, acc))
-            acc = ftz(identical_mul_add(k1, x1, acc))
-            acc = ftz(identical_mul_add(k2, x2, acc))
-            acc = ftz(identical_mul_add(k3, x3, acc))
-            acc = ftz(identical_mul_add(k4, x4, acc))
-            acc = ftz(identical_mul_add(k5, x5, acc))
-            acc = ftz(identical_mul_add(k6, x6, acc))
-            acc = ftz(identical_mul_add(k7, x7, acc))
-            k0 = nk0
-            k1 = nk1
-            k2 = nk2
-            k3 = nk3
-            k4 = nk4
-            k5 = nk5
-            k6 = nk6
-            k7 = nk7
-            x0 = nx0
-            x1 = nx1
-            x2 = nx2
-            x3 = nx3
-            x4 = nx4
-            x5 = nx5
-            x6 = nx6
-            x7 = nx7
-            r = nr
+    while r + 8 <= cnt:
+        var k0 = colk[r]
+        var k1 = colk[r + 1]
+        var k2 = colk[r + 2]
+        var k3 = colk[r + 3]
+        var k4 = colk[r + 4]
+        var k5 = colk[r + 5]
+        var k6 = colk[r + 6]
+        var k7 = colk[r + 7]
+        var x0 = tile[r * DOT_LD + c]
+        var x1 = tile[(r + 1) * DOT_LD + c]
+        var x2 = tile[(r + 2) * DOT_LD + c]
+        var x3 = tile[(r + 3) * DOT_LD + c]
+        var x4 = tile[(r + 4) * DOT_LD + c]
+        var x5 = tile[(r + 5) * DOT_LD + c]
+        var x6 = tile[(r + 6) * DOT_LD + c]
+        var x7 = tile[(r + 7) * DOT_LD + c]
+        acc = ftz(identical_mul_add(k0, x0, acc))
+        acc = ftz(identical_mul_add(k1, x1, acc))
+        acc = ftz(identical_mul_add(k2, x2, acc))
+        acc = ftz(identical_mul_add(k3, x3, acc))
+        acc = ftz(identical_mul_add(k4, x4, acc))
+        acc = ftz(identical_mul_add(k5, x5, acc))
+        acc = ftz(identical_mul_add(k6, x6, acc))
+        acc = ftz(identical_mul_add(k7, x7, acc))
+        r += 8
     while r < cnt:
         acc = ftz(identical_mul_add(colk[r], tile[r * DOT_LD + c], acc))
         r += 1
