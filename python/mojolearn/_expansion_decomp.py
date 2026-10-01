@@ -984,11 +984,42 @@ def _pinv_rows(k, C):
     return k.lu_solve(lu, piv, C).T
 
 
+_RP_HOST = []
+
+
+def _rp_host_binding():
+    """`mojolearn.host._mojolearn_x_decomp_host` for the random projections
+    on a GPU install (lane/neural-pass78, 2026-10-01): the transform is one
+    narrow product over all of X (900K x 220 x 10 on the board), a single
+    read of X on the host where the device route uploads it first (L40S
+    board 109 ms vs sklearn 32 ms). Same bits on both routes (the same
+    cells). None when the host set is not installed or when
+    MOJOLEARN_X_DECOMP_DEVICE=1 keeps the device."""
+    if not _RP_HOST:
+        mod = None
+        import os
+        if os.environ.get("MOJOLEARN_X_DECOMP_DEVICE", "") != "1":
+            try:
+                import importlib
+                pkg = __name__.rsplit(".", 1)[0]
+                cand = importlib.import_module(f"{pkg}.host._mojolearn_x_decomp_host")
+                if getattr(cand, "x_decomp_rand", None) is not None:
+                    mod = cand
+            except Exception:  # noqa: BLE001 - no host set: the device binding serves
+                mod = None
+        _RP_HOST.append(mod)
+    return _RP_HOST[0]
+
+
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
     `rand_cell`), not numpy's generator: the same `random_state` gives the
     same matrix on every box, and a different one than sklearn's."""
+
+    def _kit(self):
+        h = _rp_host_binding() if str(self.numeric_mode_).strip().lower() == "identical" else None
+        return _Kit(self.numeric_mode_, binding=h) if h is not None else _Kit(self.numeric_mode_)
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
